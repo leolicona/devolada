@@ -22,11 +22,9 @@ Deuda técnica consciente: cosas pospuestas a propósito durante un spec. Cada e
 - `scripts/spec-lint.mjs` corre en los tres workflows: falla si un `*.spec.md` no está en el índice de `SPEC.md`; advierte tests sin US-ID (se vuelve error al pagar TD-005).
 
 ## TD-006 — Pipeline CI/CD con pendientes de activación
-- Estado: en pago (repo, workflows, environments y spec-lint listos el 2026-08-13)
-- Progreso 2026-08-13: D1 remotas creadas con IDs reales en `wrangler.jsonc` ✅ · repo público y required reviewer activo en `production` ✅
-- Restan dos pendientes:
-  1. **`CLOUDFLARE_API_TOKEN`** creado en el dash de Cloudflare y cargado como secret de los environments `dev` y `production`.
-  2. Variables de repo tras el primer deploy: `DEV_API_URL`, `PROD_API_URL` (smoke tests) y `PREVIEW_ENABLED=true` (previews por PR).
+- Estado: **pagada** (2026-08-13)
+- Cerrada con: repo público `leolicona/devolada` · workflows `ci/deploy-dev/deploy-prod` · spec-lint en los tres · required reviewer activo en `production` · D1 remotas con IDs reales · `CLOUDFLARE_API_TOKEN` en ambos environments · primer deploy a dev exitoso con migraciones aplicadas por el pipeline · `DEV_API_URL`/`PROD_API_URL`/`PREVIEW_ENABLED=true` configuradas · smoke `/health` verificado en `https://devolada-api-dev.leolicona-dev.workers.dev`.
+- Nota: prod aún sin primer deploy (correcto: saldrá con el primer tag `v*` y tu aprobación).
 
 ## TD-005 — Sesiones verificadas solo con curl
 - Estado: en pago · Origen: auth/sesiones.spec.md (anterior a la estrategia de testing)

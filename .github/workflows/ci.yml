@@ -35,6 +35,8 @@ jobs:
     if: vars.PREVIEW_ENABLED == 'true'
     needs: quality
     runs-on: ubuntu-latest
+    # The Cloudflare token lives in environment secrets; previews target dev
+    environment: dev
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

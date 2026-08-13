@@ -1,49 +1,49 @@
-# Agnostic Auth — contrato real
+# Agnostic Auth — real contract
 
-IdP stateless en Cloudflare Workers. **Este archivo documenta el contrato verificado contra la API real (2026-08-13), que difiere de la guía de integración oficial.** Ante conflicto, manda este archivo.
+Stateless IdP on Cloudflare Workers. **This file documents the contract verified against the real API (2026-08-13), which differs from the official integration guide.** On conflict, this file wins.
 
 - Base (dev, HTTP): `https://agnostic-auth.leolicona-dev.workers.dev`
-- Producción: service binding `AGNOSTIC_AUTH_API` → worker `agnostic-auth`
-- Cliente único: `apps/api/src/auth/agnostic.ts`. Ninguna app frontend habla con el IdP.
+- Production: service binding `AGNOSTIC_AUTH_API` → `agnostic-auth` worker
+- Single client: `apps/api/src/auth/agnostic.ts`. No frontend app talks to the IdP.
 
-## Registro de apps
+## App registration
 
-Sin endpoint; se escribe directo en KV desde `~/software-projects/agnostic-auth/auth-service/`:
+No endpoint; written directly to KV from `~/software-projects/agnostic-auth/auth-service/`:
 
 ```sh
 npx wrangler kv key put --binding=APP_REGISTRY --preview false --remote "devolada" \
   '{"appId":"devolada","redirectUrl":"https://tienda.devolada.app","callbackUrl":"https://api.devolada.app/auth/callback","tokenTtlSeconds":900}'
 ```
 
-La app `devolada` quedó registrada el 2026-08-13.
+The `devolada` app was registered on 2026-08-13.
 
-## Discrepancias vs la guía oficial (verificadas)
+## Discrepancies vs the official guide (verified)
 
-1. `POST /auth/verify-password` exige:
+1. `POST /auth/verify-password` requires:
    ```json
    { "appId": "...", "identity": "...", "attemptedPassword": "...", "storedHash": "...", "storedSalt": "..." }
    ```
-   La guía dice `{ password, hash, salt }` — está mal.
-2. Envelope de error real: `{ "success": false, "error": "<código string>", "message": "...", "details": {...} }`. La guía muestra `error` como objeto — está mal.
-3. Errores de validación llegan con `error: "Validation failed"` + `details` por campo.
+   The guide says `{ password, hash, salt }` — it's wrong.
+2. Real error envelope: `{ "success": false, "error": "<code string>", "message": "...", "details": {...} }`. The guide shows `error` as an object — it's wrong.
+3. Validation errors arrive as `error: "Validation failed"` + per-field `details`.
 
-## Endpoints que usamos
+## Endpoints we use
 
-| Endpoint | Uso en Devolada |
+| Endpoint | Use in Devolada |
 |----------|-----------------|
-| `POST /auth/hash` `{password}` → `{hash, salt}` | Alta de credenciales (registro ISP, invitación tienda) |
-| `POST /auth/verify-password` (ver arriba) → `{jwt, refreshToken}` | Login tienda (identity=teléfono) y admin (identity=correo) |
-| `POST /auth/refresh` `{appId, refreshToken}` → `{jwt, refreshToken}` | Refresh transparente del middleware |
+| `POST /auth/hash` `{password}` → `{hash, salt}` | Credential creation (ISP signup, store invitation) |
+| `POST /auth/verify-password` (see above) → `{jwt, refreshToken}` | Store login (identity=phone) and admin login (identity=email) |
+| `POST /auth/refresh` `{appId, refreshToken}` → `{jwt, refreshToken}` | Middleware transparent refresh |
 | `POST /auth/token/revoke` `{appId, refreshToken}` | Logout |
-| `POST /auth/initiate` `{appId, identity}` → `{token, magicLink}` | Invitación de tienda, verificación de correo, recuperación |
-| `POST /auth/verify` `{appId, token}` → `{jwt, refreshToken}` | Canje del token mágico |
+| `POST /auth/initiate` `{appId, identity}` → `{token, magicLink}` | Store invitation, email verification, password recovery |
+| `POST /auth/verify` `{appId, token}` → `{jwt, refreshToken}` | Magic-token redemption |
 
 ## JWT
 
-- HS256, firmado con secreto del worker desplegado (no legible desde fuera).
-- Verificación en `apps/api` con `AUTH_JWT_SECRET`; sin él (solo dev) se decodifica sin verificar firma → TD-001.
-- Payload: usar `identity ?? sub` como identidad del actor.
+- HS256, signed with a secret held by the deployed worker (not readable from outside).
+- Verified in `apps/api` with `AUTH_JWT_SECRET`; without it (dev only) decoded without signature verification → TD-001.
+- Payload: use `identity ?? sub` as the actor's identity.
 
-## Reparto de responsabilidades
+## Responsibility split
 
-Agnostic Auth emite y renueva tokens; **Devolada decide todo lo demás**: cookies (`gm_access`/`gm_refresh` HTTP-only), estatus del actor en DB por solicitud, y qué identidad corresponde a tienda o ISP.
+Agnostic Auth issues and renews tokens; **Devolada decides everything else**: cookies (HTTP-only `gm_access`/`gm_refresh`), per-request actor status in the DB, and which identity maps to a store or an ISP.

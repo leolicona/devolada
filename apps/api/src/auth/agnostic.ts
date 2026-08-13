@@ -1,10 +1,10 @@
 import type { Bindings } from "../env";
 
-/* Cliente del IdP Agnostic Auth. Usa el service binding si existe
-   (producción) o HTTP directo a AUTH_BASE_URL (dev). */
+/* Client for the Agnostic Auth IdP. Uses the service binding when present
+   (production) or plain HTTP against AUTH_BASE_URL (dev). */
 
-/* El envelope real difiere de la guía: `error` es un string de código
-   y el detalle viene en `message` / `details`. */
+/* The real envelope differs from the official guide: `error` is a code
+   string and the detail comes in `message` / `details`. */
 type Envelope<T> = {
   success: boolean;
   data: T;
@@ -12,13 +12,13 @@ type Envelope<T> = {
   message?: string;
 };
 
-export class ErrorAuth extends Error {
+export class AuthError extends Error {
   constructor(
-    public codigo: string,
+    public code: string,
     public status: number,
-    detalle?: string,
+    detail?: string,
   ) {
-    super(detalle ? `${codigo}: ${detalle}` : codigo);
+    super(detail ? `${code}: ${detail}` : code);
   }
 }
 
@@ -37,16 +37,16 @@ export class AgnosticAuth {
 
     const json = (await res.json()) as Envelope<T>;
     if (!res.ok || !json.success) {
-      const codigo =
-        (typeof json.error === "string" ? json.error : json.error?.code) ?? `auth ${path} falló`;
-      throw new ErrorAuth(codigo, res.status, json.message);
+      const code =
+        (typeof json.error === "string" ? json.error : json.error?.code) ?? `auth ${path} failed`;
+      throw new AuthError(code, res.status, json.message);
     }
     return json.data;
   }
 
-  /* Valida credenciales contra hash+salt almacenados y emite tokens.
-     Contrato real (difiere de la guía): appId, identity, attemptedPassword,
-     storedHash, storedSalt. */
+  /* Validates credentials against stored hash+salt and issues tokens.
+     Real contract (differs from the guide): appId, identity,
+     attemptedPassword, storedHash, storedSalt. */
   verifyPassword(identity: string, password: string, hash: string, salt: string) {
     return this.post<{ jwt: string; refreshToken: string }>("/auth/verify-password", {
       appId: this.env.AUTH_APP_ID,
@@ -75,7 +75,7 @@ export class AgnosticAuth {
     return this.post<{ hash: string; salt: string }>("/auth/hash", { password });
   }
 
-  /* Magic link: invitaciones de tienda, verificación de correo, recuperación */
+  /* Magic link: store invitations, email verification, password recovery */
   initiate(identity: string) {
     return this.post<{ token: string; magicLink: string }>("/auth/initiate", {
       appId: this.env.AUTH_APP_ID,

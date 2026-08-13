@@ -1,29 +1,29 @@
-# Leyes de frontend
+# Frontend laws
 
-Reglas transversales de UI. Cada `.spec.md` incluye además su sección **Contrato de UI** (estados, responsive, accesibilidad, componentes que reutiliza vs crea, microcopy). Estas leyes no se re-deciden por feature.
+Cross-cutting UI rules. Each `.spec.md` additionally includes its own **UI Contract** section (states, responsive, accessibility, which components it reuses vs creates, microcopy). These laws are not re-decided per feature.
 
-## Fuente visual única
+## Single visual source
 
-- **Los tokens son ley**: todo color, espacio, radio, sombra y tamaño sale de `packages/ui/src/styles/tokens.css`. Cero valores hardcodeados. (El espejo de diseño en `.design/devolada/DESIGN_TOKENS.css` se sincroniza desde el vivo.)
-- **`EstadoBadge` es la única representación de estados** del dominio (reconexión, entregas, servicio). Prohibido re-crear pills de estado por pantalla; si falta un estado, se agrega al átomo.
-- **`Monto` / `DesgloseMonto` / `formatearMonto`** para todo dinero visible. El total de un desglose siempre se calcula, nunca se pasa a mano.
-- Filosofía: funcionalista (Rams) con acento cálido. Color = información (verde cobrado / ámbar en cola / rojo fallido); nada decorativo sin función; sin bounce.
+- **Tokens are law**: every color, space, radius, shadow and size comes from `packages/ui/src/styles/tokens.css`. Zero hardcoded values. (The design mirror in `.design/devolada/DESIGN_TOKENS.css` syncs from the live file.)
+- **`StatusBadge` is the only representation of domain statuses** (reconnection, cash drops, service). Re-creating status pills per screen is forbidden; if a status is missing, it is added to the atom.
+- **`Amount` / `AmountBreakdown` / `formatMoney`** for all visible money. A breakdown's total is always computed, never passed by hand.
+- Philosophy: functionalist (Rams) with a warm accent. Color = information (green charged / amber queued / red failed); nothing decorative without function; no bounce.
 
-## PWA tienda
+## Store PWA
 
-- Móvil-primero con piso real de **360px**; contenido centrado a `--max-width-content` en pantallas grandes.
-- Táctiles ≥ 48px (`--size-touch`); acciones críticas de cobro a 64px (`--size-touch-lg`) ancladas a la zona del pulgar.
-- Máximo 3 pasos por cobro; cero jerga técnica; es-MX llano.
-- Estados obligatorios: cuenta suspendida (pantalla completa, puede aparecer a media jornada), sin conexión, WispHub en cola.
+- Mobile-first with a real floor of **360px**; content centered at `--max-width-content` on large screens.
+- Touch targets ≥ 48px (`--size-touch`); critical charge actions at 64px (`--size-touch-lg`) anchored to the thumb zone.
+- At most 3 steps per charge; zero technical jargon; plain es-MX.
+- Mandatory states: suspended account (full screen, can appear mid-shift), offline, WispHub queued.
 
 ## Admin
 
-- Desktop-primero pero usable en móvil: tablas colapsan a tarjetas, sidebar a menú inferior; confirmar una entrega desde el teléfono toma dos toques.
-- Navegación de un solo nivel: 4 secciones, el detalle vive dentro de cada una.
+- Desktop-first but usable on mobile: tables collapse to cards, sidebar to a bottom menu; confirming a cash drop from a phone takes two taps.
+- Single-level navigation: 4 sections, detail lives inside each one.
 
-## Ambas superficies
+## Both surfaces
 
-- Claro + oscuro vía tokens (`[data-theme]` + `prefers-color-scheme`); el oscuro es carbón cálido recalibrado, nunca inversión.
-- Contraste AA mínimo; AAA objetivo en montos y estados. El color nunca viaja solo: siempre ícono + texto.
-- `aria-live` en feeds y transiciones de estado; teclado + focus visible en admin; `prefers-reduced-motion` respetado (ya en la hoja base).
-- Sin pantalla de "sesión expirada" en operación normal (US-S02); solo si el refresh caduca se vuelve a login.
+- Light + dark via tokens (`[data-theme]` + `prefers-color-scheme`); dark is recalibrated warm charcoal, never inversion.
+- Minimum AA contrast; AAA target on amounts and statuses. Color never travels alone: always icon + text.
+- `aria-live` on feeds and status transitions; keyboard + visible focus in the admin; `prefers-reduced-motion` respected (already in the base stylesheet).
+- No "session expired" screen during normal operation (US-S02); only a failed refresh returns to login.

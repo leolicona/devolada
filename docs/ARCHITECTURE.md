@@ -1,48 +1,48 @@
-# Reglas arquitectónicas
+# Architectural rules
 
-Reglas globales que ningún spec re-decide. Cambiarlas exige actualizar este archivo en la misma PR.
+Global rules no spec re-decides. Changing them requires updating this file in the same PR.
 
 ## Monorepo
 
 ```
-apps/tienda   → PWA móvil (React + Vite + TanStack Router/Query, móvil-primero)
-apps/admin    → Dashboard ISP (mismo stack, desktop-primero)
-apps/api      → Hono + Drizzle + Zod en Cloudflare Workers + D1
-packages/ui   → Tokens y componentes compartidos (fuente única visual)
+apps/tienda   → Store mobile PWA (React + Vite + TanStack Router/Query, mobile-first)
+apps/admin    → ISP dashboard (same stack, desktop-first)
+apps/api      → Hono + Drizzle + Zod on Cloudflare Workers + D1
+packages/ui   → Shared tokens and components (single visual source)
 ```
 
-- pnpm workspaces. Las apps frontend viven en subdominios (`tienda.` / `admin.` / `api.devolada.app`).
-- El código se escribe en español (dominios, variables, rutas), consistente con el glosario del SPEC.
+- pnpm workspaces. Frontend apps live on subdomains (`tienda.` / `admin.` / `api.devolada.app`).
+- Code identifiers, docs and commits are written in English; **user-facing copy is es-MX** per the SPEC glossary.
 
-## Dinero
+## Money
 
-- **Siempre centavos enteros** (`totalCentavos: 41500`). Los floats no tocan montos jamás.
-- Formato visible único vía `formatearMonto` / `<Monto>` de `packages/ui` (es-MX, `$1,234.00`, tabular-nums).
+- **Always integer cents** (`totalCents: 41500`). Floats never touch amounts.
+- A single visible format via `formatMoney` / `<Amount>` from `packages/ui` (es-MX, `$1,234.00`, tabular-nums).
 
-## Ledger (caja de saldo continuo)
+## Ledger (continuous cash box)
 
-- La tabla `movimientos` es **append-only**: nunca UPDATE ni DELETE. Correcciones = contra-asientos.
-- Balance de una tienda = `SUM(centavos)`. Ningún balance se almacena; siempre se deriva.
-- Tipos de asiento: `cobro` (+total), `comision` (−parte de la tienda), `entrega` (−monto). Sin gastos operativos (decisión de producto).
-- Las entregas son bilaterales: asiento en estado `pendiente` hasta confirmación del ISP.
+- The `ledger_entries` table is **append-only**: never UPDATE or DELETE. Corrections = counter-entries.
+- A store's balance = `SUM(cents)`. No balance is ever stored; it is always derived.
+- Entry types: `charge` (+total), `commission` (−store share), `cash_drop` (−amount handed over). No operating expenses (product decision).
+- Cash drops are bilateral: the entry stays `pending` until the ISP confirms.
 
-## Sesiones y auth
+## Sessions & auth
 
-- Cookies HTTP-only `gm_access` (15 min) + `gm_refresh` (30 días); el navegador nunca ve JWTs.
-- `apps/api` es el único que habla con Agnostic Auth (ver `integrations/agnostic-auth.md`).
-- El middleware verifica **estatus en DB en cada solicitud**: suspensión = revocación inmediata (US-S03).
-- Refresh transparente: si `gm_access` expiró y `gm_refresh` vale, se renueva y la petición original continúa.
-- 401 idéntico exista o no la cuenta: no se filtra qué teléfonos/correos existen.
-- Errores de configuración del IdP nunca se disfrazan de 401.
+- HTTP-only cookies `gm_access` (15 min) + `gm_refresh` (30 days); the browser never sees JWTs.
+- `apps/api` is the only party that talks to Agnostic Auth (see `integrations/agnostic-auth.md`).
+- The middleware checks **status in the DB on every request** — a suspended store or ISP loses access immediately (US-S03).
+- Transparent refresh: if `gm_access` expired and `gm_refresh` is valid, tokens renew and the original request continues.
+- Identical 401 whether the account exists or not: no leaking which phones/emails are registered.
+- IdP configuration errors are never disguised as 401s.
 
 ## API
 
-- Envelope uniforme: `{ success: true, data }` | `{ success: false, error: { code } }`.
-- Validación de entrada con Zod en el borde (`@hono/zod-validator`); los esquemas Zod son el contrato.
-- Multi-tenant latente: `ispId` en toda tabla de negocio; la UI del MVP no lo expone.
-- Rutas `/dev/*` solo existen con `ENTORNO=dev`.
+- Uniform envelope: `{ success: true, data }` | `{ success: false, error: { code } }`.
+- Input validation with Zod at the edge (`@hono/zod-validator`); the Zod schemas are the contract.
+- Latent multi-tenancy: `ispId` on every business table; the MVP UI does not expose it.
+- `/dev/*` routes exist only with `ENVIRONMENT=dev`.
 
-## Resiliencia
+## Resilience
 
-- Un cobro **nunca se rechaza** por fallas de WispHub (US-C04): se registra y la reconexión entra a cola con reintentos idempotentes por cobro.
-- Estados de reconexión: `en_cola → reconectado | fallido`. Los fallidos exigen intervención visible en el admin.
+- A charge is **never rejected** because of WispHub failures (US-C04): it is recorded and the reconnection is queued with idempotent retries per charge.
+- Reconnection statuses: `queued → reconnected | failed`. Failed ones demand visible intervention in the admin.

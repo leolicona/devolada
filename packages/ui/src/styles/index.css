@@ -1,6 +1,6 @@
-/* Devolada UI — hoja base compartida por apps/tienda y apps/admin.
-   Importa Tailwind v4, fuentes self-hosted y los tokens, y mapea los
-   tokens a utilidades de Tailwind vía @theme inline. */
+/* Devolada UI — base stylesheet shared by apps/tienda and apps/admin.
+   Imports Tailwind v4, self-hosted fonts and the tokens, and maps the
+   tokens to Tailwind utilities via @theme inline. */
 
 @import "tailwindcss";
 
@@ -10,17 +10,17 @@
 
 @import "./tokens.css";
 
-/* Mapeo tokens → utilidades Tailwind.
-   `inline` hace que las utilidades emitan var(--token) directamente,
-   así el cambio de tema ([data-theme] / prefers-color-scheme) resuelve
-   en runtime sin duplicar utilidades. */
+/* Tokens → Tailwind utilities mapping.
+   `inline` makes utilities emit var(--token) directly, so theme switches
+   ([data-theme] / prefers-color-scheme) resolve at runtime without
+   duplicating utilities. */
 @theme inline {
-  /* Fuentes: font-display / font-body / font-mono */
+  /* Fonts: font-display / font-body / font-mono */
   --font-display: var(--font-family-display);
   --font-body: var(--font-family-body);
   --font-mono: var(--font-family-mono);
 
-  /* Superficies y tinta: bg-surface, bg-card, bg-well, text-ink… */
+  /* Surfaces and ink: bg-surface, bg-card, bg-well, text-ink… */
   --color-surface: var(--color-bg-primary);
   --color-card: var(--color-bg-secondary);
   --color-well: var(--color-bg-tertiary);
@@ -36,13 +36,13 @@
   --color-line-soft: var(--color-border-secondary);
   --color-focus: var(--color-border-focus);
 
-  /* Acción: bg-accent, hover:bg-accent-hover, bg-accent-soft */
+  /* Action: bg-accent, hover:bg-accent-hover, bg-accent-soft */
   --color-accent: var(--color-accent-primary);
   --color-accent-hover: var(--color-accent-primary-hover);
   --color-accent-active: var(--color-accent-primary-active);
   --color-accent-soft: var(--color-accent-primary-subtle);
 
-  /* Estados: tinta / -soft (fondo) / -line (borde) */
+  /* Statuses: ink / -soft (background) / -line (border) */
   --color-success: var(--color-status-success);
   --color-success-soft: var(--color-status-success-bg);
   --color-success-line: var(--color-status-success-border);
@@ -61,17 +61,17 @@
 
   --color-overlay: var(--color-surface-overlay);
 
-  /* Radios: rounded-sm/md/lg */
+  /* Radii: rounded-sm/md/lg */
   --radius-sm: var(--border-radius-sm);
   --radius-md: var(--border-radius-md);
   --radius-lg: var(--border-radius-lg);
 
-  /* Sombras: shadow-sm/md/lg */
+  /* Shadows: shadow-sm/md/lg */
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
 
-  /* Tipografía: text-xs … text-amount */
+  /* Typography: text-xs … text-amount */
   --text-xs: var(--font-size-xs);
   --text-sm: var(--font-size-sm);
   --text-base: var(--font-size-base);
@@ -96,8 +96,8 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Los montos siempre tabulares: clase utilitaria de Tailwind
-     `tabular-nums` disponible; este fallback cubre elementos sueltos */
+  /* Amounts are always tabular: Tailwind's `tabular-nums` utility is
+     available; this fallback covers loose elements */
   data,
   time {
     font-variant-numeric: tabular-nums;

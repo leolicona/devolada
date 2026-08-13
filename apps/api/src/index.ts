@@ -9,9 +9,9 @@ app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 
 app.route("/auth", auth);
 
-/* Rutas de siembra solo en desarrollo */
+/* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {
-  if (c.env.ENTORNO !== "dev") return c.notFound();
+  if (c.env.ENVIRONMENT !== "dev") return c.notFound();
   await next();
 });
 app.route("/dev", dev);

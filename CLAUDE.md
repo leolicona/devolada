@@ -2,55 +2,55 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Devolada: red de puntos de cobro en tienditas para ISPs que usan WispHub. El código, los docs y los commits se escriben en **español**, usando el glosario de `docs/SPEC.md` (Cobro, Caja, Entrega, Movimiento, Cargo por servicio, Reconexión — una palabra por concepto, sin sinónimos).
+Devolada: a network of payment points in neighborhood corner stores for ISPs running WispHub. Code identifiers, docs and commits are written in **English**; **user-facing copy is es-MX** (the product ships in Mexico). The glossary in `docs/SPEC.md` maps domain terms both ways (Cobro→`charge`, Entrega→`cash_drop`, Movimiento→`ledger_entry`, …) — one word per concept, no synonyms.
 
-## Metodología (no opcional)
+## Methodology (not optional)
 
-El proyecto es **spec-driven**; las reglas viven en `docs/SPEC.md` y el CI las hace cumplir (`scripts/spec-lint.mjs`):
+The project is **spec-driven**; the rules live in `docs/SPEC.md` and CI enforces them (`scripts/spec-lint.mjs`):
 
-- **Regla de oro**: si existe en el código pero no está en `SPEC.md`, está mal. Toda feature nueva empieza escribiendo `docs/<dominio>/<feature>.spec.md` (con US-ID reservado en `SPEC.md`) **antes** de tocar código, y se registra en el índice en la misma PR. El spec se actualiza con la realidad durante el desarrollo; nunca se bifurca.
-- **Vía lite**: bugfixes/typos/copy no llevan spec — llevan entrada en `docs/BUGS.md` (si tocó producción) y test.
-- Deuda consciente → `docs/TECH_DEBT.md` (formato TD-NNN con condición de pago). Molde de spec: `docs/auth/sesiones.spec.md`.
-- Capas transversales que ninguna feature re-decide: `docs/ARCHITECTURE.md`, `docs/FRONTEND.md`, `docs/TESTING.md`, `docs/CICD.md`, `docs/integrations/*.md`.
-- `docs/integrations/agnostic-auth.md` documenta el **contrato real verificado**, que difiere de la guía oficial del servicio — ante conflicto manda el archivo local.
+- **Golden rule**: if it exists in the code but not in `SPEC.md`, it's wrong. Every new feature starts by writing `docs/<domain>/<feature>.spec.md` (with a US-ID reserved in `SPEC.md`) **before** touching code, registered in the index within the same PR. The spec is updated with reality during development; it never forks.
+- **Lite path**: bugfixes/typos/copy carry no spec — they carry an entry in `docs/BUGS.md` (if production was affected) and a test.
+- Conscious debt → `docs/TECH_DEBT.md` (TD-NNN format with a payment condition). Spec template: `docs/auth/sessions.spec.md`.
+- Cross-cutting layers no feature re-decides: `docs/ARCHITECTURE.md`, `docs/FRONTEND.md`, `docs/TESTING.md`, `docs/CICD.md`, `docs/integrations/*.md`.
+- `docs/integrations/agnostic-auth.md` documents the **verified real contract**, which differs from the service's official guide — on conflict, the local file wins.
 
-## Comandos
+## Commands
 
 ```sh
-pnpm install                                  # raíz del monorepo (pnpm workspaces)
-pnpm muestra                                  # playground de tokens/componentes (packages/ui, puerto 5173)
-pnpm --filter @devolada/api dev               # API local (wrangler, puerto 8787; D1 local)
-pnpm --filter @devolada/api db:generate       # generar migración drizzle desde src/db/schema.ts
-pnpm --filter @devolada/api db:migrate:local  # aplicar migraciones a la D1 local
-pnpm -r --if-present typecheck                # typecheck de todos los workspaces
-pnpm -r --if-present test                     # tests (infraestructura definida en docs/TESTING.md)
-node scripts/spec-lint.mjs                    # enforcement local de la regla de oro
+pnpm install                                  # monorepo root (pnpm workspaces)
+pnpm playground                               # tokens/components playground (packages/ui, port 5173)
+pnpm --filter @devolada/api dev               # local API (wrangler, port 8787; local D1)
+pnpm --filter @devolada/api db:generate       # generate a drizzle migration from src/db/schema.ts
+pnpm --filter @devolada/api db:migrate:local  # apply migrations to the local D1
+pnpm -r --if-present typecheck                # typecheck every workspace
+pnpm -r --if-present test                     # tests (infrastructure defined in docs/TESTING.md)
+node scripts/spec-lint.mjs                    # local golden-rule enforcement
 ```
 
-Seed local de desarrollo: con el API corriendo, `curl -X POST localhost:8787/dev/seed` crea ISP demo (`demo@devolada.app`) y tienda demo (`5512345678`), contraseña `devolada123`. Las rutas `/dev/*` solo existen con `ENTORNO=dev`.
+Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` creates a demo ISP (`demo@devolada.app`) and demo store (`5512345678`), password `devolada123`. `/dev/*` routes exist only with `ENVIRONMENT=dev`.
 
-**Nunca desplegar desde local**: todo deploy pasa por GitHub Actions (`docs/CICD.md`). Trunk-based sobre `main`; PR → CI + preview; merge → dev; tag `v*` → prod con approval gate. Features paralelas se trabajan con `git worktree` (reglas de convivencia en CICD.md: puertos distintos, D1 local por-worktree, un spec por worktree).
+**Never deploy from a local machine**: every deploy goes through GitHub Actions (`docs/CICD.md`). Trunk-based on `main`; PR → CI + preview; merge → dev; `v*` tag → prod with approval gate. Parallel features use `git worktree` (coexistence rules in CICD.md: distinct ports, per-worktree local D1, one spec per worktree).
 
-## Arquitectura
+## Architecture
 
 ```
-apps/api      Hono + Drizzle + Zod en Cloudflare Workers + D1
-packages/ui   Tokens de diseño (Tailwind v4) + átomos compartidos
-apps/tienda   PWA de la tienda (pendiente de crear; móvil-primero)
-apps/admin    Dashboard del ISP (pendiente de crear; desktop-primero)
+apps/api      Hono + Drizzle + Zod on Cloudflare Workers + D1
+packages/ui   Design tokens (Tailwind v4) + shared atoms
+apps/tienda   Store PWA (not created yet; mobile-first)
+apps/admin    ISP dashboard (not created yet; desktop-first)
 ```
 
-Invariantes que atraviesan todo (detalle en `docs/ARCHITECTURE.md`):
+Invariants that cut across everything (detail in `docs/ARCHITECTURE.md`):
 
-- **Dinero siempre en centavos enteros**; el formato visible sale únicamente de `formatearMonto`/`<Monto>` en `packages/ui`.
-- **La tabla `movimientos` es un ledger append-only**: nunca UPDATE/DELETE; correcciones = contra-asientos; el balance de una tienda se deriva con SUM, jamás se almacena.
-- **Sesiones**: cookies HTTP-only `gm_access`/`gm_refresh`; `apps/api` es el único que habla con el IdP externo (Agnostic Auth) y con WispHub — los frontends consumen el proxy. El middleware (`apps/api/src/auth/middleware.ts`) verifica estatus en DB en cada solicitud (suspensión = revocación inmediata) y hace refresh transparente.
-- **Un cobro nunca se rechaza por fallas de WispHub**: se registra y la reconexión entra en cola con estado visible (`en_cola → reconectado | fallido`).
-- `ispId` en toda tabla de negocio (multi-tenant latente); la UI del MVP no lo expone.
-- Envelope del API: `{ success: true, data }` | `{ success: false, error: { code } }`; validación Zod en el borde.
+- **Money is always integer cents**; visible formatting comes solely from `formatMoney`/`<Amount>` in `packages/ui`.
+- **The `ledger_entries` table is an append-only ledger**: never UPDATE/DELETE; corrections = counter-entries; a store's balance is derived with SUM, never stored.
+- **Sessions**: HTTP-only cookies `gm_access`/`gm_refresh`; `apps/api` is the only party talking to the external IdP (Agnostic Auth) and to WispHub — frontends consume the proxy. The middleware (`apps/api/src/auth/middleware.ts`) checks status in the DB on every request (suspension = immediate revocation) and refreshes transparently.
+- **A charge is never rejected because of WispHub failures**: it is recorded and the reconnection is queued with visible status (`queued → reconnected | failed`).
+- `ispId` on every business table (latent multi-tenancy); the MVP UI doesn't expose it.
+- API envelope: `{ success: true, data }` | `{ success: false, error: { code } }`; Zod validation at the edge.
 
 ## Frontend
 
-Leyes en `docs/FRONTEND.md`; artefactos de diseño (brief, IA, tokens, tasks) en `.design/devolada/`. Lo esencial: los tokens de `packages/ui/src/styles/tokens.css` son ley (cero valores hardcodeados; se mapean a Tailwind vía `@theme inline` en `src/styles/index.css`); `EstadoBadge` es la única representación de estados del dominio; claro+oscuro vía `[data-theme]` (el oscuro es paleta propia, no inversión); el estado nunca se comunica solo con color (siempre ícono + texto).
+Laws in `docs/FRONTEND.md`; design artifacts (brief, IA, tokens, tasks) in `.design/devolada/`. The essentials: the tokens in `packages/ui/src/styles/tokens.css` are law (zero hardcoded values; mapped to Tailwind via `@theme inline` in `src/styles/index.css`); `StatusBadge` is the only representation of domain statuses; light+dark via `[data-theme]` (dark is its own palette, not inversion); status is never communicated by color alone (always icon + text).
 
-El plan de construcción ordenado vive en `.design/devolada/TASKS.md`; los tests citan su historia de usuario (`US-C02: …`) según `docs/TESTING.md`.
+The ordered build plan lives in `.design/devolada/TASKS.md`; tests cite their user story (`US-C02: …`) per `docs/TESTING.md`.

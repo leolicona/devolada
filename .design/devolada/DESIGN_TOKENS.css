@@ -1,68 +1,67 @@
 /* ============================================================
    Devolada — Design Tokens
-   Filosofía: Funcionalista (Dieter Rams) con acento cálido.
-   - Color es información: verde=cobrado, ámbar=en cola, rojo=fallido.
-   - La calidez vive en los neutros (crema/piedra, carbón cálido).
-   - El acento de acción es verde petróleo: nunca compite con los
-     semánticos de estado.
-   - Bordes sutiles sobre sombras; radios discretos y consistentes.
+   Philosophy: Functionalist (Dieter Rams) with a warm accent.
+   - Color is information: green=paid, amber=queued, red=failed.
+   - Warmth lives in the neutrals (cream/stone, warm charcoal).
+   - The action accent is deep teal: it never competes with the
+     semantic status colors.
+   - Subtle borders over shadows; discreet, consistent radii.
 
-   Integración (fase de build):
-   - Vive en packages/ui como tokens.css, importado por ambas apps.
-   - Tailwind v4: mapear con @theme { --color-bg-primary: var(...) }
-     o consumir las variables directamente en utilidades arbitrarias.
-   - Fuentes: @fontsource-variable/archivo y @fontsource/jetbrains-mono
-     (self-host; sin requests a Google Fonts).
+   Integration:
+   - Lives in packages/ui, imported by both apps.
+   - Tailwind v4: mapped via @theme inline in styles/index.css.
+   - Fonts: @fontsource-variable/archivo and @fontsource/jetbrains-mono
+     (self-hosted; no external font requests).
    ============================================================ */
 
 :root {
-  /* ---------- Color: fondos ---------- */
-  --color-bg-primary: #faf9f7;      /* crema piedra, no blanco puro */
-  --color-bg-secondary: #ffffff;    /* tarjetas y superficies elevadas */
-  --color-bg-tertiary: #f1efea;     /* inputs, wells, filas alternas */
+  /* ---------- Color: backgrounds ---------- */
+  --color-bg-primary: #faf9f7;      /* stone cream, not pure white */
+  --color-bg-secondary: #ffffff;    /* cards and elevated surfaces */
+  --color-bg-tertiary: #f1efea;     /* inputs, wells, alternate rows */
   --color-bg-inverse: #1c1917;
 
-  /* ---------- Color: texto ---------- */
-  --color-text-primary: #1c1917;    /* carbón cálido, nunca negro puro */
+  /* ---------- Color: text ---------- */
+  --color-text-primary: #1c1917;    /* warm charcoal, never pure black */
   --color-text-secondary: #57534e;
-  --color-text-tertiary: #a8a29e;   /* placeholder, deshabilitado */
+  --color-text-tertiary: #a8a29e;   /* placeholder, disabled */
   --color-text-inverse: #faf9f7;
   --color-text-link: #0f766e;
 
-  /* ---------- Color: bordes ---------- */
+  /* ---------- Color: borders ---------- */
   --color-border-primary: #e0ddd5;
   --color-border-secondary: #edeae4;
   --color-border-focus: #0f766e;
 
-  /* ---------- Color: acento (acción) — verde petróleo ---------- */
+  /* ---------- Color: accent (action) — deep teal ---------- */
   --color-accent-primary: #0f766e;
   --color-accent-primary-hover: #115e59;
   --color-accent-primary-active: #134e4a;
-  --color-accent-primary-subtle: #e4f2f0;  /* fondos de selección/hover suave */
-  --color-accent-secondary: #57534e;       /* acciones secundarias, neutras */
+  --color-accent-primary-subtle: #e4f2f0;  /* selection/soft hover backgrounds */
+  --color-accent-secondary: #57534e;       /* secondary, neutral actions */
 
-  /* ---------- Color: estados (color = información) ----------
-     Cada estado tiene tinta (texto/ícono), fondo suave (badges)
-     y borde. Siempre acompañados de ícono + texto, nunca solos. */
-  --color-status-success: #15803d;         /* cobrado / reconectado */
+  /* ---------- Color: statuses (color = information) ----------
+     Each status has ink (text/icon), soft background (badges)
+     and border. Always paired with icon + text, never alone. */
+  --color-status-success: #15803d;         /* charged / reconnected */
   --color-status-success-bg: #e8f5ec;
   --color-status-success-border: #b5dfc2;
 
-  --color-status-warning: #a16207;         /* en cola / pendiente */
+  --color-status-warning: #a16207;         /* queued / pending */
   --color-status-warning-bg: #fdf3dc;
   --color-status-warning-border: #ecd399;
 
-  --color-status-error: #b91c1c;           /* fallido / suspendido */
+  --color-status-error: #b91c1c;           /* failed / suspended */
   --color-status-error-bg: #fceaea;
   --color-status-error-border: #f0bcbc;
 
-  --color-status-info: #44403c;            /* informativo: neutro, no azul */
+  --color-status-info: #44403c;            /* informational: neutral, not blue */
   --color-status-info-bg: #f1efea;
   --color-status-info-border: #e0ddd5;
 
   --color-surface-overlay: rgb(28 25 23 / 0.45);
 
-  /* ---------- Espaciado (base 4px, escala Rams) ---------- */
+  /* ---------- Spacing (4px base, Rams scale) ---------- */
   --space-0: 0;
   --space-1: 0.25rem;   /*  4px */
   --space-2: 0.5rem;    /*  8px */
@@ -75,81 +74,81 @@
   --space-9: 6rem;      /* 96px */
   --space-10: 8rem;     /* 128px */
 
-  /* ---------- Tamaños de mostrador ---------- */
-  --size-touch: 3rem;        /* 48px: mínimo táctil en la PWA */
-  --size-touch-lg: 4rem;     /* 64px: botón Cobrar y acciones críticas */
-  --size-tabbar: 4rem;       /* tabs inferiores de la PWA */
+  /* ---------- Counter sizes ---------- */
+  --size-touch: 3rem;        /* 48px: minimum touch target in the PWA */
+  --size-touch-lg: 4rem;     /* 64px: the Cobrar button and critical actions */
+  --size-tabbar: 4rem;       /* PWA bottom tab bar */
 
-  /* ---------- Tipografía ---------- */
+  /* ---------- Typography ---------- */
   --font-family-display: "Archivo Variable", "Archivo", system-ui, sans-serif;
   --font-family-body: "Archivo Variable", "Archivo", system-ui, sans-serif;
   --font-family-mono: "JetBrains Mono", ui-monospace, monospace; /* folios, API keys */
 
-  --font-size-xs: 0.75rem;    /* 12px: metadatos, timestamps */
-  --font-size-sm: 0.875rem;   /* 14px: secundario, celdas densas */
-  --font-size-base: 1rem;     /* 16px: cuerpo */
-  --font-size-md: 1.125rem;   /* 18px: cuerpo destacado PWA */
-  --font-size-lg: 1.25rem;    /* 20px: títulos de sección */
-  --font-size-xl: 1.5rem;     /* 24px: títulos de pantalla */
-  --font-size-2xl: 1.875rem;  /* 30px: cifras en tarjetas admin */
-  --font-size-3xl: 2.375rem;  /* 38px: balance de Caja */
+  --font-size-xs: 0.75rem;    /* 12px: metadata, timestamps */
+  --font-size-sm: 0.875rem;   /* 14px: secondary, dense cells */
+  --font-size-base: 1rem;     /* 16px: body */
+  --font-size-md: 1.125rem;   /* 18px: emphasized body in the PWA */
+  --font-size-lg: 1.25rem;    /* 20px: section titles */
+  --font-size-xl: 1.5rem;     /* 24px: screen titles */
+  --font-size-2xl: 1.875rem;  /* 30px: figures on admin cards */
+  --font-size-3xl: 2.375rem;  /* 38px: Caja balance */
   --font-size-4xl: 3rem;      /* 48px: display */
-  --font-size-amount: 3.75rem;/* 60px: el monto que se dicta en voz alta */
+  --font-size-amount: 3.75rem;/* 60px: the amount spoken out loud */
 
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
-  --line-height-tight: 1.15;   /* montos y encabezados */
-  --line-height-normal: 1.5;   /* cuerpo */
-  --line-height-relaxed: 1.65; /* textos de ayuda */
+  --line-height-tight: 1.15;   /* amounts and headings */
+  --line-height-normal: 1.5;   /* body */
+  --line-height-relaxed: 1.65; /* helper text */
 
-  --letter-spacing-tight: -0.015em; /* montos grandes y display */
+  --letter-spacing-tight: -0.015em; /* large amounts and display */
   --letter-spacing-normal: 0;
-  --letter-spacing-wide: 0.06em;    /* etiquetas all-caps */
+  --letter-spacing-wide: 0.06em;    /* all-caps labels */
 
-  /* Los montos siempre con font-variant-numeric: tabular-nums */
+  /* Amounts always use font-variant-numeric: tabular-nums */
 
   /* ---------- Layout ---------- */
-  --max-width-content: 40rem;  /* PWA centrada en pantallas grandes */
+  --max-width-content: 40rem;  /* PWA centered on large screens */
   --max-width-wide: 64rem;
-  --max-width-page: 80rem;     /* dashboard admin */
+  --max-width-page: 80rem;     /* admin dashboard */
 
   --border-radius-sm: 0.375rem;  /*  6px: badges, inputs */
-  --border-radius-md: 0.625rem;  /* 10px: botones, tarjetas */
-  --border-radius-lg: 0.875rem;  /* 14px: modales, hojas */
+  --border-radius-md: 0.625rem;  /* 10px: buttons, cards */
+  --border-radius-lg: 0.875rem;  /* 14px: modals, sheets */
   --border-radius-full: 9999px;
 
-  /* Sombras mínimas: la jerarquía la dan bordes y fondo */
+  /* Minimal shadows: hierarchy comes from borders and background */
   --shadow-sm: 0 1px 2px rgb(28 25 23 / 0.05);
   --shadow-md: 0 2px 8px rgb(28 25 23 / 0.07);
   --shadow-lg: 0 8px 24px rgb(28 25 23 / 0.1);
   --shadow-focus: 0 0 0 3px rgb(15 118 110 / 0.35);
 
-  /* ---------- Motion: mínimo y con propósito ---------- */
+  /* ---------- Motion: minimal and purposeful ---------- */
   --duration-instant: 50ms;
-  --duration-fast: 150ms;    /* hover, presión de botón */
-  --duration-normal: 250ms;  /* transiciones de estado */
-  --duration-slow: 400ms;    /* aparición de resultado de cobro */
+  --duration-fast: 150ms;    /* hover, button press */
+  --duration-normal: 250ms;  /* state transitions */
+  --duration-slow: 400ms;    /* charge result reveal */
 
   --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-in: cubic-bezier(0.4, 0, 1, 1);
   --easing-out: cubic-bezier(0, 0, 0.2, 1);
-  /* Sin bounce: la confianza no rebota */
+  /* No bounce: trust doesn't bounce */
 
-  /* ---------- Breakpoints (referencia; Tailwind los define) ---------- */
-  --breakpoint-sm: 375px;   /* piso real: 360px, diseñar para ello */
+  /* ---------- Breakpoints (reference; Tailwind defines them) ---------- */
+  --breakpoint-sm: 375px;   /* real floor: 360px, design for it */
   --breakpoint-md: 768px;
-  --breakpoint-lg: 1024px;  /* admin: aparece el sidebar */
+  --breakpoint-lg: 1024px;  /* admin: sidebar appears */
   --breakpoint-xl: 1280px;
   --breakpoint-2xl: 1536px;
 }
 
 /* ============================================================
-   Modo oscuro — carbón cálido, no inversión.
-   Tintas de estado aclaradas para AA sobre fondos oscuros;
-   fondos de estado como veladuras translúcidas.
+   Dark mode — warm charcoal, not inversion.
+   Status inks lightened for AA on dark backgrounds;
+   status backgrounds become translucent washes.
    ============================================================ */
 
 [data-theme="dark"] {
@@ -158,7 +157,7 @@
   --color-bg-tertiary: #2a2622;
   --color-bg-inverse: #faf9f7;
 
-  --color-text-primary: #ece9e4;    /* off-white, nunca blanco puro */
+  --color-text-primary: #ece9e4;    /* off-white, never pure white */
   --color-text-secondary: #a9a39b;
   --color-text-tertiary: #6e6862;
   --color-text-inverse: #1c1917;
@@ -192,14 +191,14 @@
 
   --color-surface-overlay: rgb(0 0 0 / 0.6);
 
-  /* Sombras más oscuras y transparentes, nunca las de modo claro */
+  /* Darker, more transparent shadows — never the light-mode values */
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 2px 8px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.55);
   --shadow-focus: 0 0 0 3px rgb(45 179 165 / 0.4);
 }
 
-/* Preferencia del sistema, salvo elección explícita de claro */
+/* System preference, unless light was explicitly chosen */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --color-bg-primary: #171412;
@@ -249,30 +248,30 @@
 }
 
 /* ============================================================
-   Tokens de componente (derivados, no valores nuevos)
+   Component tokens (derived, no new values)
    ============================================================ */
 
 :root {
-  /* Botones */
-  --button-height: var(--size-touch);          /* 48px estándar */
+  /* Buttons */
+  --button-height: var(--size-touch);             /* 48px standard */
   --button-height-critical: var(--size-touch-lg); /* 64px: "Cobrar $..." */
   --button-radius: var(--border-radius-md);
 
-  /* Inputs (buscador de cliente incluido) */
+  /* Inputs (customer search included) */
   --input-height: var(--size-touch);
   --input-radius: var(--border-radius-sm);
   --input-bg: var(--color-bg-tertiary);
 
-  /* Badges de estado: tinta + fondo + borde del semántico */
+  /* Status badges: semantic ink + background + border */
   --badge-radius: var(--border-radius-full);
   --badge-font-size: var(--font-size-sm);
 
-  /* Tarjetas */
+  /* Cards */
   --card-radius: var(--border-radius-md);
   --card-border: 1px solid var(--color-border-primary);
   --card-padding: var(--space-5);
 
-  /* Sidebar admin / tabs PWA */
-  --sidebar-width: 15rem;                      /* 240px */
+  /* Admin sidebar / PWA tabs */
+  --sidebar-width: 15rem;                         /* 240px */
   --tabbar-height: var(--size-tabbar);
 }

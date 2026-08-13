@@ -14,11 +14,10 @@
   "vars": {
     "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
     "AUTH_APP_ID": "devolada",
-    "ENTORNO": "dev"
+    "ENVIRONMENT": "dev"
   },
-  /* Entornos remotos (CICD.md). Secrets por entorno vía `wrangler secret put --env`:
-     AUTH_JWT_SECRET (obligatorio en prod). database_id: PENDIENTE — tope de D1
-     alcanzado en la cuenta (TD-006); reemplazar al liberar espacio. */
+  /* Remote environments (CICD.md). Per-environment secrets via
+     `wrangler secret put --env`: AUTH_JWT_SECRET (required in prod). */
   "env": {
     "dev": {
       "name": "devolada-api-dev",
@@ -34,7 +33,7 @@
       "vars": {
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
-        "ENTORNO": "dev"
+        "ENVIRONMENT": "dev"
       }
     },
     "prod": {
@@ -51,7 +50,7 @@
       "vars": {
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
-        "ENTORNO": "prod"
+        "ENVIRONMENT": "prod"
       }
     }
   }

@@ -1,147 +1,147 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/* Todo el dinero en centavos enteros. Timestamps en ms.
-   Diseño para un ISP piloto, con ispId en todas las tablas para
-   habilitar multi-tenant sin migración estructural. */
+/* All money in integer cents. Timestamps in ms.
+   Designed for a single pilot ISP, with ispId on every business table to
+   enable multi-tenancy later without structural migration. */
 
 const id = () =>
   text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID());
 
-const creadoEn = () =>
-  integer("creado_en", { mode: "timestamp_ms" })
+const createdAt = () =>
+  integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date());
 
 export const isps = sqliteTable("isps", {
   id: id(),
-  nombre: text("nombre").notNull(),
-  correo: text("correo").notNull().unique(),
-  correoVerificado: integer("correo_verificado", { mode: "boolean" })
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" })
     .notNull()
     .default(false),
   passwordHash: text("password_hash"),
   passwordSalt: text("password_salt"),
   wisphubApiKey: text("wisphub_api_key"),
-  /* Comisión que paga el cliente final, y la parte de la tienda.
-     La parte de la plataforma es la diferencia. */
-  cargoServicioCentavos: integer("cargo_servicio_centavos").notNull().default(1500),
-  comisionTiendaCentavos: integer("comision_tienda_centavos").notNull().default(900),
-  estatus: text("estatus", { enum: ["activo", "suspendido"] })
+  /* Fee the end customer pays, and the store's share of it.
+     The platform's share is the difference. */
+  serviceFeeCents: integer("service_fee_cents").notNull().default(1500),
+  storeCommissionCents: integer("store_commission_cents").notNull().default(900),
+  status: text("status", { enum: ["active", "suspended"] })
     .notNull()
-    .default("activo"),
-  creadoEn: creadoEn(),
+    .default("active"),
+  createdAt: createdAt(),
 });
 
-export const tiendas = sqliteTable(
-  "tiendas",
+export const stores = sqliteTable(
+  "stores",
   {
     id: id(),
     ispId: text("isp_id")
       .notNull()
       .references(() => isps.id),
-    nombre: text("nombre").notNull(),
-    responsable: text("responsable").notNull(),
-    telefono: text("telefono").notNull().unique(),
-    zona: text("zona"),
-    /* null hasta que acepta la invitación */
+    name: text("name").notNull(),
+    contactName: text("contact_name").notNull(),
+    phone: text("phone").notNull().unique(),
+    zone: text("zone"),
+    /* null until the invitation is accepted */
     passwordHash: text("password_hash"),
     passwordSalt: text("password_salt"),
-    /* null → hereda comisionTiendaCentavos del ISP */
-    comisionCentavos: integer("comision_centavos"),
-    techoSaldoCentavos: integer("techo_saldo_centavos").notNull().default(500000),
-    estatus: text("estatus", { enum: ["invitada", "activa", "suspendida"] })
+    /* null → inherits storeCommissionCents from the ISP */
+    commissionCents: integer("commission_cents"),
+    balanceCapCents: integer("balance_cap_cents").notNull().default(500000),
+    status: text("status", { enum: ["invited", "active", "suspended"] })
       .notNull()
-      .default("invitada"),
-    creadoEn: creadoEn(),
+      .default("invited"),
+    createdAt: createdAt(),
   },
-  (t) => [index("tiendas_isp_idx").on(t.ispId)],
+  (t) => [index("stores_isp_idx").on(t.ispId)],
 );
 
-export const cobros = sqliteTable(
-  "cobros",
+export const charges = sqliteTable(
+  "charges",
   {
     id: id(),
     ispId: text("isp_id")
       .notNull()
       .references(() => isps.id),
-    tiendaId: text("tienda_id")
+    storeId: text("store_id")
       .notNull()
-      .references(() => tiendas.id),
+      .references(() => stores.id),
     folio: text("folio").notNull().unique(),
-    clienteWisphubId: text("cliente_wisphub_id").notNull(),
-    clienteNombre: text("cliente_nombre").notNull(),
-    clienteZona: text("cliente_zona"),
-    mensualidadCentavos: integer("mensualidad_centavos").notNull(),
-    cargoServicioCentavos: integer("cargo_servicio_centavos").notNull(),
-    totalCentavos: integer("total_centavos").notNull(),
-    estadoReconexion: text("estado_reconexion", {
-      enum: ["en_cola", "reconectado", "fallido"],
+    wisphubCustomerId: text("wisphub_customer_id").notNull(),
+    customerName: text("customer_name").notNull(),
+    customerZone: text("customer_zone"),
+    monthlyFeeCents: integer("monthly_fee_cents").notNull(),
+    serviceFeeCents: integer("service_fee_cents").notNull(),
+    totalCents: integer("total_cents").notNull(),
+    reconnectionStatus: text("reconnection_status", {
+      enum: ["queued", "reconnected", "failed"],
     })
       .notNull()
-      .default("en_cola"),
-    intentosReconexion: integer("intentos_reconexion").notNull().default(0),
-    reconectadoEn: integer("reconectado_en", { mode: "timestamp_ms" }),
-    creadoEn: creadoEn(),
+      .default("queued"),
+    reconnectionAttempts: integer("reconnection_attempts").notNull().default(0),
+    reconnectedAt: integer("reconnected_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
   },
   (t) => [
-    index("cobros_tienda_idx").on(t.tiendaId),
-    index("cobros_isp_creado_idx").on(t.ispId, t.creadoEn),
+    index("charges_store_idx").on(t.storeId),
+    index("charges_isp_created_idx").on(t.ispId, t.createdAt),
   ],
 );
 
-export const entregas = sqliteTable(
-  "entregas",
+export const cashDrops = sqliteTable(
+  "cash_drops",
   {
     id: id(),
-    tiendaId: text("tienda_id")
+    storeId: text("store_id")
       .notNull()
-      .references(() => tiendas.id),
-    centavos: integer("centavos").notNull(),
-    estado: text("estado", { enum: ["pendiente", "confirmada", "en_disputa"] })
+      .references(() => stores.id),
+    cents: integer("cents").notNull(),
+    status: text("status", { enum: ["pending", "confirmed", "disputed"] })
       .notNull()
-      .default("pendiente"),
-    nota: text("nota"),
-    confirmadaEn: integer("confirmada_en", { mode: "timestamp_ms" }),
-    creadoEn: creadoEn(),
+      .default("pending"),
+    note: text("note"),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
   },
-  (t) => [index("entregas_tienda_idx").on(t.tiendaId)],
+  (t) => [index("cash_drops_store_idx").on(t.storeId)],
 );
 
-/* Ledger append-only: nunca UPDATE ni DELETE sobre esta tabla.
-   Correcciones = contra-asientos. Balance de una tienda = SUM(centavos).
-   cobro: +total · comision: −parte de la tienda · entrega: −monto entregado */
-export const movimientos = sqliteTable(
-  "movimientos",
+/* Append-only ledger: never UPDATE or DELETE on this table.
+   Corrections = counter-entries. A store's balance = SUM(cents).
+   charge: +total · commission: −store share · cash_drop: −amount handed over */
+export const ledgerEntries = sqliteTable(
+  "ledger_entries",
   {
     id: id(),
-    tiendaId: text("tienda_id")
+    storeId: text("store_id")
       .notNull()
-      .references(() => tiendas.id),
-    tipo: text("tipo", { enum: ["cobro", "comision", "entrega"] }).notNull(),
-    centavos: integer("centavos").notNull(),
-    cobroId: text("cobro_id").references(() => cobros.id),
-    entregaId: text("entrega_id").references(() => entregas.id),
-    creadoEn: creadoEn(),
+      .references(() => stores.id),
+    type: text("type", { enum: ["charge", "commission", "cash_drop"] }).notNull(),
+    cents: integer("cents").notNull(),
+    chargeId: text("charge_id").references(() => charges.id),
+    cashDropId: text("cash_drop_id").references(() => cashDrops.id),
+    createdAt: createdAt(),
   },
-  (t) => [index("movimientos_tienda_creado_idx").on(t.tiendaId, t.creadoEn)],
+  (t) => [index("ledger_entries_store_created_idx").on(t.storeId, t.createdAt)],
 );
 
-export const invitaciones = sqliteTable(
-  "invitaciones",
+export const invitations = sqliteTable(
+  "invitations",
   {
     id: id(),
-    tiendaId: text("tienda_id")
+    storeId: text("store_id")
       .notNull()
-      .references(() => tiendas.id),
-    /* token emitido por Agnostic Auth /auth/initiate */
+      .references(() => stores.id),
+    /* token issued by Agnostic Auth /auth/initiate */
     token: text("token").notNull().unique(),
-    estado: text("estado", { enum: ["enviada", "aceptada"] })
+    status: text("status", { enum: ["sent", "accepted"] })
       .notNull()
-      .default("enviada"),
-    aceptadaEn: integer("aceptada_en", { mode: "timestamp_ms" }),
-    creadoEn: creadoEn(),
+      .default("sent"),
+    acceptedAt: integer("accepted_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
   },
-  (t) => [index("invitaciones_tienda_idx").on(t.tiendaId)],
+  (t) => [index("invitations_store_idx").on(t.storeId)],
 );

@@ -5,77 +5,78 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../env";
-import { isps, tiendas } from "../db/schema";
-import { AgnosticAuth, ErrorAuth } from "../auth/agnostic";
-import { COOKIE_REFRESH, limpiarSesionCookies, setSesionCookies } from "../auth/cookies";
-import { requireSesion } from "../auth/middleware";
+import { isps, stores } from "../db/schema";
+import { AgnosticAuth, AuthError } from "../auth/agnostic";
+import { COOKIE_REFRESH, clearSessionCookies, setSessionCookies } from "../auth/cookies";
+import { requireSession } from "../auth/middleware";
 
 export const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-const credencialesTienda = z.object({
-  telefono: z.string().min(10).max(15),
+const storeCredentials = z.object({
+  phone: z.string().min(10).max(15),
   password: z.string().min(8),
 });
 
-const credencialesAdmin = z.object({
-  correo: z.string().email(),
+const adminCredentials = z.object({
+  email: z.string().email(),
   password: z.string().min(8),
 });
 
-/* 401 idéntico exista o no la cuenta: no filtrar qué teléfonos/correos existen */
-const noAutorizado = { success: false, error: { code: "AUTHENTICATION_ERROR" } } as const;
+/* Identical 401 whether the account exists or not: don't leak which
+   phones/emails are registered */
+const unauthorized = { success: false, error: { code: "AUTHENTICATION_ERROR" } } as const;
 
-auth.post("/tienda/login", zValidator("json", credencialesTienda), async (c) => {
-  const { telefono, password } = c.req.valid("json");
+auth.post("/store/login", zValidator("json", storeCredentials), async (c) => {
+  const { phone, password } = c.req.valid("json");
   const db = drizzle(c.env.DB);
 
-  const [tienda] = await db.select().from(tiendas).where(eq(tiendas.telefono, telefono));
-  if (!tienda?.passwordHash || !tienda.passwordSalt) return c.json(noAutorizado, 401);
-  if (tienda.estatus === "suspendida") {
-    return c.json({ success: false, error: { code: "CUENTA_SUSPENDIDA" } }, 403);
+  const [store] = await db.select().from(stores).where(eq(stores.phone, phone));
+  if (!store?.passwordHash || !store.passwordSalt) return c.json(unauthorized, 401);
+  if (store.status === "suspended") {
+    return c.json({ success: false, error: { code: "ACCOUNT_SUSPENDED" } }, 403);
   }
 
   try {
     const tokens = await new AgnosticAuth(c.env).verifyPassword(
-      telefono,
+      phone,
       password,
-      tienda.passwordHash,
-      tienda.passwordSalt,
+      store.passwordHash,
+      store.passwordSalt,
     );
-    setSesionCookies(c, tokens);
+    setSessionCookies(c, tokens);
     return c.json({
       success: true,
-      data: { tipo: "tienda", id: tienda.id, nombre: tienda.nombre },
+      data: { type: "store", id: store.id, name: store.name },
     });
   } catch (e) {
-    /* Solo credenciales inválidas son 401; errores de configuración
-       (app no registrada, validación) deben ser visibles, no un 401 falso */
-    if (e instanceof ErrorAuth && e.status === 401) return c.json(noAutorizado, 401);
+    /* Only invalid credentials map to 401; configuration errors
+       (unregistered app, validation) must stay visible, not a fake 401 */
+    if (e instanceof AuthError && e.status === 401) return c.json(unauthorized, 401);
     throw e;
   }
 });
 
-auth.post("/admin/login", zValidator("json", credencialesAdmin), async (c) => {
-  const { correo, password } = c.req.valid("json");
+auth.post("/admin/login", zValidator("json", adminCredentials), async (c) => {
+  const { email, password } = c.req.valid("json");
   const db = drizzle(c.env.DB);
 
-  const [isp] = await db.select().from(isps).where(eq(isps.correo, correo));
-  if (!isp?.passwordHash || !isp.passwordSalt) return c.json(noAutorizado, 401);
-  if (isp.estatus === "suspendido") {
-    return c.json({ success: false, error: { code: "CUENTA_SUSPENDIDA" } }, 403);
+  const [isp] = await db.select().from(isps).where(eq(isps.email, email));
+  if (!isp?.passwordHash || !isp.passwordSalt) return c.json(unauthorized, 401);
+  if (isp.status === "suspended") {
+    return c.json({ success: false, error: { code: "ACCOUNT_SUSPENDED" } }, 403);
   }
 
   try {
     const tokens = await new AgnosticAuth(c.env).verifyPassword(
-      correo,
+      email,
       password,
       isp.passwordHash,
       isp.passwordSalt,
     );
-    setSesionCookies(c, tokens);
-    return c.json({ success: true, data: { tipo: "isp", id: isp.id, nombre: isp.nombre } });
+    setSessionCookies(c, tokens);
+    return c.json({ success: true, data: { type: "isp", id: isp.id, name: isp.name } });
   } catch (e) {
-    if (e instanceof ErrorAuth && e.status === 401) return c.json(noAutorizado, 401);
+    if (e instanceof AuthError && e.status === 401) return c.json(unauthorized, 401);
     throw e;
   }
 });
@@ -86,13 +87,13 @@ auth.post("/logout", async (c) => {
     try {
       await new AgnosticAuth(c.env).revoke(refresh);
     } catch {
-      /* revocación es mejor-esfuerzo; las cookies se limpian igual */
+      /* revocation is best-effort; cookies get cleared regardless */
     }
   }
-  limpiarSesionCookies(c);
+  clearSessionCookies(c);
   return c.json({ success: true, data: {} });
 });
 
-auth.get("/me", requireSesion, (c) => {
+auth.get("/me", requireSession, (c) => {
   return c.json({ success: true, data: c.get("actor") });
 });

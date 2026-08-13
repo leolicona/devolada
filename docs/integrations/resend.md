@@ -1,19 +1,19 @@
-# Resend — contrato pendiente
+# Resend — contract pending
 
-**Estado: no integrado todavía.** Se llena al construir `auth/registro-isp.spec.md`.
+**Status: not integrated yet.** Filled in while building `auth/isp-signup.spec.md`.
 
-## Uso previsto
+## Intended use
 
-- Verificación de correo del ISP (US-S04): enviar el `magicLink` de Agnostic Auth `/auth/initiate`.
-- Recuperación de contraseña del admin (US-S06): mismo patrón.
-- Solo correo transaccional del lado admin. Las tiendas no usan correo (su canal es WhatsApp/SMS → TD-003).
+- ISP email verification (US-S04): sending the Agnostic Auth `/auth/initiate` `magicLink`.
+- Admin password recovery (US-S06): same pattern.
+- Transactional email on the admin side only. Stores don't use email (their channel is WhatsApp/SMS → TD-003).
 
-## Requisitos para activarlo
+## Requirements to activate
 
-- API Key de Resend como secret del worker (`RESEND_API_KEY` en `.dev.vars` / `wrangler secret`).
-- Dominio verificado en Resend (o el sandbox `onboarding@resend.dev` para desarrollo).
-- Solo se llama desde `apps/api`; nunca desde el navegador.
+- Resend API key as a worker secret (`RESEND_API_KEY` in `.dev.vars` / `wrangler secret`).
+- Verified domain in Resend (or the `onboarding@resend.dev` sandbox for development).
+- Called only from `apps/api`; never from the browser.
 
-## Regla de resiliencia
+## Resilience rule
 
-El registro no se bloquea si Resend falla: la cuenta queda creada sin verificar y el correo puede reenviarse. El error se registra, no se propaga como fallo del registro.
+Signup does not block if Resend fails: the account is created unverified and the email can be re-sent. The error is logged, not propagated as a signup failure.

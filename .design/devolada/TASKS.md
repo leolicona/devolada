@@ -3,49 +3,49 @@
 Generated from: .design/devolada/DESIGN_BRIEF.md (+ INFORMATION_ARCHITECTURE.md, DESIGN_TOKENS.css)
 Date: 2026-08-13
 
-Orden: riesgo primero (spike WispHub), luego fundación visual para validar la dirección estética, luego rebanadas verticales por superficie. Cada tarea incluye estructura + estilo + interacción y es verificable por sí sola.
+Order: risk first (WispHub spike), then visual foundation to validate the aesthetic direction, then vertical slices per surface. Every task includes structure + styling + interaction and is verifiable on its own.
 
-## Riesgo primero
+## Risk first
 
-- [ ] **Spike WispHub**: con la API Key real, probar buscar cliente (por ID/teléfono/nombre), registrar un pago y verificar que el servicio se reactiva en el MikroTik; documentar endpoints, latencias y limitaciones en `.design/devolada/WISPHUB_SPIKE.md`. Si la reactivación no es automática vía API, el hallazgo redefine el producto — por eso va antes que todo. _Sin UI; bloquea todo el backend._
+- [ ] **WispHub spike**: with a real API Key, test customer search (by ID/phone/name), payment registration, and verify the service reactivates on the MikroTik; document endpoints, latencies and limitations in `.design/devolada/WISPHUB_SPIKE.md`. If reactivation is not automatic via API, the finding redefines the product — hence it goes before everything. _No UI; blocks the whole backend._
 
-## Fundación
+## Foundation
 
-- [x] **Tokens vivos en packages/ui**: montar el monorepo mínimo necesario para servir una página de muestra que renderice `DESIGN_TOKENS.css` (escala tipográfica, montos con tabular-nums, botones, badges, claro/oscuro) con Tailwind v4 + Archivo/JetBrains Mono self-hosted. Aquí se establece la filosofía funcionalista Rams cálida: esta página es el veredicto de la dirección visual antes de construir pantallas. _Reuses: DESIGN_TOKENS.css._
-- [ ] **Átomos compartidos: Badge de estado + Desglose de monto**: los dos componentes fuente-de-verdad de `packages/ui`. Badge: tinta + fondo + borde + ícono + texto para reconectado/en cola/fallido/pendiente/confirmada/en disputa. Desglose: mensualidad + cargo por servicio + total, formato `$1,234.00` tabular. Verificables en la página de muestra. _New components; los consumen ambas apps._
-- [x] **API base con sesiones**: `apps/api` (Hono + Drizzle + Zod en Workers) con esquema inicial (isp, tienda, cobro, movimiento, entrega, invitación) y middleware de cookies `gm_access`/`gm_refresh` contra Agnostic Auth (service binding): verificación de estatus en DB por solicitud, refresh transparente, revoke en logout. Verificable con curl: login de tienda (teléfono+contraseña vía `/auth/verify-password`) y sesión que sobrevive expiración del access token. _Depends on: Spike WispHub (solo para el diseño del esquema de cobros)._
-- [ ] **Registro y acceso del ISP**: `/registro` con correo + contraseña (`/auth/hash`), verificación de correo vía `/auth/initiate` + Resend + `/auth/verify`, y `/recuperar` con el mismo patrón. Incluye el componente de canje de token mágico que reutilizará la invitación de tienda. Empieza con `docs/auth/registro-isp.spec.md` y **monta la infraestructura de testing** (matriz de `docs/TESTING.md`: vitest-pool-workers, Testing Library, MSW, Playwright+axe) — sus escenarios nacen automatizados y se retro-cubren los 8 de sesiones (TD-005). _New; base visual del formulario de acceso compartido._
+- [x] **Live tokens in packages/ui**: minimal monorepo serving a sample page rendering the tokens (type scale, tabular-nums amounts, buttons, badges, light/dark) with Tailwind v4 + self-hosted Archivo/JetBrains Mono. The warm functionalist Rams philosophy is established here: this page is the verdict on the visual direction before building screens. _Reuses: DESIGN_TOKENS.css._
+- [x] **Shared atoms: StatusBadge + AmountBreakdown**: the two source-of-truth components in `packages/ui`. Badge: ink + background + border + icon + text for reconnected/queued/failed/pending/confirmed/disputed. Breakdown: monthly fee + service fee + total, tabular `$1,234.00` format. Verifiable on the sample page. _New components; consumed by both apps._
+- [x] **API base with sessions**: `apps/api` (Hono + Drizzle + Zod on Workers) with the initial schema (isps, stores, charges, ledger_entries, cash_drops, invitations) and `gm_access`/`gm_refresh` cookie middleware against Agnostic Auth (service binding): per-request DB status check, transparent refresh, revoke on logout. Verifiable with curl: store login (phone+password via `/auth/verify-password`) and a session that survives access-token expiry. _Depends on: WispHub spike (only for the charge schema design)._
+- [ ] **ISP signup and access**: `/signup` with email + password (`/auth/hash`), email verification via `/auth/initiate` + Resend + `/auth/verify`, and `/recover` with the same pattern. Includes the magic-token redemption component the store invitation will reuse. Starts with `docs/auth/isp-signup.spec.md` and **lands the testing infrastructure** (the `docs/TESTING.md` matrix: vitest-pool-workers, Testing Library, MSW, Playwright+axe) — its scenarios are born automated and the 8 session scenarios get retro-covered (TD-005). _New; visual base of the shared access form._
 
-## PWA Tienda (camino crítico)
+## Store PWA (critical path)
 
-- [ ] **Shell de la PWA**: layout con 3 tabs inferiores (Cobrar · Caja · Movimientos, 64px), login teléfono + contraseña, manifest instalable, sesión larga. Móvil-primero con piso 360px, contenido centrado a `--max-width-content` en pantallas grandes. _Reuses: formulario de acceso, tokens._
-- [ ] **Cobrar — buscador**: home con input enfocado al abrir, búsqueda por ID/teléfono/nombre (proxy del API a WispHub), resultados con identidad mínima (nombre, zona, estado del servicio). Estados: vacío, buscando, sin resultados, WispHub caído (aviso de cola). _Depends on: API base._
-- [ ] **Cobrar — confirmar y cobrar**: `/cobrar/$clienteId` con monto en `--font-size-amount`, desglose, tarjeta de identidad y botón "Cobrar $X" de 64px anclado abajo. Estados: sin adeudo (sin botón), techo de saldo bloqueante (botón deshabilitado + explicación). _Reuses: Desglose de monto._
-- [ ] **Resultado de cobro con estado vivo**: `/cobros/$cobroId` — registra el cobro + asientos del ledger (cobro y comisión), muestra transición reconectando → reconectado (verde) / en cola (ámbar) con polling, folio en mono, botón "Nuevo cobro". El cobro nunca se rechaza por fallas de WispHub. _Reuses: Badge de estado. Depends on: cola de reconexión (puede stubearse)._
-- [ ] **Caja**: balance actual protagonista (`--font-size-3xl`), comisión acumulada, estado de la última entrega, avisos de techo de saldo (cercano/superado), nombre de tienda y cerrar sesión. Cada número se desglosa tocándolo (principio: el ledger es la verdad). _Reuses: Badge, Desglose._
-- [ ] **Registrar entrega + Movimientos**: `/caja/entregar` con monto sugerido = balance (editable hacia abajo) creando asiento pendiente; `/movimientos` con ledger agrupado por día (scroll infinito) y detalle por movimiento. _Reuses: lista de movimientos compartida con admin._
-- [ ] **Estados especiales de la PWA**: pantalla completa de cuenta suspendida (con contacto del ISP; puede aparecer a media jornada), `/invitacion/$token` para establecer contraseña (canje de token mágico), y aviso de sin conexión. _Reuses: canje de token mágico._
+- [ ] **PWA shell**: layout with 3 bottom tabs (Cobrar · Caja · Movimientos, 64px), phone + password login, installable manifest, long session. Mobile-first with a 360px floor, content centered at `--max-width-content` on large screens. _Reuses: access form, tokens._
+- [ ] **Charge — search**: home with the input focused on open, search by ID/phone/name (API proxy to WispHub), results with minimum identity (name, zone, service status). States: empty, searching, no results, WispHub down (queue notice). _Depends on: API base._
+- [ ] **Charge — confirm & charge**: `/charge/$customerId` with the amount at `--font-size-amount`, breakdown, identity card and a 64px "Cobrar $X" button anchored at the bottom. States: nothing due (no button), blocking balance cap (disabled button + explanation). _Reuses: AmountBreakdown._
+- [ ] **Charge result with live status**: `/charges/$chargeId` — records the charge + ledger entries (charge and commission), shows the reconnecting → reconnected (green) / queued (amber) transition with polling, folio in mono, "Nuevo cobro" button. A charge is never rejected because of WispHub failures. _Reuses: StatusBadge. Depends on: reconnection queue (stubbable)._
+- [ ] **Cash box**: current balance as protagonist (`--font-size-3xl`), accumulated commission, last drop status, balance-cap notices (approaching/exceeded), store name and logout. Every number breaks down on tap (principle: the ledger is the truth). _Reuses: StatusBadge, AmountBreakdown._
+- [ ] **Record cash drop + Ledger**: `/cashbox/drop` with suggested amount = balance (editable downward) creating a pending entry; `/ledger` with the ledger grouped by day (infinite scroll) and per-entry detail. _Reuses: ledger entry list shared with admin._
+- [ ] **PWA special states**: full-screen suspended account (with the ISP's contact; can appear mid-shift), `/invitation/$token` to set the password (magic-token redemption), and offline notice. _Reuses: magic-token redemption._
 
-## Dashboard Admin
+## Admin Dashboard
 
-- [ ] **Shell del admin**: sidebar de 4 secciones (Cobros · Tiendas · Entregas · Configuración) con cuenta al pie, colapso a menú inferior en móvil, login correo + contraseña. Desktop-primero. _Reuses: formulario de acceso, tokens._
-- [ ] **Feed de cobros en vivo**: home con transacciones en tiempo real (estado de reconexión visible, fallidos destacados arriba), totales del día, filtros por tienda/estado/fechas vía query params, detalle expandible `/cobros/$cobroId` con línea de tiempo de reconexión. _Reuses: Badge, Desglose. Referencia: Stripe Dashboard._
-- [ ] **Tiendas**: tabla con saldo por tienda y alerta de techo, alta con invitación por WhatsApp/SMS (enlace copiable como fallback si no hay proveedor de mensajería), detalle `/tiendas/$tiendaId` con ledger completo, edición de comisión/techo, suspender y reenviar invitación. _Reuses: lista de movimientos._
-- [ ] **Entregas**: pendientes de confirmar arriba con acciones confirmar/disputar (con nota), historial paginado, badge contador en el sidebar. Confirmar desde el teléfono en dos toques. _Reuses: Badge._
-- [ ] **Configuración**: API Key de WispHub con validación en vivo (probar conexión), cargo por servicio, reparto de comisión tienda/plataforma. Primer login exige API Key antes de operar. _Sección propia pensando en multi-tenant futuro._
+- [ ] **Admin shell**: 4-section sidebar (Cobros · Tiendas · Entregas · Configuración) with account at the foot, bottom-menu collapse on mobile, email + password login. Desktop-first. _Reuses: access form, tokens._
+- [ ] **Live charge feed**: home with real-time transactions (reconnection status visible, failed ones surfaced on top), today's totals, filters by store/status/dates via query params, expandable detail `/charges/$chargeId` with a reconnection timeline. _Reuses: StatusBadge, AmountBreakdown. Reference: Stripe Dashboard._
+- [ ] **Stores**: table with per-store balance and cap alert, creation with WhatsApp/SMS invitation (copyable link as fallback while there's no messaging provider), `/stores/$storeId` detail with full ledger, commission/cap editing, suspend and re-send invitation. _Reuses: ledger entry list._
+- [ ] **Cash drops**: pending confirmations on top with confirm/dispute (with note) actions, paginated history, count badge in the sidebar. Confirming from a phone in two taps. _Reuses: StatusBadge._
+- [ ] **Settings**: WispHub API Key with live validation (test connection), service fee, store/platform commission split. First login demands the API Key before operating. _Its own section with future multi-tenancy in mind._
 
-## Backend de soporte
+## Supporting backend
 
-- [ ] **Cola de reconexión**: reintentos con backoff contra WispHub (Cloudflare Queues), transiciones de estado del cobro (en cola → reconectado / fallido) que la PWA y el feed observan, idempotencia por cobro. _Depends on: Spike WispHub._
-- [ ] **Comprobante por WhatsApp/SMS**: plantilla con folio, desglose y estado de reconexión; envío al registrar el cobro y actualización al reconectar. Decisión pendiente de proveedor (Meta WhatsApp Business API vs Twilio) — la plantilla y el trigger se construyen agnósticos del proveedor. _Reuses: Desglose de monto._
+- [ ] **Reconnection queue**: retries with backoff against WispHub (Cloudflare Queues), charge status transitions (queued → reconnected / failed) observed by the PWA and the feed, idempotency per charge. _Depends on: WispHub spike._
+- [ ] **WhatsApp/SMS receipt**: template with folio, breakdown and reconnection status; sent on charge and updated on reconnection. Provider decision pending (Meta WhatsApp Business API vs Twilio) — template and trigger built provider-agnostic. _Reuses: AmountBreakdown._
 
-## Interacciones, Responsive y Polish
+## Interactions, Responsive & Polish
 
-- [ ] **Estados de listas en ambas apps**: vacío (primera vez sin cobros/tiendas), carga (skeletons), error con reintento, para feed, movimientos, tiendas y entregas. Covers: empty, loading, error.
-- [ ] **Pase de modo oscuro**: revisar ambas apps contra los tokens dark (carbón cálido); ningún color hardcodeado fuera de tokens. Covers: claro, oscuro, preferencia de sistema + toggle manual.
-- [ ] **Pase responsive**: PWA a 360px real y centrada en desktop; admin con tablas → tarjetas y sidebar → menú inferior en móvil. Breakpoints: 375/768/1024/1280.
-- [ ] **Pase de accesibilidad**: contraste AA (AAA en montos y estados), color nunca solo (ícono + texto), táctiles ≥48px, teclado + focus visible en admin, `aria-live` en feed y transiciones de reconexión, es-MX llano.
+- [ ] **List states in both apps**: empty (first time, no charges/stores), loading (skeletons), error with retry, for feed, ledger, stores and cash drops. Covers: empty, loading, error.
+- [ ] **Dark mode pass**: review both apps against the dark tokens (warm charcoal); no hardcoded color outside tokens. Covers: light, dark, system preference + manual toggle.
+- [ ] **Responsive pass**: PWA at a real 360px and centered on desktop; admin with tables → cards and sidebar → bottom menu on mobile. Breakpoints: 375/768/1024/1280.
+- [ ] **Accessibility pass**: AA contrast (AAA on amounts and statuses), color never alone (icon + text), touch targets ≥48px, keyboard + visible focus in admin, `aria-live` on the feed and reconnection transitions, plain es-MX.
 
 ## Review
 
-- [ ] **Design review**: correr /design-review contra el brief con las apps corriendo (screenshots claro/oscuro, 360/768/1280).
+- [ ] **Design review**: run /design-review against the brief with the apps running (light/dark screenshots, 360/768/1280).

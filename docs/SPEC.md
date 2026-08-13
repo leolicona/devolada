@@ -1,96 +1,97 @@
 # Devolada — SPEC
 
-Índice sagrado del proyecto. **Regla de oro: si existe en el código pero no está aquí, está mal.**
+The project's sacred index. **Golden rule: if it exists in the code but is not here, it's wrong.**
 
-Red de puntos de cobro en tienditas para ISPs que usan WispHub. El cliente paga su mensualidad en la tienda de su colonia, su internet se reconecta automáticamente en segundos, la tienda gana comisión sin invertir y el ISP cobra más rápido sin cobranza de campo.
+A network of payment points in neighborhood corner stores for ISPs running WispHub. The customer pays their monthly internet fee at the store around the corner, their service reconnects automatically within seconds, the store earns a commission with zero investment, and the ISP collects faster without field collection runs.
 
-## Reglas del flujo spec-driven (adaptado)
+## Spec-driven workflow rules (adapted)
 
-1. Toda funcionalidad nueva: entrevista → decisiones justificadas (D1…Dn en formato mini-ADR: decisión + alternativas descartadas + porqué) → reservar US-ID aquí → escribir `docs/<dominio>/<feature>.spec.md` → registrarlo en este índice **en la misma PR**.
-2. El `.spec.md` se actualiza con la realidad durante el desarrollo; nunca se bifurca.
-3. **Vía lite**: bugfixes, typos y ajustes de copy no llevan spec ni plan — llevan entrada en `BUGS.md` (si tocó producción) y test. El umbral: si cambia una regla de negocio o un contrato, es spec; si no, es vía lite.
-4. Los `.plan.md` son **efímeros**: se borran o archivan al mergear. Solo el spec se mantiene.
-5. Al terminar: deuda consciente → `TECH_DEBT.md`; defectos en producción → `BUGS.md`.
-6. Los tests nombran su historia (`US-C02: cobra mensualidad exacta…`) para poder rastrear cobertura con grep.
+1. Every new feature: interview → justified decisions (D1…Dn as mini-ADRs: decision + discarded alternatives + why) → reserve a US-ID here → write `docs/<domain>/<feature>.spec.md` → register it in this index **within the same PR**.
+2. The `.spec.md` is updated with reality during development; it never forks.
+3. **Lite path**: bugfixes, typos and copy tweaks carry no spec or plan — they carry an entry in `BUGS.md` (if production was affected) and a test. The threshold: if a business rule or contract changes, it's a spec; otherwise it's the lite path.
+4. `.plan.md` files are **ephemeral**: deleted or archived on merge. Only the spec is maintained.
+5. On completion: conscious debt → `TECH_DEBT.md`; production defects → `BUGS.md`.
+6. Tests cite their story (`US-C02: charges the exact monthly fee…`) so spec coverage can be traced with grep.
 
-## Glosario
+## Glossary
 
-Fuente única de vocabulario (UI, URLs, código). Detalle en `.design/devolada/INFORMATION_ARCHITECTURE.md`.
+Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico); code identifiers are English. One word per concept, no synonyms.
 
-| Concepto | Término | Nunca |
-|----------|---------|-------|
-| Transacción de pago del cliente | **Cobro** | "pago" (solo en comprobante al cliente final) |
-| Saldo continuo de la tienda | **Caja** / **Balance** | "corte" |
-| Cash drop al ISP | **Entrega** | "corte", "cash drop" |
-| Comisión que paga el cliente final | **Cargo por servicio** | — |
-| Ganancia de la tienda | **Comisión** | (nunca de cara al cliente final) |
-| Asiento del ledger | **Movimiento** | — |
-| Reactivación en MikroTik | **Reconexión** | — |
-| Comprobante con folio único | **Comprobante** / **Folio** | "ticket", "recibo" |
-| Acceso inicial de tienda | **Invitación** | — |
+| Concept | UI copy (es-MX) | Code (English) | Never |
+|---------|-----------------|----------------|-------|
+| Customer payment transaction | **Cobro** | `charge` | "pago" (only on the end-customer receipt) |
+| Store's continuous balance | **Caja** / **Balance** | `balance` (derived) | "corte" |
+| Cash handover to the ISP | **Entrega** | `cash_drop` | "corte" |
+| Fee paid by the end customer | **Cargo por servicio** | `service_fee` | — |
+| Store's earnings | **Comisión** | `commission` | (never shown to the end customer) |
+| Ledger entry | **Movimiento** | `ledger_entry` | — |
+| MikroTik reactivation | **Reconexión** | `reconnection` (`queued/reconnected/failed`) | — |
+| Receipt with unique folio | **Comprobante** / **Folio** | `receipt` / `folio` | "ticket" |
+| Store's initial access | **Invitación** | `invitation` (`sent/accepted`) | — |
+| Balance threshold | **Techo de saldo** | `balance_cap` | — |
 
-## Historias de Usuario
+## User Stories
 
-### Auth y sesiones (S)
-- **US-S01** — Como tienda, inicio sesión con teléfono + contraseña y mi sesión dura semanas en mi dispositivo.
-- **US-S02** — Como usuario con sesión, nunca veo "sesión expirada" en operación normal: los tokens se renuevan solos.
-- **US-S03** — Como ISP, al suspender una tienda su acceso se revoca de inmediato, aunque tenga sesión viva.
-- **US-S04** — Como ISP, me registro con correo + contraseña y verifico mi correo (Resend) antes de operar.
-- **US-S05** — Como tienda, recibo una invitación por WhatsApp/SMS y establezco mi contraseña desde el enlace.
-- **US-S06** — Como ISP, recupero mi contraseña por correo; como tienda, el ISP me reenvía la invitación.
+### Auth & sessions (S)
+- **US-S01** — As a store, I log in with phone + password and my session lasts for weeks on my device.
+- **US-S02** — As a signed-in user, I never see "session expired" during normal operation: tokens renew on their own.
+- **US-S03** — As an ISP, suspending a store revokes its access immediately, even mid-session.
+- **US-S04** — As an ISP, I sign up with email + password and verify my email (Resend) before operating.
+- **US-S05** — As a store, I receive an invitation via WhatsApp/SMS and set my password from the link.
+- **US-S06** — As an ISP, I recover my password by email; as a store, the ISP re-sends my invitation.
 
-### Cobros (C)
-- **US-C01** — Como tienda, busco al cliente por ID, teléfono o nombre y veo solo lo mínimo para confirmar su identidad.
-- **US-C02** — Como tienda, cobro la mensualidad exacta con desglose visible (mensualidad + cargo por servicio).
-- **US-C03** — Como cliente final, mi servicio se reconecta automáticamente en segundos tras pagar; la tienda ve el estado en vivo.
-- **US-C04** — Como tienda, nunca se me rechaza un cobro por fallas de WispHub: queda registrado y la reconexión entra en cola con reintentos.
-- **US-C05** — Como cliente final, recibo comprobante por WhatsApp/SMS con folio único.
+### Charges (C)
+- **US-C01** — As a store, I search for the customer by ID, phone or name and see only the minimum needed to confirm their identity.
+- **US-C02** — As a store, I charge the exact monthly fee with a visible breakdown (monthly fee + service fee).
+- **US-C03** — As an end customer, my service reconnects automatically within seconds after paying; the store sees the status live.
+- **US-C04** — As a store, a charge is never rejected because of WispHub failures: it gets recorded and the reconnection is queued with retries.
+- **US-C05** — As an end customer, I receive a receipt via WhatsApp/SMS with a unique folio.
 
-### Caja (K)
-- **US-K01** — Como tienda, veo mi balance (efectivo del ISP en mi poder) y mi comisión acumulada; todo número se desglosa en sus movimientos.
-- **US-K02** — Como tienda, registro una entrega de efectivo que queda pendiente hasta que el ISP la confirma.
-- **US-K03** — Como tienda, consulto mi ledger de movimientos (cobros, comisiones, entregas) inmutable.
-- **US-K04** — Como tienda, el techo de saldo me avisa al acercarme y bloquea cobros al superarse, con explicación clara.
+### Cash box (K)
+- **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my accumulated commission; every number breaks down into its ledger entries.
+- **US-K02** — As a store, I record a cash drop that stays pending until the ISP confirms it.
+- **US-K03** — As a store, I browse my immutable ledger (charges, commissions, cash drops).
+- **US-K04** — As a store, the balance cap warns me as I approach it and blocks charges once exceeded, with a clear explanation.
 
-### Entregas — lado admin (E)
-- **US-E01** — Como ISP, confirmo la recepción de una entrega y el balance de la tienda baja.
-- **US-E02** — Como ISP, disputo una entrega con nota si el monto no coincide; ambos vemos el mismo ledger para resolver.
+### Cash drops — admin side (E)
+- **US-E01** — As an ISP, I confirm receipt of a cash drop and the store's balance goes down.
+- **US-E02** — As an ISP, I dispute a cash drop with a note if the amount doesn't match; both sides see the same ledger to resolve it.
 
 ### Admin (A)
-- **US-A01** — Como ISP, veo los cobros aparecer en tiempo real con su estado de reconexión; los fallidos exigen mi atención.
-- **US-A02** — Como ISP, doy de alta tiendas y les envío invitación; puedo reenviarla mientras no sea aceptada.
-- **US-A03** — Como ISP, gestiono cada tienda: comisión, techo de saldo, suspender, ver su ledger.
-- **US-A04** — Como ISP, configuro mi API Key de WispHub (validada en vivo), el cargo por servicio y el reparto de comisión.
+- **US-A01** — As an ISP, I watch charges appear in real time with their reconnection status; failed ones demand my attention.
+- **US-A02** — As an ISP, I register stores and send them invitations; I can re-send one while it hasn't been accepted.
+- **US-A03** — As an ISP, I manage each store: commission, balance cap, suspend, view its ledger.
+- **US-A04** — As an ISP, I configure my WispHub API Key (validated live), the service fee and the commission split.
 
-## Funcionalidades por Fase
+## Features by Phase
 
-Detalle operativo en `.design/devolada/TASKS.md` (capa de ejecución).
+Operational detail in `.design/devolada/TASKS.md` (execution layer).
 
-- **Fase 0 — Riesgo**: spike WispHub (pago → reactivación). ⏳ pendiente de API Key
-- **Fase 1 — Fundación**: tokens vivos ✅ · átomos compartidos ✅ · API base con sesiones ✅ · registro/acceso ISP ⏳
-- **Fase 2 — PWA Tienda**: shell, buscador, cobrar, resultado vivo, caja, entregas, movimientos, estados especiales
-- **Fase 3 — Dashboard Admin**: shell, feed en vivo, tiendas, entregas, configuración
-- **Fase 4 — Backend de soporte**: cola de reconexión, comprobantes
-- **Fase 5 — Polish**: estados de listas, modo oscuro, responsive, accesibilidad, design review
+- **Phase 0 — Risk**: WispHub spike (payment → reactivation). ⏳ pending API Key
+- **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ⏳
+- **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
+- **Phase 3 — Admin Dashboard**: shell, live feed, stores, cash drops, settings
+- **Phase 4 — Supporting backend**: reconnection queue, receipts
+- **Phase 5 — Polish**: list states, dark mode, responsive, accessibility, design review
 
-## Índice de specs
+## Spec index
 
-| Spec | Dominio | Historias | Estado |
-|------|---------|-----------|--------|
-| [auth/sesiones.spec.md](auth/sesiones.spec.md) | auth | US-S01, US-S02, US-S03 | vigente |
-| auth/registro-isp.spec.md | auth | US-S04, US-S06 | pendiente |
-| auth/invitacion-tienda.spec.md | auth | US-S05 | pendiente |
-| cobros/*.spec.md | cobros | US-C01…C05 | pendiente |
-| caja/*.spec.md | caja | US-K01…K04 | pendiente |
-| entregas/*.spec.md | entregas | US-E01, US-E02 | pendiente |
-| admin/*.spec.md | admin | US-A01…A04 | pendiente |
+| Spec | Domain | Stories | Status |
+|------|--------|---------|--------|
+| [auth/sessions.spec.md](auth/sessions.spec.md) | auth | US-S01, US-S02, US-S03 | current |
+| auth/isp-signup.spec.md | auth | US-S04, US-S06 | pending |
+| auth/store-invitation.spec.md | auth | US-S05 | pending |
+| charges/*.spec.md | charges | US-C01…C05 | pending |
+| cashbox/*.spec.md | cashbox | US-K01…K04 | pending |
+| cash-drops/*.spec.md | cash-drops | US-E01, US-E02 | pending |
+| admin/*.spec.md | admin | US-A01…A04 | pending |
 
-## Capas transversales
+## Cross-cutting layers
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — reglas arquitectónicas globales
-- [FRONTEND.md](FRONTEND.md) — leyes de UI que ninguna feature re-decide
-- [CICD.md](CICD.md) — pipeline: trunk-based, preview por PR, dev automático, prod con approval gate
-- [TESTING.md](TESTING.md) — reglas de prueba
+- [ARCHITECTURE.md](ARCHITECTURE.md) — global architectural rules
+- [FRONTEND.md](FRONTEND.md) — UI laws no feature re-decides
+- [CICD.md](CICD.md) — pipeline: trunk-based, per-PR previews, auto dev, gated prod
+- [TESTING.md](TESTING.md) — testing rules
 - [BUGS.md](BUGS.md) · [TECH_DEBT.md](TECH_DEBT.md)
-- [integrations/](integrations/) — contratos de terceros (se consumen, no se re-deciden)
-- `.design/devolada/` — capa de diseño: brief, IA, tokens, tasks (el design system vive en `packages/ui`)
+- [integrations/](integrations/) — third-party contracts (consumed, never re-decided)
+- `.design/devolada/` — design layer: brief, IA, tokens, tasks (the design system lives in `packages/ui`)

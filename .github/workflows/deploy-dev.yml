@@ -1,4 +1,4 @@
-# Despliegue continuo a dev en cada push a main (CICD.md camino 2).
+# Continuous deployment to dev on every push to main (CICD.md path 2).
 name: Deploy Dev
 on:
   push:
@@ -39,20 +39,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Migraciones D1 dev (antes del deploy)
+      - name: D1 dev migrations (before deploy)
         working-directory: apps/api
         run: pnpm exec wrangler d1 migrations apply devolada-db-dev --env dev --remote
-      - name: Deploy API dev
+      - name: Deploy dev API
         working-directory: apps/api
         run: pnpm exec wrangler deploy --env dev
-      # TODO: deploy de apps/tienda y apps/admin cuando existan
+      # TODO: deploy apps/tienda and apps/admin once they exist
       - name: Smoke test
         run: |
           URL="${{ vars.DEV_API_URL }}"
           if [ -z "$URL" ]; then
-            echo "::warning::DEV_API_URL no configurada; smoke omitido"
+            echo "::warning::DEV_API_URL not set; smoke skipped"
             exit 0
           fi
           sleep 5
-          curl -sf "$URL/health" || { echo "::error::Smoke falló: dev desplegado pero no responde"; exit 1; }
-      # TODO: E2E Playwright + axe contra dev (TESTING.md capa 4)
+          curl -sf "$URL/health" || { echo "::error::Smoke failed: dev deployed but not responding"; exit 1; }
+      # TODO: Playwright + axe E2E against dev (TESTING.md layer 4)

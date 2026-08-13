@@ -1,31 +1,31 @@
 export type Bindings = {
   DB: D1Database;
-  /* Service binding en producción; en dev se usa AUTH_BASE_URL por HTTP */
+  /* Service binding in production; dev falls back to HTTP via AUTH_BASE_URL */
   AGNOSTIC_AUTH_API?: Fetcher;
   AUTH_BASE_URL: string;
   AUTH_APP_ID: string;
-  /* Secreto HS256 con el que agnostic-auth firma los JWT.
-     Sin él (solo dev) los tokens se decodifican sin verificar firma. */
+  /* HS256 secret agnostic-auth signs JWTs with.
+     Without it (dev only) tokens are decoded without signature verification. */
   AUTH_JWT_SECRET?: string;
   COOKIE_DOMAIN?: string;
-  ENTORNO?: "dev" | "prod";
+  ENVIRONMENT?: "dev" | "prod";
 };
 
 export type Actor =
   | {
-      tipo: "tienda";
+      type: "store";
       id: string;
       ispId: string;
-      nombre: string;
-      telefono: string;
-      estatus: "invitada" | "activa" | "suspendida";
+      name: string;
+      phone: string;
+      status: "invited" | "active" | "suspended";
     }
   | {
-      tipo: "isp";
+      type: "isp";
       id: string;
-      nombre: string;
-      correo: string;
-      estatus: "activo" | "suspendido";
+      name: string;
+      email: string;
+      status: "active" | "suspended";
     };
 
 export type Variables = {

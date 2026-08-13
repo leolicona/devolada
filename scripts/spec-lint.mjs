@@ -1,54 +1,52 @@
 #!/usr/bin/env node
-/* Enforcement de la regla de oro (docs/SPEC.md):
-   1. Todo docs/<dominio>/<feature>.spec.md debe estar referenciado en el índice de SPEC.md.
-   2. Los archivos de test deben citar historias (US-...). Advertencia mientras no
-      exista infraestructura de tests; se volverá error al pagar TD-005. */
+/* Golden-rule enforcement (docs/SPEC.md):
+   1. Every docs/<domain>/<feature>.spec.md must be referenced in SPEC.md's index.
+   2. Test files must cite user stories (US-...). Warning-only until the test
+      infrastructure lands; becomes an error when TD-005 is paid. */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const raiz = new URL("..", import.meta.url).pathname;
-const docsDir = join(raiz, "docs");
+const root = new URL("..", import.meta.url).pathname;
+const docsDir = join(root, "docs");
 
-function buscar(dir, filtro, acc = []) {
-  for (const nombre of readdirSync(dir)) {
-    const ruta = join(dir, nombre);
-    if (statSync(ruta).isDirectory()) buscar(ruta, filtro, acc);
-    else if (filtro(nombre)) acc.push(ruta);
+function walk(dir, filter, acc = []) {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) walk(path, filter, acc);
+    else if (filter(name)) acc.push(path);
   }
   return acc;
 }
 
 const spec = readFileSync(join(docsDir, "SPEC.md"), "utf8");
-const specsEncontrados = buscar(docsDir, (n) => n.endsWith(".spec.md"));
+const specFiles = walk(docsDir, (n) => n.endsWith(".spec.md"));
 
-const huerfanos = specsEncontrados.filter(
-  (ruta) => !spec.includes(relative(docsDir, ruta)),
-);
+const orphans = specFiles.filter((path) => !spec.includes(relative(docsDir, path)));
 
-if (huerfanos.length) {
-  console.error("✘ Specs no registrados en docs/SPEC.md (regla de oro):");
-  for (const h of huerfanos) console.error(`  - ${relative(raiz, h)}`);
+if (orphans.length) {
+  console.error("✘ Specs not registered in docs/SPEC.md (golden rule):");
+  for (const o of orphans) console.error(`  - ${relative(root, o)}`);
   process.exit(1);
 }
 
 const tests = ["apps", "packages"]
-  .map((d) => join(raiz, d))
+  .map((d) => join(root, d))
   .flatMap((d) => {
     try {
-      return buscar(d, (n) => /\.(test|spec)\.[jt]sx?$/.test(n)).filter(
-        (r) => !r.includes("node_modules"),
+      return walk(d, (n) => /\.(test|spec)\.[jt]sx?$/.test(n)).filter(
+        (p) => !p.includes("node_modules"),
       );
     } catch {
       return [];
     }
   });
 
-const sinHistoria = tests.filter((t) => !/US-[A-Z]\d{2}/.test(readFileSync(t, "utf8")));
-if (sinHistoria.length) {
-  console.warn("⚠ Tests sin historia (US-XNN) citada — será error al pagar TD-005:");
-  for (const t of sinHistoria) console.warn(`  - ${relative(raiz, t)}`);
+const withoutStory = tests.filter((t) => !/US-[A-Z]\d{2}/.test(readFileSync(t, "utf8")));
+if (withoutStory.length) {
+  console.warn("⚠ Tests without a cited story (US-XNN) — becomes an error once TD-005 is paid:");
+  for (const t of withoutStory) console.warn(`  - ${relative(root, t)}`);
 }
 
 console.log(
-  `✔ spec-lint: ${specsEncontrados.length} specs registrados, ${tests.length} archivos de test revisados`,
+  `✔ spec-lint: ${specFiles.length} specs registered, ${tests.length} test files checked`,
 );

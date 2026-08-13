@@ -1,192 +1,192 @@
 # Information Architecture: Devolada
 
-Dos apps separadas en el monorepo pnpm, con paquetes compartidos:
+Two separate apps in the pnpm monorepo, with shared packages. Route paths are code and therefore English; visible labels are product copy in es-MX.
 
 ```
-apps/tienda   → PWA móvil del punto de cobro (TanStack Router, móvil-primero)
-apps/admin    → Dashboard del ISP (TanStack Router, desktop-primero)
-apps/api      → API Hono + Drizzle + Zod (Cloudflare Workers); integra WispHub,
-                Resend y Agnostic Auth (service binding)
-packages/ui   → Componentes y tokens compartidos (shadcn/ui + Tailwind)
+apps/tienda   → Store mobile PWA (TanStack Router, mobile-first)
+apps/admin    → ISP dashboard (TanStack Router, desktop-first)
+apps/api      → Hono + Drizzle + Zod API (Cloudflare Workers); integrates WispHub,
+                Resend and Agnostic Auth (service binding)
+packages/ui   → Shared components and tokens (shadcn/ui + Tailwind)
 ```
 
 ## Site Map
 
 ### apps/tienda (PWA)
 
-- Cobrar (home) `/` — buscador de cliente; la pantalla inicial ES la acción principal
-  - Confirmar y cobrar `/cobrar/$clienteId` — ficha mínima de identidad + desglose + botón cobrar
-  - Resultado de cobro `/cobros/$cobroId` — estado vivo: reconectado / en cola / fallido
-- Caja `/caja` — balance actual, comisión acumulada, aviso de techo de saldo
-  - Registrar entrega `/caja/entregar` — monto sugerido = balance completo
-- Movimientos `/movimientos` — ledger de la tienda (cobros, comisiones, entregas)
-  - Detalle de movimiento `/movimientos/$movimientoId`
-- Iniciar sesión `/login` — teléfono + contraseña (fuera del layout con tabs)
-- Aceptar invitación `/invitacion/$token` — el tendero establece su contraseña al llegar desde el enlace de WhatsApp/SMS
+- Charge (home) `/` — customer search; the initial screen IS the primary action ("Cobrar")
+- Confirm & charge `/charge/$customerId` — minimum identity card + breakdown + charge button
+- Charge result `/charges/$chargeId` — live status: reconnected / queued / failed
+- Cash box `/cashbox` — current balance, accumulated commission, balance-cap notice ("Caja")
+  - Record cash drop `/cashbox/drop` — suggested amount = full balance
+- Ledger `/ledger` — the store's entries (charges, commissions, cash drops) ("Movimientos")
+  - Entry detail `/ledger/$entryId`
+- Login `/login` — phone + password (outside the tab layout)
+- Accept invitation `/invitation/$token` — the shopkeeper sets their password arriving from the WhatsApp/SMS link
 
-### apps/admin (Dashboard ISP)
+### apps/admin (ISP dashboard)
 
-- Cobros (home) `/` — feed en vivo de cobros con estado de reconexión
-  - Detalle de cobro `/cobros/$cobroId` — cliente, tienda, desglose, folio, línea de tiempo de reconexión
-- Tiendas `/tiendas` — tabla con saldos, alertas de techo, estado
-  - Nueva tienda `/tiendas/nueva`
-  - Detalle de tienda `/tiendas/$tiendaId` — ledger completo, saldo, comisión, techo, suspender
-- Entregas `/entregas` — pendientes de confirmar (arriba) + historial
-  - Detalle de entrega `/entregas/$entregaId` — confirmar o disputar
-- Configuración `/configuracion` — API Key de WispHub, cargo por servicio, reparto de comisión
-- Iniciar sesión `/login` — correo + contraseña
-- Registro del ISP `/registro` — correo + contraseña; verificación de correo vía Resend
-- Recuperar contraseña `/recuperar` — enlace de restablecimiento vía Resend
+- Charges (home) `/` — live charge feed with reconnection status ("Cobros")
+  - Charge detail `/charges/$chargeId` — customer, store, breakdown, folio, reconnection timeline
+- Stores `/stores` — table with balances, cap alerts, status ("Tiendas")
+  - New store `/stores/new`
+  - Store detail `/stores/$storeId` — full ledger, balance, commission, cap, suspend
+- Cash drops `/cash-drops` — pending confirmations (top) + history ("Entregas")
+  - Drop detail `/cash-drops/$dropId` — confirm or dispute
+- Settings `/settings` — WispHub API Key, service fee, commission split ("Configuración")
+- Login `/login` — email + password
+- ISP signup `/signup` — email + password; email verification via Resend
+- Password recovery `/recover` — reset link via Resend
 
 ## Navigation Model
 
-- **Primary navigation (tienda)**: 3 tabs inferiores fijos — **Cobrar · Caja · Movimientos**. Nunca más de 3; la acción principal siempre a un toque en la zona del pulgar.
-- **Primary navigation (admin)**: sidebar con 4 secciones — **Cobros · Tiendas · Entregas · Configuración**. Un solo nivel de profundidad; el detalle se abre dentro de la sección.
-- **Secondary navigation**: ninguna en tienda. En admin, tabs contextuales dentro del detalle de tienda (Ledger / Datos) si el contenido lo exige; no hay tercer nivel.
-- **Utility navigation**: tienda — nombre de la tienda y cerrar sesión dentro de Caja (no roba un tab). Admin — cuenta y cerrar sesión al pie del sidebar.
-- **Mobile navigation (admin)**: el sidebar colapsa a menú inferior de 4 íconos; las tablas colapsan a tarjetas. Confirmar una entrega desde el teléfono debe tomar dos toques.
-- **Badges**: el tab Caja muestra aviso cuando el saldo se acerca al techo; la sección Entregas muestra contador de pendientes.
+- **Primary navigation (store)**: 3 fixed bottom tabs — **Cobrar · Caja · Movimientos**. Never more than 3; the primary action always one tap away in the thumb zone.
+- **Primary navigation (admin)**: sidebar with 4 sections — **Cobros · Tiendas · Entregas · Configuración**. A single level of depth; detail opens inside its section.
+- **Secondary navigation**: none in the store. In the admin, contextual tabs inside the store detail (Ledger / Details) if content demands it; no third level.
+- **Utility navigation**: store — store name and logout inside Caja (doesn't steal a tab). Admin — account and logout at the sidebar's foot.
+- **Mobile navigation (admin)**: the sidebar collapses to a 4-icon bottom menu; tables collapse into cards. Confirming a cash drop from a phone must take two taps.
+- **Badges**: the Caja tab shows a notice as the balance approaches the cap; the Entregas section shows a pending-count badge.
 
 ## Content Hierarchy
 
-### Cobrar (tienda, home)
-1. Campo de búsqueda (ID / teléfono / nombre) con teclado abierto — el cliente está formado enfrente; cero toques antes de poder buscar
-2. Resultados con datos mínimos de identidad (nombre, zona, estado del servicio) — confirmar verbalmente antes de cobrar
-3. Aviso de techo de saldo si aplica — única interrupción permitida, porque puede bloquear cobros
-4. Estado de conexión (sutil) — si WispHub está caído, avisar que los cobros entrarán a cola
+### Charge (store, home)
+1. Search field (ID / phone / name) with keyboard open — the customer is queuing right there; zero taps before searching
+2. Results with minimum identity data (name, zone, service status) — confirm verbally before charging
+3. Balance-cap notice if applicable — the only allowed interruption, because it can block charges
+4. Connection status (subtle) — if WispHub is down, note that charges will queue
 
-### Confirmar y cobrar (tienda)
-1. Monto total gigante ($415) — es lo que el tendero dicta en voz alta
-2. Desglose: mensualidad + cargo por servicio — transparencia frente al cliente
-3. Identidad del cliente (nombre, zona, estado) — última verificación antes del dinero
-4. Botón "Cobrar $415" ancho, anclado abajo — imposible de errar; deshabilitado si techo bloqueante
+### Confirm & charge (store)
+1. Giant total amount ($415) — what the shopkeeper says out loud
+2. Breakdown: monthly fee + service fee — transparency in front of the customer
+3. Customer identity (name, zone, status) — last check before the money
+4. Wide "Cobrar $415" button anchored at the bottom — impossible to miss; disabled if the cap blocks
 
-### Caja (tienda)
-1. Balance actual (efectivo del ISP en la tienda) — el número que define su responsabilidad
-2. Comisión acumulada — su ganancia, refuerzo del modelo
-3. Botón "Registrar entrega" + estado de la última entrega (pendiente/confirmada)
-4. Avisos de techo de saldo
+### Cash box (store)
+1. Current balance (the ISP's cash in the store) — the number that defines their responsibility
+2. Accumulated commission — their earnings, reinforcing the model
+3. "Registrar entrega" button + last drop status (pending/confirmed)
+4. Balance-cap notices
 
-### Cobros (admin, home)
-1. Feed en vivo — la promesa central al ISP: ver el dinero entrar en tiempo real
-2. Estados de reconexión destacados (en cola/fallidos arriba o filtrables) — lo que exige acción o atención
-3. Totales del día (cobrado, # transacciones) — contexto rápido
-4. Filtros por tienda/fecha/estado
+### Charges (admin, home)
+1. Live feed — the core promise to the ISP: watch the money come in in real time
+2. Reconnection statuses highlighted (queued/failed on top or filterable) — what demands action or attention
+3. Today's totals (charged, # transactions) — quick context
+4. Filters by store/date/status
 
-### Tiendas (admin)
-1. Saldo por tienda con alerta visual de techo — la exposición de efectivo es el dato de riesgo
-2. Estado y actividad reciente de cada tienda
-3. Acciones: ver detalle, editar, suspender
-4. Alta de nueva tienda
+### Stores (admin)
+1. Balance per store with visual cap alert — cash exposure is the risk datum
+2. Status and recent activity per store
+3. Actions: view detail, edit, suspend
+4. New store creation
 
 ## User Flows
 
-### Cobro con reconexión (camino crítico)
-1. Tendero abre la PWA → home Cobrar con buscador enfocado
-2. Escribe ID, teléfono o nombre → resultados con identidad mínima
-3. Toca al cliente → pantalla de confirmación con monto y desglose
-   - Si el servicio ya está activo y sin saldo pendiente → aviso "Sin adeudo", no hay botón de cobro
-   - Si el techo de saldo bloquea → botón deshabilitado + "Registra una entrega para seguir cobrando"
-4. Confirma verbalmente con el cliente → toca "Cobrar $415"
-5. Pantalla de resultado con estado vivo:
-   - WispHub responde → verde "Pagado y reconectado" + folio; comprobante WhatsApp/SMS se envía solo
-   - WispHub no responde → ámbar "Pagado — reconexión en cola"; el asiento del ledger se crea igual
-6. Toca "Nuevo cobro" → vuelve al buscador limpio
+### Charge with reconnection (critical path)
+1. Shopkeeper opens the PWA → Charge home with the search focused
+2. Types ID, phone or name → results with minimum identity
+3. Taps the customer → confirmation screen with amount and breakdown
+   - If the service is active with no balance due → "Sin adeudo" notice, no charge button
+   - If the balance cap blocks → disabled button + "Registra una entrega para seguir cobrando"
+4. Confirms verbally with the customer → taps "Cobrar $415"
+5. Result screen with live status:
+   - WispHub responds → green "Pagado y reconectado" + folio; WhatsApp/SMS receipt sends itself
+   - WispHub doesn't respond → amber "Pagado — reconexión en cola"; the ledger entry is created regardless
+6. Taps "Nuevo cobro" → back to a clean search
 
-### Reconexión en cola (recuperación automática)
-1. Backend reintenta contra WispHub con backoff
-2. Al lograrlo → estado del cobro pasa a "Reconectado" en PWA y admin sin acción humana; se envía/actualiza comprobante
-3. Si agota reintentos → "Fallido" en rojo; en admin aparece arriba del feed para intervención manual del ISP
+### Queued reconnection (automatic recovery)
+1. Backend retries against WispHub with backoff
+2. On success → the charge's status flips to "Reconectado" in PWA and admin with no human action; receipt is sent/updated
+3. If retries are exhausted → red "Fallido"; in the admin it surfaces at the top of the feed for manual ISP intervention
 
-### Entrega bilateral (cash drop)
-1. Tendero en Caja → "Registrar entrega" → monto sugerido = balance completo (editable hacia abajo)
-2. Confirma → asiento "Entrega pendiente" visible en ambas superficies; el balance muestra el monto comprometido
-3. Entrega física del efectivo (fuera del sistema)
-4. Admin en Entregas → revisa monto → "Confirmar recepción"
-   - Si no coincide → "Disputar" con nota; el asiento queda en disputa y ambos ven el mismo ledger para resolver
-5. Confirmada → el balance de la tienda baja; el movimiento queda inmutable en ambos historiales
+### Bilateral cash drop
+1. Shopkeeper in Caja → "Registrar entrega" → suggested amount = full balance (editable downward)
+2. Confirms → "pending" entry visible on both surfaces; the balance shows the committed amount
+3. Physical cash handover (outside the system)
+4. Admin in Entregas → reviews the amount → "Confirmar recepción"
+   - If it doesn't match → "Disputar" with a note; the entry goes into dispute and both see the same ledger to resolve it
+5. Confirmed → the store's balance goes down; the entry stays immutable in both histories
 
-### Registro del ISP (admin)
-1. ISP llega a `/registro` → correo + contraseña
-2. Recibe correo de verificación (Resend) → confirma
-3. Primer inicio de sesión → Configuración le pide la API Key de WispHub antes de operar
-4. Con la API Key validada → puede dar de alta tiendas
+### ISP signup (admin)
+1. ISP lands on `/signup` → email + password
+2. Receives verification email (Resend) → confirms
+3. First login → Settings asks for the WispHub API Key before operating
+4. With the API Key validated → can register stores
 
-### Alta de tienda por invitación (admin)
-1. Admin → Tiendas → "Nueva tienda"
-2. Captura: nombre, responsable, teléfono, zona, comisión por cobro, techo de saldo
-3. Guarda → se envía invitación por WhatsApp/SMS al teléfono de la tienda
-4. Tendero abre el enlace → establece su contraseña → listo para cobrar
-5. Reenviar invitación disponible en el detalle de tienda mientras no haya sido aceptada
+### Store creation by invitation (admin)
+1. Admin → Stores → "Nueva tienda"
+2. Captures: name, contact, phone, zone, per-charge commission, balance cap
+3. Saves → invitation is sent via WhatsApp/SMS to the store's phone
+4. Shopkeeper opens the link → sets their password → ready to charge
+5. Re-send invitation available on the store detail while it hasn't been accepted
 
-### Inicio de sesión (tienda)
-1. Abre PWA → si hay sesión válida (larga) → directo a Cobrar
-2. Sin sesión → `/login` teléfono + contraseña
-3. Olvido → el admin reenvía la invitación desde el detalle de tienda para establecer nueva contraseña (sin self-service en MVP)
+### Store login
+1. Opens PWA → with a valid (long) session → straight to Charge
+2. No session → `/login` phone + password
+3. Forgotten → the admin re-sends the invitation from the store detail to set a new password (no self-service in MVP)
 
 ## Auth & Session Model
 
-La autenticación se gestiona íntegramente con cookies seguras HTTP-only emitidas por `apps/api`; el navegador nunca ve un JWT. El API es el único que habla con **Agnostic Auth** (IdP stateless en Cloudflare Workers, vía service binding).
+Authentication is handled entirely with secure HTTP-only cookies issued by `apps/api`; the browser never sees a JWT. The API is the only party talking to **Agnostic Auth** (stateless IdP on Cloudflare Workers, via service binding).
 
-- **Cookies**: `gm_access` (JWT HS256 de corta duración, validaciones rápidas) + `gm_refresh` (larga duración, mantiene la sesión). `Secure`, `HttpOnly`, `SameSite` — protegidas contra robo de sesión por XSS.
-- **Middleware en cada solicitud**: verifica el token **y** el estatus del usuario en la base de datos — una tienda o admin suspendido pierde acceso de inmediato aunque su token siga vigente.
-- **Refresh transparente**: si `gm_access` expiró pero `gm_refresh` es válido, el API intercepta la petición, genera nuevos tokens con `/auth/refresh`, actualiza las cookies y deja continuar la solicitud original. El usuario nunca ve una interrupción.
+- **Cookies**: `gm_access` (short-lived HS256 JWT, fast validations) + `gm_refresh` (long-lived, keeps the session alive). `Secure`, `HttpOnly`, `SameSite` — protected against session theft via XSS.
+- **Middleware on every request**: verifies the token **and** the user's status in the database — a suspended store or admin loses access immediately even with a valid token.
+- **Transparent refresh**: if `gm_access` expired but `gm_refresh` is valid, the API intercepts the request, mints new tokens with `/auth/refresh`, updates cookies and lets the original request continue. The user never sees an interruption.
 
-Mapeo de flujos a Agnostic Auth:
+Flow mapping to Agnostic Auth:
 
-| Flujo | Endpoints |
-|-------|-----------|
-| Login (tienda y admin) | credenciales → API lee hash+salt de la DB → `/auth/verify-password` → cookies |
-| Registro ISP | `/auth/hash` guarda hash+salt; verificación de correo con `/auth/initiate` → magicLink enviado por Resend → `/auth/verify` |
-| Invitación de tienda | `/auth/initiate` (identity = teléfono) → magicLink por WhatsApp/SMS → `/auth/verify` al abrirlo → establece contraseña con `/auth/hash` |
-| Recuperar contraseña admin | `/auth/initiate` → enlace por Resend → `/auth/verify` → nueva contraseña |
-| Cerrar sesión / revocar | `/auth/token/revoke` + limpieza de cookies |
+| Flow | Endpoints |
+|------|-----------|
+| Login (store and admin) | credentials → API reads hash+salt from DB → `/auth/verify-password` → cookies |
+| ISP signup | `/auth/hash` stores hash+salt; email verification with `/auth/initiate` → magicLink sent via Resend → `/auth/verify` |
+| Store invitation | `/auth/initiate` (identity = phone) → magicLink via WhatsApp/SMS → `/auth/verify` on open → password set with `/auth/hash` |
+| Admin password recovery | `/auth/initiate` → link via Resend → `/auth/verify` → new password |
+| Logout / revoke | `/auth/token/revoke` + cookie cleanup |
 
-Implicaciones de UX que el diseño debe honrar:
+UX implications the design must honor:
 
-- No existe pantalla de "sesión expirada" en operación normal; solo si `gm_refresh` caduca o fue revocado se vuelve a `/login`.
-- La PWA necesita un estado de **cuenta suspendida** (pantalla completa, con contacto del ISP) — puede aparecer en medio de la jornada si el admin suspende la tienda.
-- La invitación y la verificación de correo comparten el mismo patrón magicLink: la pantalla `/invitacion/$token` y la verificación del ISP son variantes del mismo componente de canje de token.
+- There is no "session expired" screen in normal operation; only if `gm_refresh` expires or is revoked does the user return to `/login`.
+- The PWA needs a **suspended account** state (full screen, with the ISP's contact) — it can appear mid-shift if the admin suspends the store.
+- Invitation and email verification share the same magicLink pattern: the `/invitation/$token` screen and the ISP's verification are variants of the same token-redemption component.
 
 ## Naming Conventions
 
-| Concepto | Label en UI | Notas |
-|----------|-------------|-------|
-| Transacción de pago del cliente | **Cobro** | La tienda cobra; "pago" solo en el comprobante del cliente final ("Tu pago fue recibido") |
-| Saldo continuo de la tienda | **Caja** / **Balance** | "Caja" nombra la sección; "balance" el número. Nunca "corte" |
-| Cash drop al ISP | **Entrega** | Familiar y sin anglicismo. Estados: pendiente / confirmada / en disputa |
-| Comisión que paga el cliente final | **Cargo por servicio** | Visible en desglose y comprobante |
-| Ganancia de la tienda | **Comisión** | Solo en contexto de tienda/admin, nunca de cara al cliente final |
-| Asiento del ledger | **Movimiento** | Tipos: cobro, comisión, entrega |
-| Cliente del ISP | **Cliente** | El tendero es **la tienda**; el ISP es **admin** internamente |
-| Reactivación en MikroTik | **Reconexión** | Estados: reconectado / en cola / fallido |
-| Comprobante | **Comprobante** | Con **folio** único; nunca "ticket" ni "recibo" |
-| Acceso inicial de la tienda | **Invitación** | Enlace por WhatsApp/SMS al teléfono; estados: enviada / aceptada |
+| Concept | UI label (es-MX) | Notes |
+|---------|------------------|-------|
+| Customer payment transaction | **Cobro** | The store charges; "pago" only on the end-customer receipt ("Tu pago fue recibido") |
+| Store's continuous balance | **Caja** / **Balance** | "Caja" names the section; "balance" the number. Never "corte" |
+| Cash drop to the ISP | **Entrega** | Familiar, no anglicism in UI. Statuses: pendiente / confirmada / en disputa |
+| Fee the end customer pays | **Cargo por servicio** | Visible in breakdown and receipt |
+| Store's earnings | **Comisión** | Only in store/admin contexts, never shown to the end customer |
+| Ledger entry | **Movimiento** | Types: cobro, comisión, entrega |
+| ISP's customer | **Cliente** | The shopkeeper is **la tienda**; the ISP is **admin** internally |
+| MikroTik reactivation | **Reconexión** | Statuses: reconectado / en cola / fallido |
+| Receipt | **Comprobante** | With a unique **folio**; never "ticket" or "recibo" |
+| Store's initial access | **Invitación** | WhatsApp/SMS link to the phone; statuses: enviada / aceptada |
 
 ## Component Reuse Map
 
 | Component | Used on | Behavior differences |
 |-----------|---------|---------------------|
-| Layout con tabs inferiores | tienda: Cobrar, Caja, Movimientos | Login queda fuera del layout |
-| Layout con sidebar | admin: las 4 secciones | Colapsa a menú inferior en móvil |
-| Badge de estado de cobro | Resultado (tienda), Movimientos, feed y detalle (admin) | Mismo componente en `packages/ui`: color + ícono + texto |
-| Lista de movimientos del ledger | Movimientos (tienda), detalle de tienda (admin) | Admin agrega filtros y export; misma fila base |
-| Tarjeta de identidad de cliente | Resultados de búsqueda y confirmación (tienda), detalle de cobro (admin) | Admin puede mostrar más campos que el tendero |
-| Desglose de monto | Confirmar cobro, resultado, comprobante, detalle (admin) | Fuente única del formato de montos |
-| Tarjeta/fila de entrega | Caja (última entrega), Entregas (admin) | Admin agrega acciones confirmar/disputar |
-| Formulario de acceso | Login de ambas apps, registro admin, invitación tienda | Tienda: teléfono + contraseña; admin: correo + contraseña; misma base visual |
+| Bottom-tab layout | store: Charge, Cash box, Ledger | Login sits outside the layout |
+| Sidebar layout | admin: the 4 sections | Collapses to a bottom menu on mobile |
+| Charge status badge | Result (store), Ledger, feed and detail (admin) | Same `packages/ui` component: color + icon + text |
+| Ledger entry list | Ledger (store), store detail (admin) | Admin adds filters and export; same base row |
+| Customer identity card | Search results and confirmation (store), charge detail (admin) | Admin may show more fields than the shopkeeper |
+| Amount breakdown | Charge confirmation, result, receipt, detail (admin) | Single source of amount formatting |
+| Cash drop card/row | Cash box (last drop), Cash drops (admin) | Admin adds confirm/dispute actions |
+| Access form | Both logins, admin signup, store invitation | Store: phone + password; admin: email + password; same visual base |
 
 ## Content Growth Plan
 
-- **Feed de cobros (admin)**: crece sin límite → paginación por cursor, filtros por tienda/estado/rango de fechas. Post-MVP: búsqueda por cliente/folio.
-- **Movimientos (tienda)**: crece por tienda → scroll infinito agrupado por día; el balance vive en Caja, no depende de cargar todo el historial.
-- **Tiendas (admin)**: decenas en el piloto → tabla simple sin paginación; el diseño no debe romperse con 200 filas (multi-tenant futuro).
-- **Entregas**: pendientes siempre arriba y acotadas; historial paginado.
-- **Configuración**: fija en MVP; crecerá con multi-tenant (se convertiría en configuración por ISP) — por eso es sección propia y no un modal.
+- **Charge feed (admin)**: grows without bound → cursor pagination, filters by store/status/date range. Post-MVP: search by customer/folio.
+- **Ledger (store)**: grows per store → infinite scroll grouped by day; the balance lives in Cash box and doesn't depend on loading full history.
+- **Stores (admin)**: dozens in the pilot → simple table without pagination; the design must not break at 200 rows (future multi-tenancy).
+- **Cash drops**: pendings always on top and bounded; history paginated.
+- **Settings**: fixed in MVP; grows with multi-tenancy (would become per-ISP settings) — which is why it's its own section, not a modal.
 
 ## URL Strategy
 
-- Patrón: `/seccion/$id` — plano, máximo dos segmentos; los detalles usan ID, no slug (datos operativos, no contenido)
-- Dynamic segments: `$clienteId` (ID de WispHub), `$cobroId`, `$tiendaId`, `$entregaId`, `$movimientoId` (IDs propios)
-- Query parameters: solo en listas del admin — `?tienda=`, `?estado=`, `?desde=&hasta=`, `?cursor=` (filtros compartibles por URL)
-- Las dos apps viven en dominios/subdominios separados (ej. `tienda.devolada.app` y `admin.devolada.app`); las rutas no llevan prefijo de rol
+- Pattern: `/section/$id` — flat, at most two segments; details use IDs, not slugs (operational data, not content)
+- Dynamic segments: `$customerId` (WispHub ID), `$chargeId`, `$storeId`, `$dropId`, `$entryId` (own IDs)
+- Query parameters: admin lists only — `?store=`, `?status=`, `?from=&to=`, `?cursor=` (URL-shareable filters)
+- The two apps live on separate subdomains (e.g. `tienda.devolada.app` and `admin.devolada.app`); routes carry no role prefix

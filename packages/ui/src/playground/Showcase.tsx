@@ -1,6 +1,9 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { Monitor, Moon, Search, Sun } from "lucide-react";
-import { DesgloseMonto, EstadoBadge, Monto, type Estado } from "../index";
+import { AmountBreakdown, StatusBadge, Amount, type Status } from "../index";
+
+/* Living catalog of tokens and shared atoms. Visible strings are real
+   product copy and therefore stay in es-MX. */
 
 type Theme = "light" | "dark" | "system";
 
@@ -21,72 +24,72 @@ function useTheme() {
   return { theme, setTheme };
 }
 
-function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-t border-line pt-6 pb-12">
       <h2 className="mb-6 text-xs font-semibold tracking-[0.06em] uppercase text-ink-faint">
-        {titulo}
+        {title}
       </h2>
       {children}
     </section>
   );
 }
 
-const rampa = [
-  { token: "xs", px: "12", clase: "text-xs", texto: "Hace 5 min · Folio DV-000184" },
-  { token: "sm", px: "14", clase: "text-sm", texto: "Col. El Mirador · Servicio suspendido" },
-  { token: "base", px: "16", clase: "text-base", texto: "María Guadalupe Hernández" },
-  { token: "md", px: "18", clase: "text-md", texto: "Confirma el nombre con el cliente" },
-  { token: "lg", px: "20", clase: "text-lg", texto: "Movimientos de hoy" },
-  { token: "xl", px: "24", clase: "text-xl", texto: "Caja" },
-  { token: "2xl", px: "30", clase: "text-2xl font-semibold", texto: "$4,820.00" },
-  { token: "3xl", px: "38", clase: "text-3xl font-semibold", texto: "$3,215.00" },
+const typeRamp = [
+  { token: "xs", px: "12", cls: "text-xs", text: "Hace 5 min · Folio DV-000184" },
+  { token: "sm", px: "14", cls: "text-sm", text: "Col. El Mirador · Servicio suspendido" },
+  { token: "base", px: "16", cls: "text-base", text: "María Guadalupe Hernández" },
+  { token: "md", px: "18", cls: "text-md", text: "Confirma el nombre con el cliente" },
+  { token: "lg", px: "20", cls: "text-lg", text: "Movimientos de hoy" },
+  { token: "xl", px: "24", cls: "text-xl", text: "Caja" },
+  { token: "2xl", px: "30", cls: "text-2xl font-semibold", text: "$4,820.00" },
+  { token: "3xl", px: "38", cls: "text-3xl font-semibold", text: "$3,215.00" },
 ];
 
-const estadosMuestra: Estado[] = [
-  "reconectado",
-  "en_cola",
-  "fallido",
-  "pendiente",
-  "confirmada",
-  "en_disputa",
-  "activo",
-  "suspendido",
+const sampleStatuses: Status[] = [
+  "reconnected",
+  "queued",
+  "failed",
+  "pending",
+  "confirmed",
+  "disputed",
+  "active",
+  "suspended",
 ];
 
-const movimientos = [
+const ledgerEntries = [
   {
-    titulo: "Cobro · María G. Hernández",
+    title: "Cobro · María G. Hernández",
     meta: "14:32 · Folio DV-000184",
-    centavos: 41500,
-    clase: "text-success",
+    cents: 41500,
+    cls: "text-success",
   },
   {
-    titulo: "Comisión de la tienda",
+    title: "Comisión de la tienda",
     meta: "14:32 · Sobre folio DV-000184",
-    centavos: -900,
-    clase: "text-ink-soft",
+    cents: -900,
+    cls: "text-ink-soft",
   },
   {
-    titulo: "Entrega al ISP",
+    title: "Entrega al ISP",
     meta: "Ayer · Pendiente de confirmar",
-    centavos: -320000,
-    clase: "text-ink",
+    cents: -320000,
+    cls: "text-ink",
   },
 ];
 
-export function Muestra() {
+export function Showcase() {
   const { theme, setTheme } = useTheme();
 
-  const opciones: { valor: Theme; etiqueta: string; icono: ComponentType<{ className?: string }> }[] = [
-    { valor: "light", etiqueta: "Claro", icono: Sun },
-    { valor: "dark", etiqueta: "Oscuro", icono: Moon },
-    { valor: "system", etiqueta: "Sistema", icono: Monitor },
+  const options: { value: Theme; label: string; icon: ComponentType<{ className?: string }> }[] = [
+    { value: "light", label: "Claro", icon: Sun },
+    { value: "dark", label: "Oscuro", icon: Moon },
+    { value: "system", label: "Sistema", icon: Monitor },
   ];
 
   return (
     <main className="mx-auto max-w-3xl px-6 pb-24">
-      {/* Encabezado */}
+      {/* Header */}
       <header className="flex items-center justify-between py-8">
         <div>
           <p className="text-lg font-semibold tracking-tight">Devolada</p>
@@ -97,45 +100,45 @@ export function Muestra() {
           aria-label="Tema"
           className="flex rounded-md border border-line bg-card p-0.5"
         >
-          {opciones.map(({ valor, etiqueta, icono: Icono }) => (
+          {options.map(({ value, label, icon: Icon }) => (
             <button
-              key={valor}
+              key={value}
               type="button"
-              onClick={() => setTheme(valor)}
-              aria-pressed={theme === valor}
+              onClick={() => setTheme(value)}
+              aria-pressed={theme === value}
               className={`flex h-9 items-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors duration-150 ${
-                theme === valor
+                theme === value
                   ? "bg-accent-soft text-link"
                   : "text-ink-soft hover:text-ink"
               }`}
             >
-              <Icono className="size-4" aria-hidden />
-              {etiqueta}
+              <Icon className="size-4" aria-hidden />
+              {label}
             </button>
           ))}
         </div>
       </header>
 
-      {/* Monto protagonista */}
-      <Seccion titulo="Monto — lo que el tendero dicta en voz alta">
+      {/* Hero amount */}
+      <Section title="Monto — lo que el tendero dicta en voz alta">
         <div className="rounded-md border border-line bg-card p-8">
           <p className="text-sm text-ink-soft">Total a cobrar</p>
-          <Monto
-            centavos={41500}
+          <Amount
+            cents={41500}
             className="mt-1 block font-semibold tracking-tight text-amount leading-[1.15]"
           />
-          <DesgloseMonto
+          <AmountBreakdown
             className="mt-6 border-t border-line-soft pt-4"
-            lineas={[
-              { etiqueta: "Mensualidad", centavos: 40000 },
-              { etiqueta: "Cargo por servicio", centavos: 1500 },
+            lines={[
+              { label: "Mensualidad", cents: 40000 },
+              { label: "Cargo por servicio", cents: 1500 },
             ]}
           />
         </div>
-      </Seccion>
+      </Section>
 
-      {/* Botones */}
-      <Seccion titulo="Botones — 64px el crítico, 48px el estándar">
+      {/* Buttons */}
+      <Section title="Botones — 64px el crítico, 48px el estándar">
         <div className="space-y-4">
           <button
             type="button"
@@ -165,25 +168,25 @@ export function Muestra() {
             </button>
           </div>
         </div>
-      </Seccion>
+      </Section>
 
-      {/* Badges de estado */}
-      <Seccion titulo="Estados — color + ícono + texto, nunca color solo">
+      {/* Status badges */}
+      <Section title="Estados — color + ícono + texto, nunca color solo">
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3">
-            {estadosMuestra.map((estado) => (
-              <EstadoBadge key={estado} estado={estado} />
+            {sampleStatuses.map((status) => (
+              <StatusBadge key={status} status={status} />
             ))}
           </div>
           <div className="flex flex-wrap gap-3">
-            <EstadoBadge estado="reconectado" tamano="md" />
-            <EstadoBadge estado="en_cola" tamano="md" />
+            <StatusBadge status="reconnected" size="md" />
+            <StatusBadge status="queued" size="md" />
           </div>
         </div>
-      </Seccion>
+      </Section>
 
-      {/* Campo de búsqueda */}
-      <Seccion titulo="Campos — el buscador es la pantalla inicial">
+      {/* Search field */}
+      <Section title="Campos — el buscador es la pantalla inicial">
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-ink-soft">
             Buscar cliente
@@ -200,36 +203,36 @@ export function Muestra() {
             />
           </div>
         </label>
-      </Seccion>
+      </Section>
 
       {/* Ledger */}
-      <Seccion titulo="Movimientos — el ledger es la verdad">
+      <Section title="Movimientos — el ledger es la verdad">
         <ul className="divide-y divide-line-soft rounded-md border border-line bg-card">
-          {movimientos.map((m) => (
-            <li key={m.titulo} className="flex items-baseline justify-between gap-4 p-4">
+          {ledgerEntries.map((entry) => (
+            <li key={entry.title} className="flex items-baseline justify-between gap-4 p-4">
               <div className="min-w-0">
-                <p className="truncate text-base font-medium">{m.titulo}</p>
-                <p className="mt-0.5 text-sm text-ink-faint">{m.meta}</p>
+                <p className="truncate text-base font-medium">{entry.title}</p>
+                <p className="mt-0.5 text-sm text-ink-faint">{entry.meta}</p>
               </div>
-              <Monto
-                centavos={m.centavos}
-                signo
-                className={`shrink-0 text-base font-semibold ${m.clase}`}
+              <Amount
+                cents={entry.cents}
+                sign
+                className={`shrink-0 text-base font-semibold ${entry.cls}`}
               />
             </li>
           ))}
         </ul>
-      </Seccion>
+      </Section>
 
-      {/* Rampa tipográfica */}
-      <Seccion titulo="Tipografía — Archivo, escala estricta, números tabulares">
+      {/* Type ramp */}
+      <Section title="Tipografía — Archivo, escala estricta, números tabulares">
         <ul className="space-y-4">
-          {rampa.map((fila) => (
-            <li key={fila.token} className="flex items-baseline gap-6">
+          {typeRamp.map((row) => (
+            <li key={row.token} className="flex items-baseline gap-6">
               <span className="w-16 shrink-0 font-mono text-xs text-ink-faint">
-                {fila.token} · {fila.px}
+                {row.token} · {row.px}
               </span>
-              <span className={`truncate tabular-nums ${fila.clase}`}>{fila.texto}</span>
+              <span className={`truncate tabular-nums ${row.cls}`}>{row.text}</span>
             </li>
           ))}
           <li className="flex items-baseline gap-6">
@@ -237,28 +240,28 @@ export function Muestra() {
             <span className="font-mono text-base">DV-000184 · wh_live_9f2c…</span>
           </li>
         </ul>
-      </Seccion>
+      </Section>
 
-      {/* Paleta */}
-      <Seccion titulo="Color — la calidez vive en los neutros">
+      {/* Palette */}
+      <Section title="Color — la calidez vive en los neutros">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { nombre: "surface", clase: "bg-surface border-line" },
-            { nombre: "card", clase: "bg-card border-line" },
-            { nombre: "well", clase: "bg-well border-line" },
-            { nombre: "accent", clase: "bg-accent border-transparent" },
-            { nombre: "success", clase: "bg-success-soft border-success-line" },
-            { nombre: "warning", clase: "bg-warning-soft border-warning-line" },
-            { nombre: "error", clase: "bg-error-soft border-error-line" },
-            { nombre: "inverse", clase: "bg-inverse border-transparent" },
+            { name: "surface", cls: "bg-surface border-line" },
+            { name: "card", cls: "bg-card border-line" },
+            { name: "well", cls: "bg-well border-line" },
+            { name: "accent", cls: "bg-accent border-transparent" },
+            { name: "success", cls: "bg-success-soft border-success-line" },
+            { name: "warning", cls: "bg-warning-soft border-warning-line" },
+            { name: "error", cls: "bg-error-soft border-error-line" },
+            { name: "inverse", cls: "bg-inverse border-transparent" },
           ].map((c) => (
-            <div key={c.nombre}>
-              <div className={`h-16 rounded-md border ${c.clase}`} />
-              <p className="mt-1.5 font-mono text-xs text-ink-faint">{c.nombre}</p>
+            <div key={c.name}>
+              <div className={`h-16 rounded-md border ${c.cls}`} />
+              <p className="mt-1.5 font-mono text-xs text-ink-faint">{c.name}</p>
             </div>
           ))}
         </div>
-      </Seccion>
+      </Section>
 
       <footer className="border-t border-line pt-6 text-sm text-ink-soft">
         Claro y oscuro comparten tokens; el oscuro es carbón cálido, no inversión.

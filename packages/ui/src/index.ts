@@ -1,8 +1,8 @@
-export { EstadoBadge, type Estado, type EstadoBadgeProps } from "./components/estado-badge";
+export { StatusBadge, type Status, type StatusBadgeProps } from "./components/status-badge";
 export {
-  DesgloseMonto,
-  Monto,
-  type DesgloseMontoProps,
-  type LineaDesglose,
-} from "./components/desglose-monto";
-export { formatearMonto } from "./lib/monto";
+  AmountBreakdown,
+  Amount,
+  type AmountBreakdownProps,
+  type BreakdownLine,
+} from "./components/amount-breakdown";
+export { formatMoney } from "./lib/money";

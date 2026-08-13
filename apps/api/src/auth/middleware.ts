@@ -4,20 +4,20 @@ import { decode, verify } from "hono/jwt";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Actor, Bindings, Variables } from "../env";
-import { isps, tiendas } from "../db/schema";
+import { isps, stores } from "../db/schema";
 import { AgnosticAuth } from "./agnostic";
-import { COOKIE_ACCESS, COOKIE_REFRESH, limpiarSesionCookies, setSesionCookies } from "./cookies";
+import { COOKIE_ACCESS, COOKIE_REFRESH, clearSessionCookies, setSessionCookies } from "./cookies";
 
 type Payload = { identity?: string; sub?: string; exp?: number };
 
-/* Con AUTH_JWT_SECRET verifica firma HS256; sin él (solo dev)
-   decodifica y valida expiración manualmente. */
-async function leerPayload(jwt: string, env: Bindings): Promise<Payload | null> {
+/* With AUTH_JWT_SECRET verifies the HS256 signature; without it (dev only)
+   decodes and checks expiry manually. */
+async function readPayload(jwt: string, env: Bindings): Promise<Payload | null> {
   try {
     if (env.AUTH_JWT_SECRET) {
       return (await verify(jwt, env.AUTH_JWT_SECRET, "HS256")) as Payload;
     }
-    console.warn("AUTH_JWT_SECRET ausente: JWT decodificado sin verificar firma (solo dev)");
+    console.warn("AUTH_JWT_SECRET missing: JWT decoded without signature verification (dev only)");
     const { payload } = decode(jwt);
     const p = payload as Payload;
     if (p.exp && p.exp * 1000 < Date.now()) return null;
@@ -27,61 +27,61 @@ async function leerPayload(jwt: string, env: Bindings): Promise<Payload | null> 
   }
 }
 
-async function buscarActor(env: Bindings, identity: string): Promise<Actor | null> {
+async function findActor(env: Bindings, identity: string): Promise<Actor | null> {
   const db = drizzle(env.DB);
-  const [tienda] = await db.select().from(tiendas).where(eq(tiendas.telefono, identity));
-  if (tienda) {
+  const [store] = await db.select().from(stores).where(eq(stores.phone, identity));
+  if (store) {
     return {
-      tipo: "tienda",
-      id: tienda.id,
-      ispId: tienda.ispId,
-      nombre: tienda.nombre,
-      telefono: tienda.telefono,
-      estatus: tienda.estatus,
+      type: "store",
+      id: store.id,
+      ispId: store.ispId,
+      name: store.name,
+      phone: store.phone,
+      status: store.status,
     };
   }
-  const [isp] = await db.select().from(isps).where(eq(isps.correo, identity));
+  const [isp] = await db.select().from(isps).where(eq(isps.email, identity));
   if (isp) {
-    return { tipo: "isp", id: isp.id, nombre: isp.nombre, correo: isp.correo, estatus: isp.estatus };
+    return { type: "isp", id: isp.id, name: isp.name, email: isp.email, status: isp.status };
   }
   return null;
 }
 
-/* Sesión requerida: valida gm_access; si expiró y gm_refresh es válido,
-   renueva en segundo plano, actualiza cookies y deja continuar la
-   solicitud original. Verifica estatus en DB en cada solicitud:
-   una suspensión revoca el acceso de inmediato. */
-export const requireSesion = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
+/* Session required: validates gm_access; if it expired and gm_refresh is
+   valid, renews in the background, updates cookies and lets the original
+   request continue. Checks status in the DB on every request:
+   a suspension revokes access immediately. */
+export const requireSession = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
   async (c, next) => {
     const access = getCookie(c, COOKIE_ACCESS);
     const refresh = getCookie(c, COOKIE_REFRESH);
 
-    let payload = access ? await leerPayload(access, c.env) : null;
+    let payload = access ? await readPayload(access, c.env) : null;
 
     if (!payload && refresh) {
       try {
         const tokens = await new AgnosticAuth(c.env).refresh(refresh);
-        payload = await leerPayload(tokens.jwt, c.env);
-        if (payload) setSesionCookies(c, tokens);
+        payload = await readPayload(tokens.jwt, c.env);
+        if (payload) setSessionCookies(c, tokens);
       } catch {
-        /* refresh inválido o revocado: cae al 401 de abajo */
+        /* invalid or revoked refresh: falls through to the 401 below */
       }
     }
 
     const identity = payload?.identity ?? payload?.sub;
     if (!identity) {
-      limpiarSesionCookies(c);
+      clearSessionCookies(c);
       return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
     }
 
-    const actor = await buscarActor(c.env, identity);
+    const actor = await findActor(c.env, identity);
     if (!actor) {
-      limpiarSesionCookies(c);
+      clearSessionCookies(c);
       return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
     }
-    if (actor.estatus === "suspendida" || actor.estatus === "suspendido") {
-      limpiarSesionCookies(c);
-      return c.json({ success: false, error: { code: "CUENTA_SUSPENDIDA" } }, 403);
+    if (actor.status === "suspended") {
+      clearSessionCookies(c);
+      return c.json({ success: false, error: { code: "ACCOUNT_SUSPENDED" } }, 403);
     }
 
     c.set("actor", actor);

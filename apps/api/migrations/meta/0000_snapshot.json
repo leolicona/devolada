@@ -1,11 +1,93 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "295191fa-b27e-40d2-9c5c-c573944a2ff2",
+  "id": "2de8d926-6d8d-4332-8fd1-afd61d43244d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "cobros": {
-      "name": "cobros",
+    "cash_drops": {
+      "name": "cash_drops",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cents": {
+          "name": "cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "cash_drops_store_idx": {
+          "name": "cash_drops_store_idx",
+          "columns": [
+            "store_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "cash_drops_store_id_stores_id_fk": {
+          "name": "cash_drops_store_id_stores_id_fk",
+          "tableFrom": "cash_drops",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "charges": {
+      "name": "charges",
       "columns": {
         "id": {
           "name": "id",
@@ -21,8 +103,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "tienda_id": {
-          "name": "tienda_id",
+        "store_id": {
+          "name": "store_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -35,73 +117,73 @@
           "notNull": true,
           "autoincrement": false
         },
-        "cliente_wisphub_id": {
-          "name": "cliente_wisphub_id",
+        "wisphub_customer_id": {
+          "name": "wisphub_customer_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "cliente_nombre": {
-          "name": "cliente_nombre",
+        "customer_name": {
+          "name": "customer_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "cliente_zona": {
-          "name": "cliente_zona",
+        "customer_zone": {
+          "name": "customer_zone",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "mensualidad_centavos": {
-          "name": "mensualidad_centavos",
+        "monthly_fee_cents": {
+          "name": "monthly_fee_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "cargo_servicio_centavos": {
-          "name": "cargo_servicio_centavos",
+        "service_fee_cents": {
+          "name": "service_fee_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "total_centavos": {
-          "name": "total_centavos",
+        "total_cents": {
+          "name": "total_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "estado_reconexion": {
-          "name": "estado_reconexion",
+        "reconnection_status": {
+          "name": "reconnection_status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'en_cola'"
+          "default": "'queued'"
         },
-        "intentos_reconexion": {
-          "name": "intentos_reconexion",
+        "reconnection_attempts": {
+          "name": "reconnection_attempts",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
         },
-        "reconectado_en": {
-          "name": "reconectado_en",
+        "reconnected_at": {
+          "name": "reconnected_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "creado_en": {
-          "name": "creado_en",
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -109,33 +191,33 @@
         }
       },
       "indexes": {
-        "cobros_folio_unique": {
-          "name": "cobros_folio_unique",
+        "charges_folio_unique": {
+          "name": "charges_folio_unique",
           "columns": [
             "folio"
           ],
           "isUnique": true
         },
-        "cobros_tienda_idx": {
-          "name": "cobros_tienda_idx",
+        "charges_store_idx": {
+          "name": "charges_store_idx",
           "columns": [
-            "tienda_id"
+            "store_id"
           ],
           "isUnique": false
         },
-        "cobros_isp_creado_idx": {
-          "name": "cobros_isp_creado_idx",
+        "charges_isp_created_idx": {
+          "name": "charges_isp_created_idx",
           "columns": [
             "isp_id",
-            "creado_en"
+            "created_at"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "cobros_isp_id_isps_id_fk": {
-          "name": "cobros_isp_id_isps_id_fk",
-          "tableFrom": "cobros",
+        "charges_isp_id_isps_id_fk": {
+          "name": "charges_isp_id_isps_id_fk",
+          "tableFrom": "charges",
           "tableTo": "isps",
           "columnsFrom": [
             "isp_id"
@@ -146,12 +228,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "cobros_tienda_id_tiendas_id_fk": {
-          "name": "cobros_tienda_id_tiendas_id_fk",
-          "tableFrom": "cobros",
-          "tableTo": "tiendas",
+        "charges_store_id_stores_id_fk": {
+          "name": "charges_store_id_stores_id_fk",
+          "tableFrom": "charges",
+          "tableTo": "stores",
           "columnsFrom": [
-            "tienda_id"
+            "store_id"
           ],
           "columnsTo": [
             "id"
@@ -164,8 +246,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "entregas": {
-      "name": "entregas",
+    "invitations": {
+      "name": "invitations",
       "columns": {
         "id": {
           "name": "id",
@@ -174,90 +256,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "tienda_id": {
-          "name": "tienda_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "centavos": {
-          "name": "centavos",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "estado": {
-          "name": "estado",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pendiente'"
-        },
-        "nota": {
-          "name": "nota",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "confirmada_en": {
-          "name": "confirmada_en",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "creado_en": {
-          "name": "creado_en",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "entregas_tienda_idx": {
-          "name": "entregas_tienda_idx",
-          "columns": [
-            "tienda_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "entregas_tienda_id_tiendas_id_fk": {
-          "name": "entregas_tienda_id_tiendas_id_fk",
-          "tableFrom": "entregas",
-          "tableTo": "tiendas",
-          "columnsFrom": [
-            "tienda_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "invitaciones": {
-      "name": "invitaciones",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tienda_id": {
-          "name": "tienda_id",
+        "store_id": {
+          "name": "store_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -270,23 +270,23 @@
           "notNull": true,
           "autoincrement": false
         },
-        "estado": {
-          "name": "estado",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'enviada'"
+          "default": "'sent'"
         },
-        "aceptada_en": {
-          "name": "aceptada_en",
+        "accepted_at": {
+          "name": "accepted_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "creado_en": {
-          "name": "creado_en",
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -294,28 +294,28 @@
         }
       },
       "indexes": {
-        "invitaciones_token_unique": {
-          "name": "invitaciones_token_unique",
+        "invitations_token_unique": {
+          "name": "invitations_token_unique",
           "columns": [
             "token"
           ],
           "isUnique": true
         },
-        "invitaciones_tienda_idx": {
-          "name": "invitaciones_tienda_idx",
+        "invitations_store_idx": {
+          "name": "invitations_store_idx",
           "columns": [
-            "tienda_id"
+            "store_id"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "invitaciones_tienda_id_tiendas_id_fk": {
-          "name": "invitaciones_tienda_id_tiendas_id_fk",
-          "tableFrom": "invitaciones",
-          "tableTo": "tiendas",
+        "invitations_store_id_stores_id_fk": {
+          "name": "invitations_store_id_stores_id_fk",
+          "tableFrom": "invitations",
+          "tableTo": "stores",
           "columnsFrom": [
-            "tienda_id"
+            "store_id"
           ],
           "columnsTo": [
             "id"
@@ -338,22 +338,22 @@
           "notNull": true,
           "autoincrement": false
         },
-        "nombre": {
-          "name": "nombre",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "correo": {
-          "name": "correo",
+        "email": {
+          "name": "email",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "correo_verificado": {
-          "name": "correo_verificado",
+        "email_verified": {
+          "name": "email_verified",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -381,32 +381,32 @@
           "notNull": false,
           "autoincrement": false
         },
-        "cargo_servicio_centavos": {
-          "name": "cargo_servicio_centavos",
+        "service_fee_cents": {
+          "name": "service_fee_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 1500
         },
-        "comision_tienda_centavos": {
-          "name": "comision_tienda_centavos",
+        "store_commission_cents": {
+          "name": "store_commission_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 900
         },
-        "estatus": {
-          "name": "estatus",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'activo'"
+          "default": "'active'"
         },
-        "creado_en": {
-          "name": "creado_en",
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -414,10 +414,10 @@
         }
       },
       "indexes": {
-        "isps_correo_unique": {
-          "name": "isps_correo_unique",
+        "isps_email_unique": {
+          "name": "isps_email_unique",
           "columns": [
-            "correo"
+            "email"
           ],
           "isUnique": true
         }
@@ -427,8 +427,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "movimientos": {
-      "name": "movimientos",
+    "ledger_entries": {
+      "name": "ledger_entries",
       "columns": {
         "id": {
           "name": "id",
@@ -437,43 +437,43 @@
           "notNull": true,
           "autoincrement": false
         },
-        "tienda_id": {
-          "name": "tienda_id",
+        "store_id": {
+          "name": "store_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "tipo": {
-          "name": "tipo",
+        "type": {
+          "name": "type",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "centavos": {
-          "name": "centavos",
+        "cents": {
+          "name": "cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "cobro_id": {
-          "name": "cobro_id",
+        "charge_id": {
+          "name": "charge_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "entrega_id": {
-          "name": "entrega_id",
+        "cash_drop_id": {
+          "name": "cash_drop_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "creado_en": {
-          "name": "creado_en",
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -481,22 +481,22 @@
         }
       },
       "indexes": {
-        "movimientos_tienda_creado_idx": {
-          "name": "movimientos_tienda_creado_idx",
+        "ledger_entries_store_created_idx": {
+          "name": "ledger_entries_store_created_idx",
           "columns": [
-            "tienda_id",
-            "creado_en"
+            "store_id",
+            "created_at"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "movimientos_tienda_id_tiendas_id_fk": {
-          "name": "movimientos_tienda_id_tiendas_id_fk",
-          "tableFrom": "movimientos",
-          "tableTo": "tiendas",
+        "ledger_entries_store_id_stores_id_fk": {
+          "name": "ledger_entries_store_id_stores_id_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "stores",
           "columnsFrom": [
-            "tienda_id"
+            "store_id"
           ],
           "columnsTo": [
             "id"
@@ -504,12 +504,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "movimientos_cobro_id_cobros_id_fk": {
-          "name": "movimientos_cobro_id_cobros_id_fk",
-          "tableFrom": "movimientos",
-          "tableTo": "cobros",
+        "ledger_entries_charge_id_charges_id_fk": {
+          "name": "ledger_entries_charge_id_charges_id_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "charges",
           "columnsFrom": [
-            "cobro_id"
+            "charge_id"
           ],
           "columnsTo": [
             "id"
@@ -517,12 +517,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "movimientos_entrega_id_entregas_id_fk": {
-          "name": "movimientos_entrega_id_entregas_id_fk",
-          "tableFrom": "movimientos",
-          "tableTo": "entregas",
+        "ledger_entries_cash_drop_id_cash_drops_id_fk": {
+          "name": "ledger_entries_cash_drop_id_cash_drops_id_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "cash_drops",
           "columnsFrom": [
-            "entrega_id"
+            "cash_drop_id"
           ],
           "columnsTo": [
             "id"
@@ -535,8 +535,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tiendas": {
-      "name": "tiendas",
+    "stores": {
+      "name": "stores",
       "columns": {
         "id": {
           "name": "id",
@@ -552,29 +552,29 @@
           "notNull": true,
           "autoincrement": false
         },
-        "nombre": {
-          "name": "nombre",
+        "name": {
+          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "responsable": {
-          "name": "responsable",
+        "contact_name": {
+          "name": "contact_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "telefono": {
-          "name": "telefono",
+        "phone": {
+          "name": "phone",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "zona": {
-          "name": "zona",
+        "zone": {
+          "name": "zone",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -594,31 +594,31 @@
           "notNull": false,
           "autoincrement": false
         },
-        "comision_centavos": {
-          "name": "comision_centavos",
+        "commission_cents": {
+          "name": "commission_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "techo_saldo_centavos": {
-          "name": "techo_saldo_centavos",
+        "balance_cap_cents": {
+          "name": "balance_cap_cents",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 500000
         },
-        "estatus": {
-          "name": "estatus",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'invitada'"
+          "default": "'invited'"
         },
-        "creado_en": {
-          "name": "creado_en",
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -626,15 +626,15 @@
         }
       },
       "indexes": {
-        "tiendas_telefono_unique": {
-          "name": "tiendas_telefono_unique",
+        "stores_phone_unique": {
+          "name": "stores_phone_unique",
           "columns": [
-            "telefono"
+            "phone"
           ],
           "isUnique": true
         },
-        "tiendas_isp_idx": {
-          "name": "tiendas_isp_idx",
+        "stores_isp_idx": {
+          "name": "stores_isp_idx",
           "columns": [
             "isp_id"
           ],
@@ -642,9 +642,9 @@
         }
       },
       "foreignKeys": {
-        "tiendas_isp_id_isps_id_fk": {
-          "name": "tiendas_isp_id_isps_id_fk",
-          "tableFrom": "tiendas",
+        "stores_isp_id_isps_id_fk": {
+          "name": "stores_isp_id_isps_id_fk",
+          "tableFrom": "stores",
           "tableTo": "isps",
           "columnsFrom": [
             "isp_id"

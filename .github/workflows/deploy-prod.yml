@@ -1,4 +1,4 @@
-# Producción por tag v* con approval gate (CICD.md camino 3).
+# Production via v* tag with approval gate (CICD.md path 3).
 name: Deploy Prod
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    # Environment con required reviewer: el job se pausa aquí hasta aprobación humana
+    # Environment with required reviewer: the job pauses here until human approval
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -41,27 +41,27 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Respaldo D1 prod (antes de migrar)
+      - name: D1 prod backup (before migrating)
         working-directory: apps/api
-        run: pnpm exec wrangler d1 export devolada-db-prod --remote --output respaldo-prod.sql
+        run: pnpm exec wrangler d1 export devolada-db-prod --remote --output backup-prod.sql
       - uses: actions/upload-artifact@v4
         with:
-          name: respaldo-d1-${{ github.ref_name }}
-          path: apps/api/respaldo-prod.sql
+          name: d1-backup-${{ github.ref_name }}
+          path: apps/api/backup-prod.sql
           retention-days: 30
-      - name: Migraciones D1 prod
+      - name: D1 prod migrations
         working-directory: apps/api
         run: pnpm exec wrangler d1 migrations apply devolada-db-prod --env prod --remote
-      - name: Deploy API prod
+      - name: Deploy prod API
         working-directory: apps/api
         run: pnpm exec wrangler deploy --env prod
-      # TODO: deploy de apps/tienda y apps/admin cuando existan
+      # TODO: deploy apps/tienda and apps/admin once they exist
       - name: Smoke test
         run: |
           URL="${{ vars.PROD_API_URL }}"
           if [ -z "$URL" ]; then
-            echo "::warning::PROD_API_URL no configurada; smoke omitido"
+            echo "::warning::PROD_API_URL not set; smoke skipped"
             exit 0
           fi
           sleep 5
-          curl -sf "$URL/health" || { echo "::error::Smoke falló: considerar wrangler rollback (CICD.md)"; exit 1; }
+          curl -sf "$URL/health" || { echo "::error::Smoke failed: consider wrangler rollback (CICD.md)"; exit 1; }

@@ -2,17 +2,17 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { isps, tiendas } from "../db/schema";
+import { isps, stores } from "../db/schema";
 import { AgnosticAuth } from "../auth/agnostic";
 
-/* Rutas solo-dev: index.ts las monta únicamente cuando ENTORNO === "dev".
-   Siembra un ISP y una tienda de prueba para verificar login con curl. */
+/* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
+   Seeds a demo ISP and store to verify login with curl. */
 
 export const dev = new Hono<{ Bindings: Bindings }>();
 
 const DEMO = {
-  ispCorreo: "demo@devolada.app",
-  tiendaTelefono: "5512345678",
+  ispEmail: "demo@devolada.app",
+  storePhone: "5512345678",
   password: "devolada123",
 };
 
@@ -20,42 +20,42 @@ dev.post("/seed", async (c) => {
   const db = drizzle(c.env.DB);
   const { hash, salt } = await new AgnosticAuth(c.env).hash(DEMO.password);
 
-  let [isp] = await db.select().from(isps).where(eq(isps.correo, DEMO.ispCorreo));
+  let [isp] = await db.select().from(isps).where(eq(isps.email, DEMO.ispEmail));
   if (!isp) {
     [isp] = await db
       .insert(isps)
       .values({
-        nombre: "ISP Demo",
-        correo: DEMO.ispCorreo,
-        correoVerificado: true,
+        name: "ISP Demo",
+        email: DEMO.ispEmail,
+        emailVerified: true,
         passwordHash: hash,
         passwordSalt: salt,
       })
       .returning();
   }
 
-  const [tiendaExistente] = await db
+  const [existingStore] = await db
     .select()
-    .from(tiendas)
-    .where(eq(tiendas.telefono, DEMO.tiendaTelefono));
-  if (!tiendaExistente) {
-    await db.insert(tiendas).values({
+    .from(stores)
+    .where(eq(stores.phone, DEMO.storePhone));
+  if (!existingStore) {
+    await db.insert(stores).values({
       ispId: isp.id,
-      nombre: "Abarrotes La Esquina",
-      responsable: "Don Chuy",
-      telefono: DEMO.tiendaTelefono,
-      zona: "Col. El Mirador",
+      name: "Abarrotes La Esquina",
+      contactName: "Don Chuy",
+      phone: DEMO.storePhone,
+      zone: "Col. El Mirador",
       passwordHash: hash,
       passwordSalt: salt,
-      estatus: "activa",
+      status: "active",
     });
   }
 
   return c.json({
     success: true,
     data: {
-      admin: { correo: DEMO.ispCorreo, password: DEMO.password },
-      tienda: { telefono: DEMO.tiendaTelefono, password: DEMO.password },
+      admin: { email: DEMO.ispEmail, password: DEMO.password },
+      store: { phone: DEMO.storePhone, password: DEMO.password },
     },
   });
 });

@@ -1,18 +1,18 @@
 # BUGS
 
-Historial de defectos encontrados en código **ya enviado a producción**. Este archivo es el tracker (proyecto solo-dev); no hay tracker espejo.
+History of defects found in code **already shipped to production**. This file is the tracker (solo-dev project); there is no mirror tracker.
 
-Formato:
+Format:
 
 ```
-## BUG-NNN — título corto
-- Estado: abierto | corregido
-- Detectado: fecha · dónde
-- Spec afectado: docs/<dominio>/<feature>.spec.md
-- Síntoma / causa raíz / corrección (commit)
-- Test de regresión: <ruta o "pendiente">
+## BUG-NNN — short title
+- Status: open | fixed
+- Detected: date · where
+- Affected spec: docs/<domain>/<feature>.spec.md
+- Symptom / root cause / fix (commit)
+- Regression test: <path or "pending">
 ```
 
 ---
 
-Sin defectos registrados. Nada ha llegado a producción todavía.
+No defects recorded. Nothing has reached production yet.

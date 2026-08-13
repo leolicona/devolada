@@ -3,6 +3,6 @@
   "private": true,
   "packageManager": "pnpm@10.29.3",
   "scripts": {
-    "muestra": "pnpm --filter @devolada/ui dev"
+    "playground": "pnpm --filter @devolada/ui dev"
   }
 }

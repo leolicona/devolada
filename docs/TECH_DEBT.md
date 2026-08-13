@@ -1,32 +1,32 @@
 # TECH_DEBT
 
-Deuda técnica consciente: cosas pospuestas a propósito durante un spec. Cada entrada dice qué se pospuso, por qué era razonable y qué la vuelve pagadera.
+Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
-## TD-001 — JWT sin verificación de firma en dev
-- Estado: abierta · Origen: auth/sesiones.spec.md
-- `apps/api` decodifica los JWT sin verificar firma cuando falta `AUTH_JWT_SECRET` (con warning en consola). Razonable en dev local; **bloqueante para producción**.
-- Se paga: configurando el secreto HS256 de agnostic-auth como secret del worker y en `.dev.vars`.
+## TD-001 — JWTs without signature verification in dev
+- Status: open · Origin: auth/sessions.spec.md
+- `apps/api` decodes JWTs without verifying the signature when `AUTH_JWT_SECRET` is missing (with a console warning). Reasonable for local dev; **blocking for production**.
+- Paid by: configuring agnostic-auth's HS256 secret as a worker secret and in `.dev.vars`.
 
-## TD-002 — Tokens de diseño duplicados
-- Estado: abierta · Origen: fase de tokens
-- `.design/devolada/DESIGN_TOKENS.css` (documento) y `packages/ui/src/styles/tokens.css` (vivo) se sincronizan a mano. El vivo manda.
-- Se paga: script de sincronización o declarar el `.design` como snapshot histórico y dejar de mantenerlo.
+## TD-002 — Duplicated design tokens
+- Status: open · Origin: tokens phase
+- `.design/devolada/DESIGN_TOKENS.css` (document) and `packages/ui/src/styles/tokens.css` (live) are synced by hand. The live file wins.
+- Paid by: a sync script, or declaring the `.design` copy a historical snapshot and no longer maintaining it.
 
-## TD-003 — Proveedor de mensajería sin decidir
-- Estado: abierta · Origen: brief (comprobantes WhatsApp/SMS, invitaciones)
-- La plantilla y el trigger se construyen agnósticos del proveedor (Meta WhatsApp Business API vs Twilio). Mientras no se decida, las invitaciones usan enlace copiable como fallback.
-- Se paga: decidir proveedor, crear `integrations/<proveedor>.md` e implementar el envío real.
+## TD-003 — Messaging provider undecided
+- Status: open · Origin: brief (WhatsApp/SMS receipts, invitations)
+- The template and trigger are built provider-agnostic (Meta WhatsApp Business API vs Twilio). Until decided, invitations use a copyable link as fallback.
+- Paid by: choosing a provider, creating `integrations/<provider>.md` and implementing real sending.
 
-## TD-004 — Regla de oro sin enforcement
-- Estado: **pagada** (2026-08-13) · Origen: adopción de la metodología
-- `scripts/spec-lint.mjs` corre en los tres workflows: falla si un `*.spec.md` no está en el índice de `SPEC.md`; advierte tests sin US-ID (se vuelve error al pagar TD-005).
+## TD-004 — Golden rule without enforcement
+- Status: **paid** (2026-08-13) · Origin: methodology adoption
+- `scripts/spec-lint.mjs` runs in all three workflows: fails if a `*.spec.md` is missing from SPEC.md's index; warns on tests without a US-ID (becomes an error once TD-005 is paid).
 
-## TD-006 — Pipeline CI/CD con pendientes de activación
-- Estado: **pagada** (2026-08-13)
-- Cerrada con: repo público `leolicona/devolada` · workflows `ci/deploy-dev/deploy-prod` · spec-lint en los tres · required reviewer activo en `production` · D1 remotas con IDs reales · `CLOUDFLARE_API_TOKEN` en ambos environments · primer deploy a dev exitoso con migraciones aplicadas por el pipeline · `DEV_API_URL`/`PROD_API_URL`/`PREVIEW_ENABLED=true` configuradas · smoke `/health` verificado en `https://devolada-api-dev.leolicona-dev.workers.dev`.
-- Nota: prod aún sin primer deploy (correcto: saldrá con el primer tag `v*` y tu aprobación).
+## TD-005 — Sessions verified with curl only
+- Status: being paid · Origin: auth/sessions.spec.md (predates the testing strategy)
+- The `TESTING.md` strategy governs from the next feature onward (infrastructure lands with `isp-signup`); the remaining debt is retroactive: turning the 8 curl scenarios for sessions into API-layer tests.
+- Paid by: landing the infrastructure with isp-signup, in the same PR or the immediately following one.
 
-## TD-005 — Sesiones verificadas solo con curl
-- Estado: en pago · Origen: auth/sesiones.spec.md (anterior a la estrategia de testing)
-- La estrategia de `TESTING.md` ya rige desde la próxima feature (la infraestructura se monta con `registro-isp`); la deuda restante es retroactiva: convertir los 8 escenarios curl de sesiones en tests de la capa API.
-- Se paga: al montar la infraestructura con registro-isp, en la misma PR o la inmediata siguiente.
+## TD-006 — CI/CD pipeline with activation pendings
+- Status: **paid** (2026-08-13)
+- Closed with: public repo `leolicona/devolada` · `ci/deploy-dev/deploy-prod` workflows · spec-lint in all three · required reviewer active on `production` · remote D1 databases with real IDs · `CLOUDFLARE_API_TOKEN` in both environments · first dev deploy green with migrations applied by the pipeline · `DEV_API_URL`/`PROD_API_URL`/`PREVIEW_ENABLED=true` configured · smoke `/health` verified at `https://devolada-api-dev.leolicona-dev.workers.dev`.
+- Note: prod has no first deploy yet (correct: it ships with the first `v*` tag and your approval).

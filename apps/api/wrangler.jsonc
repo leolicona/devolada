@@ -26,7 +26,7 @@
         {
           "binding": "DB",
           "database_name": "devolada-db-dev",
-          "database_id": "PENDIENTE-tope-d1",
+          "database_id": "b1b5bace-f440-488b-99a4-4339570b1360",
           "migrations_dir": "migrations"
         }
       ],
@@ -43,7 +43,7 @@
         {
           "binding": "DB",
           "database_name": "devolada-db-prod",
-          "database_id": "PENDIENTE-tope-d1",
+          "database_id": "706a3cfb-00a0-4aba-87d6-50d059c562d5",
           "migrations_dir": "migrations"
         }
       ],

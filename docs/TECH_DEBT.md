@@ -23,11 +23,10 @@ Deuda técnica consciente: cosas pospuestas a propósito durante un spec. Cada e
 
 ## TD-006 — Pipeline CI/CD con pendientes de activación
 - Estado: en pago (repo, workflows, environments y spec-lint listos el 2026-08-13)
-- Restan tres pendientes que requieren acción del dueño de la cuenta:
+- Progreso 2026-08-13: D1 remotas creadas con IDs reales en `wrangler.jsonc` ✅ · repo público y required reviewer activo en `production` ✅
+- Restan dos pendientes:
   1. **`CLOUDFLARE_API_TOKEN`** creado en el dash de Cloudflare y cargado como secret de los environments `dev` y `production`.
-  2. **D1 remotas** `devolada-db-dev`/`devolada-db-prod`: tope de bases alcanzado (10/10 en plan free). Liberar espacio (candidatas con 0 tablas: guideme-db, guideme-db-prod, corp-db, gestor-calificaciones) o subir de plan, crear las bases y reemplazar `PENDIENTE-tope-d1` en `apps/api/wrangler.jsonc`.
-  3. Variables de repo: `DEV_API_URL`, `PROD_API_URL` (smoke tests) y `PREVIEW_ENABLED=true` (previews por PR).
-  4. **Required reviewer en `production`**: el plan free no lo soporta en repos privados. Gate degradado a "prod solo por tag/dispatch manual". Se completa con GitHub Pro o repo público.
+  2. Variables de repo tras el primer deploy: `DEV_API_URL`, `PROD_API_URL` (smoke tests) y `PREVIEW_ENABLED=true` (previews por PR).
 
 ## TD-005 — Sesiones verificadas solo con curl
 - Estado: en pago · Origen: auth/sesiones.spec.md (anterior a la estrategia de testing)

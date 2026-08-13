@@ -63,7 +63,7 @@ Barrera de calidad; no despliega a entornos estables.
 
 ### 3. `deploy-prod.yml` — tag `v*`
 
-1. **Approval gate nativo**: GitHub Environment `production` con required reviewer. El job queda en pausa hasta aprobación humana; nada artesanal.
+1. **Approval gate**: GitHub Environment `production` con required reviewer. **Limitación actual**: el plan free de GitHub no soporta required reviewers en repos privados, así que hoy el gate es que prod solo se dispara por acción humana explícita (crear el tag `v*` o `workflow_dispatch`) — nada automático llega a prod. El gate completo se habilita al pasar a GitHub Pro o hacer público el repo (TD-006).
 2. **Respaldo**: `wrangler d1 export` de `devolada-db-prod` como artefacto del run, antes de migrar.
 3. Migraciones a `devolada-db-prod`.
 4. Deploy de API + apps a dominios prod.

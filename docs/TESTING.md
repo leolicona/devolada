@@ -2,7 +2,7 @@
 
 ## Strategy (in force from the first feature)
 
-The infrastructure lands with the **next feature under development** (`auth/isp-signup.spec.md`), and from then on every feature ships its scenarios automated as part of its DoD — tests are not a later phase, they are part of development.
+The API layer landed with `auth/isp-signup.spec.md` (2026-08-13); every feature ships its scenarios automated as part of its DoD — tests are not a later phase, they are part of development. The component, network and E2E layers land with the first frontend app (no UI surface exists yet). Run with `pnpm --filter @devolada/api test`.
 
 | Layer | Tooling | Where | Covers |
 |-------|---------|-------|--------|

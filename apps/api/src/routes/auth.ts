@@ -9,8 +9,40 @@ import { isps, stores } from "../db/schema";
 import { AgnosticAuth, AuthError } from "../auth/agnostic";
 import { COOKIE_REFRESH, clearSessionCookies, setSessionCookies } from "../auth/cookies";
 import { requireSession } from "../auth/middleware";
+import { readPayload } from "../auth/jwt";
+import { sendAuthLink } from "../email/sender";
 
 export const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+/* Magic links are built with our admin URL, not the IdP's magicLink,
+   which points at the registered store domain (spec D1). */
+async function sendLink(
+  env: Bindings,
+  kind: "verify" | "recover",
+  email: string,
+): Promise<void> {
+  const { token } = await new AgnosticAuth(env).initiate(email);
+  const path = kind === "verify" ? "verify" : "reset";
+  await sendAuthLink(env, kind, email, `${env.ADMIN_BASE_URL}/${path}?token=${token}`);
+}
+
+/* Redeems a magic token and resolves which ISP it belongs to.
+   Returns null when the token is invalid, used, or maps to no account. */
+async function redeemIspToken(env: Bindings, token: string) {
+  try {
+    const tokens = await new AgnosticAuth(env).verify(token);
+    const payload = await readPayload(tokens.jwt, env);
+    const identity = payload?.identity ?? payload?.sub;
+    if (!identity) return null;
+    const db = drizzle(env.DB);
+    const [isp] = await db.select().from(isps).where(eq(isps.email, identity));
+    if (!isp) return null;
+    return { isp, tokens };
+  } catch (e) {
+    if (e instanceof AuthError && e.status < 500) return null;
+    throw e;
+  }
+}
 
 const storeCredentials = z.object({
   phone: z.string().min(10).max(15),
@@ -97,3 +129,117 @@ auth.post("/logout", async (c) => {
 auth.get("/me", requireSession, (c) => {
   return c.json({ success: true, data: c.get("actor") });
 });
+
+const signupInput = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+auth.post("/signup", zValidator("json", signupInput), async (c) => {
+  const { name, email, password } = c.req.valid("json");
+  const db = drizzle(c.env.DB);
+
+  const [existing] = await db.select().from(isps).where(eq(isps.email, email));
+  /* Signup necessarily reveals existence (spec D4) */
+  if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
+
+  const idp = new AgnosticAuth(c.env);
+  const { hash, salt } = await idp.hash(password);
+  const [isp] = await db
+    .insert(isps)
+    .values({ name, email, passwordHash: hash, passwordSalt: salt })
+    .returning();
+
+  const tokens = await idp.verifyPassword(email, password, hash, salt);
+  setSessionCookies(c, tokens);
+
+  /* Best-effort: the account never depends on the email provider (spec D2) */
+  try {
+    await sendLink(c.env, "verify", email);
+  } catch (e) {
+    console.error("verification email failed", e);
+  }
+
+  return c.json(
+    { success: true, data: { type: "isp", id: isp.id, name: isp.name, emailVerified: false } },
+    201,
+  );
+});
+
+auth.post(
+  "/verify-email",
+  zValidator("json", z.object({ token: z.string().min(1) })),
+  async (c) => {
+    const redeemed = await redeemIspToken(c.env, c.req.valid("json").token);
+    if (!redeemed) return c.json({ success: false, error: { code: "INVALID_TOKEN" } }, 400);
+
+    const db = drizzle(c.env.DB);
+    await db.update(isps).set({ emailVerified: true }).where(eq(isps.id, redeemed.isp.id));
+    setSessionCookies(c, redeemed.tokens);
+    return c.json({
+      success: true,
+      data: { type: "isp", id: redeemed.isp.id, name: redeemed.isp.name, emailVerified: true },
+    });
+  },
+);
+
+auth.post("/resend-verification", requireSession, async (c) => {
+  const actor = c.get("actor");
+  if (actor.type !== "isp") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const [isp] = await db.select().from(isps).where(eq(isps.id, actor.id));
+  if (isp?.emailVerified) {
+    return c.json({ success: false, error: { code: "ALREADY_VERIFIED" } }, 409);
+  }
+  try {
+    await sendLink(c.env, "verify", actor.email);
+  } catch (e) {
+    console.error("verification email failed", e);
+  }
+  return c.json({ success: true, data: {} });
+});
+
+auth.post(
+  "/recover",
+  zValidator("json", z.object({ email: z.string().email() })),
+  async (c) => {
+    const { email } = c.req.valid("json");
+    const db = drizzle(c.env.DB);
+    const [isp] = await db.select().from(isps).where(eq(isps.email, email));
+    /* Identical 200 whether the account exists or not (no existence leak) */
+    if (isp) {
+      try {
+        await sendLink(c.env, "recover", email);
+      } catch (e) {
+        console.error("recovery email failed", e);
+      }
+    }
+    return c.json({ success: true, data: {} });
+  },
+);
+
+auth.post(
+  "/reset-password",
+  zValidator("json", z.object({ token: z.string().min(1), password: z.string().min(8) })),
+  async (c) => {
+    const { token, password } = c.req.valid("json");
+    const redeemed = await redeemIspToken(c.env, token);
+    if (!redeemed) return c.json({ success: false, error: { code: "INVALID_TOKEN" } }, 400);
+
+    const { hash, salt } = await new AgnosticAuth(c.env).hash(password);
+    const db = drizzle(c.env.DB);
+    /* Completing a reset proves email ownership (spec D5) */
+    await db
+      .update(isps)
+      .set({ passwordHash: hash, passwordSalt: salt, emailVerified: true })
+      .where(eq(isps.id, redeemed.isp.id));
+    setSessionCookies(c, redeemed.tokens);
+    return c.json({
+      success: true,
+      data: { type: "isp", id: redeemed.isp.id, name: redeemed.isp.name, emailVerified: true },
+    });
+  },
+);

@@ -55,5 +55,5 @@ Cookie-based authentication for stores (phone) and admins (email), with invisibl
 
 - [x] Contract implemented and scenarios 1–8 verified
 - [x] IdP discrepancies documented in `integrations/agnostic-auth.md`
-- [ ] Scenarios automated (blocked by TD-005)
+- [x] Scenarios automated (`test/sessions.test.ts`, TD-005 paid)
 - [ ] JWT signature verification in dev and prod (TD-001)

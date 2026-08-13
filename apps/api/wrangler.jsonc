@@ -14,7 +14,8 @@
   "vars": {
     "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
     "AUTH_APP_ID": "devolada",
-    "ENVIRONMENT": "dev"
+    "ENVIRONMENT": "dev",
+    "ADMIN_BASE_URL": "http://localhost:5174"
   },
   /* Remote environments (CICD.md). Per-environment secrets via
      `wrangler secret put --env`: AUTH_JWT_SECRET (required in prod). */
@@ -33,7 +34,8 @@
       "vars": {
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
-        "ENVIRONMENT": "dev"
+        "ENVIRONMENT": "dev",
+        "ADMIN_BASE_URL": "https://admin-dev.devolada.app"
       }
     },
     "prod": {
@@ -50,7 +52,8 @@
       "vars": {
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
-        "ENVIRONMENT": "prod"
+        "ENVIRONMENT": "prod",
+        "ADMIN_BASE_URL": "https://admin.devolada.app"
       }
     }
   }

@@ -9,6 +9,10 @@ export type Bindings = {
   AUTH_JWT_SECRET?: string;
   COOKIE_DOMAIN?: string;
   ENVIRONMENT?: "dev" | "prod";
+  /* Base URL of the admin app, used to build magic links (spec D1) */
+  ADMIN_BASE_URL: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 };
 
 export type Actor =

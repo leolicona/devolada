@@ -1,33 +1,14 @@
 import { createMiddleware } from "hono/factory";
 import { getCookie } from "hono/cookie";
-import { decode, verify } from "hono/jwt";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Actor, Bindings, Variables } from "../env";
 import { isps, stores } from "../db/schema";
 import { AgnosticAuth } from "./agnostic";
+import { readPayload } from "./jwt";
 import { COOKIE_ACCESS, COOKIE_REFRESH, clearSessionCookies, setSessionCookies } from "./cookies";
 
-type Payload = { identity?: string; sub?: string; exp?: number };
-
-/* With AUTH_JWT_SECRET verifies the HS256 signature; without it (dev only)
-   decodes and checks expiry manually. */
-async function readPayload(jwt: string, env: Bindings): Promise<Payload | null> {
-  try {
-    if (env.AUTH_JWT_SECRET) {
-      return (await verify(jwt, env.AUTH_JWT_SECRET, "HS256")) as Payload;
-    }
-    console.warn("AUTH_JWT_SECRET missing: JWT decoded without signature verification (dev only)");
-    const { payload } = decode(jwt);
-    const p = payload as Payload;
-    if (p.exp && p.exp * 1000 < Date.now()) return null;
-    return p;
-  } catch {
-    return null;
-  }
-}
-
-async function findActor(env: Bindings, identity: string): Promise<Actor | null> {
+export async function findActor(env: Bindings, identity: string): Promise<Actor | null> {
   const db = drizzle(env.DB);
   const [store] = await db.select().from(stores).where(eq(stores.phone, identity));
   if (store) {

@@ -22,9 +22,9 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - `scripts/spec-lint.mjs` runs in all three workflows: fails if a `*.spec.md` is missing from SPEC.md's index; warns on tests without a US-ID (becomes an error once TD-005 is paid).
 
 ## TD-005 — Sessions verified with curl only
-- Status: being paid · Origin: auth/sessions.spec.md (predates the testing strategy)
-- The `TESTING.md` strategy governs from the next feature onward (infrastructure lands with `isp-signup`); the remaining debt is retroactive: turning the 8 curl scenarios for sessions into API-layer tests.
-- Paid by: landing the infrastructure with isp-signup, in the same PR or the immediately following one.
+- Status: **paid** (2026-08-13, `feat/isp-signup`)
+- API test layer landed (`apps/api`: vitest + `@cloudflare/vitest-pool-workers@0.8`, app running in workerd with real D1, IdP mocked per the real contract). The 8 session scenarios are retro-covered in `test/sessions.test.ts` (10 tests) and isp-signup was born automated (`test/isp-signup.test.ts`, 8 tests).
+- Note: the component/MSW/Playwright layers land with the first frontend app (there is no UI surface to test yet) — tracked in `TESTING.md`.
 
 ## TD-006 — CI/CD pipeline with activation pendings
 - Status: **paid** (2026-08-13)

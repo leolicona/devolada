@@ -79,7 +79,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | Spec | Domain | Stories | Status |
 |------|--------|---------|--------|
 | [auth/sessions.spec.md](auth/sessions.spec.md) | auth | US-S01, US-S02, US-S03 | current |
-| auth/isp-signup.spec.md | auth | US-S04, US-S06 | pending |
+| [auth/isp-signup.spec.md](auth/isp-signup.spec.md) | auth | US-S04, US-S06 | in development |
 | auth/store-invitation.spec.md | auth | US-S05 | pending |
 | charges/*.spec.md | charges | US-C01…C05 | pending |
 | cashbox/*.spec.md | cashbox | US-K01…K04 | pending |

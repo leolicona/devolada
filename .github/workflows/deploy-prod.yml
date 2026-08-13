@@ -1,0 +1,67 @@
+# Producción por tag v* con approval gate (CICD.md camino 3).
+name: Deploy Prod
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/spec-lint.mjs
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm -r --if-present test
+      - run: pnpm -r --if-present build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    # Environment con required reviewer: el job se pausa aquí hasta aprobación humana
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Respaldo D1 prod (antes de migrar)
+        working-directory: apps/api
+        run: pnpm exec wrangler d1 export devolada-db-prod --remote --output respaldo-prod.sql
+      - uses: actions/upload-artifact@v4
+        with:
+          name: respaldo-d1-${{ github.ref_name }}
+          path: apps/api/respaldo-prod.sql
+          retention-days: 30
+      - name: Migraciones D1 prod
+        working-directory: apps/api
+        run: pnpm exec wrangler d1 migrations apply devolada-db-prod --env prod --remote
+      - name: Deploy API prod
+        working-directory: apps/api
+        run: pnpm exec wrangler deploy --env prod
+      # TODO: deploy de apps/tienda y apps/admin cuando existan
+      - name: Smoke test
+        run: |
+          URL="${{ vars.PROD_API_URL }}"
+          if [ -z "$URL" ]; then
+            echo "::warning::PROD_API_URL no configurada; smoke omitido"
+            exit 0
+          fi
+          sleep 5
+          curl -sf "$URL/health" || { echo "::error::Smoke falló: considerar wrangler rollback (CICD.md)"; exit 1; }

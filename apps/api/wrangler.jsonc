@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devolada-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-05-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "devolada-db",
+      "database_id": "devolada-db-local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
+    "AUTH_APP_ID": "devolada",
+    "ENTORNO": "dev"
+  },
+  /* Entornos remotos (CICD.md). Secrets por entorno vía `wrangler secret put --env`:
+     AUTH_JWT_SECRET (obligatorio en prod). database_id: PENDIENTE — tope de D1
+     alcanzado en la cuenta (TD-006); reemplazar al liberar espacio. */
+  "env": {
+    "dev": {
+      "name": "devolada-api-dev",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "devolada-db-dev",
+          "database_id": "PENDIENTE-tope-d1",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "services": [{ "binding": "AGNOSTIC_AUTH_API", "service": "agnostic-auth" }],
+      "vars": {
+        "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
+        "AUTH_APP_ID": "devolada",
+        "ENTORNO": "dev"
+      }
+    },
+    "prod": {
+      "name": "devolada-api",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "devolada-db-prod",
+          "database_id": "PENDIENTE-tope-d1",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "services": [{ "binding": "AGNOSTIC_AUTH_API", "service": "agnostic-auth" }],
+      "vars": {
+        "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
+        "AUTH_APP_ID": "devolada",
+        "ENTORNO": "prod"
+      }
+    }
+  }
+}

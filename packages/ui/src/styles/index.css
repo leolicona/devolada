@@ -1,0 +1,121 @@
+/* Devolada UI — hoja base compartida por apps/tienda y apps/admin.
+   Importa Tailwind v4, fuentes self-hosted y los tokens, y mapea los
+   tokens a utilidades de Tailwind vía @theme inline. */
+
+@import "tailwindcss";
+
+@import "@fontsource-variable/archivo";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@import "./tokens.css";
+
+/* Mapeo tokens → utilidades Tailwind.
+   `inline` hace que las utilidades emitan var(--token) directamente,
+   así el cambio de tema ([data-theme] / prefers-color-scheme) resuelve
+   en runtime sin duplicar utilidades. */
+@theme inline {
+  /* Fuentes: font-display / font-body / font-mono */
+  --font-display: var(--font-family-display);
+  --font-body: var(--font-family-body);
+  --font-mono: var(--font-family-mono);
+
+  /* Superficies y tinta: bg-surface, bg-card, bg-well, text-ink… */
+  --color-surface: var(--color-bg-primary);
+  --color-card: var(--color-bg-secondary);
+  --color-well: var(--color-bg-tertiary);
+  --color-inverse: var(--color-bg-inverse);
+
+  --color-ink: var(--color-text-primary);
+  --color-ink-soft: var(--color-text-secondary);
+  --color-ink-faint: var(--color-text-tertiary);
+  --color-ink-inverse: var(--color-text-inverse);
+  --color-link: var(--color-text-link);
+
+  --color-line: var(--color-border-primary);
+  --color-line-soft: var(--color-border-secondary);
+  --color-focus: var(--color-border-focus);
+
+  /* Acción: bg-accent, hover:bg-accent-hover, bg-accent-soft */
+  --color-accent: var(--color-accent-primary);
+  --color-accent-hover: var(--color-accent-primary-hover);
+  --color-accent-active: var(--color-accent-primary-active);
+  --color-accent-soft: var(--color-accent-primary-subtle);
+
+  /* Estados: tinta / -soft (fondo) / -line (borde) */
+  --color-success: var(--color-status-success);
+  --color-success-soft: var(--color-status-success-bg);
+  --color-success-line: var(--color-status-success-border);
+
+  --color-warning: var(--color-status-warning);
+  --color-warning-soft: var(--color-status-warning-bg);
+  --color-warning-line: var(--color-status-warning-border);
+
+  --color-error: var(--color-status-error);
+  --color-error-soft: var(--color-status-error-bg);
+  --color-error-line: var(--color-status-error-border);
+
+  --color-info: var(--color-status-info);
+  --color-info-soft: var(--color-status-info-bg);
+  --color-info-line: var(--color-status-info-border);
+
+  --color-overlay: var(--color-surface-overlay);
+
+  /* Radios: rounded-sm/md/lg */
+  --radius-sm: var(--border-radius-sm);
+  --radius-md: var(--border-radius-md);
+  --radius-lg: var(--border-radius-lg);
+
+  /* Sombras: shadow-sm/md/lg */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  /* Tipografía: text-xs … text-amount */
+  --text-xs: var(--font-size-xs);
+  --text-sm: var(--font-size-sm);
+  --text-base: var(--font-size-base);
+  --text-md: var(--font-size-md);
+  --text-lg: var(--font-size-lg);
+  --text-xl: var(--font-size-xl);
+  --text-2xl: var(--font-size-2xl);
+  --text-3xl: var(--font-size-3xl);
+  --text-4xl: var(--font-size-4xl);
+  --text-amount: var(--font-size-amount);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-family-body);
+  }
+
+  body {
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    line-height: var(--line-height-normal);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Los montos siempre tabulares: clase utilitaria de Tailwind
+     `tabular-nums` disponible; este fallback cubre elementos sueltos */
+  data,
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+    border-radius: var(--border-radius-sm);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

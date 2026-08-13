@@ -1,0 +1,7 @@
+{
+  "name": "devolada",
+  "private": true,
+  "scripts": {
+    "muestra": "pnpm --filter @devolada/ui dev"
+  }
+}

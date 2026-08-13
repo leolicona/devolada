@@ -1,0 +1,58 @@
+# Despliegue continuo a dev en cada push a main (CICD.md camino 2).
+name: Deploy Dev
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/spec-lint.mjs
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm -r --if-present test
+      - run: pnpm -r --if-present build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migraciones D1 dev (antes del deploy)
+        working-directory: apps/api
+        run: pnpm exec wrangler d1 migrations apply devolada-db-dev --env dev --remote
+      - name: Deploy API dev
+        working-directory: apps/api
+        run: pnpm exec wrangler deploy --env dev
+      # TODO: deploy de apps/tienda y apps/admin cuando existan
+      - name: Smoke test
+        run: |
+          URL="${{ vars.DEV_API_URL }}"
+          if [ -z "$URL" ]; then
+            echo "::warning::DEV_API_URL no configurada; smoke omitido"
+            exit 0
+          fi
+          sleep 5
+          curl -sf "$URL/health" || { echo "::error::Smoke falló: dev desplegado pero no responde"; exit 1; }
+      # TODO: E2E Playwright + axe contra dev (TESTING.md capa 4)

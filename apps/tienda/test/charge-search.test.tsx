@@ -40,6 +40,20 @@ describe("US-C01: typing shows result cards with minimum identity", () => {
     expect(screen.getByText("$499.00")).toBeInTheDocument();
   });
 
+  /* Regression: the card used to link with the numeric wisphubId, which the
+     quote endpoint rejects. Mounting the confirm route directly hid it —
+     tests must travel from the origin screen (TESTING.md rule 7). */
+  it("tapping a result navigates using the usuario, not the numeric id", async () => {
+    withSession();
+    server.use(handlers.customerSearch(() => ok(results)));
+    const router = renderApp("/");
+
+    await userEvent.type(await screen.findByLabelText("Buscar cliente"), "Janely");
+    await userEvent.click(await screen.findByText("Janely"));
+
+    expect(router.state.location.pathname).toBe("/charge/greyes%40wifiplus");
+  });
+
   it("shows 'Sin resultados' when the list is empty", async () => {
     withSession();
     server.use(handlers.customerSearch(() => ok({ customers: [] })));

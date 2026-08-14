@@ -1,6 +1,6 @@
-# WispHub — contract pending spike
+# WispHub — verified contract
 
-**Status: NOT verified.** This file gets filled with the spike's outcome (Phase 0, `WISPHUB_SPIKE.md`). Until then, nothing below is a contract — they are working hypotheses.
+**Status: verified end-to-end on the demo tenant (2026-08-13).** The executed spike — including invoice creation and payment registration — is documented in `.design/devolada/WISPHUB_SPIKE.md`, which is the authoritative contract. Key facts: auth `Authorization: Api-Key <token>` against `https://api.wisphub.net/api/`; `OPTIONS` responses are the real documentation; payment = `POST /api/facturas/{id}/registrar-pago/` (async, returns `task_id`); `estado` is WispHub-managed (not writable) while `auto_activar_servicio` is the writable opt-in for payment-triggered reactivation. Pending only: physical MikroTik verification with the pilot ISP's real router.
 
 ## The spike's golden question
 

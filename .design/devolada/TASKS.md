@@ -7,7 +7,7 @@ Order: risk first (WispHub spike), then visual foundation to validate the aesthe
 
 ## Risk first
 
-- [ ] **WispHub spike**: with a real API Key, test customer search (by ID/phone/name), payment registration, and verify the service reactivates on the MikroTik; document endpoints, latencies and limitations in `.design/devolada/WISPHUB_SPIKE.md`. If reactivation is not automatic via API, the finding redefines the product — hence it goes before everything. _No UI; blocks the whole backend._
+- [x] **WispHub spike**: with a real API Key, test customer search (by ID/phone/name), payment registration, and verify the service reactivates on the MikroTik; document endpoints, latencies and limitations in `.design/devolada/WISPHUB_SPIKE.md`. Executed 2026-08-13 on the demo tenant: full pipeline verified (search filters → invoice → `registrar-pago` async with `task_id`); `auto_activar_servicio` is the writable reactivation opt-in. Only the physical MikroTik flip remains, pending the pilot ISP's router. _No UI; blocks the whole backend._
 
 ## Foundation
 

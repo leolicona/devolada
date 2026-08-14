@@ -8,6 +8,7 @@ import { recordChargeEntries, storeBalanceCents } from "../../ledger";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
 import { startOfBusinessDayMs } from "../../time/business-day";
+import { firstAttemptSchedule } from "../../reconnection/queue";
 import type { ChargeResponse, CustomerQuoteResponse, CustomerSearchResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -147,19 +148,20 @@ export async function recordCharge(c: Ctx, usuario: string) {
     commissionCents,
   });
 
-  /* D3: one immediate attempt; the retry queue is the next task */
-  const status = await attemptReconnection(
-    ctx.wisphub,
-    usuario,
-    customer.monthlyFeeCents,
-    new Date(),
-  );
+  /* D3: one immediate attempt, then the queue takes over
+     (reconnection-queue spec): the same rules decide when it retries. */
+  const now = new Date();
+  const attempt = await attemptReconnection(ctx.wisphub, usuario, customer.monthlyFeeCents, now);
+  const schedule = firstAttemptSchedule(attempt, now);
   const [updated] = await ctx.db
     .update(charges)
     .set({
-      reconnectionStatus: status,
-      reconnectionAttempts: 1,
-      ...(status === "reconnected" ? { reconnectedAt: new Date() } : {}),
+      reconnectionStatus: attempt.status,
+      reconnectionAttempts: schedule.attempts,
+      wisphubInvoiceId: attempt.invoiceId,
+      nextAttemptAt: schedule.nextAttemptAt,
+      lastError: attempt.error,
+      ...(attempt.status === "reconnected" ? { reconnectedAt: now } : {}),
     })
     .where(eq(charges.id, charge.id))
     .returning();
@@ -244,6 +246,7 @@ export async function listChargeFeed(
         createdAt: charge.createdAt.getTime(),
         reconnectedAt: charge.reconnectedAt?.getTime() ?? null,
         attempts: charge.reconnectionAttempts,
+        lastError: charge.lastError,
       })),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,
       today,

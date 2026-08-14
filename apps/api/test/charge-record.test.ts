@@ -42,11 +42,15 @@ function mockCustomerLookup(results: unknown[], times = 1) {
     .times(times);
 }
 
-/* The full happy reconnection: payment methods → invoice → payment → verify */
+/* The full happy reconnection: payment methods → look for a pending
+   invoice (reconnection-queue D1) → create → payment → verify */
 function mockReconnection(verifyEstado = "Activo") {
   wh()
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
     .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
+  wh()
+    .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
+    .reply(...json({ count: 0, results: [] }));
   wh()
     .intercept({ method: "POST", path: "/api/facturas/" })
     .reply(...json({ messages: "Se genero correctamente la factura 42." }));

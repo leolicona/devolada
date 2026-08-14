@@ -19,6 +19,7 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   createdAt: Date.now(),
   reconnectedAt: Date.now(),
   attempts: 1,
+  lastError: null,
   ...over,
 });
 

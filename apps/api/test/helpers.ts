@@ -4,7 +4,9 @@ import { isps, stores } from "../src/db/schema";
 
 export const AUTH_ORIGIN = "https://agnostic-auth.leolicona-dev.workers.dev";
 
-export const app = async () => (await import("../src/index")).default;
+/* The Hono app, not the worker default export (which also carries
+   the cron `scheduled` handler). */
+export const app = async () => (await import("../src/index")).app;
 
 /* Unsigned but well-formed JWT: dev mode (no AUTH_JWT_SECRET) decodes
    without verifying the signature, exactly like the middleware documents. */

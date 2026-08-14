@@ -33,6 +33,7 @@
         }
       ],
       "services": [{ "binding": "AGNOSTIC_AUTH_API", "service": "agnostic-auth" }],
+      "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
@@ -54,6 +55,7 @@
         }
       ],
       "services": [{ "binding": "AGNOSTIC_AUTH_API", "service": "agnostic-auth" }],
+      "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",

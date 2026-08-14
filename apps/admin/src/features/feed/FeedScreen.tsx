@@ -35,6 +35,16 @@ function feedPath(opts: { cursor?: number; status?: string }): string {
   return `/charges/feed${qs ? `?${qs}` : ""}`;
 }
 
+/* The queue writes a code; the ISP reads a sentence
+   (reconnection-queue spec UI contract). */
+const reasons: Record<string, string> = {
+  WISPHUB_AUTH_FAILED: "WispHub rechazó la llave. Revísala en Configuración.",
+  WISPHUB_NOT_CONFIGURED: "Falta la llave de WispHub en Configuración.",
+  WISPHUB_UNAVAILABLE: "WispHub no respondió. Lo seguimos intentando.",
+  NOT_ACTIVE_YET: "El pago quedó registrado; el servicio aún no se activa.",
+};
+const reasonFor = (code: string) => reasons[code] ?? "WispHub no respondió. Lo seguimos intentando.";
+
 /* D4 + D7: detail expands in place with a Collapsible row */
 function ChargeRow({ charge }: { charge: FeedCharge }) {
   const { timeFormat, timezone } = useDisplaySettings();
@@ -71,6 +81,9 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
               <p className="mt-1">Intentos de reconexión: {charge.attempts}</p>
+              {charge.lastError && (
+                <p className="mt-1 text-error">{reasonFor(charge.lastError)}</p>
+              )}
               {charge.reconnectedAt && (
                 <p className="mt-1 text-success">
                   Reconectado a las {at(charge.reconnectedAt)}

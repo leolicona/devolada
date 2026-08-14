@@ -118,6 +118,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       createdAt: at,
       reconnectedAt: at,
       attempts: 1,
+      lastError: null,
     };
     server.use(
       handlers.session(() => ok({ ...ispActor, timeFormat: "24h" })),

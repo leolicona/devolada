@@ -126,6 +126,27 @@ export class WispHub {
     return (cash ?? data.results[0]).id;
   }
 
+  /* TD-009: the pending invoice a customer already has, if any.
+
+     The list endpoint takes `estado` and a date range but **no customer
+     filter** (verified against the live API), so the match happens here.
+     `estado=1` is Pendiente. The default range is the current month and
+     the spike warns that an empty answer can lie, so the window is
+     explicit: the last 45 days by issue date. */
+  async findPendingInvoiceId(usuario: string, now: Date): Promise<number | null> {
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    const desde = day(new Date(now.getTime() - 45 * 24 * 3600 * 1000));
+    /* One day ahead: WispHub stamps in the tenant's timezone, not UTC */
+    const hasta = day(new Date(now.getTime() + 24 * 3600 * 1000));
+
+    const data = await this.get<{ results: { id_factura: number; cliente: { usuario: string | null } }[] }>(
+      `/facturas/?estado=1&tipo_fecha=fecha_emision&desde=${desde}&hasta=${hasta}&limit=100`,
+    );
+    const mine = data.results.filter((f) => f.cliente?.usuario === usuario);
+    /* Oldest first: pay the debt the customer has been carrying */
+    return mine.length ? Math.min(...mine.map((f) => f.id_factura)) : null;
+  }
+
   /* Creates a pending invoice. WispHub answers with a message string,
      not an id (spike finding, TD-008): we parse "la factura N". */
   async createInvoice(usuario: string, amountCents: number, date: string): Promise<number> {

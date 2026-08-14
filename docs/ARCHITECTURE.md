@@ -14,6 +14,30 @@ packages/ui   → Shared tokens and components (single visual source)
 - pnpm workspaces. Frontend apps live on subdomains (`tienda.` / `admin.` / `api.devolada.app`).
 - Code identifiers, docs and commits are written in English; **user-facing copy is es-MX** per the SPEC glossary.
 
+## Code organization
+
+Adopted 2026-08-14 (critical evaluation of FSD + resource-routes). New code is born with this shape; existing code migrates **lazily** — when a file is next touched, never as a big-bang.
+
+### Backend (`apps/api`)
+
+- **Resource routes**: `src/routes/<resource>/` with `index.ts` (pure router), `schema.ts` (Zod in/out), `handler.ts` (logic) — **when the resource has real logic**. Trivial routers (e.g. `dev`) stay single-file; the three-file split is a tool, not a dogma.
+- **`schema.ts` is the shareable contract**: frontends derive types from it and MSW handlers validate against it (TESTING.md rule 5 becomes mechanical).
+- **Adapters own the outside world**: `src/auth/` (IdP), `src/email/`, `src/wisphub/` — handlers orchestrate, adapters talk to third parties. No fetch to an external service outside an adapter.
+- **Cross-resource invariants get their own module**: the append-only ledger is written by charges *and* cash drops — all ledger writes go through `src/ledger/`, never inline in handlers. Duplicated invariants are dead invariants.
+
+### Frontend (`apps/tienda`, `apps/admin`)
+
+- **FSD-lite, not orthodox FSD**: one folder per route domain (`src/features/charge/`, `cashbox/`, `ledger/`, `auth/`) encapsulating screens + hooks + local components, plus `src/shared/` (API client, cross-feature utilities). No `entities/widgets` taxonomy — it breeds arbitration nobody performs solo.
+- **Route files are dumb**: `router.tsx` wires params → feature components. No logic in routes.
+- **Server state lives in TanStack Query only.** The cookie is the session; nobody mirrors it in memory.
+- **Client-state manager: pre-approved, not installed.** When a *second* consumer of shared UI state appears, the tool is Zustand — until then the dependency does not exist. Server state never migrates into it.
+- Import direction: features may import from `shared/` and `@devolada/ui`; never from another feature. Documented boundary (the AI reads this); lint enforcement only if drift appears.
+
+### Design system (`packages/ui`)
+
+- Primitives (`Button`, `Input`, `Field`) and domain atoms (`StatusBadge`, `Amount…`) are the only place visual patterns live; repeating a Tailwind recipe across surfaces instead of extracting it is drift.
+- A component enters `packages/ui` when two surfaces need it; until then it lives in its feature.
+
 ## Money
 
 - **Always integer cents** (`totalCents: 41500`). Floats never touch amounts.

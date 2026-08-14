@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Clock3, Search } from "lucide-react";
-import { Amount, Input, StatusBadge } from "@devolada/ui";
+import { Alert, Amount, Card, Input, StatusBadge } from "@devolada/ui";
 import type { CustomerResult } from "@devolada/api/charges-schema";
 import { useCustomerSearch } from "./useCustomerSearch";
 
@@ -11,26 +11,28 @@ import { useCustomerSearch } from "./useCustomerSearch";
 function CustomerCard({ customer }: { customer: CustomerResult }) {
   return (
     <li>
-      <Link
-        to="/charge/$customerId"
-        /* The quote endpoint loads by usuario, never by the numeric id
-           (charge-confirm spec D1): WispHub's detail endpoint is empty. */
-        params={{ customerId: customer.usuario }}
-        className="flex min-h-16 items-center justify-between gap-4 rounded-md border border-line bg-card p-4 transition-colors duration-150 hover:bg-well"
-      >
-        <div className="min-w-0">
-          <p className="truncate text-base font-medium">{customer.name}</p>
-          <p className="mt-0.5 truncate text-sm text-ink-faint">
-            {customer.zone ?? "Sin zona"}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <StatusBadge
-            status={customer.serviceStatus === "unknown" ? "active" : customer.serviceStatus}
-          />
-          <Amount cents={customer.monthlyFeeCents} className="text-sm font-semibold" />
-        </div>
-      </Link>
+      <Card asChild>
+        <Link
+          to="/charge/$customerId"
+          /* The quote endpoint loads by usuario, never by the numeric id
+             (charge-confirm spec D1): WispHub's detail endpoint is empty. */
+          params={{ customerId: customer.usuario }}
+          className="flex min-h-16 items-center justify-between gap-4 p-4 transition-colors duration-150 hover:bg-well"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-base font-medium">{customer.name}</p>
+            <p className="mt-0.5 truncate text-sm text-ink-faint">
+              {customer.zone ?? "Sin zona"}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <StatusBadge
+              status={customer.serviceStatus === "unknown" ? "active" : customer.serviceStatus}
+            />
+            <Amount cents={customer.monthlyFeeCents} className="text-sm font-semibold" />
+          </div>
+        </Link>
+      </Card>
     </li>
   );
 }
@@ -64,16 +66,18 @@ export function SearchScreen() {
         {enabled && isFetching && <p className="text-sm text-ink-faint">Buscando…</p>}
 
         {errorCode === "WISPHUB_UNAVAILABLE" && (
-          <p className="flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
-            <Clock3 className="mt-0.5 size-4 shrink-0" aria-hidden />
+          /* The results region is already aria-live; a nested live region
+             would announce the same sentence twice */
+          <Alert variant="warning" layout="icon" role={undefined}>
+            <Clock3 aria-hidden />
             El sistema del ISP no responde. Los cobros quedarán en cola y se aplicarán solos.
-          </p>
+          </Alert>
         )}
 
         {errorCode === "WISPHUB_NOT_CONFIGURED" && (
-          <p className="rounded-md border border-line bg-well px-4 py-3 text-sm text-ink-soft">
+          <Alert className="font-normal">
             Tu ISP todavía no conecta su sistema. Pídele que lo configure para poder cobrar.
-          </p>
+          </Alert>
         )}
 
         {enabled && !isFetching && !errorCode && data && data.customers.length === 0 && (

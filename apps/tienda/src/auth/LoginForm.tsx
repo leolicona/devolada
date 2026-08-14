@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LogIn } from "lucide-react";
-import { Button, Field, Input } from "@devolada/ui";
+import { Alert, Button, Field, Input } from "@devolada/ui";
 import { ApiError } from "../api/client";
 import { login } from "./session";
 
@@ -52,11 +52,7 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           onChange={(e) => setPassword(e.target.value)}
         />
       </Field>
-      {error && (
-        <p role="alert" className="rounded-sm border border-error-line bg-error-soft px-4 py-3 text-sm font-medium text-error">
-          {error}
-        </p>
-      )}
+      {error && <Alert variant="destructive">{error}</Alert>}
       <Button type="submit" disabled={busy} className="w-full">
         <LogIn className="size-5" aria-hidden />
         {busy ? "Entrando…" : "Entrar"}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
-import { Button, Field, Input } from "@devolada/ui";
+import { Alert, Button, Field, Input } from "@devolada/ui";
 import { api, ApiError } from "../../api/client";
 
 /* Invitation redemption (US-S05): one screen, one step. The link
@@ -49,7 +49,7 @@ export function InvitationScreen() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-[40rem] flex-col justify-center bg-surface px-8">
+    <main className="mx-auto flex min-h-dvh max-w-content flex-col justify-center bg-surface px-8">
       <p className="text-2xl font-semibold tracking-tight">Devolada</p>
       <p className="mt-1 mb-8 text-base text-ink-soft">
         Bienvenido. Crea tu contraseña para empezar a cobrar.
@@ -73,11 +73,7 @@ export function InvitationScreen() {
             onChange={(e) => setConfirm(e.target.value)}
           />
         </Field>
-        {error && (
-          <p role="alert" className="rounded-sm border border-error-line bg-error-soft px-4 py-3 text-sm font-medium text-error">
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="destructive">{error}</Alert>}
         <Button type="submit" disabled={busy} className="w-full">
           <KeyRound className="size-5" aria-hidden />
           {busy ? "Guardando…" : "Guardar y entrar"}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine } from "lucide-react";
-import { Amount, Button, Field, Input, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Button, Field, Input, Skeleton, parseMoney } from "@devolada/ui";
 import type { CashboxResponse } from "@devolada/api/cashbox-schema";
 import type { CashDropResponse } from "@devolada/api/cash-drops-schema";
 import { api, ApiError } from "../../api/client";
@@ -50,9 +50,13 @@ export function DropScreen() {
      it earlier lets the prefill land on top of what the shopkeeper typed. */
   if (isPending || !cashbox) {
     return (
-      <main className="px-6 pt-8">
+      <main className="px-6 pt-8" aria-busy="true" aria-label="Cargando tu balance">
         <h1 className="text-xl font-semibold">Registrar entrega</h1>
-        <p className="mt-6 text-sm text-ink-faint">Cargando tu balance…</p>
+        <Skeleton className="mt-2 h-4 w-56" />
+        <div className="mt-6">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="mt-2 h-12 w-full" />
+        </div>
       </main>
     );
   }
@@ -90,11 +94,7 @@ export function DropScreen() {
             placeholder="0.00"
           />
         </Field>
-        {error && (
-          <p role="alert" className="rounded-sm border border-error-line bg-error-soft px-4 py-3 text-sm font-medium text-error">
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="destructive">{error}</Alert>}
         <Button type="submit" disabled={record.isPending} className="w-full">
           <ArrowDownToLine className="size-5" aria-hidden />
           {record.isPending ? "Registrando…" : "Registrar entrega"}

@@ -5,6 +5,7 @@ Cross-cutting UI rules. Each `.spec.md` additionally includes its own **UI Contr
 ## Single visual source
 
 - **Tokens are law**: every color, space, radius, shadow and size comes from `packages/ui/src/styles/tokens.css`. Zero hardcoded values. (The design mirror in `.design/devolada/DESIGN_TOKENS.css` syncs from the live file.)
+- **`packages/ui` is declared to Tailwind with `@source "../"`** in `src/styles/index.css`, and the line must stay. Both apps resolve `@devolada/ui` through node_modules, which Tailwind v4's automatic source detection skips — so without it, a utility used *only* inside an atom compiles to nothing and fails silently, with no build error and no failing test. Found 2026-08-14: `pl-12` (the search input's icon gap), `hover:bg-accent-hover`, `active:bg-accent-active` and `animate-pulse` had never reached either stylesheet. A new class in an atom is verified in the built CSS, not in the JSX.
 - **`StatusBadge` is the only representation of domain statuses** (reconnection, cash drops, service). Re-creating status pills per screen is forbidden; if a status is missing, it is added to the atom.
 - **`Amount` / `AmountBreakdown` / `formatMoney`** for all visible money. A breakdown's total is always computed, never passed by hand.
 - Philosophy: functionalist (Rams) with a warm accent. Color = information (green charged / amber queued / red failed); nothing decorative without function; no bounce.
@@ -15,7 +16,10 @@ Cross-cutting UI rules. Each `.spec.md` additionally includes its own **UI Contr
 - Search order for any piece of UI: domain atom in `@devolada/ui` → shadcn primitive → new component (and if two surfaces need it, it becomes a shared atom).
 - **shadcn is the recipe; the tokens stay the law** (`admin/shell.spec.md` D1). Copy the code into the repo — never add a component library as a dependency.
 - Not every primitive fits: pick the one the UI Contract needs, and write down what you rejected and why (`charge-feed.spec.md` D7 refuses `Table` because rows expand and must become cards on mobile).
-- Today the catalog lives in `apps/admin/src/components/ui/`. The store PWA builds on `@devolada/ui` atoms; when it needs a primitive those atoms don't cover, it copies from shadcn as well.
+- **Primitives both surfaces use live in `@devolada/ui`** — today `Alert`, `Card` and `Skeleton` alongside the domain atoms (`store-pwa/shell.spec.md` D5). They are written in token utilities (`bg-well`, `border-line`), not shadcn's semantic aliases, because the package is the layer that owns the tokens.
+- Primitives only one surface uses stay in that app's `src/components/ui/`: the admin keeps Tabs, Select, Collapsible, AlertDialog, Textarea, Label, Button and Input there, mapped through the alias layer in `apps/admin/src/styles.css` (`admin/shell.spec.md` D1). The second surface to need one is what promotes it.
+- **Class names merge with `cn()`** (clsx + tailwind-merge), never with template concatenation: `"h-12" + "h-14"` leaves the winner to stylesheet order instead of the caller (`store-pwa/shell.spec.md` D6). Variants past two options use `cva`.
+- Both apps carry a `components.json`, so `pnpm dlx shadcn@latest add <primitive>` lands the code in the right folder with the right alias.
 
 ## Store PWA
 

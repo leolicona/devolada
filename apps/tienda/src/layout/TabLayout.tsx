@@ -30,7 +30,7 @@ const tabs = [
 export function TabLayout() {
   const online = useOnline();
   return (
-    <div className="mx-auto flex min-h-dvh max-w-[40rem] flex-col bg-surface">
+    <div className="mx-auto flex min-h-dvh max-w-content flex-col bg-surface">
       {!online && (
         <p
           role="status"
@@ -47,7 +47,7 @@ export function TabLayout() {
         aria-label="Navegación principal"
         className="fixed inset-x-0 bottom-0 border-t border-line bg-card pb-[env(safe-area-inset-bottom)]"
       >
-        <div className="mx-auto flex h-16 max-w-[40rem]">
+        <div className="mx-auto flex h-16 max-w-content">
           {tabs.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}

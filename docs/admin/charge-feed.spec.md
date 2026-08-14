@@ -13,7 +13,7 @@ The Cobros section: the ISP watches money come in, in near real time, with the r
 ## Decisions
 
 - **D1 — "Live" is polling, not sockets.** The feed refetches every 5 seconds. A WebSocket adds infrastructure for a latency nobody asked for at pilot scale. Revisited if an ISP runs hundreds of stores.
-- **D2 — The browser owns "today".** The client computes the start-of-day in its own timezone and sends it as `todayStartMs`; the server never guesses timezones. A Mexican ISP's evening charges must count as "today" in Mexico, not in UTC.
+- **D2 — The browser owns "today".** The client computes the start-of-day in its own timezone and sends it as `todayStartMs`; the server never guesses timezones. A Mexican ISP's evening charges must count as "today" in Mexico, not in UTC. **Superseded when the ISP timezone setting ships (US-A04)**: a configured timezone beats the browser's, because an ISP in Sonora (UTC-7) checking totals while travelling must still see its own business day. Until then the browser is the best available source.
 - **D3 — Failed charges get their own strip on top.** A failed reconnection demands action; buried in page three it is invisible. The strip queries `status=failed` separately, so it finds failures beyond the first page.
 - **D4 — Detail is an expandable row, not a route.** Tapping a row opens the breakdown, folio and reconnection timeline in place (Stripe-style). One screen, no navigation. Revisited if the detail grows (receipts, disputes).
 - **D5 — The API ships all filters; the UI ships status only.** `storeId`, `from`, `to` work server-side today, but the store selector needs the Stores task's endpoint and date pickers add little at pilot volume. The UI grows into the API, not the reverse.

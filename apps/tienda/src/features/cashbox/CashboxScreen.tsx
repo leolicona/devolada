@@ -102,15 +102,3 @@ export function CashboxScreen() {
     </main>
   );
 }
-
-/* Honest placeholder: recording the drop is the next task. */
-export function CashDropPlaceholder() {
-  return (
-    <main className="px-6 pt-8">
-      <h1 className="text-xl font-semibold">Registrar entrega</h1>
-      <p className="mt-6 rounded-md border border-line bg-well px-4 py-3 text-sm text-ink-soft">
-        El registro de entregas llega con la siguiente tarea del plan.
-      </p>
-    </main>
-  );
-}

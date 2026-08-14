@@ -87,7 +87,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [charges/charge-record.spec.md](charges/charge-record.spec.md) | charges | US-C03, US-C04 | in development |
 | charges/*.spec.md | charges | US-C05 | pending |
 | [cashbox/cashbox.spec.md](cashbox/cashbox.spec.md) | cashbox | US-K01, US-K04 | in development |
-| cashbox/*.spec.md | cashbox | US-K02, US-K03 | pending |
+| [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
 | cash-drops/*.spec.md | cash-drops | US-E01, US-E02 | pending |
 | admin/*.spec.md | admin | US-A01…A04 | pending |
 

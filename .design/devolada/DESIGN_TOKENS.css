@@ -32,6 +32,7 @@
   --color-border-primary: #e0ddd5;
   --color-border-secondary: #edeae4;
   --color-border-focus: #0f766e;
+  --color-border-input: #8a8880;
 
   /* ---------- Color: accent (action) — deep teal ---------- */
   --color-accent-primary: #0f766e;
@@ -43,11 +44,11 @@
   /* ---------- Color: statuses (color = information) ----------
      Each status has ink (text/icon), soft background (badges)
      and border. Always paired with icon + text, never alone. */
-  --color-status-success: #15803d;         /* charged / reconnected */
+  --color-status-success: #147b3b;         /* charged / reconnected */
   --color-status-success-bg: #e8f5ec;
   --color-status-success-border: #b5dfc2;
 
-  --color-status-warning: #a16207;         /* queued / pending */
+  --color-status-warning: #9b5e07;         /* queued / pending */
   --color-status-warning-bg: #fdf3dc;
   --color-status-warning-border: #ecd399;
 
@@ -166,6 +167,7 @@
   --color-border-primary: #3a352f;
   --color-border-secondary: #2a2622;
   --color-border-focus: #2db3a5;
+  --color-border-input: #7b746a;
 
   --color-accent-primary: #109384;
   --color-accent-primary-hover: #16a795;

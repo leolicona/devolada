@@ -11,7 +11,9 @@ export function Input({ icon: Icon, className, ...props }: InputProps) {
   const field = (
     <input
       className={cn(
-        "h-12 w-full rounded-sm border border-line bg-well text-base text-ink placeholder:text-ink-faint focus:border-focus disabled:text-ink-faint",
+        /* border-line-input, not border-line: a field must be findable
+           (polish/dark-and-contrast.spec.md D4, WCAG 1.4.11) */
+        "h-12 w-full rounded-sm border border-line-input bg-well text-base text-ink placeholder:text-ink-faint focus:border-focus disabled:text-ink-faint",
         Icon ? "pl-12 pr-4" : "px-4",
         className,
       )}

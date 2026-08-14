@@ -22,7 +22,10 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   ...over,
 });
 
-function feedOf(charges: unknown[], today = { count: 2, totalCents: 82800 }) {
+function feedOf(
+  charges: unknown[],
+  today = { count: 2, totalCents: 82800, startedAtMs: Date.UTC(2026, 7, 14, 6) },
+) {
   return feedResponse.parse({ charges, nextCursor: null, today });
 }
 

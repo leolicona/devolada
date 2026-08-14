@@ -122,7 +122,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
     server.use(
       handlers.session(() => ok({ ...ispActor, timeFormat: "24h" })),
       handlers.feed(() =>
-        ok(feedResponse.parse({ charges: [charge], nextCursor: null, today: { count: 1, totalCents: 41400 } })),
+        ok(feedResponse.parse({ charges: [charge], nextCursor: null, today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) } })),
       ),
     );
     renderApp("/");

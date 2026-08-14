@@ -29,18 +29,38 @@ function formatterFor(timezone: string): Intl.DateTimeFormat {
   return f;
 }
 
-export function startOfBusinessDayMs(timezone: string, now: Date = new Date()): number {
-  const read = (list: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) =>
-    Number(list.find((p) => p.type === type)?.value ?? 0);
+const read = (list: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) =>
+  Number(list.find((p) => p.type === type)?.value ?? 0);
 
-  const list = formatterFor(timezone).formatToParts(now);
-  const year = read(list, "year");
-  const month = read(list, "month");
-  const day = read(list, "day");
-  /* en-CA gives 24 for midnight; Date.UTC treats it as the next day's 0 */
+/* How far the zone's wall clock sits from UTC at one instant.
+   The wall clock only goes down to seconds, so the instant is floored to
+   the same precision before subtracting. Without that, the instant's
+   milliseconds leak into the offset and the day boundary lands a few ms
+   after midnight — a different boundary on every request. */
+function offsetMsAt(timezone: string, instant: Date): number {
+  const list = formatterFor(timezone).formatToParts(instant);
+  /* en-CA writes midnight as 24; Date.UTC would read that as the next day */
   const hour = read(list, "hour") % 24;
+  const wallClockAsUtc = Date.UTC(
+    read(list, "year"),
+    read(list, "month") - 1,
+    read(list, "day"),
+    hour,
+    read(list, "minute"),
+    read(list, "second"),
+  );
+  return wallClockAsUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
 
-  const wallClockAsUtc = Date.UTC(year, month - 1, day, hour, read(list, "minute"), read(list, "second"));
-  const offsetMs = wallClockAsUtc - now.getTime();
-  return Date.UTC(year, month - 1, day) - offsetMs;
+export function startOfBusinessDayMs(timezone: string, now: Date = new Date()): number {
+  const list = formatterFor(timezone).formatToParts(now);
+  const midnightAsUtc = Date.UTC(read(list, "year"), read(list, "month") - 1, read(list, "day"));
+
+  /* Two passes, because the offset now is not always the offset at
+     midnight. Tijuana changes clocks twice a year: on those two days a
+     single pass puts the boundary an hour off, and charges near midnight
+     land on the wrong day. The first pass lands close enough to read the
+     offset that actually applied at midnight; the second uses it. */
+  const guess = midnightAsUtc - offsetMsAt(timezone, now);
+  return midnightAsUtc - offsetMsAt(timezone, new Date(guess));
 }

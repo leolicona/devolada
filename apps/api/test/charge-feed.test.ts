@@ -2,7 +2,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { charges } from "../src/db/schema";
-import { startOfBusinessDayMs } from "../src/time/business-day";
 import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
 
 /* docs/admin/charge-feed.spec.md scenarios 1–3. */
@@ -70,42 +69,54 @@ describe("US-A01: the ISP sees its charges newest first", () => {
 
 /* docs/admin/settings.spec.md scenario 4. */
 describe("US-A04: today's totals follow the ISP timezone", () => {
-  it("the same charge counts for one zone and not for the other", async () => {
-    /* The two zones start their day 1–2 hours apart. A charge placed in
-       that gap belongs to today for the zone that started earlier and to
-       yesterday for the other one — whatever time this test runs at. */
-    const now = new Date();
-    const starts = [
-      { zone: "America/Mexico_City" as const, ms: startOfBusinessDayMs("America/Mexico_City", now) },
-      { zone: "America/Tijuana" as const, ms: startOfBusinessDayMs("America/Tijuana", now) },
-    ].sort((a, b) => a.ms - b.ms);
-    const [earlier, later] = starts;
-    expect(later.ms).toBeGreaterThan(earlier.ms);
+  /* The server reports the boundary it used, so this test never has to
+     guess it — it holds at any hour, in any runner timezone. */
+  const todayOf = async (client: Awaited<ReturnType<typeof app>>) =>
+    (await (await client.request("/charges/feed", asIsp, env)).json()).data.today;
 
-    const isp = await seedIsp({ timezone: earlier.zone });
+  it("reports the boundary it counted from, and it moves with the zone", async () => {
+    const isp = await seedIsp({ timezone: "America/Mexico_City" });
     const store = await seedStore(isp.id);
     const db = drizzle(env.DB);
-    await db.insert(charges).values({
+    const client = await app();
+
+    const centre = await todayOf(client);
+    expect(centre).toEqual({ count: 0, totalCents: 0, startedAtMs: expect.any(Number) });
+
+    /* One charge on each side of the boundary the server just reported */
+    const charge = (folio: string, at: number) => ({
       ispId: isp.id,
       storeId: store.id,
-      folio: "DV-TZ01",
+      folio,
       wisphubCustomerId: "1",
       customerName: "Cliente TZ",
       monthlyFeeCents: 39900,
       serviceFeeCents: 1500,
       totalCents: 41400,
-      createdAt: new Date(later.ms - 1),
+      createdAt: new Date(at),
+    });
+    await db.insert(charges).values(charge("DV-TZ01", centre.startedAtMs - 1));
+    await db.insert(charges).values(charge("DV-TZ02", centre.startedAtMs + 1));
+
+    /* Counting follows the reported boundary exactly: the charge one ms
+       before it is yesterday's, the one after it is today's. */
+    const countedFrom = (boundary: number) =>
+      [centre.startedAtMs - 1, centre.startedAtMs + 1].filter((at) => at >= boundary).length;
+
+    expect(await todayOf(client)).toMatchObject({
+      count: countedFrom(centre.startedAtMs),
+      totalCents: 41400,
     });
 
-    const client = await app();
-    const counted = await client.request("/charges/feed", asIsp, env);
-    expect((await counted.json()).data.today).toEqual({ count: 1, totalCents: 41400 });
-
-    /* Same data, same instant, the ISP's own zone decides (D5) */
+    /* Same data, same instant: the ISP's own zone decides (D5). Baja
+       California's day never starts at the same moment as the centre's,
+       so the window moves and the count moves with it. */
     const { isps } = await import("../src/db/schema");
-    await db.update(isps).set({ timezone: later.zone });
-    const notCounted = await client.request("/charges/feed", asIsp, env);
-    expect((await notCounted.json()).data.today).toEqual({ count: 0, totalCents: 0 });
+    await db.update(isps).set({ timezone: "America/Tijuana" });
+
+    const baja = await todayOf(client);
+    expect(baja.startedAtMs).not.toBe(centre.startedAtMs);
+    expect(baja.count).toBe(countedFrom(baja.startedAtMs));
   });
 });
 

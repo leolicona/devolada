@@ -218,16 +218,16 @@ export async function listChargeFeed(
   const page = rows.slice(0, PAGE);
 
   /* Settings D5: the ISP's timezone decides where its day starts */
+  const todayStartMs = startOfBusinessDayMs(actor.timezone);
   const [t] = await db
     .select({ count: count(), total: sum(charges.totalCents) })
     .from(charges)
-    .where(
-      and(
-        eq(charges.ispId, actor.id),
-        gte(charges.createdAt, new Date(startOfBusinessDayMs(actor.timezone))),
-      ),
-    );
-  const today = { count: Number(t?.count ?? 0), totalCents: Number(t?.total ?? 0) };
+    .where(and(eq(charges.ispId, actor.id), gte(charges.createdAt, new Date(todayStartMs))));
+  const today = {
+    count: Number(t?.count ?? 0),
+    totalCents: Number(t?.total ?? 0),
+    startedAtMs: todayStartMs,
+  };
 
   return c.json({
     success: true,

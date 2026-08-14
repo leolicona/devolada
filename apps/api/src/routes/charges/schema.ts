@@ -73,8 +73,14 @@ export const feedCharge = z.object({
 export const feedResponse = z.object({
   charges: z.array(feedCharge),
   nextCursor: z.number().int().nullable(),
-  /* The day starts in the ISP's timezone, so it is always present (settings D5) */
-  today: z.object({ count: z.number().int(), totalCents: z.number().int() }),
+  /* The day starts in the ISP's timezone, so it is always present.
+     `startedAtMs` is that boundary — the server says which day it counted
+     (settings D5), instead of leaving the client to assume. */
+  today: z.object({
+    count: z.number().int(),
+    totalCents: z.number().int(),
+    startedAtMs: z.number().int(),
+  }),
 });
 
 export type FeedCharge = z.infer<typeof feedCharge>;

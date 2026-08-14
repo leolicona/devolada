@@ -31,7 +31,7 @@ Query: `cursor` (ms) · `status` (`queued|reconnected|failed`) · `storeId` · `
                serviceFeeCents, customerName, storeName, createdAt,
                reconnectedAt, attempts } ],
   nextCursor: number | null,
-  today: { count, totalCents } }   // the day starts in the ISP's timezone (settings D5)
+  today: { count, totalCents, startedAtMs } }  // the day starts in the ISP's timezone (settings D5)
 ```
 
 Newest first, 20 per page. 401/403 as usual; a store session gets 403.

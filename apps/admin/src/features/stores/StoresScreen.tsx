@@ -5,6 +5,7 @@ import { Amount, StatusBadge } from "@devolada/ui";
 import type { StoresResponse } from "@devolada/api/stores-schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 
 /* Tiendas list (US-A03): every store with its balance and cap alert —
@@ -27,6 +28,21 @@ export function StoresScreen() {
           </Button>
         </Link>
       </div>
+
+      {isPending && (
+        <Card className="mt-4 p-4">
+          {[0, 1, 2].map((k) => (
+            <div key={k} className="flex items-center gap-4 py-3">
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-6 w-28 rounded-full" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </Card>
+      )}
 
       {!isPending && data?.stores.length === 0 && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">

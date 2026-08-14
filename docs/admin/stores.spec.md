@@ -17,6 +17,7 @@ The Tiendas section: register stores, send invitations, watch balances with cap 
 - **D3 — Re-send rotates the token in place.** One invitation row per store; re-sending replaces its token. After acceptance → 409 `ALREADY_ACCEPTED`. Two live tokens for one store is a door nobody needs open.
 - **D4 — Balances arrive with the list, in one grouped query.** The table shows every store's balance (ledger SUM) with the cap booleans, same 80% rule as the cashbox — computed server-side, one owner.
 - **D5 — `invited` joins the StatusBadge atom.** The store list needs "Invitación enviada" as a status; per the frontend law, missing statuses are added to the atom, never improvised per screen.
+- **D6a — shadcn catalog usage** (refactor 2026-08-14): loading states are `Skeleton`; the list stays a list of link rows — rows navigate, and must collapse to cards on mobile (same reasoning as charge-feed D7).
 - **D6 — Suspension is one switch on the detail.** `PATCH /stores/:id { status }` — the emergency stop from the owner's notes. The session middleware already makes it bite immediately (US-S03).
 
 ## Contract (ISP session only; tenant-scoped by `ispId`)

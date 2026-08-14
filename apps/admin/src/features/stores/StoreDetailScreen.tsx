@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 
 /* Store detail (US-A03): config, the emergency switch, the invitation,
@@ -58,8 +59,13 @@ export function StoreDetailScreen() {
 
   if (store.isPending || !store.data) {
     return (
-      <main className="px-4 pt-4 lg:px-8 lg:pt-8">
-        <p className="text-sm text-ink-faint">Cargando…</p>
+      <main className="space-y-4 px-4 pt-4 lg:px-8 lg:pt-8">
+        <Skeleton className="h-7 w-56" />
+        <Skeleton className="h-4 w-72" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-56" />
+          <Skeleton className="h-56" />
+        </div>
       </main>
     );
   }

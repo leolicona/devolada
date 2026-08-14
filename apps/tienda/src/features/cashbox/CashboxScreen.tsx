@@ -84,7 +84,7 @@ export function CashboxScreen() {
             cents={data.balanceCents}
             className="mt-1 block text-3xl font-semibold tracking-tight"
           />
-          <p className="mt-2 text-sm text-ink-faint">Toca para ver tus movimientos</p>
+          <p className="mt-2 text-sm text-ink-soft">Toca para ver tus movimientos</p>
         </Link>
       </Card>
 
@@ -127,7 +127,7 @@ export function CashboxScreen() {
       )}
 
       <div className="mt-6">
-        <Link to="/cashbox/drop">
+        <Link to="/cashbox/drop" className="block">
           <Button className="w-full">
             <ArrowDownToLine className="size-5" aria-hidden />
             Registrar entrega

@@ -68,7 +68,7 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
   const busy = confirm.isPending || dispute.isPending;
 
   return (
-    <Card className="p-4">
+    <Card className="min-w-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{drop.storeName}</p>
@@ -87,7 +87,9 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {/* US-P03: stacked, not a wrapping flex row — a w-full child
+          inside one grows the card past a 360px screen. */}
+      <div className="mt-4 space-y-2">
         {/* D6: the second tap lives in a dialog — the write cannot be undone */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -116,7 +118,7 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
         </AlertDialog>
 
         {/* The rare, slower path: writing a reason */}
-        <Collapsible className="w-full">
+        <Collapsible>
           <CollapsibleTrigger asChild>
             <Button variant="outline" disabled={busy}>
               <MessageSquareWarning className="size-4" aria-hidden />

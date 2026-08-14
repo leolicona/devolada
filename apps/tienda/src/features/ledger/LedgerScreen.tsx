@@ -105,7 +105,7 @@ export function LedgerScreen() {
 
       {groups.map((group) => (
         <section key={group.day} className="mt-6">
-          <h2 className="text-xs font-semibold tracking-[0.06em] uppercase text-ink-faint">
+          <h2 className="text-xs font-semibold tracking-[0.06em] uppercase text-ink-soft">
             {group.day}
           </h2>
           <Card asChild>
@@ -114,7 +114,7 @@ export function LedgerScreen() {
                 <li key={entry.id} className="flex items-baseline justify-between gap-4 p-4">
                   <div className="min-w-0">
                     <p className="truncate text-base font-medium">{typeLabel(entry)}</p>
-                    <p className="mt-0.5 text-sm text-ink-faint">
+                    <p className="mt-0.5 text-sm text-ink-soft">
                       {timeFormat.format(new Date(entry.createdAt))}
                       {entry.reference && (
                         <span className="font-mono"> · {entry.reference.folio}</span>

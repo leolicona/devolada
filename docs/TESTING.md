@@ -9,7 +9,7 @@ The API layer landed with `auth/isp-signup.spec.md` and the component + network 
 | API | Vitest + `@cloudflare/vitest-pool-workers` | `apps/api` | The Hono app running in workerd (the real Workers runtime) with real local D1 — no database mocks. Routes, middleware, ledger invariants. |
 | Components | Vitest + React Testing Library + happy-dom | `packages/ui`, apps | Atoms and screens by what the user sees (`getByRole`, visible text), not implementation details. |
 | Network | MSW (Mock Service Worker) | frontend apps | Full flows with TanStack Query without a running backend: error states, WispHub queued, loading. Handlers are validated against the API's Zod schemas so mocks can't lie. |
-| E2E + accessibility | Playwright + `@axe-core/playwright` | root | Critical charge path against `wrangler dev`, PWA offline mode (`context.setOffline`), automated AA checks. |
+| E2E + accessibility | Playwright + `@axe-core/playwright` | root (`tests/e2e/`) | **Landed 2026-08-14** (`polish/responsive.spec.md`): breakpoints and touch-target geometry, real colour contrast in light and dark, against built previews with the API stubbed. Runs on deploy-dev (CICD D3), `pnpm e2e` locally. Still to come: the charge path against `wrangler dev` and PWA offline mode (`context.setOffline`). |
 
 Out of scope for now (a decision, not an oversight): Storybook/Chromatic and visual regression — the playground (`pnpm playground`) is the living catalog; visual regression comes post-MVP once the UI stabilizes.
 

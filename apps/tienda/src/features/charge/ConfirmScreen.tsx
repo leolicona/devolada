@@ -104,7 +104,7 @@ export function ConfirmScreen() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">{customer.name}</h1>
-          <p className="mt-0.5 text-sm text-ink-faint">{customer.zone ?? "Sin zona"}</p>
+          <p className="mt-0.5 text-sm text-ink-soft">{customer.zone ?? "Sin zona"}</p>
         </div>
         <StatusBadge
           status={customer.serviceStatus === "unknown" ? "active" : customer.serviceStatus}

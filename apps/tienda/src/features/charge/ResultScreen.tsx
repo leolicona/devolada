@@ -108,12 +108,12 @@ export function ResultScreen() {
 
       {/* The folio is the receipt of last resort: the customer can write
           it down even if nothing sends (receipt spec UI contract) */}
-      <p className="mt-6 font-mono text-sm text-ink-faint">Folio {data.folio}</p>
+      <p className="mt-6 font-mono text-sm text-ink-soft">Folio {data.folio}</p>
 
       <ReceiptActions chargeId={chargeId} />
 
       <div className="mt-auto w-full pt-8">
-        <Link to="/">
+        <Link to="/" className="block">
           <Button size="critical" variant="secondary">
             Nuevo cobro
           </Button>

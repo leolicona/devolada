@@ -58,18 +58,26 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
   return (
     <li>
       <Collapsible>
-        <CollapsibleTrigger className="group flex w-full items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted">
-          <span className="w-12 shrink-0 text-sm tabular-nums text-muted-foreground">
+        {/* US-P03: on a phone the row becomes a card. Squeezed into one
+            line at 360px, the flex-1 name collapsed to nothing and the
+            feed showed the amount without saying who paid it. */}
+        <CollapsibleTrigger className="group grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2 p-4 text-left transition-colors duration-150 hover:bg-muted sm:flex sm:gap-4">
+          <span className="shrink-0 text-sm tabular-nums text-muted-foreground sm:w-12">
             {at(charge.createdAt)}
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="col-start-2 min-w-0 sm:flex-1">
             <span className="block truncate text-sm font-medium">{charge.customerName}</span>
             <span className="block truncate text-sm text-muted-foreground">{charge.storeName}</span>
           </span>
-          <StatusBadge status={charge.reconnectionStatus} />
-          <Amount cents={charge.totalCents} className="w-20 shrink-0 text-right text-sm font-semibold" />
+          <Amount
+            cents={charge.totalCents}
+            className="shrink-0 text-right text-sm font-semibold sm:order-last sm:w-20"
+          />
+          <span className="col-span-2 sm:contents">
+            <StatusBadge status={charge.reconnectionStatus} />
+          </span>
           <ChevronDown
-            className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=open]:rotate-180"
+            className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden
           />
         </CollapsibleTrigger>

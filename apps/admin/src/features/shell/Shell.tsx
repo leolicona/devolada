@@ -109,7 +109,7 @@ export function Shell() {
   if (isPending) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-background">
-        <p className="text-sm text-ink-faint">Cargando…</p>
+        <p className="text-sm text-ink-soft">Cargando…</p>
       </main>
     );
   }
@@ -161,7 +161,7 @@ export function Shell() {
               <KeyRound className="size-4 shrink-0" aria-hidden />
               Falta tu llave de WispHub. Sin ella no podemos reconectar a los clientes.
             </span>
-            <Link to="/settings">
+            <Link to="/settings" className="block">
               <Button variant="outline">Configurar</Button>
             </Link>
           </Alert>

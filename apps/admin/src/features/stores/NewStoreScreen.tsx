@@ -83,7 +83,7 @@ export function NewStoreScreen() {
                 <Copy className="size-4" aria-hidden />
                 {copied ? "Copiado" : "Copiar enlace"}
               </Button>
-              <Link to="/stores">
+              <Link to="/stores" className="block">
                 <Button variant="outline">Volver a tiendas</Button>
               </Link>
             </div>

@@ -99,7 +99,7 @@ export function DropScreen() {
           <ArrowDownToLine className="size-5" aria-hidden />
           {record.isPending ? "Registrando…" : "Registrar entrega"}
         </Button>
-        <p className="text-sm text-ink-faint">
+        <p className="text-sm text-ink-soft">
           La entrega quedará pendiente hasta que tu ISP confirme que recibió el efectivo.
         </p>
       </form>

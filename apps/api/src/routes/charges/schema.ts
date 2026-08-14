@@ -48,6 +48,38 @@ export const chargeResponse = z.object({
   customerName: z.string(),
 });
 
+export const feedQuery = z.object({
+  cursor: z.coerce.number().int().positive().optional(),
+  status: z.enum(["queued", "reconnected", "failed"]).optional(),
+  storeId: z.string().optional(),
+  from: z.coerce.number().int().positive().optional(),
+  to: z.coerce.number().int().positive().optional(),
+  /* D2: the browser owns "today" */
+  todayStartMs: z.coerce.number().int().positive().optional(),
+});
+
+export const feedCharge = z.object({
+  id: z.string(),
+  folio: z.string(),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
+  totalCents: z.number().int(),
+  monthlyFeeCents: z.number().int(),
+  serviceFeeCents: z.number().int(),
+  customerName: z.string(),
+  storeName: z.string(),
+  createdAt: z.number().int(),
+  reconnectedAt: z.number().int().nullable(),
+  attempts: z.number().int(),
+});
+
+export const feedResponse = z.object({
+  charges: z.array(feedCharge),
+  nextCursor: z.number().int().nullable(),
+  today: z.object({ count: z.number().int(), totalCents: z.number().int() }).nullable(),
+});
+
+export type FeedCharge = z.infer<typeof feedCharge>;
+export type FeedResponse = z.infer<typeof feedResponse>;
 export type ChargeResponse = z.infer<typeof chargeResponse>;
 export type CustomerResult = z.infer<typeof customerResult>;
 export type CustomerSearchResponse = z.infer<typeof customerSearchResponse>;

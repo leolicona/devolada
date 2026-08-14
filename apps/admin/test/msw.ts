@@ -23,6 +23,8 @@ export const handlers = {
   verifyEmail: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/verify-email", () => r()),
   resend: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/resend-verification", () => r()),
   recover: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/recover", () => r()),
+  feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/charges/feed", ({ request }) => r(new URL(request.url))),
 };
 
 export const server = setupServer();

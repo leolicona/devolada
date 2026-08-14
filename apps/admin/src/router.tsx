@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { Shell, SectionPlaceholder } from "./features/shell/Shell";
 import { LoginPage, RecoverPage, ResetPage, SignupPage, VerifyPage } from "./features/auth/pages";
+import { FeedScreen } from "./features/feed/FeedScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -20,7 +21,7 @@ const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "app", compo
 const feedRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  component: () => <SectionPlaceholder title="Cobros" next="El monitor de cobros en vivo" />,
+  component: FeedScreen,
 });
 const storesRoute = createRoute({
   getParentRoute: () => appRoute,

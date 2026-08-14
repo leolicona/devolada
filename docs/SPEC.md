@@ -90,7 +90,8 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
 | cash-drops/*.spec.md | cash-drops | US-E01, US-E02 | pending |
 | [admin/shell.spec.md](admin/shell.spec.md) | admin | US-S04, US-S06 (UI) | in development |
-| admin/*.spec.md | admin | US-A01…A04 | pending |
+| [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
+| admin/*.spec.md | admin | US-A02…A04 | pending |
 
 ## Cross-cutting layers
 

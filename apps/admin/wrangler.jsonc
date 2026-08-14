@@ -1,0 +1,13 @@
+{
+  "$schema": "../api/node_modules/wrangler/config-schema.json",
+  "name": "devolada-admin",
+  "compatibility_date": "2025-05-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "env": {
+    "dev": { "name": "devolada-admin-dev" },
+    "prod": { "name": "devolada-admin" }
+  }
+}

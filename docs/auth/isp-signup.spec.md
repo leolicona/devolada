@@ -63,5 +63,5 @@ Pages live in `apps/admin` (land with the admin shell; this spec ships the API a
 
 - [x] Contract implemented with scenarios 1–8 automated (`test/isp-signup.test.ts`)
 - [x] Retroactive session scenarios automated (`test/sessions.test.ts`; TD-005 paid)
-- [ ] Admin UI pages built and wired (blocked by: admin shell task)
+- [x] Admin UI pages built and wired (`apps/admin`, admin/shell.spec.md)
 - [ ] Real email sending verified with a Resend API key (blocked by: RESEND_API_KEY)

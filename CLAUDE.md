@@ -51,6 +51,10 @@ Invariants that cut across everything (detail in `docs/ARCHITECTURE.md`):
 
 ## Frontend
 
-Laws in `docs/FRONTEND.md`; design artifacts (brief, IA, tokens, tasks) in `.design/devolada/`. The essentials: the tokens in `packages/ui/src/styles/tokens.css` are law (zero hardcoded values; mapped to Tailwind via `@theme inline` in `src/styles/index.css`); `StatusBadge` is the only representation of domain statuses; light+dark via `[data-theme]` (dark is its own palette, not inversion); status is never communicated by color alone (always icon + text).
+Laws in `docs/FRONTEND.md`; design artifacts (brief, IA, tokens, tasks) in `.design/devolada/`.
+
+**Use the `/shadcn` skill for every frontend task.** Check the shadcn catalog before writing a component by hand; copy the primitive into the app's `src/components/ui/` and theme it with our tokens. shadcn is the recipe, the tokens are the law. Order: domain atom in `@devolada/ui` → shadcn primitive → new component.
+
+The other essentials: the tokens in `packages/ui/src/styles/tokens.css` are law (zero hardcoded values; mapped to Tailwind via `@theme inline` in `src/styles/index.css`); `StatusBadge` is the only representation of domain statuses; light+dark via `[data-theme]` (dark is its own palette, not inversion); status is never communicated by color alone (always icon + text).
 
 The ordered build plan lives in `.design/devolada/TASKS.md`; tests cite their user story (`US-C02: …`) per `docs/TESTING.md`.

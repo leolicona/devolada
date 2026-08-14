@@ -25,6 +25,15 @@ export const handlers = {
   recover: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/recover", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/feed", ({ request }) => r(new URL(request.url))),
+  stores: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/stores", () => r()),
+  createStore: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/stores", () => r()),
+  store: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/stores/:id", () => r()),
+  patchStore: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/stores/:id", async ({ request }) => r(await request.json())),
+  resendInvitation: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/stores/:id/resend-invitation", () => r()),
+  storeLedger: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/stores/:id/ledger", () => r()),
 };
 
 export const server = setupServer();

@@ -16,6 +16,8 @@ export type Bindings = {
   CROSS_SITE_COOKIES?: string;
   /* Base URL of the admin app, used to build magic links (spec D1) */
   ADMIN_BASE_URL: string;
+  /* Base URL of the store PWA, used to build invitation links */
+  TIENDA_BASE_URL: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   /* Dev only: the seed copies this key into the demo ISP row.

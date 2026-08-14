@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   Clock3,
+  Mail,
   Wifi,
   WifiOff,
   XCircle,
@@ -25,9 +26,11 @@ export type Status =
   | "pending"
   | "confirmed"
   | "disputed"
-  /* customer service */
+  /* customer service / store status */
   | "active"
-  | "suspended";
+  | "suspended"
+  /* store invitation */
+  | "invited";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -50,6 +53,7 @@ const statuses: Record<
   disputed: { tone: "error", icon: AlertTriangle, label: "En disputa" },
   active: { tone: "success", icon: Wifi, label: "Servicio activo" },
   suspended: { tone: "error", icon: WifiOff, label: "Servicio suspendido" },
+  invited: { tone: "warning", icon: Mail, label: "Invitación enviada" },
 };
 
 const sizes = {

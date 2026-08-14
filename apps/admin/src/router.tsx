@@ -7,6 +7,9 @@ import {
 import { Shell, SectionPlaceholder } from "./features/shell/Shell";
 import { LoginPage, RecoverPage, ResetPage, SignupPage, VerifyPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
+import { StoresScreen } from "./features/stores/StoresScreen";
+import { NewStoreScreen } from "./features/stores/NewStoreScreen";
+import { StoreDetailScreen } from "./features/stores/StoreDetailScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -26,7 +29,19 @@ const feedRoute = createRoute({
 const storesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/stores",
-  component: () => <SectionPlaceholder title="Tiendas" next="La gestión de tiendas" />,
+  component: StoresScreen,
+});
+
+const newStoreRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/stores/new",
+  component: NewStoreScreen,
+});
+
+const storeDetailRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/stores/$storeId",
+  component: StoreDetailScreen,
 });
 const dropsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -45,7 +60,7 @@ const routeTree = rootRoute.addChildren([
   verifyRoute,
   recoverRoute,
   resetRoute,
-  appRoute.addChildren([feedRoute, storesRoute, dropsRoute, settingsRoute]),
+  appRoute.addChildren([feedRoute, storesRoute, newStoreRoute, storeDetailRoute, dropsRoute, settingsRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

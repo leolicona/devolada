@@ -21,7 +21,7 @@ function CustomerCard({ customer }: { customer: CustomerResult }) {
         >
           <div className="min-w-0">
             <p className="truncate text-base font-medium">{customer.name}</p>
-            <p className="mt-0.5 truncate text-sm text-ink-faint">
+            <p className="mt-0.5 truncate text-sm text-ink-soft">
               {customer.zone ?? "Sin zona"}
             </p>
           </div>
@@ -63,7 +63,7 @@ export function SearchScreen() {
           </p>
         )}
 
-        {enabled && isFetching && <p className="text-sm text-ink-faint">Buscando…</p>}
+        {enabled && isFetching && <p className="text-sm text-ink-soft">Buscando…</p>}
 
         {errorCode === "WISPHUB_UNAVAILABLE" && (
           /* The results region is already aria-live; a nested live region

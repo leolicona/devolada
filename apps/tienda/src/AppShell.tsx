@@ -10,7 +10,7 @@ export function AppShell() {
   if (isPending) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-surface">
-        <p className="text-base text-ink-faint">Cargando…</p>
+        <p className="text-base text-ink-soft">Cargando…</p>
       </main>
     );
   }

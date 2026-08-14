@@ -83,7 +83,7 @@ function WispHubCard({ settings }: { settings: SettingsResponse }) {
           placeholder="01q9K2Rf.M02bG…"
           autoComplete="off"
         />
-        <p className="mt-1 text-sm text-ink-faint">
+        <p className="mt-1 text-sm text-ink-soft">
           La llave nunca se muestra completa después de guardarla.
         </p>
       </div>
@@ -163,7 +163,7 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
             value={fee}
             onChange={(e) => setFee(e.target.value)}
           />
-          <p className="mt-1 text-sm text-ink-faint">Lo que paga el cliente además de su mensualidad.</p>
+          <p className="mt-1 text-sm text-ink-soft">Lo que paga el cliente además de su mensualidad.</p>
         </div>
         <div>
           <Label htmlFor="store-commission">Comisión de la tienda</Label>
@@ -174,7 +174,7 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
             value={commission}
             onChange={(e) => setCommission(e.target.value)}
           />
-          <p className="mt-1 text-sm text-ink-faint">Lo que gana la tienda por cada cobro.</p>
+          <p className="mt-1 text-sm text-ink-soft">Lo que gana la tienda por cada cobro.</p>
         </div>
       </div>
 
@@ -238,7 +238,7 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
               ))}
             </SelectContent>
           </Select>
-          <p className="mt-1 text-sm text-ink-faint">
+          <p className="mt-1 text-sm text-ink-soft">
             Decide dónde empieza tu día: los totales de hoy y las fechas de los movimientos.
           </p>
         </div>
@@ -254,7 +254,7 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
               <SelectItem value="24h">24 horas</SelectItem>
             </SelectContent>
           </Select>
-          <p className="mt-1 text-sm text-ink-faint">
+          <p className="mt-1 text-sm text-ink-soft">
             Así se verá: {formatTime(SAMPLE_TIME_MS, timeFormat === "24h" ? "24h" : "12h", timezone)}
           </p>
         </div>

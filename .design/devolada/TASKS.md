@@ -43,7 +43,7 @@ Order: risk first (WispHub spike), then visual foundation to validate the aesthe
 
 - [x] **List states in both apps**: empty (first time, no charges/stores), loading (skeletons), error with retry, for feed, ledger, stores and cash drops. Covers: empty, loading, error.
 - [x] **Dark mode pass**: review both apps against the dark tokens (warm charcoal); no hardcoded color outside tokens. Covers: light, dark, system preference + manual toggle.
-- [ ] **Responsive pass**: PWA at a real 360px and centered on desktop; admin with tables → cards and sidebar → bottom menu on mobile. Breakpoints: 375/768/1024/1280.
+- [x] **Responsive pass**: PWA at a real 360px and centered on desktop; admin with tables → cards and sidebar → bottom menu on mobile. Breakpoints: 375/768/1024/1280.
 - [x] **Accessibility pass**: AA contrast (AAA on amounts and statuses), color never alone (icon + text), touch targets ≥48px, keyboard + visible focus in admin, `aria-live` on the feed and reconnection transitions, plain es-MX.
 
 ## Review

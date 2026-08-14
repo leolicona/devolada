@@ -40,6 +40,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # CICD.md D3: the browser layer runs here, after the merge, not in
+      # the PR loop. It builds its own previews and stubs the API, so it
+      # gates the deploy without depending on it.
+      - name: Install chromium for the browser layer
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Responsive and contrast (docs/polish/responsive.spec.md)
+        run: pnpm e2e
       - name: D1 dev migrations (before deploy)
         working-directory: apps/api
         run: pnpm exec wrangler d1 migrations apply devolada-db-dev --env dev --remote

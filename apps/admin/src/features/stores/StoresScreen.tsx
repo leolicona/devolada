@@ -19,7 +19,7 @@ export function StoresScreen() {
     <main className="px-4 pt-4 lg:px-8 lg:pt-8">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Tiendas</h1>
-        <Link to="/stores/new">
+        <Link to="/stores/new" className="block">
           <Button>
             <Plus className="size-4" aria-hidden />
             Nueva tienda

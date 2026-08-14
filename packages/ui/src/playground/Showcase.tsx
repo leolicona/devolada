@@ -1,5 +1,7 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { Monitor, Moon, Search, Sun } from "lucide-react";
+import { Button } from "../components/button";
+import { Field, Input } from "../components/input";
 import { AmountBreakdown, StatusBadge, Amount, type Status } from "../index";
 
 /* Living catalog of tokens and shared atoms. Visible strings are real
@@ -140,32 +142,11 @@ export function Showcase() {
       {/* Buttons */}
       <Section title="Botones — 64px el crítico, 48px el estándar">
         <div className="space-y-4">
-          <button
-            type="button"
-            className="h-16 w-full rounded-md bg-accent text-md font-semibold text-ink-inverse transition-colors duration-150 hover:bg-accent-hover active:bg-accent-active"
-          >
-            Cobrar $415.00
-          </button>
+          <Button size="critical">Cobrar $415.00</Button>
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="h-12 rounded-md bg-accent px-6 text-base font-medium text-ink-inverse transition-colors duration-150 hover:bg-accent-hover active:bg-accent-active"
-            >
-              Registrar entrega
-            </button>
-            <button
-              type="button"
-              className="h-12 rounded-md border border-line bg-card px-6 text-base font-medium text-ink transition-colors duration-150 hover:bg-well"
-            >
-              Ver movimientos
-            </button>
-            <button
-              type="button"
-              disabled
-              className="h-12 rounded-md bg-well px-6 text-base font-medium text-ink-faint"
-            >
-              Cobrar (techo alcanzado)
-            </button>
+            <Button>Registrar entrega</Button>
+            <Button variant="secondary">Ver movimientos</Button>
+            <Button disabled>Cobrar (techo alcanzado)</Button>
           </div>
         </div>
       </Section>
@@ -187,22 +168,9 @@ export function Showcase() {
 
       {/* Search field */}
       <Section title="Campos — el buscador es la pantalla inicial">
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium text-ink-soft">
-            Buscar cliente
-          </span>
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-ink-faint"
-              aria-hidden
-            />
-            <input
-              type="search"
-              placeholder="ID, teléfono o nombre"
-              className="h-12 w-full rounded-sm border border-line bg-well pl-12 pr-4 text-base text-ink placeholder:text-ink-faint focus:border-focus"
-            />
-          </div>
-        </label>
+        <Field label="Buscar cliente">
+          <Input icon={Search} type="search" placeholder="ID, teléfono o nombre" />
+        </Field>
       </Section>
 
       {/* Ledger */}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { LogIn } from "lucide-react";
+import { Button, Field, Input } from "@devolada/ui";
 import { ApiError } from "../api/client";
 import { login } from "./session";
 
@@ -31,43 +32,35 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-5" noValidate>
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-ink-soft">Teléfono</span>
-        <input
+      <Field label="Teléfono">
+        <Input
           type="tel"
           inputMode="numeric"
           autoComplete="tel"
           required
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className="h-12 w-full rounded-sm border border-line bg-well px-4 text-base text-ink placeholder:text-ink-faint focus:border-focus"
           placeholder="10 dígitos"
         />
-      </label>
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-ink-soft">Contraseña</span>
-        <input
+      </Field>
+      <Field label="Contraseña">
+        <Input
           type="password"
           autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="h-12 w-full rounded-sm border border-line bg-well px-4 text-base text-ink focus:border-focus"
         />
-      </label>
+      </Field>
       {error && (
         <p role="alert" className="rounded-sm border border-error-line bg-error-soft px-4 py-3 text-sm font-medium text-error">
           {error}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={busy}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-accent text-base font-semibold text-ink-inverse transition-colors duration-150 hover:bg-accent-hover active:bg-accent-active disabled:bg-well disabled:text-ink-faint"
-      >
+      <Button type="submit" disabled={busy} className="w-full">
         <LogIn className="size-5" aria-hidden />
         {busy ? "Entrando…" : "Entrar"}
-      </button>
+      </Button>
     </form>
   );
 }

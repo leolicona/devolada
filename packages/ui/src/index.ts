@@ -6,3 +6,5 @@ export {
   type BreakdownLine,
 } from "./components/amount-breakdown";
 export { formatMoney } from "./lib/money";
+export { Button, type ButtonProps } from "./components/button";
+export { Input, Field, type InputProps } from "./components/input";

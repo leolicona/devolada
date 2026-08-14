@@ -67,7 +67,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 
 Operational detail in `.design/devolada/TASKS.md` (execution layer).
 
-- **Phase 0 — Risk**: WispHub spike (payment → reactivation). ⏳ pending API Key
+- **Phase 0 — Risk**: WispHub spike (payment → reactivation). ✅ executed 2026-08-13 (`.design/devolada/WISPHUB_SPIKE.md`); only the physical MikroTik flip pends on the pilot ISP
 - **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ⏳
 - **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
 - **Phase 3 — Admin Dashboard**: shell, live feed, stores, cash drops, settings

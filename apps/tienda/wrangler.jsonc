@@ -1,0 +1,15 @@
+{
+  "$schema": "../api/node_modules/wrangler/config-schema.json",
+  "name": "devolada-tienda",
+  "compatibility_date": "2025-05-01",
+  /* Assets-only worker: serves the built PWA. SPA fallback keeps
+     deep links like /charge/... working. */
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "env": {
+    "dev": { "name": "devolada-tienda-dev" },
+    "prod": { "name": "devolada-tienda" }
+  }
+}

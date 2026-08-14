@@ -33,9 +33,11 @@ Rules for two worktrees to coexist:
 
 | Environment | API | Store PWA | Admin | D1 |
 |-------------|-----|-----------|-------|-----|
-| dev | `api-dev.devolada.app` | `tienda-dev.devolada.app` | `admin-dev.devolada.app` | `devolada-db-dev` |
-| prod | `api.devolada.app` | `tienda.devolada.app` | `admin.devolada.app` | `devolada-db-prod` |
-| preview (per PR) | worker preview version | preview URL per PR | preview URL per PR | points at `devolada-db-dev` |
+| dev | `devolada-api-dev.leolicona-dev.workers.dev` | `devolada-tienda-dev.leolicona-dev.workers.dev` | (not built) | `devolada-db-dev` |
+| prod | `devolada-api` worker | `devolada-tienda` worker | (not built) | `devolada-db-prod` |
+| preview (per PR) | API version upload | **PWA version upload — the URL the client opens** | — | points at `devolada-db-dev` |
+
+Custom domains (`api.devolada.app`, `tienda.devolada.app`, …) replace the `workers.dev` URLs when the zone exists in Cloudflare.
 
 Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo.
 

@@ -9,10 +9,14 @@ const FIFTEEN_MIN = 60 * 15;
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
 function baseOptions(env: Bindings) {
+  /* Local dev is same-origin through the Vite proxy: Lax and not secure.
+     Deployed frontends live on other *.workers.dev sites: None + Secure.
+     CSRF stays covered: JSON-only bodies + the CORS allow-list. */
+  const crossSite = env.CROSS_SITE_COOKIES === "true";
   return {
     httpOnly: true,
-    secure: env.ENVIRONMENT !== "dev",
-    sameSite: "Lax" as const,
+    secure: crossSite || env.ENVIRONMENT !== "dev",
+    sameSite: (crossSite ? "None" : "Lax") as "None" | "Lax",
     path: "/",
     ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
   };

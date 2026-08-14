@@ -59,7 +59,10 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
 
   return (
     <nav
-      aria-label="Secciones"
+      /* Both navs are always in the DOM; CSS decides which one shows.
+         Sharing a name leaves a screen reader with two identical
+         "Secciones" landmarks and no way to tell them apart (US-P04). */
+      aria-label={sidebar ? "Secciones" : "Secciones, barra inferior"}
       className={
         sidebar
           ? "flex flex-1 flex-col gap-1"

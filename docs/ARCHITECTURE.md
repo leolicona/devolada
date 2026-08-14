@@ -28,6 +28,7 @@ packages/ui   → Shared tokens and components (single visual source)
 
 ## Sessions & auth
 
+- **Auth follows the Backend-for-Frontend (BFF) pattern — this is a law, not a preference.** `apps/api` is the BFF for both frontends: it alone talks to the IdP (Agnostic Auth), holds and refreshes tokens, and translates them into HTTP-only cookies. Frontends never store tokens, never call the IdP, never attach `Authorization` headers — they send cookies to the BFF and receive envelopes. Any future auth feature (invitations, OAuth, whatever) goes through the BFF or it's wrong.
 - HTTP-only cookies `gm_access` (15 min) + `gm_refresh` (30 days); the browser never sees JWTs.
 - `apps/api` is the only party that talks to Agnostic Auth (see `integrations/agnostic-auth.md`).
 - The middleware checks **status in the DB on every request** — a suspended store or ISP loses access immediately (US-S03).

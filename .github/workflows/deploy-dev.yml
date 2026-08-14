@@ -45,7 +45,13 @@ jobs:
       - name: Deploy dev API
         working-directory: apps/api
         run: pnpm exec wrangler deploy --env dev
-      # TODO: deploy apps/tienda and apps/admin once they exist
+      - name: Build store PWA (dev API baked in)
+        working-directory: apps/tienda
+        run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build
+      - name: Deploy dev store PWA
+        working-directory: apps/tienda
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../tienda/wrangler.jsonc --env dev
+      # TODO: deploy apps/admin once it exists
       - name: Smoke test
         run: |
           URL="${{ vars.DEV_API_URL }}"

@@ -9,6 +9,11 @@ export type Bindings = {
   AUTH_JWT_SECRET?: string;
   COOKIE_DOMAIN?: string;
   ENVIRONMENT?: "dev" | "prod";
+  /* Comma-separated list of frontend origins allowed by CORS (TD-007) */
+  ALLOWED_ORIGINS?: string;
+  /* "true" when frontends live on another site (*.workers.dev):
+     cookies switch to SameSite=None + Secure */
+  CROSS_SITE_COOKIES?: string;
   /* Base URL of the admin app, used to build magic links (spec D1) */
   ADMIN_BASE_URL: string;
   RESEND_API_KEY?: string;

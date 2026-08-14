@@ -15,7 +15,8 @@
     "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
     "AUTH_APP_ID": "devolada",
     "ENVIRONMENT": "dev",
-    "ADMIN_BASE_URL": "http://localhost:5174"
+    "ADMIN_BASE_URL": "http://localhost:5174",
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174"
   },
   /* Remote environments (CICD.md). Per-environment secrets via
      `wrangler secret put --env`: AUTH_JWT_SECRET (required in prod). */
@@ -35,7 +36,9 @@
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
         "ENVIRONMENT": "dev",
-        "ADMIN_BASE_URL": "https://admin-dev.devolada.app"
+        "ADMIN_BASE_URL": "https://admin-dev.devolada.app",
+        "ALLOWED_ORIGINS": "https://devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-tienda-dev.leolicona-dev.workers.dev",
+        "CROSS_SITE_COOKIES": "true"
       }
     },
     "prod": {
@@ -53,7 +56,9 @@
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
         "ENVIRONMENT": "prod",
-        "ADMIN_BASE_URL": "https://admin.devolada.app"
+        "ADMIN_BASE_URL": "https://admin.devolada.app",
+        "ALLOWED_ORIGINS": "https://devolada-tienda.leolicona-dev.workers.dev",
+        "CROSS_SITE_COOKIES": "true"
       }
     }
   }

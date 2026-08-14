@@ -28,9 +28,8 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Paid by: choosing a provider, creating `integrations/<provider>.md` and implementing real sending.
 
 ## TD-007 — No CORS for the deployed store PWA
-- Status: open · Origin: store-pwa/shell.spec.md (D2)
-- In dev, Vite proxies `/auth` to the API so cookies are same-origin. The deployed PWA will be cross-origin and needs a CORS + credentials allowlist on `apps/api`.
-- Paid by: adding `hono/cors` with an origin allowlist when the PWA deploy step lands in `deploy-dev.yml`.
+- Status: **paid** (2026-08-14, `chore/pwa-deploy`)
+- The API now has a CORS allow-list with credentials (`ALLOWED_ORIGINS`, suffix patterns admit per-PR preview URLs) and cookies switch to `SameSite=None; Secure` on cross-site deployments (`CROSS_SITE_COOKIES`). The PWA deploys as an assets-only worker in `deploy-dev.yml`/`deploy-prod.yml`, and CI uploads a per-PR preview version — the URL the client opens.
 
 ## TD-004 — Golden rule without enforcement
 - Status: **paid** (2026-08-13) · Origin: methodology adoption

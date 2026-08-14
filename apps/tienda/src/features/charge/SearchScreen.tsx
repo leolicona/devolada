@@ -89,15 +89,3 @@ export function SearchScreen() {
     </main>
   );
 }
-
-/* Placeholder for the next task (confirm & charge). Honest, no fake UI. */
-export function ChargeConfirmPlaceholder() {
-  return (
-    <main className="px-6 pt-8">
-      <h1 className="text-xl font-semibold">Confirmar y cobrar</h1>
-      <p className="mt-6 rounded-md border border-line bg-well px-4 py-3 text-sm text-ink-soft">
-        La confirmación del cobro llega con la siguiente tarea del plan.
-      </p>
-    </main>
-  );
-}

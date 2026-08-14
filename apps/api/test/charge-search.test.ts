@@ -20,6 +20,7 @@ const wisphubCustomer = {
   usuario: "greyes@wifiplus",
   nombre: "Janely",
   estado: "Activo",
+  estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
   zona: { id: 71342, nombre: "Zona dia 15" },
   direccion: "Calle Falsa 123",
@@ -85,6 +86,7 @@ describe("US-C01: the response is minimum identity only", () => {
       name: "Janely",
       zone: "Zona dia 15",
       serviceStatus: "active",
+      billingStatus: "due",
       monthlyFeeCents: 49900,
     });
     /* The allow-list: address and phone must not be in the payload */

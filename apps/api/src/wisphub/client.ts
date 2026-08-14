@@ -20,6 +20,7 @@ export type WispHubCustomer = {
   name: string;
   zone: string | null;
   serviceStatus: "active" | "suspended" | "unknown";
+  billingStatus: "paid" | "due" | "unknown";
   monthlyFeeCents: number;
 };
 
@@ -28,6 +29,13 @@ export type WispHubCustomer = {
 function mapStatus(estado: unknown): WispHubCustomer["serviceStatus"] {
   if (estado === "Activo") return "active";
   if (estado === "Suspendido" || estado === "Cortado") return "suspended";
+  return "unknown";
+}
+
+/* D3 (charge-confirm spec): "Pagadas" means nothing is due. */
+function mapBillingStatus(estadoFacturas: unknown): WispHubCustomer["billingStatus"] {
+  if (estadoFacturas === "Pagadas") return "paid";
+  if (estadoFacturas === "Pendiente de Pago" || estadoFacturas === "Vencidas") return "due";
   return "unknown";
 }
 
@@ -43,6 +51,7 @@ type WispHubListItem = {
   usuario: string | null;
   nombre: string | null;
   estado: string | null;
+  estado_facturas: string | null;
   precio_plan: string | null;
   zona: { nombre?: string } | null;
 };
@@ -85,7 +94,15 @@ export class WispHub {
       name: c.nombre ?? "",
       zone: c.zona?.nombre ?? null,
       serviceStatus: mapStatus(c.estado),
+      billingStatus: mapBillingStatus(c.estado_facturas),
       monthlyFeeCents: c.precio_plan ? decimalToCents(c.precio_plan) : 0,
     }));
+  }
+
+  /* D1 (charge-confirm spec): one customer loads through the list filter.
+     The detail endpoint returns nombre/usuario as null (spike finding). */
+  async getCustomer(usuario: string): Promise<WispHubCustomer | null> {
+    const matches = await this.searchCustomers(usuario);
+    return matches.find((c) => c.usuario === usuario) ?? null;
   }
 }

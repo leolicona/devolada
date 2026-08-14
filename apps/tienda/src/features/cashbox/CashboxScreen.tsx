@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine, ChevronRight, LogOut, TriangleAlert } from "lucide-react";
-import { Amount, Button, StatusBadge } from "@devolada/ui";
+import { Amount, Button, ListError, StatusBadge } from "@devolada/ui";
 import type { CashboxResponse } from "@devolada/api/cashbox-schema";
 import { api, ApiError } from "../../api/client";
 import { logout } from "../../auth/session";
@@ -12,7 +12,7 @@ import { logout } from "../../auth/session";
 export function CashboxScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data, isPending } = useQuery<CashboxResponse, ApiError>({
+  const { data, isPending, isError, refetch, isRefetching } = useQuery<CashboxResponse, ApiError>({
     queryKey: ["cashbox"],
     queryFn: () => api<CashboxResponse>("/cashbox"),
   });
@@ -21,6 +21,21 @@ export function CashboxScreen() {
     await logout().catch(() => {});
     queryClient.clear();
     void navigate({ to: "/login" });
+  }
+
+  /* D1: a balance we could not load is not a balance of zero */
+  if (isError) {
+    return (
+      <main className="px-6 pt-8">
+        <h1 className="text-xl font-semibold">Caja</h1>
+        <ListError
+          what="tu caja"
+          onRetry={() => void refetch()}
+          retrying={isRefetching}
+          className="mt-6"
+        />
+      </main>
+    );
   }
 
   if (isPending || !data) {

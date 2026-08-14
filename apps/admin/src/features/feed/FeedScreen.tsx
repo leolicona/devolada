@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ChevronDown, TriangleAlert } from "lucide-react";
-import { Amount, AmountBreakdown, StatusBadge, formatMoney } from "@devolada/ui";
+import { Amount, AmountBreakdown, ListError, StatusBadge, formatMoney } from "@devolada/ui";
 import type { FeedCharge, FeedResponse } from "@devolada/api/charges-schema";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -135,6 +135,8 @@ export function FeedScreen() {
   });
 
   const charges = feed.data?.pages.flatMap((p) => p.charges) ?? [];
+  /* D1/D5: a failed first load is an error, a failed page keeps its rows */
+  const failedFirstLoad = feed.isError && !feed.data;
   const today = feed.data?.pages[0]?.today ?? null;
   const failedCount = failed.data?.charges.length ?? 0;
 
@@ -173,9 +175,18 @@ export function FeedScreen() {
         </TabsList>
       </Tabs>
 
-      {feed.isPending && <FeedSkeleton />}
+      {failedFirstLoad && (
+        <ListError
+          what="los cobros"
+          onRetry={() => void feed.refetch()}
+          retrying={feed.isRefetching}
+          className="mt-4"
+        />
+      )}
 
-      {charges.length === 0 && !feed.isPending && (
+      {feed.isPending && !feed.isError && <FeedSkeleton />}
+
+      {charges.length === 0 && !feed.isPending && !feed.isError && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
           Sin cobros por aquí todavía. Aparecerán en cuanto tus tiendas empiecen a cobrar.
         </p>
@@ -191,7 +202,16 @@ export function FeedScreen() {
         </Card>
       )}
 
-      {feed.hasNextPage && (
+      {feed.isError && feed.data && (
+        <ListError
+          what="más cobros"
+          onRetry={() => void feed.fetchNextPage()}
+          retrying={feed.isFetchingNextPage}
+          className="mt-4"
+        />
+      )}
+
+      {feed.hasNextPage && !feed.isError && (
         <div className="mt-4 pb-6">
           <Button variant="outline" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
             {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}

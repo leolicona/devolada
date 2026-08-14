@@ -8,3 +8,4 @@ export {
 export { formatMoney, parseMoney } from "./lib/money";
 export { Button, type ButtonProps } from "./components/button";
 export { Input, Field, type InputProps } from "./components/input";
+export { ListError, type ListErrorProps } from "./components/list-error";

@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Amount, Button } from "@devolada/ui";
+import { Amount, Button, ListError } from "@devolada/ui";
 import type { LedgerEntryItem, LedgerResponse } from "@devolada/api/ledger-schema";
 import { api, ApiError } from "../../api/client";
 
@@ -23,7 +23,16 @@ const dayFormat = new Intl.DateTimeFormat("es-MX", {
 const timeFormat = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" });
 
 export function LedgerScreen() {
-  const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery<
+  const {
+    data,
+    isPending,
+    isError,
+    refetch,
+    isRefetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<
     LedgerResponse,
     ApiError
   >({
@@ -33,6 +42,23 @@ export function LedgerScreen() {
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
+
+  /* D1: before anything else — an error must never fall through to the
+     empty state and tell the shopkeeper they have no movements.
+     D5: only when nothing loaded; a failed page two keeps its rows. */
+  if (isError && !data) {
+    return (
+      <main className="px-6 pt-8">
+        <h1 className="text-xl font-semibold">Movimientos</h1>
+        <ListError
+          what="tus movimientos"
+          onRetry={() => void refetch()}
+          retrying={isRefetching}
+          className="mt-6"
+        />
+      </main>
+    );
+  }
 
   if (isPending) {
     return (
@@ -91,7 +117,17 @@ export function LedgerScreen() {
         </section>
       ))}
 
-      {hasNextPage && (
+      {/* D5: the failed page reports under the rows it could not extend */}
+      {isError && data && (
+        <ListError
+          what="más movimientos"
+          onRetry={() => void fetchNextPage()}
+          retrying={isFetchingNextPage}
+          className="mt-6"
+        />
+      )}
+
+      {hasNextPage && !isError && (
         <div className="mt-6 pb-4">
           <Button
             variant="secondary"

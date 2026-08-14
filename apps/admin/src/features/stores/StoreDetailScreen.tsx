@@ -2,15 +2,12 @@ import { useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Mail, Pause, Play } from "lucide-react";
-import { Amount, StatusBadge, formatMoney, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Card, CardContent, CardHeader, CardTitle, Skeleton, StatusBadge, formatMoney, parseMoney } from "@devolada/ui";
 import type { StoreItem } from "@devolada/api/stores-schema";
 import type { LedgerResponse } from "@devolada/api/ledger-schema";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 
 /* Store detail (US-A03): config, the emergency switch, the invitation,

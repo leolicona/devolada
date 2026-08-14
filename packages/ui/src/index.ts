@@ -6,6 +6,20 @@ export {
   type BreakdownLine,
 } from "./components/amount-breakdown";
 export { formatMoney, parseMoney } from "./lib/money";
-export { Button, type ButtonProps } from "./components/button";
+export { cn } from "./lib/cn";
+export { Button, buttonVariants, type ButtonProps } from "./components/button";
 export { Input, Field, type InputProps } from "./components/input";
 export { ListError, type ListErrorProps } from "./components/list-error";
+
+/* Primitives from the shadcn catalog, themed by tokens and shared
+   because both surfaces use them (store-pwa/shell.spec.md D5). */
+export { Alert, type AlertProps } from "./components/alert";
+export {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  type CardProps,
+} from "./components/card";
+export { Skeleton } from "./components/skeleton";

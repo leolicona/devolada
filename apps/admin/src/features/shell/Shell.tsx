@@ -1,3 +1,4 @@
+import { Alert } from "@devolada/ui";
 import { Link, Navigate, Outlet } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,7 +12,6 @@ import {
   Store,
   WifiOff,
 } from "lucide-react";
-import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { logout, resendVerification, useSession } from "../auth/session";
 import { usePendingDropCount } from "../cash-drops/usePendingDrops";

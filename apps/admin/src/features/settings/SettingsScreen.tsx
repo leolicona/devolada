@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { formatMoney, parseMoney } from "@devolada/ui";
+import { Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
 import type {
   SettingsPatchRequest,
   SettingsResponse,
@@ -9,11 +9,9 @@ import type {
 } from "@devolada/api/settings-schema";
 import { TIMEZONES } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
 

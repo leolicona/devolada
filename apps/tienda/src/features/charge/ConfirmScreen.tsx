@@ -1,7 +1,16 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, TriangleAlert } from "lucide-react";
-import { Amount, AmountBreakdown, Button, StatusBadge, formatMoney } from "@devolada/ui";
+import {
+  Alert,
+  Amount,
+  AmountBreakdown,
+  Button,
+  Card,
+  Skeleton,
+  StatusBadge,
+  formatMoney,
+} from "@devolada/ui";
 import type { ChargeResponse, CustomerQuoteResponse } from "@devolada/api/charges-schema";
 import { api, ApiError } from "../../api/client";
 
@@ -41,10 +50,24 @@ export function ConfirmScreen() {
     },
   });
 
+  /* D7: the identity and the amount keep their place while they load —
+     the shopkeeper is already holding the customer's money. */
   if (isPending) {
     return (
-      <main className="px-6 pt-8">
-        <p className="text-sm text-ink-faint">Cargando…</p>
+      <main className="px-6 pt-8" aria-busy="true" aria-label="Cargando el cobro">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="mt-2 h-4 w-24" />
+          </div>
+          <Skeleton className="h-6 w-24 rounded-full" />
+        </div>
+        <Card className="mt-8 p-6">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="mt-2 h-12 w-52" />
+          <Skeleton className="mt-6 h-4 w-full" />
+          <Skeleton className="mt-2 h-4 w-2/3" />
+        </Card>
       </main>
     );
   }
@@ -53,9 +76,9 @@ export function ConfirmScreen() {
     return (
       <main className="px-6 pt-8">
         <h1 className="text-xl font-semibold">Confirmar y cobrar</h1>
-        <p className="mt-6 rounded-md border border-line bg-well px-4 py-3 text-sm text-ink-soft">
+        <Alert className="mt-6 font-normal">
           No encontramos a este cliente. Regresa y búscalo de nuevo.
-        </p>
+        </Alert>
       </main>
     );
   }
@@ -64,9 +87,9 @@ export function ConfirmScreen() {
     return (
       <main className="px-6 pt-8">
         <h1 className="text-xl font-semibold">Confirmar y cobrar</h1>
-        <p className="mt-6 rounded-md border border-warning-line bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
+        <Alert variant="warning" className="mt-6">
           El sistema del ISP no responde. Intenta de nuevo en un momento.
-        </p>
+        </Alert>
       </main>
     );
   }
@@ -89,12 +112,12 @@ export function ConfirmScreen() {
       </div>
 
       {paid ? (
-        <p className="mt-8 flex items-start gap-2 rounded-md border border-success-line bg-success-soft px-4 py-3 text-sm font-medium text-success">
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <Alert variant="success" layout="icon" className="mt-8">
+          <CheckCircle2 aria-hidden />
           Sin adeudo. Este cliente no tiene nada pendiente por pagar.
-        </p>
+        </Alert>
       ) : (
-        <div className="mt-8 rounded-md border border-line bg-card p-6">
+        <Card className="mt-8 p-6">
           <p className="text-sm text-ink-soft">Total a cobrar</p>
           <Amount
             cents={quote.totalCents}
@@ -107,20 +130,20 @@ export function ConfirmScreen() {
               { label: "Cargo por servicio", cents: quote.serviceFeeCents },
             ]}
           />
-        </div>
+        </Card>
       )}
 
       {cap.blocked && !paid && (
-        <p className="mt-4 flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <Alert variant="warning" layout="icon" className="mt-4">
+          <TriangleAlert aria-hidden />
           Tu caja llegó a su límite. Registra una entrega para seguir cobrando.
-        </p>
+        </Alert>
       )}
 
       {charge.isError && !charge.error.code.startsWith("WISPHUB") && (
-        <p className="mt-4 rounded-md border border-error-line bg-error-soft px-4 py-3 text-sm font-medium text-error" role="alert">
+        <Alert variant="destructive" className="mt-4">
           No se pudo registrar el cobro. Intenta de nuevo.
-        </p>
+        </Alert>
       )}
 
       {!paid && (

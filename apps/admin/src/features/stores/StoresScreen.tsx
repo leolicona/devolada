@@ -1,11 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, TriangleAlert } from "lucide-react";
-import { Amount, ListError, StatusBadge } from "@devolada/ui";
+import { Amount, Card, ListError, Skeleton, StatusBadge } from "@devolada/ui";
 import type { StoresResponse } from "@devolada/api/stores-schema";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 
 /* Tiendas list (US-A03): every store with its balance and cap alert —

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine, Check, MessageSquareWarning } from "lucide-react";
-import { Amount, ListError, StatusBadge, formatMoney } from "@devolada/ui";
+import { Amount, Card, ListError, Skeleton, StatusBadge, formatMoney } from "@devolada/ui";
 import type { AdminCashDrop, CashDropsResponse } from "@devolada/api/cash-drops-schema";
 import {
   AlertDialog,
@@ -14,9 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";

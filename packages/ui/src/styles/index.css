@@ -4,6 +4,14 @@
 
 @import "tailwindcss";
 
+/* The atoms live in this package, and Tailwind's automatic source
+   detection skips node_modules — which is how both apps resolve
+   `@devolada/ui`. Without this, any utility used *only* inside an atom
+   never reaches the stylesheet: `pl-12` (the search input's icon gap),
+   `hover:bg-accent-hover` and `animate-pulse` were all silently absent.
+   The path is relative to this file, so it points at the real package. */
+@source "../";
+
 @import "@fontsource-variable/archivo";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
@@ -70,6 +78,11 @@
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+
+  /* Content widths: max-w-content (PWA) / max-w-wide / max-w-page (admin) */
+  --container-content: var(--max-width-content);
+  --container-wide: var(--max-width-wide);
+  --container-page: var(--max-width-page);
 
   /* Typography: text-xs … text-amount */
   --text-xs: var(--font-size-xs);

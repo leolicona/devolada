@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine, ChevronRight, LogOut, TriangleAlert } from "lucide-react";
-import { Amount, Button, ListError, StatusBadge } from "@devolada/ui";
+import { Alert, Amount, Button, Card, ListError, Skeleton, StatusBadge } from "@devolada/ui";
 import type { CashboxResponse } from "@devolada/api/cashbox-schema";
 import { api, ApiError } from "../../api/client";
 import { logout } from "../../auth/session";
@@ -23,7 +23,7 @@ export function CashboxScreen() {
     void navigate({ to: "/login" });
   }
 
-  /* D1: a balance we could not load is not a balance of zero */
+  /* list-states D1: a balance we could not load is not a balance of zero */
   if (isError) {
     return (
       <main className="px-6 pt-8">
@@ -38,10 +38,20 @@ export function CashboxScreen() {
     );
   }
 
+  /* shell D7: the balance is the screen — it holds its place while it loads */
   if (isPending || !data) {
     return (
-      <main className="px-6 pt-8">
-        <p className="text-sm text-ink-faint">Cargando…</p>
+      <main className="px-6 pt-8" aria-busy="true" aria-label="Cargando tu caja">
+        <Skeleton className="h-6 w-40" />
+        <Card className="mt-5 p-6">
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="mt-2 h-9 w-36" />
+          <Skeleton className="mt-3 h-4 w-40" />
+        </Card>
+        <Card className="mt-3 p-6">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="mt-2 h-7 w-28" />
+        </Card>
       </main>
     );
   }
@@ -50,54 +60,56 @@ export function CashboxScreen() {
     <main className="px-6 pt-8">
       <div className="flex items-center justify-between gap-4">
         <h1 className="truncate text-xl font-semibold">{data.storeName}</h1>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={() => void onLogout()}
-          className="flex h-12 shrink-0 items-center gap-1.5 text-sm font-medium text-ink-soft hover:text-ink"
+          className="shrink-0 gap-1.5 px-0 text-sm"
         >
           <LogOut className="size-4" aria-hidden />
           Cerrar sesión
-        </button>
+        </Button>
       </div>
 
       {/* D2: the balance explains itself — it links to the entries it sums */}
-      <Link
-        to="/ledger"
-        className="mt-5 block rounded-md border border-line bg-card p-6 transition-colors duration-150 hover:bg-well"
-      >
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-ink-soft">Efectivo del ISP en tu poder</p>
-          <ChevronRight className="size-4 text-ink-faint" aria-hidden />
-        </div>
-        <Amount
-          cents={data.balanceCents}
-          className="mt-1 block text-3xl font-semibold tracking-tight"
-        />
-        <p className="mt-2 text-sm text-ink-faint">Toca para ver tus movimientos</p>
-      </Link>
+      <Card asChild>
+        <Link
+          to="/ledger"
+          className="mt-5 block p-6 transition-colors duration-150 hover:bg-well"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-ink-soft">Efectivo del ISP en tu poder</p>
+            <ChevronRight className="size-4 text-ink-faint" aria-hidden />
+          </div>
+          <Amount
+            cents={data.balanceCents}
+            className="mt-1 block text-3xl font-semibold tracking-tight"
+          />
+          <p className="mt-2 text-sm text-ink-faint">Toca para ver tus movimientos</p>
+        </Link>
+      </Card>
 
-      <div className="mt-3 rounded-md border border-line bg-card p-6">
+      <Card className="mt-3 p-6">
         <p className="text-sm text-ink-soft">Tu comisión ganada</p>
         <Amount
           cents={data.commissionEarnedCents}
           className="mt-1 block text-2xl font-semibold text-success"
         />
-      </div>
+      </Card>
 
       {data.cap.blocked ? (
-        <p className="mt-4 flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <Alert variant="warning" layout="icon" className="mt-4">
+          <TriangleAlert aria-hidden />
           Tu caja llegó a su límite. Registra una entrega para seguir cobrando.
-        </p>
+        </Alert>
       ) : data.cap.approaching ? (
-        <p className="mt-4 flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
-          <ArrowDownToLine className="mt-0.5 size-4 shrink-0" aria-hidden />
+        <Alert variant="warning" layout="icon" className="mt-4">
+          <ArrowDownToLine aria-hidden />
           Tu caja se acerca a su límite. Registra una entrega pronto.
-        </p>
+        </Alert>
       ) : null}
 
       {data.lastCashDrop && (
-        <div className="mt-4 rounded-md border border-line bg-card p-4">
+        <Card className="mt-4 p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium">Última entrega</p>
@@ -111,7 +123,7 @@ export function CashboxScreen() {
               {data.lastCashDrop.note}
             </p>
           )}
-        </div>
+        </Card>
       )}
 
       <div className="mt-6">

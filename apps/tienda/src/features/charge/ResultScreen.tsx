@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, MessageCircle } from "lucide-react";
-import { Amount, Button, StatusBadge } from "@devolada/ui";
+import { Amount, Button, Skeleton, StatusBadge } from "@devolada/ui";
 import type { ChargeResponse, ReceiptResponse } from "@devolada/api/charges-schema";
 import { api, ApiError } from "../../api/client";
 
@@ -65,10 +65,18 @@ export function ResultScreen() {
       query.state.data?.reconnectionStatus === "queued" ? 3000 : false,
   });
 
+  /* D7: the result is centred, so its skeleton is too */
   if (isPending || !data) {
     return (
-      <main className="px-6 pt-8">
-        <p className="text-sm text-ink-faint">Cargando…</p>
+      <main
+        className="flex flex-col items-center px-6 pt-12"
+        aria-busy="true"
+        aria-label="Cargando el cobro"
+      >
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="mt-2 h-12 w-52" />
+        <Skeleton className="mt-3 h-4 w-40" />
+        <Skeleton className="mt-6 h-7 w-32 rounded-full" />
       </main>
     );
   }

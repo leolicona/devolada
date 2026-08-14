@@ -16,6 +16,7 @@ const results = customerSearchResponse.parse({
       name: "Janely",
       zone: "Zona dia 15",
       serviceStatus: "suspended",
+      billingStatus: "due",
       monthlyFeeCents: 49900,
     },
   ],

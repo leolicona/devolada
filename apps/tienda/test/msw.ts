@@ -26,6 +26,8 @@ export const handlers = {
     http.post("/auth/store/login", () => response()),
   customerSearch: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/customers", () => response()),
+  customerQuote: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/charges/customers/:usuario", () => response()),
 };
 
 export const server = setupServer();

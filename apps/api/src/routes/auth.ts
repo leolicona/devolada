@@ -5,7 +5,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../env";
-import { isps, stores } from "../db/schema";
+import { invitations, isps, stores } from "../db/schema";
 import { AgnosticAuth, AuthError } from "../auth/agnostic";
 import { COOKIE_REFRESH, clearSessionCookies, setSessionCookies } from "../auth/cookies";
 import { requireSession } from "../auth/middleware";
@@ -241,5 +241,48 @@ auth.post(
       success: true,
       data: { type: "isp", id: redeemed.isp.id, name: redeemed.isp.name, emailVerified: true },
     });
+  },
+);
+
+/* Store invitation redemption (store-invitation spec). One call:
+   verify the token, set the password, activate, sign in. */
+auth.post(
+  "/store/accept-invitation",
+  zValidator("json", z.object({ token: z.string().min(1), password: z.string().min(8) })),
+  async (c) => {
+    const { token, password } = c.req.valid("json");
+    const invalid = () =>
+      c.json({ success: false, error: { code: "INVALID_TOKEN" } }, 400);
+
+    const idp = new AgnosticAuth(c.env);
+    let tokens;
+    try {
+      tokens = await idp.verify(token);
+    } catch (e) {
+      /* D3: every failure shape answers the same */
+      if (e instanceof AuthError && e.status < 500) return invalid();
+      throw e;
+    }
+
+    const db = drizzle(c.env.DB);
+    const [invitation] = await db.select().from(invitations).where(eq(invitations.token, token));
+    if (!invitation || invitation.status !== "sent") return invalid();
+
+    const [store] = await db.select().from(stores).where(eq(stores.id, invitation.storeId));
+    if (!store) return invalid();
+
+    const { hash, salt } = await idp.hash(password);
+    /* D2: accepting also activates */
+    await db
+      .update(stores)
+      .set({ passwordHash: hash, passwordSalt: salt, status: "active" })
+      .where(eq(stores.id, store.id));
+    await db
+      .update(invitations)
+      .set({ status: "accepted", acceptedAt: new Date() })
+      .where(eq(invitations.id, invitation.id));
+
+    setSessionCookies(c, tokens);
+    return c.json({ success: true, data: { type: "store", id: store.id, name: store.name } });
   },
 );

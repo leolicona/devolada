@@ -80,7 +80,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 |------|--------|---------|--------|
 | [auth/sessions.spec.md](auth/sessions.spec.md) | auth | US-S01, US-S02, US-S03 | current |
 | [auth/isp-signup.spec.md](auth/isp-signup.spec.md) | auth | US-S04, US-S06 | in development |
-| auth/store-invitation.spec.md | auth | US-S05 | pending |
+| [auth/store-invitation.spec.md](auth/store-invitation.spec.md) | auth | US-S05 | in development |
 | [store-pwa/shell.spec.md](store-pwa/shell.spec.md) | store-pwa | US-S01, US-S02, US-S03 (UI) | in development |
 | [charges/customer-search.spec.md](charges/customer-search.spec.md) | charges | US-C01 | in development |
 | [charges/charge-confirm.spec.md](charges/charge-confirm.spec.md) | charges | US-C02, US-K04 (partial) | in development |

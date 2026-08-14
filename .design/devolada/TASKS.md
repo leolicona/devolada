@@ -24,7 +24,7 @@ Order: risk first (WispHub spike), then visual foundation to validate the aesthe
 - [x] **Charge result with live status**: `/charges/$chargeId` — records the charge + ledger entries (charge and commission), shows the reconnecting → reconnected (green) / queued (amber) transition with polling, folio in mono, "Nuevo cobro" button. A charge is never rejected because of WispHub failures. _Reuses: StatusBadge. Depends on: reconnection queue (stubbable)._
 - [x] **Cash box**: current balance as protagonist (`--font-size-3xl`), accumulated commission, last drop status, balance-cap notices (approaching/exceeded), store name and logout. Every number breaks down on tap (principle: the ledger is the truth). _Reuses: StatusBadge, AmountBreakdown._
 - [x] **Record cash drop + Ledger**: `/cashbox/drop` with suggested amount = balance (editable downward) creating a pending entry; `/ledger` with the ledger grouped by day (infinite scroll) and per-entry detail. _Reuses: ledger entry list shared with admin._
-- [ ] **PWA special states**: full-screen suspended account (with the ISP's contact; can appear mid-shift), `/invitation/$token` to set the password (magic-token redemption), and offline notice. _Reuses: magic-token redemption._
+- [x] **PWA special states**: full-screen suspended account (with the ISP's contact; can appear mid-shift), `/invitation/$token` to set the password (magic-token redemption), and offline notice. _Reuses: magic-token redemption._
 
 ## Admin Dashboard
 

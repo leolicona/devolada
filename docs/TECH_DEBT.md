@@ -17,6 +17,11 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - The template and trigger are built provider-agnostic (Meta WhatsApp Business API vs Twilio). Until decided, invitations use a copyable link as fallback.
 - Paid by: choosing a provider, creating `integrations/<provider>.md` and implementing real sending.
 
+## TD-007 — No CORS for the deployed store PWA
+- Status: open · Origin: store-pwa/shell.spec.md (D2)
+- In dev, Vite proxies `/auth` to the API so cookies are same-origin. The deployed PWA will be cross-origin and needs a CORS + credentials allowlist on `apps/api`.
+- Paid by: adding `hono/cors` with an origin allowlist when the PWA deploy step lands in `deploy-dev.yml`.
+
 ## TD-004 — Golden rule without enforcement
 - Status: **paid** (2026-08-13) · Origin: methodology adoption
 - `scripts/spec-lint.mjs` runs in all three workflows: fails if a `*.spec.md` is missing from SPEC.md's index; warns on tests without a US-ID (becomes an error once TD-005 is paid).

@@ -2,7 +2,7 @@
 
 ## Strategy (in force from the first feature)
 
-The API layer landed with `auth/isp-signup.spec.md` (2026-08-13); every feature ships its scenarios automated as part of its DoD — tests are not a later phase, they are part of development. The component, network and E2E layers land with the first frontend app (no UI surface exists yet). Run with `pnpm --filter @devolada/api test`.
+The API layer landed with `auth/isp-signup.spec.md` and the component + network layers with `store-pwa/shell.spec.md` (both 2026-08-13); every feature ships its scenarios automated as part of its DoD — tests are not a later phase, they are part of development. The E2E + accessibility layer (Playwright + axe) lands once there is a deployed charge flow worth traversing. Run everything with `pnpm -r --if-present test`.
 
 | Layer | Tooling | Where | Covers |
 |-------|---------|-------|--------|

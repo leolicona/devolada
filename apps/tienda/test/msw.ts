@@ -28,6 +28,10 @@ export const handlers = {
     http.get("/charges/customers", () => response()),
   customerQuote: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/customers/:usuario", () => response()),
+  recordCharge: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/charges", () => response()),
+  chargeStatus: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/charges/:chargeId", () => response()),
 };
 
 export const server = setupServer();

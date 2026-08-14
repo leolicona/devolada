@@ -16,3 +16,20 @@ export async function storeBalanceCents(
     .where(eq(ledgerEntries.storeId, storeId));
   return Number(row?.total ?? 0);
 }
+
+/* A charge writes exactly two entries: the full total in, the store's
+   commission out (the store keeps it from the cash in hand). */
+export async function recordChargeEntries(
+  db: ReturnType<typeof drizzle>,
+  input: { storeId: string; chargeId: string; totalCents: number; commissionCents: number },
+): Promise<void> {
+  await db.insert(ledgerEntries).values([
+    { storeId: input.storeId, type: "charge", cents: input.totalCents, chargeId: input.chargeId },
+    {
+      storeId: input.storeId,
+      type: "commission",
+      cents: -input.commissionCents,
+      chargeId: input.chargeId,
+    },
+  ]);
+}

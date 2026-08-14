@@ -62,11 +62,15 @@ export class WispHub {
     private baseUrl: string = DEFAULT_BASE_URL,
   ) {}
 
-  private async get<T>(path: string): Promise<T> {
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
-        headers: { Authorization: `Api-Key ${this.apiKey}` },
+        ...init,
+        headers: {
+          Authorization: `Api-Key ${this.apiKey}`,
+          ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        },
       });
     } catch {
       throw new WispHubError("WISPHUB_UNAVAILABLE", "network error");
@@ -78,6 +82,10 @@ export class WispHub {
     }
     if (!res.ok) throw new WispHubError("WISPHUB_UNAVAILABLE", `status ${res.status}`);
     return (await res.json()) as T;
+  }
+
+  private get<T>(path: string): Promise<T> {
+    return this.request<T>(path);
   }
 
   /* Uses the LIST endpoint on purpose: the detail endpoint returns
@@ -104,5 +112,58 @@ export class WispHub {
   async getCustomer(usuario: string): Promise<WispHubCustomer | null> {
     const matches = await this.searchCustomers(usuario);
     return matches.find((c) => c.usuario === usuario) ?? null;
+  }
+
+  /* D6 (charge-record spec): find the cash payment method by name. */
+  async getCashPaymentMethodId(): Promise<number> {
+    const data = await this.get<{ results: { id: number; nombre: string }[] }>(
+      "/formas-de-pago/",
+    );
+    if (data.results.length === 0) {
+      throw new WispHubError("WISPHUB_UNAVAILABLE", "no payment methods");
+    }
+    const cash = data.results.find((m) => /efect|cash/i.test(m.nombre));
+    return (cash ?? data.results[0]).id;
+  }
+
+  /* Creates a pending invoice. WispHub answers with a message string,
+     not an id (spike finding, TD-008): we parse "la factura N". */
+  async createInvoice(usuario: string, amountCents: number, date: string): Promise<number> {
+    const amount = amountCents / 100; /* boundary conversion, outbound only */
+    const data = await this.request<{ messages?: string }>("/facturas/", {
+      method: "POST",
+      body: JSON.stringify({
+        cliente: usuario,
+        tipo_factura: 1,
+        articulos: [{ descripcion: "Mensualidad de internet", precio: amount, cantidad: 1 }],
+        fecha_emision: date,
+        fecha_vencimiento: date,
+        fecha_pago: date,
+        estado: 1,
+        sub_total: amount,
+        total: amount,
+      }),
+    });
+    const match = /factura (\d+)/.exec(data.messages ?? "");
+    if (!match) throw new WispHubError("WISPHUB_UNAVAILABLE", "invoice id not found in message");
+    return Number.parseInt(match[1], 10);
+  }
+
+  /* Registers the payment. Async on WispHub's side (returns a task_id). */
+  async registerPayment(
+    invoiceId: number,
+    paymentMethodId: number,
+    amountCents: number,
+    dateTime: string,
+  ): Promise<void> {
+    await this.request<{ messages?: string[] }>(`/facturas/${invoiceId}/registrar-pago/`, {
+      method: "POST",
+      body: JSON.stringify({
+        forma_pago: paymentMethodId,
+        accion: 1,
+        fecha_pago: dateTime,
+        total_cobrado: amountCents / 100,
+      }),
+    });
   }
 }

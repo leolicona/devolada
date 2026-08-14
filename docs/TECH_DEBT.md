@@ -2,6 +2,11 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-008 — Invoice id parsed from a message string
+- Status: open · Origin: charges/charge-record.spec.md (D5)
+- WispHub's create-invoice response has no id field; we parse "la factura N" from the message. It works, but any wording change breaks it.
+- Paid by: asking WispHub support for a stable id in the response, or switching to a list lookup after creation.
+
 ## TD-001 — JWTs without signature verification in dev
 - Status: open · Origin: auth/sessions.spec.md
 - `apps/api` decodes JWTs without verifying the signature when `AUTH_JWT_SECRET` is missing (with a console warning). Reasonable for local dev; **blocking for production**.

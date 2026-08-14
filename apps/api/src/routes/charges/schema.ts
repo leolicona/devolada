@@ -35,6 +35,20 @@ export const customerQuoteResponse = z.object({
   }),
 });
 
+export const chargeRecordRequest = z.object({
+  /* D1: the client sends only the customer; the server computes the money */
+  usuario: z.string().min(3),
+});
+
+export const chargeResponse = z.object({
+  id: z.string(),
+  folio: z.string(),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
+  totalCents: z.number().int(),
+  customerName: z.string(),
+});
+
+export type ChargeResponse = z.infer<typeof chargeResponse>;
 export type CustomerResult = z.infer<typeof customerResult>;
 export type CustomerSearchResponse = z.infer<typeof customerSearchResponse>;
 export type CustomerQuoteResponse = z.infer<typeof customerQuoteResponse>;

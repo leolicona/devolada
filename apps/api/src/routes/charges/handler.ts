@@ -2,10 +2,11 @@ import type { Context } from "hono";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { isps, stores } from "../../db/schema";
-import { storeBalanceCents } from "../../ledger";
+import { charges, isps, stores } from "../../db/schema";
+import { recordChargeEntries, storeBalanceCents } from "../../ledger";
 import { WispHub, WispHubError } from "../../wisphub/client";
-import type { CustomerQuoteResponse, CustomerSearchResponse } from "./schema";
+import { attemptReconnection } from "../../wisphub/reconnection";
+import type { ChargeResponse, CustomerQuoteResponse, CustomerSearchResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -75,4 +76,104 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
   } catch (e) {
     return wisphubFailure(c, e);
   }
+}
+
+function makeFolio(): string {
+  /* DV- + 6 uppercase base36 chars; the unique index is the real guard */
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  let out = "";
+  for (const b of bytes) out += chars[b % 36];
+  return `DV-${out}`;
+}
+
+const toChargeResponse = (row: typeof charges.$inferSelect): ChargeResponse => ({
+  id: row.id,
+  folio: row.folio,
+  reconnectionStatus: row.reconnectionStatus,
+  totalCents: row.totalCents,
+  customerName: row.customerName,
+});
+
+export async function recordCharge(c: Ctx, usuario: string) {
+  const ctx = await storeContext(c);
+  if ("error" in ctx) return ctx.error;
+
+  let customer;
+  try {
+    customer = await ctx.wisphub.getCustomer(usuario);
+  } catch (e) {
+    return wisphubFailure(c, e);
+  }
+  if (!customer) {
+    return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
+  }
+
+  /* D4: server-side guards; the UI is not a security layer */
+  if (customer.billingStatus === "paid") {
+    return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
+  }
+  const [store] = await ctx.db.select().from(stores).where(eq(stores.id, ctx.actor.id));
+  const balanceCents = await storeBalanceCents(ctx.db, ctx.actor.id);
+  if (balanceCents >= store.balanceCapCents) {
+    return c.json({ success: false, error: { code: "BALANCE_CAP_EXCEEDED" } }, 409);
+  }
+
+  const totalCents = customer.monthlyFeeCents + ctx.isp.serviceFeeCents;
+  const commissionCents = store.commissionCents ?? ctx.isp.storeCommissionCents;
+
+  /* D2: record first — the money is safe before any WispHub call */
+  const [charge] = await ctx.db
+    .insert(charges)
+    .values({
+      ispId: ctx.isp.id,
+      storeId: ctx.actor.id,
+      folio: makeFolio(),
+      wisphubCustomerId: String(customer.wisphubId),
+      customerName: customer.name,
+      customerZone: customer.zone,
+      monthlyFeeCents: customer.monthlyFeeCents,
+      serviceFeeCents: ctx.isp.serviceFeeCents,
+      totalCents,
+    })
+    .returning();
+  await recordChargeEntries(ctx.db, {
+    storeId: ctx.actor.id,
+    chargeId: charge.id,
+    totalCents,
+    commissionCents,
+  });
+
+  /* D3: one immediate attempt; the retry queue is the next task */
+  const status = await attemptReconnection(
+    ctx.wisphub,
+    usuario,
+    customer.monthlyFeeCents,
+    new Date(),
+  );
+  const [updated] = await ctx.db
+    .update(charges)
+    .set({
+      reconnectionStatus: status,
+      reconnectionAttempts: 1,
+      ...(status === "reconnected" ? { reconnectedAt: new Date() } : {}),
+    })
+    .where(eq(charges.id, charge.id))
+    .returning();
+
+  return c.json({ success: true, data: toChargeResponse(updated) }, 201);
+}
+
+export async function getCharge(c: Ctx, chargeId: string) {
+  const actor = c.get("actor");
+  if (actor.type !== "store") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const [row] = await db.select().from(charges).where(eq(charges.id, chargeId));
+  /* Own charges only: a foreign charge looks like it does not exist */
+  if (!row || row.storeId !== actor.id) {
+    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  }
+  return c.json({ success: true, data: toChargeResponse(row) });
 }

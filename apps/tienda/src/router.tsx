@@ -8,6 +8,7 @@ import { AppShell } from "./AppShell";
 import { LoginPage } from "./screens/LoginPage";
 import { SearchScreen } from "./features/charge/SearchScreen";
 import { ConfirmScreen } from "./features/charge/ConfirmScreen";
+import { ResultScreen } from "./features/charge/ResultScreen";
 import { CashboxScreen, LedgerScreen } from "./screens/placeholders";
 
 /* Code-based route tree (spec D1): five routes, zero build magic. */
@@ -38,6 +39,12 @@ const chargeConfirmRoute = createRoute({
   component: ConfirmScreen,
 });
 
+const chargeResultRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/charges/$chargeId",
+  component: ResultScreen,
+});
+
 const cashboxRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/cashbox",
@@ -52,7 +59,7 @@ const ledgerRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appRoute.addChildren([chargeRoute, chargeConfirmRoute, cashboxRoute, ledgerRoute]),
+  appRoute.addChildren([chargeRoute, chargeConfirmRoute, chargeResultRoute, cashboxRoute, ledgerRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

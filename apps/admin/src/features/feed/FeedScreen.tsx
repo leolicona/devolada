@@ -14,7 +14,7 @@ import {
 import type { FeedCharge, FeedResponse } from "@devolada/api/charges-schema";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { formatTime } from "@/lib/datetime";
 import { useDisplaySettings } from "../auth/session";
@@ -170,7 +170,9 @@ export function FeedScreen() {
         </Alert>
       )}
 
-      {/* D7: status filters are shadcn Tabs */}
+      {/* D7: status filters are shadcn Tabs. D8 (US-P04): the list lives
+          inside TabsContent — a tab that advertises aria-controls without
+          a panel points a screen reader at nothing. */}
       <Tabs value={status} onValueChange={setStatus} className="mt-4">
         <TabsList aria-label="Filtrar por estado">
           {statusFilters.map((f) => (
@@ -179,7 +181,7 @@ export function FeedScreen() {
             </TabsTrigger>
           ))}
         </TabsList>
-      </Tabs>
+        <TabsContent value={status}>
 
       {failedFirstLoad && (
         <ListError
@@ -224,6 +226,8 @@ export function FeedScreen() {
           </Button>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }

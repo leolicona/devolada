@@ -60,4 +60,4 @@ Failures: 401 / 403 (as search) · 404 `CUSTOMER_NOT_FOUND` · 503 `WISPHUB_NOT_
 
 - [x] Scenarios 1–4 automated in the API layer (`test/charge-quote.test.ts`, 4 tests)
 - [x] Scenarios 5–7 automated with Testing Library + MSW (`test/charge-confirm.test.tsx`, 3 tests)
-- [ ] Manual check against the real WispHub demo tenant (blocked: rotated API key)
+- [x] Manual check: Done 2026-08-14 against the deployed dev API and the real WispHub demo tenant

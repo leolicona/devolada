@@ -2,6 +2,11 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-009 — The reconnection creates a new invoice even when one is pending
+- Status: open · Origin: E2E check of charges/charge-record.spec.md
+- `attemptReconnection` always creates a fresh invoice. With a pending invoice already there, WispHub ends up with duplicates (observed: the old one flips to "Se Transfirio"). With retries, every attempt would add one more.
+- Paid by: **must be fixed in the reconnection-queue task, before retries ship** — look up a pending invoice for the customer first, create only if none exists.
+
 ## TD-008 — Invoice id parsed from a message string
 - Status: open · Origin: charges/charge-record.spec.md (D5)
 - WispHub's create-invoice response has no id field; we parse "la factura N" from the message. It works, but any wording change breaks it.

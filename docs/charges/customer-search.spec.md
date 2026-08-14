@@ -60,4 +60,4 @@ Success: `{ success: true, data: { customers: [ { wisphubId, usuario, name, zone
 
 - [x] Scenarios 1–6 automated in the API layer (`test/charge-search.test.ts`, 9 tests)
 - [x] Scenarios 7–9 automated with Testing Library + MSW (`test/charge-search.test.tsx`, 3 tests)
-- [ ] Manual check against the real WispHub demo tenant (blocked: needs the rotated API key in `.dev.vars`)
+- [x] Manual check: Done 2026-08-14 against the deployed dev API and the real WispHub demo tenant

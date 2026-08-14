@@ -22,3 +22,11 @@ Does registering a payment via the API trigger the **automatic reactivation** of
 
 - The ISP's API Key is stored in `isps.wisphub_api_key` and validated live when configured (US-A04).
 - `apps/api` is the only party that talks to WispHub; frontend apps consume the proxy.
+
+## Local dev limitation (2026-08-14)
+
+`wrangler dev` (local workerd) cannot reach `api.wisphub.net` — every fetch fails with workerd's opaque `internal error`, while the same key works with curl and from deployed Workers. Manual checks therefore run against the **deployed dev API**, with `WISPHUB_API_KEY` set as a dev-environment secret. The API tests are not affected (WispHub is mocked).
+
+## E2E evidence (2026-08-14)
+
+Full pipeline verified through `devolada-api-dev`: real search (allow-list mapping, cents), real quote (`due` after a pending invoice), real charge → folio `DV-RJO12L`, WispHub invoice created and **paid** (`estado: Pagada`), status `reconnected` after the verify read, ledger `+41400 / −900`. Finding: the reconnection created a new invoice instead of paying the already-pending one → TD-009.

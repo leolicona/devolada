@@ -37,6 +37,7 @@ export type Actor =
       id: string;
       name: string;
       email: string;
+      emailVerified: boolean;
       status: "active" | "suspended";
     };
 

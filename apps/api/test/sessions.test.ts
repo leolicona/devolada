@@ -48,6 +48,16 @@ describe("US-S01: store and admin log in with credentials", () => {
     expect((await res.json()).data.type).toBe("store");
   });
 
+  it("the ISP actor from /auth/me includes emailVerified", async () => {
+    await seedIsp({ emailVerified: false });
+    const res = await (await app()).request(
+      "/auth/me",
+      { headers: { Cookie: sessionCookieHeader("demo@devolada.app") } },
+      env,
+    );
+    expect((await res.json()).data).toMatchObject({ type: "isp", emailVerified: false });
+  });
+
   it("valid admin login returns 200 with session cookies", async () => {
     await seedIsp();
     mockIdp("/auth/verify-password", {

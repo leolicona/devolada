@@ -36,8 +36,8 @@
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
         "ENVIRONMENT": "dev",
-        "ADMIN_BASE_URL": "https://admin-dev.devolada.app",
-        "ALLOWED_ORIGINS": "https://devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-tienda-dev.leolicona-dev.workers.dev",
+        "ADMIN_BASE_URL": "https://devolada-admin-dev.leolicona-dev.workers.dev",
+        "ALLOWED_ORIGINS": "https://devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-tienda-dev.leolicona-dev.workers.dev,https://devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
         "CROSS_SITE_COOKIES": "true"
       }
     },
@@ -56,8 +56,8 @@
         "AUTH_BASE_URL": "https://agnostic-auth.leolicona-dev.workers.dev",
         "AUTH_APP_ID": "devolada",
         "ENVIRONMENT": "prod",
-        "ADMIN_BASE_URL": "https://admin.devolada.app",
-        "ALLOWED_ORIGINS": "https://devolada-tienda.leolicona-dev.workers.dev",
+        "ADMIN_BASE_URL": "https://devolada-admin.leolicona-dev.workers.dev",
+        "ALLOWED_ORIGINS": "https://devolada-tienda.leolicona-dev.workers.dev,https://devolada-admin.leolicona-dev.workers.dev",
         "CROSS_SITE_COOKIES": "true"
       }
     }

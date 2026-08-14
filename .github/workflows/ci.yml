@@ -60,4 +60,12 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      # TODO: preview for apps/admin once it exists
+      - name: Build admin (dev API baked in)
+        working-directory: apps/admin
+        run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build
+      - name: Admin preview
+        working-directory: apps/admin
+        run: pnpm --filter @devolada/api exec wrangler versions upload --config ../admin/wrangler.jsonc --env dev
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

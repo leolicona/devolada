@@ -23,7 +23,14 @@ export async function findActor(env: Bindings, identity: string): Promise<Actor 
   }
   const [isp] = await db.select().from(isps).where(eq(isps.email, identity));
   if (isp) {
-    return { type: "isp", id: isp.id, name: isp.name, email: isp.email, status: isp.status };
+    return {
+      type: "isp",
+      id: isp.id,
+      name: isp.name,
+      email: isp.email,
+      emailVerified: isp.emailVerified,
+      status: isp.status,
+    };
   }
   return null;
 }

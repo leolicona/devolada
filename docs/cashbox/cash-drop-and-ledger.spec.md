@@ -33,7 +33,7 @@ The store records a cash handover (entrega) that stays pending until the ISP con
 
 ## UI Contract
 
-- `/cashbox/drop`: current balance shown, amount input **prefilled with the balance** (pesos), editable downward. Submit → back to Caja, where the pending drop appears with its badge. Plain es-MX errors for both guards.
+- `/cashbox/drop`: current balance shown, amount input **prefilled with the balance** (pesos), editable downward. The form waits for the balance before it renders the field (fixed 2026-08-14): while the request was in flight, the prefill could land on top of an amount the shopkeeper had already typed. Submit → back to Caja, where the pending drop appears with its badge. Plain es-MX errors for both guards.
 - `/ledger` (Movimientos): rows grouped by day (es-MX date headers). Row: label by type (Cobro · name / Comisión / Entrega al ISP), folio when present, signed amount (`+` green for charges, `−` for the rest). "Cargar más" while `nextCursor` exists; honest empty state for a new store.
 
 ## Scenarios

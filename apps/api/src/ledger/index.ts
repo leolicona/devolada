@@ -30,6 +30,21 @@ export async function commissionEarnedCents(
   return -Number(row?.total ?? 0);
 }
 
+/* A confirmed cash drop takes the handed-over cash out of the store's
+   balance. Written only when the ISP confirms (cash-drops spec D1):
+   the ledger records the agreement, not the promise. */
+export async function recordCashDropEntry(
+  db: ReturnType<typeof drizzle>,
+  input: { storeId: string; cashDropId: string; cents: number },
+): Promise<void> {
+  await db.insert(ledgerEntries).values({
+    storeId: input.storeId,
+    type: "cash_drop",
+    cents: -input.cents,
+    cashDropId: input.cashDropId,
+  });
+}
+
 /* A charge writes exactly two entries: the full total in, the store's
    commission out (the store keeps it from the cash in hand). */
 export async function recordChargeEntries(

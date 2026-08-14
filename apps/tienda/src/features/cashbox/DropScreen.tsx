@@ -13,7 +13,7 @@ import { api, ApiError } from "../../api/client";
 export function DropScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: cashbox } = useQuery<CashboxResponse, ApiError>({
+  const { data: cashbox, isPending } = useQuery<CashboxResponse, ApiError>({
     queryKey: ["cashbox"],
     queryFn: () => api<CashboxResponse>("/cashbox"),
   });
@@ -46,6 +46,19 @@ export function DropScreen() {
     },
   });
 
+  /* The field waits for the balance — every hook has run by now. Rendering
+     it earlier lets the prefill land on top of what the shopkeeper typed. */
+  if (isPending || !cashbox) {
+    return (
+      <main className="px-6 pt-8">
+        <h1 className="text-xl font-semibold">Registrar entrega</h1>
+        <p className="mt-6 text-sm text-ink-faint">Cargando tu balance…</p>
+      </main>
+    );
+  }
+
+  const balanceCents = cashbox.balanceCents;
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -54,7 +67,7 @@ export function DropScreen() {
       setError("Escribe un monto válido.");
       return;
     }
-    if (cashbox && cents > cashbox.balanceCents) {
+    if (cents > balanceCents) {
       setError("El monto no puede ser mayor a tu balance.");
       return;
     }
@@ -64,12 +77,9 @@ export function DropScreen() {
   return (
     <main className="px-6 pt-8">
       <h1 className="text-xl font-semibold">Registrar entrega</h1>
-      {cashbox && (
-        <p className="mt-2 text-sm text-ink-soft">
-          Tienes <Amount cents={cashbox.balanceCents} className="font-semibold" /> del ISP en tu
-          poder.
-        </p>
-      )}
+      <p className="mt-2 text-sm text-ink-soft">
+        Tienes <Amount cents={cashbox.balanceCents} className="font-semibold" /> del ISP en tu poder.
+      </p>
 
       <form onSubmit={submit} className="mt-6 space-y-5" noValidate>
         <Field label="Monto a entregar">

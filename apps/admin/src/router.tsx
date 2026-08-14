@@ -10,6 +10,7 @@ import { FeedScreen } from "./features/feed/FeedScreen";
 import { StoresScreen } from "./features/stores/StoresScreen";
 import { NewStoreScreen } from "./features/stores/NewStoreScreen";
 import { StoreDetailScreen } from "./features/stores/StoreDetailScreen";
+import { CashDropsScreen } from "./features/cash-drops/CashDropsScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -46,7 +47,7 @@ const storeDetailRoute = createRoute({
 const dropsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/cash-drops",
-  component: () => <SectionPlaceholder title="Entregas" next="La confirmación de entregas" />,
+  component: CashDropsScreen,
 });
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,

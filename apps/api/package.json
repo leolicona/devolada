@@ -28,6 +28,8 @@
   },
   "exports": {
     "./charges-schema": "./src/routes/charges/schema.ts",
-    "./cashbox-schema": "./src/routes/cashbox/schema.ts"
+    "./cashbox-schema": "./src/routes/cashbox/schema.ts",
+    "./cash-drops-schema": "./src/routes/cash-drops/schema.ts",
+    "./ledger-schema": "./src/routes/ledger/schema.ts"
   }
 }

@@ -36,6 +36,10 @@ export const handlers = {
     http.get("/cashbox", () => response()),
   logout: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.post("/auth/logout", () => response()),
+  recordDrop: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-drops", () => response()),
+  ledger: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/ledger", () => response()),
 };
 
 export const server = setupServer();

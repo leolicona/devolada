@@ -9,8 +9,9 @@ import { LoginPage } from "./screens/LoginPage";
 import { SearchScreen } from "./features/charge/SearchScreen";
 import { ConfirmScreen } from "./features/charge/ConfirmScreen";
 import { ResultScreen } from "./features/charge/ResultScreen";
-import { CashboxScreen, CashDropPlaceholder } from "./features/cashbox/CashboxScreen";
-import { LedgerScreen } from "./screens/placeholders";
+import { CashboxScreen } from "./features/cashbox/CashboxScreen";
+import { DropScreen } from "./features/cashbox/DropScreen";
+import { LedgerScreen } from "./features/ledger/LedgerScreen";
 
 /* Code-based route tree (spec D1): five routes, zero build magic. */
 
@@ -55,7 +56,7 @@ const cashboxRoute = createRoute({
 const cashDropRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/cashbox/drop",
-  component: CashDropPlaceholder,
+  component: DropScreen,
 });
 
 const ledgerRoute = createRoute({

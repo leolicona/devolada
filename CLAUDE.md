@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Devolada: a network of payment points in neighborhood corner stores for ISPs running WispHub. Code identifiers, docs and commits are written in **English**; **user-facing copy is es-MX** (the product ships in Mexico). The glossary in `docs/SPEC.md` maps domain terms both ways (Cobro→`charge`, Entrega→`cash_drop`, Movimiento→`ledger_entry`, …) — one word per concept, no synonyms.
 
+**Writing style: B1-level English.** This applies to commit bodies, PR descriptions, and code comments. Use simple, common words. Keep sentences short — one idea per sentence. No complex idioms or phrasal verbs ("start", not "kick off"). Technical terms stay as they are (worktree, migration, binding, tenant); explain them when the meaning is not clear.
+
 ## Methodology (not optional)
 
 The project is **spec-driven**; the rules live in `docs/SPEC.md` and CI enforces them (`scripts/spec-lint.mjs`):

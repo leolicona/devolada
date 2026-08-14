@@ -18,7 +18,7 @@ Order: risk first (WispHub spike), then visual foundation to validate the aesthe
 
 ## Store PWA (critical path)
 
-- [ ] **PWA shell**: layout with 3 bottom tabs (Cobrar · Caja · Movimientos, 64px), phone + password login, installable manifest, long session. Mobile-first with a 360px floor, content centered at `--max-width-content` on large screens. _Reuses: access form, tokens._
+- [x] **PWA shell**: layout with 3 bottom tabs (Cobrar · Caja · Movimientos, 64px), phone + password login, installable manifest, long session. Mobile-first with a 360px floor, content centered at `--max-width-content` on large screens. _Reuses: access form, tokens._
 - [ ] **Charge — search**: home with the input focused on open, search by ID/phone/name (API proxy to WispHub), results with minimum identity (name, zone, service status). States: empty, searching, no results, WispHub down (queue notice). _Depends on: API base._
 - [ ] **Charge — confirm & charge**: `/charge/$customerId` with the amount at `--font-size-amount`, breakdown, identity card and a 64px "Cobrar $X" button anchored at the bottom. States: nothing due (no button), blocking balance cap (disabled button + explanation). _Reuses: AmountBreakdown._
 - [ ] **Charge result with live status**: `/charges/$chargeId` — records the charge + ledger entries (charge and commission), shows the reconnecting → reconnected (green) / queued (amber) transition with polling, folio in mono, "Nuevo cobro" button. A charge is never rejected because of WispHub failures. _Reuses: StatusBadge. Depends on: reconnection queue (stubbable)._

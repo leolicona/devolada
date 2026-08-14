@@ -63,6 +63,9 @@ importers:
         specifier: ^19.0.0
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@devolada/api':
+        specifier: workspace:*
+        version: link:../api
       '@tailwindcss/vite':
         specifier: ^4.1.0
         version: 4.3.3(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0))
@@ -102,6 +105,9 @@ importers:
       vitest:
         specifier: ~3.2.7
         version: 3.2.7(@types/node@26.2.0)(happy-dom@17.6.3)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@26.2.0)(typescript@5.9.3))
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
 
   packages/ui:
     dependencies:

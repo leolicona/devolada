@@ -1,31 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
 import { LoginForm } from "../src/auth/LoginForm";
-import { router as appRouter } from "../src/router";
 import { fail, handlers, ok, server, storeActor } from "./msw";
+import { renderApp } from "./render";
 
 /* docs/store-pwa/shell.spec.md scenarios 1–5. */
-
-function renderApp(path: string) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createRouter({
-    routeTree: appRouter.options.routeTree,
-    history: createMemoryHistory({ initialEntries: [path] }),
-  });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-  return router;
-}
 
 describe("US-S01: store logs in with phone + password", () => {
   it("submits credentials and reports success", async () => {

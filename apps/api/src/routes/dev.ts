@@ -30,6 +30,7 @@ dev.post("/seed", async (c) => {
         emailVerified: true,
         passwordHash: hash,
         passwordSalt: salt,
+        wisphubApiKey: c.env.WISPHUB_API_KEY ?? null,
       })
       .returning();
   }

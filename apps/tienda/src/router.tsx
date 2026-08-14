@@ -6,7 +6,8 @@ import {
 } from "@tanstack/react-router";
 import { AppShell } from "./AppShell";
 import { LoginPage } from "./screens/LoginPage";
-import { ChargeHome, CashboxScreen, LedgerScreen } from "./screens/placeholders";
+import { SearchScreen, ChargeConfirmPlaceholder } from "./features/charge/SearchScreen";
+import { CashboxScreen, LedgerScreen } from "./screens/placeholders";
 
 /* Code-based route tree (spec D1): five routes, zero build magic. */
 
@@ -27,7 +28,13 @@ const appRoute = createRoute({
 const chargeRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  component: ChargeHome,
+  component: SearchScreen,
+});
+
+const chargeConfirmRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/charge/$customerId",
+  component: ChargeConfirmPlaceholder,
 });
 
 const cashboxRoute = createRoute({
@@ -44,7 +51,7 @@ const ledgerRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appRoute.addChildren([chargeRoute, cashboxRoute, ledgerRoute]),
+  appRoute.addChildren([chargeRoute, chargeConfirmRoute, cashboxRoute, ledgerRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

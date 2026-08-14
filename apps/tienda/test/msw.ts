@@ -24,6 +24,8 @@ export const handlers = {
     http.get("/auth/me", () => response()),
   login: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.post("/auth/store/login", () => response()),
+  customerSearch: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/charges/customers", () => response()),
 };
 
 export const server = setupServer();

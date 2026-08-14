@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, TriangleAlert } from "lucide-react";
 import { Amount, AmountBreakdown, Button, StatusBadge, formatMoney } from "@devolada/ui";
-import type { CustomerQuoteResponse } from "@devolada/api/charges-schema";
+import type { ChargeResponse, CustomerQuoteResponse } from "@devolada/api/charges-schema";
 import { api, ApiError } from "../../api/client";
 
 /* Confirm & charge (US-C02). One screen: who, how much, one button.
@@ -21,8 +20,26 @@ function useCustomerQuote(usuario: string) {
 export function ConfirmScreen() {
   const { customerId } = useParams({ strict: false }) as { customerId: string };
   const { data, isPending, errorCode } = useCustomerQuote(customerId);
-  /* D5: recording the charge is the next task. Pressing shows an honest note. */
-  const [pressed, setPressed] = useState(false);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  /* Charging: the server re-computes the amount; we only send the customer */
+  const charge = useMutation<ChargeResponse, ApiError>({
+    mutationFn: () =>
+      api<ChargeResponse>("/charges", {
+        method: "POST",
+        body: JSON.stringify({ usuario: customerId }),
+      }),
+    onSuccess: (created) => {
+      void navigate({ to: "/charges/$chargeId", params: { chargeId: created.id } });
+    },
+    onError: (e) => {
+      /* The quote changed under us: reload it so the screen tells the truth */
+      if (e.code === "NOTHING_DUE" || e.code === "BALANCE_CAP_EXCEEDED") {
+        void queryClient.invalidateQueries({ queryKey: ["customer-quote", customerId] });
+      }
+    },
+  });
 
   if (isPending) {
     return (
@@ -100,9 +117,9 @@ export function ConfirmScreen() {
         </p>
       )}
 
-      {pressed && (
-        <p className="mt-4 rounded-md border border-line bg-well px-4 py-3 text-sm text-ink-soft">
-          El registro del cobro llega con la siguiente tarea del plan.
+      {charge.isError && !charge.error.code.startsWith("WISPHUB") && (
+        <p className="mt-4 rounded-md border border-error-line bg-error-soft px-4 py-3 text-sm font-medium text-error" role="alert">
+          No se pudo registrar el cobro. Intenta de nuevo.
         </p>
       )}
 
@@ -110,10 +127,10 @@ export function ConfirmScreen() {
         <div className="mt-auto pt-8">
           <Button
             size="critical"
-            disabled={!chargeable}
-            onClick={() => setPressed(true)}
+            disabled={!chargeable || charge.isPending}
+            onClick={() => charge.mutate()}
           >
-            Cobrar {formatMoney(quote.totalCents)}
+            {charge.isPending ? "Cobrando…" : `Cobrar ${formatMoney(quote.totalCents)}`}
           </Button>
         </div>
       )}

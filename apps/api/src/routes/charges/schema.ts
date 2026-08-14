@@ -73,6 +73,19 @@ export const feedCharge = z.object({
   lastError: z.string().nullable(),
 });
 
+/* The receipt (receipt spec D2): the API hands over finished copy. */
+export const receiptResponse = z.object({
+  folio: z.string(),
+  customerName: z.string(),
+  totalCents: z.number().int(),
+  monthlyFeeCents: z.number().int(),
+  serviceFeeCents: z.number().int(),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
+  text: z.string(),
+  waLink: z.string(),
+  phone: z.string().nullable(),
+});
+
 export const feedResponse = z.object({
   charges: z.array(feedCharge),
   nextCursor: z.number().int().nullable(),
@@ -86,6 +99,7 @@ export const feedResponse = z.object({
   }),
 });
 
+export type ReceiptResponse = z.infer<typeof receiptResponse>;
 export type FeedCharge = z.infer<typeof feedCharge>;
 export type FeedResponse = z.infer<typeof feedResponse>;
 export type ChargeResponse = z.infer<typeof chargeResponse>;

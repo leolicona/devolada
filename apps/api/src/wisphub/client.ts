@@ -19,6 +19,8 @@ export type WispHubCustomer = {
   usuario: string;
   name: string;
   zone: string | null;
+  /* For the receipt's wa.me link (receipt spec D3). Often empty. */
+  phone: string | null;
   serviceStatus: "active" | "suspended" | "unknown";
   billingStatus: "paid" | "due" | "unknown";
   monthlyFeeCents: number;
@@ -50,6 +52,7 @@ type WispHubListItem = {
   id_servicio: number;
   usuario: string | null;
   nombre: string | null;
+  telefono: string | null;
   estado: string | null;
   estado_facturas: string | null;
   precio_plan: string | null;
@@ -101,6 +104,7 @@ export class WispHub {
       usuario: c.usuario ?? "",
       name: c.nombre ?? "",
       zone: c.zona?.nombre ?? null,
+      phone: c.telefono?.trim() ? c.telefono.trim() : null,
       serviceStatus: mapStatus(c.estado),
       billingStatus: mapBillingStatus(c.estado_facturas),
       monthlyFeeCents: c.precio_plan ? decimalToCents(c.precio_plan) : 0,

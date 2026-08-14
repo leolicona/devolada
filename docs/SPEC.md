@@ -71,7 +71,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ⏳
 - **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
-- **Phase 4 — Supporting backend**: reconnection queue ⏳ · receipts
+- **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
 - **Phase 5 — Polish**: list states, dark mode, responsive, accessibility, design review
 
 ## Spec index
@@ -86,7 +86,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [charges/charge-confirm.spec.md](charges/charge-confirm.spec.md) | charges | US-C02, US-K04 (partial) | in development |
 | [charges/charge-record.spec.md](charges/charge-record.spec.md) | charges | US-C03, US-C04 | in development |
 | [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retries) | in development |
-| charges/*.spec.md | charges | US-C05 | pending |
+| [charges/receipt.spec.md](charges/receipt.spec.md) | charges | US-C05 | in development |
 | [cashbox/cashbox.spec.md](cashbox/cashbox.spec.md) | cashbox | US-K01, US-K04 | in development |
 | [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
 | [cash-drops/confirm-cash-drop.spec.md](cash-drops/confirm-cash-drop.spec.md) | cash-drops | US-E01, US-E02 | in development |

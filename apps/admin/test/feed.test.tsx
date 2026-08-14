@@ -81,7 +81,7 @@ describe("D5: the status chips re-query the feed", () => {
     renderApp("/");
     await screen.findByRole("button", { name: /janely/i });
 
-    await userEvent.click(screen.getByRole("button", { name: "Fallidos" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Fallidos" }));
     await screen.findByRole("button", { name: /janely/i });
 
     expect(seen).toContain("failed");

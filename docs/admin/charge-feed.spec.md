@@ -18,6 +18,7 @@ The Cobros section: the ISP watches money come in, in near real time, with the r
 - **D4 — Detail is an expandable row, not a route.** Tapping a row opens the breakdown, folio and reconnection timeline in place (Stripe-style). One screen, no navigation. Revisited if the detail grows (receipts, disputes).
 - **D5 — The API ships all filters; the UI ships status only.** `storeId`, `from`, `to` work server-side today, but the store selector needs the Stores task's endpoint and date pickers add little at pilot volume. The UI grows into the API, not the reverse.
 - **D6 — Tenant isolation is tested, not assumed.** The feed filters by the actor's `ispId`; a test proves another ISP's charges never appear.
+- **D7 — Built on the shadcn catalog** (refactor 2026-08-14): status filters are `Tabs`, row expansion is `Collapsible`, loading is `Skeleton` — all token-themed per admin/shell D1. Deliberately **no `Table`**: rows are interactive (they expand) and must collapse to cards on mobile (FRONTEND law); a list of collapsible rows serves both, a table serves neither.
 
 ## Contract
 

@@ -5,11 +5,18 @@ import type { Bindings, Variables } from "../../env";
 import { charges, isps, stores } from "../../db/schema";
 import { and, count, desc, gte, lt, lte, sum } from "drizzle-orm";
 import { recordChargeEntries, storeBalanceCents } from "../../ledger";
-import { WispHub, WispHubError } from "../../wisphub/client";
+import { WispHub, WispHubError, type WispHubCustomer } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
 import { startOfBusinessDayMs } from "../../time/business-day";
 import { firstAttemptSchedule } from "../../reconnection/queue";
-import type { ChargeResponse, CustomerQuoteResponse, CustomerSearchResponse } from "./schema";
+import { receiptText, toWhatsAppPhone, whatsAppLink } from "../../receipt";
+import type {
+  ChargeResponse,
+  CustomerQuoteResponse,
+  CustomerResult,
+  CustomerSearchResponse,
+  ReceiptResponse,
+} from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -37,13 +44,26 @@ function wisphubFailure(c: Ctx, e: unknown) {
   throw e;
 }
 
+/* The wire contract is the allow-list (customer-search D2). The adapter
+   also carries the customer's phone, which the charge stores for its
+   receipt (receipt D4) but the frontend never needs — so it stops here. */
+const toCustomerResult = (customer: WispHubCustomer): CustomerResult => ({
+  wisphubId: customer.wisphubId,
+  usuario: customer.usuario,
+  name: customer.name,
+  zone: customer.zone,
+  serviceStatus: customer.serviceStatus,
+  billingStatus: customer.billingStatus,
+  monthlyFeeCents: customer.monthlyFeeCents,
+});
+
 export async function searchCustomers(c: Ctx, q: string) {
   const ctx = await storeContext(c);
   if ("error" in ctx) return ctx.error;
 
   try {
     const customers = await ctx.wisphub.searchCustomers(q);
-    const data: CustomerSearchResponse = { customers };
+    const data: CustomerSearchResponse = { customers: customers.map(toCustomerResult) };
     return c.json({ success: true, data });
   } catch (e) {
     return wisphubFailure(c, e);
@@ -68,7 +88,7 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
     const capCents = store.balanceCapCents;
 
     const data: CustomerQuoteResponse = {
-      customer,
+      customer: toCustomerResult(customer),
       quote: {
         monthlyFeeCents: customer.monthlyFeeCents,
         serviceFeeCents,
@@ -136,6 +156,7 @@ export async function recordCharge(c: Ctx, usuario: string) {
       wisphubCustomerId: String(customer.wisphubId),
       customerName: customer.name,
       customerZone: customer.zone,
+      customerPhone: customer.phone,
       monthlyFeeCents: customer.monthlyFeeCents,
       serviceFeeCents: ctx.isp.serviceFeeCents,
       totalCents,
@@ -181,6 +202,37 @@ export async function getCharge(c: Ctx, chargeId: string) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
   return c.json({ success: true, data: toChargeResponse(row) });
+}
+
+/* The receipt for one charge (receipt spec). Own charges only, like
+   getCharge: a foreign folio must not be readable. */
+export async function getReceipt(c: Ctx, chargeId: string) {
+  const actor = c.get("actor");
+  if (actor.type !== "store") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const [row] = await db.select().from(charges).where(eq(charges.id, chargeId));
+  if (!row || row.storeId !== actor.id) {
+    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  }
+
+  const [store] = await db.select().from(stores).where(eq(stores.id, actor.id));
+  /* D5: built now, so a retry that succeeded changes what the customer reads */
+  const text = receiptText(row, store.name);
+  const phone = toWhatsAppPhone(row.customerPhone);
+  const data: ReceiptResponse = {
+    folio: row.folio,
+    customerName: row.customerName,
+    totalCents: row.totalCents,
+    monthlyFeeCents: row.monthlyFeeCents,
+    serviceFeeCents: row.serviceFeeCents,
+    reconnectionStatus: row.reconnectionStatus,
+    text,
+    waLink: whatsAppLink(text, phone),
+    phone,
+  };
+  return c.json({ success: true, data });
 }
 
 /* The ISP's live feed (charge-feed spec). Tenant isolation by ispId (D6). */

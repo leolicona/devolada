@@ -37,7 +37,7 @@ Order: risk first (WispHub spike), then visual foundation to validate the aesthe
 ## Supporting backend
 
 - [x] **Reconnection queue**: retries with backoff against WispHub (Cloudflare Queues), charge status transitions (queued → reconnected / failed) observed by the PWA and the feed, idempotency per charge. _Depends on: WispHub spike._
-- [ ] **WhatsApp/SMS receipt**: template with folio, breakdown and reconnection status; sent on charge and updated on reconnection. Provider decision pending (Meta WhatsApp Business API vs Twilio) — template and trigger built provider-agnostic. _Reuses: AmountBreakdown._
+- [x] **WhatsApp/SMS receipt**: template with folio, breakdown and reconnection status; sent on charge and updated on reconnection. Provider decision pending (Meta WhatsApp Business API vs Twilio) — template and trigger built provider-agnostic. _Reuses: AmountBreakdown._
 
 ## Interactions, Responsive & Polish
 

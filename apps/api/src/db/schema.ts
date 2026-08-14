@@ -79,6 +79,9 @@ export const charges = sqliteTable(
     wisphubCustomerId: text("wisphub_customer_id").notNull(),
     customerName: text("customer_name").notNull(),
     customerZone: text("customer_zone"),
+    /* Copied at record time (receipt spec D4): reading it back from
+       WispHub would make the receipt fail exactly when WispHub is down */
+    customerPhone: text("customer_phone"),
     monthlyFeeCents: integer("monthly_fee_cents").notNull(),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     totalCents: integer("total_cents").notNull(),

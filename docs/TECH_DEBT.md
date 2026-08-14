@@ -23,8 +23,9 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 
 ## TD-003 — Messaging provider undecided
 - Status: open · Origin: brief (WhatsApp/SMS receipts, invitations)
-- The template and trigger are built provider-agnostic (Meta WhatsApp Business API vs Twilio). Until decided, invitations use a copyable link as fallback.
-- Paid by: choosing a provider, creating `integrations/<provider>.md` and implementing real sending.
+- The template and trigger are built provider-agnostic (Meta WhatsApp Business API vs Twilio). Until decided, invitations use a copyable link as fallback and customer receipts open a `wa.me` link the shopkeeper sends from their own WhatsApp (`charges/receipt.spec.md` D1).
+- Owner's decision (2026-08-14): **Meta WhatsApp Business API, as its own later feature** — verification, a verified number and template approval are weeks the pilot cannot wait for. Manual `wa.me` links carry both flows until then.
+- Paid by: creating `integrations/meta-whatsapp.md` with the verified contract and implementing real sending, with the links kept as the fallback.
 
 ## TD-007 — No CORS for the deployed store PWA
 - Status: **paid** (2026-08-14, `chore/pwa-deploy`)

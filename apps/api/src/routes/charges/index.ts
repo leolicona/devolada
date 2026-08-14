@@ -3,7 +3,14 @@ import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireSession } from "../../auth/middleware";
 import { chargeRecordRequest, customerSearchQuery, feedQuery } from "./schema";
-import { getCharge, getCustomerQuote, listChargeFeed, recordCharge, searchCustomers } from "./handler";
+import {
+  getCharge,
+  getCustomerQuote,
+  getReceipt,
+  listChargeFeed,
+  recordCharge,
+  searchCustomers,
+} from "./handler";
 
 /* Pure router: validation + wiring only (code organization law). */
 export const charges = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -24,7 +31,11 @@ charges.post("/", requireSession, zValidator("json", chargeRecordRequest), (c) =
   return recordCharge(c, c.req.valid("json").usuario);
 });
 
-/* Param route last: static /customers wins over /:chargeId */
+/* Param routes last: static /customers and /feed win over /:chargeId */
+charges.get("/:chargeId/receipt", requireSession, (c) => {
+  return getReceipt(c, c.req.param("chargeId"));
+});
+
 charges.get("/:chargeId", requireSession, (c) => {
   return getCharge(c, c.req.param("chargeId"));
 });

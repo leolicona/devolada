@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { chargeResponse, customerQuoteResponse } from "@devolada/api/charges-schema";
+import { chargeResponse, customerQuoteResponse, receiptResponse } from "@devolada/api/charges-schema";
 import { fail as failResponse, handlers, ok, server, storeActor } from "./msw";
 import { renderApp } from "./render";
 
@@ -90,5 +90,51 @@ describe("US-C04: a 409 reloads the quote so the screen tells the truth", () => 
 
     expect(await screen.findByText(/registra una entrega/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cobrar/i })).toBeDisabled();
+  });
+});
+
+/* docs/charges/receipt.spec.md scenario 5. */
+describe("US-C05: the store sends the comprobante from its own WhatsApp", () => {
+  const receipt = (over: Record<string, unknown> = {}) =>
+    receiptResponse.parse({
+      folio: "DV-A1B2C3",
+      customerName: "Janely",
+      totalCents: 51400,
+      monthlyFeeCents: 49900,
+      serviceFeeCents: 1500,
+      reconnectionStatus: "reconnected",
+      text: "Comprobante de pago Devolada\n\nFolio: DV-A1B2C3",
+      waLink: "https://wa.me/525512345678?text=Comprobante",
+      phone: "525512345678",
+      ...over,
+    });
+
+  it("offers to send and to copy, next to the folio", async () => {
+    server.use(
+      handlers.session(() => ok(storeActor)),
+      handlers.chargeStatus(() => ok(charge("reconnected"))),
+      handlers.receipt(() => ok(receipt())),
+    );
+    renderApp("/charges/ch-1");
+
+    const send = await screen.findByRole("link", { name: /enviar comprobante/i });
+    expect(send).toHaveAttribute("href", "https://wa.me/525512345678?text=Comprobante");
+    expect(screen.getByRole("button", { name: /copiar comprobante/i })).toBeInTheDocument();
+    /* The folio stays readable even if nothing is ever sent */
+    expect(screen.getByText(/DV-A1B2C3/)).toBeInTheDocument();
+  });
+
+  it("still offers WhatsApp when the customer has no phone (D3)", async () => {
+    server.use(
+      handlers.session(() => ok(storeActor)),
+      handlers.chargeStatus(() => ok(charge("queued"))),
+      handlers.receipt(() => ok(receipt({ phone: null, waLink: "https://wa.me/?text=Comprobante" }))),
+    );
+    renderApp("/charges/ch-1");
+
+    /* No apology, no disabled button: WhatsApp opens its contact picker */
+    const send = await screen.findByRole("link", { name: /enviar comprobante/i });
+    expect(send).toHaveAttribute("href", "https://wa.me/?text=Comprobante");
+    expect(screen.queryByText(/sin teléfono/i)).not.toBeInTheDocument();
   });
 });

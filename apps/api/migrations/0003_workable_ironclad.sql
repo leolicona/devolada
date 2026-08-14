@@ -1,0 +1,1 @@
+ALTER TABLE `charges` ADD `customer_phone` text;

@@ -32,6 +32,8 @@ export const handlers = {
     http.post("/charges", () => response()),
   chargeStatus: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/:chargeId", () => response()),
+  receipt: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/charges/:chargeId/receipt", () => response()),
   cashbox: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/cashbox", () => response()),
   logout: (response: () => ReturnType<typeof ok | typeof fail>) =>

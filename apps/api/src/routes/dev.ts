@@ -21,6 +21,14 @@ dev.post("/seed", async (c) => {
   const { hash, salt } = await new AgnosticAuth(c.env).hash(DEMO.password);
 
   let [isp] = await db.select().from(isps).where(eq(isps.email, DEMO.ispEmail));
+  /* Idempotent, but the WispHub key must refresh: the demo ISP may have
+     been seeded before the key existed in the environment */
+  if (isp && !isp.wisphubApiKey && c.env.WISPHUB_API_KEY) {
+    await db
+      .update(isps)
+      .set({ wisphubApiKey: c.env.WISPHUB_API_KEY })
+      .where(eq(isps.id, isp.id));
+  }
   if (!isp) {
     [isp] = await db
       .insert(isps)

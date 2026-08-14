@@ -26,6 +26,7 @@ async function storeContext(c: Ctx) {
 
 function wisphubFailure(c: Ctx, e: unknown) {
   if (e instanceof WispHubError) {
+    console.error("wisphub failure:", e.code, e.message);
     /* D3: a rejected key surfaces as a setup problem, like a missing key */
     const code = e.code === "WISPHUB_AUTH_FAILED" ? "WISPHUB_NOT_CONFIGURED" : e.code;
     return c.json({ success: false, error: { code } }, 503);

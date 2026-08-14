@@ -72,8 +72,8 @@ export class WispHub {
           ...(init?.body ? { "Content-Type": "application/json" } : {}),
         },
       });
-    } catch {
-      throw new WispHubError("WISPHUB_UNAVAILABLE", "network error");
+    } catch (e) {
+      throw new WispHubError("WISPHUB_UNAVAILABLE", `network error: ${String(e)}`);
     }
     /* 401/403 means WispHub rejected the key: a setup problem, not an outage.
        Note: WispHub sends the same generic 403 for "no permission" (spike). */

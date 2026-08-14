@@ -54,4 +54,4 @@ Folio format: `DV-` + 6 uppercase base36 chars, unique index enforced.
 
 - [x] Scenarios 1–7 automated in the API layer (`test/charge-record.test.ts`, 7 tests)
 - [x] Scenarios 8–9 automated with Testing Library + MSW (`test/charge-result.test.tsx`, 4 tests)
-- [ ] Manual check against the real WispHub demo tenant (blocked: rotated API key)
+- [x] Manual check: Done 2026-08-14 against the deployed dev API and the real WispHub demo tenant

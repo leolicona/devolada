@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Bindings, Variables } from "./env";
 import { auth } from "./routes/auth";
+import { cashbox } from "./routes/cashbox";
 import { charges } from "./routes/charges";
 import { dev } from "./routes/dev";
 
@@ -29,6 +30,7 @@ app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 
 app.route("/auth", auth);
 app.route("/charges", charges);
+app.route("/cashbox", cashbox);
 
 /* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {

@@ -8,15 +8,6 @@ function Pending({ feature }: { feature: string }) {
   );
 }
 
-export function CashboxScreen() {
-  return (
-    <main className="px-6 pt-8">
-      <h1 className="text-xl font-semibold">Caja</h1>
-      <Pending feature="El balance de tu caja" />
-    </main>
-  );
-}
-
 export function LedgerScreen() {
   return (
     <main className="px-6 pt-8">

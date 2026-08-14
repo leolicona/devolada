@@ -32,6 +32,10 @@ export const handlers = {
     http.post("/charges", () => response()),
   chargeStatus: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/:chargeId", () => response()),
+  cashbox: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/cashbox", () => response()),
+  logout: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/auth/logout", () => response()),
 };
 
 export const server = setupServer();

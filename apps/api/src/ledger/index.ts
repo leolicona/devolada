@@ -1,4 +1,4 @@
-import { eq, sum } from "drizzle-orm";
+import { and, eq, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { ledgerEntries } from "../db/schema";
 
@@ -15,6 +15,19 @@ export async function storeBalanceCents(
     .from(ledgerEntries)
     .where(eq(ledgerEntries.storeId, storeId));
   return Number(row?.total ?? 0);
+}
+
+/* Accumulated commission: the store's earnings so far, as a positive
+   number (commission entries are negative in the ledger). */
+export async function commissionEarnedCents(
+  db: ReturnType<typeof drizzle>,
+  storeId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({ total: sum(ledgerEntries.cents) })
+    .from(ledgerEntries)
+    .where(and(eq(ledgerEntries.storeId, storeId), eq(ledgerEntries.type, "commission")));
+  return -Number(row?.total ?? 0);
 }
 
 /* A charge writes exactly two entries: the full total in, the store's

@@ -27,6 +27,7 @@
     "wrangler": "^4.0.0"
   },
   "exports": {
-    "./charges-schema": "./src/routes/charges/schema.ts"
+    "./charges-schema": "./src/routes/charges/schema.ts",
+    "./cashbox-schema": "./src/routes/cashbox/schema.ts"
   }
 }

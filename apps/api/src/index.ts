@@ -7,6 +7,7 @@ import { cashDropsRoute } from "./routes/cash-drops";
 import { ledgerRoute } from "./routes/ledger";
 import { storesRoute } from "./routes/stores";
 import { settingsRoute } from "./routes/settings";
+import { sweepReconnections } from "./reconnection/queue";
 import { charges } from "./routes/charges";
 import { dev } from "./routes/dev";
 
@@ -52,4 +53,19 @@ app.onError((err, c) => {
   return c.json({ success: false, error: { code: "INTERNAL_SERVER_ERROR" } }, 500);
 });
 
-export default app;
+/* The Hono app itself, for tests and for the worker below */
+export { app };
+
+/* The worker is the API plus the reconnection queue's cron sweep
+   (reconnection-queue spec D2). `waitUntil` keeps the sweep alive past
+   the handler's return. */
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      sweepReconnections(env).then((report) => {
+        if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
+      }),
+    );
+  },
+};

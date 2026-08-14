@@ -23,6 +23,8 @@ export type Bindings = {
   /* Dev only: the seed copies this key into the demo ISP row.
      In real use, every ISP stores its own key in isps.wisphub_api_key. */
   WISPHUB_API_KEY?: string;
+  /* Points the adapter at a sandbox; unset means the real API */
+  WISPHUB_BASE_URL?: string;
 };
 
 export type Actor =

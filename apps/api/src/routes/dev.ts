@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { isps, stores } from "../db/schema";
 import { AgnosticAuth } from "../auth/agnostic";
+import { queuedCount, sweepReconnections } from "../reconnection/queue";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
    Seeds a demo ISP and store to verify login with curl. */
@@ -15,6 +16,13 @@ const DEMO = {
   storePhone: "5512345678",
   password: "devolada123",
 };
+
+/* D7: one sweep on demand — waiting a minute for cron while standing
+   next to a pilot ISP's router is a bad way to spend a visit. */
+dev.post("/reconnect-sweep", async (c) => {
+  const report = await sweepReconnections(c.env);
+  return c.json({ success: true, data: { ...report, queued: await queuedCount(c.env) } });
+});
 
 dev.post("/seed", async (c) => {
   const db = drizzle(c.env.DB);

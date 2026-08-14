@@ -89,11 +89,19 @@ export const charges = sqliteTable(
       .default("queued"),
     reconnectionAttempts: integer("reconnection_attempts").notNull().default(0),
     reconnectedAt: integer("reconnected_at", { mode: "timestamp_ms" }),
+    /* Reconnection queue (reconnection-queue spec). The charge row is the
+       queue: `nextAttemptAt` is when it may be touched again (null once
+       terminal), and the invoice id makes a retry pay the same invoice
+       instead of creating a second one (D1, pays TD-009). */
+    wisphubInvoiceId: integer("wisphub_invoice_id"),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
     createdAt: createdAt(),
   },
   (t) => [
     index("charges_store_idx").on(t.storeId),
     index("charges_isp_created_idx").on(t.ispId, t.createdAt),
+    index("charges_due_idx").on(t.reconnectionStatus, t.nextAttemptAt),
   ],
 );
 

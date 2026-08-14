@@ -3,9 +3,8 @@
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
 ## TD-009 — The reconnection creates a new invoice even when one is pending
-- Status: open · Origin: E2E check of charges/charge-record.spec.md
-- `attemptReconnection` always creates a fresh invoice. With a pending invoice already there, WispHub ends up with duplicates (observed: the old one flips to "Se Transfirio"). With retries, every attempt would add one more.
-- Paid by: **must be fixed in the reconnection-queue task, before retries ship** — look up a pending invoice for the customer first, create only if none exists.
+- Status: **paid** (2026-08-14, `feat/reconnection-queue`) · Origin: E2E check of charges/charge-record.spec.md
+- The adapter now asks for pending invoices (`estado=1`, explicit 45-day window) and matches `cliente.usuario` in our code, because **the list endpoint has no customer filter** — verified against the live API before writing it. It creates one only when there is none, and the id is stored on the charge so a retry pays the same invoice even if the list lies about an empty month. Covered by `test/reconnection-queue.test.ts` scenario 1, which registers no create-invoice interceptor: creating one fails the test.
 
 ## TD-008 — Invoice id parsed from a message string
 - Status: open · Origin: charges/charge-record.spec.md (D5)

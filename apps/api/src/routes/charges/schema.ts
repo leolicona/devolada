@@ -68,6 +68,9 @@ export const feedCharge = z.object({
   createdAt: z.number().int(),
   reconnectedAt: z.number().int().nullable(),
   attempts: z.number().int(),
+  /* Why the last attempt did not work, for the ISP's detail view
+     (reconnection-queue spec UI contract) */
+  lastError: z.string().nullable(),
 });
 
 export const feedResponse = z.object({

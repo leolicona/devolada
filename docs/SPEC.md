@@ -91,7 +91,8 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | cash-drops/*.spec.md | cash-drops | US-E01, US-E02 | pending |
 | [admin/shell.spec.md](admin/shell.spec.md) | admin | US-S04, US-S06 (UI) | in development |
 | [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
-| admin/*.spec.md | admin | US-A02…A04 | pending |
+| [admin/stores.spec.md](admin/stores.spec.md) | admin | US-A02, US-A03 | in development |
+| admin/*.spec.md | admin | US-A04 | pending |
 
 ## Cross-cutting layers
 

@@ -20,6 +20,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Status: open · Origin: tokens phase
 - `.design/devolada/DESIGN_TOKENS.css` (document) and `packages/ui/src/styles/tokens.css` (live) are synced by hand. The live file wins.
 - Paid by: a sync script, or declaring the `.design` copy a historical snapshot and no longer maintaining it.
+- 2026-08-14: `contrast-lint.mjs` reads the **live** file only, so the mirror can no longer cause a false pass. The mirror was re-synced by hand with the three values this pass changed (`--color-status-success`, `--color-status-warning`, new `--color-border-input`).
 
 ## TD-003 — Messaging provider undecided
 - Status: open · Origin: brief (WhatsApp/SMS receipts, invitations)

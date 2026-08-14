@@ -78,7 +78,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
-- **Phase 5 — Polish**: list states ⏳ (US-P01) · dark mode (US-P02) · responsive (US-P03) · accessibility (US-P04) · design review
+- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ⏳ (US-P02) · responsive (US-P03) · accessibility (US-P04) · design review
 
 ## Spec index
 
@@ -101,6 +101,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [admin/stores.spec.md](admin/stores.spec.md) | admin | US-A02, US-A03 | in development |
 | [admin/settings.spec.md](admin/settings.spec.md) | admin | US-A04 | in development |
 | [polish/list-states.spec.md](polish/list-states.spec.md) | polish | US-P01 | in development |
+| [polish/dark-and-contrast.spec.md](polish/dark-and-contrast.spec.md) | polish | US-P02, US-P04 (contrast) | in development |
 
 ## Cross-cutting layers
 

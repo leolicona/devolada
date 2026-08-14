@@ -21,6 +21,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Spec-driven enforcement (golden rule)
         run: node scripts/spec-lint.mjs
+      - name: Contrast and token law (docs/polish/dark-and-contrast.spec.md)
+        run: node scripts/contrast-lint.mjs
       - name: Typecheck
         run: pnpm -r --if-present typecheck
       - name: Tests

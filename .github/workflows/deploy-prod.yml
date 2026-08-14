@@ -21,6 +21,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node scripts/spec-lint.mjs
+      - run: node scripts/contrast-lint.mjs
       - run: pnpm -r --if-present typecheck
       - run: pnpm -r --if-present test
       - run: pnpm -r --if-present build

@@ -42,6 +42,7 @@
 
   --color-line: var(--color-border-primary);
   --color-line-soft: var(--color-border-secondary);
+  --color-line-input: var(--color-border-input);
   --color-focus: var(--color-border-focus);
 
   /* Action: bg-accent, hover:bg-accent-hover, bg-accent-soft */

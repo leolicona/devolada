@@ -36,6 +36,6 @@ Cross-cutting UI rules. Each `.spec.md` additionally includes its own **UI Contr
 ## Both surfaces
 
 - Light + dark via tokens (`[data-theme]` + `prefers-color-scheme`); dark is recalibrated warm charcoal, never inversion.
-- Minimum AA contrast; AAA target on amounts and statuses. Color never travels alone: always icon + text.
+- Minimum AA contrast; AAA target on amounts and statuses. Color never travels alone: always icon + text. **Enforced**: `scripts/contrast-lint.mjs` measures every rendered pair in both themes on each CI run, and fails on a hardcoded color anywhere outside `tokens.css` (`docs/polish/dark-and-contrast.spec.md`).
 - `aria-live` on feeds and status transitions; keyboard + visible focus in the admin; `prefers-reduced-motion` respected (already in the base stylesheet).
 - No "session expired" screen during normal operation (US-S02); only a failed refresh returns to login.

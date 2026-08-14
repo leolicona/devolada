@@ -17,7 +17,7 @@
   --destructive: var(--color-status-error);
   --destructive-foreground: var(--color-text-inverse);
   --border: var(--color-border-primary);
-  --input: var(--color-border-primary);
+  --input: var(--color-border-input);
   --ring: var(--color-border-focus);
   --radius: var(--border-radius-md);
 }

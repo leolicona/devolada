@@ -28,6 +28,12 @@ export const isps = sqliteTable("isps", {
      The platform's share is the difference. */
   serviceFeeCents: integer("service_fee_cents").notNull().default(1500),
   storeCommissionCents: integer("store_commission_cents").notNull().default(900),
+  /* Display settings (settings spec D5, D6). Mexico spans three zones, so
+     the ISP — not the browser — decides where its business day starts. */
+  timezone: text("timezone").notNull().default("America/Mexico_City"),
+  timeFormat: text("time_format", { enum: ["12h", "24h"] })
+    .notNull()
+    .default("12h"),
   status: text("status", { enum: ["active", "suspended"] })
     .notNull()
     .default("active"),

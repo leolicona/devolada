@@ -13,7 +13,7 @@ The Cobros section: the ISP watches money come in, in near real time, with the r
 ## Decisions
 
 - **D1 — "Live" is polling, not sockets.** The feed refetches every 5 seconds. A WebSocket adds infrastructure for a latency nobody asked for at pilot scale. Revisited if an ISP runs hundreds of stores.
-- **D2 — The browser owns "today".** The client computes the start-of-day in its own timezone and sends it as `todayStartMs`; the server never guesses timezones. A Mexican ISP's evening charges must count as "today" in Mexico, not in UTC.
+- **D2 — ~~The browser owns "today"~~. Superseded 2026-08-14 by `admin/settings.spec.md` D5**: the server computes the start of the business day from the ISP's `timezone` setting and the `todayStartMs` parameter is gone. The browser was only ever the best available source while no setting existed; it made the same charge count on different days depending on where the laptop was.
 - **D3 — Failed charges get their own strip on top.** A failed reconnection demands action; buried in page three it is invisible. The strip queries `status=failed` separately, so it finds failures beyond the first page.
 - **D4 — Detail is an expandable row, not a route.** Tapping a row opens the breakdown, folio and reconnection timeline in place (Stripe-style). One screen, no navigation. Revisited if the detail grows (receipts, disputes).
 - **D5 — The API ships all filters; the UI ships status only.** `storeId`, `from`, `to` work server-side today, but the store selector needs the Stores task's endpoint and date pickers add little at pilot volume. The UI grows into the API, not the reverse.
@@ -24,14 +24,14 @@ The Cobros section: the ISP watches money come in, in near real time, with the r
 
 `GET /charges/feed` (session cookie, **ISP only**)
 
-Query: `cursor` (ms) · `status` (`queued|reconnected|failed`) · `storeId` · `from`/`to` (ms) · `todayStartMs` (ms)
+Query: `cursor` (ms) · `status` (`queued|reconnected|failed`) · `storeId` · `from`/`to` (ms)
 
 ```
 { charges: [ { id, folio, reconnectionStatus, totalCents, monthlyFeeCents,
                serviceFeeCents, customerName, storeName, createdAt,
                reconnectedAt, attempts } ],
   nextCursor: number | null,
-  today: { count, totalCents } | null }   // present when todayStartMs was sent
+  today: { count, totalCents, startedAtMs } }  // the day starts in the ISP's timezone (settings D5)
 ```
 
 Newest first, 20 per page. 401/403 as usual; a store session gets 403.

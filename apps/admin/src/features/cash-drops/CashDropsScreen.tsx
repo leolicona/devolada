@@ -19,23 +19,23 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
+import { formatDateTime } from "@/lib/datetime";
+import { useDisplaySettings } from "../auth/session";
 import { pendingDropsQuery } from "./usePendingDrops";
 
 /* Entregas (US-E01, US-E02). Confirming here is what finally writes the
    cash_drop ledger entry — so it takes two taps (D6), and the second one
    is a shadcn AlertDialog. Disputing writes a note and no entry. */
 
-const dateFormat = new Intl.DateTimeFormat("es-MX", {
-  day: "numeric",
-  month: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-const when = (ms: number) => dateFormat.format(new Date(ms));
+/* Settings D6: the ISP's zone and format decide how a time reads */
+function useWhen() {
+  const { timeFormat, timezone } = useDisplaySettings();
+  return (ms: number) => formatDateTime(ms, timeFormat, timezone);
+}
 
 function PendingCard({ drop }: { drop: AdminCashDrop }) {
   const queryClient = useQueryClient();
+  const when = useWhen();
   const [note, setNote] = useState("");
   const [noteError, setNoteError] = useState(false);
 
@@ -166,6 +166,7 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
 }
 
 function HistoryRow({ drop }: { drop: AdminCashDrop }) {
+  const when = useWhen();
   return (
     <li className="flex flex-wrap items-center gap-4 p-4">
       <span className="min-w-0 flex-1">

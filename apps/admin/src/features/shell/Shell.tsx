@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownToLine,
   Banknote,
+  KeyRound,
   LogOut,
   MailWarning,
   Settings,
@@ -149,23 +150,24 @@ export function Shell() {
             </Button>
           </Alert>
         )}
+        {/* Settings D8: a banner, not a wall — the admin still works
+            without a key, but nothing reconnects until it is there */}
+        {!actor.wisphubConfigured && (
+          <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
+            <span className="flex items-center gap-2">
+              <KeyRound className="size-4 shrink-0" aria-hidden />
+              Falta tu llave de WispHub. Sin ella no podemos reconectar a los clientes.
+            </span>
+            <Link to="/settings">
+              <Button variant="outline">Configurar</Button>
+            </Link>
+          </Alert>
+        )}
         <Outlet />
       </div>
 
       {/* Bottom bar (mobile) */}
       <SectionLinks variant="bottom" />
     </div>
-  );
-}
-
-/* Honest placeholders: each section is its own upcoming task. */
-export function SectionPlaceholder({ title, next }: { title: string; next: string }) {
-  return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-        {next} llega con la siguiente tarea del plan.
-      </p>
-    </main>
   );
 }

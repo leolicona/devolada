@@ -53,7 +53,7 @@ Quality gate; deploys nothing to stable environments.
 2. Fast-layer tests (`TESTING.md`): API in workerd, components, network with MSW.
 3. Build of what's affected.
 4. **Spec-driven enforcement** (pays TD-004): every `*.spec.md` is in SPEC.md's index; tests cite `US-` IDs.
-5. **Preview deploy**: a unique URL per PR (Workers versions / preview) pointing at `api-dev` — **the client reviews in the PR, before the merge**. This is the direct-feedback mechanism, not a courtesy.
+5. **Preview deploy**: a unique URL per PR (Workers versions / preview) pointing at `api-dev` — **the client reviews in the PR, before the merge**. This is the direct-feedback mechanism, not a courtesy. The job applies pending D1 migrations to `devolada-db-dev` first (added 2026-08-14): a preview binds the dev database, so a PR that adds a migration would otherwise preview against a schema it does not have.
 
 ### 2. `deploy-dev.yml` — push to `main`
 
@@ -88,4 +88,4 @@ Quality gate; deploys nothing to stable environments.
 - **D1 — Trunk-based over git-flow.** Discarded alternative: `develop` + `main` (double merging with no benefit for a single engineer; the extra latency fights the client-feedback loop).
 - **D2 — Per-PR preview as the client feedback channel.** Discarded alternative: client reviews dev only (one step too late, on already-merged work).
 - **D3 — E2E on deploy-dev, not on every PR.** Discarded alternative: E2E in PR (minutes of waiting per iteration; the fast layers already cover the gate).
-- **D4 — Previews share `devolada-db-dev`.** D1 has no data branching; a DB per PR is over-engineering at this scale. Accepted risk: a PR can dirty dev data.
+- **D4 — Previews share `devolada-db-dev`.** D1 has no data branching; a DB per PR is over-engineering at this scale. Accepted risk: a PR can dirty dev data — and, since 2026-08-14, its migrations land in dev before the merge. Both are additive by our own rule (a migration adds; it never drops a column another PR still reads), so dev keeps working for every open branch.

@@ -1,0 +1,177 @@
+import { beforeAll, afterEach, describe, expect, it } from "vitest";
+import { env, fetchMock } from "cloudflare:test";
+import { drizzle } from "drizzle-orm/d1";
+import { isps } from "../src/db/schema";
+import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
+
+/* docs/admin/settings.spec.md scenarios 1–3. */
+
+const WISPHUB_ORIGIN = "https://api.wisphub.net";
+
+beforeAll(() => {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
+});
+afterEach(() => fetchMock.assertNoPendingInterceptors());
+
+const asIsp = { headers: { Cookie: sessionCookieHeader("demo@devolada.app") } };
+
+const send = (path: string, method: string, body?: unknown): [string, RequestInit] => [
+  path,
+  {
+    method,
+    headers: { "Content-Type": "application/json", ...asIsp.headers },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  },
+];
+
+/* One customer query is the test WispHub answers (D2) */
+function mockWispHub(reply: { status: number; body?: unknown }) {
+  fetchMock
+    .get(WISPHUB_ORIGIN)
+    .intercept({ method: "GET", path: /\/api\/clientes\/.*/ })
+    .reply(reply.status, JSON.stringify(reply.body ?? {}), {
+      headers: { "Content-Type": "application/json" },
+    });
+}
+
+const oneCustomer = {
+  results: [
+    {
+      id_servicio: 1,
+      usuario: "greyes@wifiplus",
+      nombre: "G. Reyes",
+      estado: "Activo",
+      estado_facturas: "Pagadas",
+      precio_plan: "399.00",
+      zona: { nombre: "Centro" },
+    },
+  ],
+};
+
+describe("US-A04: the ISP reads its settings without reading its key", () => {
+  it("returns the split and only the key's tail", async () => {
+    await seedIsp({ wisphubApiKey: "01q9K2Rf.SECRETKEY1234" });
+
+    const res = await (await app()).request("/settings", asIsp, env);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+
+    expect(data).toMatchObject({
+      serviceFeeCents: 1500,
+      storeCommissionCents: 900,
+      /* D4: derived, never stored */
+      platformShareCents: 600,
+      timezone: "America/Mexico_City",
+      timeFormat: "12h",
+      wisphub: { configured: true, keyTail: "1234" },
+    });
+    /* D1: the key itself never travels back */
+    expect(JSON.stringify(data)).not.toContain("SECRETKEY");
+  });
+
+  it("a store session gets 403", async () => {
+    const isp = await seedIsp();
+    await seedStore(isp.id);
+    const res = await (await app()).request(
+      "/settings",
+      { headers: { Cookie: sessionCookieHeader("5512345678") } },
+      env,
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("US-A04: saving the split, the zone and the format", () => {
+  it("saves the fields and refuses a commission above the fee", async () => {
+    await seedIsp();
+    const client = await app();
+
+    const ok = await client.request(
+      ...send("/settings", "PATCH", {
+        serviceFeeCents: 2000,
+        storeCommissionCents: 1200,
+        timezone: "America/Hermosillo",
+        timeFormat: "24h",
+      }),
+      env,
+    );
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).data).toMatchObject({
+      serviceFeeCents: 2000,
+      storeCommissionCents: 1200,
+      platformShareCents: 800,
+      timezone: "America/Hermosillo",
+      timeFormat: "24h",
+    });
+
+    /* D4: the store cannot earn more than the customer pays */
+    const tooMuch = await client.request(
+      ...send("/settings", "PATCH", { storeCommissionCents: 2500 }),
+      env,
+    );
+    expect(tooMuch.status).toBe(400);
+    expect((await tooMuch.json()).error.code).toBe("COMMISSION_EXCEEDS_FEE");
+
+    /* An unknown zone would silently move a business day */
+    const badZone = await client.request(
+      ...send("/settings", "PATCH", { timezone: "Europe/Madrid" }),
+      env,
+    );
+    expect(badZone.status).toBe(400);
+  });
+
+  it("re-tests a key on save and reports the result without blocking it (D3)", async () => {
+    await seedIsp();
+    mockWispHub({ status: 403 });
+
+    const res = await (await app()).request(
+      ...send("/settings", "PATCH", { wisphubApiKey: "bad-key-000000" }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    /* Saved anyway — the ISP is told, not stopped */
+    expect(data.wisphub).toEqual({ configured: true, keyTail: "0000" });
+    expect(data.wisphubTest).toEqual({ ok: false, code: "WISPHUB_AUTH_FAILED" });
+
+    const db = drizzle(env.DB);
+    const [isp] = await db.select().from(isps);
+    expect(isp.wisphubApiKey).toBe("bad-key-000000");
+  });
+});
+
+describe("US-A04: the connection test speaks for WispHub", () => {
+  it("tests a typed key without saving it, and keeps the two failures apart", async () => {
+    await seedIsp();
+    const client = await app();
+
+    mockWispHub({ status: 200, body: oneCustomer });
+    const good = await client.request(
+      ...send("/settings/wisphub/test", "POST", { apiKey: "candidate-key-1" }),
+      env,
+    );
+    expect((await good.json()).data).toEqual({
+      ok: true,
+      code: null,
+      sampleCustomerCount: 1,
+    });
+
+    /* D2: testing is not saving */
+    const db = drizzle(env.DB);
+    const [isp] = await db.select().from(isps);
+    expect(isp.wisphubApiKey).toBeNull();
+
+    /* An outage is not a bad key (D3) */
+    mockWispHub({ status: 500 });
+    const down = await client.request(
+      ...send("/settings/wisphub/test", "POST", { apiKey: "candidate-key-1" }),
+      env,
+    );
+    expect((await down.json()).data).toMatchObject({ ok: false, code: "WISPHUB_UNAVAILABLE" });
+
+    /* Nothing stored, nothing typed */
+    const none = await client.request(...send("/settings/wisphub/test", "POST", {}), env);
+    expect((await none.json()).data).toMatchObject({ ok: false, code: "WISPHUB_NOT_CONFIGURED" });
+  });
+});

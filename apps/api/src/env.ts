@@ -41,6 +41,11 @@ export type Actor =
       email: string;
       emailVerified: boolean;
       status: "active" | "suspended";
+      /* Settings D7: they ride the session, so no screen needs a second
+         request before it can render a time or a banner */
+      timezone: string;
+      timeFormat: "12h" | "24h";
+      wisphubConfigured: boolean;
     };
 
 export type Variables = {

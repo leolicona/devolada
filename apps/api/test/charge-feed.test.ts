@@ -57,22 +57,66 @@ describe("US-A01: the ISP sees its charges newest first", () => {
     expect(data.nextCursor).toBeNull();
   });
 
-  it("filters by status and computes today totals from the client boundary", async () => {
-    const { base } = await seedFeed();
+  it("filters by status", async () => {
+    await seedFeed();
 
     const failed = await (await app()).request("/charges/feed?status=failed", asIsp, env);
     const failedData = (await failed.json()).data;
     expect(failedData.charges).toHaveLength(1);
     expect(failedData.charges[0].reconnectionStatus).toBe("failed");
+  });
+});
 
-    /* today boundary excludes the first two rows */
-    const boundary = base + 2500;
-    const res = await (await app()).request(
-      `/charges/feed?todayStartMs=${boundary}`,
-      asIsp,
-      env,
-    );
-    expect((await res.json()).data.today).toEqual({ count: 2, totalCents: 82800 });
+/* docs/admin/settings.spec.md scenario 4. */
+describe("US-A04: today's totals follow the ISP timezone", () => {
+  /* The server reports the boundary it used, so this test never has to
+     guess it — it holds at any hour, in any runner timezone. */
+  const todayOf = async (client: Awaited<ReturnType<typeof app>>) =>
+    (await (await client.request("/charges/feed", asIsp, env)).json()).data.today;
+
+  it("reports the boundary it counted from, and it moves with the zone", async () => {
+    const isp = await seedIsp({ timezone: "America/Mexico_City" });
+    const store = await seedStore(isp.id);
+    const db = drizzle(env.DB);
+    const client = await app();
+
+    const centre = await todayOf(client);
+    expect(centre).toEqual({ count: 0, totalCents: 0, startedAtMs: expect.any(Number) });
+
+    /* One charge on each side of the boundary the server just reported */
+    const charge = (folio: string, at: number) => ({
+      ispId: isp.id,
+      storeId: store.id,
+      folio,
+      wisphubCustomerId: "1",
+      customerName: "Cliente TZ",
+      monthlyFeeCents: 39900,
+      serviceFeeCents: 1500,
+      totalCents: 41400,
+      createdAt: new Date(at),
+    });
+    await db.insert(charges).values(charge("DV-TZ01", centre.startedAtMs - 1));
+    await db.insert(charges).values(charge("DV-TZ02", centre.startedAtMs + 1));
+
+    /* Counting follows the reported boundary exactly: the charge one ms
+       before it is yesterday's, the one after it is today's. */
+    const countedFrom = (boundary: number) =>
+      [centre.startedAtMs - 1, centre.startedAtMs + 1].filter((at) => at >= boundary).length;
+
+    expect(await todayOf(client)).toMatchObject({
+      count: countedFrom(centre.startedAtMs),
+      totalCents: 41400,
+    });
+
+    /* Same data, same instant: the ISP's own zone decides (D5). Baja
+       California's day never starts at the same moment as the centre's,
+       so the window moves and the count moves with it. */
+    const { isps } = await import("../src/db/schema");
+    await db.update(isps).set({ timezone: "America/Tijuana" });
+
+    const baja = await todayOf(client);
+    expect(baja.startedAtMs).not.toBe(centre.startedAtMs);
+    expect(baja.count).toBe(countedFrom(baja.startedAtMs));
   });
 });
 

@@ -1,5 +1,23 @@
+import { useEffect, useState } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
-import { ListOrdered, Search, Wallet } from "lucide-react";
+import { ListOrdered, Search, Wallet, WifiOff } from "lucide-react";
+
+/* Mobile data drops mid-shift; the shopkeeper must know why nothing
+   loads (store-invitation spec D4). */
+function useOnline(): boolean {
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  return online;
+}
 
 const tabs = [
   { to: "/", label: "Cobrar", icon: Search },
@@ -10,8 +28,18 @@ const tabs = [
 /* 3 fixed bottom tabs at --size-tabbar (64px), thumb zone. The active tab
    is marked by weight + accent bar, never color alone. */
 export function TabLayout() {
+  const online = useOnline();
   return (
     <div className="mx-auto flex min-h-dvh max-w-[40rem] flex-col bg-surface">
+      {!online && (
+        <p
+          role="status"
+          className="flex items-center justify-center gap-2 border-b border-warning-line bg-warning-soft px-4 py-2 text-sm font-medium text-warning"
+        >
+          <WifiOff className="size-4 shrink-0" aria-hidden />
+          Sin conexión. Revisa tu internet.
+        </p>
+      )}
       <div className="flex-1 pb-20">
         <Outlet />
       </div>

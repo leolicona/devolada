@@ -40,6 +40,8 @@ export const handlers = {
     http.post("/cash-drops", () => response()),
   ledger: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/ledger", () => response()),
+  acceptInvitation: (response: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/auth/store/accept-invitation", () => response()),
 };
 
 export const server = setupServer();

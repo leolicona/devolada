@@ -82,7 +82,8 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [auth/isp-signup.spec.md](auth/isp-signup.spec.md) | auth | US-S04, US-S06 | in development |
 | auth/store-invitation.spec.md | auth | US-S05 | pending |
 | [store-pwa/shell.spec.md](store-pwa/shell.spec.md) | store-pwa | US-S01, US-S02, US-S03 (UI) | in development |
-| charges/*.spec.md | charges | US-C01…C05 | pending |
+| [charges/customer-search.spec.md](charges/customer-search.spec.md) | charges | US-C01 | in development |
+| charges/*.spec.md | charges | US-C02…C05 | pending |
 | cashbox/*.spec.md | cashbox | US-K01…K04 | pending |
 | cash-drops/*.spec.md | cash-drops | US-E01, US-E02 | pending |
 | admin/*.spec.md | admin | US-A01…A04 | pending |

@@ -13,6 +13,9 @@ export type Bindings = {
   ADMIN_BASE_URL: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /* Dev only: the seed copies this key into the demo ISP row.
+     In real use, every ISP stores its own key in isps.wisphub_api_key. */
+  WISPHUB_API_KEY?: string;
 };
 
 export type Actor =

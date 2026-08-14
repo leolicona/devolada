@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, TriangleAlert } from "lucide-react";
-import { Amount, StatusBadge } from "@devolada/ui";
+import { Amount, ListError, StatusBadge } from "@devolada/ui";
 import type { StoresResponse } from "@devolada/api/stores-schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { api, ApiError } from "@/lib/api";
    the ISP's cash exposure at a glance. */
 
 export function StoresScreen() {
-  const { data, isPending } = useQuery<StoresResponse, ApiError>({
+  const { data, isPending, isError, refetch, isRefetching } = useQuery<StoresResponse, ApiError>({
     queryKey: ["stores"],
     queryFn: () => api<StoresResponse>("/stores"),
   });
@@ -29,7 +29,16 @@ export function StoresScreen() {
         </Link>
       </div>
 
-      {isPending && (
+      {isError && (
+        <ListError
+          what="tus tiendas"
+          onRetry={() => void refetch()}
+          retrying={isRefetching}
+          className="mt-4"
+        />
+      )}
+
+      {isPending && !isError && (
         <Card className="mt-4 p-4">
           {[0, 1, 2].map((k) => (
             <div key={k} className="flex items-center gap-4 py-3">
@@ -44,7 +53,7 @@ export function StoresScreen() {
         </Card>
       )}
 
-      {!isPending && data?.stores.length === 0 && (
+      {!isPending && !isError && data?.stores.length === 0 && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
           Todavía no tienes tiendas. Registra la primera y envíale su invitación.
         </p>

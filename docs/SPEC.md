@@ -63,6 +63,12 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-A03** — As an ISP, I manage each store: commission, balance cap, suspend, view its ledger.
 - **US-A04** — As an ISP, I configure my WispHub API Key (validated live), the service fee and the commission split.
 
+### Polish & reliability (P)
+- **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
+- **US-P02** — As a user, the app follows my system's light or dark preference, and dark is a real palette, not an inversion.
+- **US-P03** — As a store, the PWA works on a 360px phone; as an ISP, the admin works on my phone when I confirm a handover away from the desk.
+- **US-P04** — As a user with low vision or a screen reader, every status reaches me as icon + text, contrast holds, and the feed announces what changed.
+
 ## Features by Phase
 
 Operational detail in `.design/devolada/TASKS.md` (execution layer).
@@ -72,7 +78,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
-- **Phase 5 — Polish**: list states, dark mode, responsive, accessibility, design review
+- **Phase 5 — Polish**: list states ⏳ (US-P01) · dark mode (US-P02) · responsive (US-P03) · accessibility (US-P04) · design review
 
 ## Spec index
 
@@ -94,6 +100,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
 | [admin/stores.spec.md](admin/stores.spec.md) | admin | US-A02, US-A03 | in development |
 | [admin/settings.spec.md](admin/settings.spec.md) | admin | US-A04 | in development |
+| [polish/list-states.spec.md](polish/list-states.spec.md) | polish | US-P01 | in development |
 
 ## Cross-cutting layers
 

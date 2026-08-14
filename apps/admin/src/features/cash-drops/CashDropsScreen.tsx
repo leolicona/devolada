@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownToLine, Check, MessageSquareWarning } from "lucide-react";
-import { Amount, StatusBadge, formatMoney } from "@devolada/ui";
+import { Amount, ListError, StatusBadge, formatMoney } from "@devolada/ui";
 import type { AdminCashDrop, CashDropsResponse } from "@devolada/api/cash-drops-schema";
 import {
   AlertDialog,
@@ -221,8 +221,16 @@ export function CashDropsScreen() {
       <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Por confirmar
       </h2>
-      {pending.isPending && <ListSkeleton />}
-      {!pending.isPending && pending.data?.drops.length === 0 && (
+      {pending.isError && (
+        <ListError
+          what="las entregas por confirmar"
+          onRetry={() => void pending.refetch()}
+          retrying={pending.isRefetching}
+          className="mt-3"
+        />
+      )}
+      {pending.isPending && !pending.isError && <ListSkeleton />}
+      {!pending.isPending && !pending.isError && pending.data?.drops.length === 0 && (
         <p className="mt-3 flex max-w-lg items-center gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
           <ArrowDownToLine className="size-4 shrink-0" aria-hidden />
           No hay entregas por confirmar.
@@ -239,8 +247,16 @@ export function CashDropsScreen() {
       <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         Historial
       </h2>
-      {history.isPending && <ListSkeleton />}
-      {!history.isPending && resolved.length === 0 && (
+      {history.isError && !history.data && (
+        <ListError
+          what="el historial de entregas"
+          onRetry={() => void history.refetch()}
+          retrying={history.isRefetching}
+          className="mt-3"
+        />
+      )}
+      {history.isPending && !history.isError && <ListSkeleton />}
+      {!history.isPending && !history.isError && resolved.length === 0 && (
         <p className="mt-3 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
           Aún no has confirmado ninguna entrega.
         </p>
@@ -255,7 +271,16 @@ export function CashDropsScreen() {
         </Card>
       )}
 
-      {history.hasNextPage && (
+      {history.isError && history.data && (
+        <ListError
+          what="más entregas"
+          onRetry={() => void history.fetchNextPage()}
+          retrying={history.isFetchingNextPage}
+          className="mt-4"
+        />
+      )}
+
+      {history.hasNextPage && !history.isError && (
         <div className="mt-4 pb-6">
           <Button
             variant="outline"

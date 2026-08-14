@@ -13,6 +13,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { logout, resendVerification, useSession } from "../auth/session";
+import { usePendingDropCount } from "../cash-drops/usePendingDrops";
 
 const sections = [
   { to: "/", label: "Cobros", icon: Banknote, exact: true },
@@ -20,6 +21,20 @@ const sections = [
   { to: "/cash-drops", label: "Entregas", icon: ArrowDownToLine, exact: false },
   { to: "/settings", label: "Configuración", icon: Settings, exact: false },
 ] as const;
+
+/* D8: the count rides the same query as the Entregas screen. Text, not
+   only a dot — a badge that says nothing is decoration (FRONTEND law). */
+function PendingCount({ count, className = "ml-auto" }: { count: number; className?: string }) {
+  if (!count) return null;
+  return (
+    <span
+      className={`rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning ${className}`}
+      aria-label={`${count} ${count === 1 ? "entrega pendiente" : "entregas pendientes"}`}
+    >
+      {count}
+    </span>
+  );
+}
 
 function SuspendedScreen() {
   return (
@@ -32,6 +47,52 @@ function SuspendedScreen() {
         Tu cuenta está suspendida. Escríbenos para revisarla.
       </p>
     </main>
+  );
+}
+
+/* The links, in both shapes. It owns the pending query, so it only runs
+   once the session is known (this renders after the Shell's guards). */
+function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
+  const pendingDrops = usePendingDropCount();
+  const sidebar = variant === "sidebar";
+
+  return (
+    <nav
+      aria-label="Secciones"
+      className={
+        sidebar
+          ? "flex flex-1 flex-col gap-1"
+          : "fixed inset-x-0 bottom-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+      }
+    >
+      <div className={sidebar ? "contents" : "flex h-16"}>
+        {sections.map(({ to, label, icon: Icon, exact }) => (
+          <Link
+            key={to}
+            to={to}
+            activeOptions={{ exact }}
+            className={
+              sidebar
+                ? "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                : "flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"
+            }
+            activeProps={{
+              className: sidebar ? "bg-accent-soft text-link" : "text-link font-semibold",
+              "aria-current": "page",
+            }}
+          >
+            <span className={sidebar ? "contents" : "relative"}>
+              <Icon className={sidebar ? "size-4" : "size-5"} aria-hidden />
+              {!sidebar && to === "/cash-drops" && (
+                <PendingCount count={pendingDrops} className="absolute -right-3 -top-1" />
+              )}
+            </span>
+            {label}
+            {sidebar && to === "/cash-drops" && <PendingCount count={pendingDrops} />}
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -57,29 +118,12 @@ export function Shell() {
     void navigate({ to: "/login" });
   }
 
-  const nav = (
-    <nav aria-label="Secciones" className="flex flex-1 flex-col gap-1">
-      {sections.map(({ to, label, icon: Icon, exact }) => (
-        <Link
-          key={to}
-          to={to}
-          activeOptions={{ exact }}
-          className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          activeProps={{ className: "bg-accent-soft text-link", "aria-current": "page" }}
-        >
-          <Icon className="size-4" aria-hidden />
-          {label}
-        </Link>
-      ))}
-    </nav>
-  );
-
   return (
     <div className="min-h-dvh bg-background lg:flex">
       {/* Sidebar (desktop) */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card p-4 lg:flex">
         <p className="mb-6 px-3 text-lg font-semibold tracking-tight">Devolada</p>
-        {nav}
+        <SectionLinks variant="sidebar" />
         <div className="border-t border-border pt-3">
           <p className="truncate px-3 text-sm text-muted-foreground">{actor.email}</p>
           <Button variant="ghost" size="default" className="mt-1 w-full justify-start" onClick={() => void onLogout()}>
@@ -109,25 +153,7 @@ export function Shell() {
       </div>
 
       {/* Bottom bar (mobile) */}
-      <nav
-        aria-label="Secciones"
-        className="fixed inset-x-0 bottom-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
-      >
-        <div className="flex h-16">
-          {sections.map(({ to, label, icon: Icon, exact }) => (
-            <Link
-              key={to}
-              to={to}
-              activeOptions={{ exact }}
-              className="flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"
-              activeProps={{ className: "text-link font-semibold", "aria-current": "page" }}
-            >
-              <Icon className="size-5" aria-hidden />
-              {label}
-            </Link>
-          ))}
-        </div>
-      </nav>
+      <SectionLinks variant="bottom" />
     </div>
   );
 }

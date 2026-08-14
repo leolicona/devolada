@@ -42,6 +42,7 @@ export async function getCashbox(c: Ctx) {
           id: lastDrop.id,
           cents: lastDrop.cents,
           status: lastDrop.status,
+          note: lastDrop.note,
           createdAt: lastDrop.createdAt.getTime(),
         }
       : null,

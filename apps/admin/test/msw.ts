@@ -34,6 +34,12 @@ export const handlers = {
     http.post("/stores/:id/resend-invitation", () => r()),
   storeLedger: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/stores/:id/ledger", () => r()),
+  cashDrops: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/cash-drops", ({ request }) => r(new URL(request.url))),
+  confirmCashDrop: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-drops/:id/confirm", () => r()),
+  disputeCashDrop: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-drops/:id/dispute", async ({ request }) => r(await request.json())),
 };
 
 export const server = setupServer();

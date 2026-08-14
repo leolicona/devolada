@@ -9,23 +9,32 @@ import { renderApp } from "./render";
 
 /* docs/cashbox/cash-drop-and-ledger.spec.md scenarios 4–6. */
 
-const cashbox = (balanceCents: number, withPendingDrop = false) =>
+const cashbox = (
+  balanceCents: number,
+  lastCashDrop: Record<string, unknown> | null = null,
+) =>
   cashboxResponse.parse({
     storeName: "Abarrotes La Esquina",
     balanceCents,
     commissionEarnedCents: 900,
     cap: { capCents: 500000, approaching: false, blocked: false },
-    lastCashDrop: withPendingDrop
-      ? { id: "drop-1", cents: 40000, status: "pending", createdAt: Date.now() }
-      : null,
+    lastCashDrop,
   });
+
+const pendingDrop = {
+  id: "drop-1",
+  cents: 40000,
+  status: "pending",
+  note: null,
+  createdAt: Date.now(),
+};
 
 describe("US-K02: the drop form travels from Caja and back", () => {
   it("prefills the balance, submits, and Caja shows the pending drop", async () => {
     let dropped = false;
     server.use(
       handlers.session(() => ok(storeActor)),
-      handlers.cashbox(() => ok(cashbox(40000, dropped))),
+      handlers.cashbox(() => ok(cashbox(40000, dropped ? pendingDrop : null))),
       handlers.recordDrop(() => {
         dropped = true;
         return ok(
@@ -65,6 +74,28 @@ describe("US-K02: the drop form travels from Caja and back", () => {
     await userEvent.click(screen.getByRole("button", { name: /registrar entrega/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/mayor a tu balance/i);
+  });
+});
+
+/* docs/cash-drops/confirm-cash-drop.spec.md scenario 7. */
+describe("US-E02: the store reads the dispute the ISP wrote", () => {
+  it("shows the note under the disputed drop in Caja", async () => {
+    server.use(
+      handlers.session(() => ok(storeActor)),
+      handlers.cashbox(() =>
+        ok(
+          cashbox(40000, {
+            ...pendingDrop,
+            status: "disputed",
+            note: "Faltaron $200 en el sobre.",
+          }),
+        ),
+      ),
+    );
+    renderApp("/cashbox");
+
+    expect(await screen.findByText("En disputa")).toBeInTheDocument();
+    expect(screen.getByText("Faltaron $200 en el sobre.")).toBeInTheDocument();
   });
 });
 

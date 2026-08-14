@@ -82,12 +82,20 @@ export function CashboxScreen() {
       ) : null}
 
       {data.lastCashDrop && (
-        <div className="mt-4 flex items-center justify-between rounded-md border border-line bg-card p-4">
-          <div>
-            <p className="text-sm font-medium">Última entrega</p>
-            <Amount cents={data.lastCashDrop.cents} className="text-sm text-ink-soft" />
+        <div className="mt-4 rounded-md border border-line bg-card p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">Última entrega</p>
+              <Amount cents={data.lastCashDrop.cents} className="text-sm text-ink-soft" />
+            </div>
+            <StatusBadge status={data.lastCashDrop.status} />
           </div>
-          <StatusBadge status={data.lastCashDrop.status} />
+          {/* cash-drops D7: the store reads the same dispute the ISP wrote */}
+          {data.lastCashDrop.note && (
+            <p className="mt-3 border-t border-line-soft pt-3 text-sm text-error">
+              {data.lastCashDrop.note}
+            </p>
+          )}
         </div>
       )}
 

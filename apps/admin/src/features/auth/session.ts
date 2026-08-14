@@ -8,6 +8,10 @@ export type IspActor = {
   email: string;
   emailVerified: boolean;
   status: "active" | "suspended";
+  /* Settings D7: the display settings ride the session */
+  timezone: string;
+  timeFormat: "12h" | "24h";
+  wisphubConfigured: boolean;
 };
 
 export function useSession() {
@@ -18,6 +22,16 @@ export function useSession() {
     staleTime: 60_000,
   });
   return query;
+}
+
+/* Every screen that shows a time asks here, so one setting reaches all
+   of them without a second request (D6, D7). */
+export function useDisplaySettings(): { timezone: string; timeFormat: "12h" | "24h" } {
+  const { data } = useSession();
+  return {
+    timezone: data?.timezone ?? "America/Mexico_City",
+    timeFormat: data?.timeFormat ?? "12h",
+  };
 }
 
 export const login = (email: string, password: string) =>

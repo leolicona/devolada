@@ -8,6 +8,9 @@ export const ispActor = {
   email: "demo@devolada.app",
   emailVerified: true,
   status: "active",
+  timezone: "America/Mexico_City",
+  timeFormat: "12h",
+  wisphubConfigured: true,
 } as const;
 
 export const ok = (data: unknown, status = 200) =>
@@ -34,6 +37,11 @@ export const handlers = {
     http.post("/stores/:id/resend-invitation", () => r()),
   storeLedger: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/stores/:id/ledger", () => r()),
+  settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
+  patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/settings", async ({ request }) => r(await request.json())),
+  testWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/settings/wisphub/test", async ({ request }) => r(await request.json())),
   cashDrops: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/cash-drops", ({ request }) => r(new URL(request.url))),
   confirmCashDrop: (r: () => ReturnType<typeof ok | typeof fail>) =>

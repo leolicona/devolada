@@ -70,7 +70,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 0 — Risk**: WispHub spike (payment → reactivation). ✅ executed 2026-08-13 (`.design/devolada/WISPHUB_SPIKE.md`); only the physical MikroTik flip pends on the pilot ISP
 - **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ⏳
 - **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
-- **Phase 3 — Admin Dashboard**: shell, live feed, stores, cash drops, settings
+- **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue, receipts
 - **Phase 5 — Polish**: list states, dark mode, responsive, accessibility, design review
 
@@ -92,7 +92,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [admin/shell.spec.md](admin/shell.spec.md) | admin | US-S04, US-S06 (UI) | in development |
 | [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
 | [admin/stores.spec.md](admin/stores.spec.md) | admin | US-A02, US-A03 | in development |
-| admin/*.spec.md | admin | US-A04 | pending |
+| [admin/settings.spec.md](admin/settings.spec.md) | admin | US-A04 | in development |
 
 ## Cross-cutting layers
 

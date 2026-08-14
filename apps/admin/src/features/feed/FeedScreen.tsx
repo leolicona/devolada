@@ -10,10 +10,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
+import { formatTime } from "@/lib/datetime";
+import { useDisplaySettings } from "../auth/session";
 
 /* The live charge feed (US-A01). Polling every 5s — "live" without
-   sockets (spec D1). The browser owns "today" (D2). Built on the
-   shadcn catalog: Tabs, Collapsible, Skeleton (D7). */
+   sockets (spec D1). The ISP's timezone owns "today" (settings D5).
+   Built on the shadcn catalog: Tabs, Collapsible, Skeleton (D7). */
 
 const POLL_MS = 5000;
 const ALL = "all";
@@ -25,30 +27,24 @@ const statusFilters = [
   { value: "reconnected", label: "Reconectados" },
 ] as const;
 
-function todayStartMs(): number {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-}
-
-const timeFormat = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" });
-
-function feedPath(opts: { cursor?: number; status?: string; todayStart?: number }): string {
+function feedPath(opts: { cursor?: number; status?: string }): string {
   const params = new URLSearchParams();
   if (opts.cursor) params.set("cursor", String(opts.cursor));
   if (opts.status && opts.status !== ALL) params.set("status", opts.status);
-  if (opts.todayStart) params.set("todayStartMs", String(opts.todayStart));
   const qs = params.toString();
   return `/charges/feed${qs ? `?${qs}` : ""}`;
 }
 
 /* D4 + D7: detail expands in place with a Collapsible row */
 function ChargeRow({ charge }: { charge: FeedCharge }) {
+  const { timeFormat, timezone } = useDisplaySettings();
+  const at = (ms: number) => formatTime(ms, timeFormat, timezone);
   return (
     <li>
       <Collapsible>
         <CollapsibleTrigger className="group flex w-full items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-muted">
           <span className="w-12 shrink-0 text-sm tabular-nums text-muted-foreground">
-            {timeFormat.format(new Date(charge.createdAt))}
+            {at(charge.createdAt)}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{charge.customerName}</span>
@@ -73,11 +69,11 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
               <p className="mt-3 font-mono text-sm text-muted-foreground">Folio {charge.folio}</p>
             </div>
             <div className="text-sm text-muted-foreground">
-              <p>Registrado a las {timeFormat.format(new Date(charge.createdAt))}</p>
+              <p>Registrado a las {at(charge.createdAt)}</p>
               <p className="mt-1">Intentos de reconexión: {charge.attempts}</p>
               {charge.reconnectedAt && (
                 <p className="mt-1 text-success">
-                  Reconectado a las {timeFormat.format(new Date(charge.reconnectedAt))}
+                  Reconectado a las {at(charge.reconnectedAt)}
                 </p>
               )}
             </div>
@@ -108,12 +104,11 @@ function FeedSkeleton() {
 
 export function FeedScreen() {
   const [status, setStatus] = useState<string>(ALL);
-  const todayStart = todayStartMs();
 
   const feed = useInfiniteQuery<FeedResponse, ApiError>({
     queryKey: ["feed", status],
     queryFn: ({ pageParam }) =>
-      api<FeedResponse>(feedPath({ cursor: pageParam as number | undefined, status, todayStart })),
+      api<FeedResponse>(feedPath({ cursor: pageParam as number | undefined, status })),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: POLL_MS,

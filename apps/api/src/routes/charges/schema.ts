@@ -54,8 +54,6 @@ export const feedQuery = z.object({
   storeId: z.string().optional(),
   from: z.coerce.number().int().positive().optional(),
   to: z.coerce.number().int().positive().optional(),
-  /* D2: the browser owns "today" */
-  todayStartMs: z.coerce.number().int().positive().optional(),
 });
 
 export const feedCharge = z.object({
@@ -75,7 +73,8 @@ export const feedCharge = z.object({
 export const feedResponse = z.object({
   charges: z.array(feedCharge),
   nextCursor: z.number().int().nullable(),
-  today: z.object({ count: z.number().int(), totalCents: z.number().int() }).nullable(),
+  /* The day starts in the ISP's timezone, so it is always present (settings D5) */
+  today: z.object({ count: z.number().int(), totalCents: z.number().int() }),
 });
 
 export type FeedCharge = z.infer<typeof feedCharge>;

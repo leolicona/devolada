@@ -7,6 +7,7 @@ import { and, count, desc, gte, lt, lte, sum } from "drizzle-orm";
 import { recordChargeEntries, storeBalanceCents } from "../../ledger";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
+import { startOfBusinessDayMs } from "../../time/business-day";
 import type { ChargeResponse, CustomerQuoteResponse, CustomerSearchResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -189,7 +190,6 @@ export async function listChargeFeed(
     storeId?: string;
     from?: number;
     to?: number;
-    todayStartMs?: number;
   },
 ) {
   const actor = c.get("actor");
@@ -217,14 +217,17 @@ export async function listChargeFeed(
     .limit(PAGE + 1);
   const page = rows.slice(0, PAGE);
 
-  let today = null;
-  if (q.todayStartMs) {
-    const [t] = await db
-      .select({ count: count(), total: sum(charges.totalCents) })
-      .from(charges)
-      .where(and(eq(charges.ispId, actor.id), gte(charges.createdAt, new Date(q.todayStartMs))));
-    today = { count: Number(t?.count ?? 0), totalCents: Number(t?.total ?? 0) };
-  }
+  /* Settings D5: the ISP's timezone decides where its day starts */
+  const [t] = await db
+    .select({ count: count(), total: sum(charges.totalCents) })
+    .from(charges)
+    .where(
+      and(
+        eq(charges.ispId, actor.id),
+        gte(charges.createdAt, new Date(startOfBusinessDayMs(actor.timezone))),
+      ),
+    );
+  const today = { count: Number(t?.count ?? 0), totalCents: Number(t?.total ?? 0) };
 
   return c.json({
     success: true,

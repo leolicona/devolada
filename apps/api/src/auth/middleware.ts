@@ -30,6 +30,9 @@ export async function findActor(env: Bindings, identity: string): Promise<Actor 
       email: isp.email,
       emailVerified: isp.emailVerified,
       status: isp.status,
+      timezone: isp.timezone,
+      timeFormat: isp.timeFormat,
+      wisphubConfigured: Boolean(isp.wisphubApiKey),
     };
   }
   return null;

@@ -45,6 +45,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # A preview version binds the dev D1. Without this, any PR that adds
+      # a migration shows a broken preview until it merges. Migrations here
+      # are additive, so applying them early is safe for the live dev app.
+      - name: D1 dev migrations (the preview shares the dev database)
+        working-directory: apps/api
+        run: pnpm exec wrangler d1 migrations apply devolada-db-dev --env dev --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       - name: API preview (no-traffic version)
         working-directory: apps/api
         run: pnpm exec wrangler versions upload --env dev

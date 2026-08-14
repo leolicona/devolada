@@ -4,13 +4,14 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
-import { Shell, SectionPlaceholder } from "./features/shell/Shell";
+import { Shell } from "./features/shell/Shell";
 import { LoginPage, RecoverPage, ResetPage, SignupPage, VerifyPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { StoresScreen } from "./features/stores/StoresScreen";
 import { NewStoreScreen } from "./features/stores/NewStoreScreen";
 import { StoreDetailScreen } from "./features/stores/StoreDetailScreen";
 import { CashDropsScreen } from "./features/cash-drops/CashDropsScreen";
+import { SettingsScreen } from "./features/settings/SettingsScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -52,7 +53,7 @@ const dropsRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: () => <SectionPlaceholder title="Configuración" next="La configuración del ISP" />,
+  component: SettingsScreen,
 });
 
 const routeTree = rootRoute.addChildren([

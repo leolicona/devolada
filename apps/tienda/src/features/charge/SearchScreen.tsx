@@ -13,7 +13,9 @@ function CustomerCard({ customer }: { customer: CustomerResult }) {
     <li>
       <Link
         to="/charge/$customerId"
-        params={{ customerId: String(customer.wisphubId) }}
+        /* The quote endpoint loads by usuario, never by the numeric id
+           (charge-confirm spec D1): WispHub's detail endpoint is empty. */
+        params={{ customerId: customer.usuario }}
         className="flex min-h-16 items-center justify-between gap-4 rounded-md border border-line bg-card p-4 transition-colors duration-150 hover:bg-well"
       >
         <div className="min-w-0">

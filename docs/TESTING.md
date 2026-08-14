@@ -21,6 +21,7 @@ Out of scope for now (a decision, not an oversight): Storybook/Chromatic and vis
 4. **The spec's scenarios are the minimum**: each `.spec.md` lists its scenarios and the DoD is not checked without their automated tests passing.
 5. **External integrations** (Agnostic Auth, WispHub, Resend): simulated respecting the contracts in `integrations/*.md`, including their real error shapes (not the official guide's when they differ).
 6. **Simulated DOM doesn't verify styles**: assertions about real color/contrast belong to the Playwright+axe layer (or Vitest Browser Mode if ever adopted), not happy-dom.
+7. **Travel from the origin screen, don't mount the destination.** A screen that is reached by tapping something must have at least one test that starts on the previous screen and taps. Mounting a route directly with hand-written params tests the screen but not the link — and the link is where the wrong identifier hides (real case 2026-08-14: search cards linked with the numeric WispHub id while the quote endpoint loads by `usuario`; every unit test passed, the deployed app was broken).
 
 ## Retroactive debt
 

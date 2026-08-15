@@ -2,6 +2,14 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-011 — Email only reaches us: sandbox sender, and no key in any deployed worker
+- Status: open · Origin: auth/isp-signup.spec.md, verified while activating the key (2026-08-15)
+- Two gaps, one consequence. **(a)** `EMAIL_FROM` is unset, so the sender is Resend's sandbox `onboarding@resend.dev`, which accepts the account owner's own address and answers **422** for every other — both measured against the live API. **(b)** No deploy step sets `RESEND_API_KEY` as a worker secret, so dev and prod fall through to `console.log` and send nothing at all.
+- Why it bites quietly: signup catches the failure by design (spec D2) and returns 201 either way. A real ISP would create an account, never receive the verification email, and see nothing but the "Confirma tu correo" banner — whose **Reenviar correo** button fails the same silent way.
+- Why it was reasonable: the sandbox is exactly the right way to prove the integration without owning a domain, and it did prove it. The resilience that hides the failure is a deliberate decision worth keeping.
+- Paid by: verify a domain in Resend, set `EMAIL_FROM` to an address on it, and set `RESEND_API_KEY` via `wrangler secret put --env dev` / `--env prod` (or a deploy-workflow step). Then re-run signup against a third-party address and see a 2xx. **Before the first real ISP signs up** — which is before the pilot, since the pilot ISP will sign up like anyone else.
+- Consider with it: whether `resend-verification` should tell the admin it failed, rather than reporting success it cannot confirm.
+
 ## TD-010 — Keyboard order and visible focus are untested
 - Status: open · Origin: polish/accessibility.spec.md, found by the design review's status pass (2026-08-14)
 - Phase 5 covered the markup (axe), the palette (contrast-lint), the real colour and the touch targets — but **no layer walks the tab order**. The brief asks for full keyboard navigation and visible focus in the dashboard, and `TASKS.md` claimed the accessibility pass covered it. It did not.

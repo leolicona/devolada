@@ -1,19 +1,58 @@
-# Resend — contract pending
+# Resend — verified contract
 
-**Status: not integrated yet.** Filled in while building `auth/isp-signup.spec.md`.
+**Status: integrated, sandbox-limited.** Exercised end to end against the live API
+on 2026-08-15 from a local `wrangler dev` with a real key. Like `agnostic-auth.md`,
+this file records what the API actually did, not what the guide says it does — on
+conflict, this file wins.
 
-## Intended use
+## Use
 
-- ISP email verification (US-S04): sending the Agnostic Auth `/auth/initiate` `magicLink`.
+- ISP email verification (US-S04): sending the Agnostic Auth `/auth/initiate` link.
 - Admin password recovery (US-S06): same pattern.
-- Transactional email on the admin side only. Stores don't use email (their channel is WhatsApp/SMS → TD-003).
+- Admin side only. Stores do not use email — their channel is WhatsApp/SMS (TD-003).
 
-## Requirements to activate
+## Where the key lives
 
-- Resend API key as a worker secret (`RESEND_API_KEY` in `.dev.vars` / `wrangler secret`).
-- Verified domain in Resend (or the `onboarding@resend.dev` sandbox for development).
+`RESEND_API_KEY` in `apps/api/.dev.vars` locally, `wrangler secret put --env <env>`
+for a deployed worker. Never anywhere else — that is the BUG-001 rule, and
+`.dev.vars` is in `.gitignore` precisely because it once was not.
+
+Without the key, `sendAuthLink` logs the link to the console instead of sending
+(`src/email/sender.ts`). Every deployed environment currently takes that branch —
+see TD-011.
+
+## The call
+
+`POST https://api.resend.com/emails`, `Authorization: Bearer <key>`, JSON body
+`{ from, to, subject, html }`. A non-2xx throws `resend failed: <status>`.
+
+`from` comes from `EMAIL_FROM`, falling back to `Devolada <onboarding@resend.dev>`.
+
+## What the sandbox sender actually allows — verified
+
+With the fallback `onboarding@resend.dev` and no verified domain:
+
+| Recipient | Result |
+| --- | --- |
+| The Resend account owner's own address | **accepted** |
+| Any other address | **422** |
+
+Both cases were run against the live API on 2026-08-15. This is the whole reason
+TD-011 exists: the integration is proven, but in this state it can only mail one
+person, and that person is us.
+
+## What a failure looks like from outside
+
+Nothing. `POST /auth/signup` catches the error (spec D2 — the account never depends
+on the email provider), logs `verification email failed`, and still returns **201**.
+That resilience is correct and deliberate; the cost is that an ISP whose address
+Resend rejects signs up, receives nothing, and is told nothing.
+
+The admin's persistent "Confirma tu correo" banner and its **Reenviar correo**
+button are the only recovery path — and while the sender is the sandbox, resending
+fails the same silent way.
+
+## Rules
+
 - Called only from `apps/api`; never from the browser.
-
-## Resilience rule
-
-Signup does not block if Resend fails: the account is created unverified and the email can be re-sent. The error is logged, not propagated as a signup failure.
+- Signup must never block on it.

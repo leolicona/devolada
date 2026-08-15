@@ -67,10 +67,11 @@ Had it failed, this spec would not exist.
   The user never leaves the screen that asked, so context survives.
   Discarded: magic links (the previous draft of this spec).
 - **D5 — The middleware keeps our guarantees.** Better Auth resolves the
-  session (its own cookie, 30-day sliding — US-S01's "weeks", US-S02's
-  no-visible-expiry); `findActor` then loads the actor by `userId` and checks
-  `status` **on every request**, so suspension still revokes mid-session
-  (US-S03). `gm_access`/`gm_refresh` and `src/auth/jwt.ts` die. A suspended
+  session (its own cookie, **30-day sliding in both apps** — owner decision
+  2026-08-15; US-S01's "weeks", US-S02's no-visible-expiry). Its cookie
+  session cache stays **off**: `findActor` loads the actor by `userId` and
+  checks `status` **on every request** — that DB hit is US-S03, so caching
+  around it would buy nothing and delay suspensions (US-S03). `gm_access`/`gm_refresh` and `src/auth/jwt.ts` die. A suspended
   store can complete a sign-in but its first API call answers 403
   `ACCOUNT_SUSPENDED` and clears the session — same screen as today, one
   request later.
@@ -80,16 +81,22 @@ Had it failed, this spec would not exist.
   Better Auth handler, whose endpoints are consumed through the Better Auth
   client and are **exempt from the envelope** — documented here so the
   exemption is a rule, not an accident.
-- **D7 — Passkeys need our domain.** `rpID = devoladapago.com` (localhost in
-  local dev), which requires the apps to move to
-  `api./tienda./admin.devoladapago.com` custom domains. Everything becomes
-  same-site: `CROSS_SITE_COOKIES` and its `SameSite=None` machinery are
-  deleted. Enrollment is offered after login in both apps, never forced.
-  Caveat stated in the UI: a passkey identifies **this device** — on a
-  shared store phone that means the device, not the person.
-- **D8 — Invitations become fully ours, and never block on email.** The
-  invitation token is a random id in our `invitations` table (no IdP
-  `initiate`). Acceptance collects **email + password**, creates the Better
+- **D7 — Passkeys need our domain, and dev gets its own rpID.** Prod:
+  `api./tienda./admin.devoladapago.com`, `rpID = devoladapago.com`. Dev:
+  `api./tienda./admin.dev.devoladapago.com`, `rpID = dev.devoladapago.com`
+  (owner decision 2026-08-15) — sharing one rpID would make the browser
+  offer dev-enrolled passkeys on the prod login. Local dev: `localhost`.
+  Everything becomes same-site: `CROSS_SITE_COOKIES` and its
+  `SameSite=None` machinery are deleted with the domain move. Enrollment is
+  offered after login in both apps, never forced. Caveat stated in the UI:
+  a passkey identifies **this device** — on a shared store phone that means
+  the device, not the person.
+- **D8 — Invitations become fully ours, never block on email, and live 7
+  days.** The invitation token is a random id in our `invitations` table
+  (no IdP `initiate`), **single-use, valid 7 days**. This fixes a measured
+  product bug: today's tokens come from the IdP with `tokenTtlSeconds: 900`
+  — an invitation traveling by WhatsApp to a shopkeeper who opens it "later"
+  is dead in 15 minutes, and nobody had noticed. Acceptance collects **email + password**, creates the Better
   Auth user server-side, links `stores.userId`, activates the store and
   signs it in — the store is operational even if the code email fails
   (inherited law: onboarding never depends on the email provider). The code
@@ -116,13 +123,15 @@ Ours (envelope, Zod at the edge):
 | `POST /auth/store/accept-invitation` | `{token, email, password: ≥8}` | 200 actor + session; code email best-effort (D8) | 400 `INVALID_TOKEN` · 409 `EMAIL_TAKEN` · 400 |
 | `GET /auth/me` | session | actor envelope | 401 / 403 as today |
 
-Better Auth's (exempt from the envelope, via its client): `sign-in/email`
+Better Auth's (exempt from the envelope, via its client — endpoint names
+pinned against `better-auth@1.6.29`'s dist, not its guide): `sign-in/email`
 (ISP), `sign-in/username` (store: phone as username),
 `email-otp/send-verification-otp` + `email-otp/verify-email` (registration
-proof, both roles), `forget-password/email-otp` + `email-otp/reset-password`
-(recovery, both roles), `passkey/*` (enrol + sign-in), `sign-out`,
-`get-session`. Exact endpoint names are pinned during implementation and
-recorded here if they differ.
+proof, both roles), `email-otp/request-password-reset` +
+`email-otp/reset-password` (recovery, both roles), `passkey/*` (enrol +
+sign-in), `sign-out`, `get-session`. Better Auth's built-in rate limiter
+stays **on**: it guards `send-verification-otp` against mail-bombing and
+the 6-digit code against brute force.
 
 ## Business rules
 
@@ -139,6 +148,17 @@ recorded here if they differ.
 6. Error causes are logged distinctly server-side even when the client gets
    one generic code — TD-012's lesson, applied from day one.
 
+## Delivery
+
+Two PRs, because merging to `main` deploys dev: **PR 1** carries API + admin
++ tienda together (a half-migrated API with old frontends leaves dev broken
+between merges). **PR 2** carries the custom domains + the passkey UI
+(scenario 9): nothing breaks while they are missing, and passkey ceremonies
+cannot pass on `workers.dev` origins anyway. `BETTER_AUTH_SECRET` is a new
+worker secret in `.dev.vars` and both GitHub environments, synced by the
+existing CI step and — TD-001's lesson — verified behaviourally (sign in,
+then `/auth/me`), never by listing names.
+
 ## UI Contract
 
 - **Admin**: `/login` (email + password + passkey button), `/signup`
@@ -151,6 +171,10 @@ recorded here if they differ.
   is asked ("para recuperar tu acceso si olvidas tu contraseña"), then an
   optional code step (D8). `/recuperar` mirrors the admin's code + new
   password screen. Passkey enrolment offer after login.
+- **Admin, store detail**: shows the store's recovery email, full and
+  read-only (owner decision 2026-08-15 — the ISP is the shopkeeper's first
+  line of support and should see where recovery codes go; discarded:
+  hiding it as personal data — the owner weighed support over privacy).
 - Codes are called **código** in copy — never "token", "OTP" or "enlace".
   Copy never mentions "Better Auth"; errors stay generic.
 

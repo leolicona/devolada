@@ -2,10 +2,12 @@ import { Alert } from "@devolada/ui";
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
+import { authClient, passkeysSupported } from "@/lib/auth-client";
 import { AccessLayout } from "./AccessLayout";
 import { login, requestPasswordReset, resetPasswordWithCode, signup } from "./session";
 
@@ -77,6 +79,27 @@ export function LoginPage() {
         <Button type="submit" size="lg" className="w-full" disabled={submit.busy}>
           {submit.busy ? "Entrando…" : "Entrar"}
         </Button>
+        {/* US-S07: one-touch sign-in for devices with an enrolled passkey */}
+        {passkeysSupported() && (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="w-full"
+            onClick={async () => {
+              const { error } = await authClient.signIn.passkey();
+              if (error) {
+                submit.setError("No pudimos usar tu huella o rostro. Entra con tu contraseña.");
+                return;
+              }
+              void queryClient.invalidateQueries({ queryKey: ["session"] });
+              void navigate({ to: "/" });
+            }}
+          >
+            <Fingerprint className="size-5" aria-hidden />
+            Entrar con huella o rostro
+          </Button>
+        )}
         <div className="flex justify-between text-sm">
           <Link to="/recover" className="text-link hover:underline">
             Olvidé mi contraseña

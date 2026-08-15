@@ -8,3 +8,4 @@ dist/
 # Playwright (docs/polish/responsive.spec.md)
 test-results/
 playwright-report/
+dist-passkey/

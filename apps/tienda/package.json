@@ -11,9 +11,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/passkey": "^1.6.29",
     "@devolada/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-router": "^1.95.0",
+    "better-auth": "^1.6.29",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

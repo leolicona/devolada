@@ -39,7 +39,7 @@ Rules for two worktrees to coexist:
 
 Custom domains (`api.devolada.app`, `tienda.devolada.app`, …) replace the `workers.dev` URLs when the zone exists in Cloudflare.
 
-Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo.
+Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo — and reach the Worker through the sync step in D5. `AUTH_JWT_SECRET` is optional on dev and **required on prod**: the deploy fails without it rather than shipping an API that skips signature checks (TD-001).
 
 Until the `devolada.app` zone exists in Cloudflare, deploys go to `*.workers.dev`; the real URLs are configured as repo variables (`DEV_API_URL`, `PROD_API_URL`) feeding the smoke tests. The domains in the table are the destination, not the current state.
 
@@ -88,4 +88,5 @@ Quality gate; deploys nothing to stable environments.
 - **D1 — Trunk-based over git-flow.** Discarded alternative: `develop` + `main` (double merging with no benefit for a single engineer; the extra latency fights the client-feedback loop).
 - **D2 — Per-PR preview as the client feedback channel.** Discarded alternative: client reviews dev only (one step too late, on already-merged work).
 - **D3 — E2E on deploy-dev, not on every PR.** Discarded alternative: E2E in PR (minutes of waiting per iteration; the fast layers already cover the gate).
+- **D5 — Worker secrets are set by the pipeline, right after the deploy.** `wrangler secret put` refuses while the newest version of a Worker is undeployed, and D2's per-PR `wrangler versions upload` leaves exactly that behind — so setting a secret from a laptop fails with *"the latest version of your Worker isn't currently deployed"* almost any time a PR is open. Found the hard way on 2026-08-15 (TD-011). Both deploy workflows now set them from a GitHub environment secret in the step after `wrangler deploy`, where latest and deployed agree. Discarded alternative: setting them in the Cloudflare dashboard (works, but leaves no record of where a secret came from, and a fresh environment has to be rebuilt by hand). The "skip when unset" guard is shell, not `if:` — the `secrets` context is not allowed in a step condition, and putting it there makes GitHub reject the entire workflow file: a run with **zero jobs** and no logs, which never appears in `gh pr checks` because a deploy workflow is not a PR check. Query `actions/runs?head_sha=…` to see those.
 - **D4 — Previews share `devolada-db-dev`.** D1 has no data branching; a DB per PR is over-engineering at this scale. Accepted risk: a PR can dirty dev data — and, since 2026-08-14, its migrations land in dev before the merge. Both are additive by our own rule (a migration adds; it never drops a column another PR still reads), so dev keeps working for every open branch.

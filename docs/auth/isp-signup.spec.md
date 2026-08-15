@@ -2,8 +2,8 @@
 status: in-development
 stories: [US-S04, US-S06]
 domain: auth
-updated: 2026-08-13
-debt: [TD-001, TD-003]
+updated: 2026-08-15
+debt: [TD-001, TD-003, TD-011]
 ---
 
 # Spec: ISP signup, email verification and password recovery
@@ -64,4 +64,16 @@ Pages live in `apps/admin` (land with the admin shell; this spec ships the API a
 - [x] Contract implemented with scenarios 1–8 automated (`test/isp-signup.test.ts`)
 - [x] Retroactive session scenarios automated (`test/sessions.test.ts`; TD-005 paid)
 - [x] Admin UI pages built and wired (`apps/admin`, admin/shell.spec.md)
-- [ ] Real email sending verified with a Resend API key (blocked by: RESEND_API_KEY)
+- [x] Real email sending verified with a Resend API key — 2026-08-15, local
+      `wrangler dev` against the live API: signup took the Resend branch (no
+      console fallback, no error), and the sandbox sender's limit was measured in
+      the same session (`integrations/resend.md`)
+- [x] Delivery confirmed in an inbox by a human — 2026-08-15. Worth keeping as
+      its own box: Resend answering 2xx is not the same fact as an email
+      arriving, and only the second one closes US-S04.
+- [ ] A **third-party** ISP can receive it. Resend answers **422** for any address
+      but the account owner's, and signup swallows it and still returns 201 — so a
+      real ISP would sign up and hear nothing. Needs a verified domain and
+      `EMAIL_FROM` (TD-011).
+- [ ] `RESEND_API_KEY` set as a worker secret in dev and prod (TD-011) — no
+      deployed environment has it, so both still only log the link

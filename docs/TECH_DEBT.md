@@ -2,6 +2,16 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-011 — Email only reaches us: sandbox sender, and no key in any deployed worker
+- Status: open · Origin: auth/isp-signup.spec.md, verified while activating the key (2026-08-15)
+- Two gaps, one consequence. **(a)** `EMAIL_FROM` is unset, so the sender is Resend's sandbox `onboarding@resend.dev`, which accepts the account owner's own address and answers **422** for every other — both measured against the live API. **(b)** No deploy step sets `RESEND_API_KEY` as a worker secret, so dev and prod fall through to `console.log` and send nothing at all.
+- Why it bites quietly: signup catches the failure by design (spec D2) and returns 201 either way. A real ISP would create an account, never receive the verification email, and see nothing but the "Confirma tu correo" banner — whose **Reenviar correo** button fails the same silent way.
+- Why it was reasonable: the sandbox is exactly the right way to prove the integration without owning a domain, and it did prove it. The resilience that hides the failure is a deliberate decision worth keeping.
+- Half (a) has a decision as of 2026-08-15: `devoladapago.com` exists and its DNS is already on Cloudflare, but adding it to the current Resend account returns `403 You have reached the domain limit of your plan` — the free plan holds one domain and `turistearya.com` has it. Devolada gets **its own free Resend account** rather than a paid upgrade or evicting the other project: no cost, its own domain slot, and neither project's key can compromise the other. Runbook in `integrations/resend.md`.
+- Paid by: verify `devoladapago.com` on Devolada's own Resend account, set `EMAIL_FROM` to an address on it, and put that account's key in the `dev` / `production` GitHub environments as `RESEND_API_KEY`. Then re-run signup against a third-party address and see a 2xx. **Before the first real ISP signs up** — which is before the pilot, since the pilot ISP will sign up like anyone else.
+- Half (b) has its mechanism as of 2026-08-15: both deploy workflows set the secret in the step after `wrangler deploy`, skipped while the environment has none (CICD D5). Setting it by hand from a laptop does **not** work — `wrangler secret put` refuses while the newest version is undeployed, and D2's per-PR `versions upload` almost always leaves one behind. That is the error to expect if anyone tries.
+- Consider with it: whether `resend-verification` should tell the admin it failed, rather than reporting success it cannot confirm.
+
 ## TD-010 — Keyboard order and visible focus are untested
 - Status: open · Origin: polish/accessibility.spec.md, found by the design review's status pass (2026-08-14)
 - Phase 5 covered the markup (axe), the palette (contrast-lint), the real colour and the touch targets — but **no layer walks the tab order**. The brief asks for full keyboard navigation and visible focus in the dashboard, and `TASKS.md` claimed the accessibility pass covered it. It did not.
@@ -20,7 +30,9 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 ## TD-001 — JWTs without signature verification in dev
 - Status: open · Origin: auth/sessions.spec.md
 - `apps/api` decodes JWTs without verifying the signature when `AUTH_JWT_SECRET` is missing (with a console warning). Reasonable for local dev; **blocking for production**.
-- Paid by: configuring agnostic-auth's HS256 secret as a worker secret and in `.dev.vars`.
+- Measured 2026-08-15: missing in `.dev.vars` **and** on the deployed dev Worker, whose only secret is `WISPHUB_API_KEY`. So `devolada-api-dev.leolicona-dev.workers.dev` — reachable by anyone — takes the unverified branch of `src/auth/jwt.ts`, which parses the token and rejects it only on `exp`. The middleware still looks the actor up in the DB and checks status, so this impersonates an existing active store or ISP rather than inventing one. Demo data today; the pilot's data is what changes the stakes.
+- Note: `CICD.md` said these secrets "live in GitHub Environments" long before anything set them. The mechanism exists as of CICD D5 — the value still has to be added.
+- Paid by: put agnostic-auth's HS256 secret in the `dev` and `production` GitHub environments as `AUTH_JWT_SECRET` (the deploy step sends it on), and in `.dev.vars` for local runs. Cloudflare secrets cannot be read back, so if the value was never kept anywhere, rotate it on agnostic-auth and set the new one in both places. Prod refuses to deploy without it.
 
 ## TD-002 — Duplicated design tokens
 - Status: open · Origin: tokens phase

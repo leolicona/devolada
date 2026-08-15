@@ -87,7 +87,10 @@ export function DropScreen() {
 
       <form onSubmit={submit} className="mt-6 space-y-5" noValidate>
         <Field label="Monto a entregar">
+          {/* design-review D8: every displayed amount is $1,234.00 — the
+              field that takes one says so too */}
           <Input
+            prefix="$"
             inputMode="decimal"
             value={text}
             onChange={(e) => setText(e.target.value)}

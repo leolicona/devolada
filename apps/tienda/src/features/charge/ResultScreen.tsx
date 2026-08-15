@@ -112,7 +112,10 @@ export function ResultScreen() {
 
       <ReceiptActions chargeId={chargeId} />
 
-      <div className="mt-auto w-full pt-8">
+      {/* design-review: with a queue at the counter this is the most likely
+          next action, so it sits with the others instead of alone at the
+          bottom of a gap. It stays secondary — the receipt goes first. */}
+      <div className="mt-3 w-full max-w-sm pb-8">
         <Link to="/" className="block">
           <Button size="critical" variant="secondary">
             Nuevo cobro

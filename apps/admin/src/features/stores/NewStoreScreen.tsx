@@ -122,8 +122,9 @@ export function NewStoreScreen() {
               <Input id="zone" value={form.zone} onChange={set("zone")} />
             </div>
             <div>
-              <Label htmlFor="cap">Techo de saldo (pesos)</Label>
-              <Input id="cap" inputMode="decimal" value={form.cap} onChange={set("cap")} />
+              <Label htmlFor="cap">Techo de saldo</Label>
+              {/* design-review D8: the sign replaces "(pesos)" */}
+              <Input id="cap" prefix="$" inputMode="decimal" value={form.cap} onChange={set("cap")} />
             </div>
             {error && <Alert variant="destructive">{error}</Alert>}
             <Button type="submit" size="lg" disabled={busy}>

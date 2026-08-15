@@ -130,10 +130,59 @@ describe("US-K03: Movimientos shows labeled rows", () => {
     renderApp("/ledger");
 
     expect(await screen.findByText("Cobro · Janely")).toBeInTheDocument();
-    expect(screen.getByText("Comisión")).toBeInTheDocument();
+    expect(screen.getByText("Comisión ganada")).toBeInTheDocument();
     expect(screen.getByText("+$414.00")).toBeInTheDocument();
     expect(screen.getByText("−$9.00")).toBeInTheDocument();
     expect(screen.getAllByText(/DV-TEST01/)).toHaveLength(2);
+  });
+
+  /* design-review D4: Caja says "Tu comisión ganada $18.00" and this row
+     says −$9.00. Both are true; the row has to say why. */
+  it("explains where the commission comes from", async () => {
+    server.use(
+      handlers.session(() => ok(storeActor)),
+      handlers.ledger(() =>
+        ok(
+          ledgerResponse.parse({
+            entries: [
+              { id: "e2", type: "commission", cents: -900, createdAt: Date.now(), reference: null },
+            ],
+            nextCursor: null,
+          }),
+        ),
+      ),
+    );
+    renderApp("/ledger");
+
+    expect(await screen.findByText("Comisión ganada")).toBeInTheDocument();
+    expect(screen.getByText(/sale del efectivo del isp/i)).toBeInTheDocument();
+  });
+
+  /* design-review D3: green is a status colour. The sign already carries
+     the direction, so the amount must not claim a second meaning. */
+  it("keeps amounts in ink, not in the status green", async () => {
+    server.use(
+      handlers.session(() => ok(storeActor)),
+      handlers.ledger(() =>
+        ok(
+          ledgerResponse.parse({
+            entries: [
+              {
+                id: "e1",
+                type: "charge",
+                cents: 41400,
+                createdAt: Date.now(),
+                reference: { folio: "DV-TEST01", customerName: "Janely" },
+              },
+            ],
+            nextCursor: null,
+          }),
+        ),
+      ),
+    );
+    renderApp("/ledger");
+
+    expect((await screen.findByText("+$414.00")).className).not.toMatch(/text-success/);
   });
 
   it("shows the honest empty state for a new store", async () => {

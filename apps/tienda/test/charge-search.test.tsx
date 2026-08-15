@@ -63,6 +63,24 @@ describe("US-C01: typing shows result cards with minimum identity", () => {
 
     expect(await screen.findByText(/sin resultados/i)).toBeInTheDocument();
   });
+
+  /* design-review D7: type="search" handed the job to Chromium, which
+     painted its own blue glyph at ~13px, outside our tokens and outside
+     anything a test can reach. */
+  it("clears the search with our own named control", async () => {
+    withSession();
+    server.use(handlers.customerSearch(() => ok(results)));
+    renderApp("/");
+
+    const field = await screen.findByLabelText("Buscar cliente");
+    await userEvent.type(field, "Janely");
+    expect(await screen.findByText("Janely")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+
+    expect(field).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Limpiar búsqueda" })).not.toBeInTheDocument();
+  });
 });
 
 describe("US-C01: WispHub down shows the amber queue notice", () => {

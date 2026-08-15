@@ -50,6 +50,25 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
     expect(screen.getByText("Mensualidad")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
   });
+
+  /* design-review D9: charge-feed asked for the feed to announce, and the
+     feed is the list. Wrapping <main> re-read the heading, the attention
+     strip and the chips on every filter change. */
+  it("announces the list, not the whole page", async () => {
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [charge()])),
+      ),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+
+    const live = document.querySelectorAll("[aria-live]");
+    expect(live).toHaveLength(1);
+    expect(live[0].tagName).toBe("UL");
+    expect(document.querySelector("main")).not.toHaveAttribute("aria-live");
+  });
 });
 
 describe("D3: failed charges surface on top", () => {

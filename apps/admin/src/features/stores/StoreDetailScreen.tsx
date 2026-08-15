@@ -96,7 +96,16 @@ export function StoreDetailScreen() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={s.status === "invited" ? "invited" : s.status} />
+          {/* design-review D2: a store is a store, not an internet service */}
+          <StatusBadge
+            status={
+              s.status === "invited"
+                ? "invited"
+                : s.status === "suspended"
+                  ? "storeSuspended"
+                  : "storeActive"
+            }
+          />
           <Amount cents={s.balanceCents} className="text-lg font-semibold" />
         </div>
       </div>
@@ -118,9 +127,11 @@ export function StoreDetailScreen() {
           <CardContent>
             <form onSubmit={saveConfig} className="space-y-4" noValidate>
               <div>
-                <Label htmlFor="commission">Comisión por cobro (pesos)</Label>
+                <Label htmlFor="commission">Comisión por cobro</Label>
+                {/* design-review D8: the sign replaces "(pesos)" */}
                 <Input
                   id="commission"
+                  prefix="$"
                   inputMode="decimal"
                   placeholder="Hereda la base del ISP"
                   value={commissionText ?? (s.commissionCents !== null ? (s.commissionCents / 100).toFixed(2) : "")}
@@ -128,9 +139,10 @@ export function StoreDetailScreen() {
                 />
               </div>
               <div>
-                <Label htmlFor="cap">Techo de saldo (pesos)</Label>
+                <Label htmlFor="cap">Techo de saldo</Label>
                 <Input
                   id="cap"
+                  prefix="$"
                   inputMode="decimal"
                   value={capText ?? (s.cap.capCents / 100).toFixed(2)}
                   onChange={(e) => setCapText(e.target.value)}

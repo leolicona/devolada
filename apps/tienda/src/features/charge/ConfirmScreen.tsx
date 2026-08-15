@@ -101,9 +101,12 @@ export function ConfirmScreen() {
   return (
     <main className="flex min-h-[calc(100dvh-5rem)] flex-col px-6 pt-8 pb-6">
       {/* Identity: confirm out loud before the money */}
-      <div className="flex items-start justify-between gap-4">
+      {/* design-review D1: this screen exists to confirm who is paying —
+          the name wraps, it never truncates. Below sm the badge takes its
+          own line so the name keeps the width. */}
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold">{customer.name}</h1>
+          <h1 className="text-xl font-semibold">{customer.name}</h1>
           <p className="mt-0.5 text-sm text-ink-soft">{customer.zone ?? "Sin zona"}</p>
         </div>
         <StatusBadge

@@ -122,6 +122,27 @@ export const pendingDrops = {
   nextCursor: null,
 };
 
+/* The confirmed side of Entregas: the history list renders these, and a
+   long store name is the point — a row that cannot show it is the bug
+   design-review D1 describes. */
+export const resolvedDrops = {
+  drops: [
+    {
+      id: "cd-0",
+      storeId: "st-1",
+      storeName: "Abarrotes La Esquina",
+      storeZone: "Col. El Mirador",
+      cents: 40000,
+      status: "confirmed",
+      note: null,
+      createdAt: at - 86_400_000,
+      confirmedAt: at - 80_000_000,
+      storeBalanceCents: 0,
+    },
+  ],
+  nextCursor: null,
+};
+
 export const ledger = {
   entries: [
     {
@@ -136,12 +157,49 @@ export const ledger = {
   nextCursor: null,
 };
 
+/* The charge path's two screens. A long real name is the point: it is
+   what the confirm screen exists to show (design-review D1). */
+export const customers = {
+  customers: [
+    {
+      wisphubId: 6,
+      usuario: "greyes@wifiplus",
+      name: "Janely Guadalupe Reyes",
+      zone: "Zona dia 15",
+      serviceStatus: "suspended",
+      billingStatus: "due",
+      monthlyFeeCents: 49900,
+    },
+  ],
+};
+
+export const quote = {
+  customer: customers.customers[0],
+  quote: { monthlyFeeCents: 49900, serviceFeeCents: 1500, totalCents: 51400 },
+  cap: { balanceCents: 91000, capCents: 500000, blocked: false },
+};
+
 /* One matcher per app: anything the screens ask for gets an answer, so a
    forgotten route shows up as an empty screen rather than a hang. */
 export async function stubStoreApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", storeActor);
   await apiRoute(page, "**/cashbox", cashbox);
   await apiRoute(page, "**/ledger*", ledger);
+  /* Newest-first matching: the list, then the detail that shadows it */
+  await page.route(
+    (url) => url.pathname.endsWith("/charges/customers"),
+    (route) =>
+      route.request().resourceType() === "document"
+        ? route.fallback()
+        : route.fulfill(envelope(customers)),
+  );
+  await page.route(
+    (url) => /\/charges\/customers\/[^/]+$/.test(url.pathname),
+    (route) =>
+      route.request().resourceType() === "document"
+        ? route.fallback()
+        : route.fulfill(envelope(quote)),
+  );
 }
 
 export async function stubAdminApi(page: Page): Promise<void> {
@@ -149,4 +207,17 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/charges/feed*", feed);
   await apiRoute(page, "**/stores", stores);
   await apiRoute(page, "**/cash-drops*", pendingDrops);
+  /* Registered last so it wins over the pending matcher: Playwright tries
+     routes newest-first. */
+  await page.route(
+    (url) => url.pathname.endsWith("/cash-drops") && url.search.includes("scope=resolved"),
+    (route) =>
+      route.request().resourceType() === "document"
+        ? route.fallback()
+        : route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ success: true, data: resolvedDrops }),
+          }),
+  );
 }

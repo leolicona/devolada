@@ -34,7 +34,22 @@ describe("US-A03: the list shows balances and status", () => {
     expect(await screen.findByText("Abarrotes La Esquina")).toBeInTheDocument();
     expect(screen.getByText("$891.00")).toBeInTheDocument();
     expect(screen.getByText("Cerca del límite")).toBeInTheDocument();
-    expect(screen.getByText("Servicio activo")).toBeInTheDocument();
+    expect(screen.getByText("Tienda activa")).toBeInTheDocument();
+  });
+
+  /* design-review D2: the badge used to reuse the subscriber's words, so a
+     suspended shop told the ISP its internet was down. */
+  it("never labels a store with the subscriber's internet status", async () => {
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.stores(() =>
+        ok(storesResponse.parse({ stores: [store({ status: "suspended" })] })),
+      ),
+    );
+    renderApp("/stores");
+
+    expect(await screen.findByText("Tienda suspendida")).toBeInTheDocument();
+    expect(screen.queryByText(/Servicio (activo|suspendido)/)).not.toBeInTheDocument();
   });
 });
 

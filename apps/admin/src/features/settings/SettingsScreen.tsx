@@ -156,8 +156,10 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="service-fee">Cargo por servicio</Label>
+          {/* design-review D8: money fields carry the sign */}
           <Input
             id="service-fee"
+            prefix="$"
             inputMode="decimal"
             className="mt-1"
             value={fee}
@@ -169,6 +171,7 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
           <Label htmlFor="store-commission">Comisión de la tienda</Label>
           <Input
             id="store-commission"
+            prefix="$"
             inputMode="decimal"
             className="mt-1"
             value={commission}

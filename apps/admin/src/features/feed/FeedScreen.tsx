@@ -66,8 +66,9 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
             {at(charge.createdAt)}
           </span>
           <span className="col-start-2 min-w-0 sm:flex-1">
-            <span className="block truncate text-sm font-medium">{charge.customerName}</span>
-            <span className="block truncate text-sm text-muted-foreground">{charge.storeName}</span>
+            {/* design-review D1: identity wraps, it never truncates */}
+            <span className="block text-sm font-medium">{charge.customerName}</span>
+            <span className="block text-sm text-muted-foreground">{charge.storeName}</span>
           </span>
           <Amount
             cents={charge.totalCents}
@@ -155,7 +156,7 @@ export function FeedScreen() {
   const failedCount = failed.data?.charges.length ?? 0;
 
   return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8" aria-live="polite">
+    <main className="px-4 pt-4 lg:px-8 lg:pt-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-xl font-semibold">Cobros</h1>
         {today && (
@@ -208,9 +209,12 @@ export function FeedScreen() {
         </p>
       )}
 
+      {/* design-review D9: the live region is the list, not the page —
+          charge-feed asked for the feed to announce, and wrapping <main>
+          re-read the heading, the alert and the chips on every filter. */}
       {charges.length > 0 && (
         <Card className="mt-4">
-          <ul className="divide-y divide-line-soft">
+          <ul className="divide-y divide-line-soft" aria-live="polite">
             {charges.map((charge) => (
               <ChargeRow key={charge.id} charge={charge} />
             ))}

@@ -62,33 +62,45 @@ export function StoresScreen() {
           <ul className="divide-y divide-line-soft">
             {data.stores.map((store) => (
               <li key={store.id}>
+                {/* design-review D1: the shape the feed row already takes.
+                    Squeezed into one line at 360px the name collapsed to
+                    nothing and the row named no store at all. */}
                 <Link
                   to="/stores/$storeId"
                   params={{ storeId: store.id }}
-                  className="flex items-center gap-4 p-4 transition-colors duration-150 hover:bg-muted"
+                  className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 p-4 transition-colors duration-150 hover:bg-muted sm:flex"
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{store.name}</span>
-                    <span className="block truncate text-sm text-muted-foreground">
+                  <span className="min-w-0 sm:flex-1">
+                    <span className="block text-sm font-medium">{store.name}</span>
+                    <span className="block text-sm text-muted-foreground">
                       {store.zone ?? "Sin zona"} · {store.phone}
                     </span>
                   </span>
-                  {store.cap.approaching && (
-                    <span
-                      title="Cerca del techo de saldo"
-                      className="flex items-center gap-1 text-sm font-medium text-warning"
-                    >
-                      <TriangleAlert className="size-4" aria-hidden />
-                      {store.cap.blocked ? "En el límite" : "Cerca del límite"}
-                    </span>
-                  )}
-                  <StatusBadge
-                    status={store.status === "invited" ? "invited" : store.status}
-                  />
                   <Amount
                     cents={store.balanceCents}
-                    className="w-24 shrink-0 text-right text-sm font-semibold"
+                    className="shrink-0 text-right text-sm font-semibold sm:order-last sm:w-24"
                   />
+                  <span className="col-span-2 flex flex-wrap items-center gap-2 sm:contents">
+                    {store.cap.approaching && (
+                      <span
+                        title="Cerca del techo de saldo"
+                        className="flex items-center gap-1 text-sm font-medium text-warning"
+                      >
+                        <TriangleAlert className="size-4 shrink-0" aria-hidden />
+                        {store.cap.blocked ? "En el límite" : "Cerca del límite"}
+                      </span>
+                    )}
+                    {/* D2: a store is a store, not an internet service */}
+                    <StatusBadge
+                      status={
+                        store.status === "invited"
+                          ? "invited"
+                          : store.status === "suspended"
+                            ? "storeSuspended"
+                            : "storeActive"
+                      }
+                    />
+                  </span>
                 </Link>
               </li>
             ))}

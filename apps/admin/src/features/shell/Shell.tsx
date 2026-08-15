@@ -138,6 +138,10 @@ export function Shell() {
       </aside>
 
       <div className="flex-1 pb-20 lg:pb-0">
+        {/* design-review D5: the cap lives here, once. Uncapped, a row's
+            name and its amount ended up a screen apart on a wide monitor —
+            the Stripe dashboard the brief points at caps its content too. */}
+        <div className="mx-auto w-full max-w-7xl">
         {/* D5: unverified ISPs see a persistent banner */}
         {!actor.emailVerified && (
           <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
@@ -166,7 +170,8 @@ export function Shell() {
             </Link>
           </Alert>
         )}
-        <Outlet />
+          <Outlet />
+        </div>
       </div>
 
       {/* Bottom bar (mobile) */}

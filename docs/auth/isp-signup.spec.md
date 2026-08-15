@@ -68,7 +68,9 @@ Pages live in `apps/admin` (land with the admin shell; this spec ships the API a
       `wrangler dev` against the live API: signup took the Resend branch (no
       console fallback, no error), and the sandbox sender's limit was measured in
       the same session (`integrations/resend.md`)
-- [ ] Delivery confirmed in an inbox by a human
+- [x] Delivery confirmed in an inbox by a human — 2026-08-15. Worth keeping as
+      its own box: Resend answering 2xx is not the same fact as an email
+      arriving, and only the second one closes US-S04.
 - [ ] A **third-party** ISP can receive it. Resend answers **422** for any address
       but the account owner's, and signup swallows it and still returns 201 — so a
       real ISP would sign up and hear nothing. Needs a verified domain and

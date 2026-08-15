@@ -34,10 +34,12 @@ With the fallback `onboarding@resend.dev` and no verified domain:
 
 | Recipient | Result |
 | --- | --- |
-| The Resend account owner's own address | **accepted** |
+| The Resend account owner's own address | **accepted, and it arrived** |
 | Any other address | **422** |
 
-Both cases were run against the live API on 2026-08-15. This is the whole reason
+Both cases were run against the live API on 2026-08-15, and the first was
+confirmed in the inbox — a 2xx from Resend is not by itself evidence that an
+email was delivered. This is the whole reason
 TD-011 exists: the integration is proven, but in this state it can only mail one
 person, and that person is us.
 

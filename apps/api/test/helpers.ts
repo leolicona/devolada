@@ -25,8 +25,12 @@ export const app = async () => (await import("../src/index")).app;
 
 const auth = () => makeAuth(env as unknown as Bindings);
 
-/* makeAuth's fallback secret — tests run without BETTER_AUTH_SECRET */
-const TEST_SECRET = "devolada-dev-only-insecure-secret";
+/* Sign with whatever secret makeAuth will verify with: the binding when
+   `.dev.vars` provides one (vitest-pool-workers loads it), the fallback
+   otherwise. Hardcoding the fallback broke every forged cookie on any
+   machine whose .dev.vars had the real secret. */
+const TEST_SECRET =
+  (env as unknown as Bindings).BETTER_AUTH_SECRET ?? "devolada-dev-only-insecure-secret";
 
 const tokenFor = (identity: string) => `test-session-${identity}`;
 

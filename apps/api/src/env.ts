@@ -9,12 +9,10 @@ export type Bindings = {
      Unset → localhost (local dev). */
   PASSKEY_RP_ID?: string;
   ENVIRONMENT?: "dev" | "prod";
-  /* Comma-separated list of frontend origins allowed by CORS (TD-007) */
+  /* Comma-separated list of frontend origins allowed by CORS (TD-007).
+     CORS stays (different origins) but cookies are same-site now: every
+     surface lives under devoladapago.com (spec D7). */
   ALLOWED_ORIGINS?: string;
-  /* "true" when frontends live on another site (*.workers.dev):
-     cookies switch to SameSite=None + Secure. Dies with spec D7's
-     custom domains. */
-  CROSS_SITE_COOKIES?: string;
   /* Base URL of the admin app (es-MX copy in emails may reference it) */
   ADMIN_BASE_URL: string;
   /* Base URL of the store PWA, used to build invitation links */

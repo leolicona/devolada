@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { LogIn } from "lucide-react";
+import { Fingerprint, LogIn } from "lucide-react";
 import { Alert, Button, Field, Input } from "@devolada/ui";
-import { ApiError } from "../api/client";
 import { login } from "./session";
+import { authClient, passkeysSupported } from "./auth-client";
 
 /* Standalone so it stays testable without the router (US-S01).
    Generic error copy: no account-existence hints (sessions spec D3). */
@@ -56,6 +56,25 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         <LogIn className="size-5" aria-hidden />
         {busy ? "Entrando…" : "Entrar"}
       </Button>
+      {/* US-S07: one-touch sign-in on devices with an enrolled passkey */}
+      {passkeysSupported() && (
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={async () => {
+            const { error: passkeyError } = await authClient.signIn.passkey();
+            if (passkeyError) {
+              setError("No pudimos usar tu huella o rostro. Entra con tu contraseña.");
+              return;
+            }
+            onSuccess();
+          }}
+        >
+          <Fingerprint className="size-5" aria-hidden />
+          Entrar con huella o rostro
+        </Button>
+      )}
     </form>
   );
 }

@@ -47,6 +47,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - name: Responsive and contrast (docs/polish/responsive.spec.md)
         run: pnpm e2e
+      # Scenario 9 of better-auth.spec.md: real API + virtual authenticator.
+      # Boots wrangler + local D1; no Cloudflare credentials involved.
+      - name: Passkey ceremony (better-auth.spec.md scenario 9)
+        run: pnpm e2e:passkey
       - name: D1 dev migrations (before deploy)
         working-directory: apps/api
         run: pnpm exec wrangler d1 migrations apply devolada-db-dev --env dev --remote

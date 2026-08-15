@@ -7,6 +7,7 @@ import type {
   SettingsResponse,
   WispHubTestResponse,
 } from "@devolada/api/settings-schema";
+import { PasskeyCard } from "../auth/PasskeyCard";
 import { TIMEZONES } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -305,6 +306,7 @@ export function SettingsScreen() {
           <WispHubCard settings={data} />
           <MoneyCard settings={data} />
           <DisplayCard settings={data} />
+          <PasskeyCard />
         </div>
       )}
     </main>

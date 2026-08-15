@@ -215,13 +215,21 @@ then `/auth/me`), never by listing names.
 - [x] Tienda pages: invitation email field + optional código step,
       `/recuperar`, "¿Olvidaste tu contraseña?" — built and tested (46/46).
       Passkey button: PR 2, same reason.
-- [ ] Custom domains live (`api./punto./admin.devoladapago.com`),
-      `CROSS_SITE_COOKIES` deleted
-- [ ] Passkey end-to-end green with Playwright's virtual authenticator
-      (scenario 9)
-- [ ] TECH_DEBT updated: TD-001 and TD-012 paid by elimination; the
-      `feat/store-email` draft discarded in favour of D3
-- [ ] `integrations/agnostic-auth.md` closed with a pointer here (kept as
+- [x] Custom domains live (`api./punto./admin.devoladapago.com`, dev under
+      `.dev.`), `CROSS_SITE_COOKIES` deleted — verified 2026-08-15 against
+      deployed dev: the session cookie is `SameSite=Lax` and the browser
+      login that looped under `workers.dev` (third-party cookie blocking)
+      works. `punto.` instead of `tienda.` is the owner's naming: it is
+      what the end customer sees.
+- [x] Passkey end-to-end green with Playwright's virtual authenticator
+      (scenario 9) — `tests/passkey/passkey.spec.ts` against a real
+      wrangler + D1 (`pnpm e2e:passkey`, wired into deploy-dev): enrol,
+      sign out, sign in with one touch. Buttons in both logins, enrolment
+      offered in admin Settings and the tienda Caja, hidden wherever
+      `PublicKeyCredential` does not exist.
+- [x] TECH_DEBT updated: TD-001 and TD-012 paid by elimination; the
+      `feat/store-email` draft discarded in favour of D3 (PR #31)
+- [x] `integrations/agnostic-auth.md` closed with a pointer here (kept as
       history of why we left)
 
 ## Spike (gate, run 2026-08-15 — all green)

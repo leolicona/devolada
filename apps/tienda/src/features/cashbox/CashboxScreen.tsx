@@ -5,6 +5,7 @@ import { Alert, Amount, Button, Card, ListError, Skeleton, StatusBadge } from "@
 import type { CashboxResponse } from "@devolada/api/cashbox-schema";
 import { api, ApiError } from "../../api/client";
 import { logout } from "../../auth/session";
+import { PasskeyOffer } from "../../auth/PasskeyOffer";
 
 /* The Caja tab (US-K01). The ledger is the truth: every number here
    can explain itself — the balance taps through to Movimientos. */
@@ -138,6 +139,8 @@ export function CashboxScreen() {
           </Button>
         </Link>
       </div>
+      {/* US-S07: enrolment offered after login, never forced */}
+      <PasskeyOffer />
     </main>
   );
 }

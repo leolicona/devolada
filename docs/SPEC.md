@@ -75,11 +75,15 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 Operational detail in `.design/devolada/TASKS.md` (execution layer).
 
 - **Phase 0 — Risk**: WispHub spike (payment → reactivation). ✅ executed 2026-08-13 (`.design/devolada/WISPHUB_SPIKE.md`); only the physical MikroTik flip pends on the pilot ISP
-- **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ⏳
-- **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
+- **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ✅ (real email sending waits on `RESEND_API_KEY`)
+- **Phase 2 — Store PWA**: shell ✅ · search ✅ · charge ✅ · live result ✅ · cash box ✅ · cash drops ✅ · ledger ✅ · special states ✅
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
-- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ✅ (US-P04) · design review ✅ (US-P05)
+- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05)
+
+Every ✅ above means "built, specced and tested". None of them means "verified on
+the deployed apps with a real ISP": those checks are the open boxes at the foot of
+each spec, and they are what the pilot is for.
 
 ## Spec index
 

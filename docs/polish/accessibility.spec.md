@@ -3,7 +3,7 @@ status: in-development
 stories: [US-P04]
 domain: polish
 updated: 2026-08-14
-debt: []
+debt: [TD-010]
 ---
 
 # Spec: Accessibility, checked on every screen
@@ -35,4 +35,8 @@ Screens covered — PWA: Caja, Movimientos, Cobrar (confirm), Resultado (with th
 
 - [x] Scenarios 1–4 automated (`a11y.test.tsx` in both apps, 11 tests)
 - [x] The two violations the first run found are fixed
-- [ ] Remaining for the responsive pass: touch-target geometry (≥48px, 64px on the charge path) and real focus order, which need a browser
+- [x] Touch-target geometry (≥44px asserted, 48px on the charge path) —
+      `polish/responsive.spec.md`, measured in a browser
+- [ ] Real focus order. Still uncovered by any layer — the same open box stands
+      in `polish/dark-and-contrast.spec.md`; whichever slice takes it should
+      take it once, for both apps.

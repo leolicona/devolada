@@ -48,6 +48,10 @@ The installable shell of `apps/tienda`: login, session guard, bottom-tab navigat
 - [x] Scenarios 6–7 automated (`apps/tienda/test/loading-states.test.tsx` 2 tests, `packages/ui/test/atoms.test.tsx` 8 tests)
 - [x] `Alert` / `Card` / `Skeleton` shared in `@devolada/ui`, consumed by both apps (D5)
 - [x] Zero repeated alert or card recipes in `apps/tienda/src` (D5)
+- [x] Light/dark verified against tokens — `contrast-lint` measures 34 pairs in
+      both themes and `tests/e2e/contrast.spec.ts` measures the rendered pixels
+      (`polish/dark-and-contrast.spec.md`), which is stronger than the eyeball
+      check this box was written for
+- [x] CORS for the deployed PWA — TD-007 paid (`chore/pwa-deploy`): allow-list
+      with credentials, `SameSite=None; Secure` on cross-site deploys
 - [ ] Installable shell verified in a browser (manifest + icon)
-- [ ] Light/dark verified against tokens
-- [ ] CORS for the deployed PWA (TD-007; blocked by: PWA deploy step)

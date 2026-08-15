@@ -31,6 +31,7 @@
   "env": {
     "dev": {
       "name": "devolada-api-dev",
+      "routes": [{ "pattern": "api.dev.devoladapago.com", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
@@ -42,16 +43,17 @@
       "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "ENVIRONMENT": "dev",
-        "API_BASE_URL": "https://devolada-api-dev.leolicona-dev.workers.dev",
-        "ADMIN_BASE_URL": "https://devolada-admin-dev.leolicona-dev.workers.dev",
-        "TIENDA_BASE_URL": "https://devolada-tienda-dev.leolicona-dev.workers.dev",
-        "ALLOWED_ORIGINS": "https://devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-tienda-dev.leolicona-dev.workers.dev,https://devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
-        "CROSS_SITE_COOKIES": "true",
+        "API_BASE_URL": "https://api.dev.devoladapago.com",
+        "ADMIN_BASE_URL": "https://admin.dev.devoladapago.com",
+        "TIENDA_BASE_URL": "https://tienda.dev.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://tienda.dev.devoladapago.com,https://admin.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
+        "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
     },
     "prod": {
       "name": "devolada-api",
+      "routes": [{ "pattern": "api.devoladapago.com", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
@@ -63,11 +65,11 @@
       "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "ENVIRONMENT": "prod",
-        "API_BASE_URL": "https://devolada-api.leolicona-dev.workers.dev",
-        "ADMIN_BASE_URL": "https://devolada-admin.leolicona-dev.workers.dev",
-        "TIENDA_BASE_URL": "https://devolada-tienda.leolicona-dev.workers.dev",
-        "ALLOWED_ORIGINS": "https://devolada-tienda.leolicona-dev.workers.dev,https://devolada-admin.leolicona-dev.workers.dev",
-        "CROSS_SITE_COOKIES": "true",
+        "API_BASE_URL": "https://api.devoladapago.com",
+        "ADMIN_BASE_URL": "https://admin.devoladapago.com",
+        "TIENDA_BASE_URL": "https://tienda.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://tienda.devoladapago.com,https://admin.devoladapago.com",
+        "PASSKEY_RP_ID": "devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
     }

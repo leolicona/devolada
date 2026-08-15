@@ -42,12 +42,11 @@ export function makeAuth(env: Bindings) {
       updateAge: ONE_DAY,
       cookieCache: { enabled: false },
     },
-    advanced: {
-      /* Same rule the old cookie pair had: deployed frontends live on
-         other origins until the custom domains land (spec D7 / PR 2). */
-      defaultCookieAttributes:
-        env.CROSS_SITE_COOKIES === "true" ? { sameSite: "none" as const, secure: true } : {},
-    },
+    /* No cross-site cookie machinery (spec D7): every surface lives
+       under devoladapago.com, so the session cookie travels same-site.
+       Chrome's third-party cookie blocking killed the SameSite=None
+       setup in real browsers — measured 2026-08-15, login looped back
+       to login while curl worked. */
     plugins: [
       emailOTP({
         sendVerificationOnSignUp: true,

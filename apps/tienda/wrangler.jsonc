@@ -9,7 +9,13 @@
     "not_found_handling": "single-page-application"
   },
   "env": {
-    "dev": { "name": "devolada-tienda-dev" },
-    "prod": { "name": "devolada-tienda" }
+    "dev": {
+      "name": "devolada-tienda-dev",
+      "routes": [{ "pattern": "tienda.dev.devoladapago.com", "custom_domain": true }]
+    },
+    "prod": {
+      "name": "devolada-tienda",
+      "routes": [{ "pattern": "tienda.devoladapago.com", "custom_domain": true }]
+    }
   }
 }

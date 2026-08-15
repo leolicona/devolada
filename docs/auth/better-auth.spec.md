@@ -231,5 +231,9 @@ via `vitest-pool-workers` (our existing test infra), 4 tests, 312ms:
 session row + working cookie · email OTP through our hook · phone-as-username
 + password · passkey challenge with correct `rpID`. Findings that shape this
 spec: the passkey plugin is its own package (guides showing
-`better-auth/plugins/passkey` are stale); **no `nodejs_compat` needed**; an
-official `phone-number` plugin (SMS OTP) exists for when TD-003 is paid.
+`better-auth/plugins/passkey` are stale); an official `phone-number`
+plugin (SMS OTP) exists for when TD-003 is paid. One spike finding did
+**not** survive contact with wrangler: "no `nodejs_compat` needed" was
+true only under vitest-pool-workers, which resolves node builtins itself
+— wrangler's bundling needs the flag (`No such module "node:crypto"`
+otherwise), so `wrangler.jsonc` carries it.

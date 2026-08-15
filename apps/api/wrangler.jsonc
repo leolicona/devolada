@@ -3,6 +3,10 @@
   "name": "devolada-api",
   "main": "src/index.ts",
   "compatibility_date": "2025-05-01",
+  /* Better Auth's bundle imports node:crypto. The spike ran without this
+     flag, but only because vitest-pool-workers resolves node builtins
+     itself; wrangler's own bundling does not. Inherited by every env. */
+  "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "DB",

@@ -76,5 +76,7 @@ Pages live in `apps/admin` (land with the admin shell; this spec ships the API a
       call answered **422** an hour earlier under the sandbox sender, which is
       what made this its own box: signup swallows that failure and returns 201
       either way, so nothing in the response ever showed it.
-- [ ] `RESEND_API_KEY` set as a worker secret in dev and prod (TD-011) — no
-      deployed environment has it, so both still only log the link
+- [ ] `RESEND_API_KEY` set as a worker secret in dev **and prod** (TD-011) —
+      dev has it as of 2026-08-15 (uploaded by the deploy step, confirmed with
+      `wrangler secret list --env dev`), so the dev API really sends. The box
+      stays open for `production`, which still falls back to logging the link.

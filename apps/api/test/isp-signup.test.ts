@@ -78,6 +78,22 @@ describe("US-S04: ISP signup verifies the email with a code", () => {
     expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
   });
 
+  it("a legacy isp row without a user also answers 409, and never orphans a user", async () => {
+    /* Pre-migration shape: the isps row exists, no Better Auth user.
+       The old check only looked at `user`, created one, and the isps
+       UNIQUE(email) blew up — leaving a user that signs in but resolves
+       to no actor. Measured on deployed dev, 2026-08-15. */
+    const db = drizzle(env.DB);
+    await db.insert(isps).values({ name: "ISP Legado", email: EMAIL });
+
+    const res = await signup();
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
+
+    const orphans = await db.select().from(userTable).where(eq(userTable.email, EMAIL));
+    expect(orphans).toHaveLength(0);
+  });
+
   it("a malformed payload returns 400", async () => {
     const res = await (await app()).request(
       "/auth/isp/signup",

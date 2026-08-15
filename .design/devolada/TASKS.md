@@ -44,8 +44,9 @@ Order: risk first (WispHub spike), then visual foundation to validate the aesthe
 - [x] **List states in both apps**: empty (first time, no charges/stores), loading (skeletons), error with retry, for feed, ledger, stores and cash drops. Covers: empty, loading, error.
 - [x] **Dark mode pass**: review both apps against the dark tokens (warm charcoal); no hardcoded color outside tokens. Covers: light, dark, system preference + manual toggle.
 - [x] **Responsive pass**: PWA at a real 360px and centered on desktop; admin with tables → cards and sidebar → bottom menu on mobile. Breakpoints: 375/768/1024/1280.
-- [x] **Accessibility pass**: AA contrast (AAA on amounts and statuses), color never alone (icon + text), touch targets ≥48px, keyboard + visible focus in admin, `aria-live` on the feed and reconnection transitions, plain es-MX.
+- [x] **Accessibility pass**: AA contrast (AAA on amounts and statuses), color never alone (icon + text), touch targets ≥48px, `aria-live` on the feed and reconnection transitions, plain es-MX.
+- [ ] **Keyboard pass**: tab order and visible focus in the admin (TD-010). It was folded into the line above and never done — no test walks the tab order.
 
 ## Review
 
-- [ ] **Design review**: run /design-review against the brief with the apps running (light/dark screenshots, 360/768/1280).
+- [x] **Design review**: run /design-review against the brief with the apps running (light/dark screenshots, 360/768/1280). Done 2026-08-14: `.design/devolada/DESIGN_REVIEW.md`, 42 captures, 15 findings, all fixed (`docs/polish/design-review.spec.md`, US-P05).

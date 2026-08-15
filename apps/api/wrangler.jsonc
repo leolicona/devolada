@@ -17,7 +17,10 @@
     "ENVIRONMENT": "dev",
     "ADMIN_BASE_URL": "http://localhost:5174",
     "TIENDA_BASE_URL": "http://localhost:5173",
-    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174"
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174",
+    /* Not a secret. Repeated in every env block below because an env's
+       `vars` replaces the top-level one rather than merging with it. */
+    "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
   },
   /* Remote environments (CICD.md). Per-environment secrets via
      `wrangler secret put --env`: AUTH_JWT_SECRET (required in prod). */
@@ -41,7 +44,8 @@
         "ADMIN_BASE_URL": "https://devolada-admin-dev.leolicona-dev.workers.dev",
         "TIENDA_BASE_URL": "https://devolada-tienda-dev.leolicona-dev.workers.dev",
         "ALLOWED_ORIGINS": "https://devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-tienda-dev.leolicona-dev.workers.dev,https://devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
-        "CROSS_SITE_COOKIES": "true"
+        "CROSS_SITE_COOKIES": "true",
+        "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
     },
     "prod": {
@@ -63,7 +67,8 @@
         "ADMIN_BASE_URL": "https://devolada-admin.leolicona-dev.workers.dev",
         "TIENDA_BASE_URL": "https://devolada-tienda.leolicona-dev.workers.dev",
         "ALLOWED_ORIGINS": "https://devolada-tienda.leolicona-dev.workers.dev,https://devolada-admin.leolicona-dev.workers.dev",
-        "CROSS_SITE_COOKIES": "true"
+        "CROSS_SITE_COOKIES": "true",
+        "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
     }
   }

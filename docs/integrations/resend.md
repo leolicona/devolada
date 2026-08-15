@@ -11,6 +11,34 @@ conflict, this file wins.
 - Admin password recovery (US-S06): same pattern.
 - Admin side only. Stores do not use email — their channel is WhatsApp/SMS (TD-003).
 
+## Account and sender
+
+Devolada has **its own Resend account**, separate from the one holding
+`turistearya.com`. Not preference — measured: the free plan caps at one verified
+domain, and `POST /domains` for `devoladapago.com` came back
+`403 You have reached the domain limit of your plan` (2026-08-15). A second free
+account costs nothing and gives Devolada its own domain slot; it also means
+rotating or leaking one project's key never touches the other.
+
+Sender: `Devolada <no-reply@devoladapago.com>` — the apex, because the domain is
+dedicated to this product and carries no other mail (checked at setup: no MX, no
+TXT). If it ever hosts a mailbox, move sending to a subdomain such as
+`send.devoladapago.com` so reputations stay apart.
+
+## Activating it (the remaining half of TD-011)
+
+1. Create a Resend account for Devolada and add `devoladapago.com` to it.
+2. Paste the DKIM and SPF records Resend shows into the `devoladapago.com` zone
+   in Cloudflare, which is where its nameservers point.
+3. Wait for Resend to report the domain **verified**.
+4. Issue an API key on that account. Put it in `apps/api/.dev.vars` and in the
+   `dev` and `production` GitHub environments as `RESEND_API_KEY`.
+5. Only then set `EMAIL_FROM` to `Devolada <no-reply@devoladapago.com>` in
+   `wrangler.jsonc`. Setting it before step 3 makes every send fail — the
+   sandbox at least reaches us.
+6. Sign up with an address that is not ours and confirm the email arrives. That
+   is the test the sandbox can never pass.
+
 ## Where the key lives
 
 `RESEND_API_KEY` in `apps/api/.dev.vars` locally, `wrangler secret put --env <env>`

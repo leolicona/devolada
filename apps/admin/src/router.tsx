@@ -5,7 +5,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { Shell } from "./features/shell/Shell";
-import { LoginPage, RecoverPage, ResetPage, SignupPage, VerifyPage } from "./features/auth/pages";
+import { LoginPage, RecoverPage, SignupPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { StoresScreen } from "./features/stores/StoresScreen";
 import { NewStoreScreen } from "./features/stores/NewStoreScreen";
@@ -15,11 +15,11 @@ import { SettingsScreen } from "./features/settings/SettingsScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
+/* /verify and /reset died with the links (better-auth.spec.md D4):
+   codes are typed where they are asked, never clicked. */
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
 const signupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/signup", component: SignupPage });
-const verifyRoute = createRoute({ getParentRoute: () => rootRoute, path: "/verify", component: VerifyPage });
 const recoverRoute = createRoute({ getParentRoute: () => rootRoute, path: "/recover", component: RecoverPage });
-const resetRoute = createRoute({ getParentRoute: () => rootRoute, path: "/reset", component: ResetPage });
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "app", component: Shell });
 
@@ -59,9 +59,7 @@ const settingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   signupRoute,
-  verifyRoute,
   recoverRoute,
-  resetRoute,
   appRoute.addChildren([feedRoute, storesRoute, newStoreRoute, storeDetailRoute, dropsRoute, settingsRoute]),
 ]);
 

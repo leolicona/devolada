@@ -7,13 +7,13 @@ import {
   Banknote,
   KeyRound,
   LogOut,
-  MailWarning,
   Settings,
   Store,
   WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { logout, resendVerification, useSession } from "../auth/session";
+import { logout, useSession } from "../auth/session";
+import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
 import { usePendingDropCount } from "../cash-drops/usePendingDrops";
 
 const sections = [
@@ -142,21 +142,9 @@ export function Shell() {
             name and its amount ended up a screen apart on a wide monitor —
             the Stripe dashboard the brief points at caps its content too. */}
         <div className="mx-auto w-full max-w-7xl">
-        {/* D5: unverified ISPs see a persistent banner */}
-        {!actor.emailVerified && (
-          <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
-            <span className="flex items-center gap-2">
-              <MailWarning className="size-4 shrink-0" aria-hidden />
-              Confirma tu correo para poder registrar tiendas.
-            </span>
-            <Button
-              variant="outline"
-              onClick={() => void resendVerification().catch(() => {})}
-            >
-              Reenviar correo
-            </Button>
-          </Alert>
-        )}
+        {/* D5: unverified ISPs see a persistent banner; the código is
+            typed right here (better-auth.spec.md D4) */}
+        {!actor.emailVerified && <VerifyEmailBanner email={actor.email} />}
         {/* Settings D8: a banner, not a wall — the admin still works
             without a key, but nothing reconnects until it is there */}
         {!actor.wisphubConfigured && (

@@ -19,12 +19,11 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     try {
       await login(phone, password);
       onSuccess();
-    } catch (e) {
-      setError(
-        e instanceof ApiError && e.code === "ACCOUNT_SUSPENDED"
-          ? "Esta cuenta está suspendida. Contacta a tu ISP."
-          : "Teléfono o contraseña incorrectos",
-      );
+    } catch {
+      /* A suspended store completes the sign-in; the shell's /auth/me
+         answers 403 one request later and shows the suspended screen
+         (better-auth.spec.md D5). Here only credentials can fail. */
+      setError("Teléfono o contraseña incorrectos");
     } finally {
       setBusy(false);
     }

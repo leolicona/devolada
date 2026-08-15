@@ -47,5 +47,6 @@ export const storeCreateResponse = z.object({
 export const resendResponse = z.object({ invitationLink: z.string() });
 
 export type StoreItem = z.infer<typeof storeItem>;
+export type StoreDetail = z.infer<typeof storeDetail>;
 export type StoresResponse = z.infer<typeof storesResponse>;
 export type StoreCreateResponse = z.infer<typeof storeCreateResponse>;

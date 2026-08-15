@@ -83,7 +83,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
 - **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05)
-- **Phase 6 — Better Auth migration** (better-auth.spec.md; spike passed 2026-08-15): spec ✍ · API ☐ · admin pages ☐ · tienda pages ☐ · custom domains + passkeys ☐ — retires Agnostic Auth; TD-001 and TD-012 die by elimination
+- **Phase 6 — Better Auth migration** (better-auth.spec.md; spike passed 2026-08-15): spec ✅ · API ✅ · admin pages ✅ · tienda pages ✅ · custom domains + passkeys ☐ (PR 2) — retires Agnostic Auth; TD-001 and TD-012 died by elimination
 
 Every ✅ above means "built, specced and tested". None of them means "verified on
 the deployed apps with a real ISP": those checks are the open boxes at the foot of

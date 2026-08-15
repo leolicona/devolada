@@ -202,16 +202,19 @@ then `/auth/me`), never by listing names.
 
 ## Definition of Done
 
-- [ ] API migrated: Better Auth mounted, middleware on D5, old IdP client /
+- [x] API migrated: Better Auth mounted, middleware on D5, old IdP client /
       `jwt.ts` / cookie pair deleted; scenarios 1–8 automated in
-      `apps/api/test/`
-- [ ] `sessions.spec.md`, `isp-signup.spec.md`, `store-invitation.spec.md`
+      `apps/api/test/` (82/82 in workerd, 2026-08-15)
+- [x] `sessions.spec.md`, `isp-signup.spec.md`, `store-invitation.spec.md`
       updated to point here (they keep their history; this spec owns the
       contract now)
-- [ ] Admin pages: code input in the banner, code-based `/recover`, passkey
-      offer — built and tested (component layer)
-- [ ] Tienda pages: invitation email field + optional code step, `/recuperar`,
-      passkey offer — built and tested
+- [x] Admin pages: código input in the banner, código-based `/recover`,
+      store detail shows the recovery email — built and tested (28/28).
+      The passkey button ships with PR 2 (it cannot work on `workers.dev`
+      origins, so offering it earlier would be a lie).
+- [x] Tienda pages: invitation email field + optional código step,
+      `/recuperar`, "¿Olvidaste tu contraseña?" — built and tested (46/46).
+      Passkey button: PR 2, same reason.
 - [ ] Custom domains live (`api./tienda./admin.devoladapago.com`),
       `CROSS_SITE_COOKIES` deleted
 - [ ] Passkey end-to-end green with Playwright's virtual authenticator

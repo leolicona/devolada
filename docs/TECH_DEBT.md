@@ -2,6 +2,11 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-012 — `INVALID_TOKEN` blames the link for failures the link did not cause
+- Status: **paid** (2026-08-15, `feat/better-auth`) · Origin: found while diagnosing the TD-001 rollback
+- The old `redeemIspToken` collapsed a bad signing key, an IdP outage, an unknown identity and a genuinely expired token into one `INVALID_TOKEN`, rendered as *"Este enlace ya no sirve. Solicita uno nuevo."* — advice that could never work when the real fault was the key.
+- Paid twice over by the migration: **the links themselves are gone** (better-auth.spec.md D4 — codes typed into the app), and the new invitation redemption logs the distinct cause server-side (`accept-invitation rejected: <cause>`) while the client still gets one generic code. Scenario 8 of that spec keeps it tested.
+
 ## TD-011 — Email only reaches us: sandbox sender, and no key in any deployed worker
 - Status: **paid** (2026-08-15) · Origin: auth/isp-signup.spec.md, found while activating the key
 - Two gaps, one consequence. **(a)** `EMAIL_FROM` is unset, so the sender is Resend's sandbox `onboarding@resend.dev`, which accepts the account owner's own address and answers **422** for every other — both measured against the live API. **(b)** No deploy step sets `RESEND_API_KEY` as a worker secret, so dev and prod fall through to `console.log` and send nothing at all.
@@ -29,14 +34,10 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Paid by: asking WispHub support for a stable id in the response, or switching to a list lookup after creation.
 
 ## TD-001 — JWTs without signature verification in dev
-- Status: **open for `production` only** — local and dev are closed (2026-08-15) · Origin: auth/sessions.spec.md
-- `apps/api` decodes JWTs without verifying the signature when `AUTH_JWT_SECRET` is missing (with a console warning). Reasonable for local dev; **blocking for production**.
-- The hazard, measured on the morning of 2026-08-15 and **fixed the same day** — kept here because it is what the entry is about: the secret was missing in `.dev.vars` **and** on the deployed dev Worker, whose only secret was `WISPHUB_API_KEY`. So `devolada-api-dev.leolicona-dev.workers.dev` — reachable by anyone — took the unverified branch of `src/auth/jwt.ts`, which parses the token and rejects it only on `exp`. The middleware still looks the actor up in the DB and checks status, so this impersonates an existing active store or ISP rather than inventing one. Demo data at the time; the pilot's data is what would have changed the stakes.
-- **Closed for `dev`** (2026-08-15): the value is in the `dev` GitHub environment, and the `deploy-dev` run for the PR #28 merge logged `✨ Success! Uploaded secret AUTH_JWT_SECRET`. Confirmed independently with `wrangler secret list --env dev`, which now returns `AUTH_JWT_SECRET`, `RESEND_API_KEY` and `WISPHUB_API_KEY`. The dev Worker takes the `verify(…, "HS256")` branch.
-- **Closed for local**: `AUTH_JWT_SECRET` is in `apps/api/.dev.vars`.
-- How far that evidence goes: it proves the **configuration**, not the behaviour. No test forges a token for a real identity and shows it now gets a 401 where it used to authenticate. Reading an identity out of the remote dev D1 to build that proof was blocked, so it was not run. Worth doing before the pilot — it is the only check that tests the branch instead of the binding.
-- Note: `CICD.md` said these secrets "live in GitHub Environments" long before anything set them. The mechanism exists as of CICD D5, and as of this entry the dev value exists too.
-- Paid by: the same secret in the **`production`** GitHub environment (the deploy step sends it on). Cloudflare secrets cannot be read back, so if the value was never kept anywhere, rotate it on agnostic-auth and set the new one everywhere it is used. Prod refuses to deploy without it, so the first `v*` tag fails on this step until it is set — by design, not by accident.
+- Status: **paid by elimination** (2026-08-15, `feat/better-auth`) · Origin: auth/sessions.spec.md
+- The debt: `apps/api` could not verify a session without an HS256 key that lived in another system (agnostic-auth's per-app `jwtSecret` in KV), unannounced when it changed. An attempt to pay it that same day with the wrong value broke every session for a day — login 200, next request 401 — and the rollback left dev accepting unsigned tokens again. The full story is in PR #30's branch (`docs/td-001-reopen`), which this entry supersedes.
+- The payment: the migration to Better Auth (better-auth.spec.md) deletes `src/auth/jwt.ts` and the shared-key model with it. Sessions are rows in our own D1, signed with **our** `BETTER_AUTH_SECRET`; there is no second system to disagree with. `sessions.test.ts` covers the behaviour that used to be unverifiable: a tampered cookie gets 401.
+- What replaced the old requirement: `BETTER_AUTH_SECRET` in `.dev.vars` and in **both** GitHub environments — the deploy step now *fails* (dev and prod alike) when it is missing, because shipping sessions signed with a public fallback value is the same class of hole. The lesson that survives this entry: a secret is proven by behaviour (sign in, then `/auth/me`), never by `wrangler secret list`.
 
 ## TD-002 — Duplicated design tokens
 - Status: open · Origin: tokens phase

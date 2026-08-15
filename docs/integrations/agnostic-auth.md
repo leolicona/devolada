@@ -1,4 +1,14 @@
-# Agnostic Auth — real contract
+# Agnostic Auth — real contract (RETIRED)
+
+> **Retired 2026-08-15.** Devolada no longer calls this service: sessions
+> moved into `apps/api` with Better Auth (`docs/auth/better-auth.spec.md`).
+> The service itself keeps running for other projects. This file stays as
+> the history of why we left: the signing key lived in the IdP's KV
+> (`appConfig.jwtSecret ?? env.JWT_SECRET` — two keys where this file
+> documented one), a wrong value broke every session for a day (TD-001),
+> its magic links pointed at the registered domain instead of ours, its
+> 15-minute tokens killed WhatsApp invitations, and its `verifyToken`
+> cannot verify tokens issued for apps with a per-app secret.
 
 Stateless IdP on Cloudflare Workers. **This file documents the contract verified against the real API (2026-08-13), which differs from the official integration guide.** On conflict, this file wins.
 

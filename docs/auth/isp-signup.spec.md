@@ -8,6 +8,11 @@ debt: [TD-001, TD-003, TD-011]
 
 # Spec: ISP signup, email verification and password recovery
 
+> **Contract superseded 2026-08-15**: the auth implementation moved to
+> Better Auth and [better-auth.spec.md](better-auth.spec.md) owns the
+> contract now. This spec keeps its history and its scenario numbering,
+> which the new spec and tests still cite.
+
 Self-service ISP signup with email + password, email verification through a magic link, and password recovery with the same pattern. API-side in `apps/api` (`src/routes/auth.ts`, `src/email/sender.ts`); admin UI pages land with the admin shell (see UI Contract).
 
 ## Decisions

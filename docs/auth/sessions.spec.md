@@ -8,6 +8,11 @@ debt: [TD-001, TD-005]
 
 # Spec: Sessions (login, transparent refresh, revocation)
 
+> **Contract superseded 2026-08-15**: the auth implementation moved to
+> Better Auth and [better-auth.spec.md](better-auth.spec.md) owns the
+> contract now. This spec keeps its history and its scenario numbering,
+> which the new spec and tests still cite.
+
 Cookie-based authentication for stores (phone) and admins (email), with invisible renewal and immediate revocation on suspension. Implemented in `apps/api` (routes `src/routes/auth.ts`, middleware `src/auth/middleware.ts`).
 
 ## Decisions

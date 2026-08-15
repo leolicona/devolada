@@ -37,7 +37,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-S01** — As a store, I log in with phone + password and my session lasts for weeks on my device.
 - **US-S02** — As a signed-in user, I never see "session expired" during normal operation: tokens renew on their own.
 - **US-S03** — As an ISP, suspending a store revokes its access immediately, even mid-session.
-- **US-S04** — As an ISP, I sign up and sign in with my email and a one-time code; there is no password to remember, and my first sign-in verifies my email. *(rewritten 2026-08-15 by better-auth.spec.md; was: email + password + separate verification)*
+- **US-S04** — As an ISP, I sign up with email + password and verify my email (Resend) before operating.
 - **US-S05** — As a store, I receive an invitation via WhatsApp/SMS and set my password **and recovery email** from the link. *(email added 2026-08-15, better-auth.spec.md D7)*
 - **US-S06** — As any user, my email is my master recovery key; as a store, the ISP can also re-send my invitation. *(rewritten 2026-08-15; was ISP-only recovery)*
 - **US-S07** — As any user, I can enable my device's fingerprint or face (passkey) and sign in with one touch, no email or password involved.

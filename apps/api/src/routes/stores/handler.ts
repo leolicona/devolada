@@ -2,8 +2,7 @@ import type { Context } from "hono";
 import { and, desc, eq, inArray, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { invitations, isps, ledgerEntries, stores } from "../../db/schema";
-import { AgnosticAuth } from "../../auth/agnostic";
+import { invitations, ledgerEntries, stores, user as userTable } from "../../db/schema";
 import { ledgerPageForStore } from "../ledger/handler";
 import type { StoreItem } from "./schema";
 
@@ -89,9 +88,9 @@ export async function createStore(
   const ctx = ispGuard(c);
   if ("error" in ctx) return ctx.error;
 
-  /* D1: verification gates operation (isp-signup D3, enforced here) */
-  const [isp] = await ctx.db.select().from(isps).where(eq(isps.id, ctx.actor.id));
-  if (!isp.emailVerified) {
+  /* D1: verification gates operation (isp-signup D3, enforced here).
+     The flag lives on the Better Auth user and rides in on the actor. */
+  if (!ctx.actor.emailVerified) {
     return c.json({ success: false, error: { code: "EMAIL_NOT_VERIFIED" } }, 403);
   }
 
@@ -111,7 +110,8 @@ export async function createStore(
     })
     .returning();
 
-  const { token } = await new AgnosticAuth(c.env).initiate(body.phone);
+  /* Our own token (better-auth.spec.md D8): single-use, 7 days */
+  const token = crypto.randomUUID();
   await ctx.db.insert(invitations).values({ storeId: store.id, token });
 
   return c.json(
@@ -150,9 +150,21 @@ export async function getStore(c: Ctx, id: string) {
     .orderBy(desc(invitations.createdAt))
     .limit(1);
 
+  /* The shopkeeper's recovery email, full and read-only (owner decision,
+     better-auth.spec.md UI contract): the ISP is their first line of
+     support. Null until the invitation is accepted. */
+  let recoveryEmail: string | null = null;
+  if (store.userId) {
+    const [u] = await ctx.db
+      .select({ email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.id, store.userId));
+    recoveryEmail = u?.email ?? null;
+  }
+
   return c.json({
     success: true,
-    data: toItem(store, Number(b?.total ?? 0), invite?.status ?? null),
+    data: { ...toItem(store, Number(b?.total ?? 0), invite?.status ?? null), recoveryEmail },
   });
 }
 
@@ -190,8 +202,12 @@ export async function resendInvitation(c: Ctx, id: string) {
     .where(and(eq(invitations.storeId, store.id), eq(invitations.status, "sent")));
   if (!invite) return c.json({ success: false, error: { code: "ALREADY_ACCEPTED" } }, 409);
 
-  const { token } = await new AgnosticAuth(c.env).initiate(store.phone);
-  await ctx.db.update(invitations).set({ token }).where(eq(invitations.id, invite.id));
+  /* Rotating also restarts the 7-day window (spec D8) */
+  const token = crypto.randomUUID();
+  await ctx.db
+    .update(invitations)
+    .set({ token, createdAt: new Date() })
+    .where(eq(invitations.id, invite.id));
   return c.json({ success: true, data: { invitationLink: invitationLinkFor(c.env, token) } });
 }
 

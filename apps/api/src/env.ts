@@ -1,20 +1,21 @@
 export type Bindings = {
   DB: D1Database;
-  /* Service binding in production; dev falls back to HTTP via AUTH_BASE_URL */
-  AGNOSTIC_AUTH_API?: Fetcher;
-  AUTH_BASE_URL: string;
-  AUTH_APP_ID: string;
-  /* HS256 secret agnostic-auth signs JWTs with.
-     Without it (dev only) tokens are decoded without signature verification. */
-  AUTH_JWT_SECRET?: string;
-  COOKIE_DOMAIN?: string;
+  /* Signs Better Auth's sessions and tokens. Missing → a public dev
+     value with a loud warning; CI refuses to deploy without it. */
+  BETTER_AUTH_SECRET?: string;
+  /* This API's own public URL — Better Auth builds absolute URLs with it */
+  API_BASE_URL?: string;
+  /* WebAuthn relying-party id (better-auth.spec.md D7).
+     Unset → localhost (local dev). */
+  PASSKEY_RP_ID?: string;
   ENVIRONMENT?: "dev" | "prod";
   /* Comma-separated list of frontend origins allowed by CORS (TD-007) */
   ALLOWED_ORIGINS?: string;
   /* "true" when frontends live on another site (*.workers.dev):
-     cookies switch to SameSite=None + Secure */
+     cookies switch to SameSite=None + Secure. Dies with spec D7's
+     custom domains. */
   CROSS_SITE_COOKIES?: string;
-  /* Base URL of the admin app, used to build magic links (spec D1) */
+  /* Base URL of the admin app (es-MX copy in emails may reference it) */
   ADMIN_BASE_URL: string;
   /* Base URL of the store PWA, used to build invitation links */
   TIENDA_BASE_URL: string;

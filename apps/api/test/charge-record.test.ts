@@ -70,7 +70,7 @@ async function seedChargeableStore(overrides: Parameters<typeof seedStore>[1] = 
   return { isp, store };
 }
 
-const asStore = { headers: { Cookie: sessionCookieHeader("5512345678") } };
+const asStore = { headers: { Cookie: await sessionCookieHeader("5512345678") } };
 const post = (body: unknown): RequestInit => ({
   method: "POST",
   headers: { "Content-Type": "application/json", ...asStore.headers },
@@ -177,7 +177,7 @@ describe("US-C03: the store reads its own charge status", () => {
     /* another store of the same ISP must not see it */
     await seedStore(isp.id, { phone: "5599999999" });
     const foreign = await (await app()).request(`/charges/${created.data.id}`, {
-      headers: { Cookie: sessionCookieHeader("5599999999") },
+      headers: { Cookie: await sessionCookieHeader("5599999999") },
     }, env);
     expect(foreign.status).toBe(404);
   });

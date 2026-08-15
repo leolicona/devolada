@@ -7,8 +7,8 @@ import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
 
 /* docs/cash-drops/confirm-cash-drop.spec.md scenarios 1–4. */
 
-const asIsp = { Cookie: sessionCookieHeader("demo@devolada.app") };
-const asStore = { Cookie: sessionCookieHeader("5512345678") };
+const asIsp = { Cookie: await sessionCookieHeader("demo@devolada.app") };
+const asStore = { Cookie: await sessionCookieHeader("5512345678") };
 
 const post = (path: string, headers: Record<string, string>, body?: unknown): [string, RequestInit] => [
   path,
@@ -172,7 +172,7 @@ describe("US-E01: the two lists answer different questions", () => {
     /* Tenant isolation: another ISP sees none of this (D3) */
     await seedIsp({ email: "otro@isp.mx" });
     const otherRes = await client.request(
-      ...get("/cash-drops", { Cookie: sessionCookieHeader("otro@isp.mx") }),
+      ...get("/cash-drops", { Cookie: await sessionCookieHeader("otro@isp.mx") }),
       env,
     );
     expect((await otherRes.json()).data.drops).toEqual([]);

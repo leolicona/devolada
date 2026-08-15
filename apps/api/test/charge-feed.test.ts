@@ -11,7 +11,7 @@ beforeAll(() => {
   fetchMock.disableNetConnect();
 });
 
-const asIsp = { headers: { Cookie: sessionCookieHeader("demo@devolada.app") } };
+const asIsp = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
 
 async function seedFeed() {
   const isp = await seedIsp();
@@ -126,7 +126,7 @@ describe("D6: tenant isolation is tested, not assumed", () => {
 
     const asStore = await (await app()).request(
       "/charges/feed",
-      { headers: { Cookie: sessionCookieHeader("5512345678") } },
+      { headers: { Cookie: await sessionCookieHeader("5512345678") } },
       env,
     );
     expect(asStore.status).toBe(403);
@@ -134,7 +134,7 @@ describe("D6: tenant isolation is tested, not assumed", () => {
     await seedIsp({ email: "otro@isp.mx" });
     const otherIsp = await (await app()).request(
       "/charges/feed",
-      { headers: { Cookie: sessionCookieHeader("otro@isp.mx") } },
+      { headers: { Cookie: await sessionCookieHeader("otro@isp.mx") } },
       env,
     );
     expect((await otherIsp.json()).data.charges).toHaveLength(0);

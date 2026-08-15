@@ -1,30 +1,40 @@
 import type { Bindings } from "../env";
 
-/* Provider-agnostic auth-link sender (spec D6, TD-003 spirit).
+/* Auth code sender (better-auth.spec.md D4, D9). Codes, never links: a
+   link signs in the device that opens the email; a code is read anywhere
+   and typed where the session belongs. Copy is es-MX product copy.
    With RESEND_API_KEY it posts to Resend; without it (dev) it logs the
-   link so the flow stays fully testable. Copy is es-MX product copy. */
+   code so the flow stays fully testable. */
 
 const templates = {
-  verify: {
-    subject: "Confirma tu correo — Devolada",
-    body: (link: string) =>
-      `<p>Confirma tu correo para empezar a operar en Devolada.</p><p><a href="${link}">Confirmar correo</a></p><p>Si no creaste esta cuenta, ignora este mensaje.</p>`,
+  "email-verification": {
+    subject: (otp: string) => `${otp} es tu código para confirmar tu correo — Devolada`,
+    body: (otp: string) =>
+      `<p>Escribe este código en Devolada para confirmar tu correo:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
   },
-  recover: {
-    subject: "Restablece tu contraseña — Devolada",
-    body: (link: string) =>
-      `<p>Recibimos una solicitud para restablecer tu contraseña.</p><p><a href="${link}">Crear nueva contraseña</a></p><p>Si no fuiste tú, ignora este mensaje.</p>`,
+  "sign-in": {
+    subject: (otp: string) => `${otp} es tu código para entrar — Devolada`,
+    body: (otp: string) =>
+      `<p>Escribe este código en Devolada para entrar:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
+  },
+  "forget-password": {
+    subject: (otp: string) => `${otp} es tu código para recuperar tu acceso — Devolada`,
+    body: (otp: string) =>
+      `<p>Escribe este código en Devolada para crear una nueva contraseña:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
   },
 } as const;
 
-export async function sendAuthLink(
+export type AuthCodeKind = keyof typeof templates;
+
+export async function sendAuthCode(
   env: Bindings,
-  kind: keyof typeof templates,
+  kind: string,
   to: string,
-  link: string,
+  otp: string,
 ): Promise<void> {
+  const template = templates[kind as AuthCodeKind] ?? templates["email-verification"];
   if (!env.RESEND_API_KEY) {
-    console.log(`[email:${kind}] ${to} → ${link}`);
+    console.log(`[código:${kind}] ${to} → ${otp}`);
     return;
   }
   const res = await fetch("https://api.resend.com/emails", {
@@ -36,8 +46,8 @@ export async function sendAuthLink(
     body: JSON.stringify({
       from: env.EMAIL_FROM ?? "Devolada <onboarding@resend.dev>",
       to,
-      subject: templates[kind].subject,
-      html: templates[kind].body(link),
+      subject: template.subject(otp),
+      html: template.body(otp),
     }),
   });
   if (!res.ok) throw new Error(`resend failed: ${res.status}`);

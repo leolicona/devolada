@@ -1,4 +1,9 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { user } from "./auth-schema";
+
+/* Better Auth's tables live in auth-schema.ts; re-exported here so
+   drizzle-kit sees a single schema. */
+export * from "./auth-schema";
 
 /* All money in integer cents. Timestamps in ms.
    Designed for a single pilot ISP, with ispId on every business table to
@@ -16,13 +21,15 @@ const createdAt = () =>
 
 export const isps = sqliteTable("isps", {
   id: id(),
+  /* Auth lives in the Better Auth user row (better-auth.spec.md D3):
+     `userId` links there. `email` here is the business/display copy,
+     synced at signup and never read by auth flows. Credentials and
+     verification state have no columns here at all. */
+  userId: text("user_id")
+    .unique()
+    .references(() => user.id),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  emailVerified: integer("email_verified", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  passwordHash: text("password_hash"),
-  passwordSalt: text("password_salt"),
   wisphubApiKey: text("wisphub_api_key"),
   /* Fee the end customer pays, and the store's share of it.
      The platform's share is the difference. */
@@ -51,9 +58,11 @@ export const stores = sqliteTable(
     contactName: text("contact_name").notNull(),
     phone: text("phone").notNull().unique(),
     zone: text("zone"),
-    /* null until the invitation is accepted */
-    passwordHash: text("password_hash"),
-    passwordSalt: text("password_salt"),
+    /* null until the invitation is accepted; the Better Auth user holds
+       the shopkeeper's credentials and recovery email (spec D3) */
+    userId: text("user_id")
+      .unique()
+      .references(() => user.id),
     /* null → inherits storeCommissionCents from the ISP */
     commissionCents: integer("commission_cents"),
     balanceCapCents: integer("balance_cap_cents").notNull().default(500000),
@@ -152,7 +161,8 @@ export const invitations = sqliteTable(
     storeId: text("store_id")
       .notNull()
       .references(() => stores.id),
-    /* token issued by Agnostic Auth /auth/initiate */
+    /* Our own random token (better-auth.spec.md D8): single-use, valid
+       7 days from createdAt — checked at redemption, no extra column */
     token: text("token").notNull().unique(),
     status: text("status", { enum: ["sent", "accepted"] })
       .notNull()

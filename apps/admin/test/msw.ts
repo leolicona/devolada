@@ -19,13 +19,21 @@ export const ok = (data: unknown, status = 200) =>
 export const fail = (code: string, status: number) =>
   HttpResponse.json({ success: false, error: { code } }, { status });
 
+/* Better Auth endpoints have no envelope (better-auth.spec.md D6) */
+export const baOk = () => HttpResponse.json({});
+export const baFail = (code: string, status: number) =>
+  HttpResponse.json({ code }, { status });
+
 export const handlers = {
   session: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/auth/me", () => r()),
-  login: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/admin/login", () => r()),
-  signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/signup", () => r()),
-  verifyEmail: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/verify-email", () => r()),
-  resend: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/resend-verification", () => r()),
-  recover: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/recover", () => r()),
+  login: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/sign-in/email", () => r()),
+  signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/isp/signup", () => r()),
+  verifyEmail: (r: () => ReturnType<typeof baOk | typeof baFail>) => http.post("/auth/email-otp/verify-email", () => r()),
+  sendCode: (r: () => ReturnType<typeof baOk | typeof baFail>) => http.post("/auth/email-otp/send-verification-otp", () => r()),
+  requestReset: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/email-otp/request-password-reset", () => r()),
+  resetPassword: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/feed", ({ request }) => r(new URL(request.url))),
   stores: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/stores", () => r()),

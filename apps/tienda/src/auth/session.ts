@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, baPost } from "../api/client";
 
 export type StoreActor = {
   type: "store";
@@ -10,16 +10,26 @@ export type StoreActor = {
   status: "invited" | "active" | "suspended";
 };
 
+/* Daily login keeps phone + password (better-auth.spec.md D2); the
+   phone is the Better Auth username. A suspended store completes the
+   sign-in and the shell's /auth/me answers 403 one request later (D5). */
 export function login(phone: string, password: string) {
-  return api<{ type: string; id: string; name: string }>("/auth/store/login", {
-    method: "POST",
-    body: JSON.stringify({ phone, password }),
-  });
+  return baPost("/auth/sign-in/username", { username: phone, password });
 }
 
 export function logout() {
-  return api<Record<string, never>>("/auth/logout", { method: "POST" });
+  return baPost("/auth/sign-out");
 }
+
+/* Recovery and email confirmation by código (spec D4) */
+export const requestPasswordReset = (email: string) =>
+  baPost("/auth/email-otp/request-password-reset", { email });
+
+export const resetPasswordWithCode = (email: string, otp: string, password: string) =>
+  baPost("/auth/email-otp/reset-password", { email, otp, password });
+
+export const verifyEmailCode = (email: string, otp: string) =>
+  baPost("/auth/email-otp/verify-email", { email, otp });
 
 /* The cookie is the session (spec D3): the shell asks /auth/me and reacts —
    200 app, 401 login, 403 suspended. Transparent refresh happens API-side,

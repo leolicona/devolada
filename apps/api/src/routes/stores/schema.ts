@@ -34,6 +34,11 @@ export const storeItem = z.object({
   }),
 });
 
+/* Detail adds the shopkeeper's recovery email (owner decision,
+   better-auth.spec.md): visible to the ISP, read-only, null until the
+   invitation is accepted. */
+export const storeDetail = storeItem.extend({ recoveryEmail: z.string().nullable() });
+
 export const storesResponse = z.object({ stores: z.array(storeItem) });
 export const storeCreateResponse = z.object({
   store: storeItem,
@@ -42,5 +47,6 @@ export const storeCreateResponse = z.object({
 export const resendResponse = z.object({ invitationLink: z.string() });
 
 export type StoreItem = z.infer<typeof storeItem>;
+export type StoreDetail = z.infer<typeof storeDetail>;
 export type StoresResponse = z.infer<typeof storesResponse>;
 export type StoreCreateResponse = z.infer<typeof storeCreateResponse>;

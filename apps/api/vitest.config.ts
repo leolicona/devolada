@@ -10,6 +10,12 @@ export default defineWorkersConfig(async () => {
       setupFiles: ["./test/setup.ts"],
       poolOptions: {
         workers: {
+          /* One workerd runtime for the whole suite (tests keep isolated
+             storage). Per-file runtimes exhausted the ephemeral port
+             space once Better Auth's module graph joined the suite —
+             measured locally: 15 parallel runtimes → 16k TIME_WAIT
+             sockets and "Fallback service ... Connection refused". */
+          singleWorker: true,
           wrangler: { configPath: "./wrangler.jsonc" },
           miniflare: {
             bindings: { TEST_MIGRATIONS: migrations },

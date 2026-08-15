@@ -14,7 +14,7 @@ beforeAll(() => {
 });
 afterEach(() => fetchMock.assertNoPendingInterceptors());
 
-const asIsp = { headers: { Cookie: sessionCookieHeader("demo@devolada.app") } };
+const asIsp = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
 
 const send = (path: string, method: string, body?: unknown): [string, RequestInit] => [
   path,
@@ -75,7 +75,7 @@ describe("US-A04: the ISP reads its settings without reading its key", () => {
     await seedStore(isp.id);
     const res = await (await app()).request(
       "/settings",
-      { headers: { Cookie: sessionCookieHeader("5512345678") } },
+      { headers: { Cookie: await sessionCookieHeader("5512345678") } },
       env,
     );
     expect(res.status).toBe(403);

@@ -1,19 +1,14 @@
-import { beforeAll, afterEach, describe, expect, it } from "vitest";
-import { env, fetchMock } from "cloudflare:test";
+import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { invitations, ledgerEntries, stores } from "../src/db/schema";
-import { app, mockIdp, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
+import { invitations, ledgerEntries, stores, user as userTable } from "../src/db/schema";
+import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
 
-/* docs/admin/stores.spec.md scenarios 1–3. */
+/* docs/admin/stores.spec.md scenarios 1–3, invitation tokens now ours
+   (better-auth.spec.md D8). */
 
-beforeAll(() => {
-  fetchMock.activate();
-  fetchMock.disableNetConnect();
-});
-afterEach(() => fetchMock.assertNoPendingInterceptors());
-
-const asIsp = { headers: { Cookie: sessionCookieHeader("demo@devolada.app") } };
+const asIsp = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
 const post = (path: string, body: unknown): [string, RequestInit] => [
   path,
   {
@@ -30,22 +25,19 @@ const newStore = {
   zone: "Col. Centro",
 };
 
-function mockInitiate(token: string) {
-  mockIdp("/auth/initiate", {
-    body: { success: true, data: { token, magicLink: "https://ignored" } },
-  });
-}
-
 describe("US-A02: registering a store creates its invitation", () => {
-  it("creates an invited store and returns the copyable link", async () => {
+  it("creates an invited store and returns the copyable link with our token", async () => {
     await seedIsp();
-    mockInitiate("inv-tok-1");
 
     const res = await (await app()).request(...post("/stores", newStore), env);
     expect(res.status).toBe(201);
     const { data } = await res.json();
     expect(data.store).toMatchObject({ status: "invited", invitationStatus: "sent" });
-    expect(data.invitationLink).toBe("http://localhost:5173/invitation/inv-tok-1");
+
+    /* The token is ours now (spec D8): the link carries what the DB holds */
+    const db = drizzle(env.DB);
+    const [invite] = await db.select().from(invitations);
+    expect(data.invitationLink).toBe(`http://localhost:5173/invitation/${invite.token}`);
   });
 
   it("unverified ISP gets 403; a duplicate phone gets 409", async () => {
@@ -54,10 +46,9 @@ describe("US-A02: registering a store creates its invitation", () => {
     expect(blocked.status).toBe(403);
     expect((await blocked.json()).error.code).toBe("EMAIL_NOT_VERIFIED");
 
+    /* The flag lives on the Better Auth user now */
     const db = drizzle(env.DB);
-    const { isps } = await import("../src/db/schema");
-    await db.update(isps).set({ emailVerified: true });
-    mockInitiate("inv-tok-1");
+    await db.update(userTable).set({ emailVerified: true });
     await (await app()).request(...post("/stores", newStore), env);
 
     const dup = await (await app()).request(...post("/stores", newStore), env);
@@ -87,10 +78,22 @@ describe("US-A03: the list carries balances; tenants stay isolated", () => {
     await seedIsp({ email: "otro@isp.mx" });
     const other = await (await app()).request(
       "/stores",
-      { headers: { Cookie: sessionCookieHeader("otro@isp.mx") } },
+      { headers: { Cookie: await sessionCookieHeader("otro@isp.mx") } },
       env,
     );
     expect((await other.json()).data.stores).toHaveLength(0);
+  });
+
+  it("the detail shows the recovery email once accepted (owner decision)", async () => {
+    const isp = await seedIsp();
+    const accepted = await seedStore(isp.id);
+    const invited = await seedStore(isp.id, { status: "invited", phone: "5587654321" });
+
+    const detail = await (await app()).request(`/stores/${accepted.id}`, asIsp, env);
+    expect((await detail.json()).data.recoveryEmail).toBe("store-5512345678@test.devolada.app");
+
+    const pending = await (await app()).request(`/stores/${invited.id}`, asIsp, env);
+    expect((await pending.json()).data.recoveryEmail).toBeNull();
   });
 });
 
@@ -112,14 +115,13 @@ describe("US-A03: manage the store", () => {
       cap: { capCents: 200000 },
     });
 
-    mockInitiate("new-tok");
     const resend = await (await app()).request(
       ...post(`/stores/${store.id}/resend-invitation`, {}),
       env,
     );
-    expect((await resend.json()).data.invitationLink).toContain("new-tok");
     const [invite] = await db.select().from(invitations).where(eq(invitations.storeId, store.id));
-    expect(invite.token).toBe("new-tok");
+    expect(invite.token).not.toBe("old-tok");
+    expect((await resend.json()).data.invitationLink).toContain(invite.token);
 
     await db.update(invitations).set({ status: "accepted" }).where(eq(invitations.id, invite.id));
     const after = await (await app()).request(

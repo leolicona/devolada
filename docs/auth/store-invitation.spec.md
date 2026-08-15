@@ -8,6 +8,11 @@ debt: []
 
 # Spec: Store invitation redemption
 
+> **Contract superseded 2026-08-15**: the auth implementation moved to
+> Better Auth and [better-auth.spec.md](better-auth.spec.md) owns the
+> contract now. This spec keeps its history and its scenario numbering,
+> which the new spec and tests still cite.
+
 The shopkeeper receives a WhatsApp/SMS link, opens `/invitation/$token`, sets their password, and lands ready to charge. This spec covers the **redemption half**; creating and sending invitations ships with the admin Stores task (US-A02), which will reference this contract.
 
 ## Decisions

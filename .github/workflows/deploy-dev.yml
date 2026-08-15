@@ -59,24 +59,25 @@ jobs:
       # laptop fails. Right here, latest == deployed.
       # The guard is shell, not `if:` — the secrets context is not allowed in a
       # step condition, and using it there makes GitHub reject the whole file.
-      - name: Sync worker secrets (each skipped until the environment has one)
+      - name: Sync worker secrets
         working-directory: apps/api
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: |
           if [ -z "$RESEND_API_KEY" ]; then
             echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
           else
             printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env dev
           fi
-          # TD-001: without it the API decodes JWTs without checking the
-          # signature (src/auth/jwt.ts), on a Worker anyone can reach.
-          if [ -z "$AUTH_JWT_SECRET" ]; then
-            echo "No AUTH_JWT_SECRET in the dev environment — skipping (TD-001)."
-          else
-            printf '%s' "$AUTH_JWT_SECRET" | pnpm exec wrangler secret put AUTH_JWT_SECRET --env dev
+          # Required: Better Auth signs every session cookie with it
+          # (better-auth.spec.md). Without it the deployed API would sign
+          # with a public dev value — refuse to ship that.
+          if [ -z "$BETTER_AUTH_SECRET" ]; then
+            echo "::error::BETTER_AUTH_SECRET is not set in the dev environment. Sessions cannot ship signed with a public value."
+            exit 1
           fi
+          printf '%s' "$BETTER_AUTH_SECRET" | pnpm exec wrangler secret put BETTER_AUTH_SECRET --env dev
       - name: Build store PWA (dev API baked in)
         working-directory: apps/tienda
         run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build

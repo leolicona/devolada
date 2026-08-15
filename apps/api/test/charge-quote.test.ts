@@ -36,7 +36,7 @@ function mockWispHubUserLookup(results: unknown[] = [wisphubCustomer]) {
     });
 }
 
-const asStore = { headers: { Cookie: sessionCookieHeader("5512345678") } };
+const asStore = { headers: { Cookie: await sessionCookieHeader("5512345678") } };
 const QUOTE_PATH = "/charges/customers/greyes%40wifiplus";
 
 describe("US-C02: the quote is computed server-side", () => {

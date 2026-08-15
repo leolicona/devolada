@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { AppShell } from "./AppShell";
 import { LoginPage } from "./screens/LoginPage";
+import { RecoverPage } from "./screens/RecoverPage";
 import { InvitationScreen } from "./features/invitation/InvitationScreen";
 import { SearchScreen } from "./features/charge/SearchScreen";
 import { ConfirmScreen } from "./features/charge/ConfirmScreen";
@@ -22,6 +23,12 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
   component: LoginPage,
+});
+
+const recoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recuperar",
+  component: RecoverPage,
 });
 
 const invitationRoute = createRoute({
@@ -74,6 +81,7 @@ const ledgerRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  recoverRoute,
   invitationRoute,
   appRoute.addChildren([chargeRoute, chargeConfirmRoute, chargeResultRoute, cashboxRoute, cashDropRoute, ledgerRoute]),
 ]);

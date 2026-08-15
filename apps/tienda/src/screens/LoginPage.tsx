@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { LoginForm } from "../auth/LoginForm";
 
@@ -15,6 +15,11 @@ export function LoginPage() {
           void navigate({ to: "/" });
         }}
       />
+      <p className="mt-6 text-center text-sm">
+        <Link to="/recuperar" className="text-link hover:underline">
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </p>
     </main>
   );
 }

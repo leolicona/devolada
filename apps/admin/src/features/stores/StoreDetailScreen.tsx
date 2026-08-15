@@ -3,7 +3,7 @@ import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Mail, Pause, Play } from "lucide-react";
 import { Alert, Amount, Card, CardContent, CardHeader, CardTitle, Skeleton, StatusBadge, formatMoney, parseMoney } from "@devolada/ui";
-import type { StoreItem } from "@devolada/api/stores-schema";
+import type { StoreDetail, StoreItem } from "@devolada/api/stores-schema";
 import type { LedgerResponse } from "@devolada/api/ledger-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +27,9 @@ export function StoreDetailScreen() {
   const [commissionText, setCommissionText] = useState<string | null>(null);
   const [capText, setCapText] = useState<string | null>(null);
 
-  const store = useQuery<StoreItem, ApiError>({
+  const store = useQuery<StoreDetail, ApiError>({
     queryKey: ["store", storeId],
-    queryFn: () => api<StoreItem>(`/stores/${storeId}`),
+    queryFn: () => api<StoreDetail>(`/stores/${storeId}`),
   });
   const ledger = useQuery<LedgerResponse, ApiError>({
     queryKey: ["store-ledger", storeId],
@@ -94,6 +94,13 @@ export function StoreDetailScreen() {
           <p className="text-sm text-muted-foreground">
             {s.contactName} · {s.zone ?? "Sin zona"} · {s.phone}
           </p>
+          {/* Recovery email, read-only (owner decision, better-auth.spec.md):
+              the ISP is the shopkeeper's first line of support */}
+          {s.recoveryEmail && (
+            <p className="text-sm text-muted-foreground">
+              Correo de recuperación: {s.recoveryEmail}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {/* design-review D2: a store is a store, not an internet service */}

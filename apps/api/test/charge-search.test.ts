@@ -46,7 +46,7 @@ async function seedStoreWithKey() {
   return isp;
 }
 
-const asStore = { headers: { Cookie: sessionCookieHeader("5512345678") } };
+const asStore = { headers: { Cookie: await sessionCookieHeader("5512345678") } };
 
 describe("US-C01: the query type is detected, not selected", () => {
   it("digits query calls WispHub with ?telefono=", async () => {
@@ -142,7 +142,7 @@ describe("US-C01: store sessions only", () => {
 
     const asIsp = await (await app()).request(
       "/charges/customers?q=Janely",
-      { headers: { Cookie: sessionCookieHeader("demo@devolada.app") } },
+      { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
       env,
     );
     expect(asIsp.status).toBe(403);

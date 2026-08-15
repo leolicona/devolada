@@ -12,7 +12,7 @@ beforeAll(() => {
   fetchMock.disableNetConnect();
 });
 
-const asStore = { headers: { Cookie: sessionCookieHeader("5512345678") } };
+const asStore = { headers: { Cookie: await sessionCookieHeader("5512345678") } };
 const post = (body: unknown): RequestInit => ({
   method: "POST",
   headers: { "Content-Type": "application/json", ...asStore.headers },

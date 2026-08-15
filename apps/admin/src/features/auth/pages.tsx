@@ -1,18 +1,19 @@
 import { Alert } from "@devolada/ui";
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { AccessLayout } from "./AccessLayout";
-import { login, recover, resetPassword, signup, verifyEmail } from "./session";
+import { login, requestPasswordReset, resetPasswordWithCode, signup } from "./session";
 
-/* Access pages (isp-signup spec UI contract). Controlled forms, plain
-   es-MX copy, generic errors that never leak account existence. */
+/* Access pages (better-auth.spec.md UI contract). Controlled forms,
+   plain es-MX copy, generic errors that never leak account existence.
+   Codes, never links (D4): recovery types a código, it never clicks. */
 
-function useSubmit(action: () => Promise<unknown>, onDone: () => void) {
+function useSubmit(action: () => Promise<unknown>, onDone: () => void, fallback: string) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return {
@@ -29,9 +30,9 @@ function useSubmit(action: () => Promise<unknown>, onDone: () => void) {
         setError(
           e instanceof ApiError && e.code === "EMAIL_TAKEN"
             ? "Ya existe una cuenta con ese correo."
-            : e instanceof ApiError && e.code === "INVALID_TOKEN"
-              ? "Este enlace ya no sirve. Solicita uno nuevo."
-              : "Correo o contraseña incorrectos",
+            : e instanceof ApiError && /OTP|CODE/i.test(e.code)
+              ? "El código no es válido o ya venció. Pide uno nuevo."
+              : fallback,
         );
       } finally {
         setBusy(false);
@@ -51,6 +52,7 @@ export function LoginPage() {
       void queryClient.invalidateQueries({ queryKey: ["session"] });
       void navigate({ to: "/" });
     },
+    "Correo o contraseña incorrectos",
   );
 
   return (
@@ -97,9 +99,11 @@ export function SignupPage() {
   const submit = useSubmit(
     () => signup(name, email, password),
     () => {
+      /* The shell's banner asks for the código that just went out */
       void queryClient.invalidateQueries({ queryKey: ["session"] });
       void navigate({ to: "/" });
     },
+    "No pudimos crear la cuenta. Revisa los datos.",
   );
 
   return (
@@ -138,58 +142,44 @@ export function SignupPage() {
   );
 }
 
-export function VerifyPage() {
-  const { token } = useSearch({ strict: false }) as { token?: string };
+/* Recovery in two steps on one screen (better-auth.spec.md): email →
+   código + new password. The confirmation copy is identical whether the
+   account exists or not — no existence leak. */
+export function RecoverPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [state, setState] = useState<"working" | "done" | "failed">("working");
-
-  /* D4: the user's job was clicking the link — redeem on load */
-  useEffect(() => {
-    if (!token) {
-      setState("failed");
-      return;
-    }
-    verifyEmail(token)
-      .then(() => {
-        setState("done");
-        void queryClient.invalidateQueries({ queryKey: ["session"] });
-      })
-      .catch(() => setState("failed"));
-  }, [token, queryClient]);
-
-  return (
-    <AccessLayout title="Confirmar correo">
-      {state === "working" && <p className="text-sm text-muted-foreground">Confirmando…</p>}
-      {state === "done" && (
-        <div className="space-y-4">
-          <Alert variant="success">Tu correo quedó confirmado.</Alert>
-          <Button size="lg" className="w-full" onClick={() => void navigate({ to: "/" })}>
-            Ir al panel
-          </Button>
-        </div>
-      )}
-      {state === "failed" && (
-        <Alert variant="destructive">Este enlace ya no sirve. Solicita uno nuevo desde el panel.</Alert>
-      )}
-    </AccessLayout>
-  );
-}
-
-export function RecoverPage() {
+  const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+
+  const ask = useSubmit(
+    () => requestPasswordReset(email),
+    () => setStep("code"),
+    "No pudimos enviar el código. Intenta de nuevo.",
+  );
+
+  const reset = useSubmit(
+    async () => {
+      if (password.length < 8) throw new ApiError("VALIDATION", 400);
+      if (password !== confirm) throw new ApiError("VALIDATION", 400);
+      await resetPasswordWithCode(email, code, password);
+    },
+    () => {
+      void queryClient.invalidateQueries({ queryKey: ["session"] });
+      void navigate({ to: "/login" });
+    },
+    "Revisa que la contraseña tenga 8 caracteres y coincida.",
+  );
 
   return (
     <AccessLayout title="Recuperar contraseña">
-      {sent ? (
-        /* Same confirmation for any email: no existence leak */
-        <Alert>Si existe una cuenta con ese correo, enviamos un enlace para restablecer la contraseña.</Alert>
-      ) : (
+      {step === "email" ? (
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void recover(email).finally(() => setSent(true));
+            void ask.run();
           }}
           className="space-y-4"
           noValidate
@@ -198,62 +188,55 @@ export function RecoverPage() {
             <Label htmlFor="email">Correo</Label>
             <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
-          <Button type="submit" size="lg" className="w-full">
-            Enviar enlace
+          {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
+          <Button type="submit" size="lg" className="w-full" disabled={ask.busy}>
+            {ask.busy ? "Enviando…" : "Enviar código"}
           </Button>
         </form>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void reset.run();
+          }}
+          className="space-y-4"
+          noValidate
+        >
+          <Alert>Si existe una cuenta con ese correo, le enviamos un código.</Alert>
+          <div>
+            <Label htmlFor="code">Código</Label>
+            <Input
+              id="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="password">Nueva contraseña</Label>
+            <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="confirm">Repite la contraseña</Label>
+            <Input id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </div>
+          {reset.error && <Alert variant="destructive">{reset.error}</Alert>}
+          <Button type="submit" size="lg" className="w-full" disabled={reset.busy}>
+            {reset.busy ? "Guardando…" : "Guardar contraseña"}
+          </Button>
+          <p className="text-center text-sm">
+            <button
+              type="button"
+              className="text-link hover:underline"
+              onClick={() => void ask.run()}
+            >
+              Reenviar código
+            </button>
+          </p>
+        </form>
       )}
-    </AccessLayout>
-  );
-}
-
-export function ResetPage() {
-  const { token } = useSearch({ strict: false }) as { token?: string };
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const submit = useSubmit(
-    async () => {
-      if (password.length < 8) throw new ApiError("VALIDATION", 400);
-      if (password !== confirm) throw new ApiError("VALIDATION", 400);
-      await resetPassword(token ?? "", password);
-    },
-    () => {
-      void queryClient.invalidateQueries({ queryKey: ["session"] });
-      void navigate({ to: "/" });
-    },
-  );
-
-  return (
-    <AccessLayout title="Nueva contraseña">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit.run();
-        }}
-        className="space-y-4"
-        noValidate
-      >
-        <div>
-          <Label htmlFor="password">Nueva contraseña</Label>
-          <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="confirm">Repite la contraseña</Label>
-          <Input id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </div>
-        {submit.error && (
-          <Alert variant="destructive">
-            {submit.error === "Correo o contraseña incorrectos"
-              ? "Revisa que la contraseña tenga 8 caracteres y coincida."
-              : submit.error}
-          </Alert>
-        )}
-        <Button type="submit" size="lg" className="w-full" disabled={submit.busy}>
-          {submit.busy ? "Guardando…" : "Guardar y entrar"}
-        </Button>
-      </form>
     </AccessLayout>
   );
 }

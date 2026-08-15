@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { fail as failResponse, handlers, ispActor, ok, server } from "./msw";
+import { baOk, fail as failResponse, handlers, ispActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/admin/shell.spec.md scenarios 2–6. */
@@ -26,15 +26,20 @@ describe("US-S04: login lands on the dashboard shell", () => {
   });
 });
 
-describe("US-S04: signup shows the verify banner with re-send", () => {
-  it("lands signed-in with the banner when emailVerified is false", async () => {
+describe("US-S04: signup shows the verify banner with a código input", () => {
+  it("lands signed-in with the banner; the código confirms and can be re-sent", async () => {
     let resent = false;
+    let verified = false;
     server.use(
       handlers.signup(() => ok({ type: "isp", id: "isp-1", name: "Nuevo", emailVerified: false }, 201)),
       handlers.session(() => ok({ ...ispActor, emailVerified: false })),
-      handlers.resend(() => {
+      handlers.sendCode(() => {
         resent = true;
-        return ok({});
+        return baOk();
+      }),
+      handlers.verifyEmail(() => {
+        verified = true;
+        return baOk();
       }),
     );
     renderApp("/signup");
@@ -45,29 +50,38 @@ describe("US-S04: signup shows the verify banner with re-send", () => {
     await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
 
     expect(await screen.findByText(/confirma tu correo/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /reenviar correo/i }));
+    await userEvent.click(screen.getByRole("button", { name: /reenviar código/i }));
     expect(resent).toBe(true);
+
+    await userEvent.type(screen.getByLabelText("Código"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+    expect(verified).toBe(true);
   });
 });
 
-describe("D4: /verify redeems on load", () => {
-  it("confirms without any tap", async () => {
-    server.use(handlers.verifyEmail(() => ok({ type: "isp", id: "isp-1", emailVerified: true })));
-    renderApp("/verify?token=tok-1");
-
-    expect(await screen.findByText(/quedó confirmado/i)).toBeInTheDocument();
-  });
-});
-
-describe("US-S06: recover never leaks account existence", () => {
-  it("shows the same confirmation for any email", async () => {
-    server.use(handlers.recover(() => ok({})));
-    renderApp("/recover");
+describe("US-S06: recovery asks for a código and never leaks existence", () => {
+  it("shows the same confirmation for any email, then takes código + new password", async () => {
+    let reset = false;
+    server.use(
+      handlers.requestReset(() => baOk()),
+      handlers.resetPassword(() => {
+        reset = true;
+        return baOk();
+      }),
+    );
+    const router = renderApp("/recover");
 
     await userEvent.type(await screen.findByLabelText("Correo"), "nadie@isp.mx");
-    await userEvent.click(screen.getByRole("button", { name: /enviar enlace/i }));
+    await userEvent.click(screen.getByRole("button", { name: /enviar código/i }));
 
     expect(await screen.findByText(/si existe una cuenta/i)).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Código"), "123456");
+    await userEvent.type(screen.getByLabelText("Nueva contraseña"), "nueva-clave-1");
+    await userEvent.type(screen.getByLabelText("Repite la contraseña"), "nueva-clave-1");
+    await userEvent.click(screen.getByRole("button", { name: /guardar contraseña/i }));
+
+    expect(reset).toBe(true);
+    expect(router.state.location.pathname).toBe("/login");
   });
 });
 

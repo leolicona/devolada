@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { isps, stores } from "../db/schema";
-import { AgnosticAuth } from "../auth/agnostic";
+import { isps, stores, user as userTable } from "../db/schema";
+import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
@@ -13,6 +13,7 @@ export const dev = new Hono<{ Bindings: Bindings }>();
 
 const DEMO = {
   ispEmail: "demo@devolada.app",
+  storeEmail: "tienda@devolada.app",
   storePhone: "5512345678",
   password: "devolada123",
 };
@@ -26,7 +27,21 @@ dev.post("/reconnect-sweep", async (c) => {
 
 dev.post("/seed", async (c) => {
   const db = drizzle(c.env.DB);
-  const { hash, salt } = await new AgnosticAuth(c.env).hash(DEMO.password);
+  const ba = makeAuth(c.env);
+
+  /* Creates the Better Auth user (email pre-verified: demo data) and
+     returns its id. The signup OTP goes to the console — harmless. */
+  async function seedUser(name: string, email: string, username?: string) {
+    const { response } = await ba.api.signUpEmail({
+      body: { name, email, password: DEMO.password, ...(username ? { username } : {}) },
+      returnHeaders: true,
+    });
+    await db
+      .update(userTable)
+      .set({ emailVerified: true })
+      .where(eq(userTable.id, response.user.id));
+    return response.user.id;
+  }
 
   let [isp] = await db.select().from(isps).where(eq(isps.email, DEMO.ispEmail));
   /* Idempotent, but the WispHub key must refresh: the demo ISP may have
@@ -38,14 +53,13 @@ dev.post("/seed", async (c) => {
       .where(eq(isps.id, isp.id));
   }
   if (!isp) {
+    const userId = await seedUser("ISP Demo", DEMO.ispEmail);
     [isp] = await db
       .insert(isps)
       .values({
         name: "ISP Demo",
         email: DEMO.ispEmail,
-        emailVerified: true,
-        passwordHash: hash,
-        passwordSalt: salt,
+        userId,
         wisphubApiKey: c.env.WISPHUB_API_KEY ?? null,
       })
       .returning();
@@ -56,14 +70,14 @@ dev.post("/seed", async (c) => {
     .from(stores)
     .where(eq(stores.phone, DEMO.storePhone));
   if (!existingStore) {
+    const userId = await seedUser("Don Chuy", DEMO.storeEmail, DEMO.storePhone);
     await db.insert(stores).values({
       ispId: isp.id,
       name: "Abarrotes La Esquina",
       contactName: "Don Chuy",
       phone: DEMO.storePhone,
       zone: "Col. El Mirador",
-      passwordHash: hash,
-      passwordSalt: salt,
+      userId,
       status: "active",
     });
   }

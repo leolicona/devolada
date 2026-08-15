@@ -19,11 +19,16 @@ export const ok = (data: unknown, status = 200) =>
 export const fail = (code: string, status: number) =>
   HttpResponse.json({ success: false, error: { code } }, { status });
 
+/* Better Auth endpoints have no envelope (better-auth.spec.md D6) */
+export const baOk = () => HttpResponse.json({});
+export const baFail = (code: string, status: number) =>
+  HttpResponse.json({ code }, { status });
+
 export const handlers = {
   session: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/auth/me", () => response()),
   login: (response: () => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/auth/store/login", () => response()),
+    http.post("/auth/sign-in/username", () => response()),
   customerSearch: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/customers", () => response()),
   customerQuote: (response: () => ReturnType<typeof ok | typeof fail>) =>
@@ -37,13 +42,19 @@ export const handlers = {
   cashbox: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/cashbox", () => response()),
   logout: (response: () => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/auth/logout", () => response()),
+    http.post("/auth/sign-out", () => response()),
   recordDrop: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.post("/cash-drops", () => response()),
   ledger: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/ledger", () => response()),
   acceptInvitation: (response: () => ReturnType<typeof ok | typeof fail>) =>
     http.post("/auth/store/accept-invitation", () => response()),
+  verifyEmailCode: (response: () => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/email-otp/verify-email", () => response()),
+  requestPasswordReset: (response: () => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/email-otp/request-password-reset", () => response()),
+  resetPassword: (response: () => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/email-otp/reset-password", () => response()),
 };
 
 export const server = setupServer();

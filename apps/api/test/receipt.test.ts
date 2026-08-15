@@ -8,7 +8,7 @@ import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
 
 /* docs/charges/receipt.spec.md scenarios 1–4. */
 
-const asStore = { headers: { Cookie: sessionCookieHeader("5512345678") } };
+const asStore = { headers: { Cookie: await sessionCookieHeader("5512345678") } };
 
 async function seedCharge(over: Partial<typeof charges.$inferInsert> = {}) {
   const isp = await seedIsp();
@@ -110,7 +110,7 @@ describe("US-C05: the customer leaves with a folio they can keep", () => {
 
     expect((await receiptOf(foreign.id)).status).toBe(404);
     expect(
-      (await receiptOf(charge.id, { Cookie: sessionCookieHeader("demo@devolada.app") })).status,
+      (await receiptOf(charge.id, { Cookie: await sessionCookieHeader("demo@devolada.app") })).status,
     ).toBe(403);
   });
 });

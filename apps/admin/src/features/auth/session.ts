@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, baPost } from "@/lib/api";
 
 export type IspActor = {
   type: "isp";
@@ -34,22 +34,25 @@ export function useDisplaySettings(): { timezone: string; timeFormat: "12h" | "2
   };
 }
 
+/* Daily login keeps the password (better-auth.spec.md D2);
+   registration and recovery prove the email with a code (D4). */
+
 export const login = (email: string, password: string) =>
-  api("/auth/admin/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  baPost("/auth/sign-in/email", { email, password });
 
 export const signup = (name: string, email: string, password: string) =>
-  api("/auth/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
+  api("/auth/isp/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
 
-export const logout = () => api("/auth/logout", { method: "POST" });
+export const logout = () => baPost("/auth/sign-out");
 
-export const verifyEmail = (token: string) =>
-  api("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) });
+export const sendVerificationCode = (email: string) =>
+  baPost("/auth/email-otp/send-verification-otp", { email, type: "email-verification" });
 
-export const resendVerification = () =>
-  api("/auth/resend-verification", { method: "POST" });
+export const verifyEmailCode = (email: string, otp: string) =>
+  baPost("/auth/email-otp/verify-email", { email, otp });
 
-export const recover = (email: string) =>
-  api("/auth/recover", { method: "POST", body: JSON.stringify({ email }) });
+export const requestPasswordReset = (email: string) =>
+  baPost("/auth/email-otp/request-password-reset", { email });
 
-export const resetPassword = (token: string, password: string) =>
-  api("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) });
+export const resetPasswordWithCode = (email: string, otp: string, password: string) =>
+  baPost("/auth/email-otp/reset-password", { email, otp, password });

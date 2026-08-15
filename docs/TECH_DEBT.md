@@ -29,7 +29,9 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 ## TD-001 — JWTs without signature verification in dev
 - Status: open · Origin: auth/sessions.spec.md
 - `apps/api` decodes JWTs without verifying the signature when `AUTH_JWT_SECRET` is missing (with a console warning). Reasonable for local dev; **blocking for production**.
-- Paid by: configuring agnostic-auth's HS256 secret as a worker secret and in `.dev.vars`.
+- Measured 2026-08-15: missing in `.dev.vars` **and** on the deployed dev Worker, whose only secret is `WISPHUB_API_KEY`. So `devolada-api-dev.leolicona-dev.workers.dev` — reachable by anyone — takes the unverified branch of `src/auth/jwt.ts`, which parses the token and rejects it only on `exp`. The middleware still looks the actor up in the DB and checks status, so this impersonates an existing active store or ISP rather than inventing one. Demo data today; the pilot's data is what changes the stakes.
+- Note: `CICD.md` said these secrets "live in GitHub Environments" long before anything set them. The mechanism exists as of CICD D5 — the value still has to be added.
+- Paid by: put agnostic-auth's HS256 secret in the `dev` and `production` GitHub environments as `AUTH_JWT_SECRET` (the deploy step sends it on), and in `.dev.vars` for local runs. Cloudflare secrets cannot be read back, so if the value was never kept anywhere, rotate it on agnostic-auth and set the new one in both places. Prod refuses to deploy without it.
 
 ## TD-002 — Duplicated design tokens
 - Status: open · Origin: tokens phase

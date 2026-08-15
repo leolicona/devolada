@@ -59,16 +59,24 @@ jobs:
       # laptop fails. Right here, latest == deployed.
       # The guard is shell, not `if:` — the secrets context is not allowed in a
       # step condition, and using it there makes GitHub reject the whole file.
-      - name: Sync the Resend key (skipped until the environment has one)
+      - name: Sync worker secrets (each skipped until the environment has one)
         working-directory: apps/api
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
         run: |
           if [ -z "$RESEND_API_KEY" ]; then
             echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
-            exit 0
+          else
+            printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env dev
           fi
-          printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env dev
+          # TD-001: without it the API decodes JWTs without checking the
+          # signature (src/auth/jwt.ts), on a Worker anyone can reach.
+          if [ -z "$AUTH_JWT_SECRET" ]; then
+            echo "No AUTH_JWT_SECRET in the dev environment — skipping (TD-001)."
+          else
+            printf '%s' "$AUTH_JWT_SECRET" | pnpm exec wrangler secret put AUTH_JWT_SECRET --env dev
+          fi
       - name: Build store PWA (dev API baked in)
         working-directory: apps/tienda
         run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build

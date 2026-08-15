@@ -39,7 +39,7 @@ Rules for two worktrees to coexist:
 
 Custom domains (`api.devolada.app`, `tienda.devolada.app`, …) replace the `workers.dev` URLs when the zone exists in Cloudflare.
 
-Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo.
+Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo — and reach the Worker through the sync step in D5. `AUTH_JWT_SECRET` is optional on dev and **required on prod**: the deploy fails without it rather than shipping an API that skips signature checks (TD-001).
 
 Until the `devolada.app` zone exists in Cloudflare, deploys go to `*.workers.dev`; the real URLs are configured as repo variables (`DEV_API_URL`, `PROD_API_URL`) feeding the smoke tests. The domains in the table are the destination, not the current state.
 

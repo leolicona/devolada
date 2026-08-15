@@ -58,16 +58,26 @@ jobs:
         run: pnpm exec wrangler deploy --env prod
       # TD-011, and see the note in deploy-dev.yml: after the deploy, never
       # before it.
-      - name: Sync the Resend key (skipped until the environment has one)
+      # AUTH_JWT_SECRET is required here, not optional: prod must never run the
+      # unverified branch of src/auth/jwt.ts. The build fails without it.
+      - name: Sync worker secrets
         working-directory: apps/api
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
         run: |
+          if [ -z "$AUTH_JWT_SECRET" ]; then
+            echo "::error::AUTH_JWT_SECRET is not set in the production environment."
+            echo "Without it the API accepts any well-formed JWT without checking"
+            echo "its signature (TD-001). Refusing to finish a prod deploy."
+            exit 1
+          fi
+          printf '%s' "$AUTH_JWT_SECRET" | pnpm exec wrangler secret put AUTH_JWT_SECRET --env prod
           if [ -z "$RESEND_API_KEY" ]; then
             echo "No RESEND_API_KEY in the production environment — skipping (TD-011)."
-            exit 0
+          else
+            printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env prod
           fi
-          printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env prod
       - name: Build store PWA (prod API baked in)
         working-directory: apps/tienda
         run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build

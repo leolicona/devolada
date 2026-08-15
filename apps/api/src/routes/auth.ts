@@ -6,7 +6,14 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { APIError } from "better-auth";
 import type { Bindings, Variables } from "../env";
-import { invitations, isps, stores, user as userTable } from "../db/schema";
+import {
+  account as accountTable,
+  invitations,
+  isps,
+  session as sessionTable,
+  stores,
+  user as userTable,
+} from "../db/schema";
 import { makeAuth } from "../auth/better";
 import { requireSession } from "../auth/middleware";
 
@@ -17,6 +24,14 @@ import { requireSession } from "../auth/middleware";
 export const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/* Deletes a Better Auth user and its dependents — the cleanup path when
+   linking the actor row fails after the user was created. */
+async function removeUser(db: ReturnType<typeof drizzle>, userId: string) {
+  await db.delete(sessionTable).where(eq(sessionTable.userId, userId));
+  await db.delete(accountTable).where(eq(accountTable.userId, userId));
+  await db.delete(userTable).where(eq(userTable.id, userId));
+}
 
 /* Better Auth sets its session cookie on its own response; our envelope
    responses have to carry it over. */
@@ -39,9 +54,14 @@ auth.post("/isp/signup", zValidator("json", signupInput), async (c) => {
   const db = drizzle(c.env.DB);
 
   /* Signup necessarily reveals existence (rule inherited from the old
-     spec's D4) */
+     spec's D4). BOTH tables: a user row, or an isps row — including
+     pre-migration rows with no user linked. Checking only `user` once
+     created an orphan (user inserted, isps UNIQUE(email) blew up), and
+     an orphan signs in but /auth/me finds no actor. */
   const [existing] = await db.select().from(userTable).where(eq(userTable.email, email));
   if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
+  const [taken] = await db.select().from(isps).where(eq(isps.email, email));
+  if (taken) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
 
   const ba = makeAuth(c.env);
   const { headers, response } = await ba.api.signUpEmail({
@@ -52,10 +72,18 @@ auth.post("/isp/signup", zValidator("json", signupInput), async (c) => {
   /* isps.email is the business/display copy (schema note); auth reads
      the Better Auth user only. The verification code went out through
      the OTP hook, best-effort by construction. */
-  const [isp] = await db
-    .insert(isps)
-    .values({ name, email, userId: response.user.id })
-    .returning();
+  let isp;
+  try {
+    [isp] = await db
+      .insert(isps)
+      .values({ name, email, userId: response.user.id })
+      .returning();
+  } catch (e) {
+    /* Never leave an orphan behind: a user that signs in but resolves
+       to no actor is worse than a failed signup */
+    await removeUser(db, response.user.id);
+    throw e;
+  }
 
   forwardCookies(headers, c);
   return c.json(
@@ -113,14 +141,20 @@ auth.post(
     }
 
     /* Accepting also activates (rule inherited from the old spec) */
-    await db
-      .update(stores)
-      .set({ userId: result.response.user.id, status: "active" })
-      .where(eq(stores.id, store.id));
-    await db
-      .update(invitations)
-      .set({ status: "accepted", acceptedAt: new Date() })
-      .where(eq(invitations.id, invitation.id));
+    try {
+      await db
+        .update(stores)
+        .set({ userId: result.response.user.id, status: "active" })
+        .where(eq(stores.id, store.id));
+      await db
+        .update(invitations)
+        .set({ status: "accepted", acceptedAt: new Date() })
+        .where(eq(invitations.id, invitation.id));
+    } catch (e) {
+      /* Same rule as signup: no orphan users */
+      await removeUser(db, result.response.user.id);
+      throw e;
+    }
 
     forwardCookies(result.headers, c);
     return c.json({ success: true, data: { type: "store", id: store.id, name: store.name } });

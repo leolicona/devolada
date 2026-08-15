@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { isps, stores, user as userTable } from "../db/schema";
@@ -28,6 +28,19 @@ dev.post("/reconnect-sweep", async (c) => {
 dev.post("/seed", async (c) => {
   const db = drizzle(c.env.DB);
   const ba = makeAuth(c.env);
+
+  /* Repair pass for pre-migration rows: an isps row with no user whose
+     email already has a Better Auth user (an orphan left by the old
+     signup bug) gets linked instead of staying unreachable. The user
+     keeps whatever password they set — recovery included. */
+  const unlinked = await db.select().from(isps).where(isNull(isps.userId));
+  for (const row of unlinked) {
+    const [orphan] = await db.select().from(userTable).where(eq(userTable.email, row.email));
+    if (orphan) {
+      await db.update(isps).set({ userId: orphan.id }).where(eq(isps.id, row.id));
+      console.log(`seed: linked legacy isp ${row.email} to its orphan user`);
+    }
+  }
 
   /* Creates the Better Auth user (email pre-verified: demo data) and
      returns its id. The signup OTP goes to the console — harmless. */

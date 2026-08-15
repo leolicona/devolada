@@ -56,6 +56,14 @@ jobs:
       - name: Deploy prod API
         working-directory: apps/api
         run: pnpm exec wrangler deploy --env prod
+      # TD-011, and see the note in deploy-dev.yml: after the deploy, never
+      # before it.
+      - name: Sync the Resend key (skipped until the environment has one)
+        if: ${{ secrets.RESEND_API_KEY != '' }}
+        working-directory: apps/api
+        run: |
+          printf '%s' "${{ secrets.RESEND_API_KEY }}" \
+            | pnpm exec wrangler secret put RESEND_API_KEY --env prod
       - name: Build store PWA (prod API baked in)
         working-directory: apps/tienda
         run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build

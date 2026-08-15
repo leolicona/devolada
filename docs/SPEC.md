@@ -30,6 +30,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | Store's initial access | **Invitación** | `invitation` (`sent/accepted`) | — |
 | Balance threshold | **Techo de saldo** | `balance_cap` | — |
 | Device biometric sign-in | **Huella / rostro** | `passkey` | "biometría", "WebAuthn" (never in copy) |
+| One-time email code | **Código** | `otp` | "token", "OTP", "enlace" (never in copy) |
 
 ## User Stories
 
@@ -37,9 +38,9 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-S01** — As a store, I log in with phone + password and my session lasts for weeks on my device.
 - **US-S02** — As a signed-in user, I never see "session expired" during normal operation: tokens renew on their own.
 - **US-S03** — As an ISP, suspending a store revokes its access immediately, even mid-session.
-- **US-S04** — As an ISP, I sign up with email + password and verify my email (Resend) before operating.
-- **US-S05** — As a store, I receive an invitation via WhatsApp/SMS and set my password **and recovery email** from the link. *(email added 2026-08-15, better-auth.spec.md D7)*
-- **US-S06** — As any user, my email is my master recovery key; as a store, the ISP can also re-send my invitation. *(rewritten 2026-08-15; was ISP-only recovery)*
+- **US-S04** — As an ISP, I sign up with email + password and verify my email with a code (Resend) before operating. *(link → code 2026-08-15, better-auth.spec.md D4)*
+- **US-S05** — As a store, I receive an invitation via WhatsApp/SMS and set my password **and recovery email** from the link. *(email added 2026-08-15, better-auth.spec.md D8)*
+- **US-S06** — As any user, my email is my master recovery key: a code sent to it restores my access. As a store, the ISP can also re-send my invitation. *(rewritten 2026-08-15; was ISP-only and link-based)*
 - **US-S07** — As any user, I can enable my device's fingerprint or face (passkey) and sign in with one touch, no email or password involved.
 
 ### Charges (C)
@@ -82,7 +83,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
 - **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05)
-- **Phase 6 — Better Auth migration** (better-auth.spec.md; spike passed 2026-08-15): spec ✍ · API ☐ · admin pages ☐ · tienda pages ☐ · custom domains + passkeys ☐ — retires Agnostic Auth, TD-001 and TD-012 by elimination
+- **Phase 6 — Better Auth migration** (better-auth.spec.md; spike passed 2026-08-15): spec ✍ · API ☐ · admin pages ☐ · tienda pages ☐ · custom domains + passkeys ☐ — retires Agnostic Auth; TD-001 and TD-012 die by elimination
 
 Every ✅ above means "built, specced and tested". None of them means "verified on
 the deployed apps with a real ISP": those checks are the open boxes at the foot of

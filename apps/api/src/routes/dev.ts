@@ -52,6 +52,12 @@ dev.post("/seed", async (c) => {
       .set({ wisphubApiKey: c.env.WISPHUB_API_KEY })
       .where(eq(isps.id, isp.id));
   }
+  /* Rows seeded before the Better Auth migration exist without a user
+     (user_id NULL after migration 0004): backfill so login works again */
+  if (isp && !isp.userId) {
+    const userId = await seedUser("ISP Demo", DEMO.ispEmail);
+    await db.update(isps).set({ userId }).where(eq(isps.id, isp.id));
+  }
   if (!isp) {
     const userId = await seedUser("ISP Demo", DEMO.ispEmail);
     [isp] = await db
@@ -69,6 +75,10 @@ dev.post("/seed", async (c) => {
     .select()
     .from(stores)
     .where(eq(stores.phone, DEMO.storePhone));
+  if (existingStore && !existingStore.userId) {
+    const userId = await seedUser("Don Chuy", DEMO.storeEmail, DEMO.storePhone);
+    await db.update(stores).set({ userId }).where(eq(stores.id, existingStore.id));
+  }
   if (!existingStore) {
     const userId = await seedUser("Don Chuy", DEMO.storeEmail, DEMO.storePhone);
     await db.insert(stores).values({

@@ -1,19 +1,22 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Alert, Amount, Button, Card, ListError, Skeleton, cn } from "@devolada/ui";
+import { Alert, Amount, Button, Card, ListError, Skeleton } from "@devolada/ui";
 import type { LedgerEntryItem, LedgerResponse } from "@devolada/api/ledger-schema";
 import { api, ApiError } from "../../api/client";
 
 /* Movimientos (US-K03): the entries the Caja balance sums, grouped by
    day. Rows carry their context (spec D4). */
 
+/* design-review D4: "Comisión" appeared here as −$9.00 and in Caja as
+   "Tu comisión ganada $18.00" — same word, opposite sign, one tap apart.
+   The store earns it, and it comes out of the ISP cash the store holds. */
 const typeLabel = (entry: LedgerEntryItem): string => {
-  if (entry.type === "commission") return "Comisión";
+  if (entry.type === "commission") return "Comisión ganada";
   if (entry.type === "cash_drop") return "Entrega al ISP";
   return entry.reference ? `Cobro · ${entry.reference.customerName}` : "Cobro";
 };
 
-const amountClass = (entry: LedgerEntryItem): string =>
-  entry.type === "charge" ? "text-success" : entry.type === "commission" ? "text-ink-soft" : "text-ink";
+const typeNote = (entry: LedgerEntryItem): string | null =>
+  entry.type === "commission" ? "Sale del efectivo del ISP que tienes en tu poder" : null;
 
 const dayFormat = new Intl.DateTimeFormat("es-MX", {
   weekday: "long",
@@ -113,19 +116,20 @@ export function LedgerScreen() {
               {group.items.map((entry) => (
                 <li key={entry.id} className="flex items-baseline justify-between gap-4 p-4">
                   <div className="min-w-0">
-                    <p className="truncate text-base font-medium">{typeLabel(entry)}</p>
+                    {/* D1: the entry's name wraps; it is what the row is about */}
+                    <p className="text-base font-medium">{typeLabel(entry)}</p>
                     <p className="mt-0.5 text-sm text-ink-soft">
                       {timeFormat.format(new Date(entry.createdAt))}
                       {entry.reference && (
                         <span className="font-mono"> · {entry.reference.folio}</span>
                       )}
                     </p>
+                    {typeNote(entry) && (
+                      <p className="mt-0.5 text-sm text-ink-soft">{typeNote(entry)}</p>
+                    )}
                   </div>
-                  <Amount
-                    cents={entry.cents}
-                    sign
-                    className={cn("shrink-0 text-base font-semibold", amountClass(entry))}
-                  />
+                  {/* D3: the sign carries the direction; green stays a status */}
+                  <Amount cents={entry.cents} sign className="shrink-0 text-base font-semibold" />
                 </li>
               ))}
             </ul>

@@ -68,6 +68,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-P02** — As a user, the app follows my system's light or dark preference, and dark is a real palette, not an inversion.
 - **US-P03** — As a store, the PWA works on a 360px phone; as an ISP, the admin works on my phone when I confirm a handover away from the desk.
 - **US-P04** — As a user with low vision or a screen reader, every status reaches me as icon + text, contrast holds, and the feed announces what changed.
+- **US-P05** — As a user of either app, every list row tells me what it is about, and every word and colour means one thing across both surfaces.
 
 ## Features by Phase
 
@@ -78,7 +79,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 2 — Store PWA**: shell, search, charge, live result, cash box, cash drops, ledger, special states
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
-- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ✅ (US-P04) · design review
+- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ✅ (US-P04) · design review ✅ (US-P05)
 
 ## Spec index
 
@@ -104,6 +105,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 | [polish/dark-and-contrast.spec.md](polish/dark-and-contrast.spec.md) | polish | US-P02, US-P04 (contrast) | in development |
 | [polish/accessibility.spec.md](polish/accessibility.spec.md) | polish | US-P04 | in development |
 | [polish/responsive.spec.md](polish/responsive.spec.md) | polish | US-P03, US-P02, US-P04 (rendered) | in development |
+| [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 
 ## Cross-cutting layers
 

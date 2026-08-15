@@ -41,6 +41,88 @@ async function expectTouchTargets(page: Page, min = 44) {
   expect(small, `controls under ${min}px tall`).toEqual([]);
 }
 
+/* design-review.spec.md D1: the two assertions above both pass on a row
+   that says nothing. A `min-w-0 flex-1` column beside fixed-width siblings
+   collapses to zero, and `truncate` hides the collapse behind an ellipsis
+   — the page does not scroll, the targets are big, and the store's name is
+   gone. Clipping is measurable: an element that hides its overflow and
+   needs more width than it has is cutting text off. */
+async function expectNothingClipped(page: Page) {
+  const clipped = await page.evaluate(() => {
+    const bad: string[] = [];
+    for (const el of document.querySelectorAll("main *")) {
+      const node = el as HTMLElement;
+      if (node.children.length > 0) continue; /* leaves hold the text */
+      const text = node.textContent?.trim();
+      if (!text) continue;
+      const style = getComputedStyle(node);
+      /* sr-only clips on purpose: an absolute 1px box for assistive tech.
+         A collapsed row column is neither absolute nor 1px tall. */
+      if (style.position === "absolute" && node.clientHeight <= 1) continue;
+      if (style.overflow !== "hidden" && style.overflowX !== "hidden") continue;
+      if (node.scrollWidth > node.clientWidth + 1) {
+        bad.push(`"${text.slice(0, 40)}" needs ${node.scrollWidth}px, has ${node.clientWidth}px`);
+      }
+    }
+    return bad;
+  });
+  expect(clipped, "text cut off by its own container").toEqual([]);
+}
+
+test.describe("US-P05: every list row says what it is about at 360px", () => {
+  test.use({ viewport: PHONE });
+
+  test("Tiendas shows which store each row is", async ({ page }) => {
+    await stubAdminApi(page);
+    await page.goto(`${ADMIN}/stores`);
+    await expect(page.getByText("Abarrotes La Esquina")).toBeVisible();
+    await expectNothingClipped(page);
+  });
+
+  test("the Entregas history shows the store and the date", async ({ page }) => {
+    await stubAdminApi(page);
+    await page.goto(`${ADMIN}/cash-drops`);
+    await expect(page.getByText("Entrega confirmada")).toBeVisible();
+    await expectNothingClipped(page);
+  });
+
+  test("the confirm screen shows the whole customer name", async ({ page }) => {
+    await stubStoreApi(page);
+    await page.goto(`${TIENDA}/charge/greyes%40wifiplus`);
+    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
+    await expectNothingClipped(page);
+  });
+
+  test("a search result shows the whole customer name", async ({ page }) => {
+    await stubStoreApi(page);
+    await page.goto(TIENDA);
+    await page.getByLabel("Buscar cliente").fill("Janely");
+    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
+    await expectNothingClipped(page);
+  });
+
+  test("Movimientos shows the whole entry name", async ({ page }) => {
+    await stubStoreApi(page);
+    await page.goto(`${TIENDA}/ledger`);
+    await expect(page.getByText(/Cobro · Janely/)).toBeVisible();
+    await expectNothingClipped(page);
+  });
+
+  test("the charge feed shows customer and store", async ({ page }) => {
+    await stubAdminApi(page);
+    await page.goto(ADMIN);
+    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
+    await expectNothingClipped(page);
+  });
+
+  test("Caja shows the whole store name", async ({ page }) => {
+    await stubStoreApi(page);
+    await page.goto(`${TIENDA}/cashbox`);
+    await expect(page.getByText("Abarrotes La Esquina")).toBeVisible();
+    await expectNothingClipped(page);
+  });
+});
+
 test.describe("US-P03: the store PWA works on a 360px phone", () => {
   test.use({ viewport: PHONE });
 

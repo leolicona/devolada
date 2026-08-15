@@ -59,7 +59,9 @@ export function CashboxScreen() {
   return (
     <main className="px-6 pt-8">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="truncate text-xl font-semibold">{data.storeName}</h1>
+        {/* design-review D1: the store's own name wraps rather than losing
+            its ending to "Cerrar sesión" at the 360px floor. */}
+        <h1 className="text-xl font-semibold">{data.storeName}</h1>
         <Button
           variant="ghost"
           onClick={() => void onLogout()}
@@ -90,9 +92,11 @@ export function CashboxScreen() {
 
       <Card className="mt-3 p-6">
         <p className="text-sm text-ink-soft">Tu comisión ganada</p>
+        {/* design-review D3: green is a status colour. The amount is ink;
+            what it means is in the label above it. */}
         <Amount
           cents={data.commissionEarnedCents}
-          className="mt-1 block text-2xl font-semibold text-success"
+          className="mt-1 block text-2xl font-semibold"
         />
       </Card>
 

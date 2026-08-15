@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   Mail,
+  Store,
   Wifi,
   WifiOff,
   XCircle,
@@ -26,9 +27,14 @@ export type Status =
   | "pending"
   | "confirmed"
   | "disputed"
-  /* customer service / store status */
+  /* the subscriber's internet service */
   | "active"
   | "suspended"
+  /* the store's account — a different concept, so different words
+     (design-review D2). Sharing the pair told the ISP that a suspended
+     shop's internet was down. */
+  | "storeActive"
+  | "storeSuspended"
   /* store invitation */
   | "invited";
 
@@ -53,6 +59,8 @@ const statuses: Record<
   disputed: { tone: "error", icon: AlertTriangle, label: "En disputa" },
   active: { tone: "success", icon: Wifi, label: "Servicio activo" },
   suspended: { tone: "error", icon: WifiOff, label: "Servicio suspendido" },
+  storeActive: { tone: "success", icon: Store, label: "Tienda activa" },
+  storeSuspended: { tone: "error", icon: Store, label: "Tienda suspendida" },
   invited: { tone: "warning", icon: Mail, label: "Invitación enviada" },
 };
 

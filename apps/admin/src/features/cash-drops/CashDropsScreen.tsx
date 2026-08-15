@@ -71,8 +71,8 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
     <Card className="min-w-0 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{drop.storeName}</p>
-          <p className="truncate text-sm text-muted-foreground">
+          <p className="text-sm font-medium">{drop.storeName}</p>
+          <p className="text-sm text-muted-foreground">
             {drop.storeZone ?? "Sin zona"} · Registrada el {when(drop.createdAt)}
           </p>
         </div>
@@ -87,9 +87,12 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
         </p>
       )}
 
-      {/* US-P03: stacked, not a wrapping flex row — a w-full child
-          inside one grows the card past a 360px screen. */}
-      <div className="mt-4 space-y-2">
+      {/* The rare, slower path wraps both actions so its note can open at
+          full width under them. US-P03: stacked at the phone floor, where a
+          w-full child inside a wrapping flex row grew the card past 360px;
+          design-review D10: side by side from sm up, where there is room. */}
+      <Collapsible className="mt-4">
+        <div className="space-y-2 sm:flex sm:flex-wrap sm:gap-2 sm:space-y-0">
         {/* D6: the second tap lives in a dialog — the write cannot be undone */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -117,14 +120,13 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* The rare, slower path: writing a reason */}
-        <Collapsible>
           <CollapsibleTrigger asChild>
             <Button variant="outline" disabled={busy}>
               <MessageSquareWarning className="size-4" aria-hidden />
               Marcar en disputa
             </Button>
           </CollapsibleTrigger>
+        </div>
           <CollapsibleContent>
             <div className="mt-3 rounded-md border border-border bg-muted p-3">
               <label htmlFor={`note-${drop.id}`} className="text-sm font-medium">
@@ -153,8 +155,7 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
               </Button>
             </div>
           </CollapsibleContent>
-        </Collapsible>
-      </div>
+      </Collapsible>
 
       {(confirm.error || dispute.error) && (
         <p className="mt-3 text-sm font-medium text-error">
@@ -168,16 +169,23 @@ function PendingCard({ drop }: { drop: AdminCashDrop }) {
 function HistoryRow({ drop }: { drop: AdminCashDrop }) {
   const when = useWhen();
   return (
-    <li className="flex flex-wrap items-center gap-4 p-4">
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{drop.storeName}</span>
-        <span className="block truncate text-sm text-muted-foreground">
+    /* design-review D1: at 360px this row printed "A.." and "1..." — the
+       badge and the amount took the width, and truncate hid the damage. */
+    <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 p-4 sm:flex">
+      <span className="min-w-0 sm:flex-1">
+        <span className="block text-sm font-medium">{drop.storeName}</span>
+        <span className="block text-sm text-muted-foreground">
           {when(drop.confirmedAt ?? drop.createdAt)}
         </span>
         {drop.note && <span className="mt-1 block text-sm text-error">{drop.note}</span>}
       </span>
-      <StatusBadge status={drop.status} />
-      <Amount cents={drop.cents} className="w-24 shrink-0 text-right text-sm font-semibold" />
+      <Amount
+        cents={drop.cents}
+        className="shrink-0 text-right text-sm font-semibold sm:order-last sm:w-24"
+      />
+      <span className="col-span-2 sm:contents">
+        <StatusBadge status={drop.status} />
+      </span>
     </li>
   );
 }
@@ -215,7 +223,7 @@ export function CashDropsScreen() {
   const resolved = history.data?.pages.flatMap((p) => p.drops) ?? [];
 
   return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8" aria-live="polite">
+    <main className="px-4 pt-4 lg:px-8 lg:pt-8">
       <h1 className="text-xl font-semibold">Entregas</h1>
 
       <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -236,8 +244,11 @@ export function CashDropsScreen() {
           No hay entregas por confirmar.
         </p>
       )}
+      {/* design-review D9: the live region is the list that changes, not
+          the page — otherwise the heading and the chips are re-announced
+          every time anything moves. */}
       {pending.data && pending.data.drops.length > 0 && (
-        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <div className="mt-3 grid gap-3 xl:grid-cols-2" aria-live="polite">
           {pending.data.drops.map((drop) => (
             <PendingCard key={drop.id} drop={drop} />
           ))}

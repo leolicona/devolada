@@ -1,6 +1,8 @@
 # Resend — verified contract
 
-**Status: integrated, sandbox-limited.** Exercised end to end against the live API
+**Status: live on `devoladapago.com`.** Verified 2026-08-15 on Devolada's own
+Resend account (us-east-1, sending enabled), and a signup for a third-party
+address went through — the exact call that answered 422 an hour earlier. Exercised end to end against the live API
 on 2026-08-15 from a local `wrangler dev` with a real key. Like `agnostic-auth.md`,
 this file records what the API actually did, not what the guide says it does — on
 conflict, this file wins.
@@ -25,7 +27,7 @@ dedicated to this product and carries no other mail (checked at setup: no MX, no
 TXT). If it ever hosts a mailbox, move sending to a subdomain such as
 `send.devoladapago.com` so reputations stay apart.
 
-## Activating it (the remaining half of TD-011)
+## How it was activated — done 2026-08-15, kept for the next environment
 
 1. Create a Resend account for Devolada and add `devoladapago.com` to it.
 2. Paste the DKIM and SPF records Resend shows into the `devoladapago.com` zone
@@ -41,13 +43,14 @@ TXT). If it ever hosts a mailbox, move sending to a subdomain such as
 
 ## Where the key lives
 
-`RESEND_API_KEY` in `apps/api/.dev.vars` locally, `wrangler secret put --env <env>`
-for a deployed worker. Never anywhere else — that is the BUG-001 rule, and
-`.dev.vars` is in `.gitignore` precisely because it once was not.
+`RESEND_API_KEY` in `apps/api/.dev.vars` locally, and in the `dev` / `production`
+GitHub environments for deployed Workers, from where the deploy step carries it
+(CICD D5). Never anywhere else — that is the BUG-001 rule, and `.dev.vars` is in
+`.gitignore` precisely because it once was not.
 
 Without the key, `sendAuthLink` logs the link to the console instead of sending
-(`src/email/sender.ts`). Every deployed environment currently takes that branch —
-see TD-011.
+(`src/email/sender.ts`). A deployed environment stays on that branch until its
+first deploy after the secret is added.
 
 ## The call
 
@@ -56,18 +59,28 @@ see TD-011.
 
 `from` comes from `EMAIL_FROM`, falling back to `Devolada <onboarding@resend.dev>`.
 
-## What the sandbox sender actually allows — verified
+## Why the sender is `EMAIL_FROM`, not the fallback — measured
 
-With the fallback `onboarding@resend.dev` and no verified domain:
+Before `devoladapago.com` was verified, the fallback `onboarding@resend.dev` was
+the sender, and Resend allowed exactly one recipient:
 
-| Recipient | Result |
-| --- | --- |
-| The Resend account owner's own address | **accepted, and it arrived** |
-| Any other address | **422** |
+| Recipient | Sandbox sender | `no-reply@devoladapago.com` |
+| --- | --- | --- |
+| The account owner's own address | accepted, and it arrived | accepted |
+| Any other address | **422** | **accepted** |
 
-Both cases were run against the live API on 2026-08-15, and the first was
-confirmed in the inbox — a 2xx from Resend is not by itself evidence that an
-email was delivered. This is the whole reason
+All four cells were run against the live API on 2026-08-15. The owner-address
+send was confirmed in an inbox — a 2xx from Resend is not by itself evidence
+that an email was delivered, which is why that is tracked as its own fact.
+
+The third-party check used `delivered@resend.dev`, Resend's delivery simulator:
+a genuine non-owner recipient, which is the property that was broken, without
+aiming a hard bounce at a domain with no sending history.
+
+`EMAIL_FROM` lives in `wrangler.jsonc` `vars` — it is not a secret — and is
+repeated in every env block, because an env's `vars` replaces the top-level one
+instead of merging with it. Leave one out and that environment silently falls
+back to the sandbox and can only mail us. This is the whole reason
 TD-011 exists: the integration is proven, but in this state it can only mail one
 person, and that person is us.
 

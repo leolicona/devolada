@@ -82,8 +82,8 @@ Had it failed, this spec would not exist.
   client and are **exempt from the envelope** — documented here so the
   exemption is a rule, not an accident.
 - **D7 — Passkeys need our domain, and dev gets its own rpID.** Prod:
-  `api./tienda./admin.devoladapago.com`, `rpID = devoladapago.com`. Dev:
-  `api./tienda./admin.dev.devoladapago.com`, `rpID = dev.devoladapago.com`
+  `api./punto./admin.devoladapago.com`, `rpID = devoladapago.com`. Dev:
+  `api./punto./admin.dev.devoladapago.com`, `rpID = dev.devoladapago.com`
   (owner decision 2026-08-15) — sharing one rpID would make the browser
   offer dev-enrolled passkeys on the prod login. Local dev: `localhost`.
   Everything becomes same-site: `CROSS_SITE_COOKIES` and its
@@ -215,7 +215,7 @@ then `/auth/me`), never by listing names.
 - [x] Tienda pages: invitation email field + optional código step,
       `/recuperar`, "¿Olvidaste tu contraseña?" — built and tested (46/46).
       Passkey button: PR 2, same reason.
-- [ ] Custom domains live (`api./tienda./admin.devoladapago.com`),
+- [ ] Custom domains live (`api./punto./admin.devoladapago.com`),
       `CROSS_SITE_COOKIES` deleted
 - [ ] Passkey end-to-end green with Playwright's virtual authenticator
       (scenario 9)

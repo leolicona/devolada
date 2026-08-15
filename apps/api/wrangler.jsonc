@@ -45,8 +45,8 @@
         "ENVIRONMENT": "dev",
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://admin.dev.devoladapago.com",
-        "TIENDA_BASE_URL": "https://tienda.dev.devoladapago.com",
-        "ALLOWED_ORIGINS": "https://tienda.dev.devoladapago.com,https://admin.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
+        "TIENDA_BASE_URL": "https://punto.dev.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
@@ -67,8 +67,8 @@
         "ENVIRONMENT": "prod",
         "API_BASE_URL": "https://api.devoladapago.com",
         "ADMIN_BASE_URL": "https://admin.devoladapago.com",
-        "TIENDA_BASE_URL": "https://tienda.devoladapago.com",
-        "ALLOWED_ORIGINS": "https://tienda.devoladapago.com,https://admin.devoladapago.com",
+        "TIENDA_BASE_URL": "https://punto.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://punto.devoladapago.com,https://admin.devoladapago.com",
         "PASSKEY_RP_ID": "devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }

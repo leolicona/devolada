@@ -11,11 +11,11 @@
   "env": {
     "dev": {
       "name": "devolada-tienda-dev",
-      "routes": [{ "pattern": "tienda.dev.devoladapago.com", "custom_domain": true }]
+      "routes": [{ "pattern": "punto.dev.devoladapago.com", "custom_domain": true }]
     },
     "prod": {
       "name": "devolada-tienda",
-      "routes": [{ "pattern": "tienda.devoladapago.com", "custom_domain": true }]
+      "routes": [{ "pattern": "punto.devoladapago.com", "custom_domain": true }]
     }
   }
 }

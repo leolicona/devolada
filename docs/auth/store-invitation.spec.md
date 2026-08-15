@@ -48,4 +48,7 @@ Flow: `token` → IdP `/auth/verify` → identity (phone) → invitation row by 
 
 - [x] Scenarios 1–3 automated in the API layer (`test/store-invitation.test.ts`, 3 tests)
 - [x] Scenarios 4–6 automated with Testing Library + MSW (`test/special-states.test.tsx`, 3 tests)
-- [ ] Real end-to-end (create → send → redeem) — blocked by: admin Stores task (US-A02)
+- [ ] Real end-to-end (create → send → redeem). No longer blocked — US-A02
+      shipped and both apps deploy to dev; this now waits on someone running it
+      against the deployed pair with a real phone (`admin/stores.spec.md` has
+      the same check from the other side).

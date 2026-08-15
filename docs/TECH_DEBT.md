@@ -2,6 +2,12 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-010 — Keyboard order and visible focus are untested
+- Status: open · Origin: polish/accessibility.spec.md, found by the design review's status pass (2026-08-14)
+- Phase 5 covered the markup (axe), the palette (contrast-lint), the real colour and the touch targets — but **no layer walks the tab order**. The brief asks for full keyboard navigation and visible focus in the dashboard, and `TASKS.md` claimed the accessibility pass covered it. It did not.
+- Why it was reasonable: each polish slice took the half a tool could measure; the tab order needs a browser and a written expectation of the order, which is design work, not just a check.
+- Paid by: a keyboard slice over both apps — tab through the charge path and the admin's confirm flow in `tests/e2e/`, asserting the order and a visible `:focus-visible` ring on every stop. **Before the pilot**: a shopkeeper does not use a keyboard, but the ISP admin does.
+
 ## TD-009 — The reconnection creates a new invoice even when one is pending
 - Status: **paid** (2026-08-14, `feat/reconnection-queue`) · Origin: E2E check of charges/charge-record.spec.md
 - The adapter now asks for pending invoices (`estado=1`, explicit 45-day window) and matches `cliente.usuario` in our code, because **the list endpoint has no customer filter** — verified against the live API before writing it. It creates one only when there is none, and the id is stored on the charge so a retry pays the same invoice even if the list lies about an empty month. Covered by `test/reconnection-queue.test.ts` scenario 1, which registers no create-invoice interceptor: creating one fails the test.

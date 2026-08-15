@@ -42,4 +42,8 @@ The brief made three promises about colour: minimum AA, AAA as the target on amo
 - [x] Wired into CI's quality job (and both deploy workflows)
 - [x] The two AA misses and the input border fixed in `tokens.css`
 - [x] Each failure path verified by breaking it on purpose: an ink below AA, a token that differs between the dark blocks, a hardcoded colour
-- [ ] Remaining: axe on rendered screens, keyboard and focus order (US-P04, next slice)
+- [x] axe on rendered screens — `polish/accessibility.spec.md` (markup, per PR)
+      and `tests/e2e/contrast.spec.ts` (real colour, both themes)
+- [ ] Keyboard order and visible focus. **No layer covers this**: nothing in the
+      component tests or the browser suite walks the tab order. The brief asks
+      for full keyboard navigation and visible focus in the dashboard.

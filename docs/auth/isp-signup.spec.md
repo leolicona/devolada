@@ -71,9 +71,10 @@ Pages live in `apps/admin` (land with the admin shell; this spec ships the API a
 - [x] Delivery confirmed in an inbox by a human — 2026-08-15. Worth keeping as
       its own box: Resend answering 2xx is not the same fact as an email
       arriving, and only the second one closes US-S04.
-- [ ] A **third-party** ISP can receive it. Resend answers **422** for any address
-      but the account owner's, and signup swallows it and still returns 201 — so a
-      real ISP would sign up and hear nothing. Needs a verified domain and
-      `EMAIL_FROM` (TD-011).
+- [x] A **third-party** ISP can receive it — 2026-08-15, once
+      `devoladapago.com` was verified and `EMAIL_FROM` pointed at it. The same
+      call answered **422** an hour earlier under the sandbox sender, which is
+      what made this its own box: signup swallows that failure and returns 201
+      either way, so nothing in the response ever showed it.
 - [ ] `RESEND_API_KEY` set as a worker secret in dev and prod (TD-011) — no
       deployed environment has it, so both still only log the link

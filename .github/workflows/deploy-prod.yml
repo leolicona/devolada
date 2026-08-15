@@ -97,5 +97,12 @@ jobs:
             echo "::warning::PROD_API_URL not set; smoke skipped"
             exit 0
           fi
-          sleep 5
-          curl -sf "$URL/health" || { echo "::error::Smoke failed: consider wrangler rollback (CICD.md)"; exit 1; }
+          # Retry up to 5 minutes: the first deploy after a custom-domain
+          # change races certificate issuance (see deploy-dev.yml).
+          for i in $(seq 1 10); do
+            curl -sf "$URL/health" && exit 0
+            echo "health not up yet (attempt $i), waiting 30s"
+            sleep 30
+          done
+          echo "::error::Smoke failed: consider wrangler rollback (CICD.md)"
+          exit 1

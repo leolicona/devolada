@@ -97,6 +97,14 @@ jobs:
             echo "::warning::DEV_API_URL not set; smoke skipped"
             exit 0
           fi
-          sleep 5
-          curl -sf "$URL/health" || { echo "::error::Smoke failed: dev deployed but not responding"; exit 1; }
+          # Retry up to 5 minutes: the first deploy after a custom-domain
+          # change races certificate issuance (measured on the punto/admin
+          # domain move: DNS resolved, TLS was not ready yet).
+          for i in $(seq 1 10); do
+            curl -sf "$URL/health" && exit 0
+            echo "health not up yet (attempt $i), waiting 30s"
+            sleep 30
+          done
+          echo "::error::Smoke failed: dev deployed but not responding after 5 minutes"
+          exit 1
       # TODO: Playwright + axe E2E against dev (TESTING.md layer 4)

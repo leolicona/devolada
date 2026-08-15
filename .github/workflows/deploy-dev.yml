@@ -57,12 +57,18 @@ jobs:
       # newest version is undeployed, and CI's per-PR `versions upload` (CICD
       # D2) leaves one behind almost always — which is why setting it from a
       # laptop fails. Right here, latest == deployed.
+      # The guard is shell, not `if:` — the secrets context is not allowed in a
+      # step condition, and using it there makes GitHub reject the whole file.
       - name: Sync the Resend key (skipped until the environment has one)
-        if: ${{ secrets.RESEND_API_KEY != '' }}
         working-directory: apps/api
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
-          printf '%s' "${{ secrets.RESEND_API_KEY }}" \
-            | pnpm exec wrangler secret put RESEND_API_KEY --env dev
+          if [ -z "$RESEND_API_KEY" ]; then
+            echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
+            exit 0
+          fi
+          printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env dev
       - name: Build store PWA (dev API baked in)
         working-directory: apps/tienda
         run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build

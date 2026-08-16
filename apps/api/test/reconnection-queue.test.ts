@@ -36,6 +36,14 @@ const mockPaymentMethods = () =>
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
     .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
 
+/* D9: the payment attempt ensures the reactivation opt-in first.
+   Registering the interceptor also asserts the PATCH happens —
+   assertNoPendingInterceptors fails if it never fires. */
+const mockAutoActivate = () =>
+  wh()
+    .intercept({ method: "PATCH", path: "/api/clientes/6/" })
+    .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
+
 /* undici sorts the query when it matches, so the matcher must not
    depend on the order the adapter writes the params in. */
 const invoiceListPath = (p: string) => p.startsWith("/api/facturas/?") && p.includes("estado=1");
@@ -73,7 +81,12 @@ async function seedQueuedCharge(over: Partial<typeof charges.$inferInsert> = {})
       ispId: isp.id,
       storeId: store.id,
       folio: `DV-Q${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-      wisphubCustomerId: "greyes@wifiplus",
+      /* Production-faithful: recordCharge stores the numeric id here and
+         the usuario apart (D8). The old seed put the usuario in the id
+         column — a mock that lied (TESTING.md rule 5), hiding that no
+         real retry could ever look the customer up. */
+      wisphubCustomerId: "6",
+      customerUsuario: "greyes@wifiplus",
       customerName: "Janely",
       monthlyFeeCents: 49900,
       serviceFeeCents: 1500,
@@ -93,6 +106,7 @@ const reload = async (db: ReturnType<typeof drizzle>, id: string) =>
 describe("US-C04: the queue pays the invoice the customer already has (TD-009)", () => {
   it("reuses a pending invoice and creates none", async () => {
     const { charge, db } = await seedQueuedCharge();
+    mockAutoActivate();
     mockPaymentMethods();
     /* Two pending invoices exist; the older debt is the one to settle */
     mockPendingInvoices([
@@ -114,8 +128,9 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
     expect(row.reconnectedAt).not.toBeNull();
   });
 
-  it("creates one when there is none, and a retry reuses the stored id", async () => {
+  it("creates one when there is none, and the retry only verifies (D8)", async () => {
     const { charge, db } = await seedQueuedCharge();
+    mockAutoActivate();
     mockPaymentMethods();
     mockPendingInvoices([]);
     mockCreateInvoice(55);
@@ -126,29 +141,53 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
     const afterFirst = await reload(db, charge.id);
     expect(afterFirst.wisphubInvoiceId).toBe(55);
     expect(afterFirst.reconnectionStatus).toBe("queued");
+    /* The payment landed: that progress survives the failed convert */
+    expect(afterFirst.paymentRegisteredAt).not.toBeNull();
 
-    /* The retry knows the invoice: no list call, no creation */
+    /* D8: the retry asks the only open question. No payment methods, no
+       invoice list, no registrar-pago — any of those would fail the
+       test as an unmatched request. The old flow re-paid here, and
+       WispHub's 422 on a paid invoice killed every retry. */
     await db
       .update(charges)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
       .where(eq(charges.id, charge.id));
-    mockPaymentMethods();
-    mockPayment(55);
     mockVerify("Activo");
 
     await sweepReconnections(env);
     expect((await reload(db, charge.id)).reconnectionStatus).toBe("reconnected");
   });
+
+  it("WispHub's 422 on an already-paid invoice counts as landed (D8)", async () => {
+    /* An overlapping attempt or a panel payment got there first. The
+       refusal is the goal state: verify, don't fail. Measured live. */
+    const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55 });
+    mockAutoActivate();
+    mockPaymentMethods();
+    wh()
+      .intercept({ method: "POST", path: "/api/facturas/55/registrar-pago/" })
+      .reply(422, JSON.stringify({ errors: ["La Factura seleccionada se encuentra en estado pagada"] }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    mockVerify("Activo");
+
+    await sweepReconnections(env);
+    const row = await reload(db, charge.id);
+    expect(row.reconnectionStatus).toBe("reconnected");
+    expect(row.paymentRegisteredAt).not.toBeNull();
+  });
 });
 
 describe("US-C04: the backoff walks and then gives up", () => {
   it("schedules 5, 15, 60, 240 minutes and marks failed after the last", async () => {
-    const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55 });
+    /* The payment already landed (D8): every walk step verifies only */
+    const { charge, db } = await seedQueuedCharge({
+      wisphubInvoiceId: 55,
+      paymentRegisteredAt: new Date(),
+    });
     const expected = [5, 15, 60, 240];
 
     for (const [i, wait] of expected.entries()) {
-      mockPaymentMethods();
-      mockPayment(55);
       mockVerify("Suspendido");
 
       const before = Date.now();
@@ -168,8 +207,6 @@ describe("US-C04: the backoff walks and then gives up", () => {
     }
 
     /* One more failure exhausts the budget */
-    mockPaymentMethods();
-    mockPayment(55);
     mockVerify("Suspendido");
     const report = await sweepReconnections(env);
 
@@ -186,6 +223,7 @@ describe("US-C04: a rejected key is not the store's fault", () => {
     const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55 });
 
     /* D5: WispHub rejects the ISP's key */
+    mockAutoActivate();
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
       .reply(403, "{}", { headers: { "Content-Type": "application/json" } });
@@ -202,6 +240,7 @@ describe("US-C04: a rejected key is not the store's fault", () => {
       .update(charges)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
       .where(eq(charges.id, charge.id));
+    mockAutoActivate();
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
       .reply(500, "{}", { headers: { "Content-Type": "application/json" } });
@@ -240,6 +279,7 @@ describe("US-C03: the sweep only touches what is due", () => {
       .update(charges)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
       .where(eq(charges.id, charge.id));
+    mockAutoActivate();
     mockPaymentMethods();
     mockPendingInvoices([]);
     mockCreateInvoice(60);

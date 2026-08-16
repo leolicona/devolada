@@ -43,6 +43,13 @@
       "when": 1786816361352,
       "tag": "0005_loud_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786898751235,
+      "tag": "0006_fresh_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

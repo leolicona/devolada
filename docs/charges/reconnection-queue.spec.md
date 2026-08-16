@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-C03, US-C04]
 domain: charges
-updated: 2026-08-14
+updated: 2026-08-16
 debt: [TD-008]
 pays: [TD-009]
 ---
@@ -20,22 +20,26 @@ The charge is already safe in the ledger the moment the store records it (charge
 - **D5 — A rejected key does not burn the budget.** `WISPHUB_AUTH_FAILED` means the ISP must fix its key in Configuración; retrying cannot help and spending the five attempts would bury the charge in `failed` for a reason the store cannot act on. Those attempts reschedule (30 min) without counting. Outages (`WISPHUB_UNAVAILABLE`) do count: they are what the backoff is for.
 - **D6 — Verify, never assume** (charge-record D3, unchanged). Only a customer read that comes back `active` marks `reconnected`. A paid invoice with a still-suspended service stays `queued` — that is the exact case the retries exist for.
 - **D7 — The sweep is triggerable by hand in dev.** `POST /dev/reconnect-sweep` runs one pass and answers with what it did. Waiting a minute for cron while checking a real reconnection with a pilot ISP is a bad way to spend a visit.
+- **D8 — Pay once; a retry asks only the open question (added 2026-08-16).** The original attempt ran the whole sequence every time — including `registrar-pago` — and WispHub **refuses to pay an already-paid invoice** (422, measured live). So the exact case D6 says the retries exist for — payment landed, service not flipped yet — was the one case retries could never convert: every retry died on the 422 before reaching the verify, and five deaths later the charge was `failed`. A false red alarm for a customer who very likely got reconnected. Two fixes ride together, because the old retry was broken twice over: **(a)** `payment_registered_at` on the charge records that the money landed, and any later attempt skips straight to the customer read; a 422 on `registrar-pago` is itself treated as "landed" (an overlapping attempt or a panel payment got there first — the refusal is the goal state). **(b)** The retry now identifies the customer by **usuario**: the charge only stored the numeric `wisphub_customer_id`, which the retry passed to a lookup that classifies an all-digits query as a *phone* — no production retry could ever find its customer. `customer_usuario` is stored at record time; the numeric id stays for D9's PATCH. The test suite never saw either defect because its seed put the usuario in the id column — a mock that lied (TESTING.md rule 5); the seed is now production-faithful.
+- **D9 — `auto_activar_servicio` is ensured before the payment (added 2026-08-16).** The spike named it as the opt-in switch for payment-triggered reactivation, defaulting to **false** — and the flow never set it (all ten demo customers measured `False`), so a genuinely suspended customer's payment would reactivate nothing. The payment attempt now PATCHes it `true` first (persistence verified live). **Non-fatal**: a failed PATCH must not block the payment; the verify still tells the truth, and a service that never flips ends in `failed`, which is the honest answer for a human to act on.
 
 ## Contract
 
 Cron: `* * * * *` (one sweep per minute), handled by the worker's `scheduled` export. One sweep claims at most 20 due charges.
 
-Per charge, one attempt is:
+Per charge, one attempt is (revised by D8/D9):
 
-1. find a pending invoice for the customer (or reuse `wisphub_invoice_id`) → create one only if there is none (D1)
-2. `registrar-pago` with the ISP's cash payment method
-3. read the customer back; `active` → `reconnected` (D6)
+1. **while the payment has not landed**: ensure `auto_activar_servicio` (D9, non-fatal) → find a pending invoice (or reuse `wisphub_invoice_id`) → create one only if there is none (D1) → `registrar-pago` with the ISP's cash payment method; a 422 counts as landed (D8)
+2. read the customer back by **usuario**; `active` → `reconnected` (D6, D8)
+3. **once the payment landed**, an attempt is step 2 alone
 
 State on `charges` (all new columns nullable, additive):
 
 - `wisphub_invoice_id` — the invoice this charge is paying (D1)
 - `next_attempt_at` — when the queue may touch it again; `null` once terminal
 - `last_error` — the last failure code, for the ISP's detail view
+- `customer_usuario` — the identifier every retry lookup needs (D8; `wisphub_customer_id` keeps the numeric id for D9's PATCH). Charges from before migration 0006 have `null` and keep the old behavior.
+- `payment_registered_at` — set once `registrar-pago` landed; later attempts verify only (D8)
 
 Terminal states: `reconnected` (with `reconnected_at`) or `failed` after 5 counted attempts.
 
@@ -54,9 +58,13 @@ Terminal states: `reconnected` (with `reconnected_at`) or `failed` after 5 count
 4. A rejected key reschedules without counting an attempt; an outage counts (D5)
 5. The sweep claims only due charges, leases them for 2 minutes, and ignores terminal ones (D2, D4)
 6. A verified active customer sets `reconnected` and stops the retries (US-C03, D6)
+7. Once the payment landed, a retry makes **only** the customer read — a payment-methods, invoice-list or `registrar-pago` call fails the test (D8)
+8. A 422 on `registrar-pago` is treated as the payment having landed: the attempt verifies and can convert (D8)
+9. The payment attempt PATCHes `auto_activar_servicio`; an unfired PATCH fails the test (D9)
 
 ## Definition of Done
 
 - [x] Scenarios 1–6 automated in the API layer (`test/reconnection-queue.test.ts`, 5 tests)
+- [x] Scenarios 7–9 automated (D8/D9 revision; the queue seed is now production-faithful, so the retry lookup is asserted by usuario)
 - [x] Cron trigger configured in `wrangler.jsonc` for dev and prod
 - [ ] Real check with the pilot ISP: a charge whose first attempt fails reconnects on a retry, with the physical MikroTik flip observed

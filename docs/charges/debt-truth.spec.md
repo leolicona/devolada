@@ -37,4 +37,4 @@ No wire-shape changes. `CustomerResult.billingStatus` now carries invoice truth 
 ## Definition of Done
 
 - [x] Scenarios 1–5 automated in the API layer (`charge-record.test.ts` +3, `charge-search.test.ts` +1, `charge-quote.test.ts` +2); scenario 6 is `reconnection-queue.test.ts` unchanged
-- [ ] Deployed check: charge a debtor, search them again immediately — the app says "al corriente" and a second charge attempt is refused
+- [x] Deployed check (2026-08-16, dev + live WispHub): `valeperez` charged → invoice 8 flipped to Pagada, none fabricated → immediate re-search answered "al corriente" and the immediate second charge got 409 `NOTHING_DUE` — while WispHub's label still read *"Pendiente de Pago"*. The stale label was measurably present and measurably powerless. `jcobos` (the owner's original repro) now reads "al corriente" and refuses the charge.

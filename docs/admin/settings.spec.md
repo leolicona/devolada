@@ -53,4 +53,7 @@ The Configuración section: the WispHub API key that makes reconnection possible
 
 - [x] Scenarios 1–4 automated in the API layer (`test/settings.test.ts` 5 tests, `test/charge-feed.test.ts`, `test/business-day.test.ts` 3 tests)
 - [x] Scenarios 5–7 automated with Testing Library + MSW (`apps/admin/test/settings.test.tsx`, 4 tests)
-- [ ] Real check on the deployed admin: save the pilot key, then charge from the PWA
+- [x] Real check (2026-08-16, owner, deployed dev): the renewed WispHub key was
+      saved through the settings screen (live validation) and charges from the
+      PWA went through against it — the full save-then-charge loop the box asks
+      for. The pilot ISP's key repeats the same motion.

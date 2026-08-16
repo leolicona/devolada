@@ -61,4 +61,7 @@ Cookie-based authentication for stores (phone) and admins (email), with invisibl
 - [x] Contract implemented and scenarios 1–8 verified
 - [x] IdP discrepancies documented in `integrations/agnostic-auth.md`
 - [x] Scenarios automated (`test/sessions.test.ts`, TD-005 paid)
-- [ ] JWT signature verification in dev and prod (TD-001)
+- [x] JWT signature verification in dev and prod (TD-001) — **superseded**:
+      TD-001 was paid by elimination (better-auth.spec.md); the JWTs this box
+      wanted verified no longer exist. Sessions are D1 rows signed with our
+      `BETTER_AUTH_SECRET`, and both deploy workflows fail without it.

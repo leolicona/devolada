@@ -54,4 +54,6 @@ The installable shell of `apps/tienda`: login, session guard, bottom-tab navigat
       check this box was written for
 - [x] CORS for the deployed PWA — TD-007 paid (`chore/pwa-deploy`): allow-list
       with credentials, `SameSite=None; Secure` on cross-site deploys
-- [ ] Installable shell verified in a browser (manifest + icon)
+- [x] Installable shell verified on a real phone (2026-08-16, owner, iPhone):
+      Safari → "Add to Home Screen" installs it and it opens standalone — as an
+      app, no browser bar.

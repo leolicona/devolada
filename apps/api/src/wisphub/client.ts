@@ -48,6 +48,9 @@ export function queryParamFor(q: string): "telefono" | "usuario" | "nombre" {
   return "nombre";
 }
 
+export type PendingInvoice = { invoiceId: number; usuario: string };
+export type PendingInvoices = { invoices: PendingInvoice[]; complete: boolean };
+
 type WispHubListItem = {
   id_servicio: number;
   usuario: string | null;
@@ -130,25 +133,45 @@ export class WispHub {
     return (cash ?? data.results[0]).id;
   }
 
-  /* TD-009: the pending invoice a customer already has, if any.
+  /* The pending invoices of the whole tenant, for an explicit window
+     (debt-truth spec D1–D3; grew out of TD-009's find).
 
      The list endpoint takes `estado` and a date range but **no customer
-     filter** (verified against the live API), so the match happens here.
-     `estado=1` is Pendiente. The default range is the current month and
-     the spike warns that an empty answer can lie, so the window is
-     explicit: the last 45 days by issue date. */
-  async findPendingInvoiceId(usuario: string, now: Date): Promise<number | null> {
+     filter** — re-verified against the live API 2026-08-16 — so the
+     match happens in the caller. `estado=1` is Pendiente. The window is
+     180 days by issue date: the product's core case is the suspended
+     customer whose unpaid invoice can be months old (D3). Up to 5 pages
+     of 100; `complete` says whether the answer is the whole truth or a
+     truncated one the caller must not treat as "owes nothing" (D4). */
+  async pendingInvoices(now: Date): Promise<PendingInvoices> {
     const day = (d: Date) => d.toISOString().slice(0, 10);
-    const desde = day(new Date(now.getTime() - 45 * 24 * 3600 * 1000));
+    const desde = day(new Date(now.getTime() - 180 * 24 * 3600 * 1000));
     /* One day ahead: WispHub stamps in the tenant's timezone, not UTC */
     const hasta = day(new Date(now.getTime() + 24 * 3600 * 1000));
 
-    const data = await this.get<{ results: { id_factura: number; cliente: { usuario: string | null } }[] }>(
-      `/facturas/?estado=1&tipo_fecha=fecha_emision&desde=${desde}&hasta=${hasta}&limit=100`,
-    );
-    const mine = data.results.filter((f) => f.cliente?.usuario === usuario);
-    /* Oldest first: pay the debt the customer has been carrying */
-    return mine.length ? Math.min(...mine.map((f) => f.id_factura)) : null;
+    const invoices: PendingInvoice[] = [];
+    let path: string | null =
+      `/facturas/?estado=1&tipo_fecha=fecha_emision&desde=${desde}&hasta=${hasta}&limit=100`;
+    for (let page = 0; page < 5 && path; page++) {
+      const data: {
+        next: string | null;
+        results: { id_factura: number; cliente: { usuario: string | null } }[];
+      } = await this.get(path);
+      for (const f of data.results) {
+        if (f.cliente?.usuario) invoices.push({ invoiceId: f.id_factura, usuario: f.cliente.usuario });
+      }
+      /* WispHub's `next` is absolute; keep only the API path */
+      path = data.next ? data.next.slice(data.next.indexOf("/facturas/")) : null;
+    }
+    return { invoices, complete: path === null };
+  }
+
+  /* TD-009: the pending invoice a customer already has, if any.
+     Oldest first: pay the debt the customer has been carrying. */
+  async findPendingInvoiceId(usuario: string, now: Date): Promise<number | null> {
+    const { invoices } = await this.pendingInvoices(now);
+    const mine = invoices.filter((f) => f.usuario === usuario);
+    return mine.length ? Math.min(...mine.map((f) => f.invoiceId)) : null;
   }
 
   /* Creates a pending invoice. WispHub answers with a message string,

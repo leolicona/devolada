@@ -27,6 +27,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 ## TD-009 — The reconnection creates a new invoice even when one is pending
 - Status: **paid** (2026-08-14, `feat/reconnection-queue`) · Origin: E2E check of charges/charge-record.spec.md
 - The adapter now asks for pending invoices (`estado=1`, explicit 45-day window) and matches `cliente.usuario` in our code, because **the list endpoint has no customer filter** — verified against the live API before writing it. It creates one only when there is none, and the id is stored on the charge so a retry pays the same invoice even if the list lies about an empty month. Covered by `test/reconnection-queue.test.ts` scenario 1, which registers no create-invoice interceptor: creating one fails the test.
+- 2026-08-16: the window grew to 180 days with bounded pagination, and the charge path no longer reaches `createInvoice` at all — the guard resolves the invoice first (`charges/debt-truth.spec.md` D3, D5). The "create only when there is none" fallback survives for the queue's legacy path and the truncation edge.
 
 ## TD-008 — Invoice id parsed from a message string
 - Status: open · Origin: charges/charge-record.spec.md (D5)

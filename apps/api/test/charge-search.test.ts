@@ -2,7 +2,8 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
 
-/* docs/charges/customer-search.spec.md scenarios 1–6.
+/* docs/charges/customer-search.spec.md scenarios 1–6 and
+   docs/charges/debt-truth.spec.md scenario 3 (US-C06).
    WispHub is mocked with the shapes verified in the spike. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
@@ -40,6 +41,24 @@ function mockWispHubList(expectedParam: string, results: unknown[] = [wisphubCus
     });
 }
 
+/* Debt truth (debt-truth spec D6): a non-empty search also fetches the
+   pending-invoice list and marks every result from it. */
+function mockPendingInvoices(
+  results: { id_factura: number; cliente: { usuario: string } }[] = [
+    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
+  ],
+) {
+  fetchMock
+    .get(WISPHUB_ORIGIN)
+    .intercept({
+      method: "GET",
+      path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1"),
+    })
+    .reply(200, JSON.stringify({ next: null, count: results.length, results }), {
+      headers: { "Content-Type": "application/json" },
+    });
+}
+
 async function seedStoreWithKey() {
   const isp = await seedIsp({ wisphubApiKey: "wh-key-1" });
   await seedStore(isp.id);
@@ -52,6 +71,7 @@ describe("US-C01: the query type is detected, not selected", () => {
   it("digits query calls WispHub with ?telefono=", async () => {
     await seedStoreWithKey();
     mockWispHubList("telefono=5511122233");
+    mockPendingInvoices();
     const res = await (await app()).request("/charges/customers?q=5511122233", asStore, env);
     expect(res.status).toBe(200);
   });
@@ -59,10 +79,12 @@ describe("US-C01: the query type is detected, not selected", () => {
   it("name query uses ?nombre= and @ query uses ?usuario=", async () => {
     await seedStoreWithKey();
     mockWispHubList("nombre=Janely");
+    mockPendingInvoices();
     const byName = await (await app()).request("/charges/customers?q=Janely", asStore, env);
     expect(byName.status).toBe(200);
 
     mockWispHubList("usuario=greyes%40wifiplus");
+    mockPendingInvoices();
     const byUser = await (await app()).request(
       "/charges/customers?q=greyes@wifiplus",
       asStore,
@@ -76,6 +98,7 @@ describe("US-C01: the response is minimum identity only", () => {
   it("maps cents, status and zone; extra WispHub fields never leak", async () => {
     await seedStoreWithKey();
     mockWispHubList("nombre=Janely");
+    mockPendingInvoices();
     const res = await (await app()).request("/charges/customers?q=Janely", asStore, env);
     const { data } = await res.json();
 
@@ -97,8 +120,35 @@ describe("US-C01: the response is minimum identity only", () => {
   it("unknown estado values map to 'unknown' and do not break", async () => {
     await seedStoreWithKey();
     mockWispHubList("nombre=Janely", [{ ...wisphubCustomer, estado: "En Revision" }]);
+    mockPendingInvoices();
     const res = await (await app()).request("/charges/customers?q=Janely", asStore, env);
     expect((await res.json()).data.customers[0].serviceStatus).toBe("unknown");
+  });
+});
+
+describe("US-C06: the pending invoices decide billingStatus, not the label", () => {
+  /* debt-truth spec scenario 3, both stale directions at once — one
+     customer per direction, marked from a single pending-list fetch. */
+  it("overrides the label in both directions", async () => {
+    await seedStoreWithKey();
+    mockWispHubList("nombre=Janely", [
+      /* Label says Pagadas, but a pending invoice exists → due */
+      { ...wisphubCustomer, estado_facturas: "Pagadas" },
+      /* Label says due, but nothing is owed → paid */
+      {
+        ...wisphubCustomer,
+        id_servicio: 7,
+        usuario: "jcobos@wifiplus",
+        nombre: "Juan Fernando",
+        estado_facturas: "Pendiente de Pago",
+      },
+    ]);
+    mockPendingInvoices([{ id_factura: 42, cliente: { usuario: "greyes@wifiplus" } }]);
+
+    const res = await (await app()).request("/charges/customers?q=Janely", asStore, env);
+    const { data } = await res.json();
+    expect(data.customers[0].billingStatus).toBe("due");
+    expect(data.customers[1].billingStatus).toBe("paid");
   });
 });
 

@@ -5,7 +5,12 @@ import type { Bindings, Variables } from "../../env";
 import { charges, isps, stores } from "../../db/schema";
 import { and, count, desc, gte, lt, lte, sum } from "drizzle-orm";
 import { recordChargeEntries, storeBalanceCents } from "../../ledger";
-import { WispHub, WispHubError, type WispHubCustomer } from "../../wisphub/client";
+import {
+  WispHub,
+  WispHubError,
+  type PendingInvoices,
+  type WispHubCustomer,
+} from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
 import { startOfBusinessDayMs } from "../../time/business-day";
 import { firstAttemptSchedule } from "../../reconnection/queue";
@@ -44,16 +49,29 @@ function wisphubFailure(c: Ctx, e: unknown) {
   throw e;
 }
 
+/* Debt truth (debt-truth spec D1, D6): the pending-invoice list decides
+   `billingStatus`, in both directions — WispHub's `estado_facturas`
+   label lags real payments and real new invoices alike (measured live).
+   D4: a truncated list only proves debts, never their absence, so a
+   customer missing from an incomplete list keeps the label. */
+function invoiceBillingStatus(
+  customer: WispHubCustomer,
+  pending: PendingInvoices,
+): WispHubCustomer["billingStatus"] {
+  if (pending.invoices.some((f) => f.usuario === customer.usuario)) return "due";
+  return pending.complete ? "paid" : customer.billingStatus;
+}
+
 /* The wire contract is the allow-list (customer-search D2). The adapter
    also carries the customer's phone, which the charge stores for its
    receipt (receipt D4) but the frontend never needs — so it stops here. */
-const toCustomerResult = (customer: WispHubCustomer): CustomerResult => ({
+const toCustomerResult = (customer: WispHubCustomer, pending: PendingInvoices): CustomerResult => ({
   wisphubId: customer.wisphubId,
   usuario: customer.usuario,
   name: customer.name,
   zone: customer.zone,
   serviceStatus: customer.serviceStatus,
-  billingStatus: customer.billingStatus,
+  billingStatus: invoiceBillingStatus(customer, pending),
   monthlyFeeCents: customer.monthlyFeeCents,
 });
 
@@ -63,7 +81,13 @@ export async function searchCustomers(c: Ctx, q: string) {
 
   try {
     const customers = await ctx.wisphub.searchCustomers(q);
-    const data: CustomerSearchResponse = { customers: customers.map(toCustomerResult) };
+    /* One pending-list fetch marks every result (debt-truth spec D2) */
+    const pending = customers.length
+      ? await ctx.wisphub.pendingInvoices(new Date())
+      : { invoices: [], complete: true };
+    const data: CustomerSearchResponse = {
+      customers: customers.map((customer) => toCustomerResult(customer, pending)),
+    };
     return c.json({ success: true, data });
   } catch (e) {
     return wisphubFailure(c, e);
@@ -81,6 +105,7 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
     if (!customer) {
       return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
     }
+    const pending = await ctx.wisphub.pendingInvoices(new Date());
 
     const [store] = await ctx.db.select().from(stores).where(eq(stores.id, ctx.actor.id));
     const serviceFeeCents = ctx.isp.serviceFeeCents;
@@ -88,7 +113,7 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
     const capCents = store.balanceCapCents;
 
     const data: CustomerQuoteResponse = {
-      customer: toCustomerResult(customer),
+      customer: toCustomerResult(customer, pending),
       quote: {
         monthlyFeeCents: customer.monthlyFeeCents,
         serviceFeeCents,
@@ -123,19 +148,36 @@ export async function recordCharge(c: Ctx, usuario: string) {
   const ctx = await storeContext(c);
   if ("error" in ctx) return ctx.error;
 
+  const now = new Date();
   let customer;
+  let pending;
   try {
     customer = await ctx.wisphub.getCustomer(usuario);
+    if (!customer) {
+      return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
+    }
+    pending = await ctx.wisphub.pendingInvoices(now);
   } catch (e) {
     return wisphubFailure(c, e);
   }
-  if (!customer) {
-    return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
-  }
 
-  /* D4: server-side guards; the UI is not a security layer */
-  if (customer.billingStatus === "paid") {
-    return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
+  /* D4 (charge-record) still: server-side guards; the UI is not a
+     security layer. What changed is the question (debt-truth spec D5):
+     the guard asks the invoices, not the label, and resolves the one
+     this charge will pay — oldest first. */
+  const mine = pending.invoices.filter((f) => f.usuario === usuario);
+  const pendingInvoiceId = mine.length ? Math.min(...mine.map((f) => f.invoiceId)) : null;
+  if (pendingInvoiceId === null) {
+    if (pending.complete) {
+      return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
+    }
+    /* Debt-truth D4: a truncated list cannot prove "owes nothing", so
+       the label decides — the old behavior, logged because it carries
+       the residual double-charge risk. */
+    console.warn(`pending-invoice list truncated; label guard used for ${usuario}`);
+    if (customer.billingStatus === "paid") {
+      return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
+    }
   }
   const [store] = await ctx.db.select().from(stores).where(eq(stores.id, ctx.actor.id));
   const balanceCents = await storeBalanceCents(ctx.db, ctx.actor.id);
@@ -170,9 +212,16 @@ export async function recordCharge(c: Ctx, usuario: string) {
   });
 
   /* D3: one immediate attempt, then the queue takes over
-     (reconnection-queue spec): the same rules decide when it retries. */
-  const now = new Date();
-  const attempt = await attemptReconnection(ctx.wisphub, usuario, customer.monthlyFeeCents, now);
+     (reconnection-queue spec): the same rules decide when it retries.
+     The invoice the guard resolved rides along (debt-truth D5), so the
+     attempt never creates one on this path. */
+  const attempt = await attemptReconnection(
+    ctx.wisphub,
+    usuario,
+    customer.monthlyFeeCents,
+    now,
+    pendingInvoiceId,
+  );
   const schedule = firstAttemptSchedule(attempt, now);
   const [updated] = await ctx.db
     .update(charges)

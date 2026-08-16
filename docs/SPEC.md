@@ -49,6 +49,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-C03** — As an end customer, my service reconnects automatically within seconds after paying; the store sees the status live.
 - **US-C04** — As a store, a charge is never rejected because of WispHub failures: it gets recorded and the reconnection is queued with retries.
 - **US-C05** — As an end customer, I receive a receipt via WhatsApp/SMS with a unique folio.
+- **US-C06** — As an end customer, I can only be charged what I actually owe: a debt that no longer exists cannot be charged again. *(added 2026-08-16, found live: WispHub's summary label lags the invoices in both directions)*
 
 ### Cash box (K)
 - **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my accumulated commission; every number breaks down into its ledger entries.
@@ -103,6 +104,7 @@ each spec, and they are what the pilot is for.
 | [charges/charge-record.spec.md](charges/charge-record.spec.md) | charges | US-C03, US-C04 | in development |
 | [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retries) | in development |
 | [charges/receipt.spec.md](charges/receipt.spec.md) | charges | US-C05 | in development |
+| [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06 | in development |
 | [cashbox/cashbox.spec.md](cashbox/cashbox.spec.md) | cashbox | US-K01, US-K04 | in development |
 | [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
 | [cash-drops/confirm-cash-drop.spec.md](cash-drops/confirm-cash-drop.spec.md) | cash-drops | US-E01, US-E02 | in development |

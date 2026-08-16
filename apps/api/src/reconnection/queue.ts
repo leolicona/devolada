@@ -99,11 +99,25 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
 
     const result = await attemptReconnection(
       new WispHub(apiKey, env.WISPHUB_BASE_URL),
-      charge.wisphubCustomerId,
+      /* D8: lookups need the usuario; the numeric id only serves the
+         auto-activate PATCH. Charges from before 0006 have no stored
+         usuario — the old identifier keeps their (broken) behavior. */
+      {
+        usuario: charge.customerUsuario ?? charge.wisphubCustomerId,
+        wisphubId: charge.wisphubCustomerId,
+      },
       charge.monthlyFeeCents,
       now,
-      charge.wisphubInvoiceId,
+      {
+        invoiceId: charge.wisphubInvoiceId,
+        paymentRegistered: charge.paymentRegisteredAt !== null,
+      },
     );
+    /* The payment landing is progress worth keeping even when the
+       attempt as a whole did not convert (D8) */
+    const paymentRegisteredAt = result.paymentRegistered
+      ? (charge.paymentRegisteredAt ?? now)
+      : null;
 
     if (result.status === "reconnected") {
       await db
@@ -113,6 +127,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
           reconnectedAt: now,
           reconnectionAttempts: charge.reconnectionAttempts + 1,
           wisphubInvoiceId: result.invoiceId,
+          paymentRegisteredAt,
           nextAttemptAt: null,
           lastError: null,
         })
@@ -127,6 +142,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
         .update(charges)
         .set({
           wisphubInvoiceId: result.invoiceId,
+          paymentRegisteredAt,
           lastError: result.error,
           nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)),
         })
@@ -142,6 +158,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
       .set({
         reconnectionAttempts: attempts,
         wisphubInvoiceId: result.invoiceId,
+        paymentRegisteredAt,
         lastError: result.error,
         ...(wait === undefined
           ? { reconnectionStatus: "failed" as const, nextAttemptAt: null }

@@ -9,6 +9,9 @@ export class WispHubError extends Error {
   constructor(
     public code: "WISPHUB_UNAVAILABLE" | "WISPHUB_AUTH_FAILED",
     detail?: string,
+    /* The HTTP status when there was one: 422 on registrar-pago means
+       "already paid", which the reconnection treats as the goal state */
+    public status?: number,
   ) {
     super(detail ?? code);
   }
@@ -84,9 +87,9 @@ export class WispHub {
     /* 401/403 means WispHub rejected the key: a setup problem, not an outage.
        Note: WispHub sends the same generic 403 for "no permission" (spike). */
     if (res.status === 401 || res.status === 403) {
-      throw new WispHubError("WISPHUB_AUTH_FAILED", `status ${res.status}`);
+      throw new WispHubError("WISPHUB_AUTH_FAILED", `status ${res.status}`, res.status);
     }
-    if (!res.ok) throw new WispHubError("WISPHUB_UNAVAILABLE", `status ${res.status}`);
+    if (!res.ok) throw new WispHubError("WISPHUB_UNAVAILABLE", `status ${res.status}`, res.status);
     return (await res.json()) as T;
   }
 
@@ -195,6 +198,17 @@ export class WispHub {
     const match = /factura (\d+)/.exec(data.messages ?? "");
     if (!match) throw new WispHubError("WISPHUB_UNAVAILABLE", "invoice id not found in message");
     return Number.parseInt(match[1], 10);
+  }
+
+  /* The opt-in switch for payment-triggered reactivation (spike finding;
+     reconnection-queue D9). Defaults to false on every customer, so a
+     suspended customer's payment would reactivate nothing without this.
+     PATCH persistence verified against the live API 2026-08-16. */
+  async ensureAutoActivate(idServicio: string): Promise<void> {
+    await this.request(`/clientes/${idServicio}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ auto_activar_servicio: true }),
+    });
   }
 
   /* Registers the payment. Async on WispHub's side (returns a task_id). */

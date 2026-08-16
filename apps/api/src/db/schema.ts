@@ -108,6 +108,13 @@ export const charges = sqliteTable(
     wisphubInvoiceId: integer("wisphub_invoice_id"),
     nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
     lastError: text("last_error"),
+    /* The WispHub usuario, which every retry lookup needs (D8 revision):
+       wisphubCustomerId above is the numeric id and only serves the
+       auto-activate PATCH. Nullable: rows before 0006 predate it. */
+    customerUsuario: text("customer_usuario"),
+    /* Set once registrar-pago landed (D8): later attempts verify only —
+       WispHub refuses paying an already-paid invoice (422, measured). */
+    paymentRegisteredAt: integer("payment_registered_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
   (t) => [

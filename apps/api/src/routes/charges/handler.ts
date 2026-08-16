@@ -196,6 +196,9 @@ export async function recordCharge(c: Ctx, usuario: string) {
       storeId: ctx.actor.id,
       folio: makeFolio(),
       wisphubCustomerId: String(customer.wisphubId),
+      /* The usuario the retries will look the customer up by
+         (reconnection-queue D8): the numeric id above is not a usuario */
+      customerUsuario: customer.usuario,
       customerName: customer.name,
       customerZone: customer.zone,
       customerPhone: customer.phone,
@@ -217,10 +220,10 @@ export async function recordCharge(c: Ctx, usuario: string) {
      attempt never creates one on this path. */
   const attempt = await attemptReconnection(
     ctx.wisphub,
-    usuario,
+    { usuario, wisphubId: String(customer.wisphubId) },
     customer.monthlyFeeCents,
     now,
-    pendingInvoiceId,
+    { invoiceId: pendingInvoiceId, paymentRegistered: false },
   );
   const schedule = firstAttemptSchedule(attempt, now);
   const [updated] = await ctx.db
@@ -229,6 +232,7 @@ export async function recordCharge(c: Ctx, usuario: string) {
       reconnectionStatus: attempt.status,
       reconnectionAttempts: schedule.attempts,
       wisphubInvoiceId: attempt.invoiceId,
+      paymentRegisteredAt: attempt.paymentRegistered ? now : null,
       nextAttemptAt: schedule.nextAttemptAt,
       lastError: attempt.error,
       ...(attempt.status === "reconnected" ? { reconnectedAt: now } : {}),

@@ -56,9 +56,13 @@ function mockPendingInvoices(
 }
 
 /* The happy reconnection with the invoice already resolved by the guard
-   (debt-truth D5): payment methods → payment → verify. No find, and no
-   create — a POST /api/facturas/ here would fail the test. */
+   (debt-truth D5): auto-activate opt-in → payment methods → payment →
+   verify. No find, and no create — a POST /api/facturas/ here would
+   fail the test, and an unfired PATCH fails it too (D9). */
 function mockReconnection(verifyEstado = "Activo") {
+  wh()
+    .intercept({ method: "PATCH", path: "/api/clientes/6/" })
+    .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
   wh()
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
     .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));

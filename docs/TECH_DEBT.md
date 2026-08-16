@@ -19,10 +19,10 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Consider with it: whether `resend-verification` should tell the admin it failed, rather than reporting success it cannot confirm.
 
 ## TD-010 — Keyboard order and visible focus are untested
-- Status: open · Origin: polish/accessibility.spec.md, found by the design review's status pass (2026-08-14)
+- Status: **paid** (2026-08-16, `feat/keyboard-slice`) · Origin: polish/accessibility.spec.md, found by the design review's status pass (2026-08-14)
 - Phase 5 covered the markup (axe), the palette (contrast-lint), the real colour and the touch targets — but **no layer walks the tab order**. The brief asks for full keyboard navigation and visible focus in the dashboard, and `TASKS.md` claimed the accessibility pass covered it. It did not.
 - Why it was reasonable: each polish slice took the half a tool could measure; the tab order needs a browser and a written expectation of the order, which is design work, not just a check.
-- Paid by: a keyboard slice over both apps — tab through the charge path and the admin's confirm flow in `tests/e2e/`, asserting the order and a visible `:focus-visible` ring on every stop. **Before the pilot**: a shopkeeper does not use a keyboard, but the ISP admin does.
+- Paid by `tests/e2e/keyboard.spec.ts` (accessibility.spec.md D6): the charge path and the admin's confirm flow walked by Tab against a written order, with a visible indicator **measured as a change** against each element's resting styles (outline, ring or border — a static card shadow cannot pass). The suite proved it can go red: killing the focus styles fails it on the first stop. Findings along the way: both apps already ringed every stop; the search input signals focus by border swap, which the detector now honours.
 
 ## TD-009 — The reconnection creates a new invoice even when one is pending
 - Status: **paid** (2026-08-14, `feat/reconnection-queue`) · Origin: E2E check of charges/charge-record.spec.md

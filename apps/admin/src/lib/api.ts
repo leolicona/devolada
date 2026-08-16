@@ -1,5 +1,5 @@
 /* Same envelope-aware fetch wrapper as the PWA (future packages/api-client). */
-const BASE = import.meta.env.VITE_API_URL ?? "";
+import { API_BASE as BASE } from "./base";
 
 export class ApiError extends Error {
   constructor(

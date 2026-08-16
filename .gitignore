@@ -3,7 +3,9 @@ dist/
 .wrangler/
 .env
 .env.*
-.dev.vars
+# Suffixed too (BUG-001): a .dev.vars.bak holds the same secrets and the
+# exact pattern did not cover it.
+.dev.vars*
 
 # Playwright (docs/polish/responsive.spec.md)
 test-results/

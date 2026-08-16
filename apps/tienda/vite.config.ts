@@ -9,12 +9,9 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-  server: {
-    port: 5173,
-    /* Same-origin cookies in dev: /auth and /dev ride through to wrangler (spec D2) */
-    proxy: {
-      "/auth": "http://localhost:8787",
-      "/dev": "http://localhost:8787",
-    },
-  },
+  /* No API proxy (shell.spec.md D2): /cashbox, /ledger and /charges/:id
+     are SPA routes here, so proxying them would answer a page reload
+     with JSON. The app calls the worker directly instead — see
+     src/api/base.ts. */
+  server: { port: 5173 },
 });

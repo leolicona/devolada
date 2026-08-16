@@ -130,7 +130,11 @@ percentage fees, no manual verification. Value: drops easily into the owner's
 apps and third-party apps. Devolada touchpoints: platform settlement (#1) is
 its first real use case, and a store could one day settle its cash drop by
 validated transfer. It is **not** a Devolada feature and does not live in this
-spec tree.
+spec tree. Owner's scoping decision (2026-08-16): **v1 = receipt analysis +
+bank-reference/CEP validation** — pure validation, money goes straight to the
+business's own account, no funds custody and no fintech-license territory;
+**dynamic CLABEs deferred** to a later phase with their own regulatory
+decision, since they normally imply a concentrator account and custody.
 
 ## Spec index
 

@@ -2,8 +2,8 @@
 status: in-development
 stories: [US-P04]
 domain: polish
-updated: 2026-08-14
-debt: [TD-010]
+updated: 2026-08-16
+pays: [TD-010]
 ---
 
 # Spec: Accessibility, checked on every screen
@@ -17,6 +17,7 @@ debt: [TD-010]
 - **D3 — The suite guards itself.** Each app's first case renders an unnamed button and an unlabelled input and asserts that the checker *fails*. A green a11y suite that cannot go red is worse than none: it certifies nothing while looking like proof.
 - **D4 — Tabs must own the panel they claim to control.** The feed's filters advertised `aria-controls` at a `TabsContent` that did not exist, because charge-feed D7 used `Tabs` for filtering and rendered the list outside them. To a screen reader that is a tab pointing at nothing — axe rates it critical. The list now lives inside `TabsContent`; the visual design is unchanged. **This amends charge-feed D7**: the primitive was right, the wiring was not.
 - **D5 — Two navigations cannot share one name.** The admin shell keeps both the sidebar and the bottom bar in the DOM and lets CSS choose; both were labelled "Secciones", so a screen reader announced two identical landmarks. The bottom bar is now "Secciones, barra inferior". Hiding one from the accessibility tree was rejected: which one is visible depends on a media query neither axe nor the test DOM can see, so the honest fix is to name them apart.
+- **D6 — The keyboard slice lives in the browser layer, with the order written down (added 2026-08-16, pays TD-010).** `tests/e2e/keyboard.spec.ts` tabs through the charge path (input focused on open, and proven *reachable* — Tab out, Shift+Tab back — then clear → result → the three tabs; Enter opens the confirm and one Tab reaches the money) and the admin's Entregas (sidebar → session → the pending card's confirm-then-dispute pair, and nothing else: the BODY sentinel makes the stop count part of the claim). "Visible focus" is measured as a **change** against the element's resting styles — outline, ring or border — so a static shadow can never pass as a focus style, and the suite guards itself like D3: killing the focus styles turns it red on the first stop. One browser fact shapes the walks: blurring does not reset Chromium's sequential-navigation start point, so each walk starts from a stop the flow really visits.
 
 ## Contract
 
@@ -30,6 +31,8 @@ Screens covered — PWA: Caja, Movimientos, Cobrar (confirm), Resultado (with th
 2. The checker fails on an unnamed control, in both apps (D3)
 3. A filter tab points at a panel that exists (D4)
 4. The two admin navigations have distinct accessible names (D5)
+5. The charge path tabs in its written order with a visible indicator on every stop; Enter opens the confirm and one Tab reaches the money (US-P04, D6)
+6. The admin's Entregas tabs sidebar → session → confirm → dispute, exactly, every stop indicated (US-P04, D6)
 
 ## Definition of Done
 
@@ -37,6 +40,7 @@ Screens covered — PWA: Caja, Movimientos, Cobrar (confirm), Resultado (with th
 - [x] The two violations the first run found are fixed
 - [x] Touch-target geometry (≥44px asserted, 48px on the charge path) —
       `polish/responsive.spec.md`, measured in a browser
-- [ ] Real focus order. Still uncovered by any layer — the same open box stands
-      in `polish/dark-and-contrast.spec.md`; whichever slice takes it should
-      take it once, for both apps.
+- [x] Real focus order: scenarios 5–6 automated (`tests/e2e/keyboard.spec.ts`,
+      3 tests, D6 — pays TD-010; the twin box in
+      `polish/dark-and-contrast.spec.md` closes with it). Verified it can go
+      red: killing the focus styles fails the first stop.

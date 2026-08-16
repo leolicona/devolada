@@ -93,4 +93,18 @@ describe("D3: the guard sends session-less visits to login", () => {
     expect(await screen.findByLabelText("Correo")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
   });
+
+  /* D3 says the guard accepts only ISP actors, and it did not. Both apps
+     share one session cookie (better-auth.spec.md D7), so a store signed
+     in on the PWA drew this shell — banners lit by its missing fields —
+     and then every admin endpoint answered 403. */
+  it("a store's session does not open the admin", async () => {
+    server.use(
+      handlers.session(() => ok({ type: "store", id: "s1", name: "La Esquina", status: "active" })),
+    );
+    const router = renderApp("/stores");
+
+    expect(await screen.findByLabelText("Correo")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/login");
+  });
 });

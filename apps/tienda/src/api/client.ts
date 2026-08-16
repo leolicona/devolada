@@ -1,7 +1,7 @@
 /* Thin fetch wrapper: cookies always ride along; the envelope is the
    API contract ({ success, data } | { success, error: { code } }). */
 
-const BASE = import.meta.env.VITE_API_URL ?? "";
+import { API_BASE as BASE } from "./base";
 
 export class ApiError extends Error {
   constructor(

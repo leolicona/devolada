@@ -8,8 +8,9 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-  server: {
-    port: 5174,
-    proxy: { "/auth": "http://localhost:8787" },
-  },
+  /* No API proxy (shell.spec.md D2): /stores, /settings and /cash-drops
+     are SPA routes here, so proxying them would answer a page reload
+     with JSON. The app calls the worker directly instead — see
+     src/lib/base.ts. */
+  server: { port: 5174 },
 });

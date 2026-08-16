@@ -54,4 +54,7 @@ The end customer pays cash at a corner store and walks out with nothing in hand.
 
 - [x] Scenarios 1–4 automated in the API layer (`test/receipt.test.ts`, 5 tests)
 - [x] Scenario 5 automated with Testing Library + MSW (`apps/tienda/test/charge-result.test.tsx`, 2 tests)
-- [ ] Real check: a charge on the deployed PWA opens WhatsApp with the message ready
+- [x] Real check (2026-08-16, owner, on a phone against deployed dev): the
+      receipt button opens WhatsApp with the message ready — straight into the
+      recipient's chat when the customer has a phone on file, and at the
+      contact list when not, which is exactly D3's two branches.

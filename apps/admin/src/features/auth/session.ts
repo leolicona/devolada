@@ -14,10 +14,20 @@ export type IspActor = {
   wisphubConfigured: boolean;
 };
 
+/* Shell spec D3: the guard accepts only ISP actors. Both apps talk to
+   one API host, so they share one session cookie (better-auth.spec.md
+   D7) — a store signed in on the PWA reaches here with a session that is
+   valid but is not an ISP's. /auth/me answers 200, so the shell used to
+   draw itself (with the verify-email and WispHub banners lit by the
+   store's missing fields) and then every admin endpoint answered 403. */
 export function useSession() {
   const query = useQuery<IspActor, ApiError>({
     queryKey: ["session"],
-    queryFn: () => api<IspActor>("/auth/me"),
+    queryFn: async () => {
+      const actor = await api<IspActor>("/auth/me");
+      if (actor.type !== "isp") throw new ApiError("WRONG_ACTOR", 403);
+      return actor;
+    },
     retry: false,
     staleTime: 60_000,
   });

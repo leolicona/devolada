@@ -54,6 +54,24 @@ describe("US-S02: the guard asks the API, it doesn't assume", () => {
     expect(await screen.findByLabelText("Teléfono")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
   });
+
+  /* Both apps share one session cookie (better-auth.spec.md D7). An ISP
+     signed in on the admin used to open the store app: /auth/me answers
+     200, the tabs drew, and Caja, Movimientos and the search then all
+     answered 403. */
+  it("an admin's session does not open the store app", async () => {
+    server.use(
+      handlers.session(() =>
+        ok({ type: "isp", id: "isp-1", name: "ISP Demo", email: "demo@devolada.app" }),
+      ),
+      handlers.login(() => ok({ type: "store", id: "s1", name: "La Esquina" })),
+    );
+    const router = renderApp("/");
+
+    expect(await screen.findByLabelText("Teléfono")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/login");
+    expect(screen.queryByRole("link", { name: /caja/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("US-S03: suspension takes over the app", () => {

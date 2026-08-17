@@ -40,7 +40,32 @@ CREATE TABLE `payment_links` (
 CREATE UNIQUE INDEX `payment_links_token_unique` ON `payment_links` (`token`);--> statement-breakpoint
 CREATE UNIQUE INDEX `payment_links_isp_customer_idx` ON `payment_links` (`isp_id`,`wisphub_customer_id`);--> statement-breakpoint
 PRAGMA defer_foreign_keys = true;--> statement-breakpoint
-CREATE TABLE `__new_charges` (
+CREATE TABLE `__copy_charges` (
+	`id` text,
+	`isp_id` text,
+	`store_id` text,
+	`folio` text,
+	`wisphub_customer_id` text,
+	`customer_name` text,
+	`customer_zone` text,
+	`customer_phone` text,
+	`monthly_fee_cents` integer,
+	`service_fee_cents` integer,
+	`total_cents` integer,
+	`reconnection_status` text,
+	`reconnection_attempts` integer,
+	`reconnected_at` integer,
+	`wisphub_invoice_id` integer,
+	`next_attempt_at` integer,
+	`last_error` text,
+	`customer_usuario` text,
+	`payment_registered_at` integer,
+	`created_at` integer
+);
+--> statement-breakpoint
+INSERT INTO `__copy_charges` SELECT "id", "isp_id", "store_id", "folio", "wisphub_customer_id", "customer_name", "customer_zone", "customer_phone", "monthly_fee_cents", "service_fee_cents", "total_cents", "reconnection_status", "reconnection_attempts", "reconnected_at", "wisphub_invoice_id", "next_attempt_at", "last_error", "customer_usuario", "payment_registered_at", "created_at" FROM `charges`;--> statement-breakpoint
+DROP TABLE `charges`;--> statement-breakpoint
+CREATE TABLE `charges` (
 	`id` text PRIMARY KEY NOT NULL,
 	`isp_id` text NOT NULL,
 	`store_id` text,
@@ -68,9 +93,8 @@ CREATE TABLE `__new_charges` (
 	FOREIGN KEY (`direct_payment_id`) REFERENCES `direct_payments`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-INSERT INTO `__new_charges`("id", "isp_id", "store_id", "channel", "direct_payment_id", "folio", "wisphub_customer_id", "customer_name", "customer_zone", "customer_phone", "monthly_fee_cents", "service_fee_cents", "total_cents", "reconnection_status", "reconnection_attempts", "reconnected_at", "wisphub_invoice_id", "next_attempt_at", "last_error", "customer_usuario", "payment_registered_at", "created_at") SELECT "id", "isp_id", "store_id", 'store', NULL, "folio", "wisphub_customer_id", "customer_name", "customer_zone", "customer_phone", "monthly_fee_cents", "service_fee_cents", "total_cents", "reconnection_status", "reconnection_attempts", "reconnected_at", "wisphub_invoice_id", "next_attempt_at", "last_error", "customer_usuario", "payment_registered_at", "created_at" FROM `charges`;--> statement-breakpoint
-DROP TABLE `charges`;--> statement-breakpoint
-ALTER TABLE `__new_charges` RENAME TO `charges`;--> statement-breakpoint
+INSERT INTO `charges`("id", "isp_id", "store_id", "channel", "direct_payment_id", "folio", "wisphub_customer_id", "customer_name", "customer_zone", "customer_phone", "monthly_fee_cents", "service_fee_cents", "total_cents", "reconnection_status", "reconnection_attempts", "reconnected_at", "wisphub_invoice_id", "next_attempt_at", "last_error", "customer_usuario", "payment_registered_at", "created_at") SELECT "id", "isp_id", "store_id", 'store', NULL, "folio", "wisphub_customer_id", "customer_name", "customer_zone", "customer_phone", "monthly_fee_cents", "service_fee_cents", "total_cents", "reconnection_status", "reconnection_attempts", "reconnected_at", "wisphub_invoice_id", "next_attempt_at", "last_error", "customer_usuario", "payment_registered_at", "created_at" FROM `__copy_charges`;--> statement-breakpoint
+DROP TABLE `__copy_charges`;--> statement-breakpoint
 CREATE UNIQUE INDEX `charges_folio_unique` ON `charges` (`folio`);--> statement-breakpoint
 CREATE INDEX `charges_store_idx` ON `charges` (`store_id`);--> statement-breakpoint
 CREATE INDEX `charges_isp_created_idx` ON `charges` (`isp_id`,`created_at`);--> statement-breakpoint

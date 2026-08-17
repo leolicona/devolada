@@ -79,3 +79,39 @@ describe("guard: store sessions only", () => {
     expect(asIsp.status).toBe(403);
   });
 });
+
+describe("US-K01: the commission counts the current drop cycle (D5)", () => {
+  it("excludes commissions before the last confirmed drop and reports the boundary", async () => {
+    const isp = await seedIsp();
+    const store = await seedStore(isp.id);
+    const db = drizzle(env.DB);
+    const before = new Date("2026-08-10T12:00:00Z");
+    const dropAt = new Date("2026-08-12T12:00:00Z");
+    const after = new Date("2026-08-15T12:00:00Z");
+    await db.insert(ledgerEntries).values([
+      { storeId: store.id, type: "charge", cents: 41400, createdAt: before },
+      { storeId: store.id, type: "commission", cents: -900, createdAt: before },
+      { storeId: store.id, type: "cash_drop", cents: -40500, createdAt: dropAt },
+      { storeId: store.id, type: "charge", cents: 51400, createdAt: after },
+      { storeId: store.id, type: "commission", cents: -700, createdAt: after },
+    ]);
+
+    const res = await (await app()).request("/cashbox", asStore, env);
+    const { data } = await res.json();
+    /* Only the cycle after the drop counts; the balance stays all-time */
+    expect(data.commissionEarnedCents).toBe(700);
+    expect(data.commissionSince).toBe(dropAt.getTime());
+    expect(data.balanceCents).toBe(41400 - 900 - 40500 + 51400 - 700);
+  });
+
+  it("a pending drop resets nothing: no ledger entry, no boundary", async () => {
+    /* The cash_drop LEDGER entry only exists once the ISP confirms
+       (cash-drops D1). A registered-but-pending drop lives only in the
+       cash_drops table, so the cycle keeps running. */
+    await seedWithEntries(500000, [41400, -900]);
+    const res = await (await app()).request("/cashbox", asStore, env);
+    const { data } = await res.json();
+    expect(data.commissionEarnedCents).toBe(900);
+    expect(data.commissionSince).toBeNull();
+  });
+});

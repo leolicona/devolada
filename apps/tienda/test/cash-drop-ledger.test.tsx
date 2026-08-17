@@ -17,6 +17,7 @@ const cashbox = (
     storeName: "Abarrotes La Esquina",
     balanceCents,
     commissionEarnedCents: 900,
+    commissionSince: null,
     cap: { capCents: 500000, approaching: false, blocked: false },
     lastCashDrop,
   });

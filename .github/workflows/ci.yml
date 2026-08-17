@@ -83,9 +83,23 @@ jobs:
       - name: Build payment page (dev API baked in)
         working-directory: apps/pago
         run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build
+      # Bootstrap: a version upload needs a deployed worker, and the first
+      # deploy of devolada-pago-dev happens on merge. Only that exact
+      # failure is tolerated; anything else still fails the job.
       - name: Payment page preview
         working-directory: apps/pago
-        run: pnpm --filter @devolada/api exec wrangler versions upload --config ../pago/wrangler.jsonc --env dev
+        run: |
+          set +e
+          OUT=$(pnpm --filter @devolada/api exec wrangler versions upload --config ../pago/wrangler.jsonc --env dev 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ $CODE -ne 0 ]; then
+            if echo "$OUT" | grep -q "does not yet exist"; then
+              echo "::warning::devolada-pago-dev is not deployed yet — its first preview arrives after the first merge deploys it."
+            else
+              exit $CODE
+            fi
+          fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

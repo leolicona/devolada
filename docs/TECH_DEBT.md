@@ -2,6 +2,12 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-013 — The re-validation schedule is a global constant, not learned per bank
+- Status: open · Origin: direct-payment.spec.md (D7), owner decision 2026-08-17
+- D7's schedule (+2, +8, +20, +45 min, +2 h, +6 h) comes from published evidence (Banxico's ~30-minute CEP rule; apiCEP's "seconds normally, hours sometimes"), not from our own traffic, and it is the same for every receiving bank. The `direct_payments` log already records everything needed to do better: `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank.
+- Why it was reasonable: with zero real payments there is no distribution to learn from; shipping the evidence-based constant first is what produces the data.
+- Paid by: once enough confirmed direct payments accumulate, derive the per-bank latency distribution from the log and tune the schedule (possibly per receiving bank) — plus revisit the early cadence when apiCEP answers whether pending re-checks consume credits.
+
 ## TD-012 — `INVALID_TOKEN` blames the link for failures the link did not cause
 - Status: **paid** (2026-08-15, `feat/better-auth`) · Origin: found while diagnosing the TD-001 rollback
 - The old `redeemIspToken` collapsed a bad signing key, an IdP outage, an unknown identity and a genuinely expired token into one `INVALID_TOKEN`, rendered as *"Este enlace ya no sirve. Solicita uno nuevo."* — advice that could never work when the real fault was the key.

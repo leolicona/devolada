@@ -20,6 +20,7 @@ The project is **spec-driven**; the rules live in `docs/SPEC.md` and CI enforces
 pnpm install                                  # monorepo root (pnpm workspaces)
 pnpm playground                               # tokens/components playground (packages/ui, port 5173)
 pnpm --filter @devolada/api dev               # local API (wrangler, port 8787; local D1)
+pnpm --filter @devolada/consta dev            # Consta validation API (wrangler, port 8788; own local D1)
 pnpm --filter @devolada/api db:generate       # generate a drizzle migration from src/db/schema.ts
 pnpm --filter @devolada/api db:migrate:local  # apply migrations to the local D1
 pnpm -r --if-present typecheck                # typecheck every workspace
@@ -35,6 +36,7 @@ Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` cre
 
 ```
 apps/api      Hono + Drizzle + Zod on Cloudflare Workers + D1
+apps/consta   Consta: SPEI transfer-validation API — own product, own Worker + D1 (specs in docs/consta/)
 packages/ui   Design tokens (Tailwind v4) + shared atoms
 apps/tienda   Store PWA (not created yet; mobile-first)
 apps/admin    ISP dashboard (not created yet; desktop-first)

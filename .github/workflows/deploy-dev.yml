@@ -94,6 +94,32 @@ jobs:
       - name: Deploy dev admin
         working-directory: apps/admin
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../admin/wrangler.jsonc --env dev
+      # Consta (docs/consta/validation.spec.md D8): own Worker + own D1,
+      # deployed by the same pipeline. Missing secrets don't block the
+      # deploy: without APICEP_TOKEN /validate answers PROVIDER_ERROR, and
+      # without CONSTA_ADMIN_TOKEN /admin/keys stays hidden.
+      - name: D1 consta dev migrations (before deploy)
+        working-directory: apps/consta
+        run: pnpm exec wrangler d1 migrations apply devolada-consta-db-dev --env dev --remote
+      - name: Deploy dev Consta
+        working-directory: apps/consta
+        run: pnpm exec wrangler deploy --env dev
+      - name: Sync Consta worker secrets
+        working-directory: apps/consta
+        env:
+          APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
+          CONSTA_ADMIN_TOKEN: ${{ secrets.CONSTA_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$APICEP_TOKEN" ]; then
+            echo "::warning::No APICEP_TOKEN in the dev environment — Consta /validate will answer PROVIDER_ERROR until it lands."
+          else
+            printf '%s' "$APICEP_TOKEN" | pnpm exec wrangler secret put APICEP_TOKEN --env dev
+          fi
+          if [ -z "$CONSTA_ADMIN_TOKEN" ]; then
+            echo "::warning::No CONSTA_ADMIN_TOKEN in the dev environment — /admin/keys stays hidden."
+          else
+            printf '%s' "$CONSTA_ADMIN_TOKEN" | pnpm exec wrangler secret put CONSTA_ADMIN_TOKEN --env dev
+          fi
       - name: Smoke test
         run: |
           URL="${{ vars.DEV_API_URL }}"

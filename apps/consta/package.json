@@ -1,0 +1,29 @@
+{
+  "name": "@devolada/consta",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply devolada-consta-db --local",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.4.2",
+    "drizzle-orm": "^0.40.0",
+    "hono": "^4.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.71",
+    "@cloudflare/workers-types": "^4.20250204.0",
+    "drizzle-kit": "^0.30.4",
+    "typescript": "^5.7.0",
+    "vitest": "~3.2.7",
+    "wrangler": "^4.0.0"
+  }
+}

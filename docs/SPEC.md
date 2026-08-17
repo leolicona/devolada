@@ -71,6 +71,16 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 ### Platform (L)
 - **US-L01** — As the platform, my share of every charge accrues per ISP and per month; as an ISP, I see each month's statement with exactly what to transfer and the reference to use. *(reserved 2026-08-17, backlog #1)*
 
+### Consta (V)
+Stories of the adjacent product (see "Adjacent product" below). Its users are
+**integrators** (developers calling its API) and **the operator** (the owner).
+
+- **US-V01** — As an integrator, I validate a SPEI transfer by its data (tracking key or reference number, date, amount, banks) and get a verdict backed by the Banxico CEP.
+- **US-V02** — As an integrator, I validate a transfer from a receipt image URL and get the same verdict shape.
+- **US-V03** — As an integrator, a transfer whose CEP is not generated yet reads as "pending" — never as a false "invalid" — so I can retry later.
+- **US-V04** — As an integrator, a CEP that was already validated before comes flagged, so one proof of payment cannot be reused twice.
+- **US-V05** — As the operator, I issue and revoke API keys by hand, and every validation is logged under its key so the fixed fee per transaction can be derived later.
+
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
 - **US-P02** — As a user, the app follows my system's light or dark preference, and dark is a real palette, not an inversion.
@@ -187,6 +197,7 @@ Owner's decisions:
 | [polish/accessibility.spec.md](polish/accessibility.spec.md) | polish | US-P04 | in development |
 | [polish/responsive.spec.md](polish/responsive.spec.md) | polish | US-P03, US-P02, US-P04 (rendered) | in development |
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
+| [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05 | in development |
 
 ## Cross-cutting layers
 

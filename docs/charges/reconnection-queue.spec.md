@@ -67,4 +67,16 @@ Terminal states: `reconnected` (with `reconnected_at`) or `failed` after 5 count
 - [x] Scenarios 1–6 automated in the API layer (`test/reconnection-queue.test.ts`, 5 tests)
 - [x] Scenarios 7–9 automated (D8/D9 revision; the queue seed is now production-faithful, so the retry lookup is asserted by usuario)
 - [x] Cron trigger configured in `wrangler.jsonc` for dev and prod
-- [ ] Real check with the pilot ISP: a charge whose first attempt fails reconnects on a retry, with the physical MikroTik flip observed
+- [x] Real check, rehearsed end-to-end 2026-08-17 — on a **real RouterOS** (CHR 7.24
+      linked to the demo tenant through WispHub's SSTP VPN), not the pilot's
+      hardware yet, but the full mechanism: the owner suspended a customer from
+      the panel and the cut landed on the router (`Moroso` address-list,
+      observed); a charge from the **deployed** PWA paid the real invoice,
+      ensured `auto_activar_servicio` (D9), and WispHub logged into the router
+      seconds later and removed the cut (router log + emptied address-list);
+      the charge answered `queued` — the amber branch's first real firing —
+      and the deployed cron's verify-only retry (D8) converted it to
+      `reconnected` in ~60s without re-paying. The old flow would have died on
+      WispHub's 422 and reported a false `failed`.
+- [ ] The same scene once more on the pilot ISP's own MikroTik — a formality
+      now, but their hardware and RouterOS version deserve the confirmation

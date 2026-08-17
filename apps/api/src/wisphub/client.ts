@@ -117,6 +117,23 @@ export class WispHub {
     }));
   }
 
+  /* Every customer of the tenant, for payment-link generation
+     (direct-payment spec D5). Same list endpoint, paginated; the page
+     bound keeps one admin request from walking a huge tenant forever —
+     10 pages of 100 covers the pilot scale with room. */
+  async listCustomers(): Promise<{ wisphubId: number; usuario: string }[]> {
+    const customers: { wisphubId: number; usuario: string }[] = [];
+    let path: string | null = "/clientes/?limit=100";
+    for (let page = 0; page < 10 && path; page++) {
+      const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
+      for (const c of data.results) {
+        if (c.usuario) customers.push({ wisphubId: c.id_servicio, usuario: c.usuario });
+      }
+      path = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    }
+    return customers;
+  }
+
   /* D1 (charge-confirm spec): one customer loads through the list filter.
      The detail endpoint returns nombre/usuario as null (spike finding). */
   async getCustomer(usuario: string): Promise<WispHubCustomer | null> {

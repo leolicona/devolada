@@ -19,6 +19,7 @@ const oneCharge = feedResponse.parse({
     {
       id: "ch-1",
       folio: "DV-FEED01",
+      channel: "store",
       reconnectionStatus: "reconnected",
       totalCents: 41400,
       monthlyFeeCents: 39900,

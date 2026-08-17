@@ -5,8 +5,10 @@ import {
   Check,
   CheckCircle2,
   Clock3,
+  Hourglass,
   Mail,
   Store,
+  TimerOff,
   Wifi,
   WifiOff,
   XCircle,
@@ -36,7 +38,15 @@ export type Status =
   | "storeActive"
   | "storeSuspended"
   /* store invitation */
-  | "invited";
+  | "invited"
+  /* direct SPEI payment (direct-payment spec D10). "confirmed" above
+     belongs to cash drops — same rule as storeActive: a different
+     concept gets different words. */
+  | "validating"
+  | "paymentConfirmed"
+  | "paymentInvalid"
+  | "paymentExpired"
+  | "unapplied";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -62,6 +72,11 @@ const statuses: Record<
   storeActive: { tone: "success", icon: Store, label: "Tienda activa" },
   storeSuspended: { tone: "error", icon: Store, label: "Tienda suspendida" },
   invited: { tone: "warning", icon: Mail, label: "Invitación enviada" },
+  validating: { tone: "info", icon: Hourglass, label: "Verificando pago" },
+  paymentConfirmed: { tone: "success", icon: CheckCircle2, label: "Pago confirmado" },
+  paymentInvalid: { tone: "error", icon: XCircle, label: "Pago no válido" },
+  paymentExpired: { tone: "warning", icon: TimerOff, label: "Verificación expirada" },
+  unapplied: { tone: "warning", icon: AlertTriangle, label: "Pago sin adeudo" },
 };
 
 const sizes = {

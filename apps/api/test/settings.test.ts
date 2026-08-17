@@ -175,3 +175,54 @@ describe("US-A04: the connection test speaks for WispHub", () => {
     expect((await none.json()).data).toMatchObject({ ok: false, code: "WISPHUB_NOT_CONFIGURED" });
   });
 });
+
+/* docs/direct-payment/direct-payment.spec.md scenario 13. */
+describe("US-D05: the ISP configures its SPEI account and fee", () => {
+  it("saves CLABE, bank, beneficiary and fee; null fee falls back", async () => {
+    await seedIsp();
+
+    const res = await (await app()).request(
+      ...send("/settings", "PATCH", {
+        speiClabe: "646180157000000004",
+        speiBank: "STP",
+        speiBeneficiaryName: "WifiPlus SA de CV",
+        speiServiceFeeCents: 800,
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.spei).toMatchObject({
+      clabe: "646180157000000004",
+      bank: "STP",
+      beneficiaryName: "WifiPlus SA de CV",
+      serviceFeeCents: 800,
+      effectiveServiceFeeCents: 800,
+      configured: true,
+    });
+
+    /* clearing the fee falls back to the store fee (D3) */
+    const cleared = await (await app()).request(
+      ...send("/settings", "PATCH", { speiServiceFeeCents: null }),
+      env,
+    );
+    const { data: after } = await cleared.json();
+    expect(after.spei.serviceFeeCents).toBeNull();
+    expect(after.spei.effectiveServiceFeeCents).toBe(after.serviceFeeCents);
+  });
+
+  it("rejects a malformed CLABE and stays unconfigured by default", async () => {
+    await seedIsp();
+
+    const bad = await (await app()).request(
+      ...send("/settings", "PATCH", { speiClabe: "12345" }),
+      env,
+    );
+    expect(bad.status).toBe(400);
+
+    const res = await (await app()).request("/settings", asIsp, env);
+    const { data } = await res.json();
+    expect(data.spei.configured).toBe(false);
+    expect(data.spei.effectiveServiceFeeCents).toBe(data.serviceFeeCents);
+  });
+});

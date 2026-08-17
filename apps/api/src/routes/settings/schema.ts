@@ -34,6 +34,17 @@ export const settingsResponse = z.object({
   wisphubTest: z
     .object({ ok: z.boolean(), code: z.string().nullable() })
     .optional(),
+  /* Direct SPEI channel (direct-payment spec D3, D4): the ISP's own
+     account — nothing here belongs to Devolada. */
+  spei: z.object({
+    clabe: z.string().nullable(),
+    bank: z.string().nullable(),
+    beneficiaryName: z.string().nullable(),
+    /* null → falls back to serviceFeeCents (D3) */
+    serviceFeeCents: z.number().int().nullable(),
+    effectiveServiceFeeCents: z.number().int(),
+    configured: z.boolean(),
+  }),
 });
 
 export const settingsPatchRequest = z
@@ -43,6 +54,11 @@ export const settingsPatchRequest = z
     timezone,
     timeFormat,
     wisphubApiKey: z.string().trim().min(8),
+    /* SPEI config (direct-payment D3, D4): explicit null clears a field */
+    speiClabe: z.string().trim().regex(/^\d{18}$/).nullable(),
+    speiBank: z.string().trim().min(2).max(80).nullable(),
+    speiBeneficiaryName: z.string().trim().min(3).max(120).nullable(),
+    speiServiceFeeCents: z.number().int().nonnegative().nullable(),
   })
   .partial();
 

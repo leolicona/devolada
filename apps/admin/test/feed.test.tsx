@@ -10,6 +10,7 @@ import { renderApp } from "./render";
 const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   id: "ch-1",
   folio: "DV-FEED01",
+  channel: "store" as const,
   reconnectionStatus: "reconnected" as const,
   totalCents: 41400,
   monthlyFeeCents: 39900,

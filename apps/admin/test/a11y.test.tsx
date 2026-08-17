@@ -15,6 +15,7 @@ const feed = feedResponse.parse({
     {
       id: "ch-1",
       folio: "DV-FEED01",
+      channel: "store",
       reconnectionStatus: "failed",
       totalCents: 41400,
       monthlyFeeCents: 39900,
@@ -73,6 +74,14 @@ const settings = settingsResponse.parse({
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphub: { configured: false, keyTail: null },
+  spei: {
+    clabe: null,
+    bank: null,
+    beneficiaryName: null,
+    serviceFeeCents: null,
+    effectiveServiceFeeCents: 1500,
+    configured: false,
+  },
 });
 
 describe("US-P04: the harness reports what it should", () => {

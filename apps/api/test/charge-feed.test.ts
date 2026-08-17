@@ -140,3 +140,39 @@ describe("D6: tenant isolation is tested, not assumed", () => {
     expect((await otherIsp.json()).data.charges).toHaveLength(0);
   });
 });
+
+/* docs/direct-payment/direct-payment.spec.md scenario 14. */
+describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => {
+  it("returns spei charges with channel and no store name", async () => {
+    const { isp } = await seedFeed();
+    await drizzle(env.DB)
+      .insert(charges)
+      .values({
+        ispId: isp.id,
+        storeId: null,
+        channel: "spei",
+        folio: "DV-SPEI01",
+        wisphubCustomerId: "6",
+        customerName: "Janely",
+        monthlyFeeCents: 49900,
+        serviceFeeCents: 1500,
+        totalCents: 51400,
+        reconnectionStatus: "reconnected",
+        createdAt: new Date(),
+      });
+
+    const res = await (await app()).request("/charges/feed", asIsp, env);
+    const { data } = await res.json();
+    expect(data.charges).toHaveLength(5);
+    expect(data.charges[0]).toMatchObject({
+      folio: "DV-SPEI01",
+      channel: "spei",
+      storeName: null,
+    });
+    /* store charges keep their channel and name */
+    expect(data.charges[1]).toMatchObject({
+      channel: "store",
+      storeName: "Abarrotes La Esquina",
+    });
+  });
+});

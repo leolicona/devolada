@@ -213,6 +213,112 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
+/* Pago directo por SPEI (direct-payment spec, US-D05). D4: the account
+   is the ISP's own — the money never touches Devolada. D3: the SPEI fee
+   is separate; empty falls back to the store fee. */
+function SpeiCard({ settings }: { settings: SettingsResponse }) {
+  const save = useSaveSettings();
+  const [clabe, setClabe] = useState(settings.spei.clabe ?? "");
+  const [bank, setBank] = useState(settings.spei.bank ?? "");
+  const [beneficiary, setBeneficiary] = useState(settings.spei.beneficiaryName ?? "");
+  const [fee, setFee] = useState(
+    settings.spei.serviceFeeCents === null ? "" : pesos(settings.spei.serviceFeeCents),
+  );
+
+  const clabeValid = /^\d{18}$/.test(clabe.trim());
+  /* Empty = clear: fall back to the store fee (D3) */
+  const feeCents = fee.trim() === "" ? null : parseMoney(fee);
+  const feeValid = fee.trim() === "" || feeCents !== null;
+  const valid =
+    clabeValid && bank.trim().length >= 2 && beneficiary.trim().length >= 3 && feeValid;
+
+  return (
+    <SectionCard title="Pago directo por SPEI">
+      <p className="text-sm text-muted-foreground">
+        {settings.spei.configured
+          ? "Tus clientes con banco pueden pagar por transferencia desde su link de pago."
+          : "Aún no está activo. Con tu CLABE, tus clientes con banco podrán pagar por transferencia."}
+      </p>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <Label htmlFor="spei-clabe">CLABE</Label>
+          <Input
+            id="spei-clabe"
+            className="mt-1 font-mono"
+            inputMode="numeric"
+            maxLength={18}
+            value={clabe}
+            onChange={(e) => setClabe(e.target.value)}
+            placeholder="18 dígitos"
+            autoComplete="off"
+          />
+          {clabe.trim() !== "" && !clabeValid && (
+            <p className="mt-1 text-sm font-medium text-error">La CLABE debe tener 18 dígitos.</p>
+          )}
+          <p className="mt-1 text-sm text-ink-soft">
+            La cuenta donde recibes las transferencias. El dinero llega directo a ti.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="spei-bank">Banco</Label>
+          <Input
+            id="spei-bank"
+            className="mt-1"
+            value={bank}
+            onChange={(e) => setBank(e.target.value)}
+            placeholder="STP, BBVA, Banorte…"
+          />
+        </div>
+        <div>
+          <Label htmlFor="spei-beneficiary">Nombre del beneficiario</Label>
+          <Input
+            id="spei-beneficiary"
+            className="mt-1"
+            value={beneficiary}
+            onChange={(e) => setBeneficiary(e.target.value)}
+            placeholder="Como aparece en tu cuenta"
+          />
+        </div>
+        <div>
+          <Label htmlFor="spei-fee">Cargo por servicio SPEI</Label>
+          <Input
+            id="spei-fee"
+            prefix="$"
+            inputMode="decimal"
+            className="mt-1"
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+            placeholder={pesos(settings.serviceFeeCents)}
+          />
+          <p className="mt-1 text-sm text-ink-soft">
+            Vacío usa el cargo por servicio general ({formatMoney(settings.serviceFeeCents)}).
+          </p>
+        </div>
+      </div>
+
+      <Button
+        disabled={!valid || save.isPending}
+        onClick={() =>
+          save.mutate({
+            speiClabe: clabe.trim(),
+            speiBank: bank.trim(),
+            speiBeneficiaryName: beneficiary.trim(),
+            speiServiceFeeCents: feeCents,
+          })
+        }
+      >
+        {save.isPending ? "Guardando…" : "Guardar pago directo"}
+      </Button>
+      {save.isSuccess && !save.isPending && (
+        <p role="status" className="text-sm font-medium text-success">
+          Guardado.
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
 /* The month name a period key renders as; mid-month noon UTC so no
    timezone can shift it into a neighbour month. */
 const periodLabel = (period: string): string => {
@@ -368,6 +474,7 @@ export function SettingsScreen() {
         <div className="mt-4 space-y-4 pb-8">
           <WispHubCard settings={data} />
           <MoneyCard settings={data} />
+          <SpeiCard settings={data} />
           <SettlementCard />
           <DisplayCard settings={data} />
           <PasskeyCard />

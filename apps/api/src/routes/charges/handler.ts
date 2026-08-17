@@ -127,7 +127,8 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
   }
 }
 
-function makeFolio(): string {
+/* Shared with the direct SPEI channel: one folio format, one guard */
+export function makeFolio(): string {
   /* DV- + 6 uppercase base36 chars; the unique index is the real guard */
   const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const bytes = crypto.getRandomValues(new Uint8Array(6));
@@ -315,10 +316,12 @@ export async function listChargeFeed(
     ...(q.to ? [lte(charges.createdAt, new Date(q.to))] : []),
   ];
 
+  /* leftJoin: a direct SPEI charge has no store (direct-payment D6) and
+     must still appear in the feed */
   const rows = await db
     .select({ charge: charges, storeName: stores.name })
     .from(charges)
-    .innerJoin(stores, eq(charges.storeId, stores.id))
+    .leftJoin(stores, eq(charges.storeId, stores.id))
     .where(and(...filters))
     .orderBy(desc(charges.createdAt))
     .limit(PAGE + 1);
@@ -342,6 +345,7 @@ export async function listChargeFeed(
       charges: page.map(({ charge, storeName }) => ({
         id: charge.id,
         folio: charge.folio,
+        channel: charge.channel,
         reconnectionStatus: charge.reconnectionStatus,
         totalCents: charge.totalCents,
         monthlyFeeCents: charge.monthlyFeeCents,

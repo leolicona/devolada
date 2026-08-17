@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, TriangleAlert } from "lucide-react";
@@ -7,6 +8,8 @@ import {
   AmountBreakdown,
   Button,
   Card,
+  Field,
+  Input,
   Skeleton,
   StatusBadge,
   formatMoney,
@@ -31,13 +34,21 @@ export function ConfirmScreen() {
   const { data, isPending, errorCode } = useCustomerQuote(customerId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  /* customer-phone D2: optional capture, so it holds whatever was typed
+     and only a complete number travels — an unfinished one is not an
+     error, it is simply no phone. */
+  const [phone, setPhone] = useState("");
+  const phoneDigits = phone.replace(/\D/g, "");
 
   /* Charging: the server re-computes the amount; we only send the customer */
   const charge = useMutation<ChargeResponse, ApiError>({
     mutationFn: () =>
       api<ChargeResponse>("/charges", {
         method: "POST",
-        body: JSON.stringify({ usuario: customerId }),
+        body: JSON.stringify({
+          usuario: customerId,
+          ...(phoneDigits.length === 10 ? { customerPhone: phoneDigits } : {}),
+        }),
       }),
     onSuccess: (created) => {
       void navigate({ to: "/charges/$chargeId", params: { chargeId: created.id } });
@@ -134,6 +145,27 @@ export function ConfirmScreen() {
             ]}
           />
         </Card>
+      )}
+
+      {/* customer-phone D2: only when nobody has a number for this
+          customer. Optional by construction — it has no validation state
+          and never touches the charge button. */}
+      {!paid && !customer.hasPhone && (
+        <div className="mt-6">
+          <Field label="Teléfono para el comprobante (opcional)">
+            <Input
+              inputMode="numeric"
+              autoComplete="tel-national"
+              maxLength={10}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+              placeholder="10 dígitos"
+            />
+          </Field>
+          <p className="mt-2 text-sm text-ink-soft">
+            Para enviarle su comprobante por WhatsApp.
+          </p>
+        </div>
       )}
 
       {cap.blocked && !paid && (

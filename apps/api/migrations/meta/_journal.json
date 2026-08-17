@@ -57,6 +57,13 @@
       "when": 1786994988322,
       "tag": "0007_icy_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787009902619,
+      "tag": "0008_unknown_shooting_star",
+      "breakpoints": true
     }
   ]
 }

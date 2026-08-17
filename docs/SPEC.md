@@ -54,6 +54,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-C04** — As a store, a charge is never rejected because of WispHub failures: it gets recorded and the reconnection is queued with retries.
 - **US-C05** — As an end customer, I receive a receipt via WhatsApp/SMS with a unique folio.
 - **US-C06** — As an end customer, I can only be charged what I actually owe: a debt that no longer exists cannot be charged again. *(added 2026-08-16, found live: WispHub's summary label lags the invoices in both directions)*
+- **US-C07** — As a store, when WispHub has no phone for the customer, I can save it once during the charge, and the receipt opens straight into their chat — this time and every time after. *(reserved 2026-08-17, backlog #3; WispHub write-back probed and impossible)*
 
 ### Cash box (K)
 - **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my commission for the current drop cycle; every number breaks down into its ledger entries. *(commission per cycle 2026-08-17, cashbox.spec.md D5 — was "accumulated"; the drop is the shopkeeper's corte)*
@@ -133,12 +134,14 @@ not here. Owner's priority order (2026-08-16):
    from the ledger (commission entries after the last confirmed `cash_drop`);
    query + copy, no schema change. The label must carry the period, or a $0
    morning reads as stolen commission.
-3. **Customer phone capture** — when WispHub has no phone, the receipt's
+3. ◐ **Customer phone capture** *(picked up 2026-08-17 as US-C07, charges/customer-phone.spec.md)* — when WispHub has no phone, the receipt's
    `wa.me` opens with no recipient. Probe first whether `telefono` is writable
    via `PATCH /clientes/{id}/` (the same call that flips
    `auto_activar_servicio`): writing it back to WispHub keeps the data in the
    ISP's system and out of ours. Storing it ourselves is the fallback and a
-   personal-data commitment to weigh.
+   personal-data commitment to weigh. *(Probed 2026-08-17: `telefono` is
+   read-only via the API — absent from the detail resource and the PUT
+   schema, PATCH ignores it. The fallback is the spec.)*
 4. **Period reports** — the ledger already holds every movement forever; what
    is missing are the aggregations: monthly cortes per store and per ISP
    (charges, commission, drops). Pure derivation, no new writes.
@@ -202,6 +205,7 @@ Owner's decisions:
 | [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retries) | in development |
 | [charges/receipt.spec.md](charges/receipt.spec.md) | charges | US-C05 | in development |
 | [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06 | in development |
+| [charges/customer-phone.spec.md](charges/customer-phone.spec.md) | charges | US-C07 | in development |
 | [cashbox/cashbox.spec.md](cashbox/cashbox.spec.md) | cashbox | US-K01, US-K04 | in development |
 | [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
 | [cash-drops/confirm-cash-drop.spec.md](cash-drops/confirm-cash-drop.spec.md) | cash-drops | US-E01, US-E02 | in development |

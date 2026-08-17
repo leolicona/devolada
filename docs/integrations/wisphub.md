@@ -27,6 +27,22 @@ Does registering a payment via the API trigger the **automatic reactivation** of
 
 `wrangler dev` (local workerd) cannot reach `api.wisphub.net` — every fetch fails with workerd's opaque `internal error`, while the same key works with curl and from deployed Workers. Manual checks therefore run against the **deployed dev API**, with `WISPHUB_API_KEY` set as a dev-environment secret. The API tests are not affected (WispHub is mocked).
 
+## `telefono` is read-only via the API (probed 2026-08-17)
+
+Probed for US-C07 (customer phone capture), against the demo tenant:
+
+- `telefono` exists only in the **list** serializer (`GET /api/clientes/`).
+  The detail resource (`GET /clientes/{id_servicio}/`) is network-config
+  centric and does not carry the field at all.
+- `OPTIONS /clientes/{id}/` documents 34 PUT-writable fields
+  (`auto_activar_servicio` among them); `telefono` is not one.
+- Empirical `PATCH /clientes/{id}/ {"telefono": "..."}` neither echoes nor
+  persists the value — the list keeps the old value.
+
+Consequence: customer phones captured at charge time cannot be written back to
+WispHub; Devolada stores them (`customer_contacts`,
+charges/customer-phone.spec.md D1/D3).
+
 ## E2E evidence (2026-08-14)
 
 Full pipeline verified through `devolada-api-dev`: real search (allow-list mapping, cents), real quote (`due` after a pending invoice), real charge → folio `DV-RJO12L`, WispHub invoice created and **paid** (`estado: Pagada`), status `reconnected` after the verify read, ledger `+41400 / −900`. Finding: the reconnection created a new invoice instead of paying the already-pending one → TD-009.

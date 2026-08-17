@@ -8,6 +8,12 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Why it was reasonable: with zero real payments there is no distribution to learn from; shipping the evidence-based constant first is what produces the data.
 - Paid by: once enough confirmed direct payments accumulate, derive the per-bank latency distribution from the log and tune the schedule (possibly per receiving bank) — plus revisit the early cadence when apiCEP answers whether pending re-checks consume credits.
 
+## TD-014 — Captured customer phones have no ISP-facing view or delete
+- Status: **open** · Origin: charges/customer-phone.spec.md D5 (2026-08-17)
+- We store customer phones the shopkeeper captures (`customer_contacts`), but the ISP has no screen to see, correct or delete them; a wrong number is only fixed by typing a new one at the next charge, and a deletion request is handled by hand.
+- Why it was reasonable: the admin has no customer view at all yet — building one screen for one field would invent a surface the IA does not have.
+- Payable when: the admin gets a customer view (natural spot), or the first real deletion request arrives — whichever comes first.
+
 ## TD-012 — `INVALID_TOKEN` blames the link for failures the link did not cause
 - Status: **paid** (2026-08-15, `feat/better-auth`) · Origin: found while diagnosing the TD-001 rollback
 - The old `redeemIspToken` collapsed a bad signing key, an IdP outage, an unknown identity and a genuinely expired token into one `INVALID_TOKEN`, rendered as *"Este enlace ya no sirve. Solicita uno nuevo."* — advice that could never work when the real fault was the key.

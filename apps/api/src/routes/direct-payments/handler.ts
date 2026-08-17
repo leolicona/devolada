@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, asc, eq, gt, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { charges, directPayments, isps, paymentLinks } from "../../db/schema";
@@ -356,3 +356,61 @@ export async function listLinks(c: Ctx, cursor?: string) {
     },
   });
 }
+
+/* GET /direct-payments/links/search?q=XYZ — ISP session (US-D07).
+   Searches WispHub and ensures links exist for the results. */
+export async function searchLinks(c: Ctx, q: string) {
+  const actor = c.get("actor");
+  if (actor.type !== "isp") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const [isp] = await db.select().from(isps).where(eq(isps.id, actor.id));
+  if (!isp?.wisphubApiKey) {
+    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
+  }
+
+  let customers;
+  try {
+    customers = await new WispHub(isp.wisphubApiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
+  } catch (e) {
+    return wisphubFailure(c, e);
+  }
+
+  if (customers.length) {
+    await db
+      .insert(paymentLinks)
+      .values(
+        customers.map((customer) => ({
+          ispId: isp.id,
+          token: makeLinkToken(),
+          wisphubCustomerId: String(customer.wisphubId),
+          customerUsuario: customer.usuario,
+        })),
+      )
+      /* Existing links keep their token: the link is permanent (D1) */
+      .onConflictDoNothing();
+  }
+
+  const customerIds = customers.map((c) => String(c.wisphubId));
+  let links: { wisphubCustomerId: string; token: string }[] = [];
+  if (customerIds.length) {
+    links = await db
+      .select({ wisphubCustomerId: paymentLinks.wisphubCustomerId, token: paymentLinks.token })
+      .from(paymentLinks)
+      .where(and(eq(paymentLinks.ispId, isp.id), inArray(paymentLinks.wisphubCustomerId, customerIds)));
+  }
+  
+  const linkMap = new Map(links.map((l) => [l.wisphubCustomerId, l.token]));
+
+  const results = customers.map((customer) => ({
+    wisphubId: customer.wisphubId,
+    usuario: customer.usuario,
+    name: customer.name,
+    phone: customer.phone,
+    url: `${c.env.PAGO_BASE_URL}/p/${linkMap.get(String(customer.wisphubId))}`,
+  }));
+
+  return c.json({ success: true, data: { results } });
+}
+

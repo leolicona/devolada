@@ -11,6 +11,7 @@ import { StoresScreen } from "./features/stores/StoresScreen";
 import { NewStoreScreen } from "./features/stores/NewStoreScreen";
 import { StoreDetailScreen } from "./features/stores/StoreDetailScreen";
 import { CashDropsScreen } from "./features/cash-drops/CashDropsScreen";
+import { LinksScreen } from "./features/links/LinksScreen";
 import { SettingsScreen } from "./features/settings/SettingsScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
@@ -56,11 +57,17 @@ const settingsRoute = createRoute({
   component: SettingsScreen,
 });
 
+const linksRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/links",
+  component: LinksScreen,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   signupRoute,
   recoverRoute,
-  appRoute.addChildren([feedRoute, storesRoute, newStoreRoute, storeDetailRoute, dropsRoute, settingsRoute]),
+  appRoute.addChildren([feedRoute, storesRoute, newStoreRoute, storeDetailRoute, dropsRoute, linksRoute, settingsRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

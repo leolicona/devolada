@@ -1,0 +1,153 @@
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Share2, Link as LinkIcon, AlertCircle } from "lucide-react";
+import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { api, ApiError } from "@/lib/api";
+import type { LinksSearchResponse } from "@devolada/api/direct-payments-schema";
+
+/* US-D07: ISP searches WispHub customers and shares permanent SPEI payment links via WhatsApp. */
+
+export function LinksScreen() {
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data, isPending, isError, refetch, isRefetching, error } = useQuery<LinksSearchResponse, ApiError>({
+    queryKey: ["payment-links", "search", debouncedSearch],
+    queryFn: () => api<LinksSearchResponse>(`/direct-payments/links/search?q=${encodeURIComponent(debouncedSearch)}`),
+    enabled: debouncedSearch.trim().length > 0,
+    retry: false,
+  });
+
+  const handleShare = (link: LinksSearchResponse["results"][0]) => {
+    const message = `Hola, aquí está tu enlace permanente de pago: ${link.url}`;
+    const url = new URL("https://wa.me/");
+    if (link.phone) {
+      /* WispHub phones might have + or spaces, wa.me handles standard formats well */
+      url.pathname = `/${link.phone.replace(/\D/g, "")}`;
+    }
+    url.searchParams.set("text", message);
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  };
+
+  const isConfigError = isError && error?.status === 503;
+
+  return (
+    <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold">Enlaces SPEI</h1>
+      </div>
+
+      <div className="mt-6">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
+          <Input
+            type="search"
+            placeholder="Buscar por nombre, usuario o teléfono..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {isConfigError && (
+        <Alert
+          variant="destructive"
+          layout="icon"
+          className="mt-6"
+        >
+          <AlertCircle aria-hidden />
+          <span>
+            <strong>Sin conexión a WispHub.</strong> No pudimos conectar con WispHub para buscar a tus clientes. Revisa tu llave de API en Configuración.
+          </span>
+        </Alert>
+      )}
+
+      {isError && !isConfigError && (
+        <ListError
+          what="los enlaces"
+          onRetry={() => void refetch()}
+          retrying={isRefetching}
+          className="mt-6"
+        />
+      )}
+
+      {isPending && debouncedSearch.trim().length > 0 && !isError && (
+        <Card className="mt-6 p-4">
+          {[0, 1, 2].map((k) => (
+            <div key={k} className="flex items-center gap-4 py-3">
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-9 w-28 rounded-md" />
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {!isPending && !isError && data?.results.length === 0 && debouncedSearch.trim().length > 0 && (
+        <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          No se encontraron clientes con "{debouncedSearch}".
+        </p>
+      )}
+
+      {!debouncedSearch.trim() && !isError && (
+        <p className="mt-6 max-w-lg text-sm text-muted-foreground">
+          Busca a un cliente por nombre, usuario o teléfono para obtener su enlace permanente de pago por transferencia.
+        </p>
+      )}
+
+      {data && data.results.length > 0 && (
+        <Card className="mt-6">
+          <ul className="divide-y divide-line-soft">
+            {data.results.map((result) => (
+              <li
+                key={result.wisphubId}
+                className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 transition-colors duration-150 hover:bg-muted sm:flex"
+              >
+                <div className="min-w-0 sm:flex-1">
+                  <span className="block text-sm font-medium">{result.name || result.usuario}</span>
+                  <span className="block text-sm text-muted-foreground">
+                    {result.usuario} {result.phone ? `· ${result.phone}` : ""}
+                  </span>
+                </div>
+                
+                <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
+                  <Button
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(result.url);
+                    }}
+                    title="Copiar enlace"
+                  >
+                    <LinkIcon className="size-4" aria-hidden />
+                    <span className="sr-only">Copiar</span>
+                  </Button>
+                  
+                  <Button
+                    className="shrink-0"
+                    onClick={() => handleShare(result)}
+                  >
+                    <Share2 className="mr-2 size-4" aria-hidden />
+                    Compartir
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </main>
+  );
+}

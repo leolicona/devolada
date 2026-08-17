@@ -10,6 +10,7 @@ import {
   Settings,
   Store,
   WifiOff,
+  Link as LinkIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logout, useSession } from "../auth/session";
@@ -20,6 +21,7 @@ const sections = [
   { to: "/", label: "Cobros", icon: Banknote, exact: true },
   { to: "/stores", label: "Tiendas", icon: Store, exact: false },
   { to: "/cash-drops", label: "Entregas", icon: ArrowDownToLine, exact: false },
+  { to: "/links", label: "Enlaces SPEI", icon: LinkIcon, exact: false },
   { to: "/settings", label: "Configuración", icon: Settings, exact: false },
 ] as const;
 

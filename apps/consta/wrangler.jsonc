@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "devolada-consta",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-05-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "devolada-consta-db",
+      "database_id": "devolada-consta-db-local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "dev"
+  },
+  /* Secrets per env, set by CI after deploy (same TD-011 dance as the api):
+     APICEP_TOKEN (provider), CONSTA_ADMIN_TOKEN (key issuance).
+     Prod env block deliberately absent — it arrives with the first external
+     consumer (validation spec D8). */
+  "env": {
+    "dev": {
+      "name": "devolada-consta-dev",
+      "routes": [{ "pattern": "consta.dev.devoladapago.com", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "devolada-consta-db-dev",
+          "database_id": "1b9b09d6-79a2-4e53-ac18-7dd182ffded5",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "dev"
+      }
+    }
+  }
+}

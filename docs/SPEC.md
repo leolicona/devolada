@@ -125,20 +125,39 @@ not here. Owner's priority order (2026-08-16):
    (TD-003): real sending for receipts and invitations, `wa.me` stays as the
    fallback.
 
-**Adjacent product (its own repo, its own SPEC.md): bank-transfer validation
-service.** Automates SPEI transfer validation under a fixed fee per
+**Adjacent product (own product, shared house): Consta, the bank-transfer
+validation service.** Automates SPEI transfer validation under a fixed fee per
 transaction; three reconciliation methods (attached-receipt analysis, dynamic
 CLABEs, bank-reference validation); Hono + Cloudflare; orchestrates
 infrastructure providers (e.g. CEP validation APIs) behind one API — no
 percentage fees, no manual verification. Value: drops easily into the owner's
-apps and third-party apps. Devolada touchpoints: platform settlement (#1) is
-its first real use case, and a store could one day settle its cash drop by
-validated transfer. It is **not** a Devolada feature and does not live in this
-spec tree. Owner's scoping decision (2026-08-16): **v1 = receipt analysis +
-bank-reference/CEP validation** — pure validation, money goes straight to the
-business's own account, no funds custody and no fintech-license territory;
-**dynamic CLABEs deferred** to a later phase with their own regulatory
-decision, since they normally imply a concentrator account and custody.
+apps and third-party apps, sold as a Devolada Pagos service. Devolada
+touchpoints: platform settlement (#1) is its first real use case, and a store
+could one day settle its cash drop by validated transfer.
+
+Owner's decisions:
+
+- (2026-08-17) **The product is named Consta**, from "que conste" ("let it be
+  on record") — the service's whole job is leaving proof that a payment
+  exists, and the word echoes the CEP (Comprobante Electrónico de Pago).
+  "Folio" was ruled out: it is already a reserved glossary word (receipts).
+  The name is brand and folder; code identifiers stay English.
+- (2026-08-16) **v1 = receipt analysis + bank-reference/CEP validation** —
+  pure validation, money goes straight to the business's own account, no funds
+  custody and no fintech-license territory; **dynamic CLABEs deferred** to a
+  later phase with their own regulatory decision, since they normally imply a
+  concentrator account and custody.
+- (2026-08-17, revises the earlier "own repo" idea) **It lives in this
+  monorepo** as `apps/consta`, under a subdomain of the same domain
+  (`consta.devoladapago.com`). What it shares: the repo, the domain, the
+  methodology (spec-driven + spec-lint, CI/CD through Actions). What it does
+  NOT share: it is its **own Worker with its own D1** (its customers are
+  developers with API keys, not cookie sessions; its own billing; its own
+  secrets), its own deploy job, and its **own spec tree** under
+  `docs/consta/` with US-IDs reserved here like any other domain. It is
+  still not a Devolada *feature*: no Devolada spec may depend on its
+  internals, only on its public API — so extracting it to its own repo later
+  stays a folder move.
 
 ## Spec index
 

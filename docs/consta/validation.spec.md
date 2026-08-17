@@ -60,6 +60,17 @@ spike.
   no browser origin gets CORS. The Worker ships to `consta.dev.devoladapago.com`
   only; the prod env block and domain wait for the first external consumer.
 
+## Local sandbox
+
+apiCEP offers no sandbox, test keys or free credits (docs checked
+2026-08-17), so dev carries its own: `pnpm sandbox` starts a zero-dependency
+mock of `/validate-transfer` on port 8789 (`sandbox/apicep-mock.mjs`), and
+`APICEP_BASE_URL=http://localhost:8789` in `.dev.vars` points the adapter at
+it — D2 is what makes this a one-line switch. Scenarios ride the tracking
+key: `PEND` → pending, `DUP` → replay flag, `BAD` → invalid, `ERR` →
+provider error; anything else validates. Remove the override to hit the real
+provider.
+
 ## Contract
 
 `POST /validate` — `Authorization: Bearer ck_…`

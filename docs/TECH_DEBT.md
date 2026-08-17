@@ -2,6 +2,11 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-013 — The re-validation schedule is theory, not measurement
+- Status: **open** · Origin: direct-payment.spec.md D7 (2026-08-17)
+- The +2/+8/+20/+45 min/+2 h/+6 h schedule comes from published sources (Banxico's ~30-minute CEP rule, apiCEP's "seconds, sometimes hours") — reasonable to ship, but no own measurement backs it, and it is one global schedule for every receiving bank.
+- Payable when real direct payments accumulate: the `direct_payments` log already stores `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank. With ~50 confirmed payments, derive the real latency distribution and tune the schedule (globally or per bank). A $1 self-transfer experiment (~$0.50 in credits) can seed the first Nubank→Klar data point earlier if wanted.
+
 ## TD-012 — `INVALID_TOKEN` blames the link for failures the link did not cause
 - Status: **paid** (2026-08-15, `feat/better-auth`) · Origin: found while diagnosing the TD-001 rollback
 - The old `redeemIspToken` collapsed a bad signing key, an IdP outage, an unknown identity and a genuinely expired token into one `INVALID_TOKEN`, rendered as *"Este enlace ya no sirve. Solicita uno nuevo."* — advice that could never work when the real fault was the key.

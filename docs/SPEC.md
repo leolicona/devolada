@@ -81,6 +81,14 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V04** — As an integrator, a CEP that was already validated before comes flagged, so one proof of payment cannot be reused twice.
 - **US-V05** — As the operator, I issue and revoke API keys by hand, and every validation is logged under its key so the fixed fee per transaction can be derived later.
 
+### Direct SPEI payment (D)
+- **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
+- **US-D02** — As an end customer, I submit proof of my SPEI transfer (screenshot or manual data) and the system validates it against Banxico.
+- **US-D03** — As an end customer, my service reconnects automatically after my transfer is validated; I see the status live on the page.
+- **US-D04** — As an end customer, if Banxico hasn't generated the CEP yet, the system keeps checking and I see "verifying" — never a false rejection.
+- **US-D05** — As an ISP, I configure my CLABE, beneficiary name, and SPEI service fee from settings; payment links work automatically for all my customers.
+- **US-D06** — As an ISP, I see direct SPEI payments in my charge feed alongside store charges, clearly distinguished.
+
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
 - **US-P02** — As a user, the app follows my system's light or dark preference, and dark is a real palette, not an inversion.
@@ -134,6 +142,13 @@ not here. Owner's priority order (2026-08-16):
 5. **WhatsApp Business API** — already decided as its own later feature
    (TD-003): real sending for receipts and invitations, `wa.me` stays as the
    fallback.
+6. **Direct SPEI payment channel** — permanent payment link for banked
+   customers to pay via SPEI without visiting a store; spec written
+   (direct-payment.spec.md, US-D01–D06). Validates transfer against Banxico
+   via Consta, triggers reconnection. Complementary to the store network
+   (stores serve unbanked customers). Owner decision (2026-08-17): WABA
+   under Devolada (centralized) for MVP, migrating to BSP model at scale.
+   First consumer of Consta from the Devolada product.
 
 **Adjacent product (own product, shared house): Consta, the bank-transfer
 validation service.** Automates SPEI transfer validation under a fixed fee per
@@ -198,6 +213,7 @@ Owner's decisions:
 | [polish/responsive.spec.md](polish/responsive.spec.md) | polish | US-P03, US-P02, US-P04 (rendered) | in development |
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05 | in development |
+| [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
 
 ## Cross-cutting layers
 

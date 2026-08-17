@@ -32,6 +32,9 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | Device biometric sign-in | **Huella / rostro** | `passkey` | "biometría", "WebAuthn" (never in copy) |
 | Platform's share collection | **Liquidación** | `settlement` | "corte" |
 | One-time email code | **Código** | `otp` | "token", "OTP", "enlace" (never in copy) |
+| Customer's permanent SPEI page | **Link de pago** | `payment_link` | — |
+| Bank-transfer payment (no store) | **Pago directo** | `direct_payment` (`validating/confirmed/invalid/expired/unapplied`) | "depósito" |
+| Customer's transfer evidence | **Comprobante de transferencia** | `proof` | "receipt" (reserved for our folio) |
 
 ## User Stories
 

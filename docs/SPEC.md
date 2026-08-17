@@ -90,6 +90,52 @@ Every ✅ above means "built, specced and tested". None of them means "verified 
 the deployed apps with a real ISP": those checks are the open boxes at the foot of
 each spec, and they are what the pilot is for.
 
+## Post-MVP backlog
+
+Ideas live here as one-liners until one is picked up; picking one up means
+reserving its US-ID above and writing its spec — the golden rule starts there,
+not here. Owner's priority order (2026-08-16):
+
+1. **Platform settlement** — the admin shows *"Para la plataforma quedan $6.00"*
+   but nothing accumulates it and no flow collects it: today Devolada's share
+   travels inside the ISP's cash and stays with the ISP. Needs: a per-ISP
+   accumulated share (derivable from the ledger), a monthly cut visible in the
+   admin, and the collection mechanism. Natural first consumer of the transfer
+   validation service below.
+2. **Commission per drop cycle** — "Tu comisión ganada" is the all-time sum and
+   only grows; the drop is the shopkeeper's *corte*, so the card should read
+   "desde tu última entrega" and restart with each confirmed drop. Derivable
+   from the ledger (commission entries after the last confirmed `cash_drop`);
+   query + copy, no schema change. The label must carry the period, or a $0
+   morning reads as stolen commission.
+3. **Customer phone capture** — when WispHub has no phone, the receipt's
+   `wa.me` opens with no recipient. Probe first whether `telefono` is writable
+   via `PATCH /clientes/{id}/` (the same call that flips
+   `auto_activar_servicio`): writing it back to WispHub keeps the data in the
+   ISP's system and out of ours. Storing it ourselves is the fallback and a
+   personal-data commitment to weigh.
+4. **Period reports** — the ledger already holds every movement forever; what
+   is missing are the aggregations: monthly cortes per store and per ISP
+   (charges, commission, drops). Pure derivation, no new writes.
+5. **WhatsApp Business API** — already decided as its own later feature
+   (TD-003): real sending for receipts and invitations, `wa.me` stays as the
+   fallback.
+
+**Adjacent product (its own repo, its own SPEC.md): bank-transfer validation
+service.** Automates SPEI transfer validation under a fixed fee per
+transaction; three reconciliation methods (attached-receipt analysis, dynamic
+CLABEs, bank-reference validation); Hono + Cloudflare; orchestrates
+infrastructure providers (e.g. CEP validation APIs) behind one API — no
+percentage fees, no manual verification. Value: drops easily into the owner's
+apps and third-party apps. Devolada touchpoints: platform settlement (#1) is
+its first real use case, and a store could one day settle its cash drop by
+validated transfer. It is **not** a Devolada feature and does not live in this
+spec tree. Owner's scoping decision (2026-08-16): **v1 = receipt analysis +
+bank-reference/CEP validation** — pure validation, money goes straight to the
+business's own account, no funds custody and no fintech-license territory;
+**dynamic CLABEs deferred** to a later phase with their own regulatory
+decision, since they normally imply a concentrator account and custody.
+
 ## Spec index
 
 | Spec | Domain | Stories | Status |

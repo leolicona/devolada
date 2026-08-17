@@ -7,6 +7,7 @@ import { cashDropsRoute } from "./routes/cash-drops";
 import { ledgerRoute } from "./routes/ledger";
 import { storesRoute } from "./routes/stores";
 import { settingsRoute } from "./routes/settings";
+import { settlementRoute } from "./routes/settlement";
 import { sweepReconnections } from "./reconnection/queue";
 import { charges } from "./routes/charges";
 import { dev } from "./routes/dev";
@@ -40,6 +41,7 @@ app.route("/cash-drops", cashDropsRoute);
 app.route("/ledger", ledgerRoute);
 app.route("/stores", storesRoute);
 app.route("/settings", settingsRoute);
+app.route("/settlement", settlementRoute);
 
 /* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {

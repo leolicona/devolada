@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
+import { Amount, Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
 import type {
   SettingsPatchRequest,
   SettingsResponse,
   WispHubTestResponse,
 } from "@devolada/api/settings-schema";
+import type { SettlementResponse } from "@devolada/api/settlement-schema";
 import { PasskeyCard } from "../auth/PasskeyCard";
 import { TIMEZONES } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
@@ -212,6 +213,68 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
+/* The month name a period key renders as; mid-month noon UTC so no
+   timezone can shift it into a neighbour month. */
+const periodLabel = (period: string): string => {
+  const label = new Intl.DateTimeFormat("es-MX", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${period}-15T12:00:00Z`));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+};
+
+/* Liquidación (settlement spec, US-L01): the per-charge share the card
+   above explains, accumulated by month. Statement only — the transfer
+   confirmation is deliberately out (spec D3). */
+function SettlementCard() {
+  const { data, isPending } = useQuery<SettlementResponse, ApiError>({
+    queryKey: ["settlement"],
+    queryFn: () => api<SettlementResponse>("/settlement"),
+  });
+
+  return (
+    <SectionCard title="Liquidación a la plataforma">
+      <p className="text-sm text-ink-soft">
+        Lo acumulado para la plataforma por tus cobros. Transfiere cada mes con su referencia.
+      </p>
+
+      {isPending && (
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-2/3" />
+        </div>
+      )}
+
+      {data && data.months.length === 0 && (
+        <p className="text-sm text-ink-soft">
+          Aquí aparecerá lo acumulado para la plataforma con tu primer cobro.
+        </p>
+      )}
+
+      {data && data.months.length > 0 && (
+        <ul className="divide-y divide-line-soft">
+          {data.months.map((month) => (
+            <li key={month.period} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {periodLabel(month.period)}
+                  {month.current && <span className="ml-2 text-sm font-normal text-ink-soft">· En curso</span>}
+                </p>
+                <p className="text-sm text-ink-soft">
+                  {month.chargeCount} {month.chargeCount === 1 ? "cobro" : "cobros"} · Ref:{" "}
+                  <span className="font-mono">{month.reference}</span>
+                </p>
+              </div>
+              <Amount cents={month.shareCents} className="shrink-0 text-base font-semibold" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
 /* D5/D6: where the day starts, and how a time reads */
 function DisplayCard({ settings }: { settings: SettingsResponse }) {
   const save = useSaveSettings();
@@ -305,6 +368,7 @@ export function SettingsScreen() {
         <div className="mt-4 space-y-4 pb-8">
           <WispHubCard settings={data} />
           <MoneyCard settings={data} />
+          <SettlementCard />
           <DisplayCard settings={data} />
           <PasskeyCard />
         </div>

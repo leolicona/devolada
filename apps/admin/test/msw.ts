@@ -46,6 +46,8 @@ export const handlers = {
   storeLedger: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/stores/:id/ledger", () => r()),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
+  settlement: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/settlement", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),
   testWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>

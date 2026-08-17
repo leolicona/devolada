@@ -30,6 +30,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | Store's initial access | **Invitación** | `invitation` (`sent/accepted`) | — |
 | Balance threshold | **Techo de saldo** | `balance_cap` | — |
 | Device biometric sign-in | **Huella / rostro** | `passkey` | "biometría", "WebAuthn" (never in copy) |
+| Platform's share collection | **Liquidación** | `settlement` | "corte" |
 | One-time email code | **Código** | `otp` | "token", "OTP", "enlace" (never in copy) |
 
 ## User Stories
@@ -66,6 +67,9 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-A02** — As an ISP, I register stores and send them invitations; I can re-send one while it hasn't been accepted.
 - **US-A03** — As an ISP, I manage each store: commission, balance cap, suspend, view its ledger.
 - **US-A04** — As an ISP, I configure my WispHub API Key (validated live), the service fee and the commission split.
+
+### Platform (L)
+- **US-L01** — As the platform, my share of every charge accrues per ISP and per month; as an ISP, I see each month's statement with exactly what to transfer and the reference to use. *(reserved 2026-08-17, backlog #1)*
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -158,6 +162,7 @@ decision, since they normally imply a concentrator account and custody.
 | [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
 | [admin/stores.spec.md](admin/stores.spec.md) | admin | US-A02, US-A03 | in development |
 | [admin/settings.spec.md](admin/settings.spec.md) | admin | US-A04 | in development |
+| [platform/settlement.spec.md](platform/settlement.spec.md) | platform | US-L01 | in development |
 | [polish/list-states.spec.md](polish/list-states.spec.md) | polish | US-P01 | in development |
 | [polish/dark-and-contrast.spec.md](polish/dark-and-contrast.spec.md) | polish | US-P02, US-P04 (contrast) | in development |
 | [polish/accessibility.spec.md](polish/accessibility.spec.md) | polish | US-P04 | in development |

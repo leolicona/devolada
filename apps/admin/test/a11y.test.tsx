@@ -113,6 +113,7 @@ describe("US-P04: the admin passes axe on every section", () => {
     server.use(
       handlers.session(() => ok({ ...ispActor, wisphubConfigured: false })),
       handlers.settings(() => ok(settings)),
+      handlers.settlement(() => ok({ months: [] })),
     );
     renderApp("/settings");
     await screen.findByLabelText(/nueva llave/i);

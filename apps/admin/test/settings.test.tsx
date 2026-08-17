@@ -25,6 +25,7 @@ describe("US-A04: the split is saved with its share visible", () => {
     server.use(
       handlers.session(() => ok(ispActor)),
       handlers.settings(() => ok(settings())),
+      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(settings({ serviceFeeCents: 2000, storeCommissionCents: 1200, platformShareCents: 800 }));
@@ -54,6 +55,7 @@ describe("US-A04: the split is saved with its share visible", () => {
     server.use(
       handlers.session(() => ok(ispActor)),
       handlers.settings(() => ok(settings())),
+      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(settings());
@@ -78,6 +80,7 @@ describe("US-A04: the key is tested before it is saved", () => {
     server.use(
       handlers.session(() => ok({ ...ispActor, wisphubConfigured: false })),
       handlers.settings(() => ok(settings({ wisphub: { configured: false, keyTail: null } }))),
+      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(settings());

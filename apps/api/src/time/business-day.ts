@@ -52,6 +52,15 @@ function offsetMsAt(timezone: string, instant: Date): number {
   return wallClockAsUtc - Math.floor(instant.getTime() / 1000) * 1000;
 }
 
+/* Which month an instant belongs to on the ISP's wall clock, as
+   "YYYY-MM" (settlement spec D2: the same rule that owns "today" also
+   owns "this month"). */
+export function businessMonthKey(timezone: string, instant: Date): string {
+  const list = formatterFor(timezone).formatToParts(instant);
+  const month = String(read(list, "month")).padStart(2, "0");
+  return `${read(list, "year")}-${month}`;
+}
+
 export function startOfBusinessDayMs(timezone: string, now: Date = new Date()): number {
   const list = formatterFor(timezone).formatToParts(now);
   const midnightAsUtc = Date.UTC(read(list, "year"), read(list, "month") - 1, read(list, "day"));

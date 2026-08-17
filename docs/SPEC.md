@@ -92,7 +92,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 
 Operational detail in `.design/devolada/TASKS.md` (execution layer).
 
-- **Phase 0 — Risk**: WispHub spike (payment → reactivation). ✅ executed 2026-08-13 (`.design/devolada/WISPHUB_SPIKE.md`); only the physical MikroTik flip pends on the pilot ISP
+- **Phase 0 — Risk**: WispHub spike (payment → reactivation). ✅ executed 2026-08-13 (`.design/devolada/WISPHUB_SPIKE.md`). The router flip was **rehearsed on a real RouterOS 2026-08-17** (CHR linked to the demo tenant via WispHub's VPN; full suspend → charge → reactivate loop observed on the router — reconnection-queue.spec.md DoD); the pilot ISP's own hardware remains as final confirmation
 - **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ✅ (email live on `devoladapago.com`, reaching third parties — TD-011 paid)
 - **Phase 2 — Store PWA**: shell ✅ · search ✅ · charge ✅ · live result ✅ · cash box ✅ · cash drops ✅ · ledger ✅ · special states ✅
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅

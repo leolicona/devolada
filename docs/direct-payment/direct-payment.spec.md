@@ -15,7 +15,7 @@ Devolada's store network serves unbanked customers who pay cash at a corner stor
 - **D1 — Permanent link with opaque token per customer.** The link is `pago.devoladapago.com/p/<token>` where `<token>` is a non-guessable, unique, permanent token per customer (per ISP). The link never expires. Each time the customer opens it, the page queries WispHub for current debt. If the customer owes nothing, shows "Sin adeudo". If they owe, shows SPEI payment instructions. The ISP shares the link once and the customer bookmarks it. **Rejected**: per-transaction links with expiration (unnecessary complexity; the customer's debt status is always fresh from WispHub), readable `usuario` in URL (privacy: anyone who guesses it sees debt status).
 - **D2 — Both proof doors: screenshot or manual data.** The customer can submit proof via: (a) uploading a screenshot of their bank transfer (Consta's `receiptUrl` door → apiCEP OCR), or (b) entering transfer details manually (tracking key, sender bank, date — Consta's `transfer` door). Amount and beneficiary are pre-filled (the system knows them). **Rejected**: only manual data (many customers don't know what a tracking key is), only screenshot (OCR can fail, manual is the reliable fallback).
 - **D3 — Service fee configurable per ISP.** The ISP configures the service fee for direct SPEI payments separately from the store service fee, from the Admin settings page. A new column `speiServiceFeeCents` on the `isps` table (default: `NULL` → falls back to `serviceFeeCents`). This allows the ISP to incentivize or disincentivize SPEI payments relative to store payments. **Rejected**: hardcoded same fee (ISPs have different strategies), no service fee (Devolada still provides value in validation and reconnection).
-- **D4 — The CLABE is the ISP's, never Devolada's.** The ISP configures their own CLABE and beneficiary name in Admin settings (`speiClabe`, `speiBeneficiaryName` on `isps` table). The money flows directly from customer to ISP. Devolada validates but never custodies funds — no fintech license required. **Rejected**: Devolada concentrator CLABE (requires fintech licensing, fund custody, and dispersion — regulatory burden incompatible with the current model).
+- **D4 — The CLABE is the ISP's, never Devolada's.** The ISP configures their own CLABE, bank and beneficiary name in Admin settings (`speiClabe`, `speiBank`, `speiBeneficiaryName` on `isps` table — the bank name landed during development: Consta's transfer door requires the receiving institution by name, and deriving it from the CLABE prefix would mean maintaining a bank catalog). The money flows directly from customer to ISP. Devolada validates but never custodies funds — no fintech license required. "Available" additionally requires Consta's env config (`CONSTA_BASE_URL` + `CONSTA_API_KEY`): a CLABE nothing can validate must not be shown, so prod answers `unavailable` until Consta has a prod env. **Rejected**: Devolada concentrator CLABE (requires fintech licensing, fund custody, and dispersion — regulatory burden incompatible with the current model).
 - **D5 — Automatic link generation for all WispHub customers.** Payment links are generated automatically — every customer in the ISP's WispHub tenant gets a permanent link. The `payment_links` table maps `token → (ispId, wisphubCustomerId, customerUsuario)`. Links are created lazily (on first access or on ISP request) or in batch. No manual per-customer creation needed. **Rejected**: manual per-customer link creation from Admin (too much friction for ISPs with hundreds/thousands of customers).
 - **D6 — Direct charges bypass stores entirely.** A direct SPEI payment creates a `charge` with `channel = 'spei'` and `storeId = NULL`. No store commission, no store balance impact, no ledger entries for commission. The charge still goes through the same reconnection flow (inline attempt + queue). The admin feed shows both channels with visual distinction. **Rejected**: attributing direct payments to a "virtual store" (breaks the ledger model; a store that doesn't hold cash shouldn't have a balance).
 - **D7 — Pending CEP re-validates on a front-loaded schedule, riding the existing cron.** When Consta returns `pending`, the system stores the attempt and re-validates riding the api's existing every-minute scheduled sweep (no new Worker trigger). The cadence follows where CEPs actually appear (researched 2026-08-17): Banxico makes the CEP available at most ~30 minutes after the transfer, and apiCEP's own docs say "normalmente se genera segundos después… pero puede tardar horas". So the schedule is dense inside that first half hour and sparse in the anomaly tail: **+2, +8, +20, +45 min, +2 h, +6 h** — the typical customer confirms in 2–8 minutes, the 30-minute rule is covered with margin, and the worst case stays at ~7 paid calls (≈$1.75) instead of the 72 ($18 — more than the fee itself) a flat 5-minute loop would burn. After 6 h, status becomes `expired` and the customer is told to contact their ISP. The log (`created_at`, `confirmed_at`, `validation_attempts`, receiving bank) accumulates our own latency distribution, so the schedule can later be tuned per receiving bank on real evidence. Open dependency: apiCEP hasn't answered whether pending re-checks consume credits (pending email); if they don't, the early cadence can densify. **Rejected**: flat 5-minute polling (cost kills the margin), pure exponential from 5 min (back-loaded: it makes the common seconds-to-minutes case wait longest exactly where the probability mass lives), requiring the customer to re-submit (bad UX).
@@ -23,7 +23,7 @@ Devolada's store network serves unbanked customers who pay cash at a corner stor
 - **D9 — The payment page is a public micro-frontend.** `apps/pago` is a lightweight Vite app (no auth, no sessions, mobile-first). It communicates with `apps/api` via public endpoints under `/direct-payments/`. The page has four states: loading debt → showing instructions → validating payment → result (confirmed / pending / failed / no-debt). **Rejected**: embedding in the store PWA (different audience, different auth model), building inside the admin (the customer has no admin access).
 - **D10 — The page is in es-MX, uses "pago" not "cobro".** This is the customer-facing surface. The glossary reserves "cobro" for store/admin interfaces and "pago" for end-customer receipts. The payment link page is the customer's interface, so it says "pago", "tu servicio", "transferencia". **Aligned with**: receipt spec which already uses "pago" on the customer-facing text. The page also obeys the FRONTEND laws like any other surface: tokens only, `StatusBadge` as the sole representation of its statuses, icon + text, light + dark.
 - **D11 — `valid` is necessary, not sufficient: the CEP must match the debt.** A verdict only proves *a* transfer happened; it doesn't prove it pays *this* debt. On the transfer door the exact amount travels to Banxico as a search criterion, so a wrong amount already comes back `invalid`. On the receipt door apiCEP validates whatever the receipt claims — a real $1.00 transfer validates as a real $1.00 transfer. So on every `valid`, the integration compares the CEP's returned amount against the expected total (mensualidad + cargo) and its date against a 30-day window (measured 2026-08-17: apiCEP treats the claimed date as a hint, not a filter). Mismatch → the direct payment is `invalid` with `AMOUNT_MISMATCH` / `STALE_TRANSFER`, no charge. **Rejected**: trusting the verdict alone (the $1-receipt hole), accepting partial amounts (a debt is paid whole or not at all in v1).
-- **D12 — Proof uploads are token-bound and ephemeral.** There is no anonymous upload endpoint. The proof image is uploaded through the link itself (`POST /direct-payments/links/:token/proof`), capped at 1 MB (apiCEP's own limit) and image types only. It lands in a private R2 bucket `devolada-transfer-proofs`; what Consta receives is a short-lived presigned URL, and a lifecycle rule deletes objects after 15 days (the same horizon as the provider's own download links). **Rejected**: a public upload endpoint returning public URLs (free anonymous file hosting under the product's domain), keeping proofs forever (they are evidence for a dispute window, not an archive). Named "proof", not "receipt" — the glossary reserves receipt/comprobante for the folio we issue.
+- **D12 — Proof uploads are token-bound and ephemeral.** There is no anonymous upload endpoint. The proof image is uploaded through the link itself (`POST /direct-payments/links/:token/proof`), capped at 1 MB (apiCEP's own limit) and image types only. It lands in a private R2 bucket `devolada-transfer-proofs`; what Consta receives is a short-lived signed URL (HMAC over key+expiry, served by the API itself at `GET /direct-payments/proofs/:linkId/:file` — R2 bindings don't presign, and a 15-minute single-purpose URL doesn't need S3 credentials), and a lifecycle rule deletes objects after 15 days (the same horizon as the provider's own download links). Proof keys are namespaced by link id, so a pay request can only reference proofs uploaded through its own link, and pay verifies the object exists before spending a provider call. **Rejected**: a public upload endpoint returning public URLs (free anonymous file hosting under the product's domain), keeping proofs forever (they are evidence for a dispute window, not an archive). Named "proof", not "receipt" — the glossary reserves receipt/comprobante for the folio we issue.
 - **D13 — Validation attempts have a budget, because each one costs money.** Every proof submission triggers a paid provider call, on a public endpoint. Per link: at most 5 submissions per hour → 429 `TOO_MANY_ATTEMPTS` with honest es-MX copy. The public routes additionally sit behind Cloudflare rate limiting. **Rejected**: unlimited attempts (a hostile visitor with a leaked link drains apiCEP credits at $0.25 a call).
 - **D14 — A validated transfer with nothing left to pay becomes `unapplied`, never silent.** Between submission and confirmation (up to 6 h pending) the debt can be settled elsewhere — typically cash at a store. The money has already moved to the ISP's CLABE, so the system neither registers a second WispHub payment nor discards the proof: the direct payment ends as `unapplied`, visible to the ISP in the feed ("pago validado sin adeudo — resolver con el cliente"), and no charge is created. **Rejected**: silently registering anyway (double payment in WispHub), silently dropping (the customer's money vanishes from every screen).
 - **D15 — One invoice at a time, oldest first.** A customer can owe several months. The page shows and charges exactly one pending invoice per cycle — the oldest — same as the store flow; after a confirmed payment the page re-reads WispHub and, if debt remains, shows the next one. **Rejected**: a combined multi-month total (one CEP would have to match a sum WispHub never invoiced, and partial matching contradicts D11).
@@ -58,7 +58,7 @@ Unique constraint: `(isp_id, wisphub_customer_id)` — one link per customer per
 | `tracking_key`         | TEXT    | from customer input or CEP                                      |
 | `sender_bank`          | TEXT    |                                                                 |
 | `transfer_date`        | TEXT    |                                                                 |
-| `proof_url`            | TEXT    | private R2 object key if screenshot uploaded (D12)              |
+| `proof_key`            | TEXT    | private R2 object key if screenshot uploaded (D12) — a key, not a URL, so the column is named for what it holds |
 | `consta_validation_id` | TEXT    |                                                                 |
 | `consta_status`        | TEXT    | valid / pending / invalid                                       |
 | `charge_id`            | TEXT FK | → `charges.id` — set when confirmed and charge created          |
@@ -79,6 +79,7 @@ Partial unique index (D8): `(isp_id, tracking_key)` WHERE `status NOT IN ('inval
 ### Alter `isps`
 
 - ADD `spei_clabe` TEXT
+- ADD `spei_bank` TEXT — receiving institution by name (D4)
 - ADD `spei_beneficiary_name` TEXT
 - ADD `spei_service_fee_cents` INTEGER — NULL → falls back to `service_fee_cents` (D3)
 
@@ -91,9 +92,9 @@ Partial unique index (D8): `(isp_id, tracking_key)` WHERE `status NOT IN ('inval
 Returns the customer's current debt status and SPEI instructions, or the no-debt state. The API resolves the token to a `payment_links` row, fetches current debt from WispHub, and computes the total (monthly fee + SPEI service fee).
 
 ```
-200 { ispName, customerName, status: "debt" | "no_debt" | "unavailable",
+200 { ispName, customerName?, status: "debt" | "no_debt" | "unavailable",
       monthlyFeeCents?, serviceFeeCents?, totalCents?,
-      speiClabe?, speiBeneficiaryName?, reference? }
+      speiClabe?, speiBank?, speiBeneficiaryName?, reference? }
 ```
 
 - `status: "no_debt"` → only `ispName` and `customerName`; the page shows "Sin adeudo"
@@ -114,20 +115,28 @@ Submit proof of SPEI transfer. Exactly one proof door (same principle as Consta 
 
 Amount, beneficiary CLABE, and beneficiary name are server-side (D1 principle: the server computes, the client never sends its own amount).
 
+A refusal *before* a row exists is an envelope error; a verdict on a created
+payment travels in the 201 body (decided during development — the split is
+whether there is something for the ISP to see in the feed):
+
 ```
-201 { directPaymentId, status: "validating" | "confirmed" | "invalid",
-      error?: "TRANSFER_ALREADY_USED" | "AMOUNT_MISMATCH" | "STALE_TRANSFER"
-            | "NOTHING_DUE" | "SPEI_NOT_CONFIGURED" }
+201 { directPaymentId, status: "validating" | "confirmed" | "invalid" | "unapplied",
+      error: "TRANSFER_ALREADY_USED" | "AMOUNT_MISMATCH" | "STALE_TRANSFER" | null }
 ```
 
-- `TRANSFER_ALREADY_USED` → our own unique index hit, or Consta's
-  `alreadyValidated` with no local record (D8)
+- `TRANSFER_ALREADY_USED` in the 201 body → Consta's `alreadyValidated` with
+  no local record (D8); the row exists as `invalid`, visible in the feed
 - `AMOUNT_MISMATCH` / `STALE_TRANSFER` → the CEP is real but doesn't match the
   debt (D11)
-- `NOTHING_DUE` → customer has no pending invoice at submission time
-- `SPEI_NOT_CONFIGURED` → ISP has not set `speiClabe` (D4)
-- 429 `TOO_MANY_ATTEMPTS` → the per-link budget ran out (D13)
-- Unknown token → 404
+- `unapplied` can happen inline too (D14): the verdict landed after the debt did
+- Envelope errors (no row created): 409 `TRANSFER_ALREADY_USED` (our own
+  unique index refused a live duplicate, racing ones included — D8),
+  409 `NOTHING_DUE` (no pending invoice at submission), 409
+  `SPEI_NOT_CONFIGURED` (D4), 429 `TOO_MANY_ATTEMPTS` (D13), 400
+  `VALIDATION_ERROR`, 404 unknown token or foreign/missing `proofId`,
+  503 `WISPHUB_UNAVAILABLE` (pre-payment failure, debt-truth posture)
+- Internal retryable codes (Consta down, WispHub down mid-validation) never
+  reach the public wire: the payment stays `validating` and rides D7
 
 `GET /direct-payments/:id/status` (US-D03, US-D04)
 
@@ -159,11 +168,25 @@ multipart/form-data { file }
 
 ### ISP session endpoints (admin)
 
-`GET /direct-payments/links` — list all payment links for the ISP (paginated, US-D06).
+`GET /direct-payments/links` — list all payment links for the ISP (US-D05, D5).
+Listing IS what generates them: the handler syncs the WispHub customer list
+(up to 1000) and inserts a link for every customer that lacks one, so nobody
+creates links by hand. Cursor pagination by `customerUsuario`:
 
-ISP settings endpoints already exist; extend to include `speiClabe`, `speiBeneficiaryName`, and `speiServiceFeeCents` (US-D05).
+```
+200 { links: [{ token, usuario, url }], nextCursor }   // ?cursor=<usuario>, 50 per page
+```
 
-The admin charges feed (`GET /charges`) already returns charges; `channel` is now part of the response shape for visual distinction (US-D06).
+ISP settings endpoints already exist; extended with a `spei` block —
+`{ clabe, bank, beneficiaryName, serviceFeeCents, effectiveServiceFeeCents,
+configured }` on the response, and `speiClabe` (18 digits), `speiBank`,
+`speiBeneficiaryName`, `speiServiceFeeCents` on the PATCH, each nullable to
+clear (US-D05).
+
+The admin charges feed (`GET /charges/feed`) now returns `channel` on every
+charge and a nullable `storeName` (the store join became a leftJoin — a spei
+charge has no store to join); the feed row names the channel instead of a
+store (US-D06).
 
 ## Consta integration
 
@@ -209,7 +232,7 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 5. Customer submits a receipt screenshot → direct payment created with `proof_mode = 'receipt'`, image uploaded to R2, Consta called with `receiptUrl` door (US-D02, D2)
 6. Customer submits manual transfer data → direct payment created with `proof_mode = 'transfer'`, Consta called with `transfer` door; amount and beneficiary are server-supplied (US-D02, D2)
 7. Consta returns `valid` → direct payment `confirmed`, a charge is created with `channel = 'spei'` and `storeId = NULL`, reconnection starts; no ledger entries for commission (US-D03, D6)
-8. Consta returns `pending` → direct payment stays `validating`, `next_validation_at` set 5 min ahead (US-D04, D7)
+8. Consta returns `pending` → direct payment stays `validating`, `next_validation_at` set at the first D7 slot (+2 min from submission) (US-D04, D7)
 9. Re-validation cron picks up a pending direct payment and Consta now returns `valid` → same as scenario 7 (D7)
 10. Re-validation cron: still `pending` after 6 h → `status = 'expired'` (D7)
 11. Consta returns `alreadyValidated: true` → rejected with `TRANSFER_ALREADY_USED`, no charge created (D8)
@@ -229,13 +252,13 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 
 ## Definition of Done
 
-- [ ] Scenarios 1–4, 7–11, 16–24 automated in the API layer (`test/direct-payment.test.ts`)
-- [ ] Scenarios 5–6 automated with Consta client mocked (`test/direct-payment.test.ts`)
-- [ ] Scenario 12 covered by existing reconnection tests extended for `channel = 'spei'`
-- [ ] Scenarios 13–14 automated in admin API tests (`test/admin-settings.test.ts`, `test/charges-feed.test.ts`)
-- [ ] Scenario 15 automated with Testing Library + MSW (`apps/pago/test/`)
-- [ ] Schema migration applied: `payment_links` and `direct_payments` tables (with the D8 partial unique index) created; `charges` and `isps` altered
-- [ ] Re-validation rides the existing api scheduled sweep (no new trigger)
-- [ ] `apps/pago` deployed to `pago.dev.devoladapago.com`
+- [x] Scenarios 1–4, 7–11, 16–24 automated in the API layer (`test/direct-payment.test.ts`, 24 tests; Consta and WispHub fetch-mocked respecting their contracts)
+- [x] Scenarios 5–6 automated with Consta fetch-mocked (`test/direct-payment.test.ts` — asserts the door and the server-supplied amount/beneficiary)
+- [x] Scenario 12 automated in `test/direct-payment.test.ts` (a queued spei charge converts through `sweepReconnections`)
+- [x] Scenarios 13–14 automated in admin API tests (`test/settings.test.ts`, `test/charge-feed.test.ts` — the files that already owned those endpoints)
+- [x] Scenario 15 automated with Testing Library + MSW (`apps/pago/test/pago.test.tsx`, 7 tests)
+- [x] Schema migration written and applied locally (`0007_icy_talisman.sql`): `payment_links` and `direct_payments` tables (with the D8 partial unique index) created; `charges` and `isps` altered. Hand-adjusted after generation: D1 rejects `PRAGMA foreign_keys`, so the charges recreate uses `PRAGMA defer_foreign_keys`, and drizzle-kit's copy-INSERT selected the two new columns from the old table
+- [x] Re-validation rides the existing api scheduled sweep (no new trigger); `POST /dev/direct-payment-sweep` is the manual escape hatch
+- [ ] `apps/pago` deployed to `pago.dev.devoladapago.com` (wired into ci/deploy-dev/deploy-prod; happens on merge). One-time infra per env: create the R2 bucket (`devolada-transfer-proofs-dev` / `-prod`) with the 15-day lifecycle rule, and set the `CONSTA_API_KEY` environment secret
 - [ ] Manual check on deployed dev: end-to-end flow with a real SPEI transfer against the dev WispHub tenant
 - [ ] Dependency: Consta running on a permanent apiCEP `sk_live_` key — today it runs on a short-lived `apicep_` user token (consta validation spec, provider notes); the e2e check is meaningless until the stable key lands

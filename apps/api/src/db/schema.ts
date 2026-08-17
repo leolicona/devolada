@@ -1,4 +1,12 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 import { user } from "./auth-schema";
 
 /* Better Auth's tables live in auth-schema.ts; re-exported here so
@@ -44,6 +52,17 @@ export const isps = sqliteTable("isps", {
   status: text("status", { enum: ["active", "suspended"] })
     .notNull()
     .default("active"),
+  /* Direct SPEI channel (direct-payment spec D3, D4): the ISP's own
+     account — the money never touches Devolada. All nullable: unset
+     means the channel is "unavailable" and the page says so. The bank
+     name rides along because Consta's transfer door requires the
+     receiving institution by name, and deriving it from the CLABE
+     would mean maintaining a bank catalog. */
+  speiClabe: text("spei_clabe"),
+  speiBank: text("spei_bank"),
+  speiBeneficiaryName: text("spei_beneficiary_name"),
+  /* null → falls back to serviceFeeCents (D3) */
+  speiServiceFeeCents: integer("spei_service_fee_cents"),
   createdAt: createdAt(),
 });
 
@@ -81,9 +100,16 @@ export const charges = sqliteTable(
     ispId: text("isp_id")
       .notNull()
       .references(() => isps.id),
-    storeId: text("store_id")
+    /* null for channel = 'spei' (direct-payment spec D6): a direct
+       payment involves no store, no commission, no ledger entries */
+    storeId: text("store_id").references(() => stores.id),
+    /* 'store' = cash at a corner store · 'spei' = direct payment (D6) */
+    channel: text("channel", { enum: ["store", "spei"] })
       .notNull()
-      .references(() => stores.id),
+      .default("store"),
+    directPaymentId: text("direct_payment_id").references(
+      (): AnySQLiteColumn => directPayments.id,
+    ),
     folio: text("folio").notNull().unique(),
     wisphubCustomerId: text("wisphub_customer_id").notNull(),
     customerName: text("customer_name").notNull(),
@@ -159,6 +185,80 @@ export const ledgerEntries = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("ledger_entries_store_created_idx").on(t.storeId, t.createdAt)],
+);
+
+/* One permanent link per customer per ISP (direct-payment spec D1, D5):
+   the token is opaque and never expires — the page asks WispHub for the
+   live debt on every open, so the link itself carries no state. */
+export const paymentLinks = sqliteTable(
+  "payment_links",
+  {
+    id: id(),
+    ispId: text("isp_id")
+      .notNull()
+      .references(() => isps.id),
+    token: text("token").notNull().unique(),
+    /* Numeric WispHub id (as string) for the auto-activate PATCH;
+       the usuario is what every lookup needs — same split as charges */
+    wisphubCustomerId: text("wisphub_customer_id").notNull(),
+    customerUsuario: text("customer_usuario").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("payment_links_isp_customer_idx").on(t.ispId, t.wisphubCustomerId),
+  ],
+);
+
+/* One submitted SPEI proof and its validation lifecycle
+   (direct-payment spec). The row is also the re-validation queue (D7):
+   `nextValidationAt` is when the sweep may touch it again. */
+export const directPayments = sqliteTable(
+  "direct_payments",
+  {
+    id: id(),
+    paymentLinkId: text("payment_link_id")
+      .notNull()
+      .references(() => paymentLinks.id),
+    ispId: text("isp_id")
+      .notNull()
+      .references(() => isps.id),
+    amountCents: integer("amount_cents").notNull(),
+    monthlyFeeCents: integer("monthly_fee_cents").notNull(),
+    serviceFeeCents: integer("service_fee_cents").notNull(),
+    /* unapplied (D14): the CEP was real but the debt was settled
+       elsewhere meanwhile — visible, never silent */
+    status: text("status", {
+      enum: ["validating", "confirmed", "invalid", "expired", "unapplied"],
+    })
+      .notNull()
+      .default("validating"),
+    proofMode: text("proof_mode", { enum: ["receipt", "transfer"] }).notNull(),
+    /* From customer input (transfer door) or from the CEP (receipt door) */
+    trackingKey: text("tracking_key"),
+    senderBank: text("sender_bank"),
+    transferDate: text("transfer_date"),
+    /* Private R2 object key, never a public URL (D12) */
+    proofKey: text("proof_key"),
+    constaValidationId: text("consta_validation_id"),
+    constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
+    chargeId: text("charge_id").references(() => charges.id),
+    validationAttempts: integer("validation_attempts").notNull().default(0),
+    nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("direct_payments_link_idx").on(t.paymentLinkId),
+    index("direct_payments_due_idx").on(t.status, t.nextValidationAt),
+    /* D8: one transfer pays once — the database, not the provider,
+       refuses the second submission, racing ones included */
+    uniqueIndex("direct_payments_isp_tracking_idx")
+      .on(t.ispId, t.trackingKey)
+      .where(
+        sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired')`,
+      ),
+  ],
 );
 
 export const invitations = sqliteTable(

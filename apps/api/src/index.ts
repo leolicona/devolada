@@ -9,7 +9,9 @@ import { storesRoute } from "./routes/stores";
 import { settingsRoute } from "./routes/settings";
 import { settlementRoute } from "./routes/settlement";
 import { sweepReconnections } from "./reconnection/queue";
+import { sweepDirectPayments } from "./direct-payments/validation";
 import { charges } from "./routes/charges";
+import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -42,6 +44,7 @@ app.route("/ledger", ledgerRoute);
 app.route("/stores", storesRoute);
 app.route("/settings", settingsRoute);
 app.route("/settlement", settlementRoute);
+app.route("/direct-payments", directPaymentsRoute);
 
 /* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {
@@ -58,15 +61,22 @@ app.onError((err, c) => {
 /* The Hono app itself, for tests and for the worker below */
 export { app };
 
-/* The worker is the API plus the reconnection queue's cron sweep
-   (reconnection-queue spec D2). `waitUntil` keeps the sweep alive past
-   the handler's return. */
+/* The worker is the API plus the every-minute sweeps: the reconnection
+   queue (reconnection-queue spec D2) and the direct-payment
+   re-validations, which ride the same trigger (direct-payment spec D7 —
+   no new Worker trigger). `waitUntil` keeps them alive past the
+   handler's return. */
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
       sweepReconnections(env).then((report) => {
         if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
+      }),
+    );
+    ctx.waitUntil(
+      sweepDirectPayments(env).then((report) => {
+        if (report.claimed) console.log("direct-payment sweep:", JSON.stringify(report));
       }),
     );
   },

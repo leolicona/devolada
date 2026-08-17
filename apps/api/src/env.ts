@@ -1,5 +1,8 @@
 export type Bindings = {
   DB: D1Database;
+  /* Private bucket for SPEI transfer proofs (direct-payment spec D12):
+     objects are served only through short-lived signed URLs. */
+  PROOFS: R2Bucket;
   /* Signs Better Auth's sessions and tokens. Missing → a public dev
      value with a loud warning; CI refuses to deploy without it. */
   BETTER_AUTH_SECRET?: string;
@@ -24,6 +27,13 @@ export type Bindings = {
   WISPHUB_API_KEY?: string;
   /* Points the adapter at a sandbox; unset means the real API */
   WISPHUB_BASE_URL?: string;
+  /* Consta, the SPEI validation service (direct-payment spec). The base
+     is env config, never hardcoded: Consta has no prod env yet by its
+     own decision (consta validation spec D8). Key is a worker secret. */
+  CONSTA_BASE_URL?: string;
+  CONSTA_API_KEY?: string;
+  /* Base URL of the public payment page, used to build link URLs */
+  PAGO_BASE_URL: string;
 };
 
 export type Actor =

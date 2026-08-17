@@ -13,6 +13,14 @@ const settings = settingsResponse.parse({
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphub: { configured: true, keyTail: "1234" },
+  spei: {
+    clabe: null,
+    bank: null,
+    beneficiaryName: null,
+    serviceFeeCents: null,
+    effectiveServiceFeeCents: 1500,
+    configured: false,
+  },
 });
 
 describe("US-L01: the settlement statement lives in Configuración", () => {

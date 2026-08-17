@@ -68,11 +68,19 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          CONSTA_API_KEY: ${{ secrets.CONSTA_API_KEY }}
         run: |
           if [ -z "$RESEND_API_KEY" ]; then
             echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
           else
             printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env dev
+          fi
+          # Direct SPEI channel (direct-payment spec): without the key the
+          # payment pages answer "unavailable" instead of breaking.
+          if [ -z "$CONSTA_API_KEY" ]; then
+            echo "::warning::No CONSTA_API_KEY in the dev environment — the SPEI channel stays unavailable."
+          else
+            printf '%s' "$CONSTA_API_KEY" | pnpm exec wrangler secret put CONSTA_API_KEY --env dev
           fi
           # Required: Better Auth signs every session cookie with it
           # (better-auth.spec.md). Without it the deployed API would sign
@@ -94,6 +102,12 @@ jobs:
       - name: Deploy dev admin
         working-directory: apps/admin
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../admin/wrangler.jsonc --env dev
+      - name: Build payment page (dev API baked in)
+        working-directory: apps/pago
+        run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build
+      - name: Deploy dev payment page
+        working-directory: apps/pago
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../pago/wrangler.jsonc --env dev
       # Consta (docs/consta/validation.spec.md D8): own Worker + own D1,
       # deployed by the same pipeline. Missing secrets don't block the
       # deploy: without APICEP_TOKEN /validate answers PROVIDER_ERROR, and

@@ -15,12 +15,23 @@
       "migrations_dir": "migrations"
     }
   ],
+  /* SPEI transfer proofs (direct-payment spec D12). Private: no public
+     bucket URL — the API serves objects through signed URLs only. The
+     15-day lifecycle rule is bucket config, applied once per env:
+     `wrangler r2 bucket lifecycle add <bucket> --expire-days 15` */
+  "r2_buckets": [
+    { "binding": "PROOFS", "bucket_name": "devolada-transfer-proofs" }
+  ],
   "vars": {
     "ENVIRONMENT": "dev",
     "API_BASE_URL": "http://localhost:8787",
     "ADMIN_BASE_URL": "http://localhost:5174",
     "TIENDA_BASE_URL": "http://localhost:5173",
-    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174",
+    "PAGO_BASE_URL": "http://localhost:5175",
+    /* Local Consta (its own wrangler dev). CONSTA_API_KEY lives in
+       .dev.vars, like every secret. */
+    "CONSTA_BASE_URL": "http://localhost:8788",
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175",
     /* Not a secret. Repeated in every env block below because an env's
        `vars` replaces the top-level one rather than merging with it. */
     "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
@@ -40,13 +51,18 @@
           "migrations_dir": "migrations"
         }
       ],
+      "r2_buckets": [
+        { "binding": "PROOFS", "bucket_name": "devolada-transfer-proofs-dev" }
+      ],
       "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "ENVIRONMENT": "dev",
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://admin.dev.devoladapago.com",
         "TIENDA_BASE_URL": "https://punto.dev.devoladapago.com",
-        "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev",
+        "PAGO_BASE_URL": "https://pago.dev.devoladapago.com",
+        "CONSTA_BASE_URL": "https://consta.dev.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
@@ -62,13 +78,20 @@
           "migrations_dir": "migrations"
         }
       ],
+      "r2_buckets": [
+        { "binding": "PROOFS", "bucket_name": "devolada-transfer-proofs" }
+      ],
       "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "ENVIRONMENT": "prod",
         "API_BASE_URL": "https://api.devoladapago.com",
         "ADMIN_BASE_URL": "https://admin.devoladapago.com",
         "TIENDA_BASE_URL": "https://punto.devoladapago.com",
-        "ALLOWED_ORIGINS": "https://punto.devoladapago.com,https://admin.devoladapago.com",
+        "PAGO_BASE_URL": "https://pago.devoladapago.com",
+        /* No CONSTA_BASE_URL: Consta has no prod env yet (its spec D8).
+           Without it the SPEI channel answers "unavailable" — customers
+           are pointed at the store network instead of a void. */
+        "ALLOWED_ORIGINS": "https://punto.devoladapago.com,https://admin.devoladapago.com,https://pago.devoladapago.com",
         "PASSKEY_RP_ID": "devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }

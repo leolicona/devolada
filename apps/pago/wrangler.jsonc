@@ -1,0 +1,21 @@
+{
+  "$schema": "../api/node_modules/wrangler/config-schema.json",
+  "name": "devolada-pago",
+  "compatibility_date": "2025-05-01",
+  /* Assets-only worker: serves the built payment page (direct-payment
+     spec D9). SPA fallback keeps /p/<token> deep links working. */
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "env": {
+    "dev": {
+      "name": "devolada-pago-dev",
+      "routes": [{ "pattern": "pago.dev.devoladapago.com", "custom_domain": true }]
+    },
+    "prod": {
+      "name": "devolada-pago",
+      "routes": [{ "pattern": "pago.devoladapago.com", "custom_domain": true }]
+    }
+  }
+}

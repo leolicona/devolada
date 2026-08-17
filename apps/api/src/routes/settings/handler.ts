@@ -29,6 +29,16 @@ function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
       configured: Boolean(isp.wisphubApiKey),
       keyTail: isp.wisphubApiKey ? isp.wisphubApiKey.slice(-4) : null,
     },
+    /* Direct SPEI channel (direct-payment D3, D4). "configured" is what
+       flips the payment pages from "unavailable" to instructions. */
+    spei: {
+      clabe: isp.speiClabe,
+      bank: isp.speiBank,
+      beneficiaryName: isp.speiBeneficiaryName,
+      serviceFeeCents: isp.speiServiceFeeCents,
+      effectiveServiceFeeCents: isp.speiServiceFeeCents ?? isp.serviceFeeCents,
+      configured: Boolean(isp.speiClabe && isp.speiBank && isp.speiBeneficiaryName),
+    },
   };
 }
 
@@ -76,6 +86,14 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
       ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
       ...(body.timeFormat !== undefined ? { timeFormat: body.timeFormat } : {}),
       ...(body.wisphubApiKey !== undefined ? { wisphubApiKey: body.wisphubApiKey } : {}),
+      ...(body.speiClabe !== undefined ? { speiClabe: body.speiClabe } : {}),
+      ...(body.speiBank !== undefined ? { speiBank: body.speiBank } : {}),
+      ...(body.speiBeneficiaryName !== undefined
+        ? { speiBeneficiaryName: body.speiBeneficiaryName }
+        : {}),
+      ...(body.speiServiceFeeCents !== undefined
+        ? { speiServiceFeeCents: body.speiServiceFeeCents }
+        : {}),
     })
     .where(eq(isps.id, isp.id));
 

@@ -5,6 +5,7 @@ import type { Bindings } from "../env";
 import { isps, stores, user as userTable } from "../db/schema";
 import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
+import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
    Seeds a demo ISP and store to verify login with curl. */
@@ -23,6 +24,12 @@ const DEMO = {
 dev.post("/reconnect-sweep", async (c) => {
   const report = await sweepReconnections(c.env);
   return c.json({ success: true, data: { ...report, queued: await queuedCount(c.env) } });
+});
+
+/* Same escape hatch for the direct-payment re-validations (D7) */
+dev.post("/direct-payment-sweep", async (c) => {
+  const report = await sweepDirectPayments(c.env);
+  return c.json({ success: true, data: { ...report, validating: await validatingCount(c.env) } });
 });
 
 dev.post("/seed", async (c) => {

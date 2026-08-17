@@ -90,6 +90,14 @@ jobs:
       - name: Deploy prod admin
         working-directory: apps/admin
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../admin/wrangler.jsonc --env prod
+      # The page deploys; the channel stays "unavailable" until Consta has
+      # a prod env (direct-payment spec: no CONSTA_BASE_URL in prod vars).
+      - name: Build payment page (prod API baked in)
+        working-directory: apps/pago
+        run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build
+      - name: Deploy prod payment page
+        working-directory: apps/pago
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../pago/wrangler.jsonc --env prod
       - name: Smoke test
         run: |
           URL="${{ vars.PROD_API_URL }}"

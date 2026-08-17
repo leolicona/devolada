@@ -16,6 +16,14 @@ const settings = (over: Record<string, unknown> = {}) =>
     timezone: "America/Mexico_City",
     timeFormat: "12h",
     wisphub: { configured: true, keyTail: "1234" },
+    spei: {
+      clabe: null,
+      bank: null,
+      beneficiaryName: null,
+      serviceFeeCents: null,
+      effectiveServiceFeeCents: 1500,
+      configured: false,
+    },
     ...over,
   });
 
@@ -112,6 +120,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
     const charge = {
       id: "ch-1",
       folio: "DV-FMT01",
+      channel: "store" as const,
       reconnectionStatus: "reconnected" as const,
       totalCents: 41400,
       monthlyFeeCents: 39900,

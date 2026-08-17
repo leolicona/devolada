@@ -68,7 +68,11 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
           <span className="col-start-2 min-w-0 sm:flex-1">
             {/* design-review D1: identity wraps, it never truncates */}
             <span className="block text-sm font-medium">{charge.customerName}</span>
-            <span className="block text-sm text-muted-foreground">{charge.storeName}</span>
+            {/* US-D06: a direct payment has no store — the channel is
+                named instead, so both kinds stay distinguishable */}
+            <span className="block text-sm text-muted-foreground">
+              {charge.channel === "spei" ? "Pago directo · SPEI" : charge.storeName}
+            </span>
           </span>
           <Amount
             cents={charge.totalCents}

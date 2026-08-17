@@ -59,12 +59,16 @@ export const feedQuery = z.object({
 export const feedCharge = z.object({
   id: z.string(),
   folio: z.string(),
+  /* 'spei' = direct payment, no store involved (direct-payment D6);
+     the feed marks the channel so the two are visually distinct */
+  channel: z.enum(["store", "spei"]),
   reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
   totalCents: z.number().int(),
   monthlyFeeCents: z.number().int(),
   serviceFeeCents: z.number().int(),
   customerName: z.string(),
-  storeName: z.string(),
+  /* null for channel = 'spei': no store handled this money */
+  storeName: z.string().nullable(),
   createdAt: z.number().int(),
   reconnectedAt: z.number().int().nullable(),
   attempts: z.number().int(),

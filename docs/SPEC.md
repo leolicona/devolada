@@ -53,7 +53,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-C06** — As an end customer, I can only be charged what I actually owe: a debt that no longer exists cannot be charged again. *(added 2026-08-16, found live: WispHub's summary label lags the invoices in both directions)*
 
 ### Cash box (K)
-- **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my accumulated commission; every number breaks down into its ledger entries.
+- **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my commission for the current drop cycle; every number breaks down into its ledger entries. *(commission per cycle 2026-08-17, cashbox.spec.md D5 — was "accumulated"; the drop is the shopkeeper's corte)*
 - **US-K02** — As a store, I record a cash drop that stays pending until the ISP confirms it.
 - **US-K03** — As a store, I browse my immutable ledger (charges, commissions, cash drops).
 - **US-K04** — As a store, the balance cap warns me as I approach it and blocks charges once exceeded, with a clear explanation.
@@ -110,13 +110,13 @@ Ideas live here as one-liners until one is picked up; picking one up means
 reserving its US-ID above and writing its spec — the golden rule starts there,
 not here. Owner's priority order (2026-08-16):
 
-1. **Platform settlement** — the admin shows *"Para la plataforma quedan $6.00"*
+1. ✅ **Platform settlement** *(shipped 2026-08-17 as US-L01, platform/settlement.spec.md — statement v1; collection waits for Consta)* — the admin shows *"Para la plataforma quedan $6.00"*
    but nothing accumulates it and no flow collects it: today Devolada's share
    travels inside the ISP's cash and stays with the ISP. Needs: a per-ISP
    accumulated share (derivable from the ledger), a monthly cut visible in the
    admin, and the collection mechanism. Natural first consumer of the transfer
    validation service below.
-2. **Commission per drop cycle** — "Tu comisión ganada" is the all-time sum and
+2. ✅ **Commission per drop cycle** *(shipped 2026-08-17, cashbox.spec.md D5)* — "Tu comisión ganada" is the all-time sum and
    only grows; the drop is the shopkeeper's *corte*, so the card should read
    "desde tu última entrega" and restart with each confirmed drop. Derivable
    from the ledger (commission entries after the last confirmed `cash_drop`);

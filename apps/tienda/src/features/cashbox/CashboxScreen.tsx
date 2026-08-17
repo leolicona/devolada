@@ -92,7 +92,11 @@ export function CashboxScreen() {
       </Card>
 
       <Card className="mt-3 p-6">
-        <p className="text-sm text-ink-soft">Tu comisión ganada</p>
+        {/* D5: the label carries the period — a $0.00 morning after an
+            entrega must read as a fresh cycle, never as stolen money */}
+        <p className="text-sm text-ink-soft">
+          {data.commissionSince ? "Tu comisión desde la última entrega" : "Tu comisión ganada"}
+        </p>
         {/* design-review D3: green is a status colour. The amount is ink;
             what it means is in the label above it. */}
         <Amount

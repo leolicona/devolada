@@ -5,13 +5,16 @@ import { cashboxResponse } from "@devolada/api/cashbox-schema";
 import { handlers, ok, server, storeActor } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/cashbox/cashbox.spec.md scenarios 4–6. */
+/* docs/cashbox/cashbox.spec.md scenarios 4–6 and 8 (D5). */
 
-function cashbox(overrides: Partial<{ approaching: boolean; blocked: boolean }> = {}) {
+function cashbox(
+  overrides: Partial<{ approaching: boolean; blocked: boolean; commissionSince: number | null }> = {},
+) {
   return cashboxResponse.parse({
     storeName: "Abarrotes La Esquina",
     balanceCents: 91000,
     commissionEarnedCents: 1800,
+    commissionSince: overrides.commissionSince ?? null,
     cap: {
       capCents: 500000,
       approaching: overrides.approaching ?? false,
@@ -68,5 +71,17 @@ describe("D3: logout lives in Caja", () => {
 
     expect(await screen.findByLabelText("Teléfono")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
+  });
+});
+
+describe("US-K01: the commission label carries the period (D5)", () => {
+  it("says 'desde la última entrega' exactly when commissionSince is set", async () => {
+    mount(cashbox({ commissionSince: Date.UTC(2026, 7, 15) }));
+    expect(await screen.findByText("Tu comisión desde la última entrega")).toBeInTheDocument();
+  });
+
+  it("keeps 'Tu comisión ganada' before the first confirmed drop", async () => {
+    mount(cashbox({ commissionSince: null }));
+    expect(await screen.findByText("Tu comisión ganada")).toBeInTheDocument();
   });
 });

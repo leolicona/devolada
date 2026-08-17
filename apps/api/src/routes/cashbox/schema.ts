@@ -5,7 +5,11 @@ import { z } from "zod";
 export const cashboxResponse = z.object({
   storeName: z.string(),
   balanceCents: z.number().int(),
+  /* The current drop cycle (spec D5), not all time */
   commissionEarnedCents: z.number().int(),
+  /* ms of the last confirmed drop; null before the first one (D5) —
+     the label carries the period exactly when this is set */
+  commissionSince: z.number().int().nullable(),
   cap: z.object({
     capCents: z.number().int(),
     approaching: z.boolean(),

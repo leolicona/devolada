@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { cashDrops, stores } from "../../db/schema";
-import { commissionEarnedCents, storeBalanceCents } from "../../ledger";
+import { commissionCycle, storeBalanceCents } from "../../ledger";
 import type { CashboxResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -20,7 +20,7 @@ export async function getCashbox(c: Ctx) {
   const db = drizzle(c.env.DB);
   const [store] = await db.select().from(stores).where(eq(stores.id, actor.id));
   const balanceCents = await storeBalanceCents(db, actor.id);
-  const earned = await commissionEarnedCents(db, actor.id);
+  const commission = await commissionCycle(db, actor.id);
   const [lastDrop] = await db
     .select()
     .from(cashDrops)
@@ -31,7 +31,8 @@ export async function getCashbox(c: Ctx) {
   const data: CashboxResponse = {
     storeName: store.name,
     balanceCents,
-    commissionEarnedCents: earned,
+    commissionEarnedCents: commission.cents,
+    commissionSince: commission.sinceMs,
     cap: {
       capCents: store.balanceCapCents,
       approaching: balanceCents >= store.balanceCapCents * APPROACHING_RATIO,

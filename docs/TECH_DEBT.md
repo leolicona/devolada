@@ -2,10 +2,11 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
-## TD-013 — The re-validation schedule is theory, not measurement
-- Status: **open** · Origin: direct-payment.spec.md D7 (2026-08-17)
-- The +2/+8/+20/+45 min/+2 h/+6 h schedule comes from published sources (Banxico's ~30-minute CEP rule, apiCEP's "seconds, sometimes hours") — reasonable to ship, but no own measurement backs it, and it is one global schedule for every receiving bank.
-- Payable when real direct payments accumulate: the `direct_payments` log already stores `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank. With ~50 confirmed payments, derive the real latency distribution and tune the schedule (globally or per bank). A $1 self-transfer experiment (~$0.50 in credits) can seed the first Nubank→Klar data point earlier if wanted.
+## TD-013 — The re-validation schedule is a global constant, not learned per bank
+- Status: open · Origin: direct-payment.spec.md (D7), owner decision 2026-08-17
+- D7's schedule (+2, +8, +20, +45 min, +2 h, +6 h) comes from published evidence (Banxico's ~30-minute CEP rule; apiCEP's "seconds normally, hours sometimes"), not from our own traffic, and it is the same for every receiving bank. The `direct_payments` log already records everything needed to do better: `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank.
+- Why it was reasonable: with zero real payments there is no distribution to learn from; shipping the evidence-based constant first is what produces the data.
+- Paid by: once enough confirmed direct payments accumulate, derive the per-bank latency distribution from the log and tune the schedule (possibly per receiving bank) — plus revisit the early cadence when apiCEP answers whether pending re-checks consume credits.
 
 ## TD-012 — `INVALID_TOKEN` blames the link for failures the link did not cause
 - Status: **paid** (2026-08-15, `feat/better-auth`) · Origin: found while diagnosing the TD-001 rollback

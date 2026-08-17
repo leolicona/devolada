@@ -3,7 +3,7 @@ status: in-development
 stories: [US-D01, US-D02, US-D03, US-D04, US-D05, US-D06]
 domain: direct-payment
 updated: 2026-08-17
-debt: []
+debt: [TD-013]
 ---
 
 # Spec: Direct SPEI payment channel (Link de pago)

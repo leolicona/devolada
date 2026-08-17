@@ -71,6 +71,26 @@ key: `PEND` → pending, `DUP` → replay flag, `BAD` → invalid, `ERR` →
 provider error; anything else validates. Remove the override to hit the real
 provider.
 
+## Provider notes (measured live, 2026-08-17)
+
+- **Two credential types.** apiCEP takes `Bearer sk_live_…` (permanent API
+  keys) or `Bearer apicep_…` (user tokens). User tokens are short-lived:
+  ours died within the hour, twice — usable for a manual test fired
+  immediately, never for the deployed Worker. `APICEP_TOKEN` must become an
+  `sk_live_` key once a plan is bought; until then the deployed `/validate`
+  will decay back to `PROVIDER_ERROR` when the current user token expires.
+- **A free Welcome plan exists** (50 requests / 30 days on signup at
+  app.apicep.cloud) — enough for smoke checks without paying.
+- **Date tolerance.** The real validation claimed `2026-08-15`; the CEP came
+  back `valid` with `operationDate: 2026-08-17`. apiCEP found the CEP despite
+  the date mismatch, so the claimed date is apparently a hint, not a filter —
+  integrators must compare the returned `cep.date` themselves if the date
+  matters to their domain.
+- **Garbage tracking keys answer HTTP 200 with `status: invalid`** (5
+  measured) — a made-up transfer is a verdict, not an error.
+- No pre-registration of beneficiary accounts exists; the beneficiary travels
+  inline in every request (docs confirmed).
+
 ## Contract
 
 `POST /validate` — `Authorization: Bearer ck_…`
@@ -121,9 +141,12 @@ the routes 404.
 
 ## Definition of Done
 
-- [ ] Scenarios automated in `apps/consta/test/` (workerd + local D1 +
-      fetch-mocked provider), citing their stories
-- [ ] Deployed to `consta.dev.devoladapago.com` by Actions with
-      `APICEP_TOKEN` and `CONSTA_ADMIN_TOKEN` as worker secrets
-- [ ] Manual check on deployed dev: one real validation against apiCEP with a
-      real transfer's data
+- [x] Scenarios automated in `apps/consta/test/` (workerd + local D1 +
+      fetch-mocked provider), citing their stories (9 tests, PR #46)
+- [x] Deployed to `consta.dev.devoladapago.com` by Actions with
+      `APICEP_TOKEN` and `CONSTA_ADMIN_TOKEN` as worker secrets (PR #47
+      deploy; both probed live: 401 without credentials, not 404)
+- [x] Manual check on deployed dev: one real validation against apiCEP with a
+      real transfer's data — 2026-08-17, a real SPEI (NUBANK → KLAR, $3,198.00)
+      came back `valid` with Banxico's digital signature and the CEP XML/PDF
+      links, and left exactly one `valid` row in the dev D1 (US-V01, US-V05)

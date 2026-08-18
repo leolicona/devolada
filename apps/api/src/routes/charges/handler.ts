@@ -12,6 +12,10 @@ import {
   type WispHubCustomer,
 } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
+import {
+  invalidatePendingInvoices,
+  pendingInvoicesForDisplay,
+} from "../../wisphub/cache";
 import { startOfBusinessDayMs } from "../../time/business-day";
 import { firstAttemptSchedule } from "../../reconnection/queue";
 import { receiptText, toWhatsAppPhone, whatsAppLink } from "../../receipt";
@@ -42,7 +46,10 @@ async function storeContext(c: Ctx) {
   if (!isp?.wisphubApiKey) {
     return { error: c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503) };
   }
-  return { actor, isp, db, wisphub: new WispHub(isp.wisphubApiKey) };
+  /* provider-latency D7: the configured base, like every other path.
+     Without it the two most-used surfaces were the only ones that
+     silently ignored WISPHUB_BASE_URL. */
+  return { actor, isp, db, wisphub: new WispHub(isp.wisphubApiKey, c.env.WISPHUB_BASE_URL) };
 }
 
 function wisphubFailure(c: Ctx, e: unknown) {
@@ -87,15 +94,36 @@ const toCustomerResult = (
   hasPhone,
 });
 
+/* provider-latency D2: the customer lookup and the pending list race,
+   but their answers are still read in the old order. Both callers below
+   used to return 404 before the pending fetch ever happened, so a
+   `Promise.all` would have turned "this customer does not exist" into
+   "the provider is down" whenever both went wrong at once. The race is
+   the point; the precedence is not negotiable. */
+async function customerAndPending(
+  lookup: Promise<WispHubCustomer | null>,
+  pending: Promise<PendingInvoices>,
+): Promise<{ customer: WispHubCustomer | null; pending: PendingInvoices }> {
+  const [found, listed] = await Promise.allSettled([lookup, pending]);
+  if (found.status === "rejected") throw found.reason;
+  if (found.value === null) return { customer: null, pending: { invoices: [], complete: true } };
+  if (listed.status === "rejected") throw listed.reason;
+  return { customer: found.value, pending: listed.value };
+}
+
 export async function searchCustomers(c: Ctx, q: string) {
   const ctx = await storeContext(c);
   if ("error" in ctx) return ctx.error;
 
   try {
     const customers = await ctx.wisphub.searchCustomers(q);
-    /* One pending-list fetch marks every result (debt-truth spec D2) */
+    /* One pending-list fetch marks every result (debt-truth spec D2).
+       Display only, so it may be up to 30s old (provider-latency D3):
+       search is the most frequent screen in the product and every
+       debounced keystroke was paying for a tenant-wide invoice fetch.
+       The guard that refuses a charge still reads fresh. */
     const pending = customers.length
-      ? await ctx.wisphub.pendingInvoices(new Date())
+      ? await pendingInvoicesForDisplay(ctx.isp.id, ctx.wisphub, new Date())
       : { invoices: [], complete: true };
     /* One lookup for the whole page, and only for the customers WispHub
        had no number for (phone D4) */
@@ -126,11 +154,17 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
   if ("error" in ctx) return ctx.error;
 
   try {
-    const customer = await ctx.wisphub.getCustomer(usuario);
+    /* provider-latency D2: two independent reads, one wait. D3: the
+       quote renders, it does not decide — the charge guard below is
+       what refuses, and it reads fresh. */
+    const now = new Date();
+    const { customer, pending } = await customerAndPending(
+      ctx.wisphub.getCustomer(usuario),
+      pendingInvoicesForDisplay(ctx.isp.id, ctx.wisphub, now),
+    );
     if (!customer) {
       return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
     }
-    const pending = await ctx.wisphub.pendingInvoices(new Date());
 
     const [store] = await ctx.db.select().from(stores).where(eq(stores.id, ctx.actor.id));
     const serviceFeeCents = ctx.isp.serviceFeeCents;
@@ -181,11 +215,17 @@ export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: str
   let customer;
   let pending;
   try {
-    customer = await ctx.wisphub.getCustomer(usuario);
+    /* provider-latency D2: independent reads, one wait. D3: **fresh**,
+       never the display cache — this is the guard that decides whether
+       money may be taken, and debt-truth D1/D5 rest on it asking
+       WispHub every time. */
+    ({ customer, pending } = await customerAndPending(
+      ctx.wisphub.getCustomer(usuario),
+      ctx.wisphub.pendingInvoices(now),
+    ));
     if (!customer) {
       return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
     }
-    pending = await ctx.wisphub.pendingInvoices(now);
   } catch (e) {
     return wisphubFailure(c, e);
   }
@@ -263,8 +303,15 @@ export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: str
      (reconnection-queue spec): the same rules decide when it retries.
      The invoice the guard resolved rides along (debt-truth D5), so the
      attempt never creates one on this path. */
+  /* provider-latency D4: this charge just changed the answer the display
+     cache holds. Drop it before the attempt, so the re-search a
+     shopkeeper does seconds later reads "al corriente" — the behaviour
+     debt-truth verified live, which a 30s cache would otherwise undo. */
+  invalidatePendingInvoices(ctx.isp.id);
+
   const attempt = await attemptReconnection(
     ctx.wisphub,
+    ctx.isp.id,
     { usuario, wisphubId: String(customer.wisphubId) },
     customer.monthlyFeeCents,
     now,

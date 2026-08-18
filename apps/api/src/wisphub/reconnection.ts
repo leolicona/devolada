@@ -1,4 +1,5 @@
 import { WispHubError, type WispHub } from "./client";
+import { cashPaymentMethodId } from "./cache";
 
 /* One reconnection attempt (charge-record D3, reconnection-queue spec).
    Two phases, and the split is the point (D8): the payment happens at
@@ -26,6 +27,8 @@ export type AttemptResult = AttemptState & {
 
 export async function attemptReconnection(
   wisphub: WispHub,
+  /* The tenant, for the payment-method cache (provider-latency D5) */
+  ispId: string,
   /* usuario for every lookup; the numeric id only for the PATCH (D8) */
   customer: { usuario: string; wisphubId: string },
   monthlyFeeCents: number,
@@ -35,20 +38,22 @@ export async function attemptReconnection(
   let { invoiceId, paymentRegistered } = state;
   try {
     if (!paymentRegistered) {
+      const date = now.toISOString().slice(0, 10);
+      const dateTime = `${date} ${now.toISOString().slice(11, 16)}`;
+
       /* D9: the opt-in for payment-triggered reactivation, ensured
          before the payment that should trigger it. Non-fatal: a failed
          PATCH must not block the payment — the verify step still tells
          the truth, and a service that never flips ends in `failed`,
-         which is the honest answer. */
-      try {
-        await wisphub.ensureAutoActivate(customer.wisphubId);
-      } catch (e) {
-        console.warn(`auto_activar_servicio PATCH failed for ${customer.usuario}:`, e);
-      }
-
-      const date = now.toISOString().slice(0, 10);
-      const dateTime = `${date} ${now.toISOString().slice(11, 16)}`;
-      const paymentMethodId = await wisphub.getCashPaymentMethodId();
+         which is the honest answer.
+         provider-latency D2: it has nothing to do with the payment
+         method, so the two wait together instead of in a row. */
+      const [, paymentMethodId] = await Promise.all([
+        wisphub.ensureAutoActivate(customer.wisphubId).catch((e: unknown) => {
+          console.warn(`auto_activar_servicio PATCH failed for ${customer.usuario}:`, e);
+        }),
+        cashPaymentMethodId(ispId, wisphub, now),
+      ]);
 
       /* D1 (pays TD-009): reuse before creating. The id we already
          stored wins; otherwise ask WispHub for a pending one; only then

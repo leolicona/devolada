@@ -99,6 +99,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
 
     const result = await attemptReconnection(
       new WispHub(apiKey, env.WISPHUB_BASE_URL),
+      charge.ispId,
       /* D8: lookups need the usuario; the numeric id only serves the
          auto-activate PATCH. Charges from before 0006 have no stored
          usuario — the old identifier keeps their (broken) behavior. */

@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { charges, directPayments, isps, paymentLinks } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
+import { pendingInvoicesForDisplay } from "../../wisphub/cache";
 import {
   isUniqueViolation,
   runValidation,
@@ -97,8 +98,13 @@ export async function getLinkStatus(c: Ctx, token: string) {
 
   try {
     const wisphub = new WispHub(isp.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
-    const customer = await wisphub.getCustomer(link.customerUsuario);
-    const pending = await wisphub.pendingInvoices(now);
+    /* provider-latency D2: independent reads, one wait. D3: the page
+       renders here; the submission below re-reads fresh before any
+       amount is committed, so a 30s-old list cannot decide money. */
+    const [customer, pending] = await Promise.all([
+      wisphub.getCustomer(link.customerUsuario),
+      pendingInvoicesForDisplay(isp.id, wisphub, now),
+    ]);
     const owes = pending.invoices.some((f) => f.usuario === link.customerUsuario);
     const customerName = customer?.name ?? link.customerUsuario;
 
@@ -164,8 +170,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   let pending;
   try {
     const wisphub = new WispHub(isp.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
-    customer = await wisphub.getCustomer(link.customerUsuario);
-    pending = await wisphub.pendingInvoices(now);
+    /* provider-latency D2 together, D3 **fresh**: this read decides the
+       amount the CEP must match (D11/D15), so it never takes the cache. */
+    [customer, pending] = await Promise.all([
+      wisphub.getCustomer(link.customerUsuario),
+      wisphub.pendingInvoices(now),
+    ]);
   } catch (e) {
     return wisphubFailure(c, e);
   }

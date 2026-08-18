@@ -46,3 +46,27 @@ charges/customer-phone.spec.md D1/D3).
 ## E2E evidence (2026-08-14)
 
 Full pipeline verified through `devolada-api-dev`: real search (allow-list mapping, cents), real quote (`due` after a pending invoice), real charge → folio `DV-RJO12L`, WispHub invoice created and **paid** (`estado: Pagada`), status `reconnected` after the verify read, ledger `+41400 / −900`. Finding: the reconnection created a new invoice instead of paying the already-pending one → TD-009.
+
+## Latency and stalls (measured 2026-08-18)
+
+Sampled from a laptop with the demo tenant's real key, several runs per
+endpoint:
+
+- Healthy calls answer in **0.4–0.6 s**.
+- About **one call in eight stalls and never recovers** — observed hanging
+  past 8 s, 30 s and 60 s cutoffs, then only ending at the client's own
+  timeout. It is not endpoint-specific: `/clientes/`, `/facturas/` and
+  `/formas-de-pago/` all did it, and `/clientes/` did it with and without
+  a filter.
+
+Consequence: **every call through the adapter carries a deadline** — 5 s
+per call, 12 s per operation (`src/wisphub/client.ts`,
+polish/provider-latency.spec.md D1). A stall is reported as the existing
+`WISPHUB_UNAVAILABLE`, so it is an outage like any other: a 503 before a
+charge is recorded, a `queued` reconnection after. Retrying a stalled
+call is pointless — they were measured never to recover — which is why
+the deadline exists instead of a retry.
+
+This is also why the pending-invoice list and the payment-method id are
+cached per tenant for display paths (D3, D5): the fewer calls a screen
+makes, the smaller its chance of meeting a stall.

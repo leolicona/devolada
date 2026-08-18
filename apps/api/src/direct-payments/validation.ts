@@ -5,6 +5,7 @@ import { charges, directPayments, isps, paymentLinks } from "../db/schema";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
 import { WispHub, WispHubError } from "../wisphub/client";
 import { attemptReconnection } from "../wisphub/reconnection";
+import { invalidatePendingInvoices } from "../wisphub/cache";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/charges/handler";
 import { nextValidationSlot } from "./schedule";
@@ -227,8 +228,13 @@ export async function runValidation(
   let customer;
   let pending;
   try {
-    customer = await wisphub.getCustomer(link.customerUsuario);
-    pending = await wisphub.pendingInvoices(now);
+    /* provider-latency D2 together, D3 **fresh**: this decides whether a
+       payment is registered in WispHub (D14), so it never takes the
+       display cache. */
+    [customer, pending] = await Promise.all([
+      wisphub.getCustomer(link.customerUsuario),
+      wisphub.pendingInvoices(now),
+    ]);
   } catch (e) {
     const code = e instanceof WispHubError ? e.code : "WISPHUB_UNAVAILABLE";
     return retryLater(code, base);
@@ -272,8 +278,13 @@ export async function runValidation(
     })
     .returning();
 
+  /* provider-latency D4: a charge now exists for this tenant, so the
+     display cache is stale by definition — same rule as the store flow. */
+  invalidatePendingInvoices(isp.id);
+
   const attempt = await attemptReconnection(
     wisphub,
+    isp.id,
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
     payment.monthlyFeeCents,
     now,

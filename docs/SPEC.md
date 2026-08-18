@@ -134,7 +134,7 @@ not here. Owner's priority order (2026-08-16):
    from the ledger (commission entries after the last confirmed `cash_drop`);
    query + copy, no schema change. The label must carry the period, or a $0
    morning reads as stolen commission.
-3. ◐ **Customer phone capture** *(picked up 2026-08-17 as US-C07, charges/customer-phone.spec.md)* — when WispHub has no phone, the receipt's
+3. ✅ **Customer phone capture** *(shipped 2026-08-17 as US-C07, charges/customer-phone.spec.md — capture at the counter; the deployed-dev check is still open)* — when WispHub has no phone, the receipt's
    `wa.me` opens with no recipient. Probe first whether `telefono` is writable
    via `PATCH /clientes/{id}/` (the same call that flips
    `auto_activar_servicio`): writing it back to WispHub keeps the data in the

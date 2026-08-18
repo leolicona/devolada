@@ -69,10 +69,15 @@ fallback the backlog anticipated — storing it ourselves — is the only path.
 
 ## Contract
 
-- `GET /wisphub/customers?q=` (existing search): each result's `phone` is now
-  the D4 resolution (WispHub first, then `customer_contacts`), plus
-  `phoneSource: "wisphub" | "captured" | null` so the UI knows when to offer
-  the capture field.
+- `GET /charges/customers?q=` and `GET /charges/customers/:usuario` (search and
+  quote): every `customerResult` gains **`hasPhone: boolean`** — the D4
+  resolution (WispHub first, then `customer_contacts`) reduced to the only
+  question the UI has. *(Refined during development: the spec first said the
+  resolved `phone` and a `phoneSource` would cross the wire. They must not —
+  customer-search D2 makes the response an allow-list of identity fields, and
+  the phone deliberately stops at the server. The screen only needs to know
+  whether to ask, and `hasPhone` says exactly that; `phoneSource` died with it,
+  since the UI treats both origins identically anyway.)*
 - `POST /charges` (existing): accepts optional `customerPhone` (10 digits,
   Zod-validated). When present and the customer has no WispHub phone, it
   upserts `customer_contacts` and is copied to `charges.customer_phone`; when
@@ -81,13 +86,14 @@ fallback the backlog anticipated — storing it ourselves — is the only path.
 
 ## UI Contract
 
-- Confirm screen, only when `phone` is null: one optional input labeled
+- Confirm screen, only when `hasPhone` is false: one optional input labeled
   **"Teléfono para el comprobante (opcional)"**, hint "Para enviarle su
-  comprobante por WhatsApp". 10-digit numeric input; invalid input disables
-  only itself, never the charge button.
-- No new screen, no new state names. When `phoneSource` is `"captured"` the
-  UI treats it exactly like a WispHub phone (no badge — the shopkeeper does
-  not care where the number lives).
+  comprobante por WhatsApp". Numeric input capped at 10 digits, non-digits
+  dropped as they are typed. It has **no error state at all**: an unfinished
+  number is not a mistake, it is simply no phone — it stays out of the request
+  and the charge button never notices.
+- No new screen, no new state names. A captured number is treated exactly like
+  a WispHub one (no badge — the shopkeeper does not care where it lives).
 
 ## Scenarios
 
@@ -107,9 +113,12 @@ fallback the backlog anticipated — storing it ourselves — is the only path.
 
 ## Definition of Done
 
-- [ ] Scenarios 1–5 automated in the API layer (WispHub mocked)
-- [ ] Scenario 6 automated: API validation + UI (Testing Library + MSW)
-- [ ] Migration for `customer_contacts` applied
+- [x] Scenarios 1–5 automated in the API layer (`test/customer-phone.test.ts`,
+      5 tests, WispHub mocked)
+- [x] Scenario 6 automated: API validation (same file) and the UI's two halves
+      — field offered or not, unfinished number never blocking
+      (`apps/tienda/test/charge-confirm.test.tsx`, 3 tests)
+- [x] Migration for `customer_contacts` applied (`0008_unknown_shooting_star.sql`)
 - [x] TD-014 registered in `docs/TECH_DEBT.md`
 - [ ] Real check on deployed dev: capture a number on a charge against the
       demo tenant and see the receipt open into the chat

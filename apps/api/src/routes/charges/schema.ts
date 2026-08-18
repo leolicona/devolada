@@ -15,6 +15,11 @@ export const customerResult = z.object({
   serviceStatus: z.enum(["active", "suspended", "unknown"]),
   billingStatus: z.enum(["paid", "due", "unknown"]),
   monthlyFeeCents: z.number().int(),
+  /* Whether a phone for the receipt is known — from WispHub or captured
+     here before (customer-phone D4). The number itself stays on the
+     server, as customer-search D2's allow-list has it: the confirm screen
+     only needs to know whether to ask for one. */
+  hasPhone: z.boolean(),
 });
 
 export const customerSearchResponse = z.object({
@@ -38,6 +43,12 @@ export const customerQuoteResponse = z.object({
 export const chargeRecordRequest = z.object({
   /* D1: the client sends only the customer; the server computes the money */
   usuario: z.string().min(3),
+  /* Optional capture for the receipt (customer-phone D2): 10 national
+     digits. Ignored when WispHub already has a number (D4). */
+  customerPhone: z
+    .string()
+    .regex(/^\d{10}$/)
+    .optional(),
 });
 
 export const chargeResponse = z.object({

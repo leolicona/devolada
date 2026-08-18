@@ -18,6 +18,7 @@ const results = customerSearchResponse.parse({
       serviceStatus: "suspended",
       billingStatus: "due",
       monthlyFeeCents: 49900,
+      hasPhone: true,
     },
   ],
 });

@@ -4,6 +4,19 @@
    reports `alreadyValidated` without blocking (its D4): the replay
    policy is ours (direct-payment D8), applied by the caller. */
 
+/* A deadline, for the same reason every WispHub call has one
+   (provider-latency spec D1) — this was the last provider call in the
+   API without one, and the 2026-08-18 spike is what found it: a stalled
+   validation held the request open for over five minutes.
+
+   The number cannot follow WispHub's "ten times the healthy call",
+   because a healthy validation here is genuinely slow: OCR plus a
+   Banxico lookup measured 13.5–14.6 s. This is ~2× that worst case.
+   Cutting off early is cheap: a deadline is a retryable failure, so the
+   payment stays `validating` and rides the D7 schedule instead of
+   failing. What it must never be is unbounded. */
+export const CONSTA_TIMEOUT_MS = 30_000;
+
 export class ConstaError extends Error {
   constructor(
     public code: "CONSTA_UNAVAILABLE" | "CONSTA_AUTH_FAILED",
@@ -57,6 +70,7 @@ export class Consta {
     try {
       res = await fetch(`${this.baseUrl}/validate`, {
         method: "POST",
+        signal: AbortSignal.timeout(CONSTA_TIMEOUT_MS),
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
@@ -64,7 +78,14 @@ export class Consta {
         body: JSON.stringify(request),
       });
     } catch (e) {
-      throw new ConstaError("CONSTA_UNAVAILABLE", `network error: ${String(e)}`);
+      /* Timeout and network failure are the same thing to the caller:
+         retryable, so the payment rides D7 (provider-latency D6). */
+      const name = (e as { name?: string })?.name;
+      const detail =
+        name === "TimeoutError" || name === "AbortError"
+          ? `timed out after ${CONSTA_TIMEOUT_MS}ms`
+          : `network error: ${String(e)}`;
+      throw new ConstaError("CONSTA_UNAVAILABLE", detail);
     }
     /* A rejected key is our setup problem, not a verdict */
     if (res.status === 401) {

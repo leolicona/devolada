@@ -681,6 +681,102 @@ describe("D8: one transfer pays once", () => {
     const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
     expect(row.status).toBe("confirmed");
   });
+
+  /* The 2026-08-18 spike found this live: apiCEP validated the CEP, the
+     worker died before recording the verdict, and the honest retry was
+     told TRANSFER_ALREADY_USED — for a transfer the customer had really
+     made, with the money already in the ISP's account. */
+  it("D7: the row is born owned by the sweep, before any verdict exists", async () => {
+    const { link } = await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    /* The row has to be inspected while the provider is still thinking —
+       once a verdict lands, every path writes a slot and the bug becomes
+       invisible. A real validation takes ~15 s, so this window is the
+       normal state of things, not an edge case. */
+    consta()
+      .intercept({ method: "POST", path: "/validate" })
+      .reply(...json({ success: true, data: { validationId: "v-1", status: "pending", alreadyValidated: false } }))
+      .delay(300);
+
+    const inFlight = payTransfer();
+
+    let row;
+    for (let i = 0; i < 60 && !row; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+      [row] = await drizzle(env.DB).select().from(directPayments);
+    }
+    expect(row, "the payment row should exist while the provider is still thinking").toBeDefined();
+    expect(row!.paymentLinkId).toBe(link.id);
+    expect(row!.constaStatus, "no verdict yet — that is the point").toBeNull();
+    /* NULL here is what stranded the row live on 2026-08-18:
+       sweepDirectPayments selects on isNotNull(nextValidationAt), so a
+       row without a slot is invisible to it — never retried, and never
+       expired either, because D7's 6-hour window only exists inside the
+       sweep. The customer's money had moved and nothing would ever look
+       at the payment again. */
+    expect(row!.nextValidationAt, "born without a slot: the sweep can never see it").not.toBeNull();
+
+    expect((await inFlight).status).toBe(201);
+  });
+
+  it("D8 carve-out (a): a call that never returned still counts as our own attempt", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        monthlyFeeCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: "2026-08-17",
+        /* Exactly the stranded row the spike produced: the attempt was
+           recorded, the provider answered, and nothing came back to
+           write `constaStatus`. Keying the carve-out on the verdict
+           instead of the attempt is what made this a false rejection. */
+        constaStatus: null,
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt: new Date(now.getTime() - 8 * 60 * 1000),
+      })
+      .returning();
+
+    mockConsta({ alreadyValidated: true });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+    expect(row.lastError).toBeNull();
+  });
+
+  it("the attempt is recorded before the call, so a lost response leaves a trace", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    /* A provider that fails is the closest a test can get to one that
+       never answers; both leave through the same catch. */
+    consta().intercept({ path: "/validate", method: "POST" }).reply(502, "{}");
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.status).toBe("validating");
+    expect(row.constaStatus).toBeNull();
+    /* The counter is the marker: written before the call, it is what
+       tells the next attempt that a validation may already have landed. */
+    expect(row.validationAttempts).toBe(1);
+    expect(row.nextValidationAt).not.toBeNull();
+  });
 });
 
 describe("D11: valid is necessary, not sufficient", () => {

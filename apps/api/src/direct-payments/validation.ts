@@ -121,10 +121,23 @@ export async function runValidation(
           beneficiary,
         };
 
-  /* D8 carve-out (a): a prior verdict means our own earlier attempt may
-     have set the provider's replay flag — a lost `valid` response must
-     not brick a legitimate payment on retry. */
-  const isRetry = payment.constaStatus !== null;
+  /* D8 carve-out (a): a prior attempt may have set the provider's replay
+     flag — a lost `valid` response must not brick a legitimate payment.
+
+     "Prior attempt", not "prior verdict": `constaStatus` is only written
+     when a call comes BACK, so a call that never returned left no trace
+     and the retry read as a stranger's validation. Found live on
+     2026-08-18 — the provider had validated the CEP, our worker died
+     before recording it, and the honest retry was told
+     TRANSFER_ALREADY_USED. The counter below is written BEFORE the call
+     for exactly this reason: what matters is that a call may have
+     landed, which is knowable only in advance. */
+  const isRetry = payment.validationAttempts > 0 || payment.constaStatus !== null;
+  const attempts = payment.validationAttempts + 1;
+  await db
+    .update(directPayments)
+    .set({ validationAttempts: attempts })
+    .where(eq(directPayments.id, payment.id));
 
   let verdict;
   try {
@@ -136,7 +149,9 @@ export async function runValidation(
   }
 
   const base = {
-    validationAttempts: payment.validationAttempts + 1,
+    /* Already written above; repeated so every terminal write carries a
+       consistent row, and harmless because it is the same number. */
+    validationAttempts: attempts,
     constaValidationId: verdict.validationId,
     constaStatus: verdict.status,
   };

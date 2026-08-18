@@ -20,6 +20,7 @@ import {
   uploadsInLastHour,
   verifyProofUrl,
 } from "../../direct-payments/proofs";
+import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
 
@@ -202,6 +203,19 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         senderBank: body.transfer?.senderBank ?? null,
         transferDate: body.transfer?.date ?? null,
         proofKey: body.proofId ?? null,
+        /* The row is born owned by the sweep (D7). The inline attempt
+           below is an optimisation, not the mechanism: if it never
+           finishes — a worker evicted, a provider that stalls past its
+           deadline, a deploy mid-flight — the payment is still due at
+           its first slot. Without this the row kept
+           `next_validation_at = NULL`, which `sweepDirectPayments`
+           cannot select, so it was never retried and never expired:
+           the customer's money had moved and nothing would ever look
+           at it again (found live, 2026-08-18).
+
+           No race with the inline attempt: the first slot is +2 min and
+           a validation answers in ~15 s. */
+        nextValidationAt: nextValidationSlot(now, now),
       })
       .returning();
   } catch (e) {

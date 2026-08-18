@@ -101,6 +101,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-P03** — As a store, the PWA works on a 360px phone; as an ISP, the admin works on my phone when I confirm a handover away from the desk.
 - **US-P04** — As a user with low vision or a screen reader, every status reaches me as icon + text, contrast holds, and the feed announces what changed.
 - **US-P05** — As a user of either app, every list row tells me what it is about, and every word and colour means one thing across both surfaces.
+- **US-P06** — As a user of any of the three apps, a slow or stalled WispHub never leaves me waiting: the app answers quickly, or it tells me it could not reach the provider. *(added 2026-08-18, found live: WispHub stalls ~1 call in 8 and never recovers, and our adapter had no deadline)*
 
 ## Features by Phase
 
@@ -111,7 +112,7 @@ Operational detail in `.design/devolada/TASKS.md` (execution layer).
 - **Phase 2 — Store PWA**: shell ✅ · search ✅ · charge ✅ · live result ✅ · cash box ✅ · cash drops ✅ · ledger ✅ · special states ✅
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
-- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05)
+- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05) · provider latency ◐ (US-P06 — deadlines, parallel calls and a display-only cache; the deployed check with the live tenant is open)
 - **Phase 6 — Better Auth migration** (better-auth.spec.md; spike passed 2026-08-15): spec ✅ · API ✅ · admin pages ✅ · tienda pages ✅ · custom domains ✅ (`*.devoladapago.com`, browser login verified) · passkeys ✅ (scenario 9 e2e in deploy-dev) — retired Agnostic Auth; TD-001 and TD-012 died by elimination
 
 Every ✅ above means "built, specced and tested". None of them means "verified on
@@ -221,6 +222,7 @@ Owner's decisions:
 | [polish/accessibility.spec.md](polish/accessibility.spec.md) | polish | US-P04 | in development |
 | [polish/responsive.spec.md](polish/responsive.spec.md) | polish | US-P03, US-P02, US-P04 (rendered) | in development |
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
+| [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05 | in development |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |

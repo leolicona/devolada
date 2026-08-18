@@ -21,7 +21,11 @@ const sections = [
   { to: "/", label: "Cobros", icon: Banknote, exact: true },
   { to: "/stores", label: "Tiendas", icon: Store, exact: false },
   { to: "/cash-drops", label: "Entregas", icon: ArrowDownToLine, exact: false },
-  { to: "/links", label: "Enlaces SPEI", icon: LinkIcon, exact: false },
+  /* "Links", not "Enlaces SPEI": the glossary's word for this is
+     "Link de pago" (SPEC.md), so "Enlace" was a synonym for a concept
+     already named — and the two words wrapped onto a second line in the
+     bottom bar at 360px while every neighbour stayed on one. */
+  { to: "/links", label: "Links", icon: LinkIcon, exact: false },
   { to: "/settings", label: "Configuración", icon: Settings, exact: false },
 ] as const;
 

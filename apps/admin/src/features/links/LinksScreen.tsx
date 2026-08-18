@@ -38,7 +38,8 @@ export function LinksScreen() {
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">Enlaces SPEI</h1>
+        {/* The glossary's full term; the nav carries the short form */}
+        <h1 className="text-xl font-semibold">Links de pago</h1>
       </div>
 
       <div className="mt-6">

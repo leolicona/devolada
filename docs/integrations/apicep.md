@@ -44,7 +44,7 @@ An `sk_live_` API key is still the better credential for anything deployed — i
 
 **How to tell in ten seconds**, because our own logs will not say: `wrangler tail devolada-consta-dev --format json` and look for `provider error: apiCEP responded 401`. Devolada's API logs only `CONSTA_UNAVAILABLE`, dropping the provider's status code, so a bad credential and a provider outage are indistinguishable from the Devolada side. Worth fixing; until it is, Consta's tail is the diagnosis.
 
-Until an `sk_live_` key is bought, every deployed validation decays inside the hour and the SPEI channel silently stops working — `PROVIDER_ERROR`, which Consta maps to retryable, so payments sit in `validating` rather than failing loudly.
+However the credential is lost — superseded by a new one, or clobbered by a deploy — the failure is quiet. Consta answers `PROVIDER_ERROR`, which is retryable, so payments sit in `validating` and the SPEI channel looks slow rather than broken. Nothing alerts; the first symptom is a customer still waiting.
 
 ## Request
 
@@ -73,26 +73,38 @@ Two modes; send one. Consta's two doors map 1:1 onto them.
 
 ## Response
 
-Verified fields — these are the ones Consta reads and the ones behaviour has been proven on:
+Captured whole from a live direct-mode call, 2026-08-18. Consta reads a subset; the rest is real and simply unused:
 
 ```jsonc
 { "validationId": "…",
   "status": "valid" | "invalid" | "pending" | "error",
+  "confidence": 1,                          // OCR score; 1 in direct mode, where nothing is read
+  "extracted": {                            // the CLAIM — echoes the request in direct mode,
+    "senderBank", "receiverBank",           // the OCR's reading in receipt mode
+    "trackingKey", "amount", "date", "beneficiaryName" },
   "validation": {
+    "banxicoConfirmed": true,
     "cepStatus": "LIQUIDADO" | "EN PROCESO" | …,
     "cepPreviouslyValidated": true | false | null,
-    "cepDetails": { "trackingKey", "amount", "operationDate", "senderBank",
-                    "senderName", "receiverBank", "beneficiaryName",
-                    "digitalSignature" } },
+    "cepDetails": {                         // the RECORD — Banxico's, far richer than we model
+      "trackingKey", "amount", "iva", "operationDate", "processingTime",
+      "speiKey", "paymentConcept", "certificateNumber", "digitalSignature",
+      "cdaChain",                           // the full signed CEP string
+      "senderBank", "senderName", "senderAccount", "senderAccountType", "senderRfc",
+      "receiverBank", "beneficiaryName", "beneficiaryAccount",
+      "beneficiaryAccountType", "beneficiaryRfc" } },
   "downloads": { "cepXml": "https://storage.apicep.cloud/…",
-                 "cepPdf":  "…" } }              // expire after 15 days
+                 "cepPdf":  "…" },          // expire after 15 days
+  "processingTime": { "ocr": "0ms", "validation": "7.99s", "total": "9.34s" } }
 ```
 
-Documented by apiCEP but **never yet observed in a response we captured**: a top-level `confidence` (OCR score 0.0–1.0), `validation.banxicoConfirmed`, an `extracted` object, and `downloads.originalImage`. Consta's adapter does not model them, so nothing has ever printed them. `confidence` is worth capturing deliberately — see the open items.
+`confidence`, `extracted` and `validation.banxicoConfirmed` **do exist** — this file said otherwise until a raw response was captured. `downloads.originalImage` is documented and still unobserved; it plausibly only appears in receipt mode.
+
+**This response is full of personal data.** `senderRfc`, `beneficiaryRfc`, both complete 18-digit accounts and the whole `cdaChain` (which repeats all of it) travel in every verdict. Consta's `validations` log deliberately stores a handful of mapped fields, not the body — keep it that way, and never log the response wholesale.
 
 ### The field that decides money
 
-**`cepDetails` is Banxico's record. `extracted` is what the image claimed.** Public guides tell integrators to compare `extracted.amount` against what is owed. **Do not.** `extracted` is attacker-controlled — it is a reading of a picture the payer supplied — and trusting it is exactly the `$1-receipt` hole that direct-payment D11 exists to close.
+**`cepDetails` is Banxico's record. `extracted` is the claim.** Public guides tell integrators to compare `extracted.amount` against what is owed. **Do not.** In receipt mode `extracted` is the OCR's reading of a picture the payer supplied; in direct mode it is an echo of the caller's own request. Either way it is the input, not the truth, and trusting it is exactly the `$1-receipt` hole that direct-payment D11 exists to close.
 
 Proven, 2026-08-18: a comprobante was forged by changing one character of the clave de rastreo (`…CDB`**`F`**`MU…` → `…CDB`**`E`**`MU…`), leaving folio, reference, date, amount and banks untouched. apiCEP answered with **Banxico's real key** — the `F` — the true amount, and `cepStatus: LIQUIDADO`. The edit never reached the verdict. That is the whole security property: **the answer comes from the record, not the pixels.**
 
@@ -127,6 +139,7 @@ Cost is roughly **$0.25 MXN per call**, which sets the budgets in direct-payment
 
 ## Open items
 
-- Capture one raw response and record whether `confidence`, `validation.banxicoConfirmed`, `extracted.*` and `downloads.originalImage` are really returned. `confidence` in particular would let the receipt door tell "I could not read this" from "this transfer does not exist" — the distinction the false-negative case turns on.
-- Buy an `sk_live_` key. Everything deployed decays within the hour without it.
+- **Surface `confidence` through Consta.** Now that the field is known to exist, it is the answer to the receipt door's worst failure: an unreadable screenshot and a transfer that never happened both come back `invalid`, and the customer is told the same wrong thing. A low `confidence` on an `invalid` distinguishes them, which would let the page say "no pudimos leer tu captura, intenta con los datos" instead of "no pudimos verificar tu transferencia". Needs one field on Consta's verdict shape and a reading on the false-negative receipt to learn what its score actually is.
+- Capture a **receipt-mode** raw response too: `downloads.originalImage` is documented and still unobserved, and the direct-mode capture shows `ocr: 0ms`, so nothing is yet known about what the OCR reports when it fails.
+- Find out whether an `sk_live_` key is obtainable at all. It appears only in apiCEP's 401 hint; the dashboard issues `apicep_` tokens and nothing else, so it may be an enterprise tier — or, as the owner reads it, a leftover from a Stripe copy-paste. Worth one support question, and worth little more: the outage was ours, not the credential's.
 - Whether pending re-checks consume credits is still unanswered by apiCEP (asked 2026-08-17); direct-payment D7's cadence is priced as if they do.

@@ -10,10 +10,17 @@ The environment variable is **`APICEP_TOKEN`**, a Consta worker secret. Public g
 
 ## Auth, and the credential trap
 
-`Authorization: Bearer <token>`, two accepted kinds:
+`Authorization: Bearer <token>`, two accepted kinds. They are apiCEP's own, stated in its 401 body — worth quoting, because `sk_live_` is also Stripe's convention and reads like a copy-paste error otherwise:
 
-- **`sk_live_…`** — permanent API key. The only kind fit for a deployed Worker.
-- **`apicep_…`** — user token. **Dies within the hour** (observed four times: 2026-08-17 twice, 2026-08-18 twice). Usable for a manual test fired immediately; never for anything deployed.
+```json
+{"error": "Missing or invalid Authorization header",
+ "hint": "Use Bearer sk_live_... for API keys or Bearer apicep_... for user tokens"}
+```
+
+- **`sk_live_…`** — API key. The only kind fit for a deployed Worker.
+- **`apicep_…`** — user token. Authenticates perfectly well, which is what makes it deceptive: it **expires within about an hour**. Observed three times — twice on 2026-08-17, and once on 2026-08-18 (validations succeeded at 18:20, 18:26 and 18:27; the sweep hit `PROVIDER_ERROR` by 19:40; it worked again immediately after the secret was refreshed). Usable for a manual test fired immediately; never for anything deployed.
+
+Having a paid plan does not by itself produce an `sk_live_` key: the token copied from the signed-in dashboard is a user token, and the API key is a separate artifact to issue. A key that works today and stops within the hour is the symptom.
 
 Until an `sk_live_` key is bought, every deployed validation decays inside the hour and the SPEI channel silently stops working — `PROVIDER_ERROR`, which Consta maps to retryable, so payments sit in `validating` rather than failing loudly.
 

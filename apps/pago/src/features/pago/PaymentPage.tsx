@@ -110,10 +110,12 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
   const [tooBig, setTooBig] = useState(false);
   return (
     <div className="space-y-4">
-      <Field label="Captura de tu transferencia">
+      {/* PDF too: several banks hand out the comprobante as one, and
+          apiCEP reads it (D12) */}
+      <Field label="Captura o comprobante de tu transferencia">
         <Input
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           className="pt-2.5"
           onChange={(e) => {
             const picked = e.target.files?.[0] ?? null;
@@ -125,7 +127,7 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
       {tooBig && (
         <Alert variant="warning" layout="icon">
           <TriangleAlert aria-hidden />
-          La imagen pesa más de 1 MB. Toma la captura de nuevo o usa los datos de tu transferencia.
+          El archivo pesa más de 1 MB. Toma la captura de nuevo o usa los datos de tu transferencia.
         </Alert>
       )}
       <Button size="critical" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>

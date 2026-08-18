@@ -9,10 +9,46 @@ import type { Bindings } from "../env";
 export const PROOF_MAX_BYTES = 1_000_000; /* apiCEP's own limit */
 export const PROOF_URL_TTL_MINUTES = 15;
 
+/* What the provider can actually read (apiCEP docs, checked 2026-08-18):
+   JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC. PDF matters — several
+   Mexican banks hand out the comprobante as one, and rejecting it sent
+   those customers to the manual door for no reason (D12). */
+export function isAcceptedProofType(contentType: string): boolean {
+  return contentType.startsWith("image/") || contentType === "application/pdf";
+}
+
+/* Uploads are capped per link per hour (D13). Counting them means being
+   able to find an hour's objects without walking every proof the link
+   ever had, so the hour rides in the key. base36 keeps it short and
+   still sorts. */
+const HOUR_MS = 3_600_000;
+export const UPLOAD_HOURLY_BUDGET = 20;
+
+function hourBucket(ms: number): string {
+  return Math.floor(ms / HOUR_MS).toString(36);
+}
+
 /* Keys are namespaced by link id, so a pay request can only reference
    proofs uploaded through its own link — no cross-link smuggling. */
-export function makeProofKey(linkId: string): string {
-  return `${linkId}/${crypto.randomUUID()}`;
+export function makeProofKey(linkId: string, now: Date): string {
+  return `${linkId}/${hourBucket(now.getTime())}-${crypto.randomUUID()}`;
+}
+
+/* A rolling hour spans at most two buckets, and each is bounded by the
+   budget itself — so this stays two small listings, never a scan of the
+   15 days of proofs the lifecycle rule keeps. */
+export async function uploadsInLastHour(
+  proofs: R2Bucket,
+  linkId: string,
+  now: Date,
+): Promise<number> {
+  const since = now.getTime() - HOUR_MS;
+  let count = 0;
+  for (const bucket of new Set([hourBucket(now.getTime()), hourBucket(since)])) {
+    const listed = await proofs.list({ prefix: `${linkId}/${bucket}-` });
+    count += listed.objects.filter((o) => o.uploaded.getTime() >= since).length;
+  }
+  return count;
 }
 
 export function proofBelongsToLink(proofKey: string, linkId: string): boolean {

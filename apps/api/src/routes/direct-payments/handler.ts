@@ -11,9 +11,12 @@ import {
   speiFeeCents,
 } from "../../direct-payments/validation";
 import {
+  isAcceptedProofType,
   makeProofKey,
   PROOF_MAX_BYTES,
   proofBelongsToLink,
+  UPLOAD_HOURLY_BUDGET,
+  uploadsInLastHour,
   verifyProofUrl,
 } from "../../direct-payments/proofs";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
@@ -224,9 +227,16 @@ export async function uploadProof(c: Ctx, token: string) {
   const { db, link } = ctx;
   const now = new Date();
 
-  /* The upload shares the pay budget: an upload only exists to feed a
-     submission, and R2 must not become free anonymous hosting */
+  /* Two budgets, because an upload can outrun a submission (D13). The
+     pay budget closes the expensive door: no point storing a proof that
+     has no provider call left to feed. The upload budget closes the
+     cheap one — uploading never creates a `direct_payments` row, so
+     without its own count a leaked link is free anonymous hosting under
+     our domain for as long as the token lives. */
   if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
+    return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
+  }
+  if ((await uploadsInLastHour(c.env.PROOFS, link.id, now)) >= UPLOAD_HOURLY_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
 
@@ -238,11 +248,11 @@ export async function uploadProof(c: Ctx, token: string) {
   if (file.size > PROOF_MAX_BYTES) {
     return c.json({ success: false, error: { code: "PROOF_TOO_LARGE" } }, 413);
   }
-  if (!file.type.startsWith("image/")) {
-    return c.json({ success: false, error: { code: "PROOF_NOT_IMAGE" } }, 415);
+  if (!isAcceptedProofType(file.type)) {
+    return c.json({ success: false, error: { code: "PROOF_UNSUPPORTED_TYPE" } }, 415);
   }
 
-  const proofId = makeProofKey(link.id);
+  const proofId = makeProofKey(link.id, now);
   /* Buffered on purpose: R2 needs a known length, and the 1 MB cap
      makes the buffer bounded */
   await c.env.PROOFS.put(proofId, await file.arrayBuffer(), {

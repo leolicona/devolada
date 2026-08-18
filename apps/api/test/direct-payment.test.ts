@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { charges, directPayments, ledgerEntries, paymentLinks } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { sweepReconnections } from "../src/reconnection/queue";
-import { signedProofUrl } from "../src/direct-payments/proofs";
+import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
 import type { Bindings } from "../src/env";
 import { app, seedIsp, sessionCookieHeader } from "./helpers";
 
@@ -22,15 +22,26 @@ const CONSTA_ORIGIN = "https://consta.test";
    D1 stays real — the "no database mocks" rule is about D1; the blob
    store is an implementation detail behind three calls. */
 function fakeProofs(): R2Bucket {
-  const store = new Map<string, { data: unknown; contentType?: string }>();
+  const store = new Map<string, { data: unknown; contentType?: string; uploaded: Date }>();
   return {
     async put(key: string, value: unknown, opts?: R2PutOptions) {
       const meta = (opts?.httpMetadata as { contentType?: string } | undefined)?.contentType;
-      store.set(key, { data: value, contentType: meta });
+      store.set(key, { data: value, contentType: meta, uploaded: new Date() });
       return {} as R2Object;
     },
     async head(key: string) {
       return store.has(key) ? ({} as R2Object) : null;
+    },
+    /* Enough of the real shape for the upload budget: prefix filter and
+       an `uploaded` date per object (D13) */
+    async list(opts?: R2ListOptions) {
+      const prefix = opts?.prefix ?? "";
+      return {
+        objects: [...store.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, o]) => ({ key, uploaded: o.uploaded }) as R2Object),
+        truncated: false,
+      } as unknown as R2Objects;
     },
     async get(key: string) {
       const object = store.get(key);
@@ -315,7 +326,7 @@ describe("US-D02: submitting proof", () => {
     expect(row.proofKey).toBe(upload.proofId);
   });
 
-  it("rejects oversized and non-image proofs (D12)", async () => {
+  it("rejects oversized and unreadable proofs (D12)", async () => {
     await seedLinkedIsp();
     const big = new FormData();
     big.append("file", new File([new Uint8Array(1_000_001)], "cep.png", { type: "image/png" }));
@@ -326,14 +337,39 @@ describe("US-D02: submitting proof", () => {
     );
     expect(tooBig.status).toBe(413);
 
-    const pdf = new FormData();
-    pdf.append("file", new File([new Uint8Array(10)], "cep.pdf", { type: "application/pdf" }));
-    const notImage = await (await app()).request(
+    /* Not "not an image": the door is what the provider can read, and a
+       zip is not it */
+    const zip = new FormData();
+    zip.append("file", new File([new Uint8Array(10)], "cep.zip", { type: "application/zip" }));
+    const unsupported = await (await app()).request(
       "/direct-payments/links/tok2345abcdefgh2/proof",
-      { method: "POST", body: pdf },
+      { method: "POST", body: zip },
       testEnv,
     );
-    expect(notImage.status).toBe(415);
+    expect(unsupported.status).toBe(415);
+    expect((await unsupported.json()).error.code).toBe("PROOF_UNSUPPORTED_TYPE");
+  });
+
+  it("accepts a PDF comprobante — apiCEP reads them and banks issue them (D12)", async () => {
+    const { link } = await seedLinkedIsp();
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array(64)], "cep.pdf", { type: "application/pdf" }));
+    const up = await (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/proof",
+      { method: "POST", body: form },
+      testEnv,
+    );
+    expect(up.status).toBe(200);
+    const { data } = await up.json();
+    expect(data.proofId.startsWith(`${link.id}/`)).toBe(true);
+
+    /* And it survives the whole way: the pay path must not re-filter on
+       image types and strand a proof it already accepted */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const res = await payTransfer("tok2345abcdefgh2", { proofId: data.proofId });
+    expect(res.status).toBe(201);
   });
 
   it("scenario 22: the sixth submission in an hour → 429, no provider call", async () => {
@@ -355,7 +391,7 @@ describe("US-D02: submitting proof", () => {
     const body = await res.json();
     expect(body.error.code).toBe("TOO_MANY_ATTEMPTS");
 
-    /* the proof upload shares the budget (D13) */
+    /* an exhausted pay budget also closes the upload door (D13) */
     const form = new FormData();
     form.append("file", new File([new Uint8Array(10)], "cep.png", { type: "image/png" }));
     const up = await (await app()).request(
@@ -364,6 +400,31 @@ describe("US-D02: submitting proof", () => {
       testEnv,
     );
     expect(up.status).toBe(429);
+  });
+
+  it("D13: uploads have their own hourly cap, with no submission behind them", async () => {
+    await seedLinkedIsp();
+    const upload = async () => {
+      const form = new FormData();
+      form.append("file", new File([new Uint8Array(10)], "cep.png", { type: "image/png" }));
+      return (await app()).request(
+        "/direct-payments/links/tok2345abcdefgh2/proof",
+        { method: "POST", body: form },
+        testEnv,
+      );
+    };
+
+    /* Never submitting is the whole point: the pay budget counts
+       `direct_payments` rows, and an upload creates none — so before
+       this cap existed, a leaked link could fill R2 forever. */
+    for (let i = 0; i < UPLOAD_HOURLY_BUDGET; i++) {
+      expect((await upload()).status).toBe(200);
+    }
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+
+    const overBudget = await upload();
+    expect(overBudget.status).toBe(429);
+    expect((await overBudget.json()).error.code).toBe("TOO_MANY_ATTEMPTS");
   });
 
   it("NOTHING_DUE when the customer owes nothing at submission", async () => {

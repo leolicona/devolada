@@ -151,7 +151,11 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     renderPage();
 
     const file = new File([new Uint8Array(100)], "cep.png", { type: "image/png" });
-    await userEvent.upload(await screen.findByLabelText(/captura de tu transferencia/i), file);
+    const picker = await screen.findByLabelText(/captura o comprobante/i);
+    /* D12: the picker has to offer PDFs, or the banks that issue one
+       never reach the upload at all */
+    expect(picker).toHaveAttribute("accept", "image/*,application/pdf");
+    await userEvent.upload(picker, file);
     await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
 
     await waitFor(() => expect(paid).toHaveLength(1));

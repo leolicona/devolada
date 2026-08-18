@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, asc, eq, gt, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { charges, directPayments, isps, paymentLinks } from "../../db/schema";
@@ -16,6 +16,7 @@ import {
   proofBelongsToLink,
   verifyProofUrl,
 } from "../../direct-payments/proofs";
+import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -356,3 +357,82 @@ export async function listLinks(c: Ctx, cursor?: string) {
     },
   });
 }
+
+/* What the customer reads when the ISP shares their link (US-D07 D3).
+   Here, not in the admin, for the same reason the receipt's text lives
+   in the API (receipt spec D2): the words reach the customer the same
+   way whoever sends them. */
+const shareText = (url: string) =>
+  `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
+
+/* GET /direct-payments/links/search?q=XYZ — ISP session (US-D07).
+   Searches WispHub and ensures links exist for the results. */
+export async function searchLinks(c: Ctx, q: string) {
+  const actor = c.get("actor");
+  if (actor.type !== "isp") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const [isp] = await db.select().from(isps).where(eq(isps.id, actor.id));
+  if (!isp?.wisphubApiKey) {
+    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
+  }
+
+  let customers;
+  try {
+    customers = await new WispHub(isp.wisphubApiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
+  } catch (e) {
+    return wisphubFailure(c, e);
+  }
+
+  if (customers.length) {
+    await db
+      .insert(paymentLinks)
+      .values(
+        customers.map((customer) => ({
+          ispId: isp.id,
+          token: makeLinkToken(),
+          wisphubCustomerId: String(customer.wisphubId),
+          customerUsuario: customer.usuario,
+        })),
+      )
+      /* Existing links keep their token: the link is permanent (D1) */
+      .onConflictDoNothing();
+  }
+
+  const customerIds = customers.map((c) => String(c.wisphubId));
+  let links: { wisphubCustomerId: string; token: string }[] = [];
+  if (customerIds.length) {
+    links = await db
+      .select({ wisphubCustomerId: paymentLinks.wisphubCustomerId, token: paymentLinks.token })
+      .from(paymentLinks)
+      .where(and(eq(paymentLinks.ispId, isp.id), inArray(paymentLinks.wisphubCustomerId, customerIds)));
+  }
+  
+  const linkMap = new Map(links.map((l) => [l.wisphubCustomerId, l.token]));
+
+  const results = customers.flatMap((customer) => {
+    const token = linkMap.get(String(customer.wisphubId));
+    /* No token means the insert above skipped this customer; a link to
+       `/p/undefined` is worse than one row missing from the results. */
+    if (!token) return [];
+    const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
+    return [
+      {
+        wisphubId: customer.wisphubId,
+        usuario: customer.usuario,
+        name: customer.name,
+        phone: customer.phone,
+        url,
+        /* The API owns the message and the number (receipt spec D2, D3).
+           `toWhatsAppPhone` is what puts Mexico's 52 in front and refuses
+           a number it cannot read — without it a plain 10-digit phone
+           becomes wa.me/55…, which is Brazil, not the customer. */
+        waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
+      },
+    ];
+  });
+
+  return c.json({ success: true, data: { results } });
+}
+

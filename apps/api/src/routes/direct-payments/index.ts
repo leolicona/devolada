@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireSession } from "../../auth/middleware";
-import { linksListQuery, payRequest } from "./schema";
+import { linksListQuery, linksSearchQuery, payRequest } from "./schema";
 import {
   getDirectPaymentStatus,
   getLinkStatus,
   listLinks,
+  searchLinks,
   serveProof,
   submitPayment,
   uploadProof,
@@ -20,6 +21,10 @@ export const directPaymentsRoute = new Hono<{ Bindings: Bindings; Variables: Var
 /* Static /links first: it must win over /links/:token */
 directPaymentsRoute.get("/links", requireSession, zValidator("query", linksListQuery), (c) => {
   return listLinks(c, c.req.valid("query").cursor);
+});
+
+directPaymentsRoute.get("/links/search", requireSession, zValidator("query", linksSearchQuery), (c) => {
+  return searchLinks(c, c.req.valid("query").q);
 });
 
 directPaymentsRoute.get("/links/:token", (c) => {

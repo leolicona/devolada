@@ -92,6 +92,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D04** — As an end customer, if Banxico hasn't generated the CEP yet, the system keeps checking and I see "verifying" — never a false rejection.
 - **US-D05** — As an ISP, I configure my CLABE, beneficiary name, and SPEI service fee from settings; payment links work automatically for all my customers.
 - **US-D06** — As an ISP, I see direct SPEI payments in my charge feed alongside store charges, clearly distinguished.
+- **US-D07** — As an ISP, I can search for a customer and share their permanent SPEI payment link via WhatsApp directly from the dashboard.
 - **US-D08** — As an end customer, I get back to my payment page next month without asking my ISP for the link again.
 
 ### Polish & reliability (P)
@@ -222,6 +223,7 @@ Owner's decisions:
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05 | in development |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
+| [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
 
 ## Cross-cutting layers

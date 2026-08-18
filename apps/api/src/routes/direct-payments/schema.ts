@@ -90,10 +90,33 @@ export const linksListResponse = z.object({
   nextCursor: z.string().nullable(),
 });
 
+/* GET /direct-payments/links/search — ISP session (US-D07) */
+export const linksSearchQuery = z.object({
+  q: z.string().trim().min(2),
+});
+
+export const linksSearchResponse = z.object({
+  results: z.array(
+    z.object({
+      wisphubId: z.number(),
+      usuario: z.string(),
+      name: z.string(),
+      phone: z.string().nullable(),
+      url: z.string(),
+      /* Ready to open (D3): the API owns the message and the country
+         code, exactly like the receipt's wa.me link. Falls back to
+         WhatsApp's contact picker when the stored phone is unreadable —
+         better than opening a stranger's chat (receipt spec D3). */
+      waLink: z.string(),
+    }),
+  ),
+});
+
 export type LinkStatusResponse = z.infer<typeof linkStatusResponse>;
 export type PayRequest = z.infer<typeof payRequest>;
 export type PayResponse = z.infer<typeof payResponse>;
 export type DirectPaymentStatusResponse = z.infer<typeof directPaymentStatusResponse>;
 export type ProofUploadResponse = z.infer<typeof proofUploadResponse>;
 export type LinksListResponse = z.infer<typeof linksListResponse>;
+export type LinksSearchResponse = z.infer<typeof linksSearchResponse>;
 export type PublicPaymentError = z.infer<typeof publicPaymentError>;

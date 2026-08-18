@@ -5,6 +5,21 @@ import { decimalToCents } from "./money";
 
 const DEFAULT_BASE_URL = "https://api.wisphub.net/api";
 
+/* Deadlines (provider-latency spec D1). Measured 2026-08-18 against the
+   live demo tenant: healthy calls answer in 0.4–0.6s, and about one call
+   in eight stalls and never recovers (observed at 8s, 30s and 60s
+   cutoffs). So the per-call ceiling is ten times the healthy worst case
+   — it cuts off nothing real — and waiting past it buys nothing.
+   The budget is the second ceiling: one operation makes several calls,
+   and five separate 5s ceilings is a 25s wait on the screen the user is
+   actually looking at. Per instance, and every instance is built per
+   operation — including inside both sweep loops, which construct one per
+   charge and per payment, so later rows keep their own budget. */
+export const CALL_TIMEOUT_MS = 5_000;
+export const OPERATION_BUDGET_MS = 12_000;
+
+export type WispHubLimits = { callMs: number; operationMs: number };
+
 export class WispHubError extends Error {
   constructor(
     public code: "WISPHUB_UNAVAILABLE" | "WISPHUB_AUTH_FAILED",
@@ -66,23 +81,51 @@ type WispHubListItem = {
 };
 
 export class WispHub {
+  private readonly limits: WispHubLimits;
+  /* D1: spent when this instance's operation runs out of time. Set at
+     construction, so the clock starts when the operation does. */
+  private readonly deadlineAt: number;
+
   constructor(
     private apiKey: string,
     private baseUrl: string = DEFAULT_BASE_URL,
-  ) {}
+    limits: Partial<WispHubLimits> = {},
+  ) {
+    this.limits = {
+      callMs: limits.callMs ?? CALL_TIMEOUT_MS,
+      operationMs: limits.operationMs ?? OPERATION_BUDGET_MS,
+    };
+    this.deadlineAt = Date.now() + this.limits.operationMs;
+  }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    /* D1: a spent budget fails the call without opening a connection —
+       there is no point starting what there is no time to finish. */
+    const remaining = this.deadlineAt - Date.now();
+    if (remaining <= 0) {
+      throw new WispHubError("WISPHUB_UNAVAILABLE", "operation budget spent");
+    }
+    const timeoutMs = Math.min(this.limits.callMs, remaining);
+
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
         ...init,
+        signal: AbortSignal.timeout(timeoutMs),
         headers: {
           Authorization: `Api-Key ${this.apiKey}`,
           ...(init?.body ? { "Content-Type": "application/json" } : {}),
         },
       });
     } catch (e) {
-      throw new WispHubError("WISPHUB_UNAVAILABLE", `network error: ${String(e)}`);
+      /* D6: a deadline is an outage, not a new state. The distinction
+         lives in the log line; the wire keeps one code. */
+      const name = (e as { name?: string })?.name;
+      const detail =
+        name === "TimeoutError" || name === "AbortError"
+          ? `timed out after ${timeoutMs}ms`
+          : `network error: ${String(e)}`;
+      throw new WispHubError("WISPHUB_UNAVAILABLE", detail);
     }
     /* 401/403 means WispHub rejected the key: a setup problem, not an outage.
        Note: WispHub sends the same generic 403 for "no permission" (spike). */
@@ -90,7 +133,14 @@ export class WispHub {
       throw new WispHubError("WISPHUB_AUTH_FAILED", `status ${res.status}`, res.status);
     }
     if (!res.ok) throw new WispHubError("WISPHUB_UNAVAILABLE", `status ${res.status}`, res.status);
-    return (await res.json()) as T;
+    /* The deadline covers the body too: a provider that answers headers
+       and then stalls mid-stream aborts here, and must surface as the
+       same outage rather than an unmapped throw. */
+    try {
+      return (await res.json()) as T;
+    } catch (e) {
+      throw new WispHubError("WISPHUB_UNAVAILABLE", `body read failed: ${String(e)}`);
+    }
   }
 
   private get<T>(path: string): Promise<T> {

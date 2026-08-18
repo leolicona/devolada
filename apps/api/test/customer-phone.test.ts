@@ -56,14 +56,19 @@ function mockPendingInvoices(
     .reply(...json({ next: null, count: results.length, results }));
 }
 
-/* The happy reconnection, same shape as charge-record's */
-function mockReconnection(telefono = "") {
+/* The happy reconnection, same shape as charge-record's.
+   `paymentMethodCached`: after the first charge of a test the cash
+   payment-method id is held for the tenant (provider-latency spec D5),
+   so later charges make no `formas-de-pago` call to mock. */
+function mockReconnection(telefono = "", paymentMethodCached = false) {
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
-  wh()
-    .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
-    .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
+  if (!paymentMethodCached) {
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
+      .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
+  }
   wh()
     .intercept({ method: "POST", path: "/api/facturas/42/registrar-pago/" })
     .reply(...json({ messages: ["Se agrego correctamente el pago"], task_id: "t-1" }));
@@ -88,10 +93,12 @@ const post = (body: unknown): RequestInit => ({
 });
 
 /* One full charge with WispHub mocked end to end */
-async function charge(body: Record<string, unknown>, telefono = "") {
+async function charge(body: Record<string, unknown>, telefono = "", paymentMethodCached = false) {
   mockCustomerLookup([wisphubCustomer(telefono)]);
+  /* Always fresh: the charge guard never reads the display cache
+     (provider-latency D3), which is what debt-truth D5 rests on. */
   mockPendingInvoices();
-  mockReconnection(telefono);
+  mockReconnection(telefono, paymentMethodCached);
   return (await app()).request("/charges", post({ usuario: "greyes@wifiplus", ...body }), env);
 }
 
@@ -138,12 +145,13 @@ describe("US-C07: the number is captured once and kept", () => {
         path: (p) => p.startsWith("/api/clientes/") && p.includes("nombre="),
       })
       .reply(...json({ count: 1, results: [wisphubCustomer()] }));
-    mockPendingInvoices();
+    /* No pending-list mock: the quote above just filled the display
+       cache for this tenant (provider-latency D3). */
     const search = await (await app()).request("/charges/customers?q=Janely", asStore, env);
     expect((await search.json()).data.customers[0].hasPhone).toBe(true);
 
     /* A second charge that submits nothing still carries the phone */
-    const res = await charge({});
+    const res = await charge({}, "", true);
     expect(res.status).toBe(201);
     const rows = await db.select().from(charges);
     expect(rows).toHaveLength(2);
@@ -154,7 +162,7 @@ describe("US-C07: the number is captured once and kept", () => {
     const { isp } = await seedChargeableStore();
     const db = drizzle(env.DB);
     await charge({ customerPhone: "5551234567" });
-    await charge({ customerPhone: "5559998877" });
+    await charge({ customerPhone: "5559998877" }, "", true);
 
     const contacts = await db.select().from(customerContacts);
     expect(contacts).toHaveLength(1);
@@ -165,7 +173,7 @@ describe("US-C07: the number is captured once and kept", () => {
     });
 
     /* the correction applies from the next charge on */
-    const res = await charge({});
+    const res = await charge({}, "", true);
     const rows = await db.select().from(charges);
     expect(res.status).toBe(201);
     expect(rows[2].customerPhone).toBe("5559998877");

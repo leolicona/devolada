@@ -44,9 +44,10 @@ function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
 
 /* D2/D3: WispHub's own answer is the test. The two failures stay apart —
    a bad key is the ISP's problem, an outage is nobody's. */
-async function testKey(apiKey: string): Promise<WispHubTestResponse> {
+async function testKey(apiKey: string, baseUrl?: string): Promise<WispHubTestResponse> {
   try {
-    const customers = await new WispHub(apiKey).searchCustomers("a");
+    /* provider-latency D7: the configured base, like every other path */
+    const customers = await new WispHub(apiKey, baseUrl).searchCustomers("a");
     return { ok: true, code: null, sampleCustomerCount: customers.length };
   } catch (e) {
     const code = e instanceof WispHubError ? e.code : "WISPHUB_UNAVAILABLE";
@@ -74,7 +75,9 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
   }
 
   /* D3: a new key is always re-tested, and the result is reported, not enforced */
-  const test = body.wisphubApiKey ? await testKey(body.wisphubApiKey) : null;
+  const test = body.wisphubApiKey
+    ? await testKey(body.wisphubApiKey, c.env.WISPHUB_BASE_URL)
+    : null;
 
   await ctx.db
     .update(isps)
@@ -123,5 +126,5 @@ export async function testWispHubKey(c: Ctx, apiKey?: string) {
     });
   }
   /* 200 either way: the test succeeded in telling us the answer (D2) */
-  return c.json({ success: true, data: await testKey(key) });
+  return c.json({ success: true, data: await testKey(key, c.env.WISPHUB_BASE_URL) });
 }

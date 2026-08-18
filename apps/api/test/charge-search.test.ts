@@ -83,8 +83,10 @@ describe("US-C01: the query type is detected, not selected", () => {
     const byName = await (await app()).request("/charges/customers?q=Janely", asStore, env);
     expect(byName.status).toBe(200);
 
+    /* No second pending-list mock: the tenant's list is cached for the
+       display paths (provider-latency spec D3), so the second search in
+       the same test reuses the first one's fetch. */
     mockWispHubList("usuario=greyes%40wifiplus");
-    mockPendingInvoices();
     const byUser = await (await app()).request(
       "/charges/customers?q=greyes@wifiplus",
       asStore,

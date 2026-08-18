@@ -1,4 +1,6 @@
 import { applyD1Migrations, env } from "cloudflare:test";
+import { beforeEach } from "vitest";
+import { resetProviderCaches } from "../src/wisphub/cache";
 
 /* Isolated storage gives every test a fresh D1; migrations run before each. */
 await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
@@ -14,3 +16,11 @@ if (env.WISPHUB_BASE_URL !== "https://api.wisphub.net/api") {
       "Check the binding in vitest.config.ts — .dev.vars must not win.",
   );
 }
+
+/* The provider caches (provider-latency spec D3, D5) are module state,
+   and `singleWorker` gives the whole suite one runtime — so without this
+   a cached pending list or payment-method id would cross test
+   boundaries, and a test that counts provider calls would pass or fail
+   depending on which file ran first. Same reason D1 gets isolated
+   storage: a test starts from empty or it is not a test. */
+beforeEach(() => resetProviderCaches());

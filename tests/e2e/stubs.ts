@@ -169,6 +169,12 @@ export const customers = {
       serviceStatus: "suspended",
       billingStatus: "due",
       monthlyFeeCents: 49900,
+      /* This customer has a number in WispHub (customer-phone US-C07),
+         like the unit fixtures' default. Missing here, it read as
+         `undefined` and the confirm screen offered the optional capture
+         field, which then took the first tab stop away from the charge
+         button and failed the keyboard walk. */
+      hasPhone: true,
     },
   ],
 };

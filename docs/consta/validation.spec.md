@@ -105,6 +105,33 @@ provider.
   budget. Anything calling this synchronously must expect ~15 s.
 - **Images can only be reached by URL** — no multipart, no base64 (docs
   2026-08-18). Accepted: JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC, 1 MB max.
+- **The OCR fails on real receipts, and it fails silently** (measured
+  2026-08-18, second round). A genuine, unspent Nubank comprobante — same
+  bank, same layout, same 1125×4449 export as the two the OCR read
+  perfectly — came back `invalid` with **no `cepDetails` at all**: no
+  tracking key, no amount, no `cepStatus`. Twice, deterministically. The
+  same transfer then **`valid` through the transfer door in 12.5 s**,
+  using the tracking key read off the image by hand. So the CEP existed
+  and was liquidated the whole time; the OCR simply could not read that
+  file. **One false negative in three real receipts.** A customer who
+  really paid is told their transfer could not be verified — the failure
+  is indistinguishable, on the wire, from a transfer that never happened.
+  The transfer door has not produced a false negative yet (3 for 3).
+- **Editing a receipt does not work, because the verdict is not in the
+  image.** A comprobante was forged by changing one character of the
+  clave de rastreo (`…CDB`**`F`**`MU…` → `…CDB`**`E`**`MU…`), leaving the
+  folio, reference, date, amount and banks untouched. apiCEP answered
+  with **Banxico's real key** — the `F` — plus the true amount and
+  `cepStatus: LIQUIDADO`. It resolves the CEP from the record, not from
+  the pixels, and returns what Banxico holds. Integrators should read the
+  returned `cep` as the truth and ignore what the receipt claims; ours
+  does (direct-payment D11).
+- **An unreadable image is an error, not a verdict.** A screenshot with
+  no receipt in it (a dark UI fragment) does not come back
+  `invalid` — apiCEP *errors*, which maps to `PROVIDER_ERROR` per D3 and
+  writes no `validations` row. Integrators that treat provider errors as
+  retryable will retry an image that can never be read; see the open
+  question in direct-payment's DoD.
 - **The beneficiary never comes from the image.** Nu prints the destination
   CLABE masked (`••••8274`), so apiCEP matches the `beneficiary` the caller
   sends against Banxico's CEP record, not against the receipt. No amount of

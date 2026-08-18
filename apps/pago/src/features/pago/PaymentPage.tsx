@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/api";
+import { forgetLink, rememberLink } from "@/links";
 
 /* The customer's payment page (direct-payment spec D9, D10): es-MX,
    "pago" never "cobro". Four flows — loading, instructions, verifying,
@@ -144,6 +145,22 @@ export function PaymentPage({ token }: { token: string }) {
     queryFn: () => api<LinkStatusResponse>(`/direct-payments/links/${token}`),
     retry: false,
   });
+
+  /* US-D08 D2: this device keeps the link it was handed, so the customer
+     can come back next month without asking the ISP again. Nothing is
+     announced — nothing was asked of them. */
+  const linkData = link.data;
+  useEffect(() => {
+    if (linkData) rememberLink(token, linkData.customerName ?? linkData.ispName);
+  }, [linkData, token]);
+
+  /* A link the ISP removed is dropped rather than offered forever. Only
+     on 404: a network failure or a WispHub outage must not erase the way
+     back into an account that still exists. */
+  const linkError = link.error;
+  useEffect(() => {
+    if (linkError?.status === 404) forgetLink(token);
+  }, [linkError, token]);
 
   /* US-D03/US-D04: poll while the verdict or the reconnection is open */
   const poll = useQuery<DirectPaymentStatusResponse, ApiError>({

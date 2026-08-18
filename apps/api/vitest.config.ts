@@ -18,7 +18,18 @@ export default defineWorkersConfig(async () => {
           singleWorker: true,
           wrangler: { configPath: "./wrangler.jsonc" },
           miniflare: {
-            bindings: { TEST_MIGRATIONS: migrations },
+            bindings: {
+              TEST_MIGRATIONS: migrations,
+              /* Pinned, not defaulted: `wrangler.configPath` above also
+                 loads .dev.vars, and the queue and direct-payment paths
+                 pass this straight to the adapter. A developer pointing
+                 it at a local WispHub clone would send their provider
+                 calls there instead of to the interceptor, failing the
+                 suite on their machine alone. The tests mock this
+                 origin. (Consta's base is passed per-test, not from the
+                 environment, so it needs no pin.) */
+              WISPHUB_BASE_URL: "https://api.wisphub.net/api",
+            },
           },
         },
       },

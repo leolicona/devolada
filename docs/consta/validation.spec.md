@@ -73,6 +73,10 @@ provider.
 
 ## Provider notes (measured live, 2026-08-17)
 
+The full measured contract — request shapes, response fields, auth, limits
+and the traps — lives in `docs/integrations/apicep.md`. What follows are the
+findings this spec's decisions rest on.
+
 - **Two credential types.** apiCEP takes `Bearer sk_live_…` (permanent API
   keys) or `Bearer apicep_…` (user tokens). User tokens are short-lived:
   ours died within the hour, twice — usable for a manual test fired

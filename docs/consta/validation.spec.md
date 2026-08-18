@@ -79,7 +79,10 @@ findings this spec's decisions rest on.
 
 - **Two credential types.** apiCEP takes `Bearer sk_live_…` (API keys) or
   `Bearer apicep_…` (user tokens, what the dashboard issues).
-  **Correction, 2026-08-18: user tokens are not short-lived.** This note
+  **Correction, 2026-08-18: tokens never expire — but generating one
+  revokes the previous token** (confirmed by apiCEP support). So a
+  "refresh" is what kills the credential the deployed Worker holds; hold
+  one token and stop generating. This note
   previously said ours "died within the hour, twice"; they did not. Every
   dev deploy overwrites `APICEP_TOKEN` from the GitHub Actions environment
   secret (`deploy-dev.yml`), so a token set by hand lasts until the next

@@ -20,13 +20,23 @@ The environment variable is **`APICEP_TOKEN`**, a Consta worker secret. Public g
 - **`sk_live_…`** — API key.
 - **`apicep_…`** — user token, what the dashboard's "Generar Token" issues.
 
-### `apicep_` tokens do not expire on their own — CI was overwriting them
+### Generating a token revokes the previous one
+
+Confirmed by apiCEP support, 2026-08-18, and it is the single most expensive fact on this page:
+
+> Nuestros API tokens no tienen fecha de caducidad… El token continuará funcionando con normalidad hasta que usted decida revocarlo **o generar uno nuevo**.
+
+So **generating a token is a destructive act**, not a safe precaution. The instinct when something looks broken — "let me make a fresh one" — is what breaks it, because it kills the credential the deployed Worker is holding. Tokens have no expiry; a token that stops working was superseded by one you generated later.
+
+Rule: hold exactly one token, put that same value in the GitHub environment secret *and* on the Worker, and do not open the generator again.
+
+### They also do not expire on their own — CI was overwriting them
 
 Recorded because we believed the opposite for two days, and the wrong belief was expensive.
 
 The symptom: a token set by hand works, then every validation answers `PROVIDER_ERROR` an hour or so later, and setting it again fixes it. That reads exactly like a short-lived credential, and it was written up as one (twice on 2026-08-17, again on 2026-08-18).
 
-It is not. **Every dev deploy runs `wrangler secret put APICEP_TOKEN --env dev` from the GitHub Actions environment secret** (`deploy-dev.yml`, "Sync Consta worker secrets"). A hand-set token therefore survives only until the next merge to `main`, and on a busy day that is about an hour. Traced 2026-08-18: validations succeeded at 18:20–18:27, a deploy landed at 18:39, the next attempt failed; set by hand again, worked 20:09–20:13; a deploy landed at 20:53, and everything after 21:04 failed. Every failure follows a deploy; every recovery follows a manual `secret put`. Meanwhile the provider's dashboard listed six tokens — two of them a day old — all still `Activo`.
+It is not — and the two facts compound. A token generated later had already killed the one the GitHub secret held, and then: **Every dev deploy runs `wrangler secret put APICEP_TOKEN --env dev` from the GitHub Actions environment secret** (`deploy-dev.yml`, "Sync Consta worker secrets"). A hand-set token therefore survives only until the next merge to `main`, and on a busy day that is about an hour. Traced 2026-08-18: validations succeeded at 18:20–18:27, a deploy landed at 18:39, the next attempt failed; set by hand again, worked 20:09–20:13; a deploy landed at 20:53, and everything after 21:04 failed. Every failure follows a deploy; every recovery follows a manual `secret put`. Meanwhile the provider's dashboard listed six tokens — two of them a day old — all still `Activo`.
 
 So: **the GitHub environment secret is the source of truth.** `wrangler secret put` buys working software until the next merge and no longer. Changing the token means changing it there.
 

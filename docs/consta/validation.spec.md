@@ -90,6 +90,26 @@ provider.
   measured) — a made-up transfer is a verdict, not an error.
 - No pre-registration of beneficiary accounts exists; the beneficiary travels
   inline in every request (docs confirmed).
+- **The receipt door works on real receipts** (measured 2026-08-18, the first
+  time OCR mode ran against the real provider — scenario 4 had only ever been
+  fetch-mocked). Two Nubank comprobantes (PNG, ~515 kB, 1125×4449) went through
+  the whole chain on dev. apiCEP fetched the image from Devolada's own
+  HMAC-signed URL without complaint — that fetcher reaching a short-lived
+  signed URL was the open unknown — and read every field the domain needs: the
+  amount to the cent, the sender bank (`NUBANK`), the operation date, and the
+  28-character clave de rastreo **exactly**, including across the two-line wrap
+  Nu's layout puts in the middle of it (`NU3AGIFAMA9D9CNQV487MGAVDE2C`,
+  compared against the receipt by hand).
+- **OCR latency: 13.5–14.6 s** for `/validate` (upload ~1.2 s on top). Their
+  marketing says "less than 10 seconds"; it is not, but it fits a Worker's
+  budget. Anything calling this synchronously must expect ~15 s.
+- **Images can only be reached by URL** — no multipart, no base64 (docs
+  2026-08-18). Accepted: JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC, 1 MB max.
+- **The beneficiary never comes from the image.** Nu prints the destination
+  CLABE masked (`••••8274`), so apiCEP matches the `beneficiary` the caller
+  sends against Banxico's CEP record, not against the receipt. No amount of
+  OCR — ours or anyone's — can recover a full beneficiary CLABE from these
+  screenshots.
 
 ## Contract
 

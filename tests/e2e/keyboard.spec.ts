@@ -163,6 +163,7 @@ test.describe("US-P04: the admin's confirm flow is walkable by keyboard (TD-010)
       /^Cobros$/,
       /^Tiendas$/,
       /^Entregas/ /* carries the pending-count badge ("Entregas1") */,
+      /^Enlaces SPEI$/ /* US-D07 added it between Entregas and Configuración */,
       /^Configuración$/,
       /Cerrar sesión/,
       /Confirmar entrega/,

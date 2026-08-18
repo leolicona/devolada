@@ -17,6 +17,13 @@ export default defineWorkersConfig(async () => {
               /* Test-only values; real ones are worker secrets set by CI */
               APICEP_TOKEN: "test-apicep-token",
               CONSTA_ADMIN_TOKEN: "test-admin-token",
+              /* Pinned, not defaulted: `wrangler.configPath` above also
+                 loads .dev.vars, so a developer running the local apiCEP
+                 sandbox (APICEP_BASE_URL=http://localhost:8789) would send
+                 every test's provider call there instead of to the
+                 interceptor, and the whole suite would fail on their
+                 machine only. The tests mock this origin. */
+              APICEP_BASE_URL: "https://api.apicep.cloud",
             },
           },
         },

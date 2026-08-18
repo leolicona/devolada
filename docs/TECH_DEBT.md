@@ -2,6 +2,12 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-015 — The customer's return trip survives one device only
+- Status: open · Origin: returning-customer-access.spec.md (D10), 2026-08-17
+- Phase 1 remembers the payment link in that device's `localStorage`, so the customer who keeps the same phone and never clears it comes back for free. Everyone else — new phone, cleared browser, a link opened in WhatsApp's in-app browser whose storage was evicted — still has to ask the ISP to send the link again. Phase 2 (a passkey bound to the payment link, D4–D8) is specified and rejected-alternatives are recorded, but not built.
+- Why it was reasonable: passkeys are an auth subsystem for an action taken twelve times a year, and the failure it fixes has never been measured here. Phase 1 is a few lines in one route and covers the common case, which is also what produces the evidence: if nobody ever loses access, phase 2 was never worth its complexity.
+- Payable when: support requests to re-send links become routine, **or** the WABA work opens this surface anyway (SPEC.md, owner decision 2026-08-17) — whichever comes first. Build it as specified: credentials against `payment_links`, its own `pago.*` rpID, discoverable credentials, and the in-app-browser guard verified on a real Android phone.
+
 ## TD-013 — The re-validation schedule is a global constant, not learned per bank
 - Status: open · Origin: direct-payment.spec.md (D7), owner decision 2026-08-17
 - D7's schedule (+2, +8, +20, +45 min, +2 h, +6 h) comes from published evidence (Banxico's ~30-minute CEP rule; apiCEP's "seconds normally, hours sometimes"), not from our own traffic, and it is the same for every receiving bank. The `direct_payments` log already records everything needed to do better: `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank.

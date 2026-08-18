@@ -17,10 +17,22 @@ The environment variable is **`APICEP_TOKEN`**, a Consta worker secret. Public g
  "hint": "Use Bearer sk_live_... for API keys or Bearer apicep_... for user tokens"}
 ```
 
-- **`sk_live_…`** — API key. The only kind fit for a deployed Worker.
-- **`apicep_…`** — user token. Authenticates perfectly well, which is what makes it deceptive: it **expires within about an hour**. Observed three times — twice on 2026-08-17, and once on 2026-08-18 (validations succeeded at 18:20, 18:26 and 18:27; the sweep hit `PROVIDER_ERROR` by 19:40; it worked again immediately after the secret was refreshed). Usable for a manual test fired immediately; never for anything deployed.
+- **`sk_live_…`** — API key.
+- **`apicep_…`** — user token, what the dashboard's "Generar Token" issues.
 
-Having a paid plan does not by itself produce an `sk_live_` key: the token copied from the signed-in dashboard is a user token, and the API key is a separate artifact to issue. A key that works today and stops within the hour is the symptom.
+### `apicep_` tokens do not expire on their own — CI was overwriting them
+
+Recorded because we believed the opposite for two days, and the wrong belief was expensive.
+
+The symptom: a token set by hand works, then every validation answers `PROVIDER_ERROR` an hour or so later, and setting it again fixes it. That reads exactly like a short-lived credential, and it was written up as one (twice on 2026-08-17, again on 2026-08-18).
+
+It is not. **Every dev deploy runs `wrangler secret put APICEP_TOKEN --env dev` from the GitHub Actions environment secret** (`deploy-dev.yml`, "Sync Consta worker secrets"). A hand-set token therefore survives only until the next merge to `main`, and on a busy day that is about an hour. Traced 2026-08-18: validations succeeded at 18:20–18:27, a deploy landed at 18:39, the next attempt failed; set by hand again, worked 20:09–20:13; a deploy landed at 20:53, and everything after 21:04 failed. Every failure follows a deploy; every recovery follows a manual `secret put`. Meanwhile the provider's dashboard listed six tokens — two of them a day old — all still `Activo`.
+
+So: **the GitHub environment secret is the source of truth.** `wrangler secret put` buys working software until the next merge and no longer. Changing the token means changing it there.
+
+An `sk_live_` API key is still the better credential for anything deployed — it is the kind meant for machines — but it would not have prevented any of this. The clobber is ours.
+
+**How to tell in ten seconds**, because our own logs will not say: `wrangler tail devolada-consta-dev --format json` and look for `provider error: apiCEP responded 401`. Devolada's API logs only `CONSTA_UNAVAILABLE`, dropping the provider's status code, so a bad credential and a provider outage are indistinguishable from the Devolada side. Worth fixing; until it is, Consta's tail is the diagnosis.
 
 Until an `sk_live_` key is bought, every deployed validation decays inside the hour and the SPEI channel silently stops working — `PROVIDER_ERROR`, which Consta maps to retryable, so payments sit in `validating` rather than failing loudly.
 

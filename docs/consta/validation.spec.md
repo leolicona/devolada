@@ -77,12 +77,17 @@ The full measured contract — request shapes, response fields, auth, limits
 and the traps — lives in `docs/integrations/apicep.md`. What follows are the
 findings this spec's decisions rest on.
 
-- **Two credential types.** apiCEP takes `Bearer sk_live_…` (permanent API
-  keys) or `Bearer apicep_…` (user tokens). User tokens are short-lived:
-  ours died within the hour, twice — usable for a manual test fired
-  immediately, never for the deployed Worker. `APICEP_TOKEN` must become an
-  `sk_live_` key once a plan is bought; until then the deployed `/validate`
-  will decay back to `PROVIDER_ERROR` when the current user token expires.
+- **Two credential types.** apiCEP takes `Bearer sk_live_…` (API keys) or
+  `Bearer apicep_…` (user tokens, what the dashboard issues).
+  **Correction, 2026-08-18: user tokens are not short-lived.** This note
+  previously said ours "died within the hour, twice"; they did not. Every
+  dev deploy overwrites `APICEP_TOKEN` from the GitHub Actions environment
+  secret (`deploy-dev.yml`), so a token set by hand lasts until the next
+  merge — which on a busy day is about an hour, and reads exactly like
+  expiry. Traced against the deploy log, and the provider's dashboard shows
+  day-old tokens still `Activo`. The source of truth is the environment
+  secret; `wrangler secret put` is a stopgap. Full contract and the
+  ten-second diagnosis in `docs/integrations/apicep.md`.
 - **A free Welcome plan exists** (50 requests / 30 days on signup at
   app.apicep.cloud) — enough for smoke checks without paying.
 - **Date tolerance.** The real validation claimed `2026-08-15`; the CEP came

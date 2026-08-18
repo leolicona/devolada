@@ -16,6 +16,8 @@ type ApiCepResponse = {
   validationId?: string;
   status?: string;
   error?: string;
+  /* OCR score 0.0–1.0 (D9), top-level — not under `validation` */
+  confidence?: number;
   validation?: {
     cepStatus?: string;
     cepPreviouslyValidated?: boolean | null;
@@ -88,6 +90,9 @@ export function apiCepProvider(env: { APICEP_TOKEN?: string; APICEP_BASE_URL?: s
         status: mapStatus(body),
         alreadyValidated: body.validation?.cepPreviouslyValidated === true,
         cepStatus: body.validation?.cepStatus ?? null,
+        /* Not `?? null` on a falsy check: 0 is a real score — the worst
+           one — and the reading this whole decision exists to catch */
+        confidence: typeof body.confidence === "number" ? body.confidence : null,
         cep: details
           ? {
               trackingKey: details.trackingKey ?? null,

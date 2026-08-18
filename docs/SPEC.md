@@ -84,6 +84,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V03** — As an integrator, a transfer whose CEP is not generated yet reads as "pending" — never as a false "invalid" — so I can retry later.
 - **US-V04** — As an integrator, a CEP that was already validated before comes flagged, so one proof of payment cannot be reused twice.
 - **US-V05** — As the operator, I issue and revoke API keys by hand, and every validation is logged under its key so the fixed fee per transaction can be derived later.
+- **US-V06** — As an integrator, a verdict tells me how well the receipt could be read, so "we could not read your image" and "this transfer does not exist" stop looking identical to the person who paid.
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).

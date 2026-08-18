@@ -10,7 +10,11 @@
      contains "BAD"  → invalid, cepStatus DEVUELTO
      contains "ERR"  → HTTP 503 (Consta must say PROVIDER_ERROR)
      anything else   → valid, LIQUIDADO, echoing the claimed data
-   The receipt door (imageUrl) always answers valid with fixed data. */
+   The receipt door (imageUrl) answers valid with fixed data, unless the
+   URL contains "blur" → the real failure measured 2026-08-18: a receipt
+   the OCR could not read comes back `invalid` with NO cepDetails, exactly
+   like a transfer that never happened. `confidence` is the only thing
+   telling them apart (D9), so the mock has to be able to produce it. */
 
 import { createServer } from "node:http";
 
@@ -31,6 +35,19 @@ function reply(body) {
   const claim = body.sender ?? {};
   const key = claim.trackingKey ?? "";
 
+  /* Receipt door, unreadable image: a verdict with nothing behind it */
+  if (String(body.imageUrl ?? "").includes("blur")) {
+    return {
+      code: 200,
+      json: {
+        validationId: crypto.randomUUID(),
+        status: "invalid",
+        confidence: 0.12,
+        validation: { banxicoConfirmed: false, cepStatus: null, cepPreviouslyValidated: null },
+      },
+    };
+  }
+
   if (key.includes("ERR")) return { code: 503, json: { error: "Service temporarily unavailable (mock)" } };
   if (key.includes("PEND"))
     return {
@@ -38,6 +55,7 @@ function reply(body) {
       json: {
         validationId: crypto.randomUUID(),
         status: "invalid",
+        confidence: 1,
         validation: { banxicoConfirmed: false, cepStatus: "EN PROCESO", cepPreviouslyValidated: null },
       },
     };
@@ -47,6 +65,7 @@ function reply(body) {
       json: {
         validationId: crypto.randomUUID(),
         status: "invalid",
+        confidence: 1,
         validation: { banxicoConfirmed: false, cepStatus: "DEVUELTO", cepPreviouslyValidated: null },
       },
     };
@@ -55,6 +74,8 @@ function reply(body) {
     json: {
       validationId: crypto.randomUUID(),
       status: "valid",
+      /* 1 in transfer mode: nothing was read (D9) */
+      confidence: 1,
       validation: {
         banxicoConfirmed: true,
         cepStatus: "LIQUIDADO",

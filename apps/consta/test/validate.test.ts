@@ -183,3 +183,58 @@ describe("API keys (D5)", () => {
     expect(after.status).toBe(401);
   });
 });
+
+describe("US-V06: the OCR's confidence rides the verdict (D9)", () => {
+  it("scenario 8: an unreadable receipt is `invalid` with a low score, not silence", async () => {
+    const { key } = await seedApiKey();
+    /* The 2026-08-18 failure, in the shape the provider actually
+       returned: a verdict with no cepDetails at all. Byte-for-byte what
+       a transfer that never happened looks like — except for the score. */
+    mockApiCep({
+      validationId: "prov-uuid-blur",
+      status: "invalid",
+      confidence: 0.12,
+      validation: { banxicoConfirmed: false, cepStatus: null, cepPreviouslyValidated: null },
+    });
+
+    const res = await postValidate(key, {
+      receiptUrl: "https://example.test/blurry.png",
+      beneficiary: { bank: "BANORTE", clabe: "072180001234567895" },
+    });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.status).toBe("invalid");
+    expect(data.confidence).toBe(0.12);
+    /* Consta reports and does not act: a low score is still `invalid`,
+       never a new verdict and never `pending` (D9) */
+    expect(data.cep).toBeUndefined();
+
+    const [row] = await db().select().from(validations);
+    expect(row.confidence).toBe(0.12);
+  });
+
+  it("a settled transfer carries its score, and the log keeps it", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep({ ...settledResponse, confidence: 1 });
+
+    const res = await postValidate(key, directRequest);
+    const { data } = await res.json();
+    expect(data.status).toBe("valid");
+    expect(data.confidence).toBe(1);
+
+    const [row] = await db().select().from(validations);
+    expect(row.confidence).toBe(1);
+  });
+
+  it("a provider that omits the score reports null, not a guess", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep(settledResponse);
+
+    const res = await postValidate(key, directRequest);
+    const { data } = await res.json();
+    expect(data.confidence).toBeNull();
+
+    const [row] = await db().select().from(validations);
+    expect(row.confidence).toBeNull();
+  });
+});

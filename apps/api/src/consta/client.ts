@@ -48,6 +48,13 @@ export type ConstaVerdict = {
   validationId: string;
   status: "valid" | "pending" | "invalid";
   alreadyValidated: boolean;
+  /* How well the receipt could be read, 0.0–1.0 (consta D9). Carried so
+     the contract is visible here, not yet consumed: acting on it means
+     telling the customer "no pudimos leer tu captura" instead of "no
+     pudimos verificar tu transferencia", which is a direct-payment copy
+     decision and needs a threshold nobody can pick until a real failed
+     OCR has been scored. */
+  confidence?: number | null;
   cep?: {
     trackingKey: string;
     amountCents: number;

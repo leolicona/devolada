@@ -55,6 +55,7 @@ validateRoute.post(
         transferDate: (input.mode === "transfer" ? input.date : verdict.cep?.date) ?? null,
         providerValidationId: verdict.providerValidationId,
         cepStatus: verdict.cepStatus,
+        confidence: verdict.confidence,
       })
       .returning({ id: validations.id });
 
@@ -64,6 +65,10 @@ validateRoute.post(
         validationId: row.id,
         status: verdict.status,
         alreadyValidated: verdict.alreadyValidated,
+        /* Always present, nullable (D9): an integrator deciding whether a
+           verdict is trustworthy should not have to distinguish "absent"
+           from "unreadable" */
+        confidence: verdict.confidence,
         ...(verdict.cep ? { cep: verdict.cep } : {}),
         ...(verdict.downloads ? { downloads: verdict.downloads } : {}),
       },

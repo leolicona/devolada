@@ -1,6 +1,6 @@
 ---
 status: in-development
-stories: [US-V01, US-V02, US-V03, US-V04, US-V05]
+stories: [US-V01, US-V02, US-V03, US-V04, US-V05, US-V06]
 domain: consta
 updated: 2026-08-17
 debt: []
@@ -59,6 +59,7 @@ spike.
   `{ success, data } | { success, error: { code } }`. v1 is server-to-server:
   no browser origin gets CORS. The Worker ships to `consta.dev.devoladapago.com`
   only; the prod env block and domain wait for the first external consumer.
+- **D9 — The OCR's confidence rides the verdict; we report it and never act on it (US-V06).** apiCEP returns a top-level `confidence` (0.0–1.0); it travels on every verdict as `confidence: number | null` and lands in the log. It exists because of a failure measured on 2026-08-18: a genuine receipt the OCR could not read came back `invalid` with no CEP data, which is byte-for-byte what a transfer that never happened returns — so the customer who really paid was told the same thing as someone inventing a payment. A score is the only thing in the response that separates them. Consta does not threshold it, for the same reason it does not block replays (D4): what counts as "too low to trust" depends on the integrator's domain — a raffle can shrug, a reconnection cannot. **Rejected**: mapping a low score to `pending` or a new verdict (it would put our guess about someone else's risk appetite into their control flow, and `pending` already means something precise — the CEP is not published yet). **Rejected**: keeping it out of the log (the threshold cannot be chosen without a distribution, and the log is the only place one accumulates). Note it is `1` in direct mode, where nothing is read — a score describes an image, so it is meaningless without one.
 
 ## Local sandbox
 
@@ -68,7 +69,10 @@ mock of `/validate-transfer` on port 8789 (`sandbox/apicep-mock.mjs`), and
 `APICEP_BASE_URL=http://localhost:8789` in `.dev.vars` points the adapter at
 it — D2 is what makes this a one-line switch. Scenarios ride the tracking
 key: `PEND` → pending, `DUP` → replay flag, `BAD` → invalid, `ERR` →
-provider error; anything else validates. Remove the override to hit the real
+provider error; anything else validates. On the receipt door the URL picks
+it instead: one containing `blur` returns the 2026-08-18 failure — `invalid`,
+no `cepDetails`, `confidence: 0.12` — so the unreadable case can be driven
+without spending a provider call (D9). Remove the override to hit the real
 provider.
 
 ## Provider notes (measured live, 2026-08-17)
@@ -168,11 +172,18 @@ Response:
 { success: true, data: {
     validationId, status: "valid" | "pending" | "invalid",
     alreadyValidated: boolean,
+    confidence: number | null,         // OCR score 0.0–1.0 (D9)
     cep?: { trackingKey, amountCents, date, senderBank, senderName,
             receiverBank, beneficiaryName, digitalSignature? },
     downloads?: { cepXml?, cepPdf? }   // provider URLs, expire in 15 days
 } }
 ```
+
+- `confidence` is always present and always nullable (D9): `null` when the
+  provider does not report one, `1` in transfer mode where no image is read.
+  It is reported, never acted on — a low score does not change `status`. The
+  case it exists for is an `invalid` with no `cep`, which is what both an
+  unreadable receipt and a transfer that never happened return.
 
 - Missing/invalid/revoked key → 401 `AUTHENTICATION_ERROR`.
 - Zod rejects → 400 `VALIDATION_ERROR`; both doors or neither → 400.
@@ -197,11 +208,23 @@ the routes 404.
 6. Admin issues a key (plaintext once, hash stored) and revokes it; wrong
    admin token → 401 (US-V05, D5)
 7. Provider error → 502 `PROVIDER_ERROR`, no `validations` row (D6)
+8. An unreadable receipt → `invalid` with a low `confidence` and no `cep`,
+   the score logged; a settled transfer carries its score too, and a
+   provider that omits one reports `null` rather than a guess (US-V06, D9)
 
 ## Definition of Done
 
 - [x] Scenarios automated in `apps/consta/test/` (workerd + local D1 +
-      fetch-mocked provider), citing their stories (9 tests, PR #46)
+      fetch-mocked provider), citing their stories (12 tests; scenario 8
+      added with US-V06)
+- [x] Migration `0001` adds the nullable `confidence` column; the local
+      sandbox gained a `blur` receipt scenario so the unreadable case can be
+      driven without spending a provider call (D9)
+- [ ] Open: what a real failed OCR actually scores. The 2026-08-18 false
+      negative was measured before this field was surfaced, so the only
+      score on record is `1` from a direct-mode call. Until a low one is
+      observed, no integrator can pick a threshold — which is the whole
+      point of logging it
 - [x] Deployed to `consta.dev.devoladapago.com` by Actions with
       `APICEP_TOKEN` and `CONSTA_ADMIN_TOKEN` as worker secrets (PR #47
       deploy; both probed live: 401 without credentials, not 404)

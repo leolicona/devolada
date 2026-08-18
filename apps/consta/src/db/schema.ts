@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /* All money in integer cents. Timestamps in ms. */
 
@@ -42,6 +42,9 @@ export const validations = sqliteTable(
     /* Provider breadcrumbs: their id and raw CEP status ("EN PROCESO"…) */
     providerValidationId: text("provider_validation_id"),
     cepStatus: text("cep_status"),
+    /* OCR score (D9). Logged because a threshold cannot be chosen without
+       a distribution, and this table is where one accumulates. */
+    confidence: real("confidence"),
     createdAt: createdAt(),
   },
   (t) => [index("validations_key_idx").on(t.apiKeyId, t.createdAt)],

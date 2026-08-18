@@ -33,6 +33,10 @@ export type ProviderVerdict = {
   alreadyValidated: boolean;
   /* Raw provider CEP status ("EN PROCESO", "LIQUIDADO", …), for the log */
   cepStatus: string | null;
+  /* How well the receipt could be read, 0.0–1.0 (D9). Null when the
+     provider does not say. `1` in transfer mode, where there is no image
+     to read — a score describes an image. */
+  confidence: number | null;
   cep: {
     trackingKey: string | null;
     amountCents: number | null;

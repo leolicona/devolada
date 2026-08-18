@@ -16,6 +16,7 @@ import {
   proofBelongsToLink,
   verifyProofUrl,
 } from "../../direct-payments/proofs";
+import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -357,6 +358,13 @@ export async function listLinks(c: Ctx, cursor?: string) {
   });
 }
 
+/* What the customer reads when the ISP shares their link (US-D07 D3).
+   Here, not in the admin, for the same reason the receipt's text lives
+   in the API (receipt spec D2): the words reach the customer the same
+   way whoever sends them. */
+const shareText = (url: string) =>
+  `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
+
 /* GET /direct-payments/links/search?q=XYZ — ISP session (US-D07).
    Searches WispHub and ensures links exist for the results. */
 export async function searchLinks(c: Ctx, q: string) {
@@ -403,13 +411,27 @@ export async function searchLinks(c: Ctx, q: string) {
   
   const linkMap = new Map(links.map((l) => [l.wisphubCustomerId, l.token]));
 
-  const results = customers.map((customer) => ({
-    wisphubId: customer.wisphubId,
-    usuario: customer.usuario,
-    name: customer.name,
-    phone: customer.phone,
-    url: `${c.env.PAGO_BASE_URL}/p/${linkMap.get(String(customer.wisphubId))}`,
-  }));
+  const results = customers.flatMap((customer) => {
+    const token = linkMap.get(String(customer.wisphubId));
+    /* No token means the insert above skipped this customer; a link to
+       `/p/undefined` is worse than one row missing from the results. */
+    if (!token) return [];
+    const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
+    return [
+      {
+        wisphubId: customer.wisphubId,
+        usuario: customer.usuario,
+        name: customer.name,
+        phone: customer.phone,
+        url,
+        /* The API owns the message and the number (receipt spec D2, D3).
+           `toWhatsAppPhone` is what puts Mexico's 52 in front and refuses
+           a number it cannot read — without it a plain 10-digit phone
+           becomes wa.me/55…, which is Brazil, not the customer. */
+        waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
+      },
+    ];
+  });
 
   return c.json({ success: true, data: { results } });
 }

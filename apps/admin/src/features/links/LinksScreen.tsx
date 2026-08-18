@@ -27,15 +27,10 @@ export function LinksScreen() {
     retry: false,
   });
 
+  /* The API hands over a finished wa.me link, message and country code
+     included (D3). Building it here was where the number lost its 52. */
   const handleShare = (link: LinksSearchResponse["results"][0]) => {
-    const message = `Hola, aquí está tu enlace permanente de pago: ${link.url}`;
-    const url = new URL("https://wa.me/");
-    if (link.phone) {
-      /* WispHub phones might have + or spaces, wa.me handles standard formats well */
-      url.pathname = `/${link.phone.replace(/\D/g, "")}`;
-    }
-    url.searchParams.set("text", message);
-    window.open(url.toString(), "_blank", "noopener,noreferrer");
+    window.open(link.waLink, "_blank", "noopener,noreferrer");
   };
 
   const isConfigError = isError && error?.status === 503;

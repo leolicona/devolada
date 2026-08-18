@@ -92,7 +92,7 @@ export const linksListResponse = z.object({
 
 /* GET /direct-payments/links/search — ISP session (US-D07) */
 export const linksSearchQuery = z.object({
-  q: z.string().min(1),
+  q: z.string().trim().min(2),
 });
 
 export const linksSearchResponse = z.object({
@@ -103,6 +103,11 @@ export const linksSearchResponse = z.object({
       name: z.string(),
       phone: z.string().nullable(),
       url: z.string(),
+      /* Ready to open (D3): the API owns the message and the country
+         code, exactly like the receipt's wa.me link. Falls back to
+         WhatsApp's contact picker when the stored phone is unreadable —
+         better than opening a stranger's chat (receipt spec D3). */
+      waLink: z.string(),
     }),
   ),
 });

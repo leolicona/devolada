@@ -28,7 +28,8 @@ charges.get("/feed", requireSession, zValidator("query", feedQuery), (c) => {
 });
 
 charges.post("/", requireSession, zValidator("json", chargeRecordRequest), (c) => {
-  return recordCharge(c, c.req.valid("json").usuario);
+  const body = c.req.valid("json");
+  return recordCharge(c, body.usuario, body.customerPhone);
 });
 
 /* Param routes last: static /customers and /feed win over /:chargeId */

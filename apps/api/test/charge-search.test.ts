@@ -111,6 +111,8 @@ describe("US-C01: the response is minimum identity only", () => {
       serviceStatus: "active",
       billingStatus: "due",
       monthlyFeeCents: 49900,
+      /* customer-phone D4: whether a number exists, never the number */
+      hasPhone: true,
     });
     /* The allow-list: address and phone must not be in the payload */
     expect(JSON.stringify(data)).not.toContain("Calle Falsa");

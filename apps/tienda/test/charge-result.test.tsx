@@ -16,6 +16,7 @@ const quote = customerQuoteResponse.parse({
     serviceStatus: "suspended",
     billingStatus: "due",
     monthlyFeeCents: 49900,
+    hasPhone: true,
   },
   quote: { monthlyFeeCents: 49900, serviceFeeCents: 1500, totalCents: 51400 },
   cap: { balanceCents: 0, capCents: 500000, blocked: false },

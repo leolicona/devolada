@@ -93,6 +93,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D05** — As an ISP, I configure my CLABE, beneficiary name, and SPEI service fee from settings; payment links work automatically for all my customers.
 - **US-D06** — As an ISP, I see direct SPEI payments in my charge feed alongside store charges, clearly distinguished.
 - **US-D07** — As an ISP, I can search for a customer and share their permanent SPEI payment link via WhatsApp directly from the dashboard.
+- **US-D08** — As an end customer, I get back to my payment page next month without asking my ISP for the link again.
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -135,7 +136,7 @@ not here. Owner's priority order (2026-08-16):
    from the ledger (commission entries after the last confirmed `cash_drop`);
    query + copy, no schema change. The label must carry the period, or a $0
    morning reads as stolen commission.
-3. ◐ **Customer phone capture** *(picked up 2026-08-17 as US-C07, charges/customer-phone.spec.md)* — when WispHub has no phone, the receipt's
+3. ✅ **Customer phone capture** *(shipped 2026-08-17 as US-C07, charges/customer-phone.spec.md — capture at the counter; the deployed-dev check is still open)* — when WispHub has no phone, the receipt's
    `wa.me` opens with no recipient. Probe first whether `telefono` is writable
    via `PATCH /clientes/{id}/` (the same call that flips
    `auto_activar_servicio`): writing it back to WispHub keeps the data in the
@@ -223,6 +224,7 @@ Owner's decisions:
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05 | in development |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
+| [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
 
 ## Cross-cutting layers
 

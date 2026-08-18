@@ -15,6 +15,12 @@ import { attemptReconnection } from "../../wisphub/reconnection";
 import { startOfBusinessDayMs } from "../../time/business-day";
 import { firstAttemptSchedule } from "../../reconnection/queue";
 import { receiptText, toWhatsAppPhone, whatsAppLink } from "../../receipt";
+import {
+  capturedPhone,
+  capturedPhones,
+  normalizePhone,
+  rememberPhone,
+} from "../../customer-contacts";
 import type {
   ChargeResponse,
   CustomerQuoteResponse,
@@ -64,8 +70,13 @@ function invoiceBillingStatus(
 
 /* The wire contract is the allow-list (customer-search D2). The adapter
    also carries the customer's phone, which the charge stores for its
-   receipt (receipt D4) but the frontend never needs — so it stops here. */
-const toCustomerResult = (customer: WispHubCustomer, pending: PendingInvoices): CustomerResult => ({
+   receipt (receipt D4) but the frontend never needs — so the number
+   stops here; only whether one exists crosses the wire (phone D4). */
+const toCustomerResult = (
+  customer: WispHubCustomer,
+  pending: PendingInvoices,
+  hasPhone: boolean,
+): CustomerResult => ({
   wisphubId: customer.wisphubId,
   usuario: customer.usuario,
   name: customer.name,
@@ -73,6 +84,7 @@ const toCustomerResult = (customer: WispHubCustomer, pending: PendingInvoices): 
   serviceStatus: customer.serviceStatus,
   billingStatus: invoiceBillingStatus(customer, pending),
   monthlyFeeCents: customer.monthlyFeeCents,
+  hasPhone,
 });
 
 export async function searchCustomers(c: Ctx, q: string) {
@@ -85,8 +97,21 @@ export async function searchCustomers(c: Ctx, q: string) {
     const pending = customers.length
       ? await ctx.wisphub.pendingInvoices(new Date())
       : { invoices: [], complete: true };
+    /* One lookup for the whole page, and only for the customers WispHub
+       had no number for (phone D4) */
+    const captured = await capturedPhones(
+      ctx.db,
+      ctx.isp.id,
+      customers.filter((customer) => !customer.phone).map((customer) => String(customer.wisphubId)),
+    );
     const data: CustomerSearchResponse = {
-      customers: customers.map((customer) => toCustomerResult(customer, pending)),
+      customers: customers.map((customer) =>
+        toCustomerResult(
+          customer,
+          pending,
+          Boolean(customer.phone) || captured.has(String(customer.wisphubId)),
+        ),
+      ),
     };
     return c.json({ success: true, data });
   } catch (e) {
@@ -111,9 +136,12 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
     const serviceFeeCents = ctx.isp.serviceFeeCents;
     const balanceCents = await storeBalanceCents(ctx.db, ctx.actor.id);
     const capCents = store.balanceCapCents;
+    const hasPhone =
+      Boolean(customer.phone) ||
+      (await capturedPhone(ctx.db, ctx.isp.id, String(customer.wisphubId))) !== null;
 
     const data: CustomerQuoteResponse = {
-      customer: toCustomerResult(customer, pending),
+      customer: toCustomerResult(customer, pending, hasPhone),
       quote: {
         monthlyFeeCents: customer.monthlyFeeCents,
         serviceFeeCents,
@@ -145,7 +173,7 @@ const toChargeResponse = (row: typeof charges.$inferSelect): ChargeResponse => (
   customerName: row.customerName,
 });
 
-export async function recordCharge(c: Ctx, usuario: string) {
+export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: string) {
   const ctx = await storeContext(c);
   if ("error" in ctx) return ctx.error;
 
@@ -189,6 +217,22 @@ export async function recordCharge(c: Ctx, usuario: string) {
   const totalCents = customer.monthlyFeeCents + ctx.isp.serviceFeeCents;
   const commissionCents = store.commissionCents ?? ctx.isp.storeCommissionCents;
 
+  /* Phone for the receipt (customer-phone D4): WispHub's own number wins;
+     ours only fills its gaps. A submitted number is remembered for the
+     next charge (D3) and copied onto this one, so the receipt about to be
+     sent already links to the chat. */
+  const wisphubCustomerId = String(customer.wisphubId);
+  let customerPhone = customer.phone;
+  if (!customerPhone) {
+    const submitted = normalizePhone(submittedPhone);
+    if (submitted) {
+      await rememberPhone(ctx.db, ctx.isp.id, wisphubCustomerId, submitted);
+      customerPhone = submitted;
+    } else {
+      customerPhone = await capturedPhone(ctx.db, ctx.isp.id, wisphubCustomerId);
+    }
+  }
+
   /* D2: record first — the money is safe before any WispHub call */
   const [charge] = await ctx.db
     .insert(charges)
@@ -196,13 +240,13 @@ export async function recordCharge(c: Ctx, usuario: string) {
       ispId: ctx.isp.id,
       storeId: ctx.actor.id,
       folio: makeFolio(),
-      wisphubCustomerId: String(customer.wisphubId),
+      wisphubCustomerId,
       /* The usuario the retries will look the customer up by
          (reconnection-queue D8): the numeric id above is not a usuario */
       customerUsuario: customer.usuario,
       customerName: customer.name,
       customerZone: customer.zone,
-      customerPhone: customer.phone,
+      customerPhone,
       monthlyFeeCents: customer.monthlyFeeCents,
       serviceFeeCents: ctx.isp.serviceFeeCents,
       totalCents,

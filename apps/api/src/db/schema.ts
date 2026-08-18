@@ -187,6 +187,30 @@ export const ledgerEntries = sqliteTable(
   (t) => [index("ledger_entries_store_created_idx").on(t.storeId, t.createdAt)],
 );
 
+/* The phone the shopkeeper captured for a customer WispHub has none for
+   (customer-phone spec D1, D3). WispHub's own `telefono` is read-only
+   through its API — probed 2026-08-17, see integrations/wisphub.md — so
+   this table is the only place such a number can live. It exists to
+   deliver receipts and feeds nothing else (D5). */
+export const customerContacts = sqliteTable(
+  "customer_contacts",
+  {
+    id: id(),
+    ispId: text("isp_id")
+      .notNull()
+      .references(() => isps.id),
+    /* Numeric WispHub id (as string), same split as charges and links */
+    wisphubCustomerId: text("wisphub_customer_id").notNull(),
+    /* 10 national digits, normalized on the way in */
+    phone: text("phone").notNull(),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [uniqueIndex("customer_contacts_isp_customer_idx").on(t.ispId, t.wisphubCustomerId)],
+);
+
 /* One permanent link per customer per ISP (direct-payment spec D1, D5):
    the token is opaque and never expires — the page asks WispHub for the
    live debt on every open, so the link itself carries no state. */

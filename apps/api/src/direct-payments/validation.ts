@@ -180,7 +180,24 @@ export async function runValidation(
   };
 
   if (verdict.status === "invalid") {
-    return update({ ...base, status: "invalid", nextValidationAt: null, lastError: null });
+    /* D17/BUG-003: only a contradicted CEP is a refusal. Consta's
+       `not_found` — no cepDetails, no cepStatus — is the absence of an
+       answer, and it covers a real transfer whose CEP Banxico has not
+       published yet (measured 2026-08-19: a settled transfer with the
+       money already delivered had no CEP at T+62 min), a receipt
+       captured before the bank accepted it, a misread clave and a wrong
+       sender bank. Killing the payment on the first of those calls a
+       paying customer a liar. It rides the schedule instead, and the
+       code survives on the row so the ISP can see why. */
+    if (verdict.reason !== "contradicted") {
+      return retryLater("TRANSFER_NOT_FOUND", base);
+    }
+    return update({
+      ...base,
+      status: "invalid",
+      nextValidationAt: null,
+      lastError: "TRANSFER_CONTRADICTED",
+    });
   }
 
   if (verdict.status === "pending") {

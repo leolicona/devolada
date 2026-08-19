@@ -213,4 +213,78 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
       await screen.findByText(/esta transferencia ya fue utilizada para otro pago/i),
     ).toBeInTheDocument();
   });
+
+  /* Scenarios 41–42 (D17/BUG-003): the two things the page must never
+     confuse — "we could not verify it" and "you did not pay". */
+
+  it("scenario 41: a transfer nobody can find keeps verifying, and says so without blaming", async () => {
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.pay(() =>
+        ok(
+          payResponse.parse({
+            directPaymentId: "dp-1",
+            status: "validating",
+            error: "TRANSFER_NOT_FOUND",
+          }),
+          201,
+        ),
+      ),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 2,
+            error: "TRANSFER_NOT_FOUND",
+          }),
+        ),
+      ),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+
+    expect(await screen.findByText("Verificando pago")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/todavía no aparece en banxico/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    /* the words that made BUG-003 hurt */
+    expect(screen.queryByText(/no válido/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/revisa los datos e intenta de nuevo/i)).not.toBeInTheDocument();
+  });
+
+  it("scenario 42: the expired verification names the wall it hit, not the customer", async () => {
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.pay(() =>
+        ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201),
+      ),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "expired",
+            validationAttempts: 6,
+            error: "TRANSFER_NOT_FOUND",
+          }),
+        ),
+      ),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+
+    expect(
+      await screen.findByText("Verificación expirada", {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no encontramos tu transferencia en banxico/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/contacta a tu proveedor/i)).toBeInTheDocument();
+  });
 });

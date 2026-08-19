@@ -58,12 +58,33 @@ function requestBody(input: TransferInput | ReceiptInput): Record<string, unknow
 
 /* The trap measured in the spike (spec D3): a CEP can take hours to exist.
    Both their explicit "pending" and an "invalid" whose cepStatus is still
-   EN PROCESO mean "ask again later", never "the transfer is fake". */
-function mapStatus(body: ApiCepResponse): "valid" | "pending" | "invalid" {
-  const cepStatus = body.validation?.cepStatus;
-  if (body.status === "valid") return "valid";
-  if (body.status === "pending" || cepStatus === "EN PROCESO") return "pending";
-  return "invalid";
+   EN PROCESO mean "ask again later", never "the transfer is fake".
+
+   D11: past that, an `invalid` still says two different things. When a
+   CEP came back, the provider is contradicting the claim with evidence.
+   When nothing came back — no cepDetails and no cepStatus — there is
+   nothing to contradict it with, and that answer covers a transfer that
+   never happened, a misread clave, a wrong sender bank and a CEP Banxico
+   has not published yet, all byte-identical (measured 2026-08-19: a real
+   settled transfer sent with the wrong `sender.bank` returned exactly the
+   shape a nonexistent one returns). The caller cannot tell them apart
+   either, but it can at least be told that it cannot.
+
+   D10: a status we do not recognise is not a verdict. The old fallback
+   was `invalid` — the harshest reading available — so a value apiCEP
+   adds tomorrow would tell a paying customer their transfer is fake.
+   Fail toward "we do not know". */
+function mapVerdict(body: ApiCepResponse): Pick<ProviderVerdict, "status" | "reason"> {
+  const cepStatus = body.validation?.cepStatus ?? null;
+  if (body.status === "valid") return { status: "valid", reason: null };
+  if (body.status === "pending" || cepStatus === "EN PROCESO") {
+    return { status: "pending", reason: null };
+  }
+  if (body.status === "invalid") {
+    const evidence = Boolean(body.validation?.cepDetails) || cepStatus !== null;
+    return { status: "invalid", reason: evidence ? "contradicted" : "not_found" };
+  }
+  throw new ProviderError(`apiCEP returned an unrecognised status: ${String(body.status)}`);
 }
 
 export function apiCepProvider(env: { APICEP_TOKEN?: string; APICEP_BASE_URL?: string }): ValidationProvider {
@@ -85,7 +106,7 @@ export function apiCepProvider(env: { APICEP_TOKEN?: string; APICEP_BASE_URL?: s
       const details = body.validation?.cepDetails;
       return {
         providerValidationId: body.validationId ?? null,
-        status: mapStatus(body),
+        ...mapVerdict(body),
         alreadyValidated: body.validation?.cepPreviouslyValidated === true,
         cepStatus: body.validation?.cepStatus ?? null,
         cep: details

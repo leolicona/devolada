@@ -137,6 +137,63 @@ describe("POST /validate — transfer door", () => {
     const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
     expect(rows).toHaveLength(0);
   });
+
+  /* Scenarios 24, 25 and 14 (D11, D10) — the shapes behind BUG-003. */
+
+  it("US-V06: an `invalid` with nothing behind it says `not_found`, and says to check the inputs", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* Measured 2026-08-19: this is what a real settled transfer sent
+       with the wrong `sender.bank` returns — and it is byte-identical
+       to what a transfer that never happened returns. */
+    mockApiCep({
+      validationId: "prov-uuid-9",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+    });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("not_found");
+    expect(data.hint).toBe("verify_inputs");
+    expect(data.cep).toBeUndefined();
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows[0].reason).toBe("not_found");
+  });
+
+  it("US-V06: a returned CEP that disagrees says `contradicted`, and carries no hint", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep({
+      validationId: "prov-uuid-10",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepStatus: "DEVUELTO", cepPreviouslyValidated: null },
+    });
+
+    const res = await postValidate(key, directRequest);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("contradicted");
+    expect(data.hint).toBeUndefined();
+  });
+
+  it("US-V06: a status apiCEP has not published yet is a failure, never a verdict (D10)", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep({ validationId: "prov-uuid-11", status: "under_review", validation: {} });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(502);
+    const { error } = (await res.json()) as { error: { code: string } };
+    /* D9 will rename this `PROVIDER_UNAVAILABLE` and attach
+       `retryable`; what D10 fixes here is the verdict, not the code. */
+    expect(error.code).toBe("PROVIDER_ERROR");
+
+    /* Fail toward "we do not know": no verdict was reached, so no
+       verdict is logged and nobody is told their transfer is fake. */
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(0);
+  });
 });
 
 describe("POST /validate — receipt door", () => {

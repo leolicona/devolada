@@ -47,6 +47,10 @@ export type ConstaRequest =
 export type ConstaVerdict = {
   validationId: string;
   status: "valid" | "pending" | "invalid";
+  /* Consta D11: which kind of `invalid`. Optional on the wire, and a
+     missing value is read as the ambiguous one — an older Consta must
+     not be able to turn an unverifiable payment back into a refusal. */
+  reason?: "contradicted" | "not_found";
   alreadyValidated: boolean;
   cep?: {
     trackingKey: string;

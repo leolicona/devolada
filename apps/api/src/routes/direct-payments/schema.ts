@@ -63,11 +63,19 @@ export const payRequest = z
 
 /* Validation errors the page may show the customer. Internal codes
    (provider down, WispHub down) never travel: the payment simply stays
-   `validating` and the sweep keeps trying. */
+   `validating` and the sweep keeps trying.
+
+   D17: the last two are the two halves of what used to be one silent
+   `invalid`. `TRANSFER_CONTRADICTED` is a refusal backed by a CEP;
+   `TRANSFER_NOT_FOUND` is the honest admission that nothing came back,
+   and it travels while the payment is still `validating` precisely so
+   the page can say what is happening instead of blaming the payer. */
 export const publicPaymentError = z.enum([
   "TRANSFER_ALREADY_USED",
   "AMOUNT_MISMATCH",
   "STALE_TRANSFER",
+  "TRANSFER_CONTRADICTED",
+  "TRANSFER_NOT_FOUND",
 ]);
 
 export const payResponse = z.object({

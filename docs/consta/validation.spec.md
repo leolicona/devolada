@@ -217,8 +217,8 @@ not silently adopted.
 **Correction, 2026-08-19: "Banxico publishes within ~30 minutes" was wrong,
 and it was written here the same day it was disproved.** Two real transfers
 were watched from authorisation, with the money already delivered to the
-receiving account: one polled 12 times through **T+62 min** and one through
-T+15 min, and neither had a CEP at any sample — no `EN PROCESO`, no record at
+receiving account: one polled 12 times through **T+62 min** and one 18 times
+through **T+49 min**, and neither had a CEP at any of those 30 samples — no `EN PROCESO`, no record at
 all, just the faceless `invalid` this taxonomy's second row now names. Banxico
 itself was reachable on port 80 and refusing connections on 443 throughout, so
 whether that latency is normal or was an outage is **unmeasured**; n=2 is not

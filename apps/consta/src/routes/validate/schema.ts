@@ -1,8 +1,34 @@
 import { z } from "zod";
+import { BANKS } from "../../provider/banks";
+
+/* D12 — apiCEP never rejects a bank name. Measured 2026-08-19: it aliases a
+   near-miss ("Nu" validated fine) and answers `invalid`, with no cepDetails,
+   when the name is a different real bank — indistinguishable from a transfer
+   that never happened. So this enum is the only thing that turns a silent
+   false rejection into a fixable 400. Trim first: a pasted trailing space is
+   harmless, an unknown name is not. */
+const bank = z.string().trim().pipe(z.enum(BANKS));
+
+/* D13 — Banxico's clave de rastreo is alphanumeric, at most 30 characters.
+   The range matters more than any single number: apiCEP's own example carries
+   10 (`HSBC712057`) and Nu's carries 28, so a fixed length would be wrong for
+   a product that validates every bank. What this actually catches is the
+   receipt that prints the key across two lines and arrives with a space or a
+   newline inside it — trim the harmless edges, reject the meaningful middle. */
+const trackingKey = z.string().trim().regex(/^[A-Za-z0-9]{6,30}$/, {
+  message: "must be 6–30 letters and digits, with no spaces or line breaks",
+});
+
+/* Numeric, bounded well above anything Banxico issues (7 digits in apiCEP's
+   example). Their real maximum is undocumented — apiCEP 400s past it without
+   publishing the number (docs/integrations/apicep.md, open items). */
+const referenceNumber = z.string().trim().regex(/^\d{1,20}$/, {
+  message: "must be digits only",
+});
 
 const beneficiarySchema = z
   .object({
-    bank: z.string().min(1),
+    bank,
     clabe: z.string().regex(/^\d{18}$/).optional(),
     phoneNumber: z.string().regex(/^\d{10}$/).optional(),
     cardNumber: z.string().regex(/^\d{16}$/).optional(),
@@ -16,9 +42,9 @@ const transferSchema = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     amountCents: z.number().int().positive(),
-    senderBank: z.string().min(1),
-    trackingKey: z.string().min(1).optional(),
-    referenceNumber: z.string().min(1).optional(),
+    senderBank: bank,
+    trackingKey: trackingKey.optional(),
+    referenceNumber: referenceNumber.optional(),
     beneficiary: beneficiarySchema,
   })
   .refine((t) => t.trackingKey || t.referenceNumber, {

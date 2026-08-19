@@ -6,6 +6,7 @@ import { requireApiKey } from "../../auth/api-key";
 import { apiCepProvider } from "../../provider/apicep";
 import { ProviderError, type ReceiptInput, type TransferInput } from "../../provider/types";
 import type { Bindings, Variables } from "../../env";
+import { BANKS } from "../../provider/banks";
 import { validateRequestSchema } from "./schema";
 
 export const validateRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -14,9 +15,28 @@ validateRoute.post(
   "/",
   requireApiKey,
   zValidator("json", validateRequestSchema, (result, c) => {
-    if (!result.success) {
-      return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
-    }
+    if (result.success) return;
+    /* D12/D13: refusing here is the point — a bank name or a tracking key
+       that cannot possibly validate must cost a 400, not a credit and a
+       faceless `invalid`. The issues say which field; a bank error also
+       carries the vocabulary, because it is the one value a caller cannot
+       guess and should not need a second round trip to learn. */
+    const issues = result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
+    const bankIssue = result.error.issues.some((i) => {
+      const field = i.path[i.path.length - 1];
+      return field === "bank" || field === "senderBank";
+    });
+    return c.json(
+      {
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          issues,
+          ...(bankIssue ? { acceptedBanks: BANKS } : {}),
+        },
+      },
+      400,
+    );
   }),
   async (c) => {
     const body = c.req.valid("json");

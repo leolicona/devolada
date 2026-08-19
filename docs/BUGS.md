@@ -70,3 +70,13 @@ Format:
 - Root cause: `apps/api/src/routes/direct-payments/schema.ts:33` accepts `z.string().trim().min(5).max(50)`. No length, no alphabet. `trim()` does not help when the damage is mid-string.
 - Fix: a clave de rastreo is 28 characters of `[A-Z0-9]`. Validate the shape at the edge and reject it for free with copy that says *which* field is wrong. D13's whole premise is that each attempt costs money, so what cannot possibly be valid must never reach the provider. This is also a prerequisite for any automated extraction: whatever a reader produces has to pass the same check — measured 2026-08-19, a vision model misread the same receipt identically ten times out of ten, producing **27** characters, which this check catches for free.
 - Regression test: pending
+
+## BUG-007 — the payer types their bank as free text, and the placeholder teaches three wrong names
+- Status: open
+- Detected: 2026-08-19 · `apps/pago/src/features/pago/PaymentPage.tsx:91`, found while implementing Consta D12
+- Affected spec: docs/direct-payment/direct-payment.spec.md
+- Symptom: a customer who really paid is told their transfer could not be verified, with nothing on the wire saying why. Measured 2026-08-19 against one real settled transfer, changing only `sender.bank`: `NUBANK` → `valid` in 7.0 s; `HSBC` → **`invalid`, no `cepDetails`, no `cepStatus`, in 1.3 s** — byte-indistinguishable from a transfer that never happened. apiCEP never rejects a bank name, so no status code will ever say the picker was wrong.
+- Root cause: the field is an unconstrained `<Input>`, and its placeholder is `"BBVA, Nu, Banorte…"` — **all three of those are outside apiCEP's vocabulary**, which spells them `BBVA MEXICO`, `NUBANK` and `BANORTE`. The product is prompting the payer to type values it cannot validate. `apps/api/src/routes/direct-payments/schema.ts:34` then accepts anything from 2 to 80 characters. apiCEP tolerates *some* near-misses (`Nu` aliased to NUBANK and validated), which is why this has not failed constantly — the tolerance is undocumented, unmeasured, and silent when it runs out.
+- Fix: the payer picks from a list instead of typing. Consta serves it at `GET /banks` (its D12); the ISP's own `speiBank` needs the same treatment, since it travels as `beneficiary.bank` on every call.
+- **Blocks a deploy**: Consta D12 now refuses an unknown bank name with 400, and `apps/api/src/consta/client.ts:94` maps every non-2xx to `CONSTA_UNAVAILABLE`, which is retryable. Until the picker lands, shipping D12 to a Devolada environment would turn a mistyped bank into the full six-hour schedule instead of one fast failure — the exact disease D9–D16 exist to cure. Fix this, or land Consta D9 first so a 400 reads as terminal.
+- Regression test: pending

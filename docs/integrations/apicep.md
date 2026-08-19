@@ -104,7 +104,7 @@ sets no bound.
 
 ### `bank`: never rejected, and still decides the verdict
 
-apiCEP publishes `bank` as a closed vocabulary of 94 names. **It does not enforce
+apiCEP publishes `bank` as a closed vocabulary of 97 names. **It does not enforce
 it** — measured 2026-08-19 — and that is worse than enforcing it. The
 vocabulary:
 
@@ -112,7 +112,7 @@ vocabulary:
 
 The names are not the ones a customer would type: it is `NUBANK`, not "Nu";
 `BBVA MEXICO`, not "BBVA"; `AZTECA`, not "Banco Azteca". Casing is inconsistent
-(`albo`, `Cuenca`, `Peibo`, `Mercado Pago W` against 90 uppercase neighbours).
+(8 of the 97 are not fully uppercase: `albo`, `BaBien`, `CoDi Valida`, `Cuenca`, `Dep y Pag Dig`, `Mercado Pago W`, `MexPago`, `Peibo`).
 
 **Measured against one real, settled transfer** (NUBANK → KLAR, $2.00,
 2026-08-18, a CEP already confirmed `LIQUIDADO`), changing only `sender.bank`:

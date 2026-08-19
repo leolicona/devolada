@@ -3,8 +3,9 @@ import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { app, db, seedApiKey, validations } from "./helpers";
 
-/* docs/consta/validation.spec.md scenarios 1–5 and 7.
-   apiCEP is mocked with the shapes read from its documentation (2026-08-17). */
+/* docs/consta/validation.spec.md scenarios 1–5, 7, and 16–17/19–20.
+   apiCEP is mocked with the shapes read from its documentation (2026-08-17)
+   and measured against the live API (2026-08-19). */
 
 const APICEP_ORIGIN = "https://api.apicep.cloud";
 
@@ -181,5 +182,82 @@ describe("API keys (D5)", () => {
 
     const after = await postValidate(key, directRequest);
     expect(after.status).toBe(401);
+  });
+});
+
+/* Scenarios 16–20: refused at the edge, before a credit is spent.
+
+   None of these register an interceptor. That is the assertion: `fetchMock`
+   runs with net connect disabled, so a request that reached the provider
+   could not answer 400 — it would surface as a 502 PROVIDER_ERROR instead. */
+describe("Refused before a credit is spent (D12, D13)", () => {
+  it("US-V07: a bank name off the vocabulary is refused with the vocabulary attached", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    const res = await postValidate(key, {
+      transfer: { ...directRequest.transfer, senderBank: "Nu" },
+    });
+
+    /* Measured 2026-08-19: apiCEP accepts "Nu", aliases it, and validates.
+       We refuse it anyway — the tolerance is undocumented and its failure
+       mode, a different real bank, is a silent `invalid` (D12). */
+    expect(res.status).toBe(400);
+    const { error } = (await res.json()) as {
+      error: { code: string; issues: { path: string }[]; acceptedBanks?: string[] };
+    };
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.issues.some((i) => i.path === "transfer.senderBank")).toBe(true);
+    expect(error.acceptedBanks).toContain("NUBANK");
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("US-V07: the beneficiary's bank is held to the same vocabulary", async () => {
+    const { key } = await seedApiKey();
+    const res = await postValidate(key, {
+      transfer: {
+        ...directRequest.transfer,
+        beneficiary: { bank: "Banorte", clabe: "072180001234567895" },
+      },
+    });
+    expect(res.status).toBe(400);
+    const { error } = (await res.json()) as { error: { acceptedBanks?: string[] } };
+    expect(error.acceptedBanks).toContain("BANORTE");
+  });
+
+  it("US-V07: a tracking key carrying the line break a two-line receipt prints is refused", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    for (const bad of ["NU3AGIFAMA9D9CNQ V487MGAVDE2C", "NU3AGIFAMA9D9CNQ\nV487MGAVDE2C", "SHORT"]) {
+      const res = await postValidate(key, {
+        transfer: { ...directRequest.transfer, trackingKey: bad },
+      });
+      expect(res.status).toBe(400);
+    }
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("US-V07: surrounding whitespace is trimmed, not rejected — only the middle is meaningful", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep(settledResponse, (body) => {
+      const sender = body.sender as Record<string, unknown>;
+      expect(sender.trackingKey).toBe("MBAN01002508150012345678");
+    });
+    const res = await postValidate(key, {
+      transfer: { ...directRequest.transfer, trackingKey: "  MBAN01002508150012345678\n" },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("US-V07: a 10-character key is accepted — the check is a range, not Nu's 28", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep(settledResponse);
+    /* apiCEP's own example key. A fixed 28 would lock out every bank that
+       issues a shorter one, which is why that belongs in Devolada's schema
+       and not in a product validating every Mexican bank (D13). */
+    const res = await postValidate(key, {
+      transfer: { ...directRequest.transfer, senderBank: "HSBC", trackingKey: "HSBC712057" },
+    });
+    expect(res.status).toBe(200);
   });
 });

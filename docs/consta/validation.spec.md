@@ -112,7 +112,7 @@ could not name.
 ### Refusing what cannot possibly validate (added 2026-08-19)
 
 - **D12 — The bank vocabulary is enforced here, because the provider does not.**
-  `sender.bank` and `beneficiary.bank` become a closed `z.enum` of apiCEP's 94
+  `sender.bank` and `beneficiary.bank` become a closed `z.enum` of apiCEP's 97
   published names, and `GET /banks` publishes the list so an integrator's
   picker is generated rather than transcribed (US-V07). Measured 2026-08-19
   against one real settled transfer, changing only `sender.bank`: `NUBANK`
@@ -346,7 +346,7 @@ code:
   leaves a `validations` row, verdict or not (D15).
 
 `GET /banks` — `Authorization: Bearer ck_…` → `{ success: true, data: { banks:
-[…94 names…] } }`. The vocabulary apiCEP accepts, served so a payer-facing
+[…97 names…] } }`. The vocabulary apiCEP accepts, served so a payer-facing
 picker is generated from one source (D12, US-V07).
 
 `POST /admin/keys` `{ name }` → `{ id, name, key }` (plaintext shown once).
@@ -404,7 +404,7 @@ regression suite for "no permanent failure ever becomes a long silence".
     negative, converted into an instant fixable error (US-V07, D12)
 17. `beneficiary.bank` off the vocabulary → the same refusal on the other side
     of the request (US-V07, D12)
-18. `GET /banks` returns the 94 names to a valid key and 401s without one
+18. `GET /banks` returns the 97 names to a valid key and 401s without one
     (US-V07, D12)
 19. `trackingKey` carrying a space or a newline — the line-wrap artifact a
     two-line receipt produces — → 400 `VALIDATION_ERROR`, no provider call
@@ -443,17 +443,33 @@ regression suite for "no permanent failure ever becomes a long silence".
       came back `valid` with Banxico's digital signature and the CEP XML/PDF
       links, and left exactly one `valid` row in the dev D1 (US-V01, US-V05)
 
-### D9–D16 (proposed 2026-08-19, not yet built)
+### D12–D13 (built 2026-08-19)
 
-- [ ] Scenarios 8–25 automated, each citing its story
+- [x] The 97-name vocabulary lives in one constant, generated from
+      `docs/integrations/apicep.md` so the two cannot drift, and `GET /banks`
+      serves it (D12)
+- [x] `senderBank` and `beneficiary.bank` are a closed enum; a refusal carries
+      the vocabulary so no second round trip is needed (D12)
+- [x] `trackingKey` is `^[A-Za-z0-9]{6,30}$` after trimming, `referenceNumber`
+      digits — the edges trimmed, the middle enforced (D13)
+- [x] Scenarios 16–20 automated (`test/validate.test.ts`, `test/banks.test.ts`)
+- [ ] **Blocked before deploy — BUG-007.** Devolada's payer types their bank as
+      free text into a field whose placeholder offers three names the
+      vocabulary does not contain. D12 turns that into a 400, and
+      `apps/api/src/consta/client.ts` reads every non-2xx as retryable, so a
+      mistyped bank would ride the full six-hour schedule instead of failing
+      once. Either the payer picks from `GET /banks` first, or D9 lands first
+      so a 400 reads as terminal. Shipping D12 alone makes Devolada worse.
+
+### D9–D11, D14–D16 (proposed 2026-08-19, not yet built)
+
+- [ ] Scenarios 8–15 and 21–25 automated, each citing its story
 - [ ] `sandbox/apicep-mock.mjs` serves every response shape those scenarios
       need — rate-limit headers, `X-Processing-Time`, both 400 shapes, 401,
       429, `status: "error"` with `missingFields`, an unrecognised status, and
       a hang past the deadline
 - [ ] Migration for `validations`: `status` nullable, plus
       `provider_http_status`, `provider_ms`, `quota_remaining` (D14, D15)
-- [ ] The 94-name vocabulary lives in one constant, and `GET /banks` serves it
-      (D12)
 - [ ] `docs/integrations/apicep.md` updated with anything the build measures
       that the probe did not
 - [ ] **Hand-off recorded, not assumed**: `direct-payment.spec.md` D7 consumes

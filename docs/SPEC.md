@@ -87,6 +87,8 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V06** — As an integrator, when a validation cannot be completed I am told whether waiting can ever help and when to try again, so a permanent failure never becomes a long silence for my customer.
 - **US-V07** — As an integrator, a request that cannot possibly validate — a bank name outside the provider's vocabulary, a malformed tracking key — is refused instantly with the accepted values, instead of costing a call and coming back "invalid".
 - **US-V08** — As the operator, every call records what the provider charged, how long it took and how much quota is left, so the channel's cost and health are visible before it breaks.
+- **US-V09** — As an integrator, a receipt image is read reliably and validated through the door that does not miss, so a customer who really paid is not told their transfer could not be verified.
+- **US-V10** — As an integrator, when a receipt cannot be read I am told which field failed and nothing is charged, so I can ask the customer to correct one thing instead of leaving them waiting.
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
@@ -227,6 +229,7 @@ Owner's decisions:
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
+| [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10 | proposed |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |

@@ -8,14 +8,53 @@
 
 The environment variable is **`APICEP_TOKEN`**, a Consta worker secret. Public guides call it `APICEP_API_KEY`; this repo does not.
 
-## Auth, and the credential trap
+## Auth
 
-`Authorization: Bearer <token>`, two accepted kinds. **The trap is not the token's lifetime — it is the deploy.** See below.
+`Authorization: Bearer <token>`. Working configuration as of 2026-08-19; the
+history that got us here is at the bottom of this section.
 
-- **`sk_live_…`** — **this repo never had evidence such a key is issued to us, and it is not needed.** The claim traces to apiCEP's own 401 `hint`, not to their documentation: an unauthenticated call answers `{"error":"Missing or invalid Authorization header","hint":"Use Bearer sk_live_... for API keys or Bearer apicep_... for user tokens"}`. That said, it is **not** a dead copy-paste string — apiCEP branches on the prefix, measured 2026-08-19: a made-up `sk_live_…` answers `API key not found` while a made-up `apicep_…` answers `Invalid or revoked API token`, so a separate API-key lookup path exists. Whether it is reachable by a customer is unknown and moot; do not chase one.
-- **`apicep_…`** — user token. **It does not expire, and minting a new one does not invalidate the old ones.** Settled by two independent measurements on 2026-08-18: a token two hours old still authenticated, and after issuing a fresh one **both** earlier tokens kept working — which rules out time-based expiry and supersession alike. This is the credential dev runs on and it is treated as **definitive**. This file previously claimed the opposite ("dies within the hour", four observations across 2026-08-17/18). That claim was **wrong**, and it cost a debugging session that chased expiry while the real cause sat in the deploy pipeline. What those four observations actually were is unknown — the values are gone and cannot be retested; the honest record is that they were never re-verified against a token that had simply been left alone.
+**`APICEP_TOKEN` is an `apicep_…` token, and that is the right credential.**
+It does not expire: measured at two hours of age with no change, and minting
+a replacement leaves earlier tokens working, so neither time nor rotation
+ends one. Treat it as permanent.
 
-**The real trap: every deploy overwrites the worker secret with whatever the GitHub environment holds** (CICD D5). A wrong value there reinstates itself on the next merge with nobody touching anything, and the sync step only checks that the secret is non-empty — so a wrong-but-present token deploys under a green tick. Measured 2026-08-18 on dev: apiCEP answered **401**, Consta mapped it to `PROVIDER_ERROR`, the api mapped that to retryable, and direct payments sat in `validating` showing the customer *"Verificando tu pago"* for the full six-hour schedule instead of failing loudly (BUG-002). `deploy-dev` now probes the credential right after planting it (CICD D6), which turns that silence into a red deploy.
+**It can still be revoked**, which is the one way it dies — apiCEP answers
+`{"error":"Invalid or revoked API token"}`. "Permanent" means unbounded in
+time, not indestructible: deleting or revoking the token in the apiCEP
+dashboard breaks the channel exactly as a wrong value would.
+
+**There is no second key to obtain.** A 401 hint advertises
+`Bearer sk_live_...` for "API keys", and this repo once carried that as an
+architecture requirement — a spec decision, a provider note and a
+Definition-of-Done item all waited on buying one. Nothing supports that: the
+`sk_live_` prefix appears in apiCEP's error text, not in anything they offer
+us. (It is not a dead copy-paste string either — apiCEP branches on the
+prefix: a made-up `sk_live_…` answers `API key not found` while a made-up
+`apicep_…` answers `Invalid or revoked API token`. Whether a customer can
+obtain one is unknown, unmeasurable from outside, and moot.)
+
+### What broke on 2026-08-18, and why the probe exists
+
+**A revoked token was stored in the GitHub environment secret.** Since every
+deploy overwrites the worker secret from that environment (CICD D5), each
+deploy reinstated it — the channel broke again on merges nobody connected to
+it. The sync step only checks that the secret is non-empty, so a
+wrong-but-present token shipped under a green tick.
+
+The failure was silent all the way down: apiCEP answered **401**, Consta
+mapped it to `PROVIDER_ERROR`, the api mapped that to retryable, and direct
+payments sat in `validating` showing the customer *"Verificando tu pago"*
+for the full six-hour schedule instead of failing loudly (BUG-002).
+
+`deploy-dev` now probes the credential right after planting it (CICD D6),
+which turns that silence into a red deploy.
+
+For a while this file blamed expiry instead — "dies within the hour", four
+observations. That was wrong, and it cost a debugging session that chased a
+lifetime while a revoked token sat in the pipeline. Those four readings are
+consistent with revoked tokens, not with expiry: rotation provably does not
+invalidate an older token. **The lesson worth keeping: a 401 from this
+provider means the value is wrong or revoked — never that it aged out.**
 
 ## Request
 

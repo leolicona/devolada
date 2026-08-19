@@ -134,6 +134,60 @@ jobs:
           else
             printf '%s' "$CONSTA_ADMIN_TOKEN" | pnpm exec wrangler secret put CONSTA_ADMIN_TOKEN --env dev
           fi
+      # A secret that exists is not a secret that works. On 2026-08-18 this
+      # step ran green while planting a token apiCEP answered 401 to, and the
+      # failure then hid for six hours: Consta maps a provider 401 to
+      # PROVIDER_ERROR, the api maps that to retryable, and direct payments
+      # sat in `validating` showing the customer "Verificando tu pago" until
+      # they expired. Same lesson as TD-011, one level down — there the
+      # evidence was a skipped step going green, here it is a step that
+      # succeeds with a value nothing validated.
+      #
+      # The probe is free: an empty body is rejected before apiCEP touches
+      # Banxico, so no credit is spent. It separates the only two answers
+      # that decide anything — 401 is our credential, 400 is apiCEP telling
+      # us the credential was fine and only the body was wrong. Anything
+      # else is the provider having a bad day, which must not block a deploy.
+      #
+      # The URL matches the adapter's DEFAULT_BASE_URL: the dev env sets no
+      # APICEP_BASE_URL, so this is the host the deployed Worker will use.
+      - name: Verify the Consta provider credential
+        env:
+          APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
+        run: |
+          if [ -z "$APICEP_TOKEN" ]; then
+            echo "::warning::No APICEP_TOKEN to verify; the sync step already warned."
+            exit 0
+          fi
+          # Shape before network. A newline inside the value does not come
+          # back as 401 — measured 2026-08-18, it produces a 500, which the
+          # network check below is deliberately lenient about. In the Worker
+          # the same value builds an invalid Authorization header, `fetch`
+          # throws, and Consta answers 500 INTERNAL_SERVER_ERROR — retryable
+          # all the way down, i.e. the same six-hour silence by another road.
+          # A trailing space is fine (apiCEP trims it; measured), so only the
+          # characters that actually break the header are fatal here.
+          if [ "$APICEP_TOKEN" != "$(printf '%s' "$APICEP_TOKEN" | tr -d '\n\r')" ]; then
+            echo "::error::APICEP_TOKEN contains a newline or carriage return. Re-add the secret without a trailing line break."
+            exit 1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            -X POST https://api.apicep.cloud/validate-transfer \
+            -H "Authorization: Bearer $APICEP_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{}')
+          case "$code" in
+            400)
+              echo "apiCEP accepted the credential (HTTP 400 on an empty body, as expected)."
+              ;;
+            401)
+              echo "::error::apiCEP rejected APICEP_TOKEN (HTTP 401). Consta /validate will answer PROVIDER_ERROR, and direct payments will sit in 'validating' until they expire. Update APICEP_TOKEN in the dev environment secrets and re-run."
+              exit 1
+              ;;
+            *)
+              echo "::warning::Unexpected HTTP $code from apiCEP — the credential could not be verified, so the deploy is not blocked."
+              ;;
+          esac
       - name: Smoke test
         run: |
           URL="${{ vars.DEV_API_URL }}"

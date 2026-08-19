@@ -77,12 +77,14 @@ The full measured contract — request shapes, response fields, auth, limits
 and the traps — lives in `docs/integrations/apicep.md`. What follows are the
 findings this spec's decisions rest on.
 
-- **Two credential types.** apiCEP takes `Bearer sk_live_…` (permanent API
-  keys) or `Bearer apicep_…` (user tokens). User tokens are short-lived:
-  ours died within the hour, twice — usable for a manual test fired
-  immediately, never for the deployed Worker. `APICEP_TOKEN` must become an
-  `sk_live_` key once a plan is bought; until then the deployed `/validate`
-  will decay back to `PROVIDER_ERROR` when the current user token expires.
+- **The `apicep_…` token is the right credential and it is permanent.** It
+  does not expire and rotation does not end one; the only way it dies is
+  being revoked. `APICEP_TOKEN` needs no replacement — the `sk_live_` key
+  this note once said it "must become" traces to a 401 hint, not to
+  anything apiCEP offers us. The 2026-08-18 outage was a **revoked** token
+  stored in the GitHub environment secret and reinstated by every deploy;
+  the post-deploy probe (CICD D6) now catches that class of failure.
+  Details and measurements in `docs/integrations/apicep.md`.
 - **A free Welcome plan exists** (50 requests / 30 days on signup at
   app.apicep.cloud) — enough for smoke checks without paying.
 - **Date tolerance.** The real validation claimed `2026-08-15`; the CEP came

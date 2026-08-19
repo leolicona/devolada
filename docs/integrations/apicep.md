@@ -8,14 +8,53 @@
 
 The environment variable is **`APICEP_TOKEN`**, a Consta worker secret. Public guides call it `APICEP_API_KEY`; this repo does not.
 
-## Auth, and the credential trap
+## Auth
 
-`Authorization: Bearer <token>`, two accepted kinds:
+`Authorization: Bearer <token>`. Working configuration as of 2026-08-19; the
+history that got us here is at the bottom of this section.
 
-- **`sk_live_…`** — permanent API key. The only kind fit for a deployed Worker.
-- **`apicep_…`** — user token. **Dies within the hour** (observed four times: 2026-08-17 twice, 2026-08-18 twice). Usable for a manual test fired immediately; never for anything deployed.
+**`APICEP_TOKEN` is an `apicep_…` token, and that is the right credential.**
+It does not expire: measured at two hours of age with no change, and minting
+a replacement leaves earlier tokens working, so neither time nor rotation
+ends one. Treat it as permanent.
 
-Until an `sk_live_` key is bought, every deployed validation decays inside the hour and the SPEI channel silently stops working — `PROVIDER_ERROR`, which Consta maps to retryable, so payments sit in `validating` rather than failing loudly.
+**It can still be revoked**, which is the one way it dies — apiCEP answers
+`{"error":"Invalid or revoked API token"}`. "Permanent" means unbounded in
+time, not indestructible: deleting or revoking the token in the apiCEP
+dashboard breaks the channel exactly as a wrong value would.
+
+**There is no second key to obtain.** A 401 hint advertises
+`Bearer sk_live_...` for "API keys", and this repo once carried that as an
+architecture requirement — a spec decision, a provider note and a
+Definition-of-Done item all waited on buying one. Nothing supports that: the
+`sk_live_` prefix appears in apiCEP's error text, not in anything they offer
+us. (It is not a dead copy-paste string either — apiCEP branches on the
+prefix: a made-up `sk_live_…` answers `API key not found` while a made-up
+`apicep_…` answers `Invalid or revoked API token`. Whether a customer can
+obtain one is unknown, unmeasurable from outside, and moot.)
+
+### What broke on 2026-08-18, and why the probe exists
+
+**A revoked token was stored in the GitHub environment secret.** Since every
+deploy overwrites the worker secret from that environment (CICD D5), each
+deploy reinstated it — the channel broke again on merges nobody connected to
+it. The sync step only checks that the secret is non-empty, so a
+wrong-but-present token shipped under a green tick.
+
+The failure was silent all the way down: apiCEP answered **401**, Consta
+mapped it to `PROVIDER_ERROR`, the api mapped that to retryable, and direct
+payments sat in `validating` showing the customer *"Verificando tu pago"*
+for the full six-hour schedule instead of failing loudly (BUG-002).
+
+`deploy-dev` now probes the credential right after planting it (CICD D6),
+which turns that silence into a red deploy.
+
+For a while this file blamed expiry instead — "dies within the hour", four
+observations. That was wrong, and it cost a debugging session that chased a
+lifetime while a revoked token sat in the pipeline. Those four readings are
+consistent with revoked tokens, not with expiry: rotation provably does not
+invalidate an older token. **The lesson worth keeping: a 401 from this
+provider means the value is wrong or revoked — never that it aged out.**
 
 ## Request
 
@@ -98,6 +137,6 @@ Cost is roughly **$0.25 MXN per call**, which sets the budgets in direct-payment
 
 ## Open items
 
-- Capture one raw response and record whether `confidence`, `validation.banxicoConfirmed`, `extracted.*` and `downloads.originalImage` are really returned. `confidence` in particular would let the receipt door tell "I could not read this" from "this transfer does not exist" — the distinction the false-negative case turns on.
-- Buy an `sk_live_` key. Everything deployed decays within the hour without it.
+- ~~Capture one raw response~~ **done, 2026-08-18.** A direct-mode response carried a top-level `confidence: 1`, `validation.banxicoConfirmed: true`, and a full `extracted` object (`senderBank`, `receiverBank`, `trackingKey`, `amount`, `date`, `beneficiaryName`) — all three previously documented but never observed here. It also carried a `processingTime` breakdown (`ocr`, `validation`, `total`) and a far richer `cepDetails` than this file models: `speiKey`, `cdaChain`, `certificateNumber`, sender/beneficiary account numbers, account types and **RFCs**, `paymentConcept`, `iva`. Consta reads eight fields and drops the rest, which is the right default — `cdaChain` alone carries both parties' RFCs and full CLABEs. `downloads.originalImage` was still not returned. Note `downloads.cepPdf` is not always present on the first call: one validation returned only `cepXml`, and the same transfer returned both minutes later, so the PDF appears to be generated asynchronously.
+- ~~Buy an `sk_live_` key~~ **closed, not a real dependency.** The expiry that justified it was measured away, and the key type itself traces to a 401 hint rather than to anything apiCEP offers us (see Auth). The `apicep_` token is permanent and definitive. Revisit only if a paid plan is bought for volume reasons.
 - Whether pending re-checks consume credits is still unanswered by apiCEP (asked 2026-08-17); direct-payment D7's cadence is priced as if they do.

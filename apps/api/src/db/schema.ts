@@ -251,8 +251,12 @@ export const directPayments = sqliteTable(
     serviceFeeCents: integer("service_fee_cents").notNull(),
     /* unapplied (D14): the CEP was real but the debt was settled
        elsewhere meanwhile — visible, never silent */
+    /* `superseded` (D18): a silent attempt whose reading the payer then
+       corrected. Deliberately not `invalid` — that word means "your
+       transfer does not exist", and this is the opposite: we were the
+       ones who were wrong. */
     status: text("status", {
-      enum: ["validating", "confirmed", "invalid", "expired", "unapplied"],
+      enum: ["validating", "confirmed", "invalid", "expired", "unapplied", "superseded"],
     })
       .notNull()
       .default("validating"),
@@ -263,6 +267,19 @@ export const directPayments = sqliteTable(
     transferDate: text("transfer_date"),
     /* Private R2 object key, never a public URL (D12) */
     proofKey: text("proof_key"),
+    /* D18: the receipt's own `Estatus`, as the reader saw it. The one
+       discriminator we have between "the bank has not released this yet"
+       and the other four causes of a faceless `not_found` — so it decides
+       whether the payer is shown a form or told to wait. */
+    receiptStatus: text("receipt_status"),
+    /* D18: who Banxico says sent the money. Recorded, never acted on —
+       people pay for relatives, so a mismatch is a signal for the ISP and
+       never a rule. Nothing displays it yet. */
+    cepSenderName: text("cep_sender_name"),
+    /* D18: the row this one corrects. Keeps the pair (what was read,
+       what the payer confirmed), which is the measurement that says
+       whether the reader earns its keep. */
+    supersedesId: text("supersedes_id"),
     constaValidationId: text("consta_validation_id"),
     constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
     chargeId: text("charge_id").references(() => charges.id),
@@ -280,7 +297,10 @@ export const directPayments = sqliteTable(
     uniqueIndex("direct_payments_isp_tracking_idx")
       .on(t.ispId, t.trackingKey)
       .where(
-        sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired')`,
+        /* `superseded` joins the exclusions (D18): a corrected reading
+           must release its claim, or a clave the machine misread would
+           block the customer it really belongs to for six hours. */
+        sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired', 'superseded')`,
       ),
   ],
 );

@@ -16,12 +16,15 @@ import {
   makeProofKey,
   PROOF_MAX_BYTES,
   proofBelongsToLink,
+  signedProofUrl,
   UPLOAD_HOURLY_BUDGET,
   uploadsInLastHour,
   verifyProofUrl,
 } from "../../direct-payments/proofs";
 import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
+import { Consta, ConstaError } from "../../consta/client";
+import type { DirectPayment } from "../../direct-payments/validation";
 import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -164,6 +167,47 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     }
   }
 
+  /* D18: the payer answered a `not_found` confirmation. Two outcomes,
+     and the first is the common one if CEP latency is what it looks
+     like: they confirmed a reading that was already right. */
+  let superseded: DirectPayment | null = null;
+  if (body.supersedes) {
+    const [prior] = await db
+      .select()
+      .from(directPayments)
+      .where(
+        and(
+          eq(directPayments.id, body.supersedes),
+          eq(directPayments.paymentLinkId, link.id),
+        ),
+      );
+    if (!prior || prior.status !== "validating") {
+      return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+    }
+    const unchanged =
+      prior.trackingKey === body.transfer!.trackingKey.toUpperCase() &&
+      prior.senderBank === body.transfer!.senderBank &&
+      prior.transferDate === body.transfer!.date;
+    if (unchanged) {
+      /* Nothing to correct. Keep the row, its schedule and its attempt
+         count, and spend nothing — a second row would carry the same
+         clave straight into D8's unique index and answer
+         `TRANSFER_ALREADY_USED` to a payer racing only themselves. */
+      return c.json(
+        {
+          success: true,
+          data: {
+            directPaymentId: prior.id,
+            status: prior.status as "validating",
+            error: publicError(prior.lastError),
+          },
+        },
+        200,
+      );
+    }
+    superseded = prior;
+  }
+
   /* The debt at submission time decides the amount the CEP must match
      (D11, D15). A WispHub failure here is a pre-payment failure:
      nothing recorded, same posture as the store flow's guard. */
@@ -188,6 +232,16 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const serviceFeeCents = speiFeeCents(isp);
   const amountCents = customer.monthlyFeeCents + serviceFeeCents;
 
+  /* Release the old claim *before* the insert: the corrected row may well
+     be claiming a clave that only differs by a character, and D8's index
+     does not care that the two rows belong to the same payer. */
+  if (superseded) {
+    await db
+      .update(directPayments)
+      .set({ status: "superseded", nextValidationAt: null })
+      .where(eq(directPayments.id, superseded.id));
+  }
+
   let payment;
   try {
     [payment] = await db
@@ -203,6 +257,8 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         senderBank: body.transfer?.senderBank ?? null,
         transferDate: body.transfer?.date ?? null,
         proofKey: body.proofId ?? null,
+        receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
+        supersedesId: superseded?.id ?? null,
         /* The row is born owned by the sweep (D7). The inline attempt
            below is an optimisation, not the mechanism: if it never
            finishes — a worker evicted, a provider that stalls past its
@@ -285,6 +341,67 @@ export async function uploadProof(c: Ctx, token: string) {
   return c.json({ success: true, data: { proofId } });
 }
 
+/* POST /direct-payments/links/:token/read (US-D11, D18)
+
+   The machine reads, the human confirms, the direct door validates. This
+   endpoint is the first half: it spends a Workers AI call at Consta and
+   **no provider credit**, and everything it returns is a draft the payer
+   is about to see and can overwrite.
+
+   Nothing here fails the payment. A reader that is down, a file that is
+   a PDF, a clave that did not survive the gate — each comes back as a
+   draft with holes in it, and the payer fills them. The machine is help,
+   not an authority: this endpoint cannot reject anybody. */
+export async function readProof(c: Ctx, token: string, proofId: string) {
+  const ctx = await resolveLink(c, token);
+  if ("error" in ctx) return ctx.error;
+  const { db, link } = ctx;
+  const now = new Date();
+
+  if (!proofBelongsToLink(proofId, link.id)) {
+    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  }
+  /* Reading follows uploading, so the upload budget already bounds how
+     often this can run per link (D13). Re-reading one proof is not
+     separately capped: it costs a Workers AI call, not a provider
+     credit, and the payer re-reading their own receipt is the flow
+     working, not abuse. */
+  if ((await uploadsInLastHour(c.env.PROOFS, link.id, now)) >= UPLOAD_HOURLY_BUDGET) {
+    return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
+  }
+  if (!(await c.env.PROOFS.head(proofId))) {
+    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  }
+  if (!c.env.CONSTA_BASE_URL || !c.env.CONSTA_API_KEY) {
+    return c.json({ success: false, error: { code: "CONSTA_UNAVAILABLE" } }, 503);
+  }
+
+  const consta = new Consta(c.env.CONSTA_BASE_URL, c.env.CONSTA_API_KEY);
+  let reading;
+  try {
+    reading = await consta.extract(await signedProofUrl(c.env, proofId, now));
+  } catch (e) {
+    const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
+    console.error("proof reading failed:", code);
+    return c.json({ success: false, error: { code: "CONSTA_UNAVAILABLE" } }, 503);
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      source: reading.source,
+      isReceipt: reading.isReceipt,
+      /* Only what passed the gate reaches the payer as a suggestion. A
+         malformed clave is worse than no clave: it looks confirmable. */
+      trackingKey: reading.gate.trackingKey === "ok" ? reading.trackingKey : null,
+      senderBank: reading.gate.senderBank === "ok" ? reading.senderBank : null,
+      date: reading.date,
+      receiptStatus: reading.receiptStatus,
+      gate: reading.gate,
+    },
+  });
+}
+
 /* GET /direct-payments/proofs/:linkId/:file — how Consta's provider
    fetches the image (D12): only with a live HMAC signature. Everything
    else is 404, indistinguishable from a key that never existed. */
@@ -327,6 +444,14 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
         : {}),
       validationAttempts: payment.validationAttempts,
       error: publicError(payment.lastError),
+      /* D18: enough for the confirmation screen to render from the row
+         instead of from whatever the browser still holds. A reload must
+         not lose the question — and all of this is the payer's own data,
+         echoed back to the payer. */
+      trackingKey: payment.trackingKey,
+      senderBank: payment.senderBank,
+      transferDate: payment.transferDate,
+      receiptStatus: payment.receiptStatus,
     },
   });
 }

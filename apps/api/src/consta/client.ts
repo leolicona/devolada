@@ -63,11 +63,60 @@ export type ConstaVerdict = {
   };
 };
 
+/* proof-extraction D6: the reading, before a credit is spent. This is
+   the half of Consta that exists so a human can look at what a machine
+   read and say "that clave is wrong" in three seconds, instead of
+   watching a spinner for six hours because nothing downstream can tell a
+   misread from a transfer that never happened. */
+export type ConstaGate = {
+  trackingKey: "ok" | "malformed" | "missing";
+  senderBank: "ok" | "unknown" | "missing";
+  amount: "ok" | "malformed" | "missing";
+};
+
+export type ConstaReading = {
+  extractionId: string;
+  source: "reader" | "provider-ocr";
+  isReceipt: boolean | null;
+  trackingKey: string | null;
+  senderBank: string | null;
+  amountCents: number | null;
+  date: string | null;
+  receiptStatus: string | null;
+  gate: ConstaGate;
+};
+
 export class Consta {
   constructor(
     private baseUrl: string,
     private apiKey: string,
   ) {}
+
+  async extract(receiptUrl: string): Promise<ConstaReading> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/extract`, {
+        method: "POST",
+        signal: AbortSignal.timeout(CONSTA_TIMEOUT_MS),
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ receiptUrl }),
+      });
+    } catch (e) {
+      throw new ConstaError("CONSTA_UNAVAILABLE", `extract: ${String(e)}`);
+    }
+    if (res.status === 401) throw new ConstaError("CONSTA_AUTH_FAILED", "status 401");
+    const body = (await res.json().catch(() => null)) as
+      | { success: true; data: ConstaReading }
+      | { success: false; error: { code: string } }
+      | null;
+    if (!res.ok || !body?.success) {
+      throw new ConstaError("CONSTA_UNAVAILABLE", body && !body.success ? body.error.code : `status ${res.status}`);
+    }
+    return body.data;
+  }
 
   async validate(request: ConstaRequest): Promise<ConstaVerdict> {
     let res: Response;

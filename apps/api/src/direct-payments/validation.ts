@@ -364,6 +364,13 @@ export async function runValidation(
     status: "confirmed",
     chargeId: charge.id,
     confirmedAt: now,
+    /* D18: who Banxico says sent the money. Recorded and acted on by
+       nothing — a name unrelated to the subscriber is the only signal
+       available that a misread clave matched somebody else's real
+       transfer, but people pay for relatives, so it can never be a
+       rule. Nothing displays it yet; `apps/admin` has no direct-payment
+       view at all. */
+    cepSenderName: cep?.senderName ?? null,
     nextValidationAt: null,
     lastError: null,
   });

@@ -99,6 +99,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D06** — As an ISP, I see direct SPEI payments in my charge feed alongside store charges, clearly distinguished.
 - **US-D07** — As an ISP, I can search for a customer and share their permanent SPEI payment link via WhatsApp directly from the dashboard.
 - **US-D08** — As an end customer, I get back to my payment page next month without asking my ISP for the link again.
+- **US-D09** — As an end customer, I upload my receipt and it just works when it can; when it cannot, I am shown what was read from it and can correct it in seconds, instead of waiting hours for a rejection I cannot act on.
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -230,7 +231,7 @@ Owner's decisions:
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10 | proposed |
-| [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
+| [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
 

@@ -1,6 +1,6 @@
 ---
 status: in-development
-stories: [US-D01, US-D02, US-D03, US-D04, US-D05, US-D06]
+stories: [US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09]
 domain: direct-payment
 updated: 2026-08-19
 debt: [TD-013]
@@ -30,6 +30,30 @@ Devolada's store network serves unbanked customers who pay cash at a corner stor
 - **D16 — The bank is picked from the provider's vocabulary, never typed.** Measured 2026-08-19 against one real settled transfer, changing only `sender.bank`: `NUBANK` → `valid` in 7.0 s, `Nu` → `valid` (apiCEP aliased it), **`HSBC` → `invalid`, no `cepDetails`, no `cepStatus`, in 1.3 s**. apiCEP never answers an error for a bank name it does not know — it answers the same faceless `invalid` a transfer that never happened returns, so no status code will ever tell a caller its picker is wrong. Both surfaces that produce a bank name now choose from apiCEP's 97 published names: the payer's `senderBank` and the ISP's `speiBank`, the latter more dangerous because it travels as `beneficiary.bank` on **every** validation that ISP ever runs. Both fields were free text seeded with wrong examples — `"BBVA, Nu, Banorte…"` on the payment page, `"STP, BBVA, Banorte…"` in settings — so the product was teaching people to type values it could not validate (BUG-007). The list is **generated** from `docs/integrations/apicep.md` into one constant per app by `scripts/gen-banks.mjs`, and CI fails on drift: three copies of a vocabulary that fails silently is three chances to be wrong. `trackingKey` is bounded in the same breath — `^[A-Za-z0-9]{6,30}$` after trimming (BUG-006). A **range**, not Nu's 28: apiCEP's own example carries ten characters, and Devolada's payers bank anywhere. **Rejected**: trusting apiCEP's aliasing (undocumented, measured once, and silent when it runs out); a shared runtime endpoint for the list (the payer's form must render before anything else can fail); the catalogue's Radix `Select` on the payment page — right for the admin's short lists on a desktop, wrong for 97 options filled once on a phone, where the native control brings the OS picker, type-ahead and the payer's own assistive settings, and costs the public page no new dependency.
 - **D17 — A `not_found` is not a refusal; only a contradicted CEP is.** Consta's `invalid` splits in two (its D11), and only one half is a verdict. `contradicted` means a CEP came back and disagrees — the payment ends there, `invalid`, with `TRANSFER_CONTRADICTED` on the row. `not_found` means nothing came back at all: no `cepDetails`, no `cepStatus`, nothing to disagree with. That answer covers a CEP Banxico has not published yet, a receipt captured before the bank accepted the transfer, a misread clave and a wrong sender bank, and **nothing on the wire separates them** — so it rides the D7 schedule like a `pending`, carrying `TRANSFER_NOT_FOUND` as `lastError`, and the honest terminal state when the schedule runs out is `expired`, never `invalid`. A missing `reason` is read as `not_found` for the same reason: a Consta that predates D11 must not be able to turn silence back into an accusation. This was BUG-003 — six live submissions across two customers and three receipts, each a real payment declared `invalid` on the first attempt. The copy follows the same split: the page says *"todavía no aparece en Banxico"* while it waits, and *"no encontramos tu transferencia"* when it gives up, and it never again says *"revisa los datos"* to somebody who did nothing wrong. **What this costs, knowingly**: a transfer that genuinely never happened now burns the whole schedule before expiring instead of ending on the first call. That is the price of not being able to tell it apart from a real one, and it is the right way round — the schedule is bounded and paid in credits, while the alternative is paid by customers who did pay. Shortening it needs D9's `retryable`, not a guess. **Rejected**: mapping `not_found` to `pending` inside Consta (it would hide from every integrator that the provider actually answered); keeping `invalid` terminal and only softening the copy (the payment would still be dead, and the CEP that appears at T+20 min would never be seen).
 
+- **D18 — The machine reads, the machine tries once, the human is asked only when there is something to decide.** Uploading a receipt sends it to Consta's `/extract` (proof-extraction D6), which spends a Workers AI call and **no provider credit**. What happens next depends on what came back, and the ordering is the whole decision:
+
+  | what the reading says | what happens | credits |
+  |---|---|---|
+  | not a receipt, or a field failed the gate | **the payer is asked immediately**, with that field empty | 0 |
+  | the gate passed | **one silent attempt** through the transfer door | 1 |
+  | → `valid` | confirmed; the payer never saw a form | 1 |
+  | → `not_found`, receipt `Estatus` says *"En proceso"* | told their bank has not released it yet; **no form**, the schedule keeps trying | 1 |
+  | → `not_found`, `Estatus` *"Aceptada"* or unreadable | asked to confirm **now**, framed as a wait, schedule still running | 1 |
+  | → `contradicted` | terminal, with D17's honest copy | 1 |
+
+  **Why a silent attempt at all, when the gate already passed.** Asking every payer to confirm 28 characters on a phone is friction they will click through, and a confirmation nobody reads is neither usability nor safety. If the reading is right, nobody should be asked anything.
+
+  **Why the human is still asked, and asked *early*.** `not_found` is ambiguous by construction (D17): the CEP may simply not be published — measured at more than 49 and 62 minutes on two real transfers with the money already delivered — or the clave or bank may be wrong. Nothing on the wire separates them. Waiting for the schedule to exhaust before asking would rebuild the six-hour silence this whole line of work exists to remove, so the question is asked on the **first** `not_found` while the schedule keeps running underneath. Whichever resolves first wins.
+
+  **The receipt's own `Estatus` is the one discriminator we have**, and it is why the two `not_found` rows above differ. *"En proceso"* means the bank has not released the transfer, so there is nothing for the payer to correct and asking them to would invite them to break a correct reading. Anything else leaves the ambiguity intact, and then the payer is the fastest way through it.
+
+  **Confirming without changing anything must not cost anything.** If the three fields come back identical, the existing row and its schedule are kept and no second call is made. This is not an edge case: if CEP latency really is the dominant cause, it is the *common* path, and creating a second row would collide with the first at D8's unique index and answer `TRANSFER_ALREADY_USED` to a payer racing nobody but themselves.
+
+  **A correction supersedes, it does not overwrite.** The silent attempt writes a row, and that row claims `(isp_id, tracking_key)` for up to six hours (D8) — so a misread clave that happens to belong to *another customer of the same ISP* would block a payment that customer really made. Their pool is exactly the collision pool: same beneficiary CLABE, same mensualidad, same day. So the old row moves to a new terminal status **`superseded`**, which releases the index, and the corrected submission is a new row carrying `supersedes_id` back to it. `superseded` is deliberately not `invalid`: that word already means *"your transfer does not exist"* in the copy and in the ISP's feed, and this is the opposite — it is us being wrong, not the payer. The pair `(what was read, what was confirmed)` is the measurement that will say whether the reader earns its keep.
+
+  **`cep_sender_name` is recorded from the CEP but acts on nothing yet.** Banxico names the account holder who sent the money, and a name with no relation to the WispHub subscriber is the only signal available that a misread clave matched *somebody else's* real transfer. It can never be a rule — people pay for relatives, and the subscriber is not always the payer — so it is stored for a future ISP-facing alert and for support (*"who paid this?"*). **Today nothing displays it**, because `apps/admin` has no direct-payment view at all; that is a gap this decision does not close and does not pretend to.
+
+  **Rejected**: confirmation on every payment (friction on everyone to catch a rate nobody has measured, and a confirmation people click through is theatre); silent-only with the human asked when the schedule expires (that *is* the six-hour wait); overwriting `tracking_key` in place on a correction (loses the read-versus-confirmed pair, the only thing that measures the reader); rejecting a payment on a `senderName` mismatch (false rejections for anyone paying for a relative); asking the payer to confirm the amount (it is server-supplied on this channel, D2, and inviting confirmation of a number we already know teaches clicking through).
 ## Schema
 
 ### New table: `payment_links`
@@ -270,10 +294,29 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 40. Consta answers `invalid` with no `reason` at all → read as `not_found`, the payment survives (D17)
 41. While waiting on a `not_found`, the page says the transfer has not appeared in Banxico yet — and never shows "no válido" or "revisa los datos" (D17, US-D03)
 42. An `expired` verification names which wall it hit instead of blaming the payer (D17, US-D04)
+43. A reading that passes the gate is submitted **silently** and confirms without the payer ever seeing a form (US-D09, D18)
+44. A field the gate refused stops the silent attempt: the payer is asked immediately, that field arrives **empty**, and no provider call was spent (US-D09, D18)
+45. An image that is not a receipt is caught before any submission — no `direct_payments` row, no paid call. The case measured live at up to 7 calls over 6 h (US-D09, D18)
+46. `POST /links/:token/read` returns the reading, spends no provider credit, creates no payment, and reaches Consta through a signed, expiring proof URL (US-D09, D18, D12)
+47. A malformed clave or an unresolved bank comes back null with the gate saying why, never as a confirmable guess (US-D09, D18)
+48. A proof belonging to another link, and a key that was never uploaded, both read as 404 (US-D09, D18, D12)
+49. A silent attempt pays through the transfer door: the receipt never reaches the provider, `proof_mode` is `transfer`, and `proof_key` is still set (US-D09, D18)
+50. With Consta's reader unreachable, the upload still pays through the provider's OCR door exactly as before (US-D09, D18)
+51. `not_found` on a receipt whose `Estatus` reads *"En proceso"* shows the wait, never the form — there is nothing for the payer to correct (US-D09, D18)
+52. `not_found` on an *"Aceptada"* or unreadable `Estatus` opens the confirmation on the **first** attempt, and the row's schedule keeps running underneath (US-D09, D18, D17)
+53. Confirming the same three values keeps the existing row, its schedule and its attempt count, and spends **no** second credit — the collision that would otherwise answer `TRANSFER_ALREADY_USED` to the payer's own retry (US-D09, D18, D8)
+54. A corrected confirmation moves the first row to `superseded` — releasing `(isp_id, tracking_key)` so the real owner of the misread clave is not blocked — and the new row carries `supersedes_id` back to it (US-D09, D18, D8)
+55. A `superseded` row is not selected by the sweep and never reaches a customer-facing status (US-D09, D18, D7)
+56. `cep_sender_name` is recorded from the CEP on a confirmed payment, and acts on nothing (US-D09, D18)
 
 ## Definition of Done
 
 - [x] Scenarios 36–40 automated (`test/direct-payment.test.ts`, describe "D17"), 41–42 in `apps/pago/test/pago.test.tsx` — the regression suite for BUG-003
+- [x] Scenarios 46–49 and 53–56 automated (`test/direct-payment.test.ts`, two "D18" describes); 43–45 and 50–53 in `apps/pago/test/pago.test.tsx`
+- [x] Migration `0009`: D8's partial unique index recreated to exclude `superseded`, plus `receipt_status`, `cep_sender_name` and `supersedes_id`. No table recreate, so none of the D1 foreign-key trouble migration `0007` hit
+- [x] Scenario 41 of D17 retired: its copy ("todavía no aparece en Banxico", after two attempts) is replaced by D18's confirmation, which says the same thing and offers something to do about it
+- [ ] **The reader has never run against a real receipt.** Every test stubs it with shapes the model was measured producing; `AI.run` itself is only exercised on dev
+- [ ] **Measured before this reaches customers: is `sender.amount` a hint or a filter in apiCEP's direct mode?** The claimed *date* is documented as a hint. The amount is untested, and it decides how a $1 receipt against a $514 debt fails on this path: as `AMOUNT_MISMATCH` in seconds if it is a hint, or as a faceless `not_found` and a six-hour wait if it is a filter. This is not a new risk — the transfer door has always sent the expected amount — but D18 routes far more traffic through it. One deliberate call with a wrong amount against a known-good transfer answers it
 - [x] Scenarios 1–4, 7–11, 16–26 automated in the API layer (`test/direct-payment.test.ts`; Consta and WispHub fetch-mocked respecting their contracts)
 - [x] Scenarios 5–6 automated with Consta fetch-mocked (`test/direct-payment.test.ts` — asserts the door and the server-supplied amount/beneficiary)
 - [x] Scenario 12 automated in `test/direct-payment.test.ts` (a queued spei charge converts through `sweepReconnections`)

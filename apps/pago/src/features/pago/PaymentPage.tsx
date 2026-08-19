@@ -16,6 +16,7 @@ import type {
   DirectPaymentStatusResponse,
   LinkStatusResponse,
   PayResponse,
+  ProofReading,
   ProofUploadResponse,
 } from "@devolada/api/direct-payments-schema";
 import { NativeSelect } from "../../components/ui/native-select";
@@ -23,6 +24,7 @@ import {
   CheckCircle2,
   Copy,
   CloudUpload,
+  ScanLine,
   ShieldCheck,
   Store,
   TriangleAlert,
@@ -79,10 +81,26 @@ const payErrors: Record<string, string> = {
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
 
-function TransferForm({ onSubmit, busy }: { onSubmit: (t: { trackingKey: string; senderBank: string; date: string }) => void; busy: boolean }) {
-  const [trackingKey, setTrackingKey] = useState("");
-  const [senderBank, setSenderBank] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+type TransferDraft = { trackingKey?: string | null; senderBank?: string | null; date?: string | null };
+
+function TransferForm({
+  onSubmit,
+  busy,
+  draft,
+  submitLabel = "Verificar mi pago",
+}: {
+  onSubmit: (t: { trackingKey: string; senderBank: string; date: string }) => void;
+  busy: boolean;
+  /* D18: what the reader proposed. Every field is editable and none is
+     trusted — the payer is the one who confirms, and a field the gate
+     did not pass arrives here empty rather than pre-filled with
+     something that merely looks confirmable. */
+  draft?: TransferDraft;
+  submitLabel?: string;
+}) {
+  const [trackingKey, setTrackingKey] = useState(draft?.trackingKey ?? "");
+  const [senderBank, setSenderBank] = useState(draft?.senderBank ?? "");
+  const [date, setDate] = useState(draft?.date ?? new Date().toISOString().slice(0, 10));
   /* D16/BUG-006: the same shape the API enforces, so the button is
      honest — a key that cannot validate never gets a paid call. */
   const valid =
@@ -126,7 +144,7 @@ function TransferForm({ onSubmit, busy }: { onSubmit: (t: { trackingKey: string;
         onClick={() => onSubmit({ trackingKey: trackingKey.trim(), senderBank: senderBank.trim(), date })}
       >
         <ShieldCheck className="size-5" aria-hidden />
-        {busy ? "Enviando…" : "Verificar mi pago"}
+        {busy ? "Enviando…" : submitLabel}
       </Button>
     </div>
   );
@@ -168,6 +186,10 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
 export function PaymentPage({ token }: { token: string }) {
   const queryClient = useQueryClient();
   const [payment, setPayment] = useState<PayResponse | null>(null);
+  /* D18: the reading waiting for the payer to confirm it */
+  const [draft, setDraft] = useState<{ proofId: string; reading: ProofReading } | null>(null);
+  /* D18: a correction re-submits, and the image has to travel with it */
+  const [proofId, setProofId] = useState<string | null>(null);
 
   const link = useQuery<LinkStatusResponse, ApiError>({
     queryKey: ["link", token],
@@ -204,7 +226,11 @@ export function PaymentPage({ token }: { token: string }) {
     },
   });
 
-  const pay = useMutation<PayResponse, ApiError, { proofId?: string; transfer?: object }>({
+  const pay = useMutation<
+    PayResponse,
+    ApiError,
+    { proofId?: string; transfer?: object; supersedes?: string; receiptStatus?: string }
+  >({
     mutationFn: (body) =>
       api<PayResponse>(`/direct-payments/links/${token}/pay`, {
         method: "POST",
@@ -213,7 +239,16 @@ export function PaymentPage({ token }: { token: string }) {
     onSuccess: setPayment,
   });
 
-  const upload = useMutation<PayResponse, ApiError, File>({
+  /* D18 — the machine reads, the human confirms, the direct door
+     validates. Uploading no longer pays: it produces a draft the payer
+     looks at. Everything that can go wrong on the way here degrades into
+     "the payer fills it in", because the reader is help and never an
+     authority — it cannot reject anybody. */
+  const upload = useMutation<
+    { proofId: string; reading: ProofReading | null } | PayResponse,
+    ApiError,
+    File
+  >({
     mutationFn: async (file) => {
       const form = new FormData();
       form.append("file", file);
@@ -221,12 +256,56 @@ export function PaymentPage({ token }: { token: string }) {
         `/direct-payments/links/${token}/proof`,
         { method: "POST", body: form },
       );
+      setProofId(proofId);
+      let reading: ProofReading | null = null;
+      try {
+        reading = await api<ProofReading>(`/direct-payments/links/${token}/read`, {
+          method: "POST",
+          body: JSON.stringify({ proofId }),
+        });
+      } catch {
+        /* The reader being down is not the payer's problem: fall through
+           to the provider's OCR door, which is what shipped before this
+           step existed. */
+      }
+      if (!reading || reading.source === "provider-ocr") {
+        /* A PDF, or no reading at all — the provider's OCR still takes
+           both, so pay the way we always did */
+        return api<PayResponse>(`/direct-payments/links/${token}/pay`, {
+          method: "POST",
+          body: JSON.stringify({ proofId }),
+        });
+      }
+      /* D18: a reading that failed the gate is the one case where the
+         payer must be asked *before* anything is spent — there is a
+         visibly empty field and nothing to try. */
+      const gated =
+        reading.isReceipt === false ||
+        reading.gate.trackingKey !== "ok" ||
+        reading.gate.senderBank !== "ok";
+      if (gated) return { proofId, reading };
+
+      /* The gate passed, so try it silently. If the reading is right —
+         and we have no measurement saying how often it is — nobody is
+         asked anything, which is the whole reason not to put a
+         confirmation in front of every payer. */
       return api<PayResponse>(`/direct-payments/links/${token}/pay`, {
         method: "POST",
-        body: JSON.stringify({ proofId }),
+        body: JSON.stringify({
+          proofId,
+          transfer: {
+            trackingKey: reading.trackingKey,
+            senderBank: reading.senderBank,
+            date: reading.date ?? new Date().toISOString().slice(0, 10),
+          },
+          receiptStatus: reading.receiptStatus ?? undefined,
+        }),
       });
     },
-    onSuccess: setPayment,
+    onSuccess: (result) => {
+      if ("directPaymentId" in result) setPayment(result);
+      else setDraft(result as { proofId: string; reading: ProofReading });
+    },
   });
 
   /* ——— 1. Cargando ——— */
@@ -261,7 +340,20 @@ export function PaymentPage({ token }: { token: string }) {
   const data = link.data;
 
   /* ——— Result states (5–9): the submitted payment's lifecycle ——— */
-  const status = poll.data ?? (payment ? { status: payment.status, validationAttempts: 1, error: payment.error } : null);
+  const busy = pay.isPending || upload.isPending;
+  const status =
+    poll.data ??
+    (payment
+      ? {
+          status: payment.status,
+          validationAttempts: 1,
+          error: payment.error,
+          trackingKey: null,
+          senderBank: null,
+          transferDate: null,
+          receiptStatus: null,
+        }
+      : null);
   if (payment && status) {
     const retry = () => {
       setPayment(null);
@@ -279,20 +371,62 @@ export function PaymentPage({ token }: { token: string }) {
         {status.status === "validating" && (
           <>
             <StatusBadge status="validating" size="md" />
-            <p className="text-sm text-ink-soft">
-              Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar esta
-              página abierta.
-            </p>
-            {/* D17: after two lookups that found nothing, silence stops
-                being reassuring. Say what is happening — the wait is
-                normal for a transfer the bank has not liberated yet —
-                without implying the payer did something wrong. */}
-            {status.error === "TRANSFER_NOT_FOUND" && status.validationAttempts >= 2 && (
-              <p className="text-sm text-ink-soft">
-                Tu transferencia todavía no aparece en Banxico. Puede tardar un rato en publicarse;
-                seguiremos intentando y tu proveedor la verá en cuanto aparezca.
-              </p>
-            )}
+            {(() => {
+              const notFound = status.error === "TRANSFER_NOT_FOUND";
+              /* D18: the receipt's own Estatus is the one discriminator
+                 we have. "En proceso" means the bank has not released
+                 the transfer — there is nothing for the payer to
+                 correct, and asking would invite them to break a
+                 reading that was right. */
+              const enProceso = /proceso/i.test(status.receiptStatus ?? "");
+
+              if (notFound && enProceso) {
+                return (
+                  <p className="text-sm text-ink-soft">
+                    Tu comprobante dice “{status.receiptStatus}”: tu banco todavía no libera la
+                    transferencia. Seguiremos intentando y no necesitas hacer nada.
+                  </p>
+                );
+              }
+
+              if (notFound && payment) {
+                /* Asked on the *first* not_found, not after the schedule
+                   runs out — waiting six hours to ask is the silence
+                   this whole flow exists to remove. The schedule keeps
+                   running underneath; whichever resolves first wins. */
+                return (
+                  <div className="space-y-4">
+                    <p className="text-sm text-ink-soft">
+                      Seguimos verificando tu pago; a veces Banxico tarda en publicarlo. De paso,
+                      revisa que estos datos coincidan con tu comprobante y corrígelos si hace falta.
+                    </p>
+                    <TransferForm
+                      busy={busy}
+                      draft={{
+                        trackingKey: status.trackingKey,
+                        senderBank: status.senderBank,
+                        date: status.transferDate,
+                      }}
+                      submitLabel="Confirmar estos datos"
+                      onSubmit={(transfer) =>
+                        pay.mutate({
+                          transfer,
+                          ...(proofId ? { proofId } : {}),
+                          supersedes: payment.directPaymentId,
+                        })
+                      }
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <p className="text-sm text-ink-soft">
+                  Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar
+                  esta página abierta.
+                </p>
+              );
+            })()}
           </>
         )}
 
@@ -381,9 +515,87 @@ export function PaymentPage({ token }: { token: string }) {
     );
   }
 
-  /* ——— 3. Instrucciones de pago ——— */
-  const busy = pay.isPending || upload.isPending;
   const submitError = pay.error ?? upload.error;
+
+  /* ——— 3b. Confirma lo que leímos (D18) ——— */
+  if (draft) {
+    const { reading, proofId } = draft;
+    const startOver = () => {
+      setDraft(null);
+      upload.reset();
+      pay.reset();
+    };
+
+    /* The model said this is not a receipt. Measured live: that same
+       image sent to the provider makes it answer `error`, which is
+       retryable, so the payment used to ride the whole six-hour schedule
+       at up to seven paid calls and end `expired`. Here it costs the
+       payer ten seconds and a second try. */
+    if (reading.isReceipt === false) {
+      return (
+        <Card className="space-y-4 p-6">
+          <h1 className="text-lg font-semibold">{data.ispName}</h1>
+          <Alert variant="warning" layout="icon">
+            <TriangleAlert aria-hidden />
+            Esta imagen no parece un comprobante de transferencia. Sube la captura de tu
+            comprobante, o captura los datos a mano.
+          </Alert>
+          <Button variant="secondary" onClick={startOver}>
+            Intentar de nuevo
+          </Button>
+        </Card>
+      );
+    }
+
+    const missing =
+      reading.gate.trackingKey !== "ok" || reading.gate.senderBank !== "ok";
+    return (
+      <Card className="space-y-4 p-6">
+        <header>
+          <h1 className="text-lg font-semibold">{data.ispName}</h1>
+          <p className="text-sm text-ink-soft">Confirma los datos de tu comprobante</p>
+        </header>
+
+        {/* Say plainly that a machine read this and the payer decides.
+            The alternative — silently pre-filling and hoping — is how a
+            misread becomes six hours of "Verificando". */}
+        <Alert variant={missing ? "warning" : "default"} layout="icon">
+          {missing ? <TriangleAlert aria-hidden /> : <ScanLine aria-hidden />}
+          {missing
+            ? "Leímos tu comprobante pero no pudimos sacar todos los datos. Complétalos y revísalos antes de continuar."
+            : "Leímos estos datos de tu comprobante. Revísalos: si algo no coincide, corrígelo."}
+        </Alert>
+
+        {reading.receiptStatus && /proceso/i.test(reading.receiptStatus) && (
+          <Alert variant="warning" layout="icon">
+            <TriangleAlert aria-hidden />
+            Tu comprobante dice “{reading.receiptStatus}”. Tu banco todavía no libera la
+            transferencia, así que puede tardar en aparecer. Puedes continuar de todos modos.
+          </Alert>
+        )}
+
+        <TransferForm
+          busy={busy}
+          draft={reading}
+          submitLabel="Confirmar y verificar"
+          onSubmit={(transfer) => pay.mutate({ transfer, proofId })}
+        />
+
+        {submitError && (
+          <Alert variant="destructive" layout="icon">
+            <TriangleAlert aria-hidden />
+            {payErrorCopy(submitError.code)}
+          </Alert>
+        )}
+
+        <Button variant="ghost" onClick={startOver}>
+          Subir otro comprobante
+        </Button>
+      </Card>
+    );
+  }
+
+  /* ——— 3. Instrucciones de pago ——— */
   return (
     <div className="space-y-4">
       <Card className="space-y-4 p-6">

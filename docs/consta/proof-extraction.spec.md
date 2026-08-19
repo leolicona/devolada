@@ -352,11 +352,13 @@ configuration if it ever misbehaves in production.
       are cheap, both change what this spec is allowed to claim, and neither
       has been done
 - [ ] `docs/integrations/apicep.md` updated with whatever the build measures
-- [ ] **Devolada moves to the two-step** (`/extract`, confirm with the payer,
-      then `/validate`). Consta serving both doors is not the UX win by
-      itself — D6's whole argument is that a misread becomes *"revisa este
-      dato"* in three seconds instead of six hours of *"Verificando"*, and
-      that only happens once `apps/pago` asks
+- [ ] **Devolada consumes both halves** (direct-payment D18, US-D09):
+      `/extract` gates the upload for free, one silent attempt runs through
+      the **transfer door**, and the payer is asked only when `not_found`
+      leaves a real question. D6's argument — that a misread becomes
+      *"revisa este dato"* in three seconds rather than six hours of
+      *"Verificando"* — is what the asking half buys; the silent half is
+      what keeps the other payers from being asked at all
 - [ ] **The DNS gap of D7 is closed or accepted in writing.** The address
       checks refuse a URL that *says* it is internal; a public hostname whose
       DNS answer is private is not caught, because a Worker never sees the

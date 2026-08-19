@@ -1103,3 +1103,251 @@ describe("D12: proofs are private", () => {
     expect(ok.headers.get("Content-Type")).toBe("image/png");
   });
 });
+
+/* D18: the machine reads, the human confirms, the direct door validates.
+   docs/direct-payment/direct-payment.spec.md scenarios 46–49. */
+describe("D18: reading a proof so a human can confirm it", () => {
+  const READING = {
+    extractionId: "ex-1",
+    source: "reader",
+    isReceipt: true,
+    trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+    senderBank: "NUBANK",
+    amountCents: 51400,
+    date: "2026-08-19",
+    receiptStatus: "Aceptada",
+    gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+  };
+
+  const mockExtract = (data: Record<string, unknown> = {}, status = 200) => {
+    const captured: { body?: Record<string, unknown> } = {};
+    consta()
+      .intercept({
+        method: "POST",
+        path: "/extract",
+        body: (raw) => {
+          captured.body = JSON.parse(String(raw));
+          return true;
+        },
+      })
+      .reply(...json({ success: true, data: { ...READING, ...data } }, status));
+    return captured;
+  };
+
+  const readProof = async (proofId: string, token = "tok2345abcdefgh2") =>
+    (await app()).request(
+      `/direct-payments/links/${token}/read`,
+      post({ proofId }),
+      testEnv,
+    );
+
+  it("scenario 46: the reading comes back with no provider credit spent", async () => {
+    const { link } = await seedLinkedIsp();
+    await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
+    const captured = mockExtract();
+
+    const res = await readProof(`${link.id}/proof-1`);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.trackingKey).toBe("NU3AGKMP3ASP8QQQ4U8J8F0K1E4K");
+    expect(data.senderBank).toBe("NUBANK");
+    expect(data.source).toBe("reader");
+    /* Consta fetches the image through a signed URL that expires — the
+       bucket is never public (D12) */
+    expect(String(captured.body?.receiptUrl)).toContain("/direct-payments/proofs/");
+    expect(String(captured.body?.receiptUrl)).toContain("sig=");
+
+    /* Reading is not paying: no `direct_payments` row exists yet */
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+  });
+
+  it("scenario 47: a field the gate refused arrives empty, never as a confirmable guess", async () => {
+    const { link } = await seedLinkedIsp();
+    await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
+    mockExtract({
+      trackingKey: "NU3AGKMP3ASP8QQ4U8J8F0K1E4K",
+      senderBank: null,
+      gate: { trackingKey: "malformed", senderBank: "unknown", amount: "ok" },
+    });
+
+    const res = await readProof(`${link.id}/proof-1`);
+    const { data } = await res.json();
+    /* A malformed clave is worse than no clave: it looks confirmable,
+       and a payer clicking through it spends a paid call to learn
+       nothing (`not_found` says the same thing for four causes) */
+    expect(data.trackingKey).toBeNull();
+    expect(data.senderBank).toBeNull();
+    expect(data.gate.trackingKey).toBe("malformed");
+  });
+
+  it("scenario 48: a proof from another link is not readable through this one", async () => {
+    const { link } = await seedLinkedIsp();
+    await testEnv.PROOFS.put("someone-elses-link/proof-1", new Uint8Array(10));
+
+    /* Proofs are token-bound (D12): no cross-link reads, and no provider
+       call spent finding out */
+    expect((await readProof("someone-elses-link/proof-1")).status).toBe(404);
+    /* a key that was never uploaded is indistinguishable from one that
+       belongs to somebody else */
+    expect((await readProof(`${link.id}/never-uploaded`)).status).toBe(404);
+  });
+
+  it("scenario 49: a confirmed reading pays through the transfer door, with the image kept", async () => {
+    const { link } = await seedLinkedIsp();
+    await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payTransfer("tok2345abcdefgh2", {
+      proofId: `${link.id}/proof-1`,
+      transfer: { trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K", senderBank: "NUBANK", date: "2026-08-19" },
+    });
+    expect(res.status).toBe(201);
+
+    /* The transfer door is what validates — the door that has not missed
+       once — and the receipt never reaches the provider at all */
+    expect(captured.body?.transfer).toBeDefined();
+    expect(captured.body?.receiptUrl).toBeUndefined();
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.proofMode).toBe("transfer");
+    /* The image stays attached: it is the evidence the ISP will want */
+    expect(row.proofKey).toBe(`${link.id}/proof-1`);
+    expect(row.trackingKey).toBe("NU3AGKMP3ASP8QQQ4U8J8F0K1E4K");
+  });
+});
+
+/* D18 continued: what a confirmation does to the row that preceded it.
+   Scenarios 53–56. */
+describe("D18: a correction supersedes, an unchanged confirmation costs nothing", () => {
+  async function silentAttempt(transfer: Record<string, string>) {
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer,
+      receiptStatus: "Aceptada",
+    });
+    const { data } = await res.json();
+    return data.directPaymentId as string;
+  }
+
+  const READ = {
+    trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+    senderBank: "NUBANK",
+    date: "2026-08-19",
+  };
+
+  it("scenario 53: confirming the same three values keeps the row and spends no second credit", async () => {
+    await seedLinkedIsp();
+    const db = drizzle(env.DB);
+    const first = await silentAttempt(READ);
+
+    /* No wisphub and no consta interceptors registered on purpose: if
+       this path spent a call, the test would fail on a missing mock. */
+    const res = await payTransfer("tok2345abcdefgh2", { transfer: READ, supersedes: first });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.directPaymentId).toBe(first);
+
+    const rows = await db.select().from(directPayments);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("validating");
+    /* the schedule and the attempt count survive untouched */
+    expect(rows[0].nextValidationAt).not.toBeNull();
+    expect(rows[0].validationAttempts).toBe(1);
+  });
+
+  it("scenario 54: a corrected confirmation supersedes the first row and releases its clave", async () => {
+    await seedLinkedIsp();
+    const db = drizzle(env.DB);
+    const first = await silentAttempt(READ);
+
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...READ, trackingKey: "HSBC712057" },
+      supersedes: first,
+    });
+    expect(res.status).toBe(201);
+
+    const rows = await db.select().from(directPayments).orderBy(directPayments.createdAt);
+    expect(rows).toHaveLength(2);
+    const old = rows.find((r) => r.id === first)!;
+    const fresh = rows.find((r) => r.id !== first)!;
+    expect(old.status).toBe("superseded");
+    /* Released: the misread clave may belong to another customer of the
+       same ISP, and D8's index would have blocked a payment they really
+       made for six hours */
+    expect(old.nextValidationAt).toBeNull();
+    expect(fresh.trackingKey).toBe("HSBC712057");
+    /* the pair (what was read, what was confirmed) stays recoverable */
+    expect(fresh.supersedesId).toBe(first);
+  });
+
+  it("scenario 55: a superseded row is not swept and cannot be revived", async () => {
+    await seedLinkedIsp();
+    const db = drizzle(env.DB);
+    const first = await silentAttempt(READ);
+    await db
+      .update(directPayments)
+      .set({ status: "superseded", nextValidationAt: new Date(Date.now() - 1000) })
+      .where(eq(directPayments.id, first));
+
+    /* No consta interceptor: the sweep must not touch it */
+    const report = await sweepDirectPayments(testEnv, new Date());
+    expect(report.claimed).toBe(0);
+
+    /* and it cannot be superseded a second time */
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...READ, trackingKey: "HSBC712057" },
+      supersedes: first,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("scenario 56: a confirmed payment records who Banxico says sent the money", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    mockConsta();
+
+    await payTransfer();
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.status).toBe("confirmed");
+    /* Recorded and acted on by nothing: people pay for relatives, so a
+       mismatch can only ever be a signal for the ISP (D18) */
+    expect(row.cepSenderName).toBe("JANELY REYES");
+  });
+
+  it("a supersedes pointing at another link's payment is refused", async () => {
+    await seedLinkedIsp();
+    const first = await silentAttempt(READ);
+    const db = drizzle(env.DB);
+    /* re-home the row on a link this token does not own */
+    const [otherLink] = await db
+      .insert(paymentLinks)
+      .values({
+        ispId: (await db.select().from(directPayments))[0].ispId,
+        token: "tok9999zzzzzzzz9",
+        wisphubCustomerId: "7",
+        customerUsuario: "otro@wifiplus",
+      })
+      .returning();
+    await db
+      .update(directPayments)
+      .set({ paymentLinkId: otherLink.id })
+      .where(eq(directPayments.id, first));
+
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...READ, trackingKey: "HSBC712057" },
+      supersedes: first,
+    });
+    expect(res.status).toBe(404);
+  });
+});

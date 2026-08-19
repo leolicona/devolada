@@ -84,6 +84,9 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V03** — As an integrator, a transfer whose CEP is not generated yet reads as "pending" — never as a false "invalid" — so I can retry later.
 - **US-V04** — As an integrator, a CEP that was already validated before comes flagged, so one proof of payment cannot be reused twice.
 - **US-V05** — As the operator, I issue and revoke API keys by hand, and every validation is logged under its key so the fixed fee per transaction can be derived later.
+- **US-V06** — As an integrator, when a validation cannot be completed I am told whether waiting can ever help and when to try again, so a permanent failure never becomes a long silence for my customer.
+- **US-V07** — As an integrator, a request that cannot possibly validate — a bank name outside the provider's vocabulary, a malformed tracking key — is refused instantly with the accepted values, instead of costing a call and coming back "invalid".
+- **US-V08** — As the operator, every call records what the provider charged, how long it took and how much quota is left, so the channel's cost and health are visible before it breaks.
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
@@ -223,7 +226,7 @@ Owner's decisions:
 | [polish/responsive.spec.md](polish/responsive.spec.md) | polish | US-P03, US-P02, US-P04 (rendered) | in development |
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
-| [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05 | in development |
+| [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |

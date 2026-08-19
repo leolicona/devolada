@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { charges, directPayments, isps, paymentLinks } from "../db/schema";
+import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
 import { WispHub, WispHubError } from "../wisphub/client";
 import { attemptReconnection } from "../wisphub/reconnection";
@@ -35,14 +36,29 @@ export function speiFeeCents(isp: Isp): number {
   return isp.speiServiceFeeCents ?? isp.serviceFeeCents;
 }
 
+/* The vocabulary as a lookup. A name outside it cannot resolve a CEP —
+   apiCEP answers `invalid`, never an error (D16) — so it is exactly the
+   "nothing can validate" case D4 already refuses to show. */
+const KNOWN_BANKS: ReadonlySet<string> = new Set(BANKS);
+
+export function speiBankIsKnown(isp: Isp): boolean {
+  return Boolean(isp.speiBank && KNOWN_BANKS.has(isp.speiBank));
+}
+
 /* D4: the channel exists only when the ISP configured its own account —
    and when Consta itself is reachable in this environment. A page that
    shows a CLABE nothing can validate would let customers transfer into
-   the void. */
+   the void.
+
+   `speiBank` being non-empty is not enough, and BUG-008 is why: a value
+   stored before D16 can be truthy and still outside apiCEP's vocabulary.
+   Measured live on dev 2026-08-19 — an ISP held `Klar` where the list says
+   `KLAR`, so every payment to it failed the moment D16 shipped, and failed
+   *retryably*, which is the six-hour silence rather than an honest refusal. */
 export function speiAvailable(env: Bindings, isp: Isp): boolean {
   return Boolean(
     isp.speiClabe &&
-      isp.speiBank &&
+      speiBankIsKnown(isp) &&
       isp.speiBeneficiaryName &&
       isp.wisphubApiKey &&
       env.CONSTA_BASE_URL &&
@@ -94,6 +110,13 @@ export async function runValidation(
   if (!isp.speiClabe || !isp.speiBank || !isp.speiBeneficiaryName) {
     /* The ISP un-configured SPEI between submission and this attempt */
     return retryLater("SPEI_NOT_CONFIGURED");
+  }
+  if (!speiBankIsKnown(isp)) {
+    /* BUG-008: retrying cannot fix the ISP's own configuration, and Consta
+       would refuse it with a 400 the client reads as retryable. Stop here
+       and name it, so the ISP sees a configuration problem rather than a
+       customer seeing "Verificando" for six hours. */
+    return retryLater("SPEI_BANK_UNKNOWN");
   }
 
   const beneficiary = {

@@ -262,6 +262,29 @@ describe("US-D01: the link answers with the live debt", () => {
     const { data } = await res.json();
     expect(data.status).toBe("unavailable");
   });
+
+  it("scenario 35: an ISP whose bank is outside the vocabulary is unavailable too (BUG-008)", async () => {
+    /* Found live on dev 2026-08-19: an ISP held `Klar` where apiCEP's list
+       says `KLAR`. Every field was set, so the channel looked configured and
+       took money it could never validate — and failed *retryably*, which is
+       the six-hour silence rather than an honest refusal. D16 fixed the form;
+       nothing checked the value already in the database. */
+    await seedLinkedIsp({ speiBank: "Klar" });
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("unavailable");
+    /* No WispHub call: D4 decides before the lookup */
+  });
+
+  it("scenario 35: the exact spelling keeps the channel open", async () => {
+    await seedLinkedIsp({ speiBank: "KLAR" });
+    mockCustomerLookup([wisphubCustomer()]);
+    mockPendingInvoices();
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("debt");
+    expect(data.speiBank).toBe("KLAR");
+  });
 });
 
 describe("US-D02: submitting proof", () => {

@@ -22,6 +22,7 @@ const settings = (over: Record<string, unknown> = {}) =>
       beneficiaryName: null,
       serviceFeeCents: null,
       effectiveServiceFeeCents: 1500,
+      bankUnknown: false,
       configured: false,
     },
     ...over,

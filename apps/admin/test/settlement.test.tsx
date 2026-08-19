@@ -19,6 +19,7 @@ const settings = settingsResponse.parse({
     beneficiaryName: null,
     serviceFeeCents: null,
     effectiveServiceFeeCents: 1500,
+    bankUnknown: false,
     configured: false,
   },
 });

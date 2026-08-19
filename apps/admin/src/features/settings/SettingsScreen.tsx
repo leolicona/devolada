@@ -265,6 +265,19 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
         </div>
         <div>
           <Label htmlFor="spei-bank">Banco</Label>
+          {settings.spei.bankUnknown && (
+            /* BUG-008: the bank was saved before the list existed and no
+               longer resolves, so the channel is closed until it is picked
+               again. Silence here meant every payment failing invisibly. */
+            <p role="status" className="mt-1 flex items-start gap-2 text-sm text-danger">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                El banco guardado (<strong>{settings.spei.bank}</strong>) ya no está en la lista, así
+                que los pagos por transferencia están desactivados. Elígelo de nuevo para
+                reactivarlos.
+              </span>
+            </p>
+          )}
           {/* D16: this name travels as `beneficiary.bank` on every
               validation this ISP ever runs, so a value the provider does
               not recognise does not lose one payment — it loses all of

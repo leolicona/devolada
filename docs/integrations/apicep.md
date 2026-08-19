@@ -100,7 +100,7 @@ sets no bound.
 - Accepted: **JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC**, **1 MB max**. PDF matters — several Mexican banks issue the comprobante as one.
 - `beneficiary` is required in OCR mode, and it is **not read from the image**: receipts mask the destination CLABE (Nu prints `••••8274`), so apiCEP matches the beneficiary the caller sends against Banxico's record. No OCR can recover it.
 - The claimed `date` in direct mode is a **hint, not a filter**: a validation claiming `2026-08-15` returned a CEP dated `2026-08-17`. Compare the returned date yourself (direct-payment D11 does).
-- **Sender and beneficiary bank may not be the same institution** — apiCEP 400s with *"El banco emisor y el receptor no pueden ser la misma institución."* *(published, unverified.)* This is a coverage hole, not an error: a payer who banks where the ISP banks cannot be validated through apiCEP at all. Intra-bank transfers never produce a SPEI CEP, so the limit is Banxico's, not the provider's.
+- **Sender and beneficiary bank may not be the same institution** — measured 2026-08-19: HTTP 400 in 432 ms with *"El banco emisor y el banco receptor no pueden ser la misma institución. Las transferencias SPEI y SPID deben realizarse entre instituciones distintas."* This is a coverage hole, not an error: a payer who banks where the ISP banks cannot be validated through apiCEP at all. Intra-bank transfers never produce a SPEI CEP, so the limit is Banxico's, not the provider's.
 
 ### `bank`: never rejected, and still decides the verdict
 
@@ -273,8 +273,10 @@ response. That is the whole case for reading the receipt ourselves
 
 ### HTTP status codes, and what each one means for a retry
 
-The retry decision is the whole point of this table. *(200, 400, 401 and 500
-measured; 405, 422 and 429 published, unverified.)*
+The retry decision is the whole point of this table. *(200, 400 and 401
+measured live; 405, 422, 429 and **500** published, unverified — apiCEP has
+never actually failed on us, so the one row we treat as retryable is the one
+row we have never seen.)*
 
 | code | apiCEP means | retryable? |
 |---|---|---|
@@ -362,7 +364,7 @@ of the code. Detail and priority in the analysis that produced this update.
 - **Read `X-RateLimit-Remaining` around a pending re-check** and close the credits question apiCEP has not answered since 2026-08-17. The instrument now exists; it needs one unsettled transfer to measure against. Until then direct-payment D7's cadence stays priced as if every re-check bills.
 - **Decide what 800 calls a month buys.** That is the real ceiling, and D7's six-attempt schedule spends against it. Nothing in any spec names a budget.
 - Capture a `status: "error"` body from the receipt door — one dark-screenshot reproduction would tell us whether we get `missingFields` or a bare confidence-0, and whether `confidence` means anything in OCR mode.
-- Still unverified: **422** on a duplicated reference number, **429** and whether it carries `Retry-After`, and **405**. The 422 is cheap to provoke if a duplicate reference can be found; 429 costs 800 calls and will likely first be seen in production.
+- Still unverified: **422** on a duplicated reference number, **429** and whether it carries `Retry-After`, **405**, and **500** — the provider has never failed on us, so the only condition Consta treats as retryable is one nobody here has observed. The 422 is cheap to provoke if a duplicate reference can be found; 429 costs 800 calls and will likely first be seen in production.
 - `referenceNumber` has an undocumented maximum length; find it or bound it conservatively.
 - `downloads.originalImage` is documented and has never appeared. Either it needs a flag we are not sending, or the docs are ahead of the service.
 

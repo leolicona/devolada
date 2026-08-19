@@ -27,9 +27,19 @@ export type ReceiptInput = {
   potentialBeneficiaries?: Beneficiary[];
 };
 
+/* D11: an `invalid` is two different answers wearing one word.
+   `contradicted` — a CEP came back and disagrees with the claim.
+   `not_found`   — nothing came back at all: no cepDetails, no cepStatus.
+   The second is ambiguous by construction (a transfer that never
+   happened, a misread tracking key, a wrong sender bank, or a CEP
+   Banxico has not published yet all look identical on the wire), so it
+   is never a verdict the caller may act on as "this is fake". */
+export type InvalidReason = "contradicted" | "not_found";
+
 export type ProviderVerdict = {
   providerValidationId: string | null;
   status: "valid" | "pending" | "invalid";
+  reason: InvalidReason | null;
   alreadyValidated: boolean;
   /* Raw provider CEP status ("EN PROCESO", "LIQUIDADO", …), for the log */
   cepStatus: string | null;

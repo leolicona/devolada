@@ -94,14 +94,16 @@ could not name.
   became six-hour silences. **Rejected**: letting callers branch on a `detail`
   string (unstable, untestable); a fourth verdict `unknown` (a failure is not a
   verdict — D3 stands).
-- **D10 — An unrecognised provider status is never a verdict.** `mapStatus`
+- **D10 — An unrecognised provider status is never a verdict.** *(built
+  2026-08-19.)* `mapStatus`
   maps only the exact string `"invalid"` to `invalid`; anything unrecognised
   becomes `PROVIDER_UNAVAILABLE`. The current fallback is `invalid` — the
   harshest reading available — so a status apiCEP adds tomorrow would tell a
   paying customer their transfer is fake. Fail toward "we do not know", never
   toward "you did not pay". **Rejected**: unknown → `pending` (an unknown is
   not a promise that waiting helps).
-- **D11 — `invalid` says which kind, and admits when it cannot know.** The
+- **D11 — `invalid` says which kind, and admits when it cannot know.** *(built
+  2026-08-19; BUG-003.)* The
   verdict carries `reason`: `contradicted` when a CEP came back and disagrees
   with the claim, `not_found` when apiCEP returned no `cepDetails` and no
   `cepStatus`. `not_found` is documented as **ambiguous by construction** — it
@@ -183,12 +185,14 @@ could not name.
 
 ## The failure taxonomy, and what it does to the wait
 
-Ten distinguishable situations. Five are permanent, and **all five currently
-ride Devolada's full six-hour schedule** because Consta cannot name them.
+Eleven distinguishable situations. Five are permanent, and **all five still
+ride Devolada's full six-hour schedule** because Consta cannot name them
+until D9 lands.
 
 | what really happened | resolves by waiting? | who can fix it | Consta today | with D9–D16 |
 |---|---|---|---|---|
-| CEP not published yet (`EN PROCESO`) | **yes, ≤30 min** | nobody | `pending` ✓ | unchanged |
+| CEP not published yet, and apiCEP says so (`EN PROCESO`) | yes, bound unknown | nobody | `pending` ✓ | unchanged |
+| CEP not published yet, and apiCEP says **nothing** | yes, bound unknown | nobody | `invalid`, terminal (BUG-003) | `invalid` + `not_found` (D11, built) |
 | the transfer does not exist | no | the customer — pay | `invalid` ✓ | `invalid` + `not_found` |
 | the tracking key was misread or mistyped | **never** | the customer — retype | `invalid` (reads as "never paid") | `invalid` + `not_found` + `verify_inputs` |
 | the sender bank is wrong | **never** | the customer — fix the bank | `invalid` (reads as "never paid") | refused at the edge (D12) |
@@ -201,14 +205,29 @@ ride Devolada's full six-hour schedule** because Consta cannot name them.
 
 **The six-hour wait is not this spec's to shorten, but it is this spec's
 fault.** Devolada's schedule runs +2, +8, +20, +45 min, +2 h, +6 h from
-submission; since Banxico publishes within ~30 minutes, everything after +45
-min exists only because the code cannot tell "still waiting for Banxico" from
-"permanently broken". Once Consta states `retryable: false`, four of those five
-permanent failures end on the **first** attempt with a message the customer can
-act on, and the fifth alerts the operator instead of the customer. Shortening
-the pending budget itself and consuming `retryable` belong to
+submission, and everything after +45 min exists only because the code cannot
+tell "still waiting for Banxico" from "permanently broken". Once Consta states
+`retryable: false`, four of those five permanent failures end on the **first**
+attempt with a message the customer can act on, and the fifth alerts the
+operator instead of the customer. Shortening the pending budget itself and
+consuming `retryable` belong to
 `docs/direct-payment/direct-payment.spec.md` D7 — named here as the hand-off,
 not silently adopted.
+
+**Correction, 2026-08-19: "Banxico publishes within ~30 minutes" was wrong,
+and it was written here the same day it was disproved.** Two real transfers
+were watched from authorisation, with the money already delivered to the
+receiving account: one polled 12 times through **T+62 min** and one through
+T+15 min, and neither had a CEP at any sample — no `EN PROCESO`, no record at
+all, just the faceless `invalid` this taxonomy's second row now names. Banxico
+itself was reachable on port 80 and refusing connections on 443 throughout, so
+whether that latency is normal or was an outage is **unmeasured**; n=2 is not
+a distribution either way. What follows for the design is not a new number but
+the absence of one: **no attempt schedule may assume an upper bound on CEP
+publication**, and shortening the pending budget must wait for data rather
+than inherit a figure nobody measured. This is exactly why `not_found` rides
+the schedule instead of ending it (D11) — the premise that made terminating
+look safe does not hold.
 
 ## Local sandbox
 
@@ -466,9 +485,28 @@ regression suite for "no permanent failure ever becomes a long silence".
       `apps/api/src/consta/client.ts` still reads every non-2xx as retryable,
       so another integrator's 400 would ride a schedule it can never escape.
 
-### D9–D11, D14–D16 (proposed 2026-08-19, not yet built)
+### D10–D11 (built 2026-08-19)
 
-- [ ] Scenarios 8–15 and 21–25 automated, each citing its story
+- [x] `mapVerdict` replaces `mapStatus`: `invalid` carries `reason`
+      (`contradicted` | `not_found`), `not_found` carries `hint:
+      "verify_inputs"`, and an unrecognised provider status raises a provider
+      failure instead of falling through to `invalid` (D10, D11)
+- [x] `validations.reason` records which kind, so "how often is `not_found` a
+      real payment we could not see?" becomes a query rather than an opinion
+      (migration `0001`)
+- [x] Scenarios 24, 25 and 14 automated (`test/validate.test.ts`), and the
+      local mock serves the `not_found` shape (`NF` in the tracking key)
+- [x] **BUG-003 cleared on the consumer side in the same PR.** Consta naming
+      the two halves is only half the fix: `apps/api` now rides its schedule
+      on `not_found` and terminates only on `contradicted` (direct-payment
+      D17). A verdict nobody consumes changes nothing.
+- [ ] Scenario 14 still answers `PROVIDER_ERROR`, not D9's
+      `PROVIDER_UNAVAILABLE` with `retryable: false`. D10 fixes the verdict;
+      D9 will fix the code.
+
+### D9, D14–D16 (proposed 2026-08-19, not yet built)
+
+- [ ] Scenarios 8–13, 15 and 21–23 automated, each citing its story
 - [ ] `sandbox/apicep-mock.mjs` serves every response shape those scenarios
       need — rate-limit headers, `X-Processing-Time`, both 400 shapes, 401,
       429, `status: "error"` with `missingFields`, an unrecognised status, and

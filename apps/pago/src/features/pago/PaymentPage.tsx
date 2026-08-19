@@ -70,6 +70,11 @@ const payErrors: Record<string, string> = {
   TRANSFER_ALREADY_USED: "Esta transferencia ya fue utilizada para otro pago.",
   SPEI_NOT_CONFIGURED: "El pago por transferencia no está disponible por ahora.",
   VALIDATION_ERROR: "Revisa los datos de tu transferencia e intenta de nuevo.",
+  /* D17: two different sentences, because they are two different facts.
+     One is what the bank says; the other is that nobody said anything. */
+  TRANSFER_CONTRADICTED: "Tu banco reporta que esta transferencia no se completó. Revísala en tu app e intenta de nuevo.",
+  TRANSFER_NOT_FOUND:
+    "No encontramos tu transferencia en Banxico. Si ya la hiciste, contacta a tu proveedor de internet con tu comprobante para que la registre.",
 };
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
@@ -278,6 +283,16 @@ export function PaymentPage({ token }: { token: string }) {
               Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar esta
               página abierta.
             </p>
+            {/* D17: after two lookups that found nothing, silence stops
+                being reassuring. Say what is happening — the wait is
+                normal for a transfer the bank has not liberated yet —
+                without implying the payer did something wrong. */}
+            {status.error === "TRANSFER_NOT_FOUND" && status.validationAttempts >= 2 && (
+              <p className="text-sm text-ink-soft">
+                Tu transferencia todavía no aparece en Banxico. Puede tardar un rato en publicarse;
+                seguiremos intentando y tu proveedor la verá en cuanto aparezca.
+              </p>
+            )}
           </>
         )}
 
@@ -312,8 +327,13 @@ export function PaymentPage({ token }: { token: string }) {
         {status.status === "expired" && (
           <>
             <StatusBadge status="paymentExpired" size="md" />
+            {/* D17: "no pudimos verificarlo" is a statement about us, not
+                an accusation about the payer — and when we know which
+                wall we hit, we say which. */}
             <p className="text-sm text-ink-soft">
-              No pudimos confirmar tu pago. Contacta a tu proveedor de internet para resolverlo.
+              {status.error
+                ? payErrorCopy(status.error)
+                : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
             </p>
           </>
         )}

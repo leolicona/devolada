@@ -129,6 +129,7 @@ function mockReconnection(verifyEstado = "Activo", invoiceId = 42) {
 
 type ConstaData = {
   status?: "valid" | "pending" | "invalid";
+  reason?: "contradicted" | "not_found";
   alreadyValidated?: boolean;
   cep?: Record<string, unknown> | undefined;
 };
@@ -711,6 +712,139 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
     expect(row.status).toBe("expired");
     expect(row.nextValidationAt).toBeNull();
+  });
+});
+
+/* BUG-003 / D17: what happens when Consta cannot find the transfer.
+   Found live on dev across two customers and three receipts: a real
+   payment, exact amount, declared `invalid` and dead on the first try. */
+describe("D17: a not-found is not a refusal", () => {
+  it("scenario 36: `invalid` with reason not_found keeps the payment alive on the schedule", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+
+    const res = await payTransfer();
+    const { data } = await res.json();
+    expect(data.status).toBe("validating");
+    expect(data.error).toBe("TRANSFER_NOT_FOUND");
+
+    const db = drizzle(env.DB);
+    const [row] = await db.select().from(directPayments);
+    expect(row.status).toBe("validating");
+    expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
+    /* The point of the fix: another attempt is booked, not skipped */
+    expect(row.nextValidationAt).not.toBeNull();
+    expect(await db.select().from(charges)).toHaveLength(0);
+  });
+
+  it("scenario 37: the CEP that appears late is caught by the very next sweep", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        monthlyFeeCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        constaStatus: "invalid",
+        lastError: "TRANSFER_NOT_FOUND",
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt: new Date(now.getTime() - 8 * 60 * 1000),
+      })
+      .returning();
+
+    mockConsta();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+    expect(row.lastError).toBeNull();
+  });
+
+  it("scenario 38: not_found to the end of the schedule → `expired`, never `invalid`", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        monthlyFeeCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: "2026-08-17",
+        constaStatus: "invalid",
+        validationAttempts: 6,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt: new Date(now.getTime() - 6 * 60 * 60 * 1000),
+      })
+      .returning();
+
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.expired).toBe(1);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("expired");
+    expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
+
+    /* US-D04: the page is told which wall it hit, so it can say "we
+       could not verify it" instead of "your transfer does not exist" */
+    const status = await (await app()).request(`/direct-payments/${payment.id}/status`, {}, testEnv);
+    const { data } = await status.json();
+    expect(data.status).toBe("expired");
+    expect(data.error).toBe("TRANSFER_NOT_FOUND");
+  });
+
+  it("scenario 39: `invalid` with reason contradicted is still terminal, on the first attempt", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "invalid", reason: "contradicted", cep: undefined });
+
+    const res = await payTransfer();
+    const { data } = await res.json();
+    expect(data.status).toBe("invalid");
+    expect(data.error).toBe("TRANSFER_CONTRADICTED");
+
+    const db = drizzle(env.DB);
+    const [row] = await db.select().from(directPayments);
+    expect(row.nextValidationAt).toBeNull();
+    expect(await db.select().from(charges)).toHaveLength(0);
+  });
+
+  it("scenario 40: an `invalid` with no reason at all is read as not_found, not as a refusal", async () => {
+    /* Fail toward "we do not know": a Consta that predates D11, or one
+       that grows a third reason, must never be able to turn silence
+       back into an accusation. */
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "invalid", cep: undefined });
+
+    const res = await payTransfer();
+    const { data } = await res.json();
+    expect(data.status).toBe("validating");
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.nextValidationAt).not.toBeNull();
   });
 });
 

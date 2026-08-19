@@ -68,6 +68,7 @@ validateRoute.post(
         apiKeyId: c.get("apiKey").id,
         mode: input.mode,
         status: verdict.status,
+        reason: verdict.reason,
         alreadyValidated: verdict.alreadyValidated,
         trackingKey: (input.mode === "transfer" ? input.trackingKey : verdict.cep?.trackingKey) ?? null,
         referenceNumber: input.mode === "transfer" ? (input.referenceNumber ?? null) : null,
@@ -83,6 +84,12 @@ validateRoute.post(
       data: {
         validationId: row.id,
         status: verdict.status,
+        /* D11: `invalid` alone is not enough for the caller to act on.
+           `not_found` is ambiguous by construction, so it travels with
+           the only advice that is always true for it — and never with a
+           licence to tell a customer their transfer does not exist. */
+        ...(verdict.reason ? { reason: verdict.reason } : {}),
+        ...(verdict.reason === "not_found" ? { hint: "verify_inputs" } : {}),
         alreadyValidated: verdict.alreadyValidated,
         ...(verdict.cep ? { cep: verdict.cep } : {}),
         ...(verdict.downloads ? { downloads: verdict.downloads } : {}),

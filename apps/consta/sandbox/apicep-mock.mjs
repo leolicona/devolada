@@ -7,7 +7,8 @@
    The trackingKey picks the scenario:
      contains "PEND" → invalid + cepStatus EN PROCESO (Consta must say pending)
      contains "DUP"  → valid, cepPreviouslyValidated true (replay flag)
-     contains "BAD"  → invalid, cepStatus DEVUELTO
+     contains "BAD"  → invalid, cepStatus DEVUELTO (Consta: reason contradicted)
+     contains "NF"   → invalid, no cepStatus and no cepDetails (reason not_found)
      contains "ERR"  → HTTP 503 (Consta must say PROVIDER_ERROR)
      anything else   → valid, LIQUIDADO, echoing the claimed data
    The receipt door (imageUrl) always answers valid with fixed data. */
@@ -39,6 +40,15 @@ function reply(body) {
         validationId: crypto.randomUUID(),
         status: "invalid",
         validation: { banxicoConfirmed: false, cepStatus: "EN PROCESO", cepPreviouslyValidated: null },
+      },
+    };
+  if (key.includes("NF"))
+    return {
+      code: 200,
+      json: {
+        validationId: crypto.randomUUID(),
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
       },
     };
   if (key.includes("BAD"))

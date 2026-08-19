@@ -261,6 +261,7 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 32. A `trackingKey` carrying a receipt's two-line wrap — a space, a newline, or the live 29-character one with a Cyrillic З — → 400, no paid call (D16, BUG-006)
 33. A ten-character key (`HSBC712057`, apiCEP's own example) is accepted: the bound is a range, not Nu's 28 (D16, BUG-006)
 34. The payment page offers the bank as a list, not a text field, and the button stays disabled until one is chosen (D16)
+35. An ISP whose stored `speiBank` is outside the vocabulary shows the page as `unavailable`, and the exact spelling keeps it open — the data D16 could not reach (D4, D16, BUG-008)
 
 ## Definition of Done
 

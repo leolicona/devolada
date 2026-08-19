@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { isps } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import type { SettingsPatchRequest, SettingsResponse, WispHubTestResponse } from "./schema";
+import { speiBankIsKnown } from "../../direct-payments/validation";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -37,7 +38,12 @@ function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
       beneficiaryName: isp.speiBeneficiaryName,
       serviceFeeCents: isp.speiServiceFeeCents,
       effectiveServiceFeeCents: isp.speiServiceFeeCents ?? isp.serviceFeeCents,
-      configured: Boolean(isp.speiClabe && isp.speiBank && isp.speiBeneficiaryName),
+      /* BUG-008: a bank stored before D16 can be set and still unusable, so
+         `configured` alone would report a channel that silently refuses every
+         payment. `bankUnknown` is what the settings screen shows the ISP. */
+      bankUnknown: Boolean(isp.speiBank) && !speiBankIsKnown(isp),
+      configured:
+        Boolean(isp.speiClabe && isp.speiBeneficiaryName) && speiBankIsKnown(isp),
     },
   };
 }

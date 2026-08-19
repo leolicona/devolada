@@ -49,6 +49,8 @@ export const settingsResponse = z.object({
     /* null → falls back to serviceFeeCents (D3) */
     serviceFeeCents: z.number().int().nullable(),
     effectiveServiceFeeCents: z.number().int(),
+    /* The bank is set but outside apiCEP's vocabulary (BUG-008) */
+    bankUnknown: z.boolean(),
     configured: z.boolean(),
   }),
 });

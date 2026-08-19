@@ -1,6 +1,11 @@
 # apiCEP — verified contract
 
-**Status: verified live (2026-08-17 direct mode, 2026-08-18 receipt mode).** Provider of the Banxico CEP behind Consta (`docs/consta/validation.spec.md`). This file records the contract **as measured**; where it disagrees with apiCEP's own documentation or its blog, the measurement wins — the same rule `agnostic-auth.md` follows.
+**Status: verified live (2026-08-17 direct mode, 2026-08-18 receipt mode); apiCEP's published reference merged and probed on 2026-08-19.** Provider of the Banxico CEP behind Consta (`docs/consta/validation.spec.md`).
+
+This file records the contract **as measured**; where it disagrees with apiCEP's own documentation or its blog, the measurement wins — the same rule `agnostic-auth.md` follows. Two provenances now live here and they are never blurred:
+
+- **Measured** — we sent it and read the answer. Load-bearing; safe to build on.
+- **Published** — from apiCEP's reference, marked *(published, unverified)*. Good enough to code defensively against, not good enough to build on. The 2026-08-19 probe run tested nine published claims and **three were wrong**, one of them in the direction that would have cost us money.
 
 ## Who calls it
 
@@ -31,7 +36,8 @@ Definition-of-Done item all waited on buying one. Nothing supports that: the
 us. (It is not a dead copy-paste string either — apiCEP branches on the
 prefix: a made-up `sk_live_…` answers `API key not found` while a made-up
 `apicep_…` answers `Invalid or revoked API token`. Whether a customer can
-obtain one is unknown, unmeasurable from outside, and moot.)
+obtain one is unknown, unmeasurable from outside, and moot.) apiCEP's own
+reference agrees: it documents exactly one credential, sent one way.
 
 ### What broke on 2026-08-18, and why the probe exists
 
@@ -58,7 +64,8 @@ provider means the value is wrong or revoked — never that it aged out.**
 
 ## Request
 
-`POST https://api.apicep.cloud/validate-transfer`
+`POST https://api.apicep.cloud/validate-transfer` — the only endpoint. Any
+other method answers **405** *(published, unverified)*.
 
 Two modes; send one. Consta's two doors map 1:1 onto them.
 
@@ -75,30 +82,138 @@ Two modes; send one. Consta's two doors map 1:1 onto them.
               "bank": "NUBANK", "trackingKey": "…", "referenceNumber": null } }
 ```
 
+| field | required | notes |
+|---|---|---|
+| `imageUrl` | when `sender` is absent | public HTTPS, ≤ 1 MB |
+| `sender` | when `imageUrl` is absent | direct mode; `imageUrl` then unnecessary |
+| `beneficiary` | when `potentialBeneficiaries` is absent | **exactly one** of `clabe` (18) / `phoneNumber` (10) / `cardNumber` (16), plus `bank`; `name` optional |
+| `potentialBeneficiaries` | — | array of `{bank, clabe|phoneNumber|cardNumber}`; **OCR mode only**; no match → `status: "error"` *(published, unverified)* |
+| `system` | no | `SPEI` or `SPID`, default `SPEI`. Consta hardcodes `SPEI`; SPID (dollar transfers) is unreachable today and nobody has asked. |
+
+`sender` needs **at least one** of `trackingKey` or `referenceNumber`, plus
+`date`, `amount` and `bank`. `referenceNumber` has an undocumented maximum
+length — apiCEP 400s past it without publishing the number, and Consta's Zod
+sets no bound.
+
 - **The image travels by URL only** — no multipart, no base64 (docs, 2026-08-18).
 - **apiCEP's fetcher reads short-lived signed URLs fine.** Verified against our own HMAC-signed R2 proxy (`GET /direct-payments/proofs/:linkId/:file`, 15-minute expiry). This was the open unknown before the receipt door ever ran.
 - Accepted: **JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC**, **1 MB max**. PDF matters — several Mexican banks issue the comprobante as one.
 - `beneficiary` is required in OCR mode, and it is **not read from the image**: receipts mask the destination CLABE (Nu prints `••••8274`), so apiCEP matches the beneficiary the caller sends against Banxico's record. No OCR can recover it.
 - The claimed `date` in direct mode is a **hint, not a filter**: a validation claiming `2026-08-15` returned a CEP dated `2026-08-17`. Compare the returned date yourself (direct-payment D11 does).
+- **Sender and beneficiary bank may not be the same institution** — measured 2026-08-19: HTTP 400 in 432 ms with *"El banco emisor y el banco receptor no pueden ser la misma institución. Las transferencias SPEI y SPID deben realizarse entre instituciones distintas."* This is a coverage hole, not an error: a payer who banks where the ISP banks cannot be validated through apiCEP at all. Intra-bank transfers never produce a SPEI CEP, so the limit is Banxico's, not the provider's.
+
+### `bank`: never rejected, and still decides the verdict
+
+apiCEP publishes `bank` as a closed vocabulary of 97 names. **It does not enforce
+it** — measured 2026-08-19 — and that is worse than enforcing it. The
+vocabulary:
+
+`ACTINVER` `AFIRME` `albo` `ARCUS FI` `ASP INTEGRA OPC` `AZTECA` `BaBien` `BAJIO` `BANAMEX` `BANCO COVALTO` `BANCOMEXT` `BANCOPPEL` `BANCO S3` `BANCREA` `BANJERCITO` `BANKAOOL` `BANK OF AMERICA` `BANK OF CHINA` `BANOBRAS` `BANORTE` `BANREGIO` `BANSI` `BANXICO` `BARCLAYS` `BBASE` `BBVA MEXICO` `BMONEX` `CAJA POP MEXICA` `CAJA TELEFONIST` `CASHI CUENTA` `CB INTERCAM` `CI BOLSA` `CITI MEXICO` `CLS` `CoDi Valida` `COMPARTAMOS` `CONSUBANCO` `COOPDESARROLLO` `CREDICAPITAL` `CREDICLUB` `CRISTOBAL COLON` `Cuenca` `Dep y Pag Dig` `DONDE` `FINAMEX` `FINCOMUN` `FINCO PAY` `FONDEADORA` `FONDO (FIRA)` `GBM` `HEY BANCO` `HIPOTECARIA FED` `HSBC` `ICBC` `INBURSA` `INDEVAL` `INMOBILIARIO` `INTERCAM BANCO` `INVEX` `JP MORGAN` `KAPITAL` `KLAR` `KUSPIT` `LIBERTAD` `MASARI` `Mercado Pago W` `MexPago` `MIFEL` `MIZUHO BANK` `MONEXCB` `MUFG` `MULTIVA BANCO` `NAFIN` `NUBANK` `NVIO` `PAGATODO` `Peibo` `PROFUTURO` `REVOLUT` `SABADELL` `SANTANDER` `SCOTIABANK` `SHINHAN` `SPIN BY OXXO` `STP` `TESORED` `TRANSFER` `UALA` `UBER PRO CARD` `UNAGRA` `VALMEX` `VALUE` `VECTOR` `VE POR MAS` `VOLKSWAGEN` `TRF` `CLIP`
+
+The names are not the ones a customer would type: it is `NUBANK`, not "Nu";
+`BBVA MEXICO`, not "BBVA"; `AZTECA`, not "Banco Azteca". Casing is inconsistent
+(8 of the 97 are not fully uppercase: `albo`, `BaBien`, `CoDi Valida`, `Cuenca`, `Dep y Pag Dig`, `Mercado Pago W`, `MexPago`, `Peibo`).
+
+**Measured against one real, settled transfer** (NUBANK → KLAR, $2.00,
+2026-08-18, a CEP already confirmed `LIQUIDADO`), changing only `sender.bank`:
+
+| `sender.bank` sent | HTTP | verdict | provider time |
+|---|---|---|---|
+| `NUBANK` (correct) | 200 | `valid`, `cepDetails.senderBank: NUBANK` | 7.0 s |
+| `Nu` (off the vocabulary) | 200 | **`valid`** — resolved to NUBANK anyway | 5.9 s |
+| `HSBC` (a different real bank) | 200 | **`invalid`, no `cepDetails`, no `cepStatus`** | 1.3 s |
+
+Three things follow, and the third is the dangerous one:
+
+1. **A name off the vocabulary is not a 400.** Free text is tolerated and
+   aliased — `Nu` found the CEP. The published list is a courtesy, not a
+   contract, so no status code will ever tell a caller its picker is wrong.
+2. **`sender.bank` is load-bearing.** It is not a label travelling alongside
+   the tracking key; it participates in resolving the CEP.
+3. **Getting it wrong returns `invalid`.** Not an error, not a 400 — the same
+   `invalid` with an absent `cepDetails` that a transfer which never happened
+   returns. A payer who really paid is told their transfer could not be
+   verified, and nothing on the wire says why.
+
+The one tell is latency: the wrong bank came back in **1.3 s against 5.9–7.0 s**
+for a real lookup. `X-Processing-Time` distinguishes "we asked Banxico" from
+"we gave up early" for free.
+
+So the vocabulary must be enforced **at our edge, to protect the verdict** —
+not to anticipate a 400 that never comes. Any bank picker the payer sees has
+to emit these literals.
 
 ## Response
 
-Verified fields — these are the ones Consta reads and the ones behaviour has been proven on:
+### Body
 
 ```jsonc
 { "validationId": "…",
   "status": "valid" | "invalid" | "pending" | "error",
+  "confidence": 0.97,                  // OCR score 0.0–1.0
+  "extracted": {                       // what the picture said — see the warning below
+    "senderBank", "receiverBank", "trackingKey", "referenceNumber",
+    "amount", "date", "senderName", "beneficiaryName", "paymentConcept" },
   "validation": {
+    "banxicoConfirmed": true,
     "cepStatus": "LIQUIDADO" | "EN PROCESO" | …,
     "cepPreviouslyValidated": true | false | null,
     "cepDetails": { "trackingKey", "amount", "operationDate", "senderBank",
                     "senderName", "receiverBank", "beneficiaryName",
-                    "digitalSignature" } },
+                    "digitalSignature", … } },
   "downloads": { "cepXml": "https://storage.apicep.cloud/…",
-                 "cepPdf":  "…" } }              // expire after 15 days
+                 "cepPdf": "…", "originalImage": "…" },   // expire after 15 days
+  "processingTime": { "ocr": "1.20s", "validation": "3.45s", "total": "4.68s" } }
 ```
 
-Documented by apiCEP but **never yet observed in a response we captured**: a top-level `confidence` (OCR score 0.0–1.0), `validation.banxicoConfirmed`, an `extracted` object, and `downloads.originalImage`. Consta's adapter does not model them, so nothing has ever printed them. `confidence` is worth capturing deliberately — see the open items.
+Everything above is confirmed live except **`downloads.originalImage`**, which
+apiCEP documents and we have never seen returned.
+
+**`confidence` is not the OCR quality signal it looks like.** It came back
+`1` on every direct-mode call measured on 2026-08-19 — including ones with no
+image at all and `processingTime.ocr: "0ms"`, and including a request apiCEP
+rejected with a 400. Whatever it scores, it is not "how well I read your
+receipt" in direct mode, and its behaviour in OCR mode is untested. It was
+listed here as the field that would separate *illegible* from *nonexistent*;
+that hope now needs a receipt-door measurement before anything is built on it.
+
+`downloads` is `{}` — present but empty — on an `invalid` verdict, not absent.
+
+The real `cepDetails` is far richer than the eight fields Consta maps: a
+captured response also carried `speiKey`, `cdaChain`, `certificateNumber`,
+both parties' account numbers and account types, both parties' **RFCs**,
+`paymentConcept` and `iva`. Consta drops them deliberately — `cdaChain` alone
+carries two RFCs and two full CLABEs, and none of it decides anything.
+
+**`downloads.cepPdf` is not always present on the first call.** One validation
+returned only `cepXml`; the same transfer returned both minutes later. The PDF
+appears to be generated asynchronously, so a consumer must tolerate its
+absence rather than treat it as a failure.
+
+### Headers
+
+apiCEP says these ride "every response". **They do not** — measured
+2026-08-19:
+
+| header | on `200` | on `400` | meaning |
+|---|---|---|---|
+| `X-RateLimit-Limit` | yes | **no** | requests per period — **800** on our plan |
+| `X-RateLimit-Remaining` | yes | **no** | requests left — 767 at 2026-08-19 |
+| `X-RateLimit-Reset` | yes | **no** | ISO 8601 reset — `2026-09-16T17:59:12.203+00:00` |
+| `X-Processing-Time` | yes | sometimes | provider-side total, e.g. `2550ms` |
+
+Consta reads none of them, so no log has ever shown one. The quota figures
+above came from a `curl`, not from our own telemetry.
+
+**Quota is not what the plan page implies.** 800 per period, resetting
+monthly, with 767 left after roughly a month of spikes and a dozen probe
+calls. Devolada's D7 re-validation schedule fires up to six calls per
+unsettled payment; 800 is about 130 fully-retried payments a month. That
+ceiling deserves a number in a spec before the channel carries volume.
+
+`X-RateLimit-Remaining` is also the instrument that closes the credits
+question open with apiCEP since 2026-08-17: read it either side of a pending
+re-check and the answer costs one call.
 
 ### The field that decides money
 
@@ -110,7 +225,7 @@ So: decide money on `cepDetails.amount` and `cepDetails.operationDate`, never on
 
 ## HTTP 200 is not a valid payment
 
-Correct, and worth restating in this repo's terms. `status` is the verdict and it arrives inside a 200. Consta's mapping (`validation.spec.md` D3):
+`status` is the verdict and it arrives inside a 200. Consta's mapping (`validation.spec.md` D3):
 
 | provider | Consta | why |
 |---|---|---|
@@ -121,22 +236,137 @@ Correct, and worth restating in this repo's terms. `status` is the verdict and i
 
 A garbage tracking key answers **HTTP 200 with `status: "invalid"`** (5 measured) — a made-up transfer is a verdict, not an error.
 
+### The four faces of `status: "error"`
+
+All arrive inside a 200 *(published; only the first has been seen here)*:
+
+1. **The image could not be fetched** from `imageUrl`.
+2. **The image is unreadable** — OCR confidence 0.
+3. **The OCR read the image but missed a mandatory field**, and says which:
+   ```jsonc
+   { "status": "error",
+     "error": "El OCR no pudo extraer los siguientes datos obligatorios…",
+     "missingFields": ["fecha de la operación", "clave de rastreo o número de referencia"] }
+   ```
+4. **No `potentialBeneficiaries` candidate matched** the extracted data.
+
+**This changes how our OCR false negative reads.** apiCEP *has* a channel for
+"I could not read this" — case 3, with the field names spelled out — and our
+false negative did not use it. That receipt came back `status: "invalid"`
+with no `cepDetails`, meaning the OCR extracted enough to satisfy the
+mandatory-field check, got a character wrong, and looked up a CEP that does
+not exist. So the provider distinguishes *illegible* from *absent*, but not
+*misread* from *absent*: a confident wrong reading is reported with the same
+face as a transfer that never happened. That is the exact gap
+`docs/direct-payment/proof-extraction.spec.md` is built to close, and it is
+why `missingFields` is worth surfacing — it is the one OCR failure apiCEP
+will name out loud.
+
+**There is a third way to reach that same faceless `invalid`, and it is ours,
+not theirs:** sending the wrong `sender.bank` produces `invalid` with no
+`cepDetails` and no `cepStatus` (measured above). In OCR mode the sender bank
+comes from apiCEP's own reading of the image, so a misread bank name lands
+here too. Three distinct causes — receipt captured before the bank accepted
+it, OCR misread, wrong sender bank — arrive at one indistinguishable
+response. That is the whole case for reading the receipt ourselves
+(`docs/direct-payment/proof-extraction.spec.md`).
+
+### HTTP status codes, and what each one means for a retry
+
+The retry decision is the whole point of this table. *(200, 400 and 401
+measured live; 405, 422, 429 and **500** published, unverified — apiCEP has
+never actually failed on us, so the one row we treat as retryable is the one
+row we have never seen.)*
+
+| code | apiCEP means | retryable? |
+|---|---|---|
+| `200` | processed — read `status` | per the verdict table above |
+| `400` | malformed: bad `system`, missing fields, oversized/invalid image, same institution both sides, over-long `referenceNumber` | **never** — the request must change |
+| `401` | token absent, wrong or revoked | **never by the caller** — an operator must fix the secret |
+| `405` | not a POST | **never** — our bug |
+| `422` | the reference number is duplicated in Banxico | **not as sent** — resend with `trackingKey` to disambiguate |
+| `429` | plan quota exhausted | **yes, but only after `X-RateLimit-Reset`** — retrying before it deepens the outage |
+| `500` | provider fault | **yes** |
+
+Only `500` is genuinely transient. Consta collapses all seven into one
+retryable `PROVIDER_ERROR`; see the gap list below.
+
+**A 400 still bills a credit.** Measured twice on 2026-08-19: fire two valid
+requests and `X-RateLimit-Remaining` falls by one each; slip a malformed one
+between them and it falls by two. apiCEP charges for rejecting our own bad
+request, which makes a retry loop on a permanently-malformed payload a paid
+loop, not merely a slow one.
+
+**And there are two different 400s.** One is a bare rejection, the other is a
+full response envelope wearing a 400:
+
+```jsonc
+// request-shape 400 — no validationId, no headers
+{ "error": "system must be either 'SPEI' or 'SPID'" }
+
+// business-rule 400 — same envelope as a 200, with status "error"
+{ "validationId": "07b2cefe-…", "status": "error", "confidence": 1,
+  "extracted": { "senderBank": "KLAR", "receiverBank": "KLAR", … },
+  "validation": { "banxicoConfirmed": false },
+  "processingTime": { "ocr": "0ms", "total": "1.3s" } }
+```
+
+The same-institution rejection is the second kind. Consta throws on
+`!res.ok` **before parsing the body**, so the `validationId` of a call it was
+charged for is discarded unread.
+
 ## Measured behaviour
 
-- **Latency 12.5–19 s** per validation, receipt and transfer door alike. Their marketing says "less than 10 seconds"; it is not. Anything calling this synchronously must budget for ~15 s, and Consta's client carries a 30 s deadline for it.
+- **Latency 12.5–19 s** end to end per validation, receipt and transfer door alike. `X-Processing-Time` puts apiCEP's own share at **5.9–7.0 s** for a lookup that reaches Banxico and **1.3–2.6 s** for one that fails early, so most of the wall clock is not theirs. Their marketing says "less than 10 seconds"; it is not. Anything calling this synchronously must budget for ~15 s, and Consta's client carries a 30 s deadline for it (BUG-004: 38.5 s has been measured through the full chain).
 - **The OCR produces false negatives, silently.** Of three real Nubank transfers, the receipt door read two and failed the third outright — `invalid` with **no `cepDetails` at all**, twice, deterministically. The same transfer validated through the **direct mode in 12.5 s** using the key read off the image by hand. The CEP existed the whole time. On the wire, an unreadable receipt is indistinguishable from a transfer that never happened.
 - **The direct mode has not missed one** (3 for 3). It is the reliable door; OCR is the convenient one (direct-payment D2).
-- **An image with no receipt in it errors — it does not answer `invalid`.** A dark UI screenshot produced `PROVIDER_ERROR`, i.e. retryable, so a payment carrying it retries on the full schedule instead of failing once. Open question in direct-payment's DoD.
+- **An image with no receipt in it errors — it does not answer `invalid`.** A dark UI screenshot produced `PROVIDER_ERROR`, i.e. retryable, so a payment carrying it retries on the full schedule instead of failing once. This is published case 1 or 2 above; the response body that would say which was never captured.
 - **`cepPreviouslyValidated` is per CEP and permanent.** Once a CEP is validated it stays flagged, so a receipt is effectively single-use for testing: a second submission cannot re-test the first outcome. Consta reports the flag and refuses to act on it (its D4); the replay policy is the integrator's (direct-payment D8).
 
-## Environment
+## Environment, limits and cost
 
 No sandbox, no test keys, no free credits (docs checked 2026-08-17). A **free Welcome plan** exists — 50 requests / 30 days on signup at `app.apicep.cloud` — enough for smoke checks. Dev therefore carries its own mock: `pnpm sandbox` in `apps/consta` serves `/validate-transfer` on port 8789, with scenarios keyed off the tracking key (`PEND`, `DUP`, `BAD`, `ERR`). Pointing `APICEP_BASE_URL` at it is a one-line switch, which is what Consta's adapter boundary (its D2) buys.
 
-Cost is roughly **$0.25 MXN per call**, which sets the budgets in direct-payment D13.
+Cost is roughly **$0.25 MXN per call**, which sets the budgets in direct-payment D13. apiCEP recommends **~1 s between calls** for bulk work; nothing here batches yet, but direct-payment D7's re-validation schedule is the first thing that could.
+
+Document URLs (`cepXml`, `cepPdf`, `originalImage`) are **deleted after 15 days** — anything we need to keep must be copied, not linked.
+
+## Where Consta does not yet honour this contract
+
+Recorded here so the next reader does not mistake this file for a description
+of the code. Detail and priority in the analysis that produced this update.
+
+- **Every HTTP failure is one retryable code.** `apicep.ts` captures
+  `res.status` into `ProviderError` and never reads it again; the route maps
+  the lot to 502 `PROVIDER_ERROR`. 401, 422 and 429 each need different
+  handling and get none (BUG-002).
+- **An unrecognised `status` becomes `invalid`.** `mapStatus`'s fallback is
+  the harshest verdict, so a value apiCEP adds tomorrow would read as "this
+  transfer is fake" — against D3's entire premise.
+- **The rate-limit headers are discarded**, so quota is invisible until a 429
+  arrives, and the credits question stays open for want of reading one header.
+- **`bank` is `z.string().min(1)`.** apiCEP will not reject a wrong name, it
+  will answer `invalid` — so this is the one field where our Zod is the only
+  thing standing between a real payment and a false negative.
+- **The body of a non-2xx is never parsed**, so `missingFields`, the
+  `validationId` of a billed 400, and the whole business-rule envelope are
+  discarded unread.
+- **`confidence`, `extracted` and `banxicoConfirmed` are not modelled** — the
+  first two deliberately (`extracted` must never decide money), the third by
+  omission.
+- **The adapter's `fetch` carries no timeout**, so Consta can outlive its own
+  caller's deadline.
+- **The mock models none of this** — no 429, no 422, no `missingFields`, no
+  headers, no envelope-shaped 400 — so nothing above is testable until it does.
 
 ## Open items
 
-- ~~Capture one raw response~~ **done, 2026-08-18.** A direct-mode response carried a top-level `confidence: 1`, `validation.banxicoConfirmed: true`, and a full `extracted` object (`senderBank`, `receiverBank`, `trackingKey`, `amount`, `date`, `beneficiaryName`) — all three previously documented but never observed here. It also carried a `processingTime` breakdown (`ocr`, `validation`, `total`) and a far richer `cepDetails` than this file models: `speiKey`, `cdaChain`, `certificateNumber`, sender/beneficiary account numbers, account types and **RFCs**, `paymentConcept`, `iva`. Consta reads eight fields and drops the rest, which is the right default — `cdaChain` alone carries both parties' RFCs and full CLABEs. `downloads.originalImage` was still not returned. Note `downloads.cepPdf` is not always present on the first call: one validation returned only `cepXml`, and the same transfer returned both minutes later, so the PDF appears to be generated asynchronously.
-- ~~Buy an `sk_live_` key~~ **closed, not a real dependency.** The expiry that justified it was measured away, and the key type itself traces to a 401 hint rather than to anything apiCEP offers us (see Auth). The `apicep_` token is permanent and definitive. Revisit only if a paid plan is bought for volume reasons.
-- Whether pending re-checks consume credits is still unanswered by apiCEP (asked 2026-08-17); direct-payment D7's cadence is priced as if they do.
+- **Read `X-RateLimit-Remaining` around a pending re-check** and close the credits question apiCEP has not answered since 2026-08-17. The instrument now exists; it needs one unsettled transfer to measure against. Until then direct-payment D7's cadence stays priced as if every re-check bills.
+- **Decide what 800 calls a month buys.** That is the real ceiling, and D7's six-attempt schedule spends against it. Nothing in any spec names a budget.
+- Capture a `status: "error"` body from the receipt door — one dark-screenshot reproduction would tell us whether we get `missingFields` or a bare confidence-0, and whether `confidence` means anything in OCR mode.
+- Still unverified: **422** on a duplicated reference number, **429** and whether it carries `Retry-After`, **405**, and **500** — the provider has never failed on us, so the only condition Consta treats as retryable is one nobody here has observed. The 422 is cheap to provoke if a duplicate reference can be found; 429 costs 800 calls and will likely first be seen in production.
+- `referenceNumber` has an undocumented maximum length; find it or bound it conservatively.
+- `downloads.originalImage` is documented and has never appeared. Either it needs a flag we are not sending, or the docs are ahead of the service.
+
+*Probe cost, 2026-08-19: ~12 calls (≈ $3 MXN), including two spent
+deliberately to prove that a rejected request is billed.*

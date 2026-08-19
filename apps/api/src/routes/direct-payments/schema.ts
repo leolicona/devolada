@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { BANKS } from "../../direct-payments/banks";
+
+/* D16: re-exported so the payer's form is built from the same list that
+   validates it — the TIMEZONES pattern in settings-schema. A picker that can
+   offer a name the server refuses is the bug this closes (BUG-007). */
+export { BANKS, type Bank } from "../../direct-payments/banks";
 
 /* Shareable contract (ARCHITECTURE.md): apps/pago derives types from
    these schemas and its MSW handlers validate against them. */
@@ -30,8 +36,18 @@ export const payRequest = z
     proofId: z.string().min(1).optional(),
     transfer: z
       .object({
-        trackingKey: z.string().trim().min(5).max(50),
-        senderBank: z.string().trim().min(2).max(80),
+        /* BUG-006/D16: a clave de rastreo is alphanumeric and at most 30
+           characters. A range, not a fixed 28 — that is Nu's length, while
+           apiCEP's own example carries ten (`HSBC712057`), and a payer may
+           bank anywhere. Trimming the edges while enforcing the middle is
+           the point: a pasted trailing newline is harmless, a space inside
+           is the two-line receipt wrap that costs a paid call and comes
+           back `invalid`. */
+        trackingKey: z.string().trim().regex(/^[A-Za-z0-9]{6,30}$/),
+        /* D16: apiCEP answers `invalid` — never an error — for a bank name
+           it does not know, which reads exactly like a transfer that never
+           happened. Refusing here is the only way the payer ever learns. */
+        senderBank: z.string().trim().pipe(z.enum(BANKS)),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       })
       .optional(),

@@ -21,6 +21,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node scripts/spec-lint.mjs
+      - name: Bank vocabulary in step with the docs
+        run: node scripts/gen-banks.mjs --check
       - run: node scripts/contrast-lint.mjs
       - run: pnpm -r --if-present typecheck
       - run: pnpm -r --if-present test

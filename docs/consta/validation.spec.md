@@ -1,8 +1,8 @@
 ---
 status: in-development
-stories: [US-V01, US-V02, US-V03, US-V04, US-V05]
+stories: [US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08]
 domain: consta
-updated: 2026-08-17
+updated: 2026-08-19
 debt: []
 ---
 
@@ -60,6 +60,151 @@ spike.
   no browser origin gets CORS. The Worker ships to `consta.dev.devoladapago.com`
   only; the prod env block and domain wait for the first external consumer.
 
+### Honest failures (added 2026-08-19)
+
+The 2026-08-19 probe of apiCEP (`docs/integrations/apicep.md`) found that
+D1–D8 answer nine distinguishable provider situations with four outcomes, and
+that the collapse falls on exactly the failures a customer feels. D9–D16 fix
+that. The driving measurement: **Banxico publishes a CEP in at most ~30
+minutes**, so any wait longer than that is not patience, it is a failure we
+could not name.
+
+- **D9 — A failure says whether waiting can help.** The error envelope grows
+  two fields the consumer cannot derive: `retryable: boolean` and, when it is
+  knowable, `retryAfter` (ISO 8601). Five codes replace the single
+  `PROVIDER_ERROR`:
+
+  | code | provider condition | HTTP | `retryable` |
+  |---|---|---|---|
+  | `PROVIDER_UNAVAILABLE` | 500, network failure, our own deadline | 502 | `true` |
+  | `PROVIDER_RATE_LIMITED` | 429 | 503 + `Retry-After` | `true`, with `retryAfter` from `X-RateLimit-Reset` |
+  | `PROVIDER_AUTH_FAILED` | 401 | 502 | **`false`** — an operator must act |
+  | `REQUEST_REJECTED` | 400, 405, 422 | 422 | **`false`** — the request must change |
+  | `RECEIPT_UNREADABLE` | 200 + `status: "error"` on the receipt door | 422 | **`false`**, carries `missingFields` |
+
+  Consta is the only party that saw apiCEP's answer, so retryability is its
+  knowledge to state, not the caller's to infer from an HTTP code. Today all
+  seven apiCEP failure codes arrive as one retryable 502 and the consumer
+  guesses — which is why a revoked token and a duplicate reference number both
+  became six-hour silences. **Rejected**: letting callers branch on a `detail`
+  string (unstable, untestable); a fourth verdict `unknown` (a failure is not a
+  verdict — D3 stands).
+- **D10 — An unrecognised provider status is never a verdict.** `mapStatus`
+  maps only the exact string `"invalid"` to `invalid`; anything unrecognised
+  becomes `PROVIDER_UNAVAILABLE`. The current fallback is `invalid` — the
+  harshest reading available — so a status apiCEP adds tomorrow would tell a
+  paying customer their transfer is fake. Fail toward "we do not know", never
+  toward "you did not pay". **Rejected**: unknown → `pending` (an unknown is
+  not a promise that waiting helps).
+- **D11 — `invalid` says which kind, and admits when it cannot know.** The
+  verdict carries `reason`: `contradicted` when a CEP came back and disagrees
+  with the claim, `not_found` when apiCEP returned no `cepDetails` and no
+  `cepStatus`. `not_found` is documented as **ambiguous by construction** — it
+  covers a transfer that never happened, a misread tracking key, and a wrong
+  sender bank, and nothing on the wire separates them — so it also carries
+  `hint: "verify_inputs"`. This is the difference between telling a customer
+  *"tu transferencia no existe"* and *"revisa tu clave de rastreo y tu banco"*.
+  **Rejected**: inferring the cause from `providerMs` — the wrong-bank case
+  came back in 1.3 s against 5.9–7.0 s for a real lookup, but n=3 is not a
+  verdict; the field is recorded under D14 so the question can be settled with
+  data.
+
+### Refusing what cannot possibly validate (added 2026-08-19)
+
+- **D12 — The bank vocabulary is enforced here, because the provider does not.**
+  `sender.bank` and `beneficiary.bank` become a closed `z.enum` of apiCEP's 97
+  published names, and `GET /banks` publishes the list so an integrator's
+  picker is generated rather than transcribed (US-V07). Measured 2026-08-19
+  against one real settled transfer, changing only `sender.bank`: `NUBANK`
+  → `valid`; `Nu` → `valid` (aliased); **`HSBC` → `invalid` with no
+  `cepDetails`.** apiCEP never answers 400 for a bank name — a wrong one comes
+  back as the same faceless `invalid` a nonexistent transfer returns. Our Zod
+  is therefore the only thing standing between a real payment and a silent
+  false rejection. **The cost is accepted knowingly**: the enum will reject
+  some free-text names apiCEP would have aliased, because that tolerance is
+  undocumented, unmeasured beyond one case, and fails silently when it fails.
+  An instant 400 listing the accepted values beats a coin flip.
+  **Rejected**: passing bank names through and trusting the provider (measured
+  to produce a silent false negative); warning instead of rejecting (a wrong
+  bank cannot produce a correct verdict, so there is nothing to warn about).
+- **D13 — A tracking key is shape-checked before it is spent.** `trackingKey`
+  must match `^[A-Za-z0-9]{6,30}$`; `referenceNumber` digits within a bounded
+  length. Banxico's clave de rastreo is alphanumeric and at most 30
+  characters, and the range matters more than the number: apiCEP's own example
+  carries a 10-character key (`HSBC712057`) while Nu's is 28, so a fixed
+  length would be wrong for a product serving every bank. What the check
+  actually catches is the real failure — whitespace, pasted newlines and
+  line-wrap artifacts from receipts that print the key across two lines. Today
+  `min(1)` sends `"NU3AGI FAMA9D"` to the provider, spends a credit and gets
+  `invalid`. **Rejected**: a fixed 28 characters — correct for Nu and wrong
+  here; that belongs in Devolada's own schema (BUG-006), not in the schema of
+  a product that validates every Mexican bank.
+
+### Seeing the cost before it bites (added 2026-08-19)
+
+- **D14 — Every call records what it cost, how long it took, and what is left.**
+  Three columns on `validations`: `providerHttpStatus`, `providerMs` (from
+  `X-Processing-Time`) and `quotaRemaining` (from `X-RateLimit-Remaining`).
+  Measured: those headers ride 200s only, and the plan is **800 calls per
+  period** — about 130 fully-retried payments a month against Devolada's
+  six-attempt schedule. Today quota is invisible until a 429 arrives, and the
+  "do pending re-checks bill?" question has been open with apiCEP since
+  2026-08-17 for want of reading one header. **Rejected**: an external metrics
+  sink — the append-only log is already the billing record (D6), and one place
+  is enough.
+- **D15 — The log records billed calls, not successful ones.** Measured
+  2026-08-19: **apiCEP charges a credit for a request it rejects with 400.**
+  Two valid calls drop `X-RateLimit-Remaining` by one each; slip a malformed
+  one between them and it drops by two. D6's "billing is a SUM over this
+  table" was therefore false for every failed call, and our own cost was
+  invisible — which is how a revoked token burned quota unnoticed for a day. A
+  `validations` row is now written whenever a request reached apiCEP and a
+  response came back, non-2xx included, with `status` nullable and the
+  provider's HTTP status recorded; verdict-bearing rows stay selectable with
+  `status IS NOT NULL`. Whether 401, 422 and 429 also bill is unmeasured, and
+  the row is what will tell us. **Rejected**: a second `provider_errors` table
+  (two logs to reconcile for one invoice); leaving D6 alone (it hides what we
+  are charged).
+- **D16 — Consta owns a deadline, strictly under its caller's.** The adapter's
+  `fetch` gets `AbortSignal.timeout`, set below the api's `CONSTA_TIMEOUT_MS`.
+  The adapter has none today, so the caller times out first, treats it as
+  retryable and calls again — while Consta's original call completes, writes a
+  row, bills a credit invisibly and sets apiCEP's `cepPreviouslyValidated`.
+  That is precisely what told an honest payment `TRANSFER_ALREADY_USED` on
+  2026-08-18 (direct-payment D8's carve-out). Whoever times out first must be
+  the party able to report it. **Rejected**: no deadline (a Worker's own limit
+  is not a contract); a deadline above the caller's (leaves the
+  invisible-billing path open).
+
+## The failure taxonomy, and what it does to the wait
+
+Ten distinguishable situations. Five are permanent, and **all five currently
+ride Devolada's full six-hour schedule** because Consta cannot name them.
+
+| what really happened | resolves by waiting? | who can fix it | Consta today | with D9–D16 |
+|---|---|---|---|---|
+| CEP not published yet (`EN PROCESO`) | **yes, ≤30 min** | nobody | `pending` ✓ | unchanged |
+| the transfer does not exist | no | the customer — pay | `invalid` ✓ | `invalid` + `not_found` |
+| the tracking key was misread or mistyped | **never** | the customer — retype | `invalid` (reads as "never paid") | `invalid` + `not_found` + `verify_inputs` |
+| the sender bank is wrong | **never** | the customer — fix the bank | `invalid` (reads as "never paid") | refused at the edge (D12) |
+| the receipt is illegible / not a receipt | **never** | the customer — upload again | `PROVIDER_ERROR` → **6 h** | `RECEIPT_UNREADABLE`, not retryable |
+| the token is revoked | **never** | the operator | `PROVIDER_ERROR` → **6 h** | `PROVIDER_AUTH_FAILED`, not retryable |
+| quota is exhausted (429) | yes, at reset | the operator | `PROVIDER_ERROR` → **6 h** | `PROVIDER_RATE_LIMITED` + `retryAfter` |
+| the reference number is duplicated (422) | not as sent | the caller — add a tracking key | `PROVIDER_ERROR` → **6 h** | `REQUEST_REJECTED`, not retryable |
+| sender and beneficiary bank at one institution | **never** | nobody — no SPEI CEP exists | `PROVIDER_ERROR` → **6 h** | `REQUEST_REJECTED`, not retryable |
+| apiCEP is down (500) | yes, minutes | nobody | `PROVIDER_ERROR` ✓ | `PROVIDER_UNAVAILABLE` |
+
+**The six-hour wait is not this spec's to shorten, but it is this spec's
+fault.** Devolada's schedule runs +2, +8, +20, +45 min, +2 h, +6 h from
+submission; since Banxico publishes within ~30 minutes, everything after +45
+min exists only because the code cannot tell "still waiting for Banxico" from
+"permanently broken". Once Consta states `retryable: false`, four of those five
+permanent failures end on the **first** attempt with a message the customer can
+act on, and the fifth alerts the operator instead of the customer. Shortening
+the pending budget itself and consuming `retryable` belong to
+`docs/direct-payment/direct-payment.spec.md` D7 — named here as the hand-off,
+not silently adopted.
+
 ## Local sandbox
 
 apiCEP offers no sandbox, test keys or free credits (docs checked
@@ -70,6 +215,15 @@ it — D2 is what makes this a one-line switch. Scenarios ride the tracking
 key: `PEND` → pending, `DUP` → replay flag, `BAD` → invalid, `ERR` →
 provider error; anything else validates. Remove the override to hit the real
 provider.
+
+**The mock has to grow before D9–D16 are testable.** It models one failure
+(HTTP 503) out of the nine apiCEP can produce, and none of the shapes the
+2026-08-19 probe measured: the rate-limit headers, `X-Processing-Time`, the
+envelope-shaped 400, a bare `{error}` 400, a 401, a 429 with
+`X-RateLimit-Reset`, `status: "error"` with `missingFields`, and an
+unrecognised `status`. Each new scenario below names the mock behaviour it
+needs, and the mock is part of the same change — a decision that cannot be
+provoked locally is a decision nobody can regression-test.
 
 ## Provider notes (measured live, 2026-08-17)
 
@@ -161,6 +315,8 @@ Response:
 ```
 { success: true, data: {
     validationId, status: "valid" | "pending" | "invalid",
+    reason?: "contradicted" | "not_found",   // on invalid only (D11)
+    hint?: "verify_inputs",                  // on not_found only (D11)
     alreadyValidated: boolean,
     cep?: { trackingKey, amountCents, date, senderBank, senderName,
             receiverBank, beneficiaryName, digitalSignature? },
@@ -168,10 +324,30 @@ Response:
 } }
 ```
 
-- Missing/invalid/revoked key → 401 `AUTHENTICATION_ERROR`.
-- Zod rejects → 400 `VALIDATION_ERROR`; both doors or neither → 400.
-- Provider 4xx/5xx or `status: "error"` → 502 `PROVIDER_ERROR` (no
-  `validations` row — nothing was validated).
+Failures (D9) — `retryable` is the field consumers branch on, never the HTTP
+code:
+
+```
+{ success: false, error: {
+    code: "PROVIDER_UNAVAILABLE" | "PROVIDER_RATE_LIMITED"
+        | "PROVIDER_AUTH_FAILED" | "REQUEST_REJECTED" | "RECEIPT_UNREADABLE"
+        | "AUTHENTICATION_ERROR" | "VALIDATION_ERROR",
+    retryable: boolean,
+    retryAfter?: "2026-09-16T17:59:12.203+00:00",   // rate limiting only
+    missingFields?: ["fecha de la operación"],      // RECEIPT_UNREADABLE only
+} }
+```
+
+- Missing/invalid/revoked key → 401 `AUTHENTICATION_ERROR`, `retryable: false`.
+- Zod rejects → 400 `VALIDATION_ERROR`, `retryable: false`; both doors or
+  neither → 400. A bank name off the vocabulary (D12) or a malformed tracking
+  key (D13) is refused here, before a credit is spent.
+- Provider failures map per the D9 table. Every call that reached apiCEP
+  leaves a `validations` row, verdict or not (D15).
+
+`GET /banks` — `Authorization: Bearer ck_…` → `{ success: true, data: { banks:
+[…97 names…] } }`. The vocabulary apiCEP accepts, served so a payer-facing
+picker is generated from one source (D12, US-V07).
 
 `POST /admin/keys` `{ name }` → `{ id, name, key }` (plaintext shown once).
 `DELETE /admin/keys/:id` → revokes. Both take
@@ -192,6 +368,69 @@ the routes 404.
    admin token → 401 (US-V05, D5)
 7. Provider error → 502 `PROVIDER_ERROR`, no `validations` row (D6)
 
+### The failure taxonomy — one case per row of the D9 table (added 2026-08-19)
+
+Each names the provider response the mock must serve. Together they are the
+regression suite for "no permanent failure ever becomes a long silence".
+
+8. apiCEP **500** → `PROVIDER_UNAVAILABLE`, `retryable: true`, no
+   `retryAfter`, HTTP 502 (US-V06, D9)
+9. apiCEP **429** with `X-RateLimit-Reset` → `PROVIDER_RATE_LIMITED`,
+   `retryable: true`, `retryAfter` echoing the header verbatim, HTTP 503 with
+   a `Retry-After` header (US-V06, D9)
+10. apiCEP **401** → `PROVIDER_AUTH_FAILED`, **`retryable: false`** — the
+    failure that cost six hours on 2026-08-18, and the one a caller must never
+    retry (US-V06, D9)
+11. apiCEP **bare 400** (`{"error":"system must be either 'SPEI' or 'SPID'"}`)
+    → `REQUEST_REJECTED`, `retryable: false`, HTTP 422 (US-V06, D9)
+12. apiCEP **envelope 400** (same institution both sides: a 400 whose body is
+    a full response with `validationId` and `status: "error"`) → the same
+    `REQUEST_REJECTED`, and the provider's `validationId` is recorded even
+    though the call failed (US-V06, D9, D15)
+13. apiCEP **200 with `status: "error"` and `missingFields`** on the receipt
+    door → `RECEIPT_UNREADABLE`, `retryable: false`, `missingFields` passed
+    through verbatim so the caller can tell the customer which field to fix
+    (US-V06, D9)
+14. apiCEP **200 with an unrecognised `status`** → `PROVIDER_UNAVAILABLE`,
+    retryable — and **never `invalid`**. The regression that guards D10's
+    whole point (US-V06, D10)
+15. The provider **hangs past Consta's deadline** → `PROVIDER_UNAVAILABLE`
+    reported by Consta, not by a caller timing out first (US-V06, D16)
+
+### Refused at the edge, before a credit is spent (added 2026-08-19)
+
+16. `senderBank: "Nu"` → 400 `VALIDATION_ERROR` listing the accepted names,
+    **no provider call and no `validations` row**. The measured silent false
+    negative, converted into an instant fixable error (US-V07, D12)
+17. `beneficiary.bank` off the vocabulary → the same refusal on the other side
+    of the request (US-V07, D12)
+18. `GET /banks` returns the 97 names to a valid key and 401s without one
+    (US-V07, D12)
+19. `trackingKey` carrying a space or a newline — the line-wrap artifact a
+    two-line receipt produces — → 400 `VALIDATION_ERROR`, no provider call
+    (US-V07, D13)
+20. `trackingKey: "HSBC712057"` (10 characters) is **accepted**: the check is a
+    range and a character class, not Nu's 28 (US-V07, D13)
+
+### What every call records (added 2026-08-19)
+
+21. A `valid` verdict stores `providerHttpStatus`, `providerMs` from
+    `X-Processing-Time` and `quotaRemaining` from `X-RateLimit-Remaining`
+    (US-V08, D14)
+22. A provider **400** writes a `validations` row with `status: null` and its
+    HTTP status — the billed-but-failed call D6 used to lose (US-V08, D15)
+23. A response with **no rate-limit headers** (measured: apiCEP omits them on
+    every 400) leaves `quotaRemaining` null without failing the request
+    (US-V08, D14)
+
+### The verdict says which kind (added 2026-08-19)
+
+24. `invalid` with `cepStatus: "DEVUELTO"` → `reason: "contradicted"`, no hint
+    (US-V06, D11)
+25. `invalid` with no `cepDetails` and no `cepStatus` → `reason: "not_found"`
+    plus `hint: "verify_inputs"` — the response that must never be rendered to
+    a customer as "your transfer does not exist" (US-V06, D11)
+
 ## Definition of Done
 
 - [x] Scenarios automated in `apps/consta/test/` (workerd + local D1 +
@@ -203,3 +442,37 @@ the routes 404.
       real transfer's data — 2026-08-17, a real SPEI (NUBANK → KLAR, $3,198.00)
       came back `valid` with Banxico's digital signature and the CEP XML/PDF
       links, and left exactly one `valid` row in the dev D1 (US-V01, US-V05)
+
+### D12–D13 (built 2026-08-19)
+
+- [x] The 97-name vocabulary lives in one constant, generated from
+      `docs/integrations/apicep.md` so the two cannot drift, and `GET /banks`
+      serves it (D12)
+- [x] `senderBank` and `beneficiary.bank` are a closed enum; a refusal carries
+      the vocabulary so no second round trip is needed (D12)
+- [x] `trackingKey` is `^[A-Za-z0-9]{6,30}$` after trimming, `referenceNumber`
+      digits — the edges trimmed, the middle enforced (D13)
+- [x] Scenarios 16–20 automated (`test/validate.test.ts`, `test/banks.test.ts`)
+- [x] **BUG-007 cleared before deploy.** Devolada's payer and the ISP's settings
+      both typed their bank as free text, into fields whose placeholders
+      offered names the vocabulary does not contain. Both now pick from the
+      list (direct-payment D16), so Devolada no longer sends a name that would
+      become a retryable 400. The underlying asymmetry remains until D9:
+      `apps/api/src/consta/client.ts` still reads every non-2xx as retryable,
+      so another integrator's 400 would ride a schedule it can never escape.
+
+### D9–D11, D14–D16 (proposed 2026-08-19, not yet built)
+
+- [ ] Scenarios 8–15 and 21–25 automated, each citing its story
+- [ ] `sandbox/apicep-mock.mjs` serves every response shape those scenarios
+      need — rate-limit headers, `X-Processing-Time`, both 400 shapes, 401,
+      429, `status: "error"` with `missingFields`, an unrecognised status, and
+      a hang past the deadline
+- [ ] Migration for `validations`: `status` nullable, plus
+      `provider_http_status`, `provider_ms`, `quota_remaining` (D14, D15)
+- [ ] `docs/integrations/apicep.md` updated with anything the build measures
+      that the probe did not
+- [ ] **Hand-off recorded, not assumed**: `direct-payment.spec.md` D7 consumes
+      `retryable` and re-argues its pending budget against Banxico's ~30
+      minutes. Consta shipping D9 does not shorten anyone's wait by itself —
+      it only makes shortening it possible.

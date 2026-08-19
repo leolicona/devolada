@@ -438,6 +438,82 @@ describe("US-D02: submitting proof", () => {
   });
 });
 
+describe("D16: what cannot validate never reaches the paid provider", () => {
+  /* Measured 2026-08-19: apiCEP does not reject an unknown bank name — it
+     answers `invalid` with no cepDetails, byte-identical to a transfer that
+     never happened. A payer who really paid was told their transfer could not
+     be verified, and nothing on the wire said why (BUG-007). The form now
+     offers a list; these are the guards behind it.
+
+     The refusals register no WispHub or Consta mock on purpose: with net
+     connect disabled, a request that got past validation could not have
+     answered 400, so "no paid call" is asserted by the absence itself. */
+
+  it("US-D02: a bank name outside the vocabulary is refused, before WispHub or the provider", async () => {
+    await seedLinkedIsp();
+
+    /* The three names the old placeholder taught the payer to type. apiCEP
+       spells them NUBANK, BBVA MEXICO and BANORTE. */
+    for (const senderBank of ["Nu", "BBVA", "Banorte"]) {
+      const res = await payTransfer("tok2345abcdefgh2", {
+        transfer: { ...TRANSFER.transfer, senderBank },
+      });
+      expect(res.status).toBe(400);
+    }
+
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+  });
+
+  it("US-D02: the exact spelling apiCEP accepts does get through", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TRANSFER.transfer, senderBank: "BBVA MEXICO" },
+    });
+    expect(res.status).toBe(201);
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.senderBank).toBe("BBVA MEXICO");
+  });
+
+  it("BUG-006: a tracking key carrying a receipt's two-line wrap is refused", async () => {
+    await seedLinkedIsp();
+
+    /* The first one is the live failure: 29 characters, a space, and a
+       Cyrillic З where a 3 belongs. It used to pass, spend $0.25 and land
+       `invalid`. */
+    for (const trackingKey of [
+      "NU3AGKK16AH58LTOVUQH55PE З0AA",
+      "NU3AGIFAMA9D9CNQ V487MGAVDE2C",
+      "NU3AGIFAMA9D9CNQ\nV487MGAVDE2C",
+      "SHORT",
+    ]) {
+      const res = await payTransfer("tok2345abcdefgh2", {
+        transfer: { ...TRANSFER.transfer, trackingKey },
+      });
+      expect(res.status).toBe(400);
+    }
+
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+  });
+
+  it("BUG-006: a ten-character key is accepted — the bound is a range, not Nu's 28", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+
+    /* apiCEP's own documented example. A fixed 28 would lock out every bank
+       that issues a shorter clave. */
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TRANSFER.transfer, senderBank: "HSBC", trackingKey: "HSBC712057" },
+    });
+    expect(res.status).toBe(201);
+  });
+});
+
 describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
   it("scenario 7 + 21: confirmed → spei charge, no store, no ledger entries", async () => {
     const { isp } = await seedLinkedIsp();

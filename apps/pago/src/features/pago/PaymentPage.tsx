@@ -11,12 +11,14 @@ import {
   Skeleton,
   StatusBadge,
 } from "@devolada/ui";
+import { BANKS } from "@devolada/api/direct-payments-schema";
 import type {
   DirectPaymentStatusResponse,
   LinkStatusResponse,
   PayResponse,
   ProofUploadResponse,
 } from "@devolada/api/direct-payments-schema";
+import { NativeSelect } from "../../components/ui/native-select";
 import {
   CheckCircle2,
   Copy,
@@ -76,7 +78,12 @@ function TransferForm({ onSubmit, busy }: { onSubmit: (t: { trackingKey: string;
   const [trackingKey, setTrackingKey] = useState("");
   const [senderBank, setSenderBank] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const valid = trackingKey.trim().length >= 5 && senderBank.trim().length >= 2 && /^\d{4}-\d{2}-\d{2}$/.test(date);
+  /* D16/BUG-006: the same shape the API enforces, so the button is
+     honest — a key that cannot validate never gets a paid call. */
+  const valid =
+    /^[A-Za-z0-9]{6,30}$/.test(trackingKey.trim()) &&
+    senderBank !== "" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(date);
   return (
     <div className="space-y-4">
       <Field label="Clave de rastreo">
@@ -88,7 +95,22 @@ function TransferForm({ onSubmit, busy }: { onSubmit: (t: { trackingKey: string;
         />
       </Field>
       <Field label="Banco desde el que pagaste">
-        <Input value={senderBank} onChange={(e) => setSenderBank(e.target.value)} placeholder="BBVA, Nu, Banorte…" />
+        {/* D16: typed free-hand, this field was the quietest way to lose a
+            real payment — apiCEP answers `invalid` for a name it does not
+            know, which reads exactly like a transfer that never happened.
+            Sorted for scanning; the constant keeps the provider's order. */}
+        <NativeSelect required value={senderBank} onChange={(e) => setSenderBank(e.target.value)}>
+          <option value="" disabled>
+            Elige tu banco
+          </option>
+          {[...BANKS]
+            .sort((a, b) => a.localeCompare(b, "es-MX"))
+            .map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+        </NativeSelect>
       </Field>
       <Field label="Fecha de la transferencia">
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

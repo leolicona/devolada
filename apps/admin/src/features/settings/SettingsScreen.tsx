@@ -9,7 +9,8 @@ import type {
 } from "@devolada/api/settings-schema";
 import type { SettlementResponse } from "@devolada/api/settlement-schema";
 import { PasskeyCard } from "../auth/PasskeyCard";
-import { TIMEZONES } from "@devolada/api/settings-schema";
+import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
+import type { Bank } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -219,7 +220,9 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
 function SpeiCard({ settings }: { settings: SettingsResponse }) {
   const save = useSaveSettings();
   const [clabe, setClabe] = useState(settings.spei.clabe ?? "");
-  const [bank, setBank] = useState(settings.spei.bank ?? "");
+  /* D16: the picker's own type — the API takes a name from the vocabulary
+     or nothing, and "" is what "not configured yet" looks like here. */
+  const [bank, setBank] = useState<Bank | "">((settings.spei.bank as Bank | null) ?? "");
   const [beneficiary, setBeneficiary] = useState(settings.spei.beneficiaryName ?? "");
   const [fee, setFee] = useState(
     settings.spei.serviceFeeCents === null ? "" : pesos(settings.spei.serviceFeeCents),
@@ -262,13 +265,26 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
         </div>
         <div>
           <Label htmlFor="spei-bank">Banco</Label>
-          <Input
-            id="spei-bank"
-            className="mt-1"
-            value={bank}
-            onChange={(e) => setBank(e.target.value)}
-            placeholder="STP, BBVA, Banorte…"
-          />
+          {/* D16: this name travels as `beneficiary.bank` on every
+              validation this ISP ever runs, so a value the provider does
+              not recognise does not lose one payment — it loses all of
+              them, and silently: apiCEP answers `invalid`, never an error.
+              Typed free-hand this said "STP, BBVA, Banorte…", and two of
+              those three are not names it accepts. */}
+          <Select value={bank} onValueChange={(v) => setBank(v as Bank)}>
+            <SelectTrigger id="spei-bank" className="mt-1" aria-label="Banco">
+              <SelectValue placeholder="Elige tu banco" />
+            </SelectTrigger>
+            <SelectContent>
+              {[...BANKS]
+                .sort((a, b) => a.localeCompare(b, "es-MX"))
+                .map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {b}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label htmlFor="spei-beneficiary">Nombre del beneficiario</Label>
@@ -302,7 +318,7 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
         onClick={() =>
           save.mutate({
             speiClabe: clabe.trim(),
-            speiBank: bank.trim(),
+            speiBank: bank === "" ? null : bank,
             speiBeneficiaryName: beneficiary.trim(),
             speiServiceFeeCents: feeCents,
           })

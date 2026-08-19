@@ -94,6 +94,8 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D06** — As an ISP, I see direct SPEI payments in my charge feed alongside store charges, clearly distinguished.
 - **US-D07** — As an ISP, I can search for a customer and share their permanent SPEI payment link via WhatsApp directly from the dashboard.
 - **US-D08** — As an end customer, I get back to my payment page next month without asking my ISP for the link again.
+- **US-D09** — As an end customer, if my screenshot is not a receipt or does not carry a clave de rastreo yet, I am told so immediately and told what to do about it, instead of waiting hours for a rejection.
+- **US-D10** — As an end customer, when the reader is not sure of the clave it read, I confirm or correct it against my own screenshot instead of typing 28 characters from scratch.
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -227,6 +229,7 @@ Owner's decisions:
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
+| [direct-payment/proof-extraction.spec.md](direct-payment/proof-extraction.spec.md) | direct-payment | US-D09, US-D10 | proposed |
 
 ## Cross-cutting layers
 

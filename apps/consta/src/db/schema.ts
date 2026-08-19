@@ -50,3 +50,50 @@ export const validations = sqliteTable(
   },
   (t) => [index("validations_key_idx").on(t.apiKeyId, t.createdAt)],
 );
+
+/* D8 — Consta stores the reading, never the image.
+
+   The SHA-256 ties this record to whatever the integrator still holds,
+   without Consta accumulating other people's customers' bank receipts:
+   names, partial CLABEs and amounts are the integrator's data under the
+   integrator's retention policy, not ours.
+
+   D9 — a refusal at the edge lands here too, with `validationId` null and
+   no provider call behind it. Nothing this feature refuses is refused
+   silently, because the refusal rate is the number the feature exists to
+   drive down. (validation.spec.md D15 will fold billed-but-failed
+   provider calls into `validations`; these never reached a provider, so
+   they are a different fact and live in a different table.) */
+export const extractions = sqliteTable(
+  "extractions",
+  {
+    id: id(),
+    apiKeyId: text("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id),
+    /* Which reader saw the file — the routing decision of D2, recorded so
+       a caller (and we) can tell the two paths apart after the fact */
+    source: text("source", { enum: ["reader", "provider-ocr"] }).notNull(),
+    outcome: text("outcome", {
+      enum: ["passed", "gated", "not_a_receipt", "unreadable", "refused", "routed"],
+    }).notNull(),
+    model: text("model"),
+    /* Never the bytes themselves (D8) */
+    proofSha256: text("proof_sha256"),
+    mediaType: text("media_type"),
+    byteSize: integer("byte_size"),
+    /* What was read. Reported, never authoritative — D3 */
+    trackingKey: text("tracking_key"),
+    senderBank: text("sender_bank"),
+    amountCents: integer("amount_cents"),
+    transferDate: text("transfer_date"),
+    receiptStatus: text("receipt_status"),
+    gateTrackingKey: text("gate_tracking_key"),
+    gateSenderBank: text("gate_sender_bank"),
+    rawOutput: text("raw_output"),
+    /* Set only when the reading went on to buy a provider call */
+    validationId: text("validation_id").references(() => validations.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("extractions_key_idx").on(t.apiKeyId, t.createdAt)],
+);

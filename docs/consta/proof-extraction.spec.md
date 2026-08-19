@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in development
 stories: [US-V09, US-V10]
 domain: consta
 updated: 2026-08-19
@@ -76,10 +76,23 @@ A 30-attempt benchmark on 2026-08-19, scored against what Banxico returned:
 | `@cf/meta/llama-3.2-11b-vision-instruct` | 0/10 on that receipt | ~4 s | identical misread every time, **27 characters** |
 | `@cf/moondream/moondream3.1-9B-A2B` | unusable | — | returned `{}` |
 
-llama's failure is the load-bearing result, not mistral's success: a
-deterministic misread that a length check catches for free. **That is the
-property this spec buys — not a reader that cannot be wrong, but a reading we
-can inspect, gate and correct.**
+**Correction, 2026-08-19, found by writing the test for it.** The first draft
+called llama's failure "a deterministic misread that a length check catches for
+free". It does not. The true clave is `NU3AGKMP3ASP8QQQ4U8J8F0K1E4K`; llama
+returned `NU3AGKMP3ASP8QQ4U8J8F0K1E4K` — one `Q` short, 27 characters, every
+one of them alphanumeric. It passes `^[A-Za-z0-9]{6,30}$` cleanly, because that
+check is a **range** on purpose: apiCEP's own example carries ten characters and
+a fixed 28 would lock out every bank that is not Nu (BUG-006). Two of our own
+decisions were quietly contradicting each other, and the claim was the wrong one.
+
+So the division of labour is sharper than the draft made it sound: **the gate
+checks shape, and only the choice of model checks content.** A malformed clave,
+an unknown bank and a file that is not a receipt are caught for free; a
+plausible misread is not caught at all, and survives into a paid call. What
+bounds *that* failure is elsewhere — it returns `not_found`, which rides the
+retry schedule and carries `verify_inputs` instead of telling the payer their
+transfer does not exist (`validation.spec.md` D11, direct-payment D17). The
+regression test asserts both halves, including the one we cannot catch.
 
 ## Decisions
 
@@ -98,11 +111,13 @@ can inspect, gate and correct.**
   | a clave of the wrong shape → paid call → faceless `invalid` | refused at the edge, and the payer is told which field |
   | a bank outside the vocabulary → paid call → faceless `invalid` | refused at the edge (`validation.spec.md` D12 already does this for the transfer door) |
 
-  llama's measured 27-character misread is the load-bearing result of the
-  benchmark, not mistral's 30/30: **a deterministic error that a length check
-  catches for free.** That is the property being bought — not a reader that
-  cannot be wrong, but a reading that can be gated and corrected. A gate needs
-  the reading in hand, which is the whole reason the reader moves inside.
+  None of those three depends on the reader being better than apiCEP's. They
+  depend only on the reading being **in our hands**, which is the whole reason
+  the reader moves inside. What the gate does not buy is protection from a
+  plausible misread — see the correction above — and that limit belongs in the
+  decision rather than in a footnote: **shape is gated here, content is bought
+  with the choice of model (D5), and the consequence of getting content wrong
+  is bounded by `not_found` riding the schedule rather than ending it.**
   **Rejected**: each integrator building its own reader — every one re-solves
   this, and the verdict mapping Consta owns (`validation.spec.md` D3) would
   drift across them; leaving the receipt door as it is and telling integrators
@@ -196,12 +211,18 @@ can inspect, gate and correct.**
   audit value the hash does not already give); storing nothing (a verdict that
   rests on a reading must be able to show the reading).
 - **D9 — A rejection at the edge is logged but never billed.** A clave that
-  fails the gate, a bank that does not map, an image that cannot be read: each
-  writes a `validations` row with no provider call and no charge. This is the
-  same principle as `validation.spec.md` D15 read from the other side — that
-  one records calls apiCEP billed us for, this one records calls we refused to
-  make. **Rejected**: silently dropping them, which would hide exactly the
-  rate this feature exists to drive down.
+  fails the gate, a bank that does not map, an image that cannot be read, a URL
+  we refuse to fetch: each writes an `extractions` row with no provider call
+  and no charge. This is the same principle as `validation.spec.md` D15 read
+  from the other side — that one records calls apiCEP billed us for, this one
+  records calls we refused to make. **They live in different tables on
+  purpose**: a `validations` row means a request reached a provider, and these
+  never did; folding them together would make "how many calls did we pay for?"
+  unanswerable from either table. The join runs through
+  `extractions.validation_id`, set only when a reading went on to buy a call.
+  **Rejected**: silently dropping them, which would hide exactly the rate this
+  feature exists to drive down; a nullable-status `validations` row (that is
+  D15's shape for a different fact — a call that was billed and failed).
 
 - **D10 — What this buys for resilience, and what it cannot buy.** The reason
   this spec exists at all is that Consta has to survive as a product, and a
@@ -240,16 +261,41 @@ can inspect, gate and correct.**
 → { success: true, data: {
       extractionId,
       source: "reader" | "provider-ocr",   // D2 routing, so callers can see it
+      isReceipt: true | false | null,       // null on the PDF route: nothing was read here
       trackingKey: "NU3AGI…" | null,
       senderBank: "NUBANK" | null,          // mapped to the vocabulary, or null
       amountCents, date,                    // reported, never authoritative (D3)
+      receiptStatus: "Aceptada" | "En proceso" | null,
       gate: { trackingKey: "ok" | "malformed" | "missing",
-              senderBank:  "ok" | "unknown" | "missing" } } }
+              senderBank:  "ok" | "unknown" | "missing",
+              amount:      "ok" | "malformed" | "missing" } } }
 ```
 
 `gate` is the field a caller acts on: anything but `ok` means asking the
-customer, not spending a credit. `POST /validate` with `receiptUrl` is
-unchanged on the wire and gains `source` in its response.
+customer, not spending a credit.
+
+**`amount` is in the gate because apiCEP's direct mode requires
+`sender.amount`** — a reading without one cannot buy a lookup at all. The
+amount that travels is the one *printed on the receipt*, not the one the
+caller expects, and that choice is deliberate: a $1 receipt against a $514
+debt then comes back as a real CEP for $1, which the caller refuses with
+`AMOUNT_MISMATCH` (direct-payment D11). Sending the expected amount instead
+would turn that case into a faceless `not_found` and a six-hour wait for an
+answer we already had. D3 is untouched — the reading chooses which record to
+ask about, `cepDetails` still decides what it is worth.
+
+`POST /validate` with `receiptUrl` is unchanged on the wire and gains `source`
+and `extractionId`. Its refusals are `RECEIPT_UNREADABLE` (the image is not a
+receipt) and `RECEIPT_INCOMPLETE` (it is, but a field did not pass the gate),
+both `422` with `retryable: false` and the whole reading attached so the caller
+can say *which* field to fix. `URL_NOT_ALLOWED`, `PROOF_TOO_LARGE` and
+`UNSUPPORTED_MEDIA_TYPE` are `422`; `PROOF_UNREACHABLE`, `READER_UNAVAILABLE`
+and `READER_UNREADABLE` are `502` with `retryable: true`.
+
+**When the `AI` binding is absent the image route falls back to the provider's
+OCR** rather than failing. A door that still works beats a door that 502s
+because a binding is missing, and it makes this whole feature reversible by
+configuration if it ever misbehaves in production.
 
 ## Scenarios
 
@@ -259,8 +305,11 @@ unchanged on the wire and gains `source` in its response.
    "provider-ocr"`, and Consta never fetches its bytes onward (US-V09, D2)
 3. Routing follows magic bytes, not the caller's claim: a PDF served as
    `image/png` still takes the PDF route (US-V09, D7)
-4. A reading whose clave is 27 characters — llama's measured misread — is
-   gated before any paid call, and the row records the rejection (US-V10, D4, D9)
+4. The gate catches a clave's **shape** — BUG-006's live 29-character string
+   with a space and a Cyrillic З — and **provably does not catch** llama's
+   27-character misread, which is alphanumeric and inside the range. Both
+   halves are asserted, so nobody re-acquires the belief that the range
+   protects against content (US-V10, D4, D5, D9)
 5. A reading whose bank does not map to the vocabulary returns `gate.senderBank:
    "unknown"`, spends nothing, and never guesses a bank (US-V10, D4)
 6. **An image with no receipt in it → `RECEIPT_UNREADABLE`, not retryable,
@@ -285,11 +334,15 @@ unchanged on the wire and gains `source` in its response.
 
 ## Definition of Done
 
-- [ ] Scenarios 1–12 automated, each citing its story
-- [ ] `AI` binding on the Consta worker; the model named in config (D5)
+- [x] Scenarios 1–12 automated in `apps/consta/test/validate.test.ts`, each
+      citing its story. The reader is stubbed with the shapes the real model
+      was measured producing (fenced JSON, `esComprobante: false` on a
+      non-receipt 5/5); the bytes are fixtures carrying real magic numbers
+- [x] `AI` binding on the Consta worker; `EXTRACTION_MODEL` in `vars`, so
+      swapping the model is a deploy and not a release (D5)
+- [x] Migration `0002`: the `extractions` table of D8/D9
 - [ ] The mock serves both routes and the gate failures (`validation.spec.md`
       already requires it to grow)
-- [ ] Migration: the extraction record of D8
 - [ ] Measured on real receipts before `status: accepted` — at minimum one
       PDF comprobante, one deliberately unreadable image, and one receipt
       captured before the bank accepted it
@@ -299,6 +352,16 @@ unchanged on the wire and gains `source` in its response.
       are cheap, both change what this spec is allowed to claim, and neither
       has been done
 - [ ] `docs/integrations/apicep.md` updated with whatever the build measures
+- [ ] **Devolada moves to the two-step** (`/extract`, confirm with the payer,
+      then `/validate`). Consta serving both doors is not the UX win by
+      itself — D6's whole argument is that a misread becomes *"revisa este
+      dato"* in three seconds instead of six hours of *"Verificando"*, and
+      that only happens once `apps/pago` asks
+- [ ] **The DNS gap of D7 is closed or accepted in writing.** The address
+      checks refuse a URL that *says* it is internal; a public hostname whose
+      DNS answer is private is not caught, because a Worker never sees the
+      address it connected to. Integrators pass short-lived signed URLs today,
+      which is a mitigation and not a fix
 
 ## Open questions
 
@@ -320,6 +383,14 @@ unchanged on the wire and gains `source` in its response.
 - **Whether the reader should attempt the beneficiary.** It cannot: receipts
   mask the destination CLABE (`docs/integrations/apicep.md`). The beneficiary
   stays a caller-supplied field. Recorded so nobody re-opens it.
-- **`potentialBeneficiaries` is OCR-mode only**, so on the image route it has
-  nowhere to go. Decide whether it survives as a PDF-route feature or leaves
-  the contract.
+- ~~**`potentialBeneficiaries` is OCR-mode only**~~ — **decided**: a caller
+  using it keeps the provider's OCR door, image or not. apiCEP matches the
+  image against a list of candidate accounts and a direct-mode call takes
+  exactly one beneficiary, so the field cannot cross to the reader route. It
+  stays in the contract; it simply selects the other door.
+- **Is `sender.amount` a hint or a filter in direct mode?** The claimed *date*
+  is documented as a hint — a validation claiming `2026-08-15` returned a CEP
+  dated `2026-08-17` — and nobody has tested whether the amount behaves the
+  same. It decides how a misread amount fails: harmlessly if it is a hint,
+  as a faceless `not_found` if it is a filter. One deliberate call with a
+  wrong amount against a known-good transfer answers it.

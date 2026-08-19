@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings, Variables } from "./env";
 import { validateRoute } from "./routes/validate";
+import { extractRoute } from "./routes/extract";
 import { adminKeysRoute } from "./routes/admin/keys";
 import { banksRoute } from "./routes/banks";
 
@@ -11,6 +12,9 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 
 app.route("/validate", validateRoute);
+/* proof-extraction D6: read without spending a credit, so a caller can
+   show a customer what was read before money moves */
+app.route("/extract", extractRoute);
 app.route("/banks", banksRoute);
 app.route("/admin/keys", adminKeysRoute);
 

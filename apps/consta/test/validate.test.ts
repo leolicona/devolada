@@ -1,7 +1,18 @@
 import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
-import { app, db, seedApiKey, validations } from "./helpers";
+import {
+  aiReturning,
+  app,
+  db,
+  extractions,
+  JPEG,
+  NOT_A_FILE,
+  PDF,
+  PNG,
+  seedApiKey,
+  validations,
+} from "./helpers";
 
 /* docs/consta/validation.spec.md scenarios 1–5, 7, and 16–17/19–20.
    apiCEP is mocked with the shapes read from its documentation (2026-08-17)
@@ -60,7 +71,7 @@ function mockApiCep(reply: unknown, expectBody?: (body: Record<string, unknown>)
     .reply(200, JSON.stringify(reply), { headers: { "Content-Type": "application/json" } });
 }
 
-async function postValidate(key: string, body: unknown) {
+async function postValidate(key: string, body: unknown, overrides: Record<string, unknown> = {}) {
   return app.request(
     "/validate",
     {
@@ -68,9 +79,48 @@ async function postValidate(key: string, body: unknown) {
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
-    env,
+    { ...env, ...overrides },
   );
 }
+
+async function postExtract(key: string, body: unknown, overrides: Record<string, unknown> = {}) {
+  return app.request(
+    "/extract",
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    { ...env, ...overrides },
+  );
+}
+
+const PROOF_ORIGIN = "https://proofs.example";
+const PROOF_URL = `${PROOF_ORIGIN}/receipt`;
+
+/* proof-extraction D7: Consta fetches the bytes itself now, so the bytes
+   have to come from somewhere in tests too. */
+function mockProof(bytes: Uint8Array, contentType = "application/octet-stream", path = "/receipt") {
+  fetchMock
+    .get(PROOF_ORIGIN)
+    .intercept({ method: "GET", path })
+    .reply(200, bytes, { headers: { "Content-Type": contentType } });
+}
+
+/* What the model returns for a clean Nubank receipt of $514.00 */
+const GOOD_READING = {
+  esComprobante: true,
+  claveDeRastreo: "MBAN01002508150012345678",
+  banco: "BBVA MEXICO",
+  monto: 514.0,
+  fecha: "2026-08-15",
+  estatus: "Aceptada",
+};
+
+const receiptRequest = {
+  receiptUrl: PROOF_URL,
+  beneficiary: { bank: "BANORTE", clabe: "072180001234567895" },
+};
 
 describe("POST /validate — transfer door", () => {
   it("US-V01, US-V05: a settled transfer comes back valid, mapped to cents, and logged under the key", async () => {
@@ -197,27 +247,50 @@ describe("POST /validate — transfer door", () => {
 });
 
 describe("POST /validate — receipt door", () => {
-  it("US-V02: a receipt URL reaches the provider as OCR mode with the same verdict shape", async () => {
+  it("US-V02, scenario 2: a PDF keeps the provider's OCR door, untouched", async () => {
     const { key } = await seedApiKey();
+    mockProof(PDF(), "application/pdf");
     mockApiCep(settledResponse, (body) => {
-      expect(body.imageUrl).toBe("https://example.com/recibo.jpg");
+      expect(body.imageUrl).toBe(PROOF_URL);
       expect(body.sender).toBeUndefined();
     });
 
-    const res = await postValidate(key, {
-      receiptUrl: "https://example.com/recibo.jpg",
-      beneficiary: { bank: "BANORTE", clabe: "072180001234567895" },
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning(GOOD_READING) /* bound, and deliberately not used */,
     });
     expect(res.status).toBe(200);
     const { data } = (await res.json()) as { data: Record<string, unknown> };
     expect(data.status).toBe("valid");
+    expect(data.source).toBe("provider-ocr");
+
+    /* Several Mexican banks issue the comprobante as a PDF and vision
+       models take images, so this door stays alive on purpose (D2) */
+    const [row] = await db().select().from(extractions);
+    expect(row.source).toBe("provider-ocr");
+    expect(row.outcome).toBe("routed");
+    expect(row.model).toBeNull();
+  });
+
+  it("US-V02: with no AI binding the image route degrades to the provider's OCR", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep(settledResponse, (body) => {
+      expect(body.imageUrl).toBe(PROOF_URL);
+    });
+
+    /* No bytes are fetched at all on this path — a door that still works
+       beats a door that 502s when the reader is missing */
+    const res = await postValidate(key, receiptRequest, { AI: undefined });
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("valid");
+    expect(data.source).toBe("provider-ocr");
   });
 
   it("VALIDATION_ERROR: both doors at once is rejected before any provider call", async () => {
     const { key } = await seedApiKey();
     const res = await postValidate(key, {
       ...directRequest,
-      receiptUrl: "https://example.com/recibo.jpg",
+      receiptUrl: PROOF_URL,
       beneficiary: { bank: "BANORTE", clabe: "072180001234567895" },
     });
     expect(res.status).toBe(400);
@@ -316,5 +389,245 @@ describe("Refused before a credit is spent (D12, D13)", () => {
       transfer: { ...directRequest.transfer, senderBank: "HSBC", trackingKey: "HSBC712057" },
     });
     expect(res.status).toBe(200);
+  });
+});
+
+/* docs/consta/proof-extraction.spec.md scenarios 1, 3–12. The reader is
+   stubbed with the shapes the real model was measured producing on
+   2026-08-19 — fenced JSON, and `esComprobante: false` on an image that
+   is not a receipt (5/5). */
+describe("The receipt is read at our edge (proof-extraction)", () => {
+  it("scenario 1, 8: an image is read here and validated through direct mode", async () => {
+    const { key } = await seedApiKey();
+    const aiCalls: unknown[] = [];
+    mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse, (body) => {
+      /* The image never leaves Consta: what reaches apiCEP is a clave */
+      expect(body.imageUrl).toBeUndefined();
+      const sender = body.sender as Record<string, unknown>;
+      expect(sender.trackingKey).toBe("MBAN01002508150012345678");
+      expect(sender.bank).toBe("BBVA MEXICO");
+      expect(sender.amount).toBe(514);
+    });
+
+    const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING, aiCalls) });
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("valid");
+    expect(data.source).toBe("reader");
+    expect(data.extractionId).toEqual(expect.any(String));
+    expect(aiCalls).toHaveLength(1);
+
+    /* D8: the reading is tied to the paid call it bought */
+    const [row] = await db().select().from(extractions);
+    expect(row.outcome).toBe("passed");
+    expect(row.validationId).toBe(data.validationId);
+  });
+
+  it("scenario 3: routing follows magic bytes, not the caller's content type", async () => {
+    const { key } = await seedApiKey();
+    /* A PDF served as image/png must still take the PDF route: the route
+       decides which reader sees the file, and a vision model handed a PDF
+       produces confident nonsense. */
+    mockProof(PDF(), "image/png");
+    mockApiCep(settledResponse, (body) => expect(body.imageUrl).toBe(PROOF_URL));
+
+    const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) });
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.source).toBe("provider-ocr");
+    const [row] = await db().select().from(extractions);
+    expect(row.mediaType).toBe("application/pdf");
+  });
+
+  it("scenario 4: the gate catches a clave's shape — and cannot catch a plausible misread", async () => {
+    const { id: keyId, key } = await seedApiKey();
+
+    /* Caught: BUG-006's live string, 29 characters with a space and a
+       Cyrillic З where a 3 belongs. This is the failure that actually
+       happens — receipts print the clave across two lines. */
+    mockProof(PNG(), "image/png");
+    const bad = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ ...GOOD_READING, claveDeRastreo: "NU3AGKK16AH58LTOVUQH55PE З0AA" }),
+    });
+    expect(bad.status).toBe(422);
+    const { error } = (await bad.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("RECEIPT_INCOMPLETE");
+    expect((error.gate as Record<string, string>).trackingKey).toBe("malformed");
+    expect(error.retryable).toBe(false);
+
+    /* NOT caught, and this test exists to keep us honest about it.
+       llama's measured misread of `NU3AGKMP3ASP8QQQ4U8J8F0K1E4K` was
+       `NU3AGKMP3ASP8QQ4U8J8F0K1E4K` — one Q short, 27 characters, every
+       one of them alphanumeric. It passes `^[A-Za-z0-9]{6,30}$` because
+       that check is a **range** on purpose (BUG-006: apiCEP's own example
+       carries ten characters and a fixed 28 would lock out every bank
+       that is not Nu). The gate checks shape; only the choice of model
+       (D5) checks content, and a misread that survives here comes back
+       from apiCEP as `not_found` — which now rides the schedule and
+       carries `verify_inputs` rather than calling the payer a liar
+       (validation.spec.md D11, direct-payment D17). */
+    mockProof(PNG(), "image/png");
+    mockApiCep({
+      validationId: "prov-uuid-13",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+    });
+    const misread = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ ...GOOD_READING, claveDeRastreo: "NU3AGKMP3ASP8QQ4U8J8F0K1E4K" }),
+    });
+    expect(misread.status).toBe(200);
+    const { data } = (await misread.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("not_found");
+    expect(data.hint).toBe("verify_inputs");
+
+    /* D9: the refusal is recorded and unbilled; the misread is recorded
+       and billed, which is exactly the difference worth measuring */
+    const rows = await db().select().from(extractions).where(eq(extractions.apiKeyId, keyId));
+    expect(rows.map((r) => r.outcome).sort()).toEqual(["gated", "passed"]);
+    expect(await db().select().from(validations)).toHaveLength(1);
+  });
+
+  it("scenario 5: a bank that does not map is asked about, never guessed", async () => {
+    const { key } = await seedApiKey();
+    mockProof(PNG(), "image/png");
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ ...GOOD_READING, banco: "Banco Inventado" }),
+    });
+    expect(res.status).toBe(422);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("RECEIPT_INCOMPLETE");
+    expect((error.gate as Record<string, string>).senderBank).toBe("unknown");
+    /* Never a guess: apiCEP answers a wrong bank `invalid` with no
+       cepDetails, which is indistinguishable from a transfer that never
+       happened (validation.spec.md D12) */
+    expect(error.senderBank).toBeNull();
+    expect(await db().select().from(validations)).toHaveLength(0);
+  });
+
+  it("scenario 6: an image with no receipt in it costs one AI call, not seven paid ones", async () => {
+    const { key } = await seedApiKey();
+    mockProof(PNG(), "image/png");
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ esComprobante: false, claveDeRastreo: null, banco: null, monto: null }),
+    });
+    expect(res.status).toBe(422);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("RECEIPT_UNREADABLE");
+    expect(error.retryable).toBe(false);
+
+    /* The measured cost of this image today: apiCEP answers `error`,
+       which is retryable, so the payment rides Devolada's whole six-hour
+       schedule at up to seven paid calls and ends `expired`. */
+    expect(await db().select().from(validations)).toHaveLength(0);
+    const [row] = await db().select().from(extractions);
+    expect(row.outcome).toBe("not_a_receipt");
+  });
+
+  it("scenario 7: /extract spends no apiCEP quota at all", async () => {
+    const { key } = await seedApiKey();
+    mockProof(PNG(), "image/png");
+
+    const res = await postExtract(key, { receiptUrl: PROOF_URL }, { AI: aiReturning(GOOD_READING) });
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.source).toBe("reader");
+    expect(data.trackingKey).toBe("MBAN01002508150012345678");
+    expect(data.senderBank).toBe("BBVA MEXICO");
+    expect(data.amountCents).toBe(51400);
+    expect(data.receiptStatus).toBe("Aceptada");
+    expect(data.gate).toEqual({ trackingKey: "ok", senderBank: "ok", amount: "ok" });
+
+    /* No provider interceptor was registered, and none was needed: the
+       whole promise of this door is that a caller can show a customer
+       what was read before money moves (D6) */
+    expect(await db().select().from(validations)).toHaveLength(0);
+  });
+
+  it("scenario 9: http, a private address and an oversized file are refused before any reading", async () => {
+    const { key } = await seedApiKey();
+    const ai = aiReturning(GOOD_READING);
+
+    const plain = await postExtract(key, { receiptUrl: "http://proofs.example/receipt" }, { AI: ai });
+    expect(plain.status).toBe(422);
+    expect(((await plain.json()) as { error: { code: string } }).error.code).toBe("URL_NOT_ALLOWED");
+
+    const internal = await postExtract(key, { receiptUrl: "https://169.254.169.254/latest" }, { AI: ai });
+    expect(internal.status).toBe(422);
+    expect(((await internal.json()) as { error: { code: string } }).error.code).toBe("URL_NOT_ALLOWED");
+
+    mockProof(PNG(2 * 1024 * 1024), "image/png");
+    const big = await postExtract(key, { receiptUrl: PROOF_URL }, { AI: ai });
+    expect(big.status).toBe(422);
+    expect(((await big.json()) as { error: { code: string } }).error.code).toBe("PROOF_TOO_LARGE");
+
+    mockProof(NOT_A_FILE(), "image/png");
+    const junk = await postExtract(key, { receiptUrl: PROOF_URL }, { AI: ai });
+    expect(junk.status).toBe(422);
+    expect(((await junk.json()) as { error: { code: string } }).error.code).toBe(
+      "UNSUPPORTED_MEDIA_TYPE",
+    );
+
+    /* Every refusal is recorded — the rate this feature exists to drive
+       down is not a rate if nobody writes it down (D9) */
+    const rows = await db().select().from(extractions);
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.outcome === "refused")).toBe(true);
+  });
+
+  it("scenario 10: the row carries the model, the raw output and a hash — never the image", async () => {
+    const { key } = await seedApiKey();
+    mockProof(PNG(), "image/png");
+
+    await postExtract(key, { receiptUrl: PROOF_URL }, { AI: aiReturning(GOOD_READING) });
+
+    const [row] = await db().select().from(extractions);
+    expect(row.model).toBe("@cf/mistralai/mistral-small-3.1-24b-instruct");
+    expect(row.proofSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(row.byteSize).toBe(64);
+    expect(row.rawOutput).toContain("claveDeRastreo");
+    /* D8: names, partial CLABEs and amounts on a receipt are the
+       integrator's data under the integrator's retention policy */
+    expect(JSON.stringify(row)).not.toContain("iVBOR");
+    expect(Object.keys(row)).not.toContain("bytes");
+  });
+
+  it("scenario 11: the reading finds the CEP; only the CEP decides money", async () => {
+    const { key } = await seedApiKey();
+    mockProof(PNG(), "image/png");
+    /* The reader says $1.00 and Banxico says $514.00. The response must
+       carry Banxico's number — this is the `$1-receipt` hole, and the
+       reading is a search key, never evidence (D3). */
+    mockApiCep(settledResponse, (body) => {
+      expect((body.sender as Record<string, unknown>).amount).toBe(1);
+    });
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ ...GOOD_READING, monto: 1.0, fecha: "2020-01-01" }),
+    });
+    const { data } = (await res.json()) as { data: Record<string, Record<string, unknown>> };
+    expect(data.cep.amountCents).toBe(51400);
+    expect(data.cep.date).toBe("2026-08-15");
+  });
+
+  it("scenario 12: a perfect reading and no CEP is still `not_found`, never a verdict of ours", async () => {
+    const { key } = await seedApiKey();
+    mockProof(PNG(), "image/png");
+    mockApiCep({
+      validationId: "prov-uuid-12",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+    });
+
+    const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) });
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    /* The reading was flawless and it changes nothing: what Banxico did
+       not say, we do not say either (D10, validation.spec.md D11) */
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("not_found");
+    expect(data.hint).toBe("verify_inputs");
   });
 });

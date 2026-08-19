@@ -11,7 +11,9 @@
      contains "NF"   → invalid, no cepStatus and no cepDetails (reason not_found)
      contains "ERR"  → HTTP 503 (Consta must say PROVIDER_ERROR)
      anything else   → valid, LIQUIDADO, echoing the claimed data
-   The receipt door (imageUrl) always answers valid with fixed data. */
+   The receipt door (imageUrl) always answers valid with fixed data — it is
+   reached only by PDFs now (proof-extraction D2); an image is read at
+   Consta's edge and arrives here as a direct-mode call like any other. */
 
 import { createServer } from "node:http";
 

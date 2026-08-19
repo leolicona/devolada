@@ -19,6 +19,9 @@ export const handlers = {
     ),
   proof: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.post("/direct-payments/links/:token/proof", () => r()),
+  /* D18: the reading the payer confirms */
+  read: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/direct-payments/links/:token/read", () => r()),
   status: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/direct-payments/:id/status", () => r()),
 };

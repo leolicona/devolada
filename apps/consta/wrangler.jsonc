@@ -11,8 +11,12 @@
       "migrations_dir": "migrations"
     }
   ],
+  /* proof-extraction D5: the reader runs on Workers AI. The model is a var,
+     not a literal in code, so replacing it is a deploy and not a release. */
+  "ai": { "binding": "AI" },
   "vars": {
-    "ENVIRONMENT": "dev"
+    "ENVIRONMENT": "dev",
+    "EXTRACTION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct"
   },
   /* Secrets per env, set by CI after deploy (same TD-011 dance as the api):
      APICEP_TOKEN (provider), CONSTA_ADMIN_TOKEN (key issuance).
@@ -30,8 +34,10 @@
           "migrations_dir": "migrations"
         }
       ],
+      "ai": { "binding": "AI" },
       "vars": {
-        "ENVIRONMENT": "dev"
+        "ENVIRONMENT": "dev",
+        "EXTRACTION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct"
       }
     }
   }

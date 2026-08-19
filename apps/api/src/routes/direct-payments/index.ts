@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireSession } from "../../auth/middleware";
-import { linksListQuery, linksSearchQuery, payRequest } from "./schema";
+import { linksListQuery, linksSearchQuery, payRequest, readProofRequest } from "./schema";
 import {
   getDirectPaymentStatus,
   getLinkStatus,
   listLinks,
+  readProof,
   searchLinks,
   serveProof,
   submitPayment,
@@ -47,6 +48,20 @@ directPaymentsRoute.post(
 directPaymentsRoute.post("/links/:token/proof", (c) => {
   return uploadProof(c, c.req.param("token"));
 });
+
+/* D18: read the uploaded proof so the payer can confirm it. Public like
+   every customer-facing route here — the token is the credential. */
+directPaymentsRoute.post(
+  "/links/:token/read",
+  zValidator("json", readProofRequest, (result, c) => {
+    if (!result.success) {
+      return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
+    }
+  }),
+  (c) => {
+    return readProof(c, c.req.param("token"), c.req.valid("json").proofId);
+  },
+);
 
 directPaymentsRoute.get("/proofs/:linkId/:file", (c) => {
   return serveProof(c, c.req.param("linkId"), c.req.param("file"));

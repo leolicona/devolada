@@ -51,12 +51,34 @@ export const payRequest = z
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       })
       .optional(),
+    /* D18: the payment this submission corrects. Set only when the payer
+       answered a `not_found` confirmation. If the three fields come back
+       unchanged, the existing row is kept and nothing is spent; if they
+       changed, the old row is `superseded` so it releases its claim on
+       `(isp_id, tracking_key)` before the new one takes it. */
+    supersedes: z.string().min(1).optional(),
+    /* D18: the `Estatus` the reader saw on the receipt, carried forward
+       so the row can answer a reload. Client-supplied and harmless: it
+       decides which of two waiting messages the payer reads, never a
+       verdict, never an amount, never whether anything is confirmed. */
+    receiptStatus: z.string().max(60).optional(),
   })
   .superRefine((body, ctx) => {
-    if (Boolean(body.proofId) === Boolean(body.transfer)) {
+    /* D18: the two travel together on the read path — the payer uploaded
+       a receipt, a machine read it, and what validates is the transfer
+       door while the image stays attached as the evidence the ISP will
+       want. `transfer` wins the routing; the proof is kept, not
+       consulted. */
+    if (!body.proofId && !body.transfer) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "exactly one of proofId or transfer",
+        message: "proofId or transfer is required",
+      });
+    }
+    if (body.supersedes && !body.transfer) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "supersedes only applies to a confirmed transfer",
       });
     }
   });
@@ -78,6 +100,34 @@ export const publicPaymentError = z.enum([
   "TRANSFER_NOT_FOUND",
 ]);
 
+/* POST /direct-payments/links/:token/read (US-D11, D18)
+
+   The machine reads, the human confirms, the direct door validates. What
+   comes back is a *draft* of the form the payer is about to submit —
+   never a submission, and never anything that decides money. */
+export const readProofRequest = z.object({
+  proofId: z.string().min(1),
+});
+
+export const proofReadingResponse = z.object({
+  /* "provider-ocr" means the file was a PDF and nothing was read here:
+     the payer keeps the receipt door instead of confirming a draft */
+  source: z.enum(["reader", "provider-ocr"]),
+  isReceipt: z.boolean().nullable(),
+  /* Only fields the payer will confirm. The amount is deliberately
+     absent: it is server-supplied on this channel (D2) and letting a
+     reading anywhere near it is the `$1-receipt` hole (D11). */
+  trackingKey: z.string().nullable(),
+  senderBank: z.string().nullable(),
+  date: z.string().nullable(),
+  receiptStatus: z.string().nullable(),
+  gate: z.object({
+    trackingKey: z.enum(["ok", "malformed", "missing"]),
+    senderBank: z.enum(["ok", "unknown", "missing"]),
+    amount: z.enum(["ok", "malformed", "missing"]),
+  }),
+});
+
 export const payResponse = z.object({
   directPaymentId: z.string(),
   status: z.enum(["validating", "confirmed", "invalid", "unapplied"]),
@@ -86,11 +136,28 @@ export const payResponse = z.object({
 
 /* GET /direct-payments/:id/status (US-D03, US-D04) */
 export const directPaymentStatusResponse = z.object({
-  status: z.enum(["validating", "confirmed", "invalid", "expired", "unapplied"]),
+  status: z.enum([
+    "validating",
+    "confirmed",
+    "invalid",
+    "expired",
+    "unapplied",
+    "superseded",
+  ]),
   reconnectionStatus: z.enum(["queued", "reconnected", "failed"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),
   error: publicPaymentError.nullable(),
+  /* D18: what the silent attempt was built from, so the confirmation
+     screen can render from the row rather than from whatever the browser
+     still holds — a reload must not lose the question. All of it is the
+     payer's own data. */
+  trackingKey: z.string().nullable().optional(),
+  senderBank: z.string().nullable().optional(),
+  transferDate: z.string().nullable().optional(),
+  /* The receipt's own `Estatus`: decides whether the payer is asked to
+     confirm or simply told their bank has not released it yet */
+  receiptStatus: z.string().nullable().optional(),
 });
 
 /* POST /direct-payments/links/:token/proof (D12) */
@@ -141,6 +208,7 @@ export type PayRequest = z.infer<typeof payRequest>;
 export type PayResponse = z.infer<typeof payResponse>;
 export type DirectPaymentStatusResponse = z.infer<typeof directPaymentStatusResponse>;
 export type ProofUploadResponse = z.infer<typeof proofUploadResponse>;
+export type ProofReading = z.infer<typeof proofReadingResponse>;
 export type LinksListResponse = z.infer<typeof linksListResponse>;
 export type LinksSearchResponse = z.infer<typeof linksSearchResponse>;
 export type PublicPaymentError = z.infer<typeof publicPaymentError>;

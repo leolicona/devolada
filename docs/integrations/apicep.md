@@ -13,9 +13,9 @@ The environment variable is **`APICEP_TOKEN`**, a Consta worker secret. Public g
 `Authorization: Bearer <token>`, two accepted kinds:
 
 - **`sk_live_…`** — permanent API key. The only kind fit for a deployed Worker.
-- **`apicep_…`** — user token. **Dies within the hour** (observed four times: 2026-08-17 twice, 2026-08-18 twice). Usable for a manual test fired immediately; never for anything deployed.
+- **`apicep_…`** — user token. **It does not expire, and issuing a new one does not kill the old ones** — retested 2026-08-18: a token two hours old still authenticated, and after minting a fresh one both earlier tokens kept working. This file previously claimed the opposite ("dies within the hour", four observations across 2026-08-17/18) and that claim was **wrong**; it sent a whole debugging session after the wrong cause. What those four observations actually were is unknown — the values are gone and cannot be retested. Treat the lifetime as unbounded until something measures otherwise.
 
-Until an `sk_live_` key is bought, every deployed validation decays inside the hour and the SPEI channel silently stops working — `PROVIDER_ERROR`, which Consta maps to retryable, so payments sit in `validating` rather than failing loudly.
+A bad credential still breaks the channel silently, and that risk is not about expiry: **every deploy overwrites the worker secret with whatever the GitHub environment holds** (CICD D5), so a wrong value in the environment secret reinstates itself on the next merge, with nobody touching anything. Measured 2026-08-18 on dev — apiCEP answered **401**, Consta mapped it to `PROVIDER_ERROR`, the api mapped that to retryable, and direct payments sat in `validating` for the full six-hour schedule instead of failing loudly. `deploy-dev` now probes the credential after planting it (CICD D6), which turns that silence into a red deploy. The `sk_live_` key is still worth buying — it is the credential kind that belongs in a deployed Worker — but it is **not** urgent for expiry reasons.
 
 ## Request
 
@@ -99,5 +99,5 @@ Cost is roughly **$0.25 MXN per call**, which sets the budgets in direct-payment
 ## Open items
 
 - Capture one raw response and record whether `confidence`, `validation.banxicoConfirmed`, `extracted.*` and `downloads.originalImage` are really returned. `confidence` in particular would let the receipt door tell "I could not read this" from "this transfer does not exist" — the distinction the false-negative case turns on.
-- Buy an `sk_live_` key. Everything deployed decays within the hour without it.
+- Buy an `sk_live_` key — the credential kind that belongs in a deployed Worker. Not urgent: the expiry that used to justify it was measured away on 2026-08-18 (see Auth above).
 - Whether pending re-checks consume credits is still unanswered by apiCEP (asked 2026-08-17); direct-payment D7's cadence is priced as if they do.

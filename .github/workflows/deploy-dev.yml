@@ -157,37 +157,87 @@ jobs:
         env:
           APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
         run: |
+          # CICD D6. apiCEP answers 401 for five different reasons and the
+          # HTTP code alone cannot tell them apart, so this reads the body.
+          # All five measured 2026-08-19:
+          #
+          #   no header / no "Bearer " prefix  Missing or invalid Authorization header
+          #   leading whitespace in the value  Invalid API key format. Must start with sk_live_
+          #   apicep_ shape, not recognised    Invalid or revoked API token
+          #   sk_live_ shape, not recognised   API key not found
+          #   trailing whitespace              tolerated — apiCEP trims it (HTTP 400, auth fine)
+          #
+          # The first version of this step reported every 401 as "revoked",
+          # which sent a debugging session after the wrong cause.
           if [ -z "$APICEP_TOKEN" ]; then
             echo "::warning::No APICEP_TOKEN to verify; the sync step already warned."
             exit 0
           fi
-          # Shape before network. A newline inside the value does not come
-          # back as 401 — measured 2026-08-18, it produces a 500, which the
-          # network check below is deliberately lenient about. In the Worker
-          # the same value builds an invalid Authorization header, `fetch`
-          # throws, and Consta answers 500 INTERNAL_SERVER_ERROR — retryable
-          # all the way down, i.e. the same six-hour silence by another road.
-          # A trailing space is fine (apiCEP trims it; measured), so only the
-          # characters that actually break the header are fatal here.
+
+          # A fingerprint, not the secret: enough to answer "is this the same
+          # value as the one that works locally?" without printing either.
+          #   printf '%s' "$TOKEN" | shasum -a 256 | cut -c1-12
+          echo "APICEP_TOKEN: ${#APICEP_TOKEN} chars, sha256 $(printf '%s' "$APICEP_TOKEN" | sha256sum | cut -c1-12)"
+
+          # Shape before network, because two of these never reach a verdict
+          # a human would read correctly.
           if [ "$APICEP_TOKEN" != "$(printf '%s' "$APICEP_TOKEN" | tr -d '\n\r')" ]; then
-            echo "::error::APICEP_TOKEN contains a newline or carriage return. Re-add the secret without a trailing line break."
+            echo "::error::APICEP_TOKEN contains a newline or carriage return. In the Worker that builds an invalid Authorization header, fetch throws, and Consta answers 500 — retryable all the way down, i.e. the same six-hour silence by another road. Re-add the secret with no trailing line break."
             exit 1
           fi
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-            -X POST https://api.apicep.cloud/validate-transfer \
-            -H "Authorization: Bearer $APICEP_TOKEN" \
-            -H 'Content-Type: application/json' \
-            -d '{}')
+          case "$APICEP_TOKEN" in
+            [!\ \	]*) ;;
+            *) echo "::error::APICEP_TOKEN starts with a space or a tab. Measured: apiCEP answers 401 'Invalid API key format'. Re-add the secret with no leading whitespace."; exit 1 ;;
+          esac
+
+          call() {
+            curl -s -o /tmp/apicep-probe.txt -w '%{http_code}' --max-time 30 \
+              -X POST https://api.apicep.cloud/validate-transfer \
+              -H "Authorization: Bearer $APICEP_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d '{}'
+          }
+          code=$(call); body=$(cat /tmp/apicep-probe.txt)
+
+          # "Missing or invalid Authorization header" means apiCEP did not see
+          # a header we know curl sent. Observed once by hand, and a retry
+          # succeeded — so it is treated as a flake worth one more try rather
+          # than as grounds to fail a deploy.
+          case "$body" in
+            *"Missing or invalid Authorization header"*)
+              echo "::warning::apiCEP did not see the Authorization header. Retrying once."
+              sleep 3
+              code=$(call); body=$(cat /tmp/apicep-probe.txt)
+              ;;
+          esac
+
           case "$code" in
             400)
               echo "apiCEP accepted the credential (HTTP 400 on an empty body, as expected)."
               ;;
             401)
-              echo "::error::apiCEP rejected APICEP_TOKEN (HTTP 401). Consta /validate will answer PROVIDER_ERROR, and direct payments will sit in 'validating' until they expire. Update APICEP_TOKEN in the dev environment secrets and re-run."
+              case "$body" in
+                *"Invalid or revoked API token"*)
+                  echo "::error::apiCEP rejected APICEP_TOKEN: the token is revoked or was never valid. Its shape is right, so this is the value itself. Mint one at app.apicep.cloud and update the dev environment secret."
+                  ;;
+                *"API key not found"*)
+                  echo "::error::APICEP_TOKEN looks like an sk_live_ key and apiCEP does not know it. This repo runs on an apicep_ token (docs/integrations/apicep.md, Auth) — check the secret holds the right kind."
+                  ;;
+                *"Invalid API key format"*)
+                  echo "::error::apiCEP could not parse APICEP_TOKEN. Measured cause: leading whitespace inside the secret. The shape check above should have caught it, so inspect the value byte for byte."
+                  ;;
+                *"Missing or invalid Authorization header"*)
+                  echo "::error::apiCEP twice failed to see an Authorization header this step did send. Either apiCEP's auth layer is down, or the secret is empty in a way \$APICEP_TOKEN did not reveal. The fingerprint above says which."
+                  ;;
+                *)
+                  echo "::error::apiCEP answered 401 with an unrecognised body: $body"
+                  ;;
+              esac
+              echo "::error::Consta /validate will answer PROVIDER_ERROR, and direct payments will sit in 'validating' until they expire."
               exit 1
               ;;
             *)
-              echo "::warning::Unexpected HTTP $code from apiCEP — the credential could not be verified, so the deploy is not blocked."
+              echo "::warning::Unexpected HTTP $code from apiCEP — the credential could not be verified, so the deploy is not blocked. Body: $body"
               ;;
           esac
       - name: Smoke test

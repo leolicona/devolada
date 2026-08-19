@@ -78,12 +78,17 @@ could not name.
   |---|---|---|---|
   | `PROVIDER_UNAVAILABLE` | 500, network failure, our own deadline | 502 | `true` |
   | `PROVIDER_RATE_LIMITED` | 429 | 503 + `Retry-After` | `true`, with `retryAfter` from `X-RateLimit-Reset` |
-  | `PROVIDER_AUTH_FAILED` | 401 | 502 | **`false`** — an operator must act |
+  | `PROVIDER_AUTH_FAILED` | 401 saying the token is revoked, not found, or malformed | 502 | **`false`** — an operator must act |
+  | `PROVIDER_UNAVAILABLE` | 401 saying `Missing or invalid Authorization header` | 502 | `true` — Consta always sends the header, so this is apiCEP's fault, and it cleared on retry when measured |
   | `REQUEST_REJECTED` | 400, 405, 422 | 422 | **`false`** — the request must change |
   | `RECEIPT_UNREADABLE` | 200 + `status: "error"` on the receipt door | 422 | **`false`**, carries `missingFields` |
 
-  Consta is the only party that saw apiCEP's answer, so retryability is its
-  knowledge to state, not the caller's to infer from an HTTP code. Today all
+  **A 401 is not one thing**: apiCEP returns five distinct bodies under that
+  one code (`docs/integrations/apicep.md`, Auth), and one of them cleared on a
+  retry against a token that was never revoked. Branching on the status alone
+  would call an outage a revocation, which is the mistake the first version of
+  the deploy probe made. Consta is the only party that saw apiCEP's answer, so
+  retryability is its knowledge to state, not the caller's to infer from an HTTP code. Today all
   seven apiCEP failure codes arrive as one retryable 502 and the consumer
   guesses — which is why a revoked token and a duplicate reference number both
   became six-hour silences. **Rejected**: letting callers branch on a `detail`

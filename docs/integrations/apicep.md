@@ -24,7 +24,22 @@ a replacement leaves earlier tokens working, so neither time nor rotation
 ends one. Treat it as permanent.
 
 **It can still be revoked**, which is the one way it dies — apiCEP answers
-`{"error":"Invalid or revoked API token"}`. "Permanent" means unbounded in
+`{"error":"Invalid or revoked API token"}`. That message is one of
+**five different 401s**, and the HTTP code alone cannot tell them apart —
+measured 2026-08-19, after a hand-run `curl` failed once and succeeded on
+retry with a token that was never revoked:
+
+| body | what actually happened | fatal? |
+|---|---|---|
+| `Missing or invalid Authorization header` | no header, an empty one, or no `Bearer ` prefix | **not necessarily** — seen once against a good token, gone on retry |
+| `Invalid API key format. Must start with sk_live_…` | the value has **leading** whitespace | yes — fix the value |
+| `Invalid or revoked API token` | right shape (`apicep_`), token not recognised | yes — genuinely revoked |
+| `API key not found` | right shape (`sk_live_`), not recognised | yes — wrong kind of credential |
+| *(none — HTTP 400)* | **trailing** whitespace | no, apiCEP trims it |
+
+Leading whitespace breaks it and trailing whitespace does not; a newline
+inside the value produces a 500 rather than a 401. Anything reading these
+must read the body, not the status. "Permanent" means unbounded in
 time, not indestructible: deleting or revoking the token in the apiCEP
 dashboard breaks the channel exactly as a wrong value would.
 

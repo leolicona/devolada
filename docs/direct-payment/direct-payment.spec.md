@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-D01, US-D02, US-D03, US-D04, US-D05, US-D06]
 domain: direct-payment
-updated: 2026-08-17
+updated: 2026-08-19
 debt: [TD-013]
 ---
 
@@ -27,6 +27,7 @@ Devolada's store network serves unbanked customers who pay cash at a corner stor
 - **D13 — Validation attempts have a budget, because each one costs money — and so do uploads, in a different currency.** Every proof submission triggers a paid provider call, on a public endpoint. Per link: at most 5 submissions per hour → 429 `TOO_MANY_ATTEMPTS` with honest es-MX copy. Uploading carries **its own cap of 20 per hour per link**, because it creates no `direct_payments` row: counting only submissions left the upload endpoint effectively uncapped, and a leaked link was free 1 MB-at-a-time hosting under our own domain until the 15-day lifecycle swept it. The cap is 4× the submission budget — an upload is cheap and a customer may retake a photo — and the hour rides in the object key (`<linkId>/<hour>-<uuid>`) so counting one hour is two bounded listings rather than a scan of every proof the link still has. The public routes additionally sit behind Cloudflare rate limiting. **Rejected**: unlimited attempts (a hostile visitor with a leaked link drains apiCEP credits at $0.25 a call); one shared counter (the two doors fail differently — one spends money, the other spends storage).
 - **D14 — A validated transfer with nothing left to pay becomes `unapplied`, never silent.** Between submission and confirmation (up to 6 h pending) the debt can be settled elsewhere — typically cash at a store. The money has already moved to the ISP's CLABE, so the system neither registers a second WispHub payment nor discards the proof: the direct payment ends as `unapplied`, visible to the ISP in the feed ("pago validado sin adeudo — resolver con el cliente"), and no charge is created. **Rejected**: silently registering anyway (double payment in WispHub), silently dropping (the customer's money vanishes from every screen).
 - **D15 — One invoice at a time, oldest first.** A customer can owe several months. The page shows and charges exactly one pending invoice per cycle — the oldest — same as the store flow; after a confirmed payment the page re-reads WispHub and, if debt remains, shows the next one. **Rejected**: a combined multi-month total (one CEP would have to match a sum WispHub never invoiced, and partial matching contradicts D11).
+- **D16 — The bank is picked from the provider's vocabulary, never typed.** Measured 2026-08-19 against one real settled transfer, changing only `sender.bank`: `NUBANK` → `valid` in 7.0 s, `Nu` → `valid` (apiCEP aliased it), **`HSBC` → `invalid`, no `cepDetails`, no `cepStatus`, in 1.3 s**. apiCEP never answers an error for a bank name it does not know — it answers the same faceless `invalid` a transfer that never happened returns, so no status code will ever tell a caller its picker is wrong. Both surfaces that produce a bank name now choose from apiCEP's 97 published names: the payer's `senderBank` and the ISP's `speiBank`, the latter more dangerous because it travels as `beneficiary.bank` on **every** validation that ISP ever runs. Both fields were free text seeded with wrong examples — `"BBVA, Nu, Banorte…"` on the payment page, `"STP, BBVA, Banorte…"` in settings — so the product was teaching people to type values it could not validate (BUG-007). The list is **generated** from `docs/integrations/apicep.md` into one constant per app by `scripts/gen-banks.mjs`, and CI fails on drift: three copies of a vocabulary that fails silently is three chances to be wrong. `trackingKey` is bounded in the same breath — `^[A-Za-z0-9]{6,30}$` after trimming (BUG-006). A **range**, not Nu's 28: apiCEP's own example carries ten characters, and Devolada's payers bank anywhere. **Rejected**: trusting apiCEP's aliasing (undocumented, measured once, and silent when it runs out); a shared runtime endpoint for the list (the payer's form must render before anything else can fail); the catalogue's Radix `Select` on the payment page — right for the admin's short lists on a desktop, wrong for 97 options filled once on a phone, where the native control brings the OS picker, type-ahead and the payer's own assistive settings, and costs the public page no new dependency.
 
 ## Schema
 
@@ -255,6 +256,11 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 27. A submission carries a `next_validation_at` before any verdict exists, so an interrupted attempt is still swept (D7)
 28. A re-validation whose earlier attempt never returned a verdict still counts as our own retry, and confirms instead of rejecting (D8 carve-out a)
 29. A provider failure leaves `validation_attempts = 1` and a scheduled slot: the attempt is recorded before the call (D7, D8)
+30. A `senderBank` outside the vocabulary — `Nu`, `BBVA`, `Banorte`, the three the old placeholder taught — → 400 before WispHub or the provider is touched, and no `direct_payments` row (D16, BUG-007)
+31. `BBVA MEXICO`, the spelling apiCEP does accept, goes through and is stored (D16)
+32. A `trackingKey` carrying a receipt's two-line wrap — a space, a newline, or the live 29-character one with a Cyrillic З — → 400, no paid call (D16, BUG-006)
+33. A ten-character key (`HSBC712057`, apiCEP's own example) is accepted: the bound is a range, not Nu's 28 (D16, BUG-006)
+34. The payment page offers the bank as a list, not a text field, and the button stays disabled until one is chosen (D16)
 
 ## Definition of Done
 

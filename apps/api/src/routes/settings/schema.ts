@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { BANKS } from "../../direct-payments/banks";
+
+/* Same reason as TIMEZONES below: the admin's picker is built from the list
+   that validates it (D16). The ISP's bank is the more dangerous of the two —
+   it travels as `beneficiary.bank` on every validation this ISP ever runs. */
+export { BANKS, type Bank } from "../../direct-payments/banks";
 
 /* Shareable contract: the admin derives types, MSW validates against it. */
 
@@ -56,7 +62,9 @@ export const settingsPatchRequest = z
     wisphubApiKey: z.string().trim().min(8),
     /* SPEI config (direct-payment D3, D4): explicit null clears a field */
     speiClabe: z.string().trim().regex(/^\d{18}$/).nullable(),
-    speiBank: z.string().trim().min(2).max(80).nullable(),
+    /* D16: this travels as `beneficiary.bank` on every validation, so a
+       name apiCEP does not know poisons every payment to this ISP, not one. */
+    speiBank: z.string().trim().pipe(z.enum(BANKS)).nullable(),
     speiBeneficiaryName: z.string().trim().min(3).max(120).nullable(),
     speiServiceFeeCents: z.number().int().nonnegative().nullable(),
   })

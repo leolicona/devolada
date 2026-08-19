@@ -453,13 +453,13 @@ regression suite for "no permanent failure ever becomes a long silence".
 - [x] `trackingKey` is `^[A-Za-z0-9]{6,30}$` after trimming, `referenceNumber`
       digits — the edges trimmed, the middle enforced (D13)
 - [x] Scenarios 16–20 automated (`test/validate.test.ts`, `test/banks.test.ts`)
-- [ ] **Blocked before deploy — BUG-007.** Devolada's payer types their bank as
-      free text into a field whose placeholder offers three names the
-      vocabulary does not contain. D12 turns that into a 400, and
-      `apps/api/src/consta/client.ts` reads every non-2xx as retryable, so a
-      mistyped bank would ride the full six-hour schedule instead of failing
-      once. Either the payer picks from `GET /banks` first, or D9 lands first
-      so a 400 reads as terminal. Shipping D12 alone makes Devolada worse.
+- [x] **BUG-007 cleared before deploy.** Devolada's payer and the ISP's settings
+      both typed their bank as free text, into fields whose placeholders
+      offered names the vocabulary does not contain. Both now pick from the
+      list (direct-payment D16), so Devolada no longer sends a name that would
+      become a retryable 400. The underlying asymmetry remains until D9:
+      `apps/api/src/consta/client.ts` still reads every non-2xx as retryable,
+      so another integrator's 400 would ride a schedule it can never escape.
 
 ### D9–D11, D14–D16 (proposed 2026-08-19, not yet built)
 

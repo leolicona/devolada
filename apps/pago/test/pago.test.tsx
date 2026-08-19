@@ -7,6 +7,7 @@ import {
   payResponse,
   proofUploadResponse,
 } from "@devolada/api/direct-payments-schema";
+import { BANKS } from "@devolada/api/direct-payments-schema";
 import { App } from "../src/App";
 import { fail, handlers, ok, server } from "./msw";
 
@@ -110,14 +111,17 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     /* the manual door lives behind its tab */
     await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
     await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
-    await userEvent.type(screen.getByLabelText(/banco desde el que pagaste/i), "Nu");
+    /* D16: the bank is picked, not typed. "Nu" — what this test used to
+       send — is not a name apiCEP knows, and it answers `invalid` rather
+       than an error, so the form is the only place it can be caught. */
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
     await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
 
     expect(await screen.findByText(/estamos verificando tu transferencia/i)).toBeInTheDocument();
     expect(screen.getByText("Verificando pago")).toBeInTheDocument();
     /* D1 principle: the client sent only its own transfer data */
     expect(paid[0]).toMatchObject({
-      transfer: { trackingKey: "TRACK001XYZ", senderBank: "Nu" },
+      transfer: { trackingKey: "TRACK001XYZ", senderBank: "NUBANK" },
     });
     expect(JSON.stringify(paid[0])).not.toContain("amount");
 
@@ -125,6 +129,31 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(await screen.findByText("Pago confirmado", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(screen.getByText(/tu servicio ya está activo/i)).toBeInTheDocument();
     expect(screen.getByText(/DV-SPEI01/)).toBeInTheDocument();
+  });
+
+  it("scenario 34: the bank is chosen from the vocabulary, never typed (D16)", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+
+    /* A combobox, not a textbox — the difference BUG-007 turned on */
+    const field = screen.getByLabelText(/banco desde el que pagaste/i);
+    expect(field.tagName).toBe("SELECT");
+
+    /* Every option is a name apiCEP resolves. The three the old placeholder
+       suggested are not among them. */
+    const offered = [...field.querySelectorAll("option")]
+      .map((o) => (o as HTMLOptionElement).value)
+      .filter(Boolean);
+    expect(offered).toHaveLength(BANKS.length);
+    expect(new Set(offered)).toEqual(new Set(BANKS));
+    for (const wrong of ["Nu", "BBVA", "Banorte"]) expect(offered).not.toContain(wrong);
+
+    /* Nothing can be submitted until one is chosen */
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    expect(screen.getByRole("button", { name: /verificar mi pago/i })).toBeDisabled();
+    await userEvent.selectOptions(field, "NUBANK");
+    expect(screen.getByRole("button", { name: /verificar mi pago/i })).toBeEnabled();
   });
 
   it("uploads a screenshot and pays with its proofId", async () => {
@@ -174,7 +203,10 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
 
     await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
     await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
-    await userEvent.type(screen.getByLabelText(/banco desde el que pagaste/i), "Nu");
+    /* D16: the bank is picked, not typed. "Nu" — what this test used to
+       send — is not a name apiCEP knows, and it answers `invalid` rather
+       than an error, so the form is the only place it can be caught. */
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
     await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
 
     expect(

@@ -8,8 +8,10 @@
    status code will ever say the picker was wrong, so this list is the only
    thing standing between a real payment and a silent false rejection.
 
-   Consta validation spec D12. Served at GET /banks so an integrator's picker
-   is generated, not transcribed a third time. */
+   direct-payment spec D16. Devolada holds its own copy rather than calling
+   Consta for a static list: the payer's form needs it at page load, and a
+   network hop to render a dropdown would be a new way for the page to fail.
+   BUG-007 is what this closes. */
 
 export const BANKS = [
   "ACTINVER",

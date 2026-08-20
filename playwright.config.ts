@@ -12,9 +12,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 const TIENDA_PORT = 4173;
 const ADMIN_PORT = 4174;
+const PAGO_PORT = 4175;
 
 export const TIENDA = `http://localhost:${TIENDA_PORT}`;
 export const ADMIN = `http://localhost:${ADMIN_PORT}`;
+export const PAGO = `http://localhost:${PAGO_PORT}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -36,6 +38,15 @@ export default defineConfig({
     {
       command: `pnpm --filter @devolada/admin build && pnpm --filter @devolada/admin preview --port ${ADMIN_PORT} --strictPort`,
       url: ADMIN,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      /* The customer's page joins the browser layer because the values it
+         asks people to proofread are long enough to run out of a phone
+         (BUG-009), and no simulated DOM can measure that. */
+      command: `pnpm --filter @devolada/pago build && pnpm --filter @devolada/pago preview --port ${PAGO_PORT} --strictPort`,
+      url: PAGO,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

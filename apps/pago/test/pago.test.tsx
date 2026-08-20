@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   directPaymentStatusResponse,
@@ -15,9 +15,26 @@ import { fail, handlers, ok, server } from "./msw";
 /* docs/direct-payment/direct-payment.spec.md scenario 15 (US-D01,
    US-D03, D9, D10): the page's four main flows, in es-MX "pago" copy. */
 
+/* D19 put the remembered step in localStorage, so a test that walks to
+   step 2 would otherwise start the next one there. */
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
 function renderPage(path = "/p/tok123") {
   window.history.pushState({}, "", path);
   render(<App />);
+}
+
+/* The instructions are two steps (D19): the proof lives on the second,
+   and the manual form one deliberate tap inside it. */
+async function goToProof() {
+  await userEvent.click(await screen.findByRole("button", { name: /ya hice mi transferencia/i }));
+}
+
+async function openManualForm() {
+  await goToProof();
+  await userEvent.click(screen.getByRole("button", { name: /no tengo el comprobante/i }));
 }
 
 const debtLink = linkStatusResponse.parse({
@@ -44,10 +61,12 @@ describe("US-D01: the link shows the debt and the SPEI instructions", () => {
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
     expect(screen.getByText("Total a pagar")).toBeInTheDocument();
     expect(screen.getByText("646180157000000004")).toBeInTheDocument();
-    expect(screen.getByText("WifiPlus SA de CV")).toBeInTheDocument();
     /* D10: the customer's surface says "pago", never "cobro" */
     expect(screen.queryByText(/cobro por servicio/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /enviar comprobante/i })).toBeInTheDocument();
+    /* D19: step 1 is only the transfer; the proof is one tap away */
+    expect(screen.getByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
+    await goToProof();
+    expect(screen.getByRole("heading", { name: /envía tu comprobante/i })).toBeInTheDocument();
   });
 
   it("says 'sin adeudo' when nothing is due", async () => {
@@ -110,7 +129,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     renderPage();
 
     /* the manual door lives behind its tab */
-    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+    await openManualForm();
     await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
     /* D16: the bank is picked, not typed. "Nu" — what this test used to
        send — is not a name apiCEP knows, and it answers `invalid` rather
@@ -135,7 +154,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
   it("scenario 34: the bank is chosen from the vocabulary, never typed (D16)", async () => {
     server.use(handlers.link(() => ok(debtLink)));
     renderPage();
-    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+    await openManualForm();
 
     /* A combobox, not a textbox — the difference BUG-007 turned on */
     const field = screen.getByLabelText(/banco desde el que pagaste/i);
@@ -182,8 +201,9 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     );
     renderPage();
 
+    await goToProof();
     const file = new File([new Uint8Array(100)], "cep.png", { type: "image/png" });
-    const picker = await screen.findByLabelText(/captura o comprobante/i);
+    const picker = screen.getByLabelText(/captura o comprobante/i);
     /* D12: the picker has to offer PDFs, or the banks that issue one
        never reach the upload at all */
     expect(picker).toHaveAttribute("accept", "image/*,application/pdf");
@@ -204,6 +224,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     proofReadingResponse.parse({
       source: "reader",
       isReceipt: true,
+      amountCents: 51400,
       trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
       senderBank: "NUBANK",
       date: "2026-08-19",
@@ -214,7 +235,8 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
 
   async function uploadReceipt() {
     renderPage();
-    const picker = await screen.findByLabelText(/captura o comprobante/i);
+    await goToProof();
+    const picker = screen.getByLabelText(/captura o comprobante/i);
     await userEvent.upload(picker, new File([new Uint8Array(100)], "cep.png", { type: "image/png" }));
     await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
   }
@@ -309,6 +331,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
           proofReadingResponse.parse({
             source: "reader",
             isReceipt: false,
+            amountCents: null,
             trackingKey: null,
             senderBank: null,
             date: null,
@@ -408,6 +431,29 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     });
   });
 
+  it("scenario 57: a receipt whose amount is not the debt is refused before any credit", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      /* $1.00 against a $514.00 debt */
+      handlers.read(() => ok(readOk({ amountCents: 100 }))),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+    );
+    await uploadReceipt();
+
+    /* Measured 2026-08-19: apiCEP filters on `sender.amount`, so this
+       lookup could only ever come back as a faceless `not_found` and six
+       hours of "Verificando". Both numbers, in three seconds, instead. */
+    expect(await screen.findByText(/no coincide con tu adeudo/i)).toBeInTheDocument();
+    expect(screen.getByText("$1.00")).toBeInTheDocument();
+    expect(screen.getByText("$514.00")).toBeInTheDocument();
+    expect(paid).toHaveLength(0);
+  });
+
   it("a used transfer reads as exactly that (D8)", async () => {
     server.use(
       handlers.link(() => ok(debtLink)),
@@ -415,7 +461,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     );
     renderPage();
 
-    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+    await openManualForm();
     await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
     /* D16: the bank is picked, not typed. "Nu" — what this test used to
        send — is not a name apiCEP knows, and it answers `invalid` rather
@@ -449,7 +495,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     );
     renderPage();
 
-    await userEvent.click(await screen.findByRole("tab", { name: /datos de la transferencia/i }));
+    await openManualForm();
     await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
     await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
     await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
@@ -461,5 +507,159 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
       screen.getByText(/no encontramos tu transferencia en banxico/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/contacta a tu proveedor/i)).toBeInTheDocument();
+  });
+});
+
+/* docs/direct-payment/direct-payment.spec.md scenarios 57–62 (D19): the
+   instructions are two steps, and the device remembers which one — the
+   transfer happens in the bank app, and coming back is usually a fresh
+   page load. */
+describe("US-D01: the page is two steps and remembers the moment", () => {
+  /* What an app switch, or a tap on the ISP's WhatsApp link the next
+     morning, actually costs: a new page load on the same device. */
+  function reopen() {
+    cleanup();
+    renderPage();
+  }
+
+  it("scenario 59: after 'ya hice mi transferencia', reopening lands on the proof, not the CLABE", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    await goToProof();
+
+    reopen();
+    expect(
+      await screen.findByRole("heading", { name: /envía tu comprobante/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Paso 2 de 2")).toBeInTheDocument();
+    expect(screen.queryByText("646180157000000004")).not.toBeInTheDocument();
+  });
+
+  it("scenario 60: the way back is on the screen, and it is not undone by reopening", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    await goToProof();
+
+    /* A payer who tapped too early must not reload to see the CLABE */
+    await userEvent.click(screen.getByRole("button", { name: /ver los datos otra vez/i }));
+    expect(screen.getByText("646180157000000004")).toBeInTheDocument();
+
+    reopen();
+    expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
+  });
+
+  it("scenario 61: step 1 shows the two lines the bank needs; the rest is reachable, not stacked", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+
+    expect(await screen.findByText("646180157000000004")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /copiar monto exacto/i })).toBeInTheDocument();
+    /* Beneficiario, banco and concepto are checked once, if at all */
+    expect(screen.queryByText("WifiPlus SA de CV")).not.toBeInTheDocument();
+    expect(screen.queryByText("greyes@wifiplus")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /ver los demás datos/i }));
+    expect(await screen.findByText("WifiPlus SA de CV")).toBeInTheDocument();
+    expect(screen.getByText("greyes@wifiplus")).toBeInTheDocument();
+    expect(screen.getByText("STP")).toBeInTheDocument();
+  });
+
+  it("scenario 61: the amount copies as a number — a bank does not take '$514.00'", async () => {
+    const user = userEvent.setup();
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /copiar monto exacto/i }));
+    expect(await navigator.clipboard.readText()).toBe("514.00");
+    /* and it is read as money on the screen exactly once: the amount is
+       the breakdown's own total, not a second row repeating it */
+    expect(screen.getAllByText("$514.00")).toHaveLength(1);
+  });
+
+  it("scenario 62: step 2 opens on the upload, with no tab strip and the form one tap away", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    await goToProof();
+
+    /* D18 earned the upload its primacy; tabs made the harder path a peer */
+    expect(screen.getByLabelText(/captura o comprobante/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /no tengo el comprobante/i }));
+    expect(screen.getByLabelText(/clave de rastreo/i)).toBeInTheDocument();
+    /* the upload does not disappear when the fallback opens */
+    expect(screen.getByLabelText(/captura o comprobante/i)).toBeInTheDocument();
+  });
+
+  it("scenario 63: a confirmed payment gives the step back, so next month starts at the beginning", async () => {
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.pay(() =>
+        ok(payResponse.parse({ directPaymentId: "dp-61", status: "confirmed", error: null }), 201),
+      ),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "confirmed",
+            reconnectionStatus: "reconnected",
+            folio: "DV-SPEI09",
+            validationAttempts: 1,
+            error: null,
+          }),
+        ),
+      ),
+    );
+    renderPage();
+
+    await openManualForm();
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(await screen.findByText("Pago confirmado")).toBeInTheDocument();
+
+    reopen();
+    expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
+  });
+
+  it("scenario 64: a payment still validating keeps the step; 'sin adeudo' clears it", { timeout: 15000 }, async () => {
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.pay(() =>
+        ok(payResponse.parse({ directPaymentId: "dp-62", status: "validating", error: null }), 201),
+      ),
+      handlers.status(() =>
+        ok(directPaymentStatusResponse.parse({ status: "validating", validationAttempts: 1, error: null })),
+      ),
+    );
+    renderPage();
+
+    await openManualForm();
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(await screen.findByText(/estamos verificando tu transferencia/i)).toBeInTheDocument();
+
+    /* That payer has not finished: reopening must not send them back to
+       a CLABE they already used. */
+    reopen();
+    expect(
+      await screen.findByRole("heading", { name: /envía tu comprobante/i }),
+    ).toBeInTheDocument();
+
+    /* Paid at last: the link says there is nothing due, and the step goes */
+    cleanup();
+    server.use(
+      handlers.link(() =>
+        ok(linkStatusResponse.parse({ ispName: "WifiPlus", customerName: "Janely", status: "no_debt" })),
+      ),
+    );
+    renderPage();
+    expect(await screen.findByText(/no tienes pagos pendientes/i)).toBeInTheDocument();
+
+    cleanup();
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
   });
 });

@@ -62,6 +62,15 @@ export const payRequest = z
        decides which of two waiting messages the payer reads, never a
        verdict, never an amount, never whether anything is confirmed. */
     receiptStatus: z.string().max(60).optional(),
+    /* D18: the amount the reader saw on the receipt. Client-supplied and
+       **never** used to decide what is charged — that is computed here
+       from a fresh WispHub read (D2), and omitting this field cannot buy
+       anyone a cheaper payment. It exists because `sender.amount` is a
+       filter in apiCEP's direct mode (measured 2026-08-19), so a receipt
+       whose amount is not the debt produces a lookup that cannot succeed
+       and a faceless `not_found` six hours long. Refusing it here costs
+       nothing and answers the payer immediately. */
+    receiptAmountCents: z.number().int().positive().optional(),
   })
   .superRefine((body, ctx) => {
     /* D18: the two travel together on the read path — the payer uploaded
@@ -114,9 +123,18 @@ export const proofReadingResponse = z.object({
      the payer keeps the receipt door instead of confirming a draft */
   source: z.enum(["reader", "provider-ocr"]),
   isReceipt: z.boolean().nullable(),
-  /* Only fields the payer will confirm. The amount is deliberately
-     absent: it is server-supplied on this channel (D2) and letting a
-     reading anywhere near it is the `$1-receipt` hole (D11). */
+  /* Fields the payer may confirm, plus the amount — which they never
+     confirm and never edit. **Correction, 2026-08-19**: the first version
+     of this contract left the amount out, on the argument that it is
+     server-supplied (D2) and a reading must not go near money (D11).
+     Both still hold, and the omission was still wrong: `sender.amount` is
+     a **filter** in apiCEP's direct mode (measured — a known-good clave
+     with a wrong amount returns the same faceless `invalid` a nonexistent
+     transfer does), so a receipt whose amount differs from the debt makes
+     the lookup fail with nothing to show for it. The reading is not used
+     to decide money here. It is used to decide **whether to bother the
+     provider at all**, which is what D3 always said it was for. */
+  amountCents: z.number().int().nullable(),
   trackingKey: z.string().nullable(),
   senderBank: z.string().nullable(),
   date: z.string().nullable(),

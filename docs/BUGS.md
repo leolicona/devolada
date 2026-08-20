@@ -95,3 +95,13 @@ Format:
 - Fix: `speiAvailable` now requires the bank to be in the vocabulary, so an ISP whose bank cannot resolve shows the payment page as `unavailable` and points at the store network — which is precisely what D4 already said ("a page that shows a CLABE nothing can validate would let customers transfer into the void"); `runValidation` stops with `SPEI_BANK_UNKNOWN` rather than retrying something no retry can fix; and the settings response carries `bankUnknown` so the ISP is told rather than silently degraded. The dev row was corrected by hand to `KLAR`.
 - Regression test: `apps/api/test/direct-payment.test.ts` scenario 35 — verified to fail without the fix
 
+
+## BUG-009 — the clave de rastreo did not fit its own field, on the two screens that exist to have it proofread
+- Status: **fixed** (2026-08-20)
+- Detected: 2026-08-20 · measured in a real browser at the 360px floor while reworking the payment page flow (D19)
+- Affected spec: docs/direct-payment/direct-payment.spec.md (D16, D17, D18)
+- Symptom: a 28-character clave rendered 327px wide inside a 276px input — roughly five characters past the right edge, reachable only by dragging a caret. It affected both screens whose entire purpose is review: D18's *"Leímos estos datos de tu comprobante. Revísalos: si algo no coincide, corrígelo"* and D17's *"revisa que estos datos coincidan con tu comprobante"*. The page asked the payer to check a value it was not showing them, and the hidden part was the tail — where a misread character is most likely to sit, because that is where the reader ran out of receipt.
+- Root cause: `Input` is a shared 48px atom in the body font at `text-base`, sized for names and amounts. Nobody had put a 28-character opaque code through it. D16 fixed *which* claves are accepted (BUG-006) and D18 started pre-filling them from a machine reading, and neither step asked whether the value could be seen.
+- **The lesson**: a field that holds a machine-generated identifier is not the same control as a field that holds a name, even when both are one line of text. Pre-filling a value the user must verify raises the bar from "can they type it" to "can they read all of it".
+- Fix: the clave input renders `font-mono text-sm`. Mono is also what the value deserves — it is a code being proofread, where `0` and `O` must look different — and at 14px the full 28 characters occupy about 235px, inside the 276px the field has at 360px.
+- Regression test: `tests/e2e/pago.spec.ts` — "the clave de rastreo fits its field at the 360px floor" (and the hand-typed twin), both verified to fail without the fix. This is also what put `apps/pago` in the browser layer: happy-dom reports no layout, so no component test could ever have caught it (TESTING.md layer 4).

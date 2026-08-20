@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -6,6 +6,7 @@ import {
   AmountBreakdown,
   Button,
   Card,
+  cn,
   Field,
   Input,
   Skeleton,
@@ -22,6 +23,8 @@ import type {
 import { NativeSelect } from "../../components/ui/native-select";
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
   Copy,
   CloudUpload,
   ScanLine,
@@ -29,37 +32,70 @@ import {
   Store,
   TriangleAlert,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { api, ApiError } from "@/api";
 import { forgetLink, rememberLink } from "@/links";
+import { forgetStep, readStep, rememberStep, type Step } from "@/step";
 
 /* The customer's payment page (direct-payment spec D9, D10): es-MX,
    "pago" never "cobro". Four flows — loading, instructions, verifying,
-   result — plus the edge states the UI contract enumerates. */
+   result — plus the edge states the UI contract enumerates.
+
+   The instructions flow is itself two steps (D19), because the payment
+   has an interruption at its centre: the transfer happens in the bank
+   app. Step 1 is only what gets typed there; step 2 is only the proof. */
 
 const POLL_MS = 5000;
 
-/* One SPEI field with its copy button: transfer apps want paste. */
-function CopyField({ label, value }: { label: string; value: string }) {
+/* Transfer apps want paste, so every SPEI value carries a copy button. */
+function CopyButton({
+  value,
+  text = "Copiar",
+  /* Read by assistive tech only. Several buttons on the card show the
+     same word, and the field name is what tells them apart — appended
+     rather than substituted, so the visible text stays the start of the
+     accessible name (WCAG 2.5.3). */
+  srSuffix,
+  variant = "secondary",
+  className,
+}: {
+  value: string;
+  text?: string;
+  srSuffix?: string;
+  variant?: "secondary" | "ghost";
+  className?: string;
+}) {
   const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant={variant}
+      className={cn("h-10 shrink-0 px-3 text-sm", className)}
+      onClick={() => {
+        void navigator.clipboard?.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+    >
+      {copied ? <CheckCircle2 className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
+      {copied ? "Copiado" : text}
+      {srSuffix && <span className="sr-only"> {srSuffix}</span>}
+    </Button>
+  );
+}
+
+/* One SPEI field with its copy button. */
+function CopyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2">
       <div className="min-w-0">
         <p className="text-sm text-ink-soft">{label}</p>
         <p className="break-all font-mono text-sm text-ink">{value}</p>
       </div>
-      <Button
-        variant="secondary"
-        className="h-10 shrink-0 px-3 text-sm"
-        onClick={() => {
-          void navigator.clipboard?.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }}
-      >
-        {copied ? <CheckCircle2 className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
-        {copied ? "Copiado" : `Copiar ${label.toLowerCase()}`}
-      </Button>
+      <CopyButton value={value} srSuffix={label} />
     </div>
   );
 }
@@ -110,10 +146,17 @@ function TransferForm({
   return (
     <div className="space-y-4">
       <Field label="Clave de rastreo">
+        {/* BUG-009: a real clave runs to 28 characters, and in the body
+            font at 16px that is 327px of text in a 276px field on a
+            360px phone — the tail simply was not on screen. Mono at
+            text-sm fits it whole, and mono is what the value deserves
+            anyway: it is a code being proofread, where `0` and `O` have
+            to look different. */}
         <Input
           value={trackingKey}
           onChange={(e) => setTrackingKey(e.target.value)}
           placeholder="Está en tu comprobante"
+          className="font-mono text-sm"
           autoComplete="off"
         />
       </Field>
@@ -153,22 +196,40 @@ function TransferForm({
 function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy: boolean }) {
   const [file, setFile] = useState<File | null>(null);
   const [tooBig, setTooBig] = useState(false);
+  const inputId = useId();
   return (
     <div className="space-y-4">
-      {/* PDF too: several banks hand out the comprobante as one, and
-          apiCEP reads it (D12) */}
-      <Field label="Captura o comprobante de tu transferencia">
-        <Input
-          type="file"
-          accept="image/*,application/pdf"
-          className="pt-2.5"
-          onChange={(e) => {
-            const picked = e.target.files?.[0] ?? null;
-            setTooBig(Boolean(picked && picked.size > 1_000_000));
-            setFile(picked);
-          }}
-        />
-      </Field>
+      {/* The label is the tap target, and the input behind it is
+          visually hidden. A bare `<input type="file">` paints the
+          platform's own control — "Choose File · No file chosen", in
+          English, on a page that is es-MX by law (D10) — and gives the
+          payer a 20px hit area on the one action step 2 exists for.
+
+          PDF too: several banks hand out the comprobante as one, and
+          apiCEP reads it (D12). */}
+      <label
+        htmlFor={inputId}
+        className="flex cursor-pointer flex-col items-center gap-2 rounded-sm border border-dashed border-line-input bg-well px-4 py-8 text-center"
+      >
+        <CloudUpload className="size-6 text-ink-soft" aria-hidden />
+        <span className="break-all text-base font-medium text-ink">
+          {file ? file.name : "Toca para subir tu captura"}
+        </span>
+        <span className="text-sm text-ink-soft">
+          Captura o comprobante de tu transferencia · imagen o PDF, hasta 1 MB
+        </span>
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*,application/pdf"
+        className="sr-only"
+        onChange={(e) => {
+          const picked = e.target.files?.[0] ?? null;
+          setTooBig(Boolean(picked && picked.size > 1_000_000));
+          setFile(picked);
+        }}
+      />
       {tooBig && (
         <Alert variant="warning" layout="icon">
           <TriangleAlert aria-hidden />
@@ -190,6 +251,16 @@ export function PaymentPage({ token }: { token: string }) {
   const [draft, setDraft] = useState<{ proofId: string; reading: ProofReading } | null>(null);
   /* D18: a correction re-submits, and the image has to travel with it */
   const [proofId, setProofId] = useState<string | null>(null);
+  /* D19: which half of the payment this payer is on. Seeded from the
+     device, because coming back from the bank app is a fresh page load
+     more often than it is the same one. */
+  const [step, setStep] = useState<Step>(() => readStep(token));
+  const goTo = (next: Step) => {
+    setStep(next);
+    rememberStep(token, next);
+  };
+  /* The fallback door, opened on purpose and never closed again (D19) */
+  const [manualDoor, setManualDoor] = useState(false);
 
   const link = useQuery<LinkStatusResponse, ApiError>({
     queryKey: ["link", token],
@@ -202,7 +273,11 @@ export function PaymentPage({ token }: { token: string }) {
      announced — nothing was asked of them. */
   const linkData = link.data;
   useEffect(() => {
-    if (linkData) rememberLink(token, linkData.customerName ?? linkData.ispName);
+    if (!linkData) return;
+    rememberLink(token, linkData.customerName ?? linkData.ispName);
+    /* D19: nothing left to pay means the last payment is over — give the
+       step back, so next month starts where the next payment starts. */
+    if (linkData.status === "no_debt") forgetStep(token);
   }, [linkData, token]);
 
   /* A link the ISP removed is dropped rather than offered forever. Only
@@ -226,10 +301,24 @@ export function PaymentPage({ token }: { token: string }) {
     },
   });
 
+  /* D19: a confirmed payment gives the step back. `validating` does not
+     — that payer has not finished, and a reload must not drop them back
+     onto a CLABE they already used. */
+  const settled = poll.data?.status ?? payment?.status;
+  useEffect(() => {
+    if (settled === "confirmed") forgetStep(token);
+  }, [settled, token]);
+
   const pay = useMutation<
     PayResponse,
     ApiError,
-    { proofId?: string; transfer?: object; supersedes?: string; receiptStatus?: string }
+    {
+      proofId?: string;
+      transfer?: object;
+      supersedes?: string;
+      receiptStatus?: string;
+      receiptAmountCents?: number;
+    }
   >({
     mutationFn: (body) =>
       api<PayResponse>(`/direct-payments/links/${token}/pay`, {
@@ -285,6 +374,23 @@ export function PaymentPage({ token }: { token: string }) {
         reading.gate.senderBank !== "ok";
       if (gated) return { proofId, reading };
 
+      /* Measured 2026-08-19: `sender.amount` is a **filter** in apiCEP's
+         direct mode, not a hint. A known-good clave re-sent with a wrong
+         amount comes back as the same faceless `invalid` a nonexistent
+         transfer does. So a receipt whose amount does not match the debt
+         cannot be found no matter how right the clave is — and the amount
+         is the one field the confirmation screen never shows. Refusing
+         here turns six hours of "Verificando" into two numbers, in three
+         seconds, for zero credits. */
+      const expected = link.data?.totalCents;
+      if (
+        reading.amountCents != null &&
+        expected != null &&
+        reading.amountCents !== expected
+      ) {
+        return { proofId, reading };
+      }
+
       /* The gate passed, so try it silently. If the reading is right —
          and we have no measurement saying how often it is — nobody is
          asked anything, which is the whole reason not to put a
@@ -299,6 +405,10 @@ export function PaymentPage({ token }: { token: string }) {
             date: reading.date ?? new Date().toISOString().slice(0, 10),
           },
           receiptStatus: reading.receiptStatus ?? undefined,
+          /* The server holds the real rule (D18): it has the fresh debt
+             and refuses with AMOUNT_MISMATCH. The check above is only a
+             short-circuit so our own page answers instantly. */
+          receiptAmountCents: reading.amountCents ?? undefined,
         }),
       });
     },
@@ -517,6 +627,18 @@ export function PaymentPage({ token }: { token: string }) {
 
   const submitError = pay.error ?? upload.error;
 
+  /* One header for every screen the payer meets before submitting: the
+     D18 confirmations below are still step 2 — nothing has been sent, and
+     "subir otro comprobante" walks straight back into it (D19). */
+  const stepHeader = (n: 1 | 2, title: string) => (
+    <header className="space-y-1">
+      <p className="text-sm font-medium text-ink-soft">Paso {n} de 2</p>
+      <h1 className="text-lg font-semibold">{title}</h1>
+      <p className="text-sm text-ink-soft">{data.ispName}</p>
+      {data.customerName && <p className="text-sm text-ink-soft">{data.customerName}</p>}
+    </header>
+  );
+
   /* ——— 3b. Confirma lo que leímos (D18) ——— */
   if (draft) {
     const { reading, proofId } = draft;
@@ -534,7 +656,7 @@ export function PaymentPage({ token }: { token: string }) {
     if (reading.isReceipt === false) {
       return (
         <Card className="space-y-4 p-6">
-          <h1 className="text-lg font-semibold">{data.ispName}</h1>
+          {stepHeader(2, "Envía tu comprobante")}
           <Alert variant="warning" layout="icon">
             <TriangleAlert aria-hidden />
             Esta imagen no parece un comprobante de transferencia. Sube la captura de tu
@@ -547,14 +669,45 @@ export function PaymentPage({ token }: { token: string }) {
       );
     }
 
+    /* The amount does not match the debt, and a lookup with it is proven
+       to fail (apiCEP filters on `sender.amount`). Say both numbers: it
+       is the only thing the payer can act on, and it is the answer they
+       would otherwise get six hours from now, or never. */
+    const readAmount = reading.amountCents;
+    if (readAmount != null && data.totalCents != null && readAmount !== data.totalCents) {
+      return (
+        <Card className="space-y-4 p-6">
+          {stepHeader(2, "El monto no coincide")}
+          <Alert variant="warning" layout="icon">
+            <TriangleAlert aria-hidden />
+            El monto de tu comprobante no coincide con tu adeudo, así que no podemos verificarlo.
+          </Alert>
+          <div className="divide-y divide-line-soft border-y border-line-soft">
+            <div className="flex items-center justify-between py-2">
+              <p className="text-sm text-ink-soft">Tu comprobante</p>
+              <Amount cents={readAmount} className="font-semibold" />
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <p className="text-sm text-ink-soft">Tu adeudo</p>
+              <Amount cents={data.totalCents} className="font-semibold" />
+            </div>
+          </div>
+          <p className="text-sm text-ink-soft">
+            Si transferiste otra cantidad, contacta a tu proveedor de internet para resolverlo. Si
+            crees que leímos mal el comprobante, sube otra captura.
+          </p>
+          <Button variant="secondary" onClick={startOver}>
+            Subir otro comprobante
+          </Button>
+        </Card>
+      );
+    }
+
     const missing =
       reading.gate.trackingKey !== "ok" || reading.gate.senderBank !== "ok";
     return (
       <Card className="space-y-4 p-6">
-        <header>
-          <h1 className="text-lg font-semibold">{data.ispName}</h1>
-          <p className="text-sm text-ink-soft">Confirma los datos de tu comprobante</p>
-        </header>
+        {stepHeader(2, "Confirma estos datos")}
 
         {/* Say plainly that a machine read this and the payer decides.
             The alternative — silently pre-filling and hoping — is how a
@@ -595,62 +748,107 @@ export function PaymentPage({ token }: { token: string }) {
     );
   }
 
-  /* ——— 3. Instrucciones de pago ——— */
-  return (
-    <div className="space-y-4">
-      <Card className="space-y-4 p-6">
-        <header>
-          <h1 className="text-lg font-semibold">{data.ispName}</h1>
-          {data.customerName && <p className="text-sm text-ink-soft">{data.customerName}</p>}
-        </header>
+  /* ——— 3. Instrucciones de pago — two steps (D19) ——— */
+  /* ——— 3a. Paso 1 — haz tu transferencia ——— */
+  if (step === "transfer") {
+    return (
+      <Card className="space-y-5 p-6">
+        {stepHeader(1, "Haz tu transferencia")}
 
-        <AmountBreakdown
-          lines={[
-            { label: "Mensualidad", cents: data.monthlyFeeCents! },
-            { label: "Cargo por servicio", cents: data.serviceFeeCents! },
-          ]}
-          totalLabel="Total a pagar"
-        />
-
-        <div className="divide-y divide-line-soft border-t border-line-soft">
-          <CopyField label="CLABE" value={data.speiClabe!} />
-          <CopyField label="Beneficiario" value={data.speiBeneficiaryName!} />
-          {data.speiBank && <CopyField label="Banco" value={data.speiBank} />}
-          {data.reference && <CopyField label="Concepto" value={data.reference} />}
-          <div className="py-2">
-            <p className="text-sm text-ink-soft">Monto exacto</p>
-            <Amount cents={data.totalCents!} className="text-md font-semibold" />
-          </div>
+        {/* The two things that get typed into the bank app, and nothing
+            else at this weight (D19). The amount is shown once — it is
+            the breakdown's own total — and copies as the plain number
+            `<Amount>` already carries in its `data value`, because a
+            formatted "$514.00" is not something a bank accepts. */}
+        <div>
+          <AmountBreakdown
+            lines={[
+              { label: "Mensualidad", cents: data.monthlyFeeCents! },
+              { label: "Cargo por servicio", cents: data.serviceFeeCents! },
+            ]}
+            totalLabel="Total a pagar"
+          />
+          <CopyButton
+            variant="ghost"
+            className="w-full justify-end px-0"
+            text="Copiar monto exacto"
+            value={(data.totalCents! / 100).toFixed(2)}
+          />
         </div>
 
-        <p className="text-sm text-ink-soft">
-          Haz la transferencia por el monto exacto desde tu banco y luego envíanos tu comprobante
-          aquí abajo.
-        </p>
-      </Card>
+        <div className="border-y border-line-soft">
+          <CopyField label="CLABE" value={data.speiClabe!} />
+        </div>
 
-      <Card className="space-y-4 p-6">
-        <h2 className="text-base font-semibold">Ya pagué: enviar comprobante</h2>
-        <Tabs defaultValue="receipt">
-          <TabsList>
-            <TabsTrigger value="receipt">Subir comprobante</TabsTrigger>
-            <TabsTrigger value="transfer">Datos de la transferencia</TabsTrigger>
-          </TabsList>
-          <TabsContent value="receipt" className="mt-4">
-            <ReceiptForm busy={busy} onSubmit={(file) => upload.mutate(file)} />
-          </TabsContent>
-          <TabsContent value="transfer" className="mt-4">
-            <TransferForm busy={busy} onSubmit={(transfer) => pay.mutate({ transfer })} />
-          </TabsContent>
-        </Tabs>
+        {/* Beneficiario, banco and concepto are checked once, if at all:
+            reachable, not stacked on top of the two that are used (D19) */}
+        <Collapsible>
+          <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors duration-150 hover:text-ink">
+            Ver los demás datos
+            <ChevronDown
+              className="size-5 transition-transform duration-150 group-data-[state=open]:rotate-180"
+              aria-hidden
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="divide-y divide-line-soft border-t border-line-soft">
+              <CopyField label="Beneficiario" value={data.speiBeneficiaryName!} />
+              {data.speiBank && <CopyField label="Banco" value={data.speiBank} />}
+              {data.reference && <CopyField label="Concepto" value={data.reference} />}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
-        {submitError && (
-          <Alert variant="destructive" layout="icon">
-            <TriangleAlert aria-hidden />
-            {payErrorCopy(submitError.code)}
-          </Alert>
-        )}
+        <div className="space-y-2">
+          {/* A way forward, not a claim we verify: the payer who already
+              transferred yesterday arrives here too, and this is how
+              they reach their receipt (D19). */}
+          <Button size="critical" onClick={() => goTo("proof")}>
+            Ya hice mi transferencia
+          </Button>
+          <p className="text-center text-sm text-ink-soft">
+            Transfiere el monto exacto desde tu banco y vuelve aquí con tu comprobante.
+          </p>
+        </div>
       </Card>
-    </div>
+    );
+  }
+
+  /* ——— 3b. Paso 2 — envía tu comprobante ——— */
+  return (
+    <Card className="space-y-5 p-6">
+      {/* The first element on the screen, on purpose: a payer who tapped
+          too early must not reload the page to see the CLABE again. */}
+      <Button variant="ghost" className="-ml-2 h-10 px-2 text-sm" onClick={() => goTo("transfer")}>
+        <ChevronLeft className="size-4" aria-hidden />
+        Ver los datos otra vez
+      </Button>
+
+      {stepHeader(2, "Envía tu comprobante")}
+
+      <ReceiptForm busy={busy} onSubmit={(file) => upload.mutate(file)} />
+
+      {/* D18 earned the upload its primacy: the machine reads it and,
+          when the reading holds, nobody is asked anything. Typing a
+          28-character clave on a phone is the fallback, so it costs one
+          deliberate tap — and stays open once it has been paid for. */}
+      {manualDoor ? (
+        <div className="space-y-4 border-t border-line-soft pt-5">
+          <h2 className="text-base font-semibold">Datos de tu transferencia</h2>
+          <TransferForm busy={busy} onSubmit={(transfer) => pay.mutate({ transfer })} />
+        </div>
+      ) : (
+        <Button variant="ghost" className="h-12 w-full text-sm" onClick={() => setManualDoor(true)}>
+          No tengo el comprobante a la mano
+        </Button>
+      )}
+
+      {submitError && (
+        <Alert variant="destructive" layout="icon">
+          <TriangleAlert aria-hidden />
+          {payErrorCopy(submitError.code)}
+        </Alert>
+      )}
+    </Card>
   );
 }

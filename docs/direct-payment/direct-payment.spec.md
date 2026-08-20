@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09]
 domain: direct-payment
-updated: 2026-08-19
+updated: 2026-08-20
 debt: [TD-013]
 ---
 
@@ -54,6 +54,17 @@ Devolada's store network serves unbanked customers who pay cash at a corner stor
   **`cep_sender_name` is recorded from the CEP but acts on nothing yet.** Banxico names the account holder who sent the money, and a name with no relation to the WispHub subscriber is the only signal available that a misread clave matched *somebody else's* real transfer. It can never be a rule — people pay for relatives, and the subscriber is not always the payer — so it is stored for a future ISP-facing alert and for support (*"who paid this?"*). **Today nothing displays it**, because `apps/admin` has no direct-payment view at all; that is a gap this decision does not close and does not pretend to.
 
   **Rejected**: confirmation on every payment (friction on everyone to catch a rate nobody has measured, and a confirmation people click through is theatre); silent-only with the human asked when the schedule expires (that *is* the six-hour wait); overwriting `tracking_key` in place on a correction (loses the read-versus-confirmed pair, the only thing that measures the reader); rejecting a payment on a `senderName` mismatch (false rejections for anyone paying for a relative); asking the payer to confirm the amount (it is server-supplied on this channel, D2, and inviting confirmation of a number we already know teaches clicking through).
+
+- **D19 — The page is two steps, and it remembers which one the payer is on.** The payment has an interruption at its centre: the transfer happens in the bank app, not here. Until now one scroll held both moments at once, so a payer who had not transferred yet was shown a proof form for a payment that did not exist, and a payer coming back from their bank had to scroll past a CLABE they no longer needed. The page is cut in two. **Step 1 (`transfer`)** shows only what is needed to move money, and ends in one `--size-touch-lg` action: *"Ya hice mi transferencia"*. **Step 2 (`proof`)** shows only the proof, and carries *"Ver los datos otra vez"* back to step 1 as its first element. The step is stored per token in `localStorage` under `devolada-pago-step`, so the app switch — or the next morning — returns the payer where they were. **Rejected**: keeping one scroll and collapsing the sections into an accordion (it is the same page with less of it visible, and it still forgets the moment on the reload that an app switch often causes on iOS); the step in the URL as `?paso=2` (it survives a reload but not the way people actually come back — tapping the ISP's original WhatsApp link again, which carries the bare `/p/<token>`); any server-side notion of where the payer is (D9 keeps this app session-less, and the device already knows).
+
+  **The step is a hint, never a gate.** Step 1 does not check that a transfer happened before letting the payer through — it cannot, and a payer who transferred yesterday from the CLABE the ISP sent by WhatsApp arrives at step 1 for the first time with their receipt already in hand. The button is the way forward, not a claim being verified. In the same spirit step 2 is never a trap: the way back is its first element, because a payer who tapped too early must not have to reload to see the CLABE again. **Rejected**: a progress bar that cannot be walked backwards.
+
+  **Step 1 ranks two actions above three facts.** The amount and the CLABE are what gets typed into the bank app; beneficiario, banco and concepto are what the payer checks once, if at all. The first two are the only copy targets shown by default; the rest sit behind *"Ver los demás datos"* (shadcn Collapsible). **Rejected**: five copy rows of equal weight — that is the shape that made the payer read the whole card to find the two lines that matter.
+
+  **The upload is the door of record; the manual form is the fallback.** D18 earned that: the machine reads the receipt and, when the reading passes the gate, nobody is asked anything. The manual form asks somebody on a phone to type a 28-character clave, and exists for the payer whose receipt is not on this device. So step 2 opens on the upload, and the form arrives through *"No tengo el comprobante a la mano"*. **Rejected**: the two doors as tabs (`Tabs` went out with this decision) — equal weight invited the harder path, and a tab strip spends the top of the screen naming a choice that is not really a choice.
+
+  **A finished payment clears the step.** The link is permanent (D1) and the customer returns next month; the step is cleared when a payment confirms and when the link answers `no_debt`, so the next visit starts where the next payment starts. A `validating` payment does not clear it — that payer has not finished.
+
 ## Schema
 
 ### New table: `payment_links`
@@ -235,7 +246,9 @@ The api's existing every-minute scheduled handler (the reconnection sweep's home
 
 1. **Cargando** — skeleton while `GET /direct-payments/links/:token` resolves.
 2. **Sin adeudo** — customer owes nothing. "Tu servicio está al corriente. No tienes pagos pendientes."
-3. **Instrucciones de pago** — shows the breakdown (mensualidad, cargo por servicio, total), SPEI data (CLABE, beneficiario, monto, referencia), and two proof submission options: "Subir comprobante" (screenshot) / "Ingresa los datos de tu transferencia" (manual form). A copy button on each SPEI field.
+3. **Instrucciones de pago** — two steps, and the page remembers which one the payer is on (D19). Both carry the step indicator ("Paso 1 de 2").
+   - **3a. Paso 1 — Haz tu transferencia.** The breakdown (mensualidad, cargo por servicio, total) and the SPEI data. Monto and CLABE are the only copy targets shown; beneficiario, banco and concepto sit behind "Ver los demás datos" (Collapsible). Ends in one `--size-touch-lg` action: "Ya hice mi transferencia".
+   - **3b. Paso 2 — Envía tu comprobante.** Opens with "Ver los datos otra vez" back to 3a, then the upload. The manual transfer form arrives through "No tengo el comprobante a la mano" and stays open once revealed.
 4. **Verificando tu pago** — spinner + "Estamos verificando tu transferencia. Esto puede tomar unos minutos." Polls `GET /direct-payments/:id/status` every 5 s.
 5. **Pago confirmado** — green check. "Tu pago fue registrado. Tu servicio se reactivará en unos minutos." Shows folio. If `reconnected`, "Tu servicio ya está activo."
 6. **Pago no válido** — red. "No pudimos verificar tu transferencia. Revisa los datos e intenta de nuevo." Or if `TRANSFER_ALREADY_USED`: "Esta transferencia ya fue utilizada para otro pago."
@@ -309,6 +322,15 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 55. A `superseded` row is not selected by the sweep and never reaches a customer-facing status (US-D09, D18, D7)
 56. `cep_sender_name` is recorded from the CEP on a confirmed payment, and acts on nothing (US-D09, D18)
 
+57. A reading whose amount is not the debt is refused by the page before any credit is spent, and both numbers are named (US-D09, D18, D11)
+58. The server refuses the same mismatch with `AMOUNT_MISMATCH` and writes no row; the matching amount goes through, and omitting the field changes nothing (US-D09, D18, D11)
+59. A payer who taps "Ya hice mi transferencia" and reloads the page lands on step 2, not back on the CLABE (D19)
+60. Step 2's first element walks back to step 1, and the payer who does so is not sent forward again (D19)
+61. Step 1 shows monto and CLABE as copy targets; beneficiario, banco and concepto are reachable but not shown by default (D19)
+62. Step 2 opens on the upload; the manual form exists but is one deliberate tap away, and there is no tab strip (D19)
+63. A confirmed payment clears the remembered step, so the next visit starts on step 1 (D19)
+64. A link that answers `no_debt` clears the remembered step; a `validating` payment does not (D19)
+
 ## Definition of Done
 
 - [x] Scenarios 36–40 automated (`test/direct-payment.test.ts`, describe "D17"), 41–42 in `apps/pago/test/pago.test.tsx` — the regression suite for BUG-003
@@ -316,7 +338,7 @@ Statuses render through `StatusBadge` with icon + text, like every other surface
 - [x] Migration `0009`: D8's partial unique index recreated to exclude `superseded`, plus `receipt_status`, `cep_sender_name` and `supersedes_id`. No table recreate, so none of the D1 foreign-key trouble migration `0007` hit
 - [x] Scenario 41 of D17 retired: its copy ("todavía no aparece en Banxico", after two attempts) is replaced by D18's confirmation, which says the same thing and offers something to do about it
 - [ ] **The reader has never run against a real receipt.** Every test stubs it with shapes the model was measured producing; `AI.run` itself is only exercised on dev
-- [ ] **Measured before this reaches customers: is `sender.amount` a hint or a filter in apiCEP's direct mode?** The claimed *date* is documented as a hint. The amount is untested, and it decides how a $1 receipt against a $514 debt fails on this path: as `AMOUNT_MISMATCH` in seconds if it is a hint, or as a faceless `not_found` and a six-hour wait if it is a filter. This is not a new risk — the transfer door has always sent the expected amount — but D18 routes far more traffic through it. One deliberate call with a wrong amount against a known-good transfer answers it
+- [x] **Measured 2026-08-19: `sender.amount` is a FILTER in apiCEP's direct mode** (`docs/integrations/apicep.md`). A known-good clave re-sent with a wrong amount comes back byte-identical to a transfer that never happened, so a mismatch is invisible on this door and both the page and the server now refuse it up front (scenarios 57–58). The original question, kept because it is what the answer means: The claimed *date* is documented as a hint. The amount is untested, and it decides how a $1 receipt against a $514 debt fails on this path: as `AMOUNT_MISMATCH` in seconds if it is a hint, or as a faceless `not_found` and a six-hour wait if it is a filter. This is not a new risk — the transfer door has always sent the expected amount — but D18 routes far more traffic through it. One deliberate call with a wrong amount against a known-good transfer answers it
 - [x] Scenarios 1–4, 7–11, 16–26 automated in the API layer (`test/direct-payment.test.ts`; Consta and WispHub fetch-mocked respecting their contracts)
 - [x] Scenarios 5–6 automated with Consta fetch-mocked (`test/direct-payment.test.ts` — asserts the door and the server-supplied amount/beneficiary)
 - [x] Scenario 12 automated in `test/direct-payment.test.ts` (a queued spei charge converts through `sweepReconnections`)

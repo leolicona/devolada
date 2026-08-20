@@ -227,3 +227,41 @@ export async function stubAdminApi(page: Page): Promise<void> {
           }),
   );
 }
+
+/* The customer's payment page (direct-payment D9): no session, so the
+   only stubs are the link and the proof pipeline behind it. */
+export const paymentLink = {
+  ispName: "WifiPlus",
+  customerName: "Janely Reyes",
+  status: "debt",
+  monthlyFeeCents: 49900,
+  serviceFeeCents: 1500,
+  totalCents: 51400,
+  speiClabe: "646180157000000004",
+  speiBank: "STP",
+  speiBeneficiaryName: "WifiPlus SA de CV",
+  reference: "greyes@wifiplus",
+};
+
+/* The longest real clave measured so far: 28 characters, from a live
+   NUBANK receipt (D16/BUG-006). The field has to hold it. */
+export const longTrackingKey = "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K";
+
+export const proofReading = {
+  source: "reader",
+  isReceipt: true,
+  amountCents: paymentLink.totalCents,
+  trackingKey: longTrackingKey,
+  /* Unresolved on purpose: it is what opens the confirmation screen
+     instead of paying silently (D18). */
+  senderBank: null,
+  date: "2026-08-19",
+  receiptStatus: "Aceptada",
+  gate: { trackingKey: "ok", senderBank: "unresolved", amount: "ok" },
+};
+
+export async function stubPagoApi(page: Page): Promise<void> {
+  await apiRoute(page, "**/direct-payments/links/*", paymentLink);
+  await apiRoute(page, "**/direct-payments/links/*/proof", { proofId: "link-1/proof-1" });
+  await apiRoute(page, "**/direct-payments/links/*/read", proofReading);
+}

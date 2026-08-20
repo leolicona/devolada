@@ -232,6 +232,16 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const serviceFeeCents = speiFeeCents(isp);
   const amountCents = customer.monthlyFeeCents + serviceFeeCents;
 
+  /* D18: the debt is now known, and so is what the receipt claimed. If
+     they disagree the provider lookup is already lost — `sender.amount`
+     is a filter, so it would answer the same faceless `invalid` a
+     nonexistent transfer gets, and the payer would wait out the whole
+     schedule to be told nothing. Refuse now, with the code that already
+     means this to them. No row, no credit. */
+  if (body.receiptAmountCents != null && body.receiptAmountCents !== amountCents) {
+    return c.json({ success: false, error: { code: "AMOUNT_MISMATCH" } }, 409);
+  }
+
   /* Release the old claim *before* the insert: the corrected row may well
      be claiming a clave that only differs by a character, and D8's index
      does not care that the two rows belong to the same payer. */
@@ -391,6 +401,9 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
     data: {
       source: reading.source,
       isReceipt: reading.isReceipt,
+      /* Reported so the caller can refuse a lookup that cannot succeed —
+         never to decide what anything is worth (D3) */
+      amountCents: reading.gate.amount === "ok" ? reading.amountCents : null,
       /* Only what passed the gate reaches the payer as a suggestion. A
          malformed clave is worse than no clave: it looks confirmable. */
       trackingKey: reading.gate.trackingKey === "ok" ? reading.trackingKey : null,

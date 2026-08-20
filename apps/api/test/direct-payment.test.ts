@@ -1111,6 +1111,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
     extractionId: "ex-1",
     source: "reader",
     isReceipt: true,
+    amountCents: 51400,
     trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
     senderBank: "NUBANK",
     amountCents: 51400,
@@ -1150,6 +1151,9 @@ describe("D18: reading a proof so a human can confirm it", () => {
     expect(res.status).toBe(200);
     const { data } = await res.json();
     expect(data.trackingKey).toBe("NU3AGKMP3ASP8QQQ4U8J8F0K1E4K");
+    /* Measured: apiCEP filters on `sender.amount`, so the caller needs
+       the read amount to refuse a lookup that cannot succeed (D3) */
+    expect(data.amountCents).toBe(51400);
     expect(data.senderBank).toBe("NUBANK");
     expect(data.source).toBe("reader");
     /* Consta fetches the image through a signed URL that expires — the
@@ -1323,6 +1327,41 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     /* Recorded and acted on by nothing: people pay for relatives, so a
        mismatch can only ever be a signal for the ISP (D18) */
     expect(row.cepSenderName).toBe("JANELY REYES");
+  });
+
+  it("scenario 58: a receipt amount that is not the debt is refused by the server, no row, no credit", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    /* No consta interceptor: reaching the provider would fail the test,
+       which is the point — `sender.amount` is a filter, so this lookup
+       could only ever come back faceless (apicep.md, measured) */
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: READ,
+      receiptAmountCents: 100,
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("AMOUNT_MISMATCH");
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+  });
+
+  it("scenario 58b: the matching amount goes through, and omitting it changes nothing", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+
+    /* 49900 + 1500 — the debt this seed produces */
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: READ,
+      receiptAmountCents: 51400,
+    });
+    expect(res.status).toBe(201);
+    /* It never decides what is charged: that is still computed here from
+       a fresh WispHub read, so omitting the field cannot buy a cheaper
+       payment — it only forfeits the instant answer. */
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.amountCents).toBe(51400);
   });
 
   it("a supersedes pointing at another link's payment is refused", async () => {

@@ -72,12 +72,17 @@
            Tokens are permanent (D1), so baking them into the deploy is
            safe. testISP (leolicona.dev@gmail.com), which is the only ISP
            on dev with SPEI configured:
-             6cf4qb7ea26uqvmy  0001@wifiplus      (owes today)
-             a7zmaqwja7k3t9ge  arellano@wifiplus  (owes today)
+             vyzwrf2tnwwwn3xw  0011@wifiplus  Leo Licona  $3, SUSPENDIDO
+             96u9as4gmnjuee5d  0012@wifiplus  Juana Soto  $2, SUSPENDIDO
+             6cf4qb7ea26uqvmy  0001@wifiplus      spare
+             a7zmaqwja7k3t9ge  arellano@wifiplus  spare
              fwpuqffbksnbkmpi  greyes@wifiplus    spare
              twvh4siym4bsm4sm  jacruz@wifiplus    spare
              wep8umyj2bqtn3sg  valeperez@wifiplus spare
              h5hjatrqddeu8k6w  acaballero@wifiplus spare
+           The first two are the demo: both suspended, both owing, and
+           0011's invoice sits in the "Router Test Demo" zone, which is
+           the CHR lab router, so paying it reconnects real hardware.
            The spares owe nothing right now: a listed link with no debt
            never reaches the pay step at all, so they cost nothing and
            they mean a new invoice in WispHub is enough to add a demo
@@ -85,7 +90,7 @@
            The ISP's other 8 links stay off the list on purpose: a listed
            link is never sent to the provider, so those are the only ones
            that can still validate a real transfer. */
-        "DEMO_LINK_TOKENS": "6cf4qb7ea26uqvmy,a7zmaqwja7k3t9ge,fwpuqffbksnbkmpi,twvh4siym4bsm4sm,wep8umyj2bqtn3sg,h5hjatrqddeu8k6w",
+        "DEMO_LINK_TOKENS": "vyzwrf2tnwwwn3xw,96u9as4gmnjuee5d,6cf4qb7ea26uqvmy,a7zmaqwja7k3t9ge,fwpuqffbksnbkmpi,twvh4siym4bsm4sm,wep8umyj2bqtn3sg,h5hjatrqddeu8k6w",
         "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"

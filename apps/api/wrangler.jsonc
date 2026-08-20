@@ -74,6 +74,8 @@
            on dev with SPEI configured:
              vyzwrf2tnwwwn3xw  0011@wifiplus  Leo Licona  $3, SUSPENDIDO
              96u9as4gmnjuee5d  0012@wifiplus  Juana Soto  $2, SUSPENDIDO
+             b6gvm4r77mix983b  0014@wifiplus  Daniel      $3, SUSPENDIDO
+             7k4d8mwiqmck9ssj  0013@wifiplus  Ismael      suspended, owes nothing yet
              6cf4qb7ea26uqvmy  0001@wifiplus      spare
              a7zmaqwja7k3t9ge  arellano@wifiplus  spare
              fwpuqffbksnbkmpi  greyes@wifiplus    spare
@@ -90,7 +92,7 @@
            The ISP's other 8 links stay off the list on purpose: a listed
            link is never sent to the provider, so those are the only ones
            that can still validate a real transfer. */
-        "DEMO_LINK_TOKENS": "vyzwrf2tnwwwn3xw,96u9as4gmnjuee5d,6cf4qb7ea26uqvmy,a7zmaqwja7k3t9ge,fwpuqffbksnbkmpi,twvh4siym4bsm4sm,wep8umyj2bqtn3sg,h5hjatrqddeu8k6w",
+        "DEMO_LINK_TOKENS": "vyzwrf2tnwwwn3xw,96u9as4gmnjuee5d,b6gvm4r77mix983b,7k4d8mwiqmck9ssj,6cf4qb7ea26uqvmy,a7zmaqwja7k3t9ge,fwpuqffbksnbkmpi,twvh4siym4bsm4sm,wep8umyj2bqtn3sg,h5hjatrqddeu8k6w",
         "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"

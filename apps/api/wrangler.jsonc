@@ -31,6 +31,12 @@
     /* Local Consta (its own wrangler dev). CONSTA_API_KEY lives in
        .dev.vars, like every secret. */
     "CONSTA_BASE_URL": "http://localhost:8788",
+    /* TD-015, temporary. Payment-link tokens whose validation is
+       simulated instead of asked of Banxico (src/direct-payments/demo.ts).
+       Empty = off, which is how it must stay unless a demo is happening.
+       Read only when ENVIRONMENT is dev; the prod block below has no
+       such var, on purpose. */
+    "DEMO_LINK_TOKENS": "",
     "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175",
     /* Not a secret. Repeated in every env block below because an env's
        `vars` replaces the top-level one rather than merging with it. */
@@ -62,6 +68,10 @@
         "TIENDA_BASE_URL": "https://punto.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://pago.dev.devoladapago.com",
         "CONSTA_BASE_URL": "https://consta.dev.devoladapago.com",
+        /* TD-015, temporary — put the demo customer's link token here
+           before the demo and delete it after. One token per demo; the
+           links are permanent (D1) so the value is stable. */
+        "DEMO_LINK_TOKENS": "",
         "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"

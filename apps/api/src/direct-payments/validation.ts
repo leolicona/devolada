@@ -11,6 +11,7 @@ import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/charges/handler";
 import { nextValidationSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
+import { demoVerdict, isDemoLink } from "./demo";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -163,12 +164,21 @@ export async function runValidation(
     .where(eq(directPayments.id, payment.id));
 
   let verdict;
-  try {
-    verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
-  } catch (e) {
-    const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
-    console.error("consta validation failed:", code);
-    return retryLater(code);
+  if (isDemoLink(env, link)) {
+    /* TD-015: a named link in a dev environment, decided before the fact
+       and never by a failure — see `demo.ts`. Everything after this line
+       is the real thing: the fresh WispHub read, the charge, the folio,
+       the reconnection. Only Banxico is simulated. */
+    console.warn(`TD-015 demo verdict for direct payment ${payment.id} — no provider call`);
+    verdict = demoVerdict(payment, isp, now);
+  } else {
+    try {
+      verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
+    } catch (e) {
+      const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
+      console.error("consta validation failed:", code);
+      return retryLater(code);
+    }
   }
 
   const base = {

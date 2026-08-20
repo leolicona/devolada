@@ -32,6 +32,12 @@ export type Bindings = {
      own decision (consta validation spec D8). Key is a worker secret. */
   CONSTA_BASE_URL?: string;
   CONSTA_API_KEY?: string;
+  /* TD-015, temporary: comma-separated payment-link tokens whose
+     validation is simulated instead of asked of Banxico, so a demo can
+     reach the green screen — a real CEP has no measured upper bound on
+     publication (apicep.md). Read only when `ENVIRONMENT === "dev"`;
+     prod never carries it. Deleted with TD-015. */
+  DEMO_LINK_TOKENS?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
 };

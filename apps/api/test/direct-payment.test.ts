@@ -1351,3 +1351,87 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     expect(res.status).toBe(404);
   });
 });
+
+/* TD-015 — the demo verdict. Temporary: deleted with the debt entry.
+   Written as tests and not as a switch somebody remembers, because the
+   second one below is the whole safety argument. */
+describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () => {
+  const demoEnv = { ...testEnv, DEMO_LINK_TOKENS: "tok2345abcdefgh2" };
+
+  async function payOnDemoLink(env: typeof testEnv) {
+    return (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/pay",
+      post(TRANSFER),
+      env,
+    );
+  }
+
+  it("the demo link confirms with no provider call at all", async () => {
+    await seedLinkedIsp();
+    /* pay pre-check + validation debt re-check + reconnection verify —
+       the same WispHub traffic a real confirmation makes. No Consta
+       interceptor: `assertNoPendingInterceptors` would not catch a call
+       that never happens, but `disableNetConnect` fails the test if one
+       does. That is the assertion. */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockReconnection("Activo");
+
+    const res = await payOnDemoLink(demoEnv);
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    expect(data.status).toBe("confirmed");
+
+    const db = drizzle(env.DB);
+    const [payment] = await db.select().from(directPayments);
+    expect(payment.status).toBe("confirmed");
+    expect(payment.constaValidationId?.startsWith("demo-")).toBe(true);
+    /* The row says what it is, to anybody who reads it later */
+    expect(payment.cepSenderName).toBe("PAGO SIMULADO (DEMO)");
+
+    /* Everything downstream is real: charge, folio, reconnection */
+    const [charge] = await db.select().from(charges);
+    expect(charge.channel).toBe("spei");
+    expect(charge.totalCents).toBe(51400);
+    expect(charge.reconnectionStatus).toBe("reconnected");
+  });
+
+  it("the same token in prod goes to the provider like any other payment", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    /* Consumed or the afterEach fails: prod must reach Consta */
+    mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payOnDemoLink({ ...demoEnv, ENVIRONMENT: "prod" });
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.status).toBe("validating");
+  });
+
+  it("an unlisted link on dev is untouched by the allow-list", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payOnDemoLink({ ...testEnv, DEMO_LINK_TOKENS: "some-other-token" });
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.status).toBe("validating");
+  });
+
+  it("a provider refusal is still a refusal on a demo link — no failure ever becomes a success", async () => {
+    /* The rule this whole file exists to protect: the demo verdict is
+       decided in advance by configuration, never by something going
+       wrong. With the allow-list empty, a contradicted CEP is invalid,
+       exactly as D17 says. */
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "invalid", reason: "contradicted", cep: undefined });
+
+    const res = await payOnDemoLink({ ...testEnv, DEMO_LINK_TOKENS: "" });
+    const { data } = await res.json();
+    expect(data.status).toBe("invalid");
+    expect(data.error).toBe("TRANSFER_CONTRADICTED");
+  });
+});

@@ -31,6 +31,12 @@
     /* Local Consta (its own wrangler dev). CONSTA_API_KEY lives in
        .dev.vars, like every secret. */
     "CONSTA_BASE_URL": "http://localhost:8788",
+    /* TD-015, temporary. Payment-link tokens whose validation is
+       simulated instead of asked of Banxico (src/direct-payments/demo.ts).
+       Empty = off, which is how it must stay unless a demo is happening.
+       Read only when ENVIRONMENT is dev; the prod block below has no
+       such var, on purpose. */
+    "DEMO_LINK_TOKENS": "",
     "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175",
     /* Not a secret. Repeated in every env block below because an env's
        `vars` replaces the top-level one rather than merging with it. */
@@ -62,6 +68,24 @@
         "TIENDA_BASE_URL": "https://punto.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://pago.dev.devoladapago.com",
         "CONSTA_BASE_URL": "https://consta.dev.devoladapago.com",
+        /* TD-015, temporary — the demo links, deleted after 2026-08-20.
+           Tokens are permanent (D1), so baking them into the deploy is
+           safe. testISP (leolicona.dev@gmail.com), which is the only ISP
+           on dev with SPEI configured:
+             6cf4qb7ea26uqvmy  0001@wifiplus      (owes today)
+             a7zmaqwja7k3t9ge  arellano@wifiplus  (owes today)
+             fwpuqffbksnbkmpi  greyes@wifiplus    spare
+             twvh4siym4bsm4sm  jacruz@wifiplus    spare
+             wep8umyj2bqtn3sg  valeperez@wifiplus spare
+             h5hjatrqddeu8k6w  acaballero@wifiplus spare
+           The spares owe nothing right now: a listed link with no debt
+           never reaches the pay step at all, so they cost nothing and
+           they mean a new invoice in WispHub is enough to add a demo
+           customer — no second deploy in front of an audience.
+           The ISP's other 8 links stay off the list on purpose: a listed
+           link is never sent to the provider, so those are the only ones
+           that can still validate a real transfer. */
+        "DEMO_LINK_TOKENS": "6cf4qb7ea26uqvmy,a7zmaqwja7k3t9ge,fwpuqffbksnbkmpi,twvh4siym4bsm4sm,wep8umyj2bqtn3sg,h5hjatrqddeu8k6w",
         "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"

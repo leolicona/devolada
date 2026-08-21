@@ -1591,7 +1591,10 @@ describe("US-D10: a transfer that falls short", () => {
 
     const [charge] = await drizzle(env.DB).select().from(charges);
     expect(charge.totalCents).toBe(30000);
-    expect(charge.serviceFeeCents).toBe(0);
+    /* D14: the whole fee accrues even though the payer covered none of
+       it. The money reached the ISP's bank, so the ISP owes it onward —
+       the commission is never forgiven. */
+    expect(charge.serviceFeeCents).toBe(1500);
     expect(charge.reconnectionStatus).toBe("withheld");
 
     const [row] = await drizzle(env.DB).select().from(directPayments);
@@ -1644,8 +1647,11 @@ describe("US-D10: a transfer that falls short", () => {
     expect(sent.totalCobrado).toBe(499);
 
     const [charge] = await drizzle(env.DB).select().from(charges);
-    expect(charge.serviceFeeCents).toBe(0);
+    /* The payer covered the mensualidad and none of our fee. The ISP is
+       made whole in WispHub, the customer is reconnected, and Devolada
+       still accrues its 15.00 against the ISP (D14). */
     expect(charge.invoiceCents).toBe(49900);
+    expect(charge.serviceFeeCents).toBe(1500);
   });
 
   it("scenario 6: more than the debt → confirmed, and the surplus travels on", async () => {
@@ -1682,5 +1688,40 @@ describe("US-D10: a transfer that falls short", () => {
     expect(s.receivedCents).toBe(30000);
     expect(s.debtCents).toBe(49900);
     expect(s.missingCents).toBe(19900);
+  });
+});
+
+/* partial-payment.spec.md D14 — the fee is a receivable, not a slice of
+   the transfer. Every peso the payer sent landed in the ISP's own bank
+   account, so what Devolada holds is a debt the ISP settles monthly. */
+describe("US-D10 / US-L01: the commission is never forgiven", () => {
+  it("a short payment still accrues the whole fee to the platform statement", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({
+      cep: {
+        trackingKey: "TRACK001XYZ",
+        amountCents: 20000,
+        date: new Date().toISOString().slice(0, 10),
+        senderBank: "NUBANK",
+        senderName: "JANELY REYES",
+        receiverBank: "STP",
+        beneficiaryName: "WifiPlus SA de CV",
+      },
+    });
+    mockReconnection("Suspendido", 42, false);
+
+    await payTransfer("tok2345abcdefgh2", TRANSFER);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    /* 200.00 arrived and every peso of it went to the ISP's debt; the
+       15.00 accrues anyway, because the ISP is the one who received the
+       money and owes it onward. */
+    expect(charge.invoiceCents).toBe(20000);
+    expect(charge.serviceFeeCents).toBe(1500);
+    /* `settlement` D1 derives the platform's share from exactly this
+       column, and a spei charge carries no store commission (D6). */
+    expect(charge.storeId).toBeNull();
   });
 });

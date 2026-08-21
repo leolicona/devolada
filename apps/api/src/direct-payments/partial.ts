@@ -8,8 +8,13 @@
 export type Settlement = {
   /* Registered in WispHub, against the customer's debt. */
   ispRegisteredCents: number;
-  /* Devolada's share of what arrived — last in the queue, on purpose. */
-  feeReceivedCents: number;
+  /* What Devolada earned on this transaction. **Always the whole fee.**
+     On this channel the fee is not a slice of the transfer — every peso
+     the payer sent landed in the ISP's own bank account, so what Devolada
+     holds is a receivable against the ISP, settled monthly through the
+     statement. The service was rendered whatever the payer sent, so the
+     commission is never forgiven (D14). */
+  feeAccruedCents: number;
   /* Still owed to the ISP after this payment. Zero means settled. */
   missingCents: number;
   /* Whether the payment reaches the ISP's bar for giving the service
@@ -36,8 +41,11 @@ export function settle(input: {
      order makes an overpayment work without a special case: the fee
      takes its part, the surplus travels to WispHub and becomes a credit
      (D10). */
-  const feeReceivedCents = Math.min(Math.max(0, receivedCents - ispDebtCents), serviceFeeCents);
-  const ispRegisteredCents = receivedCents - feeReceivedCents;
+  const feeCoveredByPayerCents = Math.min(
+    Math.max(0, receivedCents - ispDebtCents),
+    serviceFeeCents,
+  );
+  const ispRegisteredCents = receivedCents - feeCoveredByPayerCents;
   const missingCents = Math.max(0, ispDebtCents - ispRegisteredCents);
 
   /* D2 and D4 together, and both must hold. The percentage alone would
@@ -49,7 +57,11 @@ export function settle(input: {
 
   return {
     ispRegisteredCents,
-    feeReceivedCents,
+    /* D14: what the payer covered decides how much of the transfer
+       reaches the ISP's WispHub books; it does **not** decide what
+       Devolada earned. A payer who fell short leaves the ISP absorbing
+       the difference, because the money reached the ISP either way. */
+    feeAccruedCents: serviceFeeCents,
     missingCents,
     reconnect: meetsPercent && meetsFloor,
     /* D6: `partial` is about the debt, not about the router. A payment

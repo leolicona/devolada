@@ -366,7 +366,12 @@ export async function runValidation(
          ISP's feed must both see it. */
       invoiceCents: settlement.ispRegisteredCents,
       carriedBalanceCents: 0,
-      serviceFeeCents: settlement.feeReceivedCents,
+      /* D14: the whole fee, always. `settlement` D1 derives the
+         platform's share from this column, and the money the payer sent
+         reached the ISP's bank whatever its size — so the fee is a
+         receivable against the ISP, never something the shortfall
+         cancels. */
+      serviceFeeCents: settlement.feeAccruedCents,
       totalCents: receivedCents,
     })
     .returning();

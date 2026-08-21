@@ -763,7 +763,13 @@ export function PaymentPage({ token }: { token: string }) {
         <div>
           <AmountBreakdown
             lines={[
-              { label: "Mensualidad", cents: data.monthlyFeeCents! },
+              { label: "Mensualidad", cents: data.invoiceCents! },
+              /* debt-truth D11: what was already owed gets its own line.
+                 Folded into the mensualidad it would be a number that
+                 matches no plan and explains nothing. */
+              ...(data.carriedBalanceCents
+                ? [{ label: "Adeudo anterior", cents: data.carriedBalanceCents }]
+                : []),
               { label: "Cargo por servicio", cents: data.serviceFeeCents! },
             ]}
             totalLabel="Total a pagar"

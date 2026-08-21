@@ -28,6 +28,7 @@ const customer = (estado: string) => ({
   estado,
   estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { id: 1, nombre: "Centro" },
 });
 
@@ -88,7 +89,7 @@ async function seedQueuedCharge(over: Partial<typeof charges.$inferInsert> = {})
       wisphubCustomerId: "6",
       customerUsuario: "greyes@wifiplus",
       customerName: "Janely",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
       serviceFeeCents: 1500,
       totalCents: 51400,
       reconnectionStatus: "queued",
@@ -110,9 +111,9 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
     mockPaymentMethods();
     /* Two pending invoices exist; the older debt is the one to settle */
     mockPendingInvoices([
-      { id_factura: 77, cliente: { usuario: "greyes@wifiplus" } },
-      { id_factura: 12, cliente: { usuario: "greyes@wifiplus" } },
-      { id_factura: 99, cliente: { usuario: "otro@wifiplus" } },
+      { id_factura: 77, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
+      { id_factura: 12, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
+      { id_factura: 99, cliente: { usuario: "otro@wifiplus" }, total: 499 },
     ]);
     mockPayment(12);
     mockVerify("Activo");
@@ -264,7 +265,7 @@ describe("US-C03: the sweep only touches what is due", () => {
       folio: "DV-DONE01",
       wisphubCustomerId: "greyes@wifiplus",
       customerName: "Janely",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
       serviceFeeCents: 1500,
       totalCents: 51400,
       reconnectionStatus: "reconnected",

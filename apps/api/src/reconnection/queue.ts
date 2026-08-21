@@ -107,7 +107,11 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
         usuario: charge.customerUsuario ?? charge.wisphubCustomerId,
         wisphubId: charge.wisphubCustomerId,
       },
-      charge.monthlyFeeCents,
+      /* What this charge settles for the ISP (debt-truth D7): the
+         invoice total plus whatever the customer was carrying. Stored at
+         record time, so a retry days later registers the same number the
+         shopkeeper collected — not a debt that moved meanwhile. */
+      charge.invoiceCents + charge.carriedBalanceCents,
       now,
       {
         invoiceId: charge.wisphubInvoiceId,

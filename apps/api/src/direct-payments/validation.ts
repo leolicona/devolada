@@ -337,7 +337,8 @@ export async function runValidation(
       customerName: customer?.name ?? link.customerUsuario,
       customerZone: customer?.zone ?? null,
       customerPhone: customer?.phone ?? null,
-      monthlyFeeCents: payment.monthlyFeeCents,
+      invoiceCents: payment.invoiceCents,
+      carriedBalanceCents: payment.carriedBalanceCents,
       serviceFeeCents: payment.serviceFeeCents,
       totalCents: payment.amountCents,
     })
@@ -351,7 +352,7 @@ export async function runValidation(
     wisphub,
     isp.id,
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
-    payment.monthlyFeeCents,
+    payment.invoiceCents + payment.carriedBalanceCents,
     now,
     { invoiceId, paymentRegistered: false },
   );

@@ -44,6 +44,7 @@ const oneCustomer = {
       estado: "Activo",
       estado_facturas: "Pagadas",
       precio_plan: "399.00",
+      saldo: "0.00",
       zona: { nombre: "Centro" },
     },
   ],

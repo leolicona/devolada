@@ -91,7 +91,12 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
             <div>
               <AmountBreakdown
                 lines={[
-                  { label: "Mensualidad", cents: charge.monthlyFeeCents },
+                  { label: "Mensualidad", cents: charge.invoiceCents },
+                  /* debt-truth D11: its own line, so the ISP can see why
+                     a charge was larger than the customer's plan */
+                  ...(charge.carriedBalanceCents
+                    ? [{ label: "Adeudo anterior", cents: charge.carriedBalanceCents }]
+                    : []),
                   { label: "Cargo por servicio", cents: charge.serviceFeeCents },
                 ]}
               />

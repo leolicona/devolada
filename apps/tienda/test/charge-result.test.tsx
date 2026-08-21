@@ -15,10 +15,11 @@ const quote = customerQuoteResponse.parse({
     zone: "Zona dia 15",
     serviceStatus: "suspended",
     billingStatus: "due",
-    monthlyFeeCents: 49900,
+    invoiceCents: 49900,
+    carriedBalanceCents: 0,
     hasPhone: true,
   },
-  quote: { monthlyFeeCents: 49900, serviceFeeCents: 1500, totalCents: 51400 },
+  quote: { invoiceCents: 49900, carriedBalanceCents: 0, serviceFeeCents: 1500, totalCents: 51400 },
   cap: { balanceCents: 0, capCents: 500000, blocked: false },
 });
 
@@ -101,7 +102,8 @@ describe("US-C05: the store sends the comprobante from its own WhatsApp", () => 
       folio: "DV-A1B2C3",
       customerName: "Janely",
       totalCents: 51400,
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       reconnectionStatus: "reconnected",
       text: "Comprobante de pago Devolada\n\nFolio: DV-A1B2C3",

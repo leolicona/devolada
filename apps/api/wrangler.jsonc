@@ -72,20 +72,21 @@
            Tokens are permanent (D1), so baking them into the deploy is
            safe. testISP (leolicona.dev@gmail.com), which is the only ISP
            on dev with SPEI configured:
-             6cf4qb7ea26uqvmy  0001@wifiplus      (owes today)
-             a7zmaqwja7k3t9ge  arellano@wifiplus  (owes today)
-             fwpuqffbksnbkmpi  greyes@wifiplus    spare
-             twvh4siym4bsm4sm  jacruz@wifiplus    spare
-             wep8umyj2bqtn3sg  valeperez@wifiplus spare
-             h5hjatrqddeu8k6w  acaballero@wifiplus spare
-           The spares owe nothing right now: a listed link with no debt
-           never reaches the pay step at all, so they cost nothing and
-           they mean a new invoice in WispHub is enough to add a demo
-           customer — no second deploy in front of an audience.
-           The ISP's other 8 links stay off the list on purpose: a listed
-           link is never sent to the provider, so those are the only ones
-           that can still validate a real transfer. */
-        "DEMO_LINK_TOKENS": "6cf4qb7ea26uqvmy,a7zmaqwja7k3t9ge,fwpuqffbksnbkmpi,twvh4siym4bsm4sm,wep8umyj2bqtn3sg,h5hjatrqddeu8k6w",
+             vyzwrf2tnwwwn3xw  0011@wifiplus  Leo Licona  $3, SUSPENDIDO
+             96u9as4gmnjuee5d  0012@wifiplus  Juana Soto  $2, SUSPENDIDO
+             b6gvm4r77mix983b  0014@wifiplus  Daniel      $3, SUSPENDIDO
+             7k4d8mwiqmck9ssj  0013@wifiplus  Ismael      SUSPENDIDO, no pending invoice
+           All four are suspended, which is the state that makes a
+           reconnection visible, and 0011's invoice sits in the "Router
+           Test Demo" zone, which is the CHR lab router, so paying it
+           brings real hardware back.
+           Ismael is listed and cannot be used yet: every invoice he has
+           is `Pagada`, including one issued today for $0, and we read
+           `estado=1`. A pending invoice is all he needs.
+           The ISP's other 10 links stay off the list on purpose: a
+           listed link is never sent to the provider, so those are the
+           only ones that can still validate a real transfer. */
+        "DEMO_LINK_TOKENS": "vyzwrf2tnwwwn3xw,96u9as4gmnjuee5d,b6gvm4r77mix983b,7k4d8mwiqmck9ssj",
         "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"

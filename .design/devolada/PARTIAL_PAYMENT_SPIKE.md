@@ -866,3 +866,34 @@ specs, not the specs themselves.
   amount on the page equals the amount WispHub says is owed, so the whole
   `AMOUNT_MISMATCH`-by-fee-mismatch class disappears and the threshold is
   measured against the same number the payer sees in their bank.
+
+### F21 — How a carried balance is actually settled (2026-08-20, during implementation)
+
+Found while writing the code, and it decides whether `partial-payment` D8 is
+buildable at all. Three measurements on `0012@wifiplus`:
+
+| setup | payment | result |
+|---|---|---|
+| `saldo 72.00`, **new invoice of 72.00** | 72.00 | **`saldo 72.00`** — unchanged |
+| `saldo 72.00`, new invoice of 100.00 | 172.00 | **`saldo 0.00`** |
+| `saldo 30.00`, **no pending invoice**, new invoice of **0.00** | 30.00 | **`saldo 0.00`** |
+
+**Row one is the trap.** Creating an invoice *for* the carried amount raises the
+debt by exactly that amount (`72 + 72 = 144`), so the customer pays 72 and still
+owes 72. An invoice must represent **new** debt; it can never be used to bill
+debt that WispHub is already carrying.
+
+**Row two is the main path.** A payment settles the whole running account, so
+registering `Σ(pending invoices) + saldo` against the customer's oldest pending
+invoice clears everything at once — no message about a remainder, `saldo` to
+zero.
+
+**Row three is the way out of the hole.** After a short payment the invoice
+closes as `Pagada`, so a payer who comes back with the rest has **nothing pending
+to pay against** — and row one says we cannot invent one. A **zero-total invoice
+is accepted** (`total: 0.00`, `estado: 1`) and works as a vehicle: it adds
+nothing to the debt and gives `registrar-pago` the id it requires.
+
+**The rule this settles:** register the full debt against the oldest pending
+invoice; when none exists and a balance is carried, create a **zero-total**
+invoice as the vehicle. Never create an invoice sized to the carried balance.

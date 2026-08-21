@@ -13,6 +13,10 @@ const pesos = (cents: number) =>
 const statusLine: Record<Charge["reconnectionStatus"], string> = {
   reconnected: "Tu internet ya está activo.",
   queued: "Tu internet se reactiva en unos minutos.",
+  /* partial-payment D7: in pesos, and the whole truth. A receipt that
+     says the service is coming back when it is not is the one thing this
+     status exists to prevent. */
+  withheld: "Tu pago quedó registrado. Tu internet se reactiva cuando llegue el resto del adeudo.",
   failed: "Tu pago quedó registrado. Si tu internet sigue sin servicio, comunícate con tu proveedor y menciona tu folio.",
 };
 

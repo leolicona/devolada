@@ -63,6 +63,17 @@ export const isps = sqliteTable("isps", {
   speiBeneficiaryName: text("spei_beneficiary_name"),
   /* null → falls back to serviceFeeCents (D3) */
   speiServiceFeeCents: integer("spei_service_fee_cents"),
+  /* Partial payments (partial-payment spec D2, D4). One control, not two:
+     100 means only a full payment reconnects — the default and the
+     owner's policy — and 0 means any payment does. A threshold and a
+     separate "action" switch could contradict each other; the extremes
+     already say "never" and "always".
+     The floor rides along because a percentage alone lets a token
+     payment reconnect a large arrears balance (D4). Both must hold. */
+  reconnectionThresholdPercent: integer("reconnection_threshold_percent")
+    .notNull()
+    .default(100),
+  reconnectionFloorCents: integer("reconnection_floor_cents").notNull().default(0),
   createdAt: createdAt(),
 });
 
@@ -128,8 +139,11 @@ export const charges = sqliteTable(
     carriedBalanceCents: integer("carried_balance_cents").notNull().default(0),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     totalCents: integer("total_cents").notNull(),
+    /* `withheld` (partial-payment D9): the payment was recorded and the
+       service deliberately not restored — a short payment under the
+       ISP's threshold. Terminal, like reconnected and failed. */
     reconnectionStatus: text("reconnection_status", {
-      enum: ["queued", "reconnected", "failed"],
+      enum: ["queued", "reconnected", "failed", "withheld"],
     })
       .notNull()
       .default("queued"),
@@ -258,6 +272,10 @@ export const directPayments = sqliteTable(
     /* Same meaning as on `charges` (debt-truth D8/D13) */
     invoiceCents: integer("invoice_cents").notNull(),
     carriedBalanceCents: integer("carried_balance_cents").notNull().default(0),
+    /* What the CEP says actually arrived (partial-payment D6). It equals
+       `amountCents` on an ordinary payment and is smaller on a short one;
+       the page's "faltan $X" is the difference. */
+    receivedCents: integer("received_cents"),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     /* unapplied (D14): the CEP was real but the debt was settled
        elsewhere meanwhile — visible, never silent */
@@ -265,8 +283,22 @@ export const directPayments = sqliteTable(
        corrected. Deliberately not `invalid` — that word means "your
        transfer does not exist", and this is the opposite: we were the
        ones who were wrong. */
+    /* `partial` (partial-payment D6): the transfer is real and the money
+       moved, but it did not cover the debt. Not `confirmed` — the payer
+       would see a green tick and no internet. Not `invalid` — that word
+       means "your transfer does not exist". Not `unapplied` — D14 keeps
+       that for a valid transfer with nothing left to pay, the opposite
+       situation. */
     status: text("status", {
-      enum: ["validating", "confirmed", "invalid", "expired", "unapplied", "superseded"],
+      enum: [
+        "validating",
+        "confirmed",
+        "partial",
+        "invalid",
+        "expired",
+        "unapplied",
+        "superseded",
+      ],
     })
       .notNull()
       .default("validating"),

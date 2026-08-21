@@ -399,7 +399,7 @@ export async function listChargeFeed(
   c: Ctx,
   q: {
     cursor?: number;
-    status?: "queued" | "reconnected" | "failed";
+    status?: "queued" | "reconnected" | "failed" | "withheld";
     storeId?: string;
     from?: number;
     to?: number;

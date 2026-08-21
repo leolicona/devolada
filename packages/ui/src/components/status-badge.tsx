@@ -7,6 +7,7 @@ import {
   Clock3,
   Hourglass,
   Mail,
+  PauseCircle,
   Store,
   TimerOff,
   Wifi,
@@ -25,6 +26,11 @@ export type Status =
   | "reconnected"
   | "queued"
   | "failed"
+  /* partial-payment D5/D9: the money was recorded and the service was
+     deliberately not restored, because the payment did not reach the
+     ISP's threshold. Not "failed" — nothing broke, and a red badge would
+     send the ISP looking for a problem that does not exist. */
+  | "withheld"
   /* cash drop */
   | "pending"
   | "confirmed"
@@ -64,6 +70,7 @@ const statuses: Record<
   reconnected: { tone: "success", icon: CheckCircle2, label: "Reconectado" },
   queued: { tone: "warning", icon: Clock3, label: "Reconexión en cola" },
   failed: { tone: "error", icon: XCircle, label: "Fallido" },
+  withheld: { tone: "warning", icon: PauseCircle, label: "Sin reactivar" },
   pending: { tone: "warning", icon: ArrowDownToLine, label: "Entrega pendiente" },
   confirmed: { tone: "success", icon: Check, label: "Entrega confirmada" },
   disputed: { tone: "error", icon: AlertTriangle, label: "En disputa" },

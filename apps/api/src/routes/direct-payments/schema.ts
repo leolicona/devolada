@@ -163,7 +163,7 @@ export const directPaymentStatusResponse = z.object({
     "unapplied",
     "superseded",
   ]),
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]).optional(),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),
   error: publicPaymentError.nullable(),

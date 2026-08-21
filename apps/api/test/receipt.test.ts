@@ -23,7 +23,7 @@ async function seedCharge(over: Partial<typeof charges.$inferInsert> = {}) {
       wisphubCustomerId: "greyes@wifiplus",
       customerName: "Janely",
       customerPhone: "55 1234 5678",
-      monthlyFeeCents: 39900,
+      invoiceCents: 39900,
       serviceFeeCents: 1500,
       totalCents: 41400,
       reconnectionStatus: "reconnected",
@@ -102,7 +102,7 @@ describe("US-C05: the customer leaves with a folio they can keep", () => {
         folio: "DV-OTHER1",
         wisphubCustomerId: "otro@wifiplus",
         customerName: "Otro",
-        monthlyFeeCents: 39900,
+        invoiceCents: 39900,
         serviceFeeCents: 1500,
         totalCents: 41400,
       })

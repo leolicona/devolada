@@ -12,6 +12,7 @@ import {
   type WispHubCustomer,
 } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
+import { billingStatusOf, debtOf } from "../../wisphub/debt";
 import {
   invalidatePendingInvoices,
   pendingInvoicesForDisplay,
@@ -62,19 +63,6 @@ function wisphubFailure(c: Ctx, e: unknown) {
   throw e;
 }
 
-/* Debt truth (debt-truth spec D1, D6): the pending-invoice list decides
-   `billingStatus`, in both directions — WispHub's `estado_facturas`
-   label lags real payments and real new invoices alike (measured live).
-   D4: a truncated list only proves debts, never their absence, so a
-   customer missing from an incomplete list keeps the label. */
-function invoiceBillingStatus(
-  customer: WispHubCustomer,
-  pending: PendingInvoices,
-): WispHubCustomer["billingStatus"] {
-  if (pending.invoices.some((f) => f.usuario === customer.usuario)) return "due";
-  return pending.complete ? "paid" : customer.billingStatus;
-}
-
 /* The wire contract is the allow-list (customer-search D2). The adapter
    also carries the customer's phone, which the charge stores for its
    receipt (receipt D4) but the frontend never needs — so the number
@@ -83,16 +71,22 @@ const toCustomerResult = (
   customer: WispHubCustomer,
   pending: PendingInvoices,
   hasPhone: boolean,
-): CustomerResult => ({
-  wisphubId: customer.wisphubId,
-  usuario: customer.usuario,
-  name: customer.name,
-  zone: customer.zone,
-  serviceStatus: customer.serviceStatus,
-  billingStatus: invoiceBillingStatus(customer, pending),
-  monthlyFeeCents: customer.monthlyFeeCents,
-  hasPhone,
-});
+): CustomerResult => {
+  /* debt-truth D7: the invoices are half the answer and `saldo` is the
+     other half. Both already rode in responses we fetched. */
+  const debt = debtOf(customer, pending);
+  return {
+    wisphubId: customer.wisphubId,
+    usuario: customer.usuario,
+    name: customer.name,
+    zone: customer.zone,
+    serviceStatus: customer.serviceStatus,
+    billingStatus: billingStatusOf(customer, pending, debt),
+    invoiceCents: debt.invoiceCents,
+    carriedBalanceCents: debt.carriedBalanceCents,
+    hasPhone,
+  };
+};
 
 /* provider-latency D2: the customer lookup and the pending list race,
    but their answers are still read in the old order. Both callers below
@@ -174,12 +168,17 @@ export async function getCustomerQuote(c: Ctx, usuario: string) {
       Boolean(customer.phone) ||
       (await capturedPhone(ctx.db, ctx.isp.id, String(customer.wisphubId))) !== null;
 
+    /* D8: the amount comes from the invoice, never from `precio_plan` —
+       prorations, discounts and any reconnection charge are already
+       inside it. D11 keeps the carried part on its own line. */
+    const debt = debtOf(customer, pending);
     const data: CustomerQuoteResponse = {
       customer: toCustomerResult(customer, pending, hasPhone),
       quote: {
-        monthlyFeeCents: customer.monthlyFeeCents,
+        invoiceCents: debt.invoiceCents,
+        carriedBalanceCents: debt.carriedBalanceCents,
         serviceFeeCents,
-        totalCents: customer.monthlyFeeCents + serviceFeeCents,
+        totalCents: debt.totalCents + serviceFeeCents,
       },
       cap: { balanceCents, capCents, blocked: balanceCents >= capCents },
     };
@@ -234,15 +233,18 @@ export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: str
      security layer. What changed is the question (debt-truth spec D5):
      the guard asks the invoices, not the label, and resolves the one
      this charge will pay — oldest first. */
-  const mine = pending.invoices.filter((f) => f.usuario === usuario);
-  const pendingInvoiceId = mine.length ? Math.min(...mine.map((f) => f.invoiceId)) : null;
-  if (pendingInvoiceId === null) {
-    if (pending.complete) {
+  /* D5, now asking D7's question: the guard reads the whole debt, not
+     just the invoice list. A customer whose invoice closed on a short
+     payment owes a carried balance and no longer appears in that list —
+     refusing them here is what made a real debt uncollectable. */
+  const debt = debtOf(customer, pending);
+  if (debt.totalCents === 0) {
+    if (pending.complete || customer.carriedBalanceCents < 0) {
       return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
     }
-    /* Debt-truth D4: a truncated list cannot prove "owes nothing", so
-       the label decides — the old behavior, logged because it carries
-       the residual double-charge risk. */
+    /* D4, narrowed by D14: a truncated list cannot prove "owes nothing",
+       and `saldo` — read from the customer record, which is never
+       truncated — said nothing either. Only then does the label decide. */
     console.warn(`pending-invoice list truncated; label guard used for ${usuario}`);
     if (customer.billingStatus === "paid") {
       return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
@@ -254,7 +256,17 @@ export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: str
     return c.json({ success: false, error: { code: "BALANCE_CAP_EXCEEDED" } }, 409);
   }
 
-  const totalCents = customer.monthlyFeeCents + ctx.isp.serviceFeeCents;
+  /* What the shopkeeper collects: the ISP's debt (D7) plus our fee. The
+     three parts stay separate on the row so the confirm screen and the
+     receipt can show them as separate lines (D11). */
+  /* The only case where the plan's price is still used: D4's truncation
+     fallback let the charge through without our ever seeing the debt. A
+     debt of zero here is not "no information", it is that path — and a
+     carried balance with no pending invoice is a real zero we must keep
+     (D15), which is why this asks the total and not the invoice line. */
+  const debtUnknown = debt.totalCents === 0;
+  const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
+  const totalCents = ispDebtCents + ctx.isp.serviceFeeCents;
   const commissionCents = store.commissionCents ?? ctx.isp.storeCommissionCents;
 
   /* Phone for the receipt (customer-phone D4): WispHub's own number wins;
@@ -287,7 +299,8 @@ export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: str
       customerName: customer.name,
       customerZone: customer.zone,
       customerPhone,
-      monthlyFeeCents: customer.monthlyFeeCents,
+      invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
+      carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
       serviceFeeCents: ctx.isp.serviceFeeCents,
       totalCents,
     })
@@ -313,9 +326,9 @@ export async function recordCharge(c: Ctx, usuario: string, submittedPhone?: str
     ctx.wisphub,
     ctx.isp.id,
     { usuario, wisphubId: String(customer.wisphubId) },
-    customer.monthlyFeeCents,
+    ispDebtCents,
     now,
-    { invoiceId: pendingInvoiceId, paymentRegistered: false },
+    { invoiceId: debt.invoiceId, paymentRegistered: false },
   );
   const schedule = firstAttemptSchedule(attempt, now);
   const [updated] = await ctx.db
@@ -370,7 +383,8 @@ export async function getReceipt(c: Ctx, chargeId: string) {
     folio: row.folio,
     customerName: row.customerName,
     totalCents: row.totalCents,
-    monthlyFeeCents: row.monthlyFeeCents,
+    invoiceCents: row.invoiceCents,
+    carriedBalanceCents: row.carriedBalanceCents,
     serviceFeeCents: row.serviceFeeCents,
     reconnectionStatus: row.reconnectionStatus,
     text,
@@ -439,7 +453,8 @@ export async function listChargeFeed(
         channel: charge.channel,
         reconnectionStatus: charge.reconnectionStatus,
         totalCents: charge.totalCents,
-        monthlyFeeCents: charge.monthlyFeeCents,
+        invoiceCents: charge.invoiceCents,
+        carriedBalanceCents: charge.carriedBalanceCents,
         serviceFeeCents: charge.serviceFeeCents,
         customerName: charge.customerName,
         storeName,

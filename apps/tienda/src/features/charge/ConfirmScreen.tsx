@@ -140,7 +140,13 @@ export function ConfirmScreen() {
           <AmountBreakdown
             className="mt-5 border-t border-line-soft pt-4"
             lines={[
-              { label: "Mensualidad", cents: quote.monthlyFeeCents },
+              { label: "Mensualidad", cents: quote.invoiceCents },
+              /* debt-truth D11: the carried balance is its own line. A
+                 shopkeeper shown an unfamiliar total with no explanation
+                 does not charge. */
+              ...(quote.carriedBalanceCents
+                ? [{ label: "Adeudo anterior", cents: quote.carriedBalanceCents }]
+                : []),
               { label: "Cargo por servicio", cents: quote.serviceFeeCents },
             ]}
           />

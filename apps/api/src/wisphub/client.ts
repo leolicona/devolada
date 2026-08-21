@@ -1,4 +1,4 @@
-import { decimalToCents } from "./money";
+import { amountToCents, decimalToCents } from "./money";
 
 /* WispHub adapter. Contract verified in .design/devolada/WISPHUB_SPIKE.md.
    All WispHub traffic goes through this file (ARCHITECTURE.md rule). */
@@ -41,7 +41,15 @@ export type WispHubCustomer = {
   phone: string | null;
   serviceStatus: "active" | "suspended" | "unknown";
   billingStatus: "paid" | "due" | "unknown";
-  monthlyFeeCents: number;
+  /* `precio_plan`: the plan's list price, NOT what this customer owes
+     (debt-truth D8). Kept only as the truncation fallback — the real
+     amount comes from the invoice. */
+  planPriceCents: number;
+  /* WispHub's running balance for the customer (`saldo`, debt-truth
+     D7): positive is carried debt, negative is a credit. It is where a
+     short payment's remainder lives, and the pending-invoice list can
+     be empty while this is not. */
+  carriedBalanceCents: number;
 };
 
 /* Spike finding: estado is a free string owned by WispHub.
@@ -66,7 +74,7 @@ export function queryParamFor(q: string): "telefono" | "usuario" | "nombre" {
   return "nombre";
 }
 
-export type PendingInvoice = { invoiceId: number; usuario: string };
+export type PendingInvoice = { invoiceId: number; usuario: string; totalCents: number };
 export type PendingInvoices = { invoices: PendingInvoice[]; complete: boolean };
 
 type WispHubListItem = {
@@ -77,6 +85,7 @@ type WispHubListItem = {
   estado: string | null;
   estado_facturas: string | null;
   precio_plan: string | null;
+  saldo: string | null;
   zona: { nombre?: string } | null;
 };
 
@@ -163,7 +172,9 @@ export class WispHub {
       phone: c.telefono?.trim() ? c.telefono.trim() : null,
       serviceStatus: mapStatus(c.estado),
       billingStatus: mapBillingStatus(c.estado_facturas),
-      monthlyFeeCents: c.precio_plan ? decimalToCents(c.precio_plan) : 0,
+      planPriceCents: c.precio_plan ? decimalToCents(c.precio_plan) : 0,
+      /* D9: already in this response — reading it costs no extra call */
+      carriedBalanceCents: c.saldo ? decimalToCents(c.saldo) : 0,
     }));
   }
 
@@ -225,10 +236,23 @@ export class WispHub {
     for (let page = 0; page < 5 && path; page++) {
       const data: {
         next: string | null;
-        results: { id_factura: number; cliente: { usuario: string | null } }[];
+        results: {
+          id_factura: number;
+          cliente: { usuario: string | null };
+          /* D8: the amount this customer actually owes for the period —
+             prorations, discounts and any reconnection charge included.
+             It rides in the same row we already fetch (D9). */
+          total: number | null;
+        }[];
       } = await this.get(path);
       for (const f of data.results) {
-        if (f.cliente?.usuario) invoices.push({ invoiceId: f.id_factura, usuario: f.cliente.usuario });
+        if (f.cliente?.usuario) {
+          invoices.push({
+            invoiceId: f.id_factura,
+            usuario: f.cliente.usuario,
+            totalCents: f.total == null ? 0 : amountToCents(f.total),
+          });
+        }
       }
       /* WispHub's `next` is absolute; keep only the API path */
       path = data.next ? data.next.slice(data.next.indexOf("/facturas/")) : null;
@@ -245,15 +269,26 @@ export class WispHub {
   }
 
   /* Creates a pending invoice. WispHub answers with a message string,
-     not an id (spike finding, TD-008): we parse "la factura N". */
-  async createInvoice(usuario: string, amountCents: number, date: string): Promise<number> {
+     not an id (spike finding, TD-008): we parse "la factura N".
+
+     `amountCents` is **new** debt only. An invoice sized to a balance the
+     customer already carries raises the running account by that amount, so
+     their payment would leave them owing exactly what they owed before —
+     measured (debt-truth D15). The zero-total case is the vehicle that
+     rule needs: it adds nothing and still gives `registrar-pago` an id. */
+  async createInvoice(
+    usuario: string,
+    amountCents: number,
+    date: string,
+    descripcion = "Mensualidad de internet",
+  ): Promise<number> {
     const amount = amountCents / 100; /* boundary conversion, outbound only */
     const data = await this.request<{ messages?: string }>("/facturas/", {
       method: "POST",
       body: JSON.stringify({
         cliente: usuario,
         tipo_factura: 1,
-        articulos: [{ descripcion: "Mensualidad de internet", precio: amount, cantidad: 1 }],
+        articulos: [{ descripcion, precio: amount, cantidad: 1 }],
         fecha_emision: date,
         fecha_vencimiento: date,
         fecha_pago: date,

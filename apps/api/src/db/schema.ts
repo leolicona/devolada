@@ -117,7 +117,15 @@ export const charges = sqliteTable(
     /* Copied at record time (receipt spec D4): reading it back from
        WispHub would make the receipt fail exactly when WispHub is down */
     customerPhone: text("customer_phone"),
-    monthlyFeeCents: integer("monthly_fee_cents").notNull(),
+    /* What the ISP was owed for the period this charge settles — the
+       pending invoice's own total, not the plan's list price
+       (debt-truth D8/D13). Prorations, discounts and any reconnection
+       charge are already inside it. */
+    invoiceCents: integer("invoice_cents").notNull(),
+    /* Debt the customer was already carrying in WispHub's running
+       account (`saldo`, debt-truth D7). Zero for the ordinary case; a
+       credit never lands here, it is netted into `invoiceCents` (D12). */
+    carriedBalanceCents: integer("carried_balance_cents").notNull().default(0),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     totalCents: integer("total_cents").notNull(),
     reconnectionStatus: text("reconnection_status", {
@@ -247,7 +255,9 @@ export const directPayments = sqliteTable(
       .notNull()
       .references(() => isps.id),
     amountCents: integer("amount_cents").notNull(),
-    monthlyFeeCents: integer("monthly_fee_cents").notNull(),
+    /* Same meaning as on `charges` (debt-truth D8/D13) */
+    invoiceCents: integer("invoice_cents").notNull(),
+    carriedBalanceCents: integer("carried_balance_cents").notNull().default(0),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     /* unapplied (D14): the CEP was real but the debt was settled
        elsewhere meanwhile — visible, never silent */

@@ -84,6 +84,7 @@ const wisphubCustomer = (estado = "Suspendido") => ({
   estado,
   estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { id: 71342, nombre: "Zona dia 15" },
 });
 
@@ -98,8 +99,8 @@ function mockCustomerLookup(results: unknown[], times = 1) {
 }
 
 function mockPendingInvoices(
-  results: { id_factura: number; cliente: { usuario: string } }[] = [
-    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
+  results: { id_factura: number; cliente: { usuario: string }; total: number }[] = [
+    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
   ],
   times = 1,
 ) {
@@ -221,7 +222,7 @@ describe("US-D01: the link answers with the live debt", () => {
     const { data } = await res.json();
     expect(data.status).toBe("debt");
     expect(data.customerName).toBe("Janely");
-    expect(data.monthlyFeeCents).toBe(49900);
+    expect(data.invoiceCents).toBe(49900);
     expect(data.serviceFeeCents).toBe(1500);
     expect(data.totalCents).toBe(51400);
     expect(data.speiClabe).toBe(SPEI_CONFIG.speiClabe);
@@ -237,6 +238,25 @@ describe("US-D01: the link answers with the live debt", () => {
     const { data } = await res.json();
     expect(data.serviceFeeCents).toBe(800);
     expect(data.totalCents).toBe(50700);
+  });
+
+  it("scenario 2 (debt-truth US-C08): a carried balance is a debt the page can see", async () => {
+    /* The state a short payment leaves behind: the invoice closed as
+       "Pagada", the pending list is empty, and the remainder lives in
+       `saldo`. Before debt-truth D7 this page answered "Sin adeudo" to
+       somebody who owed money and could not pay it. */
+    await seedLinkedIsp();
+    mockCustomerLookup([
+      { ...wisphubCustomer(), estado_facturas: "Pagadas", saldo: "150.00" },
+    ]);
+    mockPendingInvoices([]);
+
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("debt");
+    expect(data.invoiceCents).toBe(0);
+    expect(data.carriedBalanceCents).toBe(15000);
+    expect(data.totalCents).toBe(15000 + 1500);
   });
 
   it("scenario 2: no debt → sin adeudo, no SPEI data", async () => {
@@ -404,7 +424,7 @@ describe("US-D02: submitting proof", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         status: "invalid",
         proofMode: "transfer",
@@ -598,28 +618,47 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     expect(charge.reconnectionStatus).toBe("reconnected");
   });
 
-  it("scenario 24: two months due → pays the oldest, then the next shows", async () => {
+  it("scenario 24: two months due → one debt, one payment, nothing left (D21)", async () => {
     await seedLinkedIsp();
     const twoInvoices = [
-      { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
-      { id_factura: 41, cliente: { usuario: "greyes@wifiplus" } },
+      { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
+      { id_factura: 41, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
     ];
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(twoInvoices, 2);
-    mockConsta();
-    /* oldest first (D15): invoice 41, not 42 */
+    /* D21 replaces D15: WispHub applies a payment to the customer, not to
+       the invoice, so the page asks for both months at once — 998 + the
+       15.00 fee. Asking for one of them would have asked for a number
+       that reconnects nobody. */
+    mockConsta({
+      cep: {
+        trackingKey: "TRACK001XYZ",
+        amountCents: 101300,
+        date: new Date().toISOString().slice(0, 10),
+        senderBank: "NUBANK",
+        senderName: "JANELY REYES",
+        receiverBank: "STP",
+        beneficiaryName: "WifiPlus SA de CV",
+      },
+    });
+    /* The payment is registered against the oldest invoice and settles the
+       whole running account (debt-truth D15) */
     mockReconnection("Activo", 41);
 
     const res = await payTransfer();
     const { data } = await res.json();
     expect(data.status).toBe("confirmed");
 
-    /* the page re-reads: one invoice left → still debt */
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices([twoInvoices[0]], 1);
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.invoiceCents).toBe(99800);
+    expect(charge.totalCents).toBe(101300);
+
+    /* both months settled: the page now says there is nothing to pay */
+    mockCustomerLookup([wisphubCustomer("Activo")], 1);
+    mockPendingInvoices([], 1);
     const again = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
     const { data: link } = await again.json();
-    expect(link.status).toBe("debt");
+    expect(link.status).toBe("no_debt");
   });
 });
 
@@ -651,7 +690,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",
@@ -693,7 +732,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",
@@ -749,7 +788,7 @@ describe("D17: a not-found is not a refusal", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",
@@ -785,7 +824,7 @@ describe("D17: a not-found is not a refusal", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",
@@ -891,7 +930,7 @@ describe("D8: one transfer pays once", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",
@@ -963,7 +1002,7 @@ describe("D8: one transfer pays once", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",
@@ -1058,7 +1097,7 @@ describe("D14: a validated transfer with nothing left to pay", () => {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
         serviceFeeCents: 1500,
         proofMode: "transfer",
         trackingKey: "TRACK001XYZ",

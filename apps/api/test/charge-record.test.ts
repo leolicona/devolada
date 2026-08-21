@@ -23,6 +23,7 @@ const wisphubCustomer = (estado = "Suspendido") => ({
   estado,
   estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { id: 71342, nombre: "Zona dia 15" },
 });
 
@@ -46,13 +47,15 @@ function mockCustomerLookup(results: unknown[], times = 1) {
 /* The guard's question (debt-truth spec D5): the pending-invoice list.
    The default holds invoice 42 for the demo customer. */
 function mockPendingInvoices(
-  results: { id_factura: number; cliente: { usuario: string } }[] = [
-    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
+  results: { id_factura: number; cliente: { usuario: string }; total: number }[] = [
+    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
   ],
+  times = 1,
 ) {
   wh()
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
-    .reply(...json({ next: null, count: results.length, results }));
+    .reply(...json({ next: null, count: results.length, results }))
+    .times(times);
 }
 
 /* The happy reconnection with the invoice already resolved by the guard
@@ -197,7 +200,7 @@ describe("US-C04 / US-C06: server-side guards ask the invoices, not the label", 
         ...json({
           next: "http://api.wisphub.net/api/facturas/?estado=1&offset=100",
           count: 600,
-          results: [{ id_factura: 7, cliente: { usuario: "otro@wifiplus" } }],
+          results: [{ id_factura: 7, cliente: { usuario: "otro@wifiplus" }, total: 499 }],
         }),
       )
       .times(10); /* 5 pages for the guard + 5 for the reconnection's find */
@@ -251,5 +254,167 @@ describe("US-C03: the store reads its own charge status", () => {
       headers: { Cookie: await sessionCookieHeader("5599999999") },
     }, env);
     expect(foreign.status).toBe(404);
+  });
+});
+
+/* docs/charges/debt-truth.spec.md (2026-08-20 revision) scenarios 1, 3,
+   5, 6, 7 and 10 — US-C08. Every one of them is a customer the product
+   could not charge correctly before, and the defect needed no partial
+   payment from Devolada: an ISP taking a short payment in their own
+   panel is enough to produce it. */
+describe("US-C08: the debt is the invoices plus what was carried", () => {
+  /* Captures what actually travels to registrar-pago. The amount is the
+     whole debt (D15), because WispHub applies a payment to the customer
+     and not to the invoice named in the URL. */
+  function mockReconnectionCapturing(invoiceId: number) {
+    const seen: { totalCobrado?: number } = {};
+    wh()
+      .intercept({ method: "PATCH", path: "/api/clientes/6/" })
+      .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
+      .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
+    wh()
+      .intercept({
+        method: "POST",
+        path: `/api/facturas/${invoiceId}/registrar-pago/`,
+        body: (raw) => {
+          seen.totalCobrado = JSON.parse(String(raw)).total_cobrado;
+          return true;
+        },
+      })
+      .reply(...json({ messages: ["Se agrego correctamente el pago"], task_id: "t-1" }));
+    mockCustomerLookup([wisphubCustomer("Activo")]);
+    return seen;
+  }
+
+  it("scenario 1: no pending invoice, label 'Pagadas', saldo 199 → charged, not refused", async () => {
+    /* The F17 state, exactly: a short payment closed the invoice and the
+       remainder went to `saldo`. Before this spec the guard read an empty
+       invoice list and answered NOTHING_DUE — a real debt nobody could
+       collect through either channel. */
+    await seedChargeableStore();
+    mockCustomerLookup([
+      { ...wisphubCustomer(), estado_facturas: "Pagadas", saldo: "199.00" },
+    ]);
+    /* twice: the guard asks, and the reconnection asks again before it
+       decides to create the vehicle */
+    mockPendingInvoices([], 2);
+    /* D15: nothing pending, so the payment needs an empty vehicle — an
+       invoice sized to the 199.00 would raise the debt to 398.00 */
+    const created: { total?: number } = {};
+    wh()
+      .intercept({
+        method: "POST",
+        path: "/api/facturas/",
+        body: (raw) => {
+          created.total = JSON.parse(String(raw)).total;
+          return true;
+        },
+      })
+      .reply(...json({ messages: "Se genero correctamente la factura 91." }));
+    const seen = mockReconnectionCapturing(91);
+
+    const res = await (await app()).request("/charges", post({ usuario: "greyes@wifiplus" }), env);
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    /* 199 carried + 15 service fee — the plan's 499 never enters */
+    expect(data.totalCents).toBe(19900 + 1500);
+    expect(created.total).toBe(0);
+    expect(seen.totalCobrado).toBe(199);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.invoiceCents).toBe(0);
+    expect(charge.carriedBalanceCents).toBe(19900);
+  });
+
+  it("scenario 3: the invoice total wins over precio_plan, and it is what gets registered", async () => {
+    /* The reconnection charge case: the plan says 499, the invoice says
+       649. Registering 499 against it would leave 150 carried — the
+       product manufacturing the defect above (D10). */
+    await seedChargeableStore();
+    mockCustomerLookup([wisphubCustomer()]);
+    mockPendingInvoices([{ id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 649 }]);
+    const seen = mockReconnectionCapturing(42);
+
+    const res = await (await app()).request("/charges", post({ usuario: "greyes@wifiplus" }), env);
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.totalCents).toBe(64900 + 1500);
+    expect(seen.totalCobrado).toBe(649);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.invoiceCents).toBe(64900);
+    expect(charge.carriedBalanceCents).toBe(0);
+  });
+
+  it("scenario 4: invoice and carried balance stay separate on the row", async () => {
+    await seedChargeableStore();
+    mockCustomerLookup([{ ...wisphubCustomer(), saldo: "150.00" }]);
+    mockPendingInvoices();
+    const seen = mockReconnectionCapturing(42);
+
+    const res = await (await app()).request("/charges", post({ usuario: "greyes@wifiplus" }), env);
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.totalCents).toBe(49900 + 15000 + 1500);
+    /* one call, the whole account (D15) */
+    expect(seen.totalCobrado).toBe(649);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.invoiceCents).toBe(49900);
+    expect(charge.carriedBalanceCents).toBe(15000);
+  });
+
+  it("scenario 5: a credit lowers the charge, and a big enough one means nothing is due", async () => {
+    await seedChargeableStore();
+    mockCustomerLookup([{ ...wisphubCustomer(), saldo: "-100.00" }]);
+    mockPendingInvoices();
+    const seen = mockReconnectionCapturing(42);
+
+    const res = await (await app()).request("/charges", post({ usuario: "greyes@wifiplus" }), env);
+    expect(res.status).toBe(201);
+    /* 499 − 100 credit + 15 fee. D12: the credit is netted, never shown
+       as a balance the customer could ask us to pay out. */
+    expect((await res.json()).data.totalCents).toBe(39900 + 1500);
+    expect(seen.totalCobrado).toBe(399);
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.carriedBalanceCents).toBe(0);
+  });
+
+  it("scenario 5b: a credit larger than the invoice → NOTHING_DUE", async () => {
+    await seedChargeableStore();
+    mockCustomerLookup([{ ...wisphubCustomer(), saldo: "-600.00" }]);
+    mockPendingInvoices();
+
+    const res = await (await app()).request("/charges", post({ usuario: "greyes@wifiplus" }), env);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("NOTHING_DUE");
+    expect(await drizzle(env.DB).select().from(charges)).toHaveLength(0);
+  });
+
+  it("scenario 6: a carried balance proves a debt even when the list is truncated", async () => {
+    /* D14: `saldo` comes from the customer record, which is never
+       truncated, so the label fallback is not reached at all here. */
+    await seedChargeableStore();
+    mockCustomerLookup([
+      { ...wisphubCustomer(), estado_facturas: "Pagadas", saldo: "250.00" },
+    ]);
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
+      .reply(
+        ...json({
+          next: "http://api.wisphub.net/api/facturas/?estado=1&offset=100",
+          count: 600,
+          results: [{ id_factura: 7, cliente: { usuario: "otro@wifiplus" }, total: 499 }],
+        }),
+      )
+      .times(10);
+    wh()
+      .intercept({ method: "POST", path: "/api/facturas/" })
+      .reply(...json({ messages: "Se genero correctamente la factura 91." }));
+    const seen = mockReconnectionCapturing(91);
+
+    const res = await (await app()).request("/charges", post({ usuario: "greyes@wifiplus" }), env);
+    expect(res.status).toBe(201);
+    expect(seen.totalCobrado).toBe(250);
   });
 });

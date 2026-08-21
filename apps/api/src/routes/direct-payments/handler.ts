@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { charges, directPayments, isps, paymentLinks } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
+import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
   isUniqueViolation,
   runValidation,
@@ -109,10 +110,13 @@ export async function getLinkStatus(c: Ctx, token: string) {
       wisphub.getCustomer(link.customerUsuario),
       pendingInvoicesForDisplay(isp.id, wisphub, now),
     ]);
-    const owes = pending.invoices.some((f) => f.usuario === link.customerUsuario);
+    /* debt-truth D7: invoices plus the carried balance. A payer whose
+       invoice closed on a short payment owes a remainder that the
+       invoice list alone cannot see. */
+    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
     const customerName = customer?.name ?? link.customerUsuario;
 
-    if (!owes || !customer) {
+    if (debt.totalCents === 0 || !customer) {
       const data: LinkStatusResponse = {
         ispName: isp.name,
         customerName,
@@ -121,17 +125,19 @@ export async function getLinkStatus(c: Ctx, token: string) {
       return c.json({ success: true, data });
     }
 
-    /* D15: one invoice at a time, oldest first — the amount is the
-       plan's mensualidad plus the SPEI fee, same computation as the
-       store flow */
+    /* D21 replaces D15: the page shows the whole debt, because WispHub
+       applies a payment to the customer and not to one invoice. Asking
+       for one invoice's total would ask for a number that reconnects
+       nobody. */
     const serviceFeeCents = speiFeeCents(isp);
     const data: LinkStatusResponse = {
       ispName: isp.name,
       customerName,
       status: "debt",
-      monthlyFeeCents: customer.monthlyFeeCents,
+      invoiceCents: debt.invoiceCents,
+      carriedBalanceCents: debt.carriedBalanceCents,
       serviceFeeCents,
-      totalCents: customer.monthlyFeeCents + serviceFeeCents,
+      totalCents: debt.totalCents + serviceFeeCents,
       speiClabe: isp.speiClabe!,
       speiBank: isp.speiBank!,
       speiBeneficiaryName: isp.speiBeneficiaryName!,
@@ -224,13 +230,24 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   } catch (e) {
     return wisphubFailure(c, e);
   }
-  const owes = pending.invoices.some((f) => f.usuario === link.customerUsuario);
-  if (!customer || (!owes && (pending.complete || customer.billingStatus === "paid"))) {
+  const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+  if (
+    !customer ||
+    (debt.totalCents === 0 &&
+      (pending.complete ||
+        customer.carriedBalanceCents < 0 ||
+        customer.billingStatus === "paid"))
+  ) {
     return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
   }
 
   const serviceFeeCents = speiFeeCents(isp);
-  const amountCents = customer.monthlyFeeCents + serviceFeeCents;
+  /* Same rule as the store path: only D4's truncation fallback falls back
+     to the plan's price. A zero invoice line beside a carried balance is
+     a real number, not a missing one. */
+  const debtUnknown = debt.totalCents === 0;
+  const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
+  const amountCents = ispDebtCents + serviceFeeCents;
 
   /* D18: the debt is now known, and so is what the receipt claimed. If
      they disagree the provider lookup is already lost — `sender.amount`
@@ -260,7 +277,8 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents,
-        monthlyFeeCents: customer.monthlyFeeCents,
+        invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
+        carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
         serviceFeeCents,
         proofMode: body.transfer ? "transfer" : "receipt",
         trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,

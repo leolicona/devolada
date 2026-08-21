@@ -23,6 +23,7 @@ const wisphubCustomer = {
   estado: "Activo",
   estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { id: 71342, nombre: "Zona dia 15" },
   direccion: "Calle Falsa 123",
   telefono: "5511122233",
@@ -44,8 +45,8 @@ function mockWispHubList(expectedParam: string, results: unknown[] = [wisphubCus
 /* Debt truth (debt-truth spec D6): a non-empty search also fetches the
    pending-invoice list and marks every result from it. */
 function mockPendingInvoices(
-  results: { id_factura: number; cliente: { usuario: string } }[] = [
-    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
+  results: { id_factura: number; cliente: { usuario: string }; total: number }[] = [
+    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
   ],
 ) {
   fetchMock
@@ -112,7 +113,8 @@ describe("US-C01: the response is minimum identity only", () => {
       zone: "Zona dia 15",
       serviceStatus: "active",
       billingStatus: "due",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
       /* customer-phone D4: whether a number exists, never the number */
       hasPhone: true,
     });
@@ -147,7 +149,7 @@ describe("US-C06: the pending invoices decide billingStatus, not the label", () 
         estado_facturas: "Pendiente de Pago",
       },
     ]);
-    mockPendingInvoices([{ id_factura: 42, cliente: { usuario: "greyes@wifiplus" } }]);
+    mockPendingInvoices([{ id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 }]);
 
     const res = await (await app()).request("/charges/customers?q=Janely", asStore, env);
     const { data } = await res.json();

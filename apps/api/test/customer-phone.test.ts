@@ -26,6 +26,7 @@ const wisphubCustomer = (telefono = "") => ({
   estado: "Suspendido",
   estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { id: 71342, nombre: "Zona dia 15" },
 });
 
@@ -44,8 +45,8 @@ function mockCustomerLookup(results: unknown[], times = 1) {
 }
 
 function mockPendingInvoices(
-  results: { id_factura: number; cliente: { usuario: string } }[] = [
-    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
+  results: { id_factura: number; cliente: { usuario: string }; total: number }[] = [
+    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
   ],
 ) {
   wh()

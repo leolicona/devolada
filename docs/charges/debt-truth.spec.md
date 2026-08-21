@@ -85,7 +85,7 @@ No new endpoints and no new WispHub calls (D9). What changes is what the existin
 
 ## Definition of Done — 2026-08-20 revision
 
-- [ ] Scenarios 1–8 automated in the API layer; scenario 9 with Testing Library
-- [ ] `wisphub.md` carries the measured contract (running account, `saldo` semantics, invoice fields)
+- [x] Scenarios 1–8 and 10 automated in the API layer (`charge-record.test.ts` +6 under US-C08, `direct-payment.test.ts` +1, and the existing quote/search/record tests carry the new shape); scenario 9 with Testing Library (`charge-confirm.test.tsx` +2)
+- [x] `wisphub.md` carries the measured contract (running account, `saldo` semantics, invoice fields, the `accion` switch and the writes that do not work)
 - [ ] Deployed check against a live tenant: a customer left with a carried balance by a short payment made in the ISP's own panel is found by search, quoted for the right total, and charged — the exact state that is uncollectable today
 

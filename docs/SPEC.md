@@ -55,6 +55,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-C05** — As an end customer, I receive a receipt via WhatsApp/SMS with a unique folio.
 - **US-C06** — As an end customer, I can only be charged what I actually owe: a debt that no longer exists cannot be charged again. *(added 2026-08-16, found live: WispHub's summary label lags the invoices in both directions)*
 - **US-C07** — As a store, when WispHub has no phone for the customer, I can save it once during the charge, and the receipt opens straight into their chat — this time and every time after. *(reserved 2026-08-17, backlog #3; WispHub write-back probed and impossible)*
+- **US-C08** — As an end customer, I am charged exactly what I owe — the whole of it, including anything carried over from a payment that fell short — and a debt that was only half paid never becomes invisible. *(reserved 2026-08-20, found live: WispHub keeps a running account, so a partly paid invoice closes as "Pagada" and the rest survives in `saldo`, where nothing was looking)*
 
 ### Cash box (K)
 - **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my commission for the current drop cycle; every number breaks down into its ledger entries. *(commission per cycle 2026-08-17, cashbox.spec.md D5 — was "accumulated"; the drop is the shopkeeper's corte)*
@@ -100,6 +101,8 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D07** — As an ISP, I can search for a customer and share their permanent SPEI payment link via WhatsApp directly from the dashboard.
 - **US-D08** — As an end customer, I get back to my payment page next month without asking my ISP for the link again.
 - **US-D09** — As an end customer, I upload my receipt and it just works when it can; when it cannot, I am shown what was read from it and can correct it in seconds, instead of waiting hours for a rejection I cannot act on.
+- **US-D10** — As an end customer, if my transfer falls short my money is not lost: it is applied to my debt, I am told in pesos exactly how much is missing, and my service comes back when the rest arrives. *(reserved 2026-08-20; today a short transfer is refused with no record at all, while the money is already in the ISP's account)*
+- **US-D11** — As an ISP, I choose whether my customer pays the SPEI service fee or I absorb it, and either way my customer is shown a single number to transfer. *(reserved 2026-08-20)*
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -213,7 +216,7 @@ Owner's decisions:
 | [charges/charge-record.spec.md](charges/charge-record.spec.md) | charges | US-C03, US-C04 | in development |
 | [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retries) | in development |
 | [charges/receipt.spec.md](charges/receipt.spec.md) | charges | US-C05 | in development |
-| [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06 | in development |
+| [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06, US-C08 | in development |
 | [charges/customer-phone.spec.md](charges/customer-phone.spec.md) | charges | US-C07 | in development |
 | [cashbox/cashbox.spec.md](cashbox/cashbox.spec.md) | cashbox | US-K01, US-K04 | in development |
 | [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
@@ -231,7 +234,8 @@ Owner's decisions:
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10 | proposed |
-| [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09 | in development |
+| [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |
+| [direct-payment/partial-payment.spec.md](direct-payment/partial-payment.spec.md) | direct-payment | US-D10 | proposed |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
 

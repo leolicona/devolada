@@ -115,7 +115,11 @@ function mockPendingInvoices(
 
 /* The reconnection the confirmed payment triggers (D6): auto-activate →
    payment methods → pay the resolved invoice → verify. */
-function mockReconnection(verifyEstado = "Activo", invoiceId = 42) {
+/* `verify: false` is the partial-payment D5 path: with `accion: 0` there
+   is no router work and nothing to verify, so no second customer read
+   happens — and the response carries `task_id: null` rather than an id. */
+function mockReconnection(verifyEstado = "Activo", invoiceId = 42, verify = true) {
+  const captured: { accion?: number; totalCobrado?: number } = {};
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
@@ -123,9 +127,24 @@ function mockReconnection(verifyEstado = "Activo", invoiceId = 42) {
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
     .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
   wh()
-    .intercept({ method: "POST", path: `/api/facturas/${invoiceId}/registrar-pago/` })
-    .reply(...json({ messages: ["Se agrego correctamente el pago"], task_id: "t-1" }));
-  mockCustomerLookup([wisphubCustomer(verifyEstado)]);
+    .intercept({
+      method: "POST",
+      path: `/api/facturas/${invoiceId}/registrar-pago/`,
+      body: (raw) => {
+        const b = JSON.parse(String(raw));
+        captured.accion = b.accion;
+        captured.totalCobrado = b.total_cobrado;
+        return true;
+      },
+    })
+    .reply(
+      ...json({
+        messages: ["Se agrego correctamente el pago"],
+        task_id: verify ? "t-1" : null,
+      }),
+    );
+  if (verify) mockCustomerLookup([wisphubCustomer(verifyEstado)]);
+  return captured;
 }
 
 type ConstaData = {
@@ -1052,11 +1071,17 @@ describe("D8: one transfer pays once", () => {
 });
 
 describe("D11: valid is necessary, not sufficient", () => {
-  it("scenario 16: a real $1 receipt → AMOUNT_MISMATCH, no charge", async () => {
+  it("scenario 16 (partial-payment D1): a real $1 transfer is a real $1 payment, not a refusal", async () => {
+    /* This asserted AMOUNT_MISMATCH and no charge. The money was already
+       in the ISP's account, so the refusal discarded the only record it
+       arrived. Now it settles $1 of the debt, earns no reconnection at
+       the default threshold, and the ISP can see it. */
     const { link } = await seedLinkedIsp();
     await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices(undefined, 1);
+    /* twice: the submission checks the debt, and the validation reads it
+       again fresh before deciding what the money settles */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
     mockConsta({
       cep: {
         trackingKey: "OTHERKEY99",
@@ -1064,12 +1089,19 @@ describe("D11: valid is necessary, not sufficient", () => {
         date: new Date().toISOString().slice(0, 10),
       },
     });
+    /* accion 0: the money is registered and the cut stays (D5) */
+    const sent = mockReconnection("Suspendido", 42, false);
 
     const res = await payTransfer("tok2345abcdefgh2", { proofId: `${link.id}/proof-1` });
     const { data } = await res.json();
-    expect(data.status).toBe("invalid");
-    expect(data.error).toBe("AMOUNT_MISMATCH");
-    expect(await drizzle(env.DB).select().from(charges)).toHaveLength(0);
+    expect(data.status).toBe("partial");
+
+    expect(sent.accion).toBe(0);
+    expect(sent.totalCobrado).toBe(1);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.totalCents).toBe(100);
+    expect(charge.reconnectionStatus).toBe("withheld");
   });
 
   it("scenario 17: a CEP older than 30 days → STALE_TRANSFER", async () => {
@@ -1368,20 +1400,26 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     expect(row.cepSenderName).toBe("JANELY REYES");
   });
 
-  it("scenario 58: a receipt amount that is not the debt is refused by the server, no row, no credit", async () => {
+  it("scenario 58 (partial-payment D5): the receipt's amount is what travels to Banxico", async () => {
+    /* This asserted a 409 and no row. The reasoning was right — a lookup
+       asking with the expected amount could only come back faceless —
+       and the conclusion was wrong: the fix is to ask with the amount the
+       receipt actually shows, which is the transfer the payer made. */
     await seedLinkedIsp();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    /* No consta interceptor: reaching the provider would fail the test,
-       which is the point — `sender.amount` is a filter, so this lookup
-       could only ever come back faceless (apicep.md, measured) */
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer: READ,
-      receiptAmountCents: 100,
+      receiptAmountCents: 30000,
     });
-    expect(res.status).toBe(409);
-    expect((await res.json()).error.code).toBe("AMOUNT_MISMATCH");
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+    expect(res.status).toBe(201);
+    const sent = captured.body as { transfer: { amountCents: number } };
+    expect(sent.transfer.amountCents).toBe(30000);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.claimedAmountCents).toBe(30000);
   });
 
   it("scenario 58b: the matching amount goes through, and omitting it changes nothing", async () => {
@@ -1511,5 +1549,138 @@ describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () =>
     const { data } = await res.json();
     expect(data.status).toBe("invalid");
     expect(data.error).toBe("TRANSFER_CONTRADICTED");
+  });
+});
+
+/* docs/direct-payment/partial-payment.spec.md scenarios 1–7 — US-D10.
+   A short transfer used to be refused with no row written, while the
+   money was already in the ISP's account. */
+describe("US-D10: a transfer that falls short", () => {
+  const SHORT = { ...TRANSFER };
+
+  /* The seed owes 49900 and charges a 1500 fee, so 51400 is the whole
+     ask and the ISP's own debt is 49900. */
+  function shortCep(amountCents: number) {
+    return {
+      cep: {
+        trackingKey: "TRACK001XYZ",
+        amountCents,
+        date: new Date().toISOString().slice(0, 10),
+        senderBank: "NUBANK",
+        senderName: "JANELY REYES",
+        receiverBank: "STP",
+        beneficiaryName: "WifiPlus SA de CV",
+      },
+    };
+  }
+
+  it("scenario 1: below the threshold → partial, accion 0, the cut stays, a charge exists", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(shortCep(30000));
+    const sent = mockReconnection("Suspendido", 42, false);
+
+    const res = await payTransfer("tok2345abcdefgh2", SHORT);
+    const { data } = await res.json();
+    expect(data.status).toBe("partial");
+    /* D5: the money is registered either way — only the router is left
+       alone. Devolada's fee takes nothing, because the ISP is paid first. */
+    expect(sent.accion).toBe(0);
+    expect(sent.totalCobrado).toBe(300);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.totalCents).toBe(30000);
+    expect(charge.serviceFeeCents).toBe(0);
+    expect(charge.reconnectionStatus).toBe("withheld");
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.receivedCents).toBe(30000);
+  });
+
+  it("scenario 2: the same transfer with a lenient threshold → accion 1, still partial", async () => {
+    /* D6: `partial` is about the debt, not the router. A payment can
+       reconnect and still leave a balance. */
+    await seedLinkedIsp({ reconnectionThresholdPercent: 60 });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(shortCep(30000));
+    const sent = mockReconnection("Activo", 42);
+
+    const res = await payTransfer("tok2345abcdefgh2", SHORT);
+    const { data } = await res.json();
+    expect(data.status).toBe("partial");
+    expect(sent.accion).toBe(1);
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.reconnectionStatus).toBe("reconnected");
+  });
+
+  it("scenario 3: over the percentage but under the floor → still withheld", async () => {
+    await seedLinkedIsp({ reconnectionThresholdPercent: 60, reconnectionFloorCents: 40000 });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(shortCep(30000));
+    const sent = mockReconnection("Suspendido", 42, false);
+
+    await payTransfer("tok2345abcdefgh2", SHORT);
+    expect(sent.accion).toBe(0);
+  });
+
+  it("scenario 4: the ISP's debt decides, never Devolada's fee", async () => {
+    /* 49900 arrives against a 51400 ask: the mensualidad is covered and
+       our 1500 is not. The customer is reconnected and we eat the fee —
+       leaving somebody offline over it would cost more in one support
+       call than the fee is worth (D3). */
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(shortCep(49900));
+    const sent = mockReconnection("Activo", 42);
+
+    const res = await payTransfer("tok2345abcdefgh2", SHORT);
+    const { data } = await res.json();
+    expect(data.status).toBe("confirmed");
+    expect(sent.accion).toBe(1);
+    expect(sent.totalCobrado).toBe(499);
+
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.serviceFeeCents).toBe(0);
+    expect(charge.invoiceCents).toBe(49900);
+  });
+
+  it("scenario 6: more than the debt → confirmed, and the surplus travels on", async () => {
+    /* D10: no special case. Our fee takes its part and the rest goes to
+       WispHub, which turns it into a credit against the next cycle. */
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(shortCep(60000));
+    const sent = mockReconnection("Activo", 42);
+
+    const res = await payTransfer("tok2345abcdefgh2", SHORT);
+    expect((await res.json()).data.status).toBe("confirmed");
+    /* 600.00 − 15.00 of fee = 585.00 registered; 86.00 over the debt */
+    expect(sent.totalCobrado).toBe(585);
+  });
+
+  it("scenario 7: the three amounts reach the page in money, never a percentage", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(shortCep(30000));
+    mockReconnection("Suspendido", 42, false);
+
+    const res = await payTransfer("tok2345abcdefgh2", SHORT);
+    const { data } = await res.json();
+    const status = await (await app()).request(
+      `/direct-payments/${data.directPaymentId}/status`,
+      {},
+      testEnv,
+    );
+    const { data: s } = await status.json();
+    expect(s.status).toBe("partial");
+    expect(s.receivedCents).toBe(30000);
+    expect(s.debtCents).toBe(49900);
+    expect(s.missingCents).toBe(19900);
   });
 });

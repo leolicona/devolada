@@ -276,6 +276,13 @@ export const directPayments = sqliteTable(
        `amountCents` on an ordinary payment and is smaller on a short one;
        the page's "faltan $X" is the difference. */
     receivedCents: integer("received_cents"),
+    /* What the receipt said was transferred, as the reader saw it
+       (partial-payment D5). This is the amount that has to travel to
+       Banxico: `sender.amount` is a search criterion, so asking with the
+       amount we *expected* finds nothing when the payer fell short — a
+       faceless `not_found` and six hours of silence for a real payment.
+       Null on the manual door, where nobody read anything. */
+    claimedAmountCents: integer("claimed_amount_cents"),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     /* unapplied (D14): the CEP was real but the debt was settled
        elsewhere meanwhile — visible, never silent */

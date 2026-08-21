@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in-development
 stories: [US-D10]
 domain: direct-payment
 updated: 2026-08-20
@@ -28,6 +28,9 @@ The customer owes the monthly fee plus a reconnection charge and transfers only 
 - **D10 — Overpayment is not a case this spec handles.** It is `accion: 1` with the real amount, and WispHub turns the surplus into a negative `saldo` — a credit against the next cycle, measured (`saldo: "-10.00"` after paying 60 against a 50 debt). No new status, no new field, nothing for Devolada to hold. Recording a credit of our own would be a promise about money sitting in the ISP's account, which `direct-payment` D4 exists to prevent.
 - **D11 — Stores keep the whole-payment rule.** Owner decision, 2026-08-20. At the counter the shopkeeper never types an amount, and giving them a free amount field would touch the balance cap, the commission and the confirm screen at once, while handing a mistypeable number to somebody holding real cash. The store channel gets `charges/debt-truth`'s fixes — the true total and the "Adeudo anterior" line — and nothing from this spec. **Rejected**: one partial-payment feature across both channels (the two failure modes are not the same: on SPEI the money has already moved when we find out, at the counter it has not).
 
+- **D12 — The amount that travels to Banxico is the one on the receipt, never the one we expected.** This decision exists because the spec as first written was not implementable, and the reason is worth keeping. `sender.amount` is a **search criterion**, not an assertion (direct-payment D11): asking apiCEP about a $514 transfer when the payer sent $499 finds nothing, and "nothing" is a `not_found`, which under D17 rides the schedule and ends in six hours of silence for a payment that really happened. Everything needed was already there and was being thrown away: Consta's own receipt door already sends *the amount printed on the receipt* (proof-extraction), and D18's reader already returns it — Devolada received it as `receiptAmountCents`, used it to refuse the submission, and then asked Banxico with the expected amount anyway. Now it is stored on the row (`claimed_amount_cents`) and it is what the lookup asks with. **The manual door is unchanged and still asks with the expected total**, because nobody read anything there; a payer who typed their data and fell short is found by D18's correction path, not by this one. **Rejected**: asking every payer to type the amount (D18 rejected confirming a number we already know, and here we do know it — it is on the receipt they just uploaded); accepting that partial payments only work through the receipt door (the reader misses one receipt in three, direct-payment D2, so a third of short payers would be stranded for the wrong reason).
+- **D13 — A reconnection that was deliberately not attempted has its own status: `withheld`.** `accion: 0` leaves the customer suspended on purpose, so the verify read that follows an ordinary payment would find them cut and report `queued` — which sends the sweep chasing a reconnection nobody asked for, four times, and ends in a red **"Fallido"** in the ISP's feed for a flow that worked exactly as designed. `withheld` is terminal like `reconnected` and `failed`, reads **"Sin reactivar"** in warning tone with its own icon (FRONTEND law: never colour alone), and the receipt says the service comes back when the rest arrives. **Rejected**: reusing `failed` (it sends the ISP looking for a problem that does not exist); reusing `queued` (it is a promise the system has decided not to keep, and the sweep would burn retries proving it).
+
 ## Schema
 
 ### Alter `isps`
@@ -38,6 +41,12 @@ The customer owes the monthly fee plus a reconnection charge and transfers only 
 ### Alter `direct_payments`
 
 - `status` gains **`partial`** — D6
+- ADD `received_cents` INTEGER — what the CEP says arrived (D6)
+- ADD `claimed_amount_cents` INTEGER — what the receipt said, and what the lookup asks Banxico with (D12); NULL on the manual door
+
+### Alter `charges`
+
+- `reconnection_status` gains **`withheld`** — D13
 
 ## Contract
 
@@ -67,9 +76,13 @@ Admin feed: a `partial` payment appears with its own label — *"pago parcial"* 
 8. The manual door with a short amount no longer expires after six hours: it is recognised as short and answered immediately (US-D10, D1)
 9. UI: the `partial` state renders the three amounts, the missing figure in pesos, no percentage anywhere, and the SPEI instructions still visible (US-D10, D7)
 10. The store channel is untouched: `POST /charges` still charges the full debt and has no amount field (D11)
+11. The receipt's amount is what travels to Banxico, and it is kept on the row (US-D10, D12)
+12. A withheld reconnection is terminal: the sweep never touches it and the ISP's feed reads "Sin reactivar", not "Fallido" (D13)
 
 ## Definition of Done
 
-- [ ] Scenarios 1–8 automated in the API layer; 9–10 with Testing Library + MSW
+- [x] Scenarios 1–7 and 11–12 automated in the API layer (`direct-payment.test.ts`, `US-D10` block +6 and two superseded scenarios rewritten); scenario 10 is the store suite, unchanged and still passing
+- [ ] Scenario 8 (the manual door with a short amount) — D12 leaves it to D18's correction path; it needs the amount field there before it can be asserted
+- [ ] Scenario 9 with Testing Library: the `partial` state renders the three amounts and no percentage
 - [ ] The ISP can set both controls from Configuración, with the default (100 / $0) explained in one line
 - [ ] Deployed check against a live tenant with a real router: a short transfer leaves the customer cut and its money on `saldo`; the remainder reconnects them

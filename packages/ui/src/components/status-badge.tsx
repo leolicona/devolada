@@ -51,6 +51,7 @@ export type Status =
   | "validating"
   | "paymentConfirmed"
   | "paymentInvalid"
+  | "paymentPartial"
   | "paymentExpired"
   | "unapplied";
 
@@ -82,6 +83,7 @@ const statuses: Record<
   validating: { tone: "info", icon: Hourglass, label: "Verificando pago" },
   paymentConfirmed: { tone: "success", icon: CheckCircle2, label: "Pago confirmado" },
   paymentInvalid: { tone: "error", icon: XCircle, label: "Pago no válido" },
+  paymentPartial: { tone: "warning", icon: PauseCircle, label: "Pago incompleto" },
   paymentExpired: { tone: "warning", icon: TimerOff, label: "Verificación expirada" },
   unapplied: { tone: "warning", icon: AlertTriangle, label: "Pago sin adeudo" },
 };

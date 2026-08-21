@@ -1,0 +1,1 @@
+ALTER TABLE `direct_payments` ADD `claimed_amount_cents` integer;

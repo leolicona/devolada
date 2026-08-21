@@ -158,11 +158,18 @@ export const directPaymentStatusResponse = z.object({
   status: z.enum([
     "validating",
     "confirmed",
+    "partial",
     "invalid",
     "expired",
     "unapplied",
     "superseded",
   ]),
+  /* partial-payment D7: the page speaks in pesos, never in percentages,
+     so the three numbers it needs arrive computed. Present once a
+     verdict exists. */
+  receivedCents: z.number().int().optional(),
+  debtCents: z.number().int().optional(),
+  missingCents: z.number().int().optional(),
   reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),

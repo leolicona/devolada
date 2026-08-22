@@ -313,18 +313,28 @@ export class WispHub {
     });
   }
 
-  /* Registers the payment. Async on WispHub's side (returns a task_id). */
+  /* Registers the payment. Async on WispHub's side when it has router
+     work to do — `accion: 1` answers with a `task_id`, `accion: 0` with
+     `null`, and that is the difference.
+
+     `accion` is the reconnection switch, measured 2026-08-20 on a real
+     router: `1` lifts the cut, `0` records the money and leaves it in
+     place. It takes those two values and no others (`2`, `3`, `99` all
+     answer 400). `auto_activar_servicio` does **not** decide this — a
+     payment with the flag off reconnected anyway, and one with the flag
+     on and `accion: 0` did not. See integrations/wisphub.md. */
   async registerPayment(
     invoiceId: number,
     paymentMethodId: number,
     amountCents: number,
     dateTime: string,
+    reconnect = true,
   ): Promise<void> {
     await this.request<{ messages?: string[] }>(`/facturas/${invoiceId}/registrar-pago/`, {
       method: "POST",
       body: JSON.stringify({
         forma_pago: paymentMethodId,
-        accion: 1,
+        accion: reconnect ? 1 : 0,
         fecha_pago: dateTime,
         total_cobrado: amountCents / 100,
       }),

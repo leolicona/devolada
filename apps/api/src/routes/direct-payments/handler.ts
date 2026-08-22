@@ -249,15 +249,20 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
   const amountCents = ispDebtCents + serviceFeeCents;
 
-  /* D18: the debt is now known, and so is what the receipt claimed. If
-     they disagree the provider lookup is already lost — `sender.amount`
-     is a filter, so it would answer the same faceless `invalid` a
-     nonexistent transfer gets, and the payer would wait out the whole
-     schedule to be told nothing. Refuse now, with the code that already
-     means this to them. No row, no credit. */
-  if (body.receiptAmountCents != null && body.receiptAmountCents !== amountCents) {
-    return c.json({ success: false, error: { code: "AMOUNT_MISMATCH" } }, 409);
-  }
+  /* partial-payment D1 supersedes the refusal that stood here. It read
+     the receipt's amount, compared it against the expected total and
+     answered `AMOUNT_MISMATCH` with no row written — while the money was
+     already in the ISP's account.
+
+     The comparison itself was never the problem: Consta sends the amount
+     **printed on the receipt** to Banxico (proof-extraction), so a short
+     transfer comes back as a real CEP for the real amount. We had the
+     answer and threw it away. Now the amount that came back decides how
+     much was settled (D5), and the row records it either way.
+
+     A misread still corrects itself without this guard: an amount that
+     was never transferred finds no CEP, which is a `not_found` and rides
+     D17's schedule while D18 asks the payer to check their data. */
 
   /* Release the old claim *before* the insert: the corrected row may well
      be claiming a clave that only differs by a character, and D8's index
@@ -279,6 +284,9 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         amountCents,
         invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
         carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+        /* The reader's amount, kept so the lookup asks Banxico about the
+           transfer the payer actually made (partial-payment D5) */
+        claimedAmountCents: body.receiptAmountCents ?? null,
         serviceFeeCents,
         proofMode: body.transfer ? "transfer" : "receipt",
         trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,
@@ -472,6 +480,19 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
       status: payment.status,
       ...(charge
         ? { reconnectionStatus: charge.reconnectionStatus, folio: charge.folio }
+        : {}),
+      /* D7: what arrived, what was owed and what is missing — in money,
+         computed here so the page never does arithmetic about a policy
+         the payer did not agree to. */
+      ...(payment.receivedCents !== null
+        ? {
+            receivedCents: payment.receivedCents,
+            debtCents: payment.invoiceCents + payment.carriedBalanceCents,
+            missingCents: Math.max(
+              0,
+              payment.invoiceCents + payment.carriedBalanceCents - payment.receivedCents,
+            ),
+          }
         : {}),
       validationAttempts: payment.validationAttempts,
       error: publicError(payment.lastError),

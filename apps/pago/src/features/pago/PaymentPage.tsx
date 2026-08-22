@@ -554,6 +554,42 @@ export function PaymentPage({ token }: { token: string }) {
           </>
         )}
 
+        {/* partial-payment D7: brutally honest, and in pesos. The payer is
+            told what arrived, what is missing and what happens when the
+            rest does — never a percentage, and never a green tick over a
+            service that is still cut. */}
+        {status.status === "partial" && (
+          <>
+            <StatusBadge status="paymentPartial" size="md" />
+            <p className="text-sm text-ink-soft">
+              {"receivedCents" in status && status.receivedCents != null ? (
+                <>
+                  Recibimos <Amount cents={status.receivedCents} /> de{" "}
+                  <Amount cents={status.debtCents ?? 0} />.{" "}
+                  {status.reconnectionStatus === "reconnected"
+                    ? "Tu servicio ya está activo."
+                    : "Tu servicio se reactivará cuando llegue el resto."}
+                </>
+              ) : (
+                "Recibimos tu pago, pero no cubre todo el adeudo."
+              )}
+            </p>
+            {"missingCents" in status && status.missingCents ? (
+              <p className="text-sm font-medium">
+                Faltan <Amount cents={status.missingCents} />
+              </p>
+            ) : null}
+            {"folio" in status && status.folio && (
+              <p className="font-mono text-sm text-ink-soft">Folio {status.folio}</p>
+            )}
+            {/* The next action is another transfer, so the instructions
+                stay one tap away instead of making them hunt for the CLABE */}
+            <Button variant="secondary" onClick={retry}>
+              Ver los datos para transferir
+            </Button>
+          </>
+        )}
+
         {status.status === "invalid" && (
           <>
             <StatusBadge status="paymentInvalid" size="md" />

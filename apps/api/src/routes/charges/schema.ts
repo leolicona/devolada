@@ -59,14 +59,14 @@ export const chargeRecordRequest = z.object({
 export const chargeResponse = z.object({
   id: z.string(),
   folio: z.string(),
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]),
   totalCents: z.number().int(),
   customerName: z.string(),
 });
 
 export const feedQuery = z.object({
   cursor: z.coerce.number().int().positive().optional(),
-  status: z.enum(["queued", "reconnected", "failed"]).optional(),
+  status: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
   storeId: z.string().optional(),
   from: z.coerce.number().int().positive().optional(),
   to: z.coerce.number().int().positive().optional(),
@@ -78,7 +78,7 @@ export const feedCharge = z.object({
   /* 'spei' = direct payment, no store involved (direct-payment D6);
      the feed marks the channel so the two are visually distinct */
   channel: z.enum(["store", "spei"]),
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]),
   totalCents: z.number().int(),
   invoiceCents: z.number().int(),
   carriedBalanceCents: z.number().int(),
@@ -102,7 +102,7 @@ export const receiptResponse = z.object({
   invoiceCents: z.number().int(),
   carriedBalanceCents: z.number().int(),
   serviceFeeCents: z.number().int(),
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]),
   text: z.string(),
   waLink: z.string(),
   phone: z.string().nullable(),

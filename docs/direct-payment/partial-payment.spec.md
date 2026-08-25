@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-D10]
 domain: direct-payment
-updated: 2026-08-20
+updated: 2026-08-25
 debt: []
 ---
 
@@ -54,7 +54,7 @@ The customer owes the monthly fee plus a reconnection charge and transfers only 
 
 `GET /direct-payments/links/:token` — unchanged in shape. The debt it reports already follows `charges/debt-truth` D7 (invoices + carried balance), so a payer who owes a remainder after a short transfer sees it here like any other debt.
 
-`POST /direct-payments/links/:token/pay` — the pre-flight `AMOUNT_MISMATCH` refusal (`handler.ts:241`) is **removed for amounts below the expected total**. A receipt claiming *less* is now a valid submission; a receipt claiming *more* stays a mismatch, because that is a misread, not a payment (the `$1-receipt` hole D11 guards runs the other way).
+`POST /direct-payments/links/:token/pay` — the pre-flight `AMOUNT_MISMATCH` refusal (`handler.ts:241`) is **removed entirely on the server**: what the CEP says arrived decides what is settled (D5), so the server has nothing to refuse by amount. The direction that stays refused — a receipt claiming **more** than the debt, which is a misread, not a payment — is refused **on the page**, at the reader's confirmation screen, before anything is submitted or spent; a receipt claiming *less* is a valid submission and travels with `receiptAmountCents` so the lookup asks Banxico about the transfer that really happened (D12). The response's `status` may be **`partial`** when the inline attempt finishes the validation.
 
 `GET /direct-payments/:id/status` — `status` may now be `partial`, and the response carries `receivedCents`, `debtCents` and `missingCents` so the page can render D7's copy without doing arithmetic of its own.
 
@@ -62,8 +62,8 @@ Admin feed: a `partial` payment appears with its own label — *"pago parcial"* 
 
 ## UI Contract
 
-- The result state for `partial`: `StatusBadge` with its own status, icon and text (FRONTEND law — never colour alone), the three amounts as `<Amount>`, and one sentence saying what is missing and what happens when it arrives.
-- The page keeps the SPEI instructions visible in the `partial` state: the payer's next action is another transfer, and making them navigate back to find the CLABE is a way to lose them.
+- The result state for `partial`: `StatusBadge` with its own status, icon and text (FRONTEND law — never colour alone), the three amounts as `<Amount>` with the missing figure carrying the weight of an amount, and one sentence saying what happens next. The sentence follows the reconnection, because `partial` is about the debt, not the router (D6): `reconnected` → the service is active; `queued` → it comes back in minutes, and the page keeps polling until it does; `withheld` → it comes back when the rest arrives.
+- The page keeps the SPEI instructions visible in the `partial` state: the CLABE stays on the screen with its copy button, and "Ver los datos para transferir" returns to step 1, where the debt is re-read fresh (D8) — the payer's next action is another transfer, and making them navigate back to find the CLABE is a way to lose them.
 - Copy is es-MX and says "pago", never "cobro" (D10 of the parent spec).
 
 ## Scenarios
@@ -86,6 +86,6 @@ Admin feed: a `partial` payment appears with its own label — *"pago parcial"* 
 
 - [x] Scenarios 1–7, 11–13 automated in the API layer (`direct-payment.test.ts`, `US-D10` block +6 and two superseded scenarios rewritten); scenario 10 is the store suite, unchanged and still passing
 - [ ] Scenario 8 (the manual door with a short amount) — D12 leaves it to D18's correction path; it needs the amount field there before it can be asserted
-- [ ] Scenario 9 with Testing Library: the `partial` state renders the three amounts and no percentage
+- [x] Scenario 9 with Testing Library (`pago.test.tsx`, "US-D10: the partial state" +3 and scenario 57 rewritten): the three amounts and no percentage, the CLABE still visible, the queued copy that keeps polling, and the button that lands on the transfer data
 - [ ] The ISP can set both controls from Configuración, with the default (100 / $0) explained in one line
 - [ ] Deployed check against a live tenant with a real router: a short transfer leaves the customer cut and its money on `saldo`; the remainder reconnects them

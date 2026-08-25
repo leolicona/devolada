@@ -26,10 +26,11 @@ export function receiptText(charge: Charge, storeName: string): string {
     ``,
     `Folio: ${charge.folio}`,
     `Cliente: ${charge.customerName}`,
-    `Mensualidad: $${pesos(charge.invoiceCents)}`,
+    /* debt-truth D16: the invoice total, not the plan's price */
+    `Cargo del periodo: $${pesos(charge.invoiceCents)}`,
     /* debt-truth D11: what the customer was already carrying gets its own
-       line. Folding it into the mensualidad would show a number that does
-       not match their plan and explain nothing. */
+       line. Folding it into the period's charge would show a number that
+       does not match their plan and explain nothing. */
     ...(charge.carriedBalanceCents > 0
       ? [`Adeudo anterior: $${pesos(charge.carriedBalanceCents)}`]
       : []),

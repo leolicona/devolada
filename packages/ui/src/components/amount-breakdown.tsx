@@ -25,7 +25,7 @@ export interface BreakdownLine {
 }
 
 export interface AmountBreakdownProps {
-  /* e.g. [{ label: "Mensualidad", cents: 40000 },
+  /* e.g. [{ label: "Cargo del periodo", cents: 40000 },
            { label: "Cargo por servicio", cents: 1500 }] */
   lines: BreakdownLine[];
   totalLabel?: string;

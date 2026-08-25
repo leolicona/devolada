@@ -132,7 +132,7 @@ export function Showcase() {
           <AmountBreakdown
             className="mt-6 border-t border-line-soft pt-4"
             lines={[
-              { label: "Mensualidad", cents: 40000 },
+              { label: "Cargo del periodo", cents: 40000 },
               { label: "Cargo por servicio", cents: 1500 },
             ]}
           />

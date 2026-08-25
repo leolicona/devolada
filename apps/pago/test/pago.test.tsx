@@ -58,7 +58,7 @@ describe("US-D01: the link shows the debt and the SPEI instructions", () => {
 
     expect(await screen.findByText("WifiPlus")).toBeInTheDocument();
     expect(screen.getByText("Janely")).toBeInTheDocument();
-    expect(screen.getByText("Mensualidad")).toBeInTheDocument();
+    expect(screen.getByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
     expect(screen.getByText("Total a pagar")).toBeInTheDocument();
     expect(screen.getByText("646180157000000004")).toBeInTheDocument();

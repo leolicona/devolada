@@ -841,9 +841,10 @@ export function PaymentPage({ token }: { token: string }) {
         <div>
           <AmountBreakdown
             lines={[
-              { label: "Mensualidad", cents: data.invoiceCents! },
+              /* debt-truth D16: the invoice total, not the plan's price */
+              { label: "Cargo del periodo", cents: data.invoiceCents! },
               /* debt-truth D11: what was already owed gets its own line.
-                 Folded into the mensualidad it would be a number that
+                 Folded into the period's charge it would be a number that
                  matches no plan and explains nothing. */
               ...(data.carriedBalanceCents
                 ? [{ label: "Adeudo anterior", cents: data.carriedBalanceCents }]

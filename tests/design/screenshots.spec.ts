@@ -85,7 +85,7 @@ const receipt = {
   carriedBalanceCents: 0,
   serviceFeeCents: 1500,
   reconnectionStatus: "queued",
-  text: "Devolada · Comprobante DV-A1B2C3\nJanely Guadalupe Reyes\nMensualidad $499.00\nServicio $15.00\nTotal $514.00",
+  text: "Devolada · Comprobante DV-A1B2C3\nJanely Guadalupe Reyes\nCargo del periodo $499.00\nServicio $15.00\nTotal $514.00",
   waLink: "https://wa.me/525512345678?text=Devolada",
   phone: "5512345678",
 };
@@ -97,6 +97,16 @@ const settings = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphub: { configured: true, keyTail: "9f3a" },
+  spei: {
+    clabe: null,
+    bank: null,
+    beneficiaryName: null,
+    serviceFeeCents: null,
+    effectiveServiceFeeCents: 1500,
+    bankUnknown: false,
+    configured: false,
+  },
+  reconnection: { thresholdPercent: 100, floorCents: 0 },
 };
 
 const storeDetail = {

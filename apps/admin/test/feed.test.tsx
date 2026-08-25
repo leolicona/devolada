@@ -49,7 +49,7 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
 
     await userEvent.click(row);
     expect(await screen.findByText("Folio DV-FEED01")).toBeInTheDocument();
-    expect(screen.getByText("Mensualidad")).toBeInTheDocument();
+    expect(screen.getByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
   });
 

@@ -112,7 +112,8 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
                    honest name — it is the ask, not what arrived */
                 totalLabel={shortCents > 0 ? "Total a cobrar" : "Total"}
                 lines={[
-                  { label: "Mensualidad", cents: charge.invoiceCents },
+                  /* debt-truth D16: the invoice total, not the plan's price */
+                  { label: "Cargo del periodo", cents: charge.invoiceCents },
                   /* debt-truth D11: its own line, so the ISP can see why
                      a charge was larger than the customer's plan */
                   ...(charge.carriedBalanceCents

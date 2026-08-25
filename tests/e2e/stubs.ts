@@ -52,14 +52,20 @@ export const cashbox = {
   lastCashDrop: { id: "d1", cents: 40000, status: "pending", note: null, createdAt: at },
 };
 
+/* Post-debt-truth wire shape (charges D13): `invoiceCents` +
+   `carriedBalanceCents`, never `monthlyFeeCents`. These stubs drifted
+   once and the screens rendered $NaN while every geometry assertion
+   passed — `expectNothingClipped` now watches for that too. */
 export const feed = {
   charges: [
     {
       id: "ch-1",
       folio: "DV-FEED01",
+      channel: "store",
       reconnectionStatus: "failed",
       totalCents: 41400,
-      monthlyFeeCents: 39900,
+      invoiceCents: 39900,
+      carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       customerName: "Janely Guadalupe Reyes",
       storeName: "Abarrotes La Esquina",
@@ -71,9 +77,11 @@ export const feed = {
     {
       id: "ch-2",
       folio: "DV-FEED02",
+      channel: "store",
       reconnectionStatus: "reconnected",
       totalCents: 51400,
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       customerName: "Abraham Flores",
       storeName: "Miscelánea Lupita",
@@ -168,7 +176,8 @@ export const customers = {
       zone: "Zona dia 15",
       serviceStatus: "suspended",
       billingStatus: "due",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
       /* This customer has a number in WispHub (customer-phone US-C07),
          like the unit fixtures' default. Missing here, it read as
          `undefined` and the confirm screen offered the optional capture
@@ -181,7 +190,7 @@ export const customers = {
 
 export const quote = {
   customer: customers.customers[0],
-  quote: { monthlyFeeCents: 49900, serviceFeeCents: 1500, totalCents: 51400 },
+  quote: { invoiceCents: 49900, carriedBalanceCents: 0, serviceFeeCents: 1500, totalCents: 51400 },
   cap: { balanceCents: 91000, capCents: 500000, blocked: false },
 };
 
@@ -234,7 +243,8 @@ export const paymentLink = {
   ispName: "WifiPlus",
   customerName: "Janely Reyes",
   status: "debt",
-  monthlyFeeCents: 49900,
+  invoiceCents: 49900,
+  carriedBalanceCents: 0,
   serviceFeeCents: 1500,
   totalCents: 51400,
   speiClabe: "646180157000000004",

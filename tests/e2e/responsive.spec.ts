@@ -55,6 +55,14 @@ async function expectNothingClipped(page: Page) {
       if (node.children.length > 0) continue; /* leaves hold the text */
       const text = node.textContent?.trim();
       if (!text) continue;
+      /* design-review 2026-08-25 finding 7: a stub that drifts from the
+         wire shape makes `formatMoney(undefined)` render "$NaN" without
+         throwing, and every geometry assertion passes over it. Same
+         class as clipping: the page renders and says nothing. */
+      if (/\bNaN\b/.test(text)) {
+        bad.push(`"${text.slice(0, 40)}" contains NaN — a number failed to render`);
+        continue;
+      }
       const style = getComputedStyle(node);
       /* sr-only clips on purpose: an absolute 1px box for assistive tech.
          A collapsed row column is neither absolute nor 1px tall. */

@@ -17,8 +17,18 @@ Scope: the last three merged PRs — #81 (specs), #82 (debt truth), #83 (partial
 > scenario 57 plus the new "US-D10: the partial state" block in
 > `pago.test.tsx`; the spec's contract and UI-contract sections were updated
 > to match. The pago screenshots below were regenerated against the fixed
-> build, so they show the outcome, not the defect. Findings 2, 4, 6, 7 and 8
-> remain open.
+> build, so they show the outcome, not the defect.
+>
+> **Second pass (same day):** findings 2, 6 and 7 are fixed too. The feed's
+> detail derives the short payment in plain code — "Total a cobrar",
+> "Recibido" and "Faltan" (the payer's own figure), plus the "Pago parcial"
+> label and the "Sin reactivar" chip — recorded as `partial-payment` D15 and
+> scenario 14, tested in `feed.test.tsx`. The browser stubs now speak the
+> post-#82 wire shape, and `expectNothingClipped` also fails on any leaf
+> containing `NaN` (verified red against a deliberately drifted stub before
+> the fix). The admin screenshots were regenerated. Still open: finding 4
+> (the "Mensualidad" label, needs a glossary decision) and finding 8 (the
+> threshold controls in Configuración, tracked in the spec's DoD).
 
 ## Screenshots Captured
 

@@ -26,9 +26,17 @@ Scope: the last three merged PRs — #81 (specs), #82 (debt truth), #83 (partial
 > scenario 14, tested in `feed.test.tsx`. The browser stubs now speak the
 > post-#82 wire shape, and `expectNothingClipped` also fails on any leaf
 > containing `NaN` (verified red against a deliberately drifted stub before
-> the fix). The admin screenshots were regenerated. Still open: finding 4
-> (the "Mensualidad" label, needs a glossary decision) and finding 8 (the
-> threshold controls in Configuración, tracked in the spec's DoD).
+> the fix). The admin screenshots were regenerated.
+>
+> **Third pass (same day) — all nine findings closed.** Finding 4: the owner
+> chose **"Cargo del periodo"** (debt-truth D16, glossary entry added); the
+> label changed on all four surfaces and the receipt. Finding 8: the
+> **Reconexión con pago incompleto** card shipped in Configuración — the
+> threshold percentage and the floor in pesos, with the meaning of the
+> current values computed in one live sentence (see
+> `screenshots/review-admin-ajustes-reconexion-1280.png`); tested in
+> `settings.test.ts` and `settings.test.tsx`, and the spec's last DoD boxes
+> are checked. Every screenshot below shows the current build.
 
 ## Screenshots Captured
 
@@ -43,6 +51,7 @@ fixtures in the post-#82 wire shape.
 | `review-tienda-buscar-adeudo-375.png` (+`-dark`) | Mobile (375×812) | Search results showing the true debt (invoice + carried) |
 | `review-tienda-confirmar-adeudo-{375,768}.png` (+`-375-dark`) | 375 / 768 | Confirm screen with the "Adeudo anterior" line |
 | `review-admin-cobros-parcial-{1280,375}.png` (+`-1280-dark`) | 1280 / 375 | Feed with a withheld partial SPEI charge and a store charge, both expanded |
+| `review-admin-ajustes-reconexion-{1280,375}.png` (+`-1280-dark`) | 1280 / 375 | Configuración with the reconnection dial (finding 8 fixed) |
 | `review-pago-transferir-adeudo-{375,768}.png` (+`-375-dark`) | 375 / 768 | Payment page step 1 with the carried-balance breakdown |
 | `review-pago-parcial-{375,768}.png` (+`-375-dark`) | 375 / 768 | The `partial` result state, CLABE visible (finding 3 fixed) |
 | `review-pago-parcial-regreso-375.png` (+`-dark`) | 375 | "Ver los datos para transferir" landing on step 1 (finding 3 fixed) |

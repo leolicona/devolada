@@ -45,6 +45,11 @@ function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
       configured:
         Boolean(isp.speiClabe && isp.speiBeneficiaryName) && speiBankIsKnown(isp),
     },
+    /* partial-payment D2/D4: the short-payment dial, defaults 100 / $0 */
+    reconnection: {
+      thresholdPercent: isp.reconnectionThresholdPercent,
+      floorCents: isp.reconnectionFloorCents,
+    },
   };
 }
 
@@ -102,6 +107,12 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
         : {}),
       ...(body.speiServiceFeeCents !== undefined
         ? { speiServiceFeeCents: body.speiServiceFeeCents }
+        : {}),
+      ...(body.reconnectionThresholdPercent !== undefined
+        ? { reconnectionThresholdPercent: body.reconnectionThresholdPercent }
+        : {}),
+      ...(body.reconnectionFloorCents !== undefined
+        ? { reconnectionFloorCents: body.reconnectionFloorCents }
         : {}),
     })
     .where(eq(isps.id, isp.id));

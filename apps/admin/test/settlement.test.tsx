@@ -22,6 +22,7 @@ const settings = settingsResponse.parse({
     bankUnknown: false,
     configured: false,
   },
+  reconnection: { thresholdPercent: 100, floorCents: 0 },
 });
 
 describe("US-L01: the settlement statement lives in Configuración", () => {

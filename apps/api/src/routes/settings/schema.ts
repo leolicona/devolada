@@ -53,6 +53,13 @@ export const settingsResponse = z.object({
     bankUnknown: z.boolean(),
     configured: z.boolean(),
   }),
+  /* partial-payment D2/D4: when a transfer falls short, these two decide
+     whether the router is touched. Both must hold; the defaults (100 / $0)
+     mean only a full payment reconnects. */
+  reconnection: z.object({
+    thresholdPercent: z.number().int().min(0).max(100),
+    floorCents: z.number().int().nonnegative(),
+  }),
 });
 
 export const settingsPatchRequest = z
@@ -69,6 +76,10 @@ export const settingsPatchRequest = z
     speiBank: z.string().trim().pipe(z.enum(BANKS)).nullable(),
     speiBeneficiaryName: z.string().trim().min(3).max(120).nullable(),
     speiServiceFeeCents: z.number().int().nonnegative().nullable(),
+    /* partial-payment D2/D4: one percentage and one floor — two extremes
+       of the same dial, never a separate switch that could disagree. */
+    reconnectionThresholdPercent: z.number().int().min(0).max(100),
+    reconnectionFloorCents: z.number().int().nonnegative(),
   })
   .partial();
 

@@ -161,9 +161,30 @@ async function stubTienda(page: Page) {
   await json(page, (u) => u.pathname.endsWith("/charges/customers"), customers);
 }
 
+const adminSettings = {
+  serviceFeeCents: 1500,
+  storeCommissionCents: 900,
+  platformShareCents: 600,
+  timezone: "America/Mexico_City",
+  timeFormat: "12h",
+  wisphub: { configured: true, keyTail: "9f3a" },
+  spei: {
+    clabe: "646180157000000004",
+    bank: "STP",
+    beneficiaryName: "WifiPlus SA de CV",
+    serviceFeeCents: null,
+    effectiveServiceFeeCents: 1500,
+    bankUnknown: false,
+    configured: true,
+  },
+  reconnection: { thresholdPercent: 100, floorCents: 0 },
+};
+
 async function stubAdmin(page: Page) {
   await json(page, (u) => u.pathname.endsWith("/auth/me"), ispActor);
   await json(page, (u) => u.pathname.includes("/charges/feed"), feed);
+  await json(page, (u) => u.pathname.endsWith("/settings"), adminSettings);
+  await json(page, (u) => u.pathname.endsWith("/settlement"), { months: [] });
 }
 
 async function stubPago(page: Page, reading: object = shortReading) {
@@ -227,6 +248,14 @@ const shots: Shot[] = [
       }
       await expect(page.getByText("Folio DV-PARC01")).toBeVisible();
     },
+  },
+  {
+    /* partial-payment D2/D4: the dial, with its meaning in one sentence */
+    slug: "admin-ajustes-reconexion",
+    url: `${ADMIN}/settings`,
+    stub: stubAdmin,
+    ready: "Reconexión con pago incompleto",
+    widths: [1280, 375],
   },
   {
     slug: "pago-transferir-adeudo",

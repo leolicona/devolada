@@ -112,3 +112,84 @@ describe("D5: the status chips re-query the feed", () => {
     expect(seen).toContain("failed");
   });
 });
+
+/* docs/direct-payment/partial-payment.spec.md scenario 14 (US-D10, D15):
+   `totalCents` is what arrived, the other fields are what was asked, and
+   the detail has to name the difference — the row header and a derived
+   breakdown total disagreed on the same card with nothing in between. */
+describe("US-D10: a short payment explains itself in the feed", () => {
+  /* $300.00 arrived against a $514.00 ask ($499.00 of ISP debt) */
+  const partial = charge({
+    id: "ch-p1",
+    folio: "DV-PARC01",
+    channel: "spei" as const,
+    storeName: null,
+    reconnectionStatus: "withheld" as const,
+    totalCents: 30000,
+    invoiceCents: 49900,
+    reconnectedAt: null,
+  });
+
+  it("scenario 14: the detail shows the ask, the received amount and the missing figure", async () => {
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [partial])),
+      ),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    /* the label, not only the badge: a partial that reconnected would
+       wear a green "Reconectado" and pass for a full payment */
+    expect(within(row).getByText(/pago directo · spei · pago parcial/i)).toBeInTheDocument();
+    expect(within(row).getByText("Sin reactivar")).toBeInTheDocument();
+
+    await userEvent.click(row);
+    /* the ask keeps its breakdown, under its honest name */
+    expect(await screen.findByText("Total a cobrar")).toBeInTheDocument();
+    expect(screen.getByText("$514.00")).toBeInTheDocument();
+    /* what arrived and what is missing — the same figure the payer's
+       page shows, so both sides quote the same number on the phone */
+    expect(screen.getByText("Recibido")).toBeInTheDocument();
+    expect(screen.getByText("Faltan")).toBeInTheDocument();
+    expect(screen.getByText("$199.00")).toBeInTheDocument();
+  });
+
+  it("a full payment keeps its plain breakdown", async () => {
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [charge()])),
+      ),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    expect(within(row).queryByText(/pago parcial/i)).not.toBeInTheDocument();
+
+    await userEvent.click(row);
+    expect(await screen.findByText("Total")).toBeInTheDocument();
+    expect(screen.queryByText("Total a cobrar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recibido")).not.toBeInTheDocument();
+    expect(screen.queryByText("Faltan")).not.toBeInTheDocument();
+  });
+
+  it("the 'Sin reactivar' chip requests status=withheld", async () => {
+    const seen: (string | null)[] = [];
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.feed((url) => {
+        seen.push(url.searchParams.get("status"));
+        return ok(feedOf([partial]));
+      }),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Sin reactivar" }));
+    await screen.findByRole("button", { name: /janely/i });
+
+    expect(seen).toContain("withheld");
+  });
+});

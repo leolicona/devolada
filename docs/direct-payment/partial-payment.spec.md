@@ -33,6 +33,8 @@ The customer owes the monthly fee plus a reconnection charge and transfers only 
 
 - **D14 — The fee is a receivable against the ISP, not a slice of the transfer. The commission is never forgiven.** On this channel every peso the payer sends lands in the **ISP's own bank account** — Devolada never touches the money (direct-payment D4). So what Devolada holds is not a cut taken out of the transfer; it is a debt the ISP accumulates transaction by transaction and settles through the monthly statement (`platform/settlement.spec.md` D1, which derives the share from `charges.service_fee_cents`). That is true whichever way the fee switch points: if the **ISP** absorbs the fee, the ISP keeps everything the payer sent and owes Devolada the fee; if the **payer** covers it, the payer's extra pesos landed in the ISP's account too, so the ISP owes them onward. The physical receiver of the money is the debtor, always. **The consequence for a short payment is the one that had to be written down:** D3's waterfall — the ISP's debt first, our fee last — decides how much of the transfer reaches WispHub's books, and **decides nothing about what Devolada earned**. A payer who covers the mensualidad and none of the fee is reconnected, the ISP is made whole in WispHub, and the fee still accrues; the ISP absorbs the difference, which is the same thing they signed up for when the switch defaults to them paying it anyway. **Rejected**: letting the shortfall cancel the fee, which is what the first implementation did — `service_fee_cents` was written as "whatever was left over", so the statement quietly under-counted and Devolada forgave its own commission on every short payment, for a service it had already rendered and paid provider credits for.
 
+- **D15 — The feed explains a short payment with the numbers it already has (2026-08-25, from the design review).** A charge created by D9 records what **arrived** (`totalCents`) while `invoiceCents`, `carriedBalanceCents` and `serviceFeeCents` keep what was **asked** — so the expanded row derived a "Total $514.00" from its breakdown lines under a row header that said $300.00: two totals on one card, and nothing naming the gap. The detail now derives the difference in plain code, with **no wire change**: when `totalCents` falls short of the ask, the breakdown's total is labeled **"Total a cobrar"** and two lines follow — **"Recibido"** (the row's own amount) and, when the ISP's debt itself is short, **"Faltan"** with `invoiceCents + carriedBalanceCents − totalCents`. That is the same `missingCents` the payer's page shows (D3's waterfall guarantees it: below the debt no fee is covered, at or above it nothing is missing), so the ISP and the payer quote the same figure on the phone. The channel line carries the **"Pago parcial"** label for rows whose debt is short — a partial that reconnected under a lenient threshold wears a green "Reconectado" badge and would otherwise be indistinguishable from a full payment. The status chips gain **"Sin reactivar"**: money that arrived without buying a reconnection is precisely what an ISP audits, and it was reachable only by scrolling "Todos". **Rejected**: new wire fields (`receivedCents`/`missingCents` on `feedCharge`) — every number is derivable from what the row already carries; making the received amount the breakdown's own total (it hides what was asked, which is the question the tap opens).
+
 ## Schema
 
 ### Alter `isps`
@@ -58,7 +60,7 @@ The customer owes the monthly fee plus a reconnection charge and transfers only 
 
 `GET /direct-payments/:id/status` — `status` may now be `partial`, and the response carries `receivedCents`, `debtCents` and `missingCents` so the page can render D7's copy without doing arithmetic of its own.
 
-Admin feed: a `partial` payment appears with its own label — *"pago parcial"* — never inside the `confirmed` count.
+Admin feed: a `partial` payment appears with its own label — *"Pago parcial"* — never inside the `confirmed` count, and its detail shows what was asked, what arrived and what is missing (D15). `GET /charges/feed` accepts `status=withheld` and the UI ships the chip for it.
 
 ## UI Contract
 
@@ -81,6 +83,7 @@ Admin feed: a `partial` payment appears with its own label — *"pago parcial"* 
 11. The receipt's amount is what travels to Banxico, and it is kept on the row (US-D10, D12)
 12. A withheld reconnection is terminal: the sweep never touches it and the ISP's feed reads "Sin reactivar", not "Fallido" (D13)
 13. A short payment accrues the **whole** fee to the platform statement, even when the payer covered none of it (US-L01, D14)
+14. UI: a short payment's feed detail shows "Total a cobrar", "Recibido" and "Faltan" — the same missing figure the payer sees — the row is labeled "Pago parcial", the "Sin reactivar" chip requests `status=withheld`, and a full payment's breakdown stays untouched (US-D10, D15)
 
 ## Definition of Done
 

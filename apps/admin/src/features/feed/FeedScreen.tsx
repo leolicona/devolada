@@ -30,6 +30,9 @@ const statusFilters = [
   { value: ALL, label: "Todos" },
   { value: "queued", label: "En cola" },
   { value: "failed", label: "Fallidos" },
+  /* partial-payment D15: money that arrived without buying a
+     reconnection is what an ISP audits — it gets its own chip. */
+  { value: "withheld", label: "Sin reactivar" },
   { value: "reconnected", label: "Reconectados" },
 ] as const;
 
@@ -55,6 +58,17 @@ const reasonFor = (code: string) => reasons[code] ?? "WispHub no respondió. Lo 
 function ChargeRow({ charge }: { charge: FeedCharge }) {
   const { timeFormat, timezone } = useDisplaySettings();
   const at = (ms: number) => formatTime(ms, timeFormat, timezone);
+  /* partial-payment D15: `totalCents` is what arrived (D9); the other
+     three fields are what was asked. A short payment is the difference,
+     derived here — no wire field carries it. `missingCents` matches the
+     payer's page exactly: below the debt no fee is covered (D3), so the
+     ISP and the payer quote the same figure. */
+  const askCents = charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
+  const shortCents = askCents - charge.totalCents;
+  const missingCents = Math.max(
+    0,
+    charge.invoiceCents + charge.carriedBalanceCents - charge.totalCents,
+  );
   return (
     <li>
       <Collapsible>
@@ -70,8 +84,12 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
             <span className="block text-sm font-medium">{charge.customerName}</span>
             {/* US-D06: a direct payment has no store — the channel is
                 named instead, so both kinds stay distinguishable */}
+            {/* D15: the label, not only the badge — a partial that
+                reconnected under a lenient threshold wears a green
+                "Reconectado" and would otherwise pass for a full payment */}
             <span className="block text-sm text-muted-foreground">
               {charge.channel === "spei" ? "Pago directo · SPEI" : charge.storeName}
+              {missingCents > 0 && " · Pago parcial"}
             </span>
           </span>
           <Amount
@@ -90,6 +108,9 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
           <div className="grid gap-6 border-t border-line-soft bg-muted/50 p-4 pl-20 sm:grid-cols-2">
             <div>
               <AmountBreakdown
+                /* D15: with "Recibido" below, the derived sum needs its
+                   honest name — it is the ask, not what arrived */
+                totalLabel={shortCents > 0 ? "Total a cobrar" : "Total"}
                 lines={[
                   { label: "Mensualidad", cents: charge.invoiceCents },
                   /* debt-truth D11: its own line, so the ISP can see why
@@ -100,6 +121,24 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
                   { label: "Cargo por servicio", cents: charge.serviceFeeCents },
                 ]}
               />
+              {shortCents > 0 && (
+                <dl className="mt-2 space-y-2 text-base">
+                  <div className="flex justify-between gap-4 font-semibold">
+                    <dt>Recibido</dt>
+                    <dd>
+                      <Amount cents={charge.totalCents} />
+                    </dd>
+                  </div>
+                  {missingCents > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Faltan</dt>
+                      <dd>
+                        <Amount cents={missingCents} />
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              )}
               <p className="mt-3 font-mono text-sm text-muted-foreground">Folio {charge.folio}</p>
             </div>
             <div className="text-sm text-muted-foreground">

@@ -24,12 +24,13 @@ The Cobros section: the ISP watches money come in, in near real time, with the r
 
 `GET /charges/feed` (session cookie, **ISP only**)
 
-Query: `cursor` (ms) · `status` (`queued|reconnected|failed`) · `storeId` · `from`/`to` (ms)
+Query: `cursor` (ms) · `status` (`queued|reconnected|failed|withheld` — `withheld` added 2026-08-25 by `direct-payment/partial-payment.spec.md` D13/D15) · `storeId` · `from`/`to` (ms)
 
 ```
-{ charges: [ { id, folio, reconnectionStatus, totalCents, monthlyFeeCents,
+{ charges: [ { id, folio, channel, reconnectionStatus, totalCents,
+               invoiceCents, carriedBalanceCents,   // renamed/added by charges/debt-truth D13
                serviceFeeCents, customerName, storeName, createdAt,
-               reconnectedAt, attempts } ],
+               reconnectedAt, attempts, lastError } ],
   nextCursor: number | null,
   today: { count, totalCents, startedAtMs } }  // the day starts in the ISP's timezone (settings D5)
 ```
@@ -38,8 +39,8 @@ Newest first, 20 per page. 401/403 as usual; a store session gets 403.
 
 ## UI Contract
 
-- Cobros section (`src/features/feed/`): today strip ("Hoy: $X · N cobros"), the failed-attention strip (D3), status filter chips (Todos · En cola · Fallidos · Reconectados), the list with time, customer, store, `StatusBadge` and amount, refreshing every 5s (`aria-live`).
-- Row tap expands: `AmountBreakdown`, folio in mono, and the timeline (registrado → intentos → reconectado/fallido con horas).
+- Cobros section (`src/features/feed/`): today strip ("Hoy: $X · N cobros"), the failed-attention strip (D3), status filter chips (Todos · En cola · Fallidos · Sin reactivar · Reconectados — the fourth added 2026-08-25 by `direct-payment/partial-payment.spec.md` D15), the list with time, customer, store, `StatusBadge` and amount, refreshing every 5s (`aria-live`).
+- Row tap expands: `AmountBreakdown`, folio in mono, and the timeline (registrado → intentos → reconectado/fallido con horas). A short payment's detail adds "Recibido"/"Faltan" and the row wears "Pago parcial" (`partial-payment` D15).
 - Mobile: rows stay readable as stacked cards. "Cargar más" pagination.
 
 ## Scenarios

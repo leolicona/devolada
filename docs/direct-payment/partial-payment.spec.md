@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-D10]
 domain: direct-payment
-updated: 2026-08-25
+updated: 2026-08-26
 debt: []
 ---
 
@@ -92,3 +92,11 @@ Admin feed: a `partial` payment appears with its own label — *"Pago parcial"* 
 - [x] Scenario 9 with Testing Library (`pago.test.tsx`, "US-D10: the partial state" +3 and scenario 57 rewritten): the three amounts and no percentage, the CLABE still visible, the queued copy that keeps polling, and the button that lands on the transfer data
 - [x] The ISP can set both controls from Configuración, with the default (100 / $0) explained in one line — and the sentence recomputed live as the numbers change (`settings.test.ts` "US-D10" +3, `settings.test.tsx` "US-D10" +2)
 - [ ] Deployed check against a live tenant with a real router: a short transfer leaves the customer cut and its money on `saldo`; the remainder reconnects them
+
+## Open items — reserved for one follow-up PR, after `feat/validation-status-ux` merges
+
+Agreed with the owner 2026-08-26, out of live overpayment testing (a real $5 transfer against a $4 debt walked into every refusal this spec still keeps). The first two are one conceptual amendment across both doors — **the lookup asks with the amount the payer actually sent** — and the third is a friction cut the same review surfaced:
+
+- **Overpayment stops being refused on the receipt door.** The page's "mayor que tu adeudo" refusal (Contract above) reverses: the machinery already exists — `claimed_amount_cents` travels to Banxico (D12), `settle()` reconnects on received ≥ debt, and scenario 6 already pins `confirmed` with the surplus as negative `saldo` (D10, measured). The refusal's justification — an inflated misread buying six silent hours — died when validation-status-ux built the staged escalation and both doors. The confirmation screen informs instead of refusing, in pesos (D7's voice): what the receipt says, what is owed, and that the surplus stays as credit with the ISP for the next invoice. D10's own half stands untouched: no new status, no credit stored in Devolada.
+- **The manual door asks for the amount — pre-filled with the expected total, editable.** Reverses direct-payment D18's "never ask the amount": its premise ("we already know the number") died with D1. What we know is what the payer *should* have sent; what the lookup needs is what they *did* send, and on this door only the payer has it — the same standing the clave already has. Pre-filling keeps the happy path untouched (no confirmation ritual to click through); editing is deliberate. The same field joins validation-status-ux's correction form, which closes the gap scenario 8 waits on (see DoD) and gives the stuck `not_found` payer their fourth correctable field. `claimed_amount_cents` stops being NULL on this door.
+- **`spei_beneficiary_name` becomes optional in the SPEI config.** The verified contract (`docs/integrations/apicep.md`) requires only `clabe` + `bank`; `name` is optional in both modes. The three gates that demand it are all ours: the settings spei-ready check, the validation guard, and the page's beneficiary row. When absent, the request omits it and the page hides the row. Kept as a *recommended* field, not deleted: the name is the payer's one chance to sanity-check who they are paying, and whether apiCEP uses a wrong name as a match criterion is unmeasured — omitting beats guessing.

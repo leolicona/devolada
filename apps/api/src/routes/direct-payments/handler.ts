@@ -318,6 +318,38 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     /* D8: the partial unique index is what makes one transfer pay
        once — racing concurrent submissions included */
     if (isUniqueViolation(e)) {
+      /* validation-status-ux D9: the reader's misreads are deterministic,
+         so a re-uploaded capture reproduces the same wrong clave — and a
+         payer whose "Verificando" context is gone collides with their own
+         live row. Attach to it instead of accusing them with somebody
+         else's transfer. Any other owner — another link, or a terminal
+         row that already consumed the transfer — still refuses. */
+      const collidingKey = body.transfer?.trackingKey.toUpperCase();
+      if (collidingKey) {
+        const [own] = await db
+          .select()
+          .from(directPayments)
+          .where(
+            and(
+              eq(directPayments.paymentLinkId, link.id),
+              eq(directPayments.trackingKey, collidingKey),
+              eq(directPayments.status, "validating"),
+            ),
+          );
+        if (own) {
+          return c.json(
+            {
+              success: true,
+              data: {
+                directPaymentId: own.id,
+                status: "validating" as const,
+                error: publicError(own.lastError),
+              },
+            },
+            200,
+          );
+        }
+      }
       return c.json({ success: false, error: { code: "TRANSFER_ALREADY_USED" } }, 409);
     }
     throw e;

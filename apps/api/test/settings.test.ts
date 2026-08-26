@@ -227,3 +227,77 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
     expect(data.spei.effectiveServiceFeeCents).toBe(data.serviceFeeCents);
   });
 });
+
+/* docs/direct-payment/partial-payment.spec.md D2/D4 (US-D10): the two
+   numbers that decide whether a short payment buys the service back. */
+describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
+  it("reads the defaults (100 / $0) and saves both numbers", async () => {
+    await seedIsp();
+    const client = await app();
+
+    const before = await client.request("/settings", asIsp, env);
+    expect((await before.json()).data.reconnection).toEqual({
+      thresholdPercent: 100,
+      floorCents: 0,
+    });
+
+    const saved = await client.request(
+      ...send("/settings", "PATCH", {
+        reconnectionThresholdPercent: 70,
+        reconnectionFloorCents: 20000,
+      }),
+      env,
+    );
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).data.reconnection).toEqual({
+      thresholdPercent: 70,
+      floorCents: 20000,
+    });
+
+    const [isp] = await drizzle(env.DB).select().from(isps);
+    expect(isp.reconnectionThresholdPercent).toBe(70);
+    expect(isp.reconnectionFloorCents).toBe(20000);
+  });
+
+  it("refuses a percentage outside 0–100 and a negative floor", async () => {
+    await seedIsp();
+    const client = await app();
+
+    const over = await client.request(
+      ...send("/settings", "PATCH", { reconnectionThresholdPercent: 101 }),
+      env,
+    );
+    expect(over.status).toBe(400);
+
+    const negative = await client.request(
+      ...send("/settings", "PATCH", { reconnectionFloorCents: -1 }),
+      env,
+    );
+    expect(negative.status).toBe(400);
+
+    /* the refusals changed nothing */
+    const res = await client.request("/settings", asIsp, env);
+    expect((await res.json()).data.reconnection).toEqual({
+      thresholdPercent: 100,
+      floorCents: 0,
+    });
+  });
+
+  it("a store session cannot touch the dial", async () => {
+    const isp = await seedIsp();
+    await seedStore(isp.id);
+    const res = await (await app()).request(
+      "/settings",
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: await sessionCookieHeader("5512345678"),
+        },
+        body: JSON.stringify({ reconnectionThresholdPercent: 0 }),
+      },
+      env,
+    );
+    expect(res.status).toBe(403);
+  });
+});

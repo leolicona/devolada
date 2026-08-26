@@ -37,6 +37,7 @@ function json(page: Page, match: (url: URL) => boolean, data: unknown) {
   );
 }
 
+/* Post-debt-truth wire shape (charges D13), matching e2e/stubs.ts */
 const customers = {
   customers: [
     {
@@ -46,7 +47,8 @@ const customers = {
       zone: "Zona dia 15",
       serviceStatus: "suspended",
       billingStatus: "due",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
     },
     {
       wisphubId: 9,
@@ -55,14 +57,15 @@ const customers = {
       zone: "Col. El Mirador",
       serviceStatus: "active",
       billingStatus: "paid",
-      monthlyFeeCents: 39900,
+      invoiceCents: 39900,
+      carriedBalanceCents: 0,
     },
   ],
 };
 
 const quote = {
   customer: customers.customers[0],
-  quote: { monthlyFeeCents: 49900, serviceFeeCents: 1500, totalCents: 51400 },
+  quote: { invoiceCents: 49900, carriedBalanceCents: 0, serviceFeeCents: 1500, totalCents: 51400 },
   cap: { balanceCents: 91000, capCents: 500000, blocked: false },
 };
 
@@ -78,10 +81,11 @@ const receipt = {
   folio: "DV-A1B2C3",
   customerName: "Janely Guadalupe Reyes",
   totalCents: 51400,
-  monthlyFeeCents: 49900,
+  invoiceCents: 49900,
+  carriedBalanceCents: 0,
   serviceFeeCents: 1500,
   reconnectionStatus: "queued",
-  text: "Devolada · Comprobante DV-A1B2C3\nJanely Guadalupe Reyes\nMensualidad $499.00\nServicio $15.00\nTotal $514.00",
+  text: "Devolada · Comprobante DV-A1B2C3\nJanely Guadalupe Reyes\nCargo del periodo $499.00\nServicio $15.00\nTotal $514.00",
   waLink: "https://wa.me/525512345678?text=Devolada",
   phone: "5512345678",
 };
@@ -93,6 +97,16 @@ const settings = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphub: { configured: true, keyTail: "9f3a" },
+  spei: {
+    clabe: null,
+    bank: null,
+    beneficiaryName: null,
+    serviceFeeCents: null,
+    effectiveServiceFeeCents: 1500,
+    bankUnknown: false,
+    configured: false,
+  },
+  reconnection: { thresholdPercent: 100, floorCents: 0 },
 };
 
 const storeDetail = {

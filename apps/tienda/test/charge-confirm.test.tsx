@@ -42,7 +42,7 @@ describe("US-C02: the screen shows identity, breakdown and the charge button", (
     mount(quote());
 
     expect(await screen.findByRole("heading", { name: "Janely" })).toBeInTheDocument();
-    expect(screen.getByText("Mensualidad")).toBeInTheDocument();
+    expect(screen.getByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
     expect(screen.getByText("Servicio suspendido")).toBeInTheDocument();
 
@@ -172,7 +172,7 @@ describe("US-C08: a carried balance is its own line", () => {
   it("shows 'Adeudo anterior' beside the mensualidad, and the total covers both", async () => {
     mount(withCarried());
 
-    expect(await screen.findByText("Mensualidad")).toBeInTheDocument();
+    expect(await screen.findByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.getByText("Adeudo anterior")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cobrar \$664\.00/i })).toBeEnabled();
@@ -181,7 +181,7 @@ describe("US-C08: a carried balance is its own line", () => {
   it("omits the line entirely when nothing is carried", async () => {
     mount(quote());
 
-    expect(await screen.findByText("Mensualidad")).toBeInTheDocument();
+    expect(await screen.findByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.queryByText("Adeudo anterior")).not.toBeInTheDocument();
   });
 });

@@ -58,7 +58,7 @@ describe("US-D01: the link shows the debt and the SPEI instructions", () => {
 
     expect(await screen.findByText("WifiPlus")).toBeInTheDocument();
     expect(screen.getByText("Janely")).toBeInTheDocument();
-    expect(screen.getByText("Mensualidad")).toBeInTheDocument();
+    expect(screen.getByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
     expect(screen.getByText("Total a pagar")).toBeInTheDocument();
     expect(screen.getByText("646180157000000004")).toBeInTheDocument();
@@ -432,7 +432,13 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     });
   });
 
-  it("scenario 57: a receipt whose amount is not the debt is refused before any credit", async () => {
+  it("scenario 57 (US-D10 D1/D12): a short receipt is submitted with its own amount, never refused", async () => {
+    /* This asserted the $1 receipt was refused before any credit. That
+       refusal predated partial payments: by the time we know the transfer
+       fell short, the money is already in the ISP's account, and D12 sends
+       the receipt's own amount to Banxico so the short transfer is
+       findable. The page's only remaining refusal is the other direction —
+       a reading *above* the debt (a misread). */
     const paid: unknown[] = [];
     server.use(
       handlers.link(() => ok(debtLink)),
@@ -443,14 +449,54 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
         paid.push(body);
         return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
       }),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "partial",
+            receivedCents: 100,
+            debtCents: 49900,
+            missingCents: 49800,
+            reconnectionStatus: "withheld",
+            folio: "DV-SPEI04",
+            validationAttempts: 1,
+            error: null,
+          }),
+        ),
+      ),
     );
     await uploadReceipt();
 
-    /* Measured 2026-08-19: apiCEP filters on `sender.amount`, so this
-       lookup could only ever come back as a faceless `not_found` and six
-       hours of "Verificando". Both numbers, in three seconds, instead. */
-    expect(await screen.findByText(/no coincide con tu adeudo/i)).toBeInTheDocument();
-    expect(screen.getByText("$1.00")).toBeInTheDocument();
+    expect(await screen.findByText("Pago incompleto", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(paid).toHaveLength(1);
+    /* D12: the amount printed on the receipt travels with the submission,
+       so the lookup asks Banxico about the transfer that really happened */
+    expect(paid[0]).toMatchObject({
+      proofId: "link-1/proof-1",
+      transfer: { trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K", senderBank: "NUBANK" },
+      receiptAmountCents: 100,
+    });
+  });
+
+  it("a receipt claiming more than the debt is still refused — a misread, not a payment", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      /* $600.00 against a $514.00 debt */
+      handlers.read(() => ok(readOk({ amountCents: 60000 }))),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+    );
+    await uploadReceipt();
+
+    /* Measured 2026-08-19: apiCEP filters on `sender.amount`, so a lookup
+       with an amount nobody transferred can only ever come back as a
+       faceless `not_found` and six hours of "Verificando". Both numbers,
+       in three seconds, instead. */
+    expect(await screen.findByText(/es mayor que tu adeudo/i)).toBeInTheDocument();
+    expect(screen.getByText("$600.00")).toBeInTheDocument();
     expect(screen.getByText("$514.00")).toBeInTheDocument();
     expect(paid).toHaveLength(0);
   });
@@ -508,6 +554,98 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
       screen.getByText(/no encontramos tu transferencia en banxico/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/contacta a tu proveedor/i)).toBeInTheDocument();
+  });
+});
+
+/* docs/direct-payment/partial-payment.spec.md scenario 9 (US-D10, D7):
+   the `partial` state speaks in pesos, never a percentage, and keeps the
+   SPEI instructions in reach — the payer's next action is another
+   transfer. */
+describe("US-D10: the partial state", () => {
+  async function shortManualPayment(statusRows: Record<string, unknown>[]) {
+    let polls = 0;
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.pay(() =>
+        ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201),
+      ),
+      handlers.status(() => {
+        polls = Math.min(polls + 1, statusRows.length);
+        return ok(
+          directPaymentStatusResponse.parse({
+            validationAttempts: 1,
+            error: null,
+            ...statusRows[polls - 1],
+          }),
+        );
+      }),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+  }
+
+  const withheld = {
+    status: "partial",
+    receivedCents: 30000,
+    debtCents: 49900,
+    missingCents: 19900,
+    reconnectionStatus: "withheld",
+    folio: "DV-SPEI05",
+  };
+
+  it("scenario 9: three amounts in pesos, no percentage, and the CLABE still visible", async () => {
+    await shortManualPayment([withheld]);
+
+    expect(await screen.findByText("Pago incompleto", {}, { timeout: 8000 })).toBeInTheDocument();
+    /* D7: what arrived, what was owed, what is missing — as money */
+    expect(screen.getByText("$300.00")).toBeInTheDocument();
+    expect(screen.getByText("$499.00")).toBeInTheDocument();
+    expect(screen.getByText(/faltan/i)).toBeInTheDocument();
+    expect(screen.getByText("$199.00")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("%");
+    /* withheld, so the service waits for the rest — and no green tick */
+    expect(screen.getByText(/cuando llegue el resto/i)).toBeInTheDocument();
+    expect(screen.queryByText(/pago confirmado/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/DV-SPEI05/)).toBeInTheDocument();
+    /* UI contract: the next action is another transfer, so the CLABE
+       never leaves the screen */
+    expect(screen.getByText("646180157000000004")).toBeInTheDocument();
+  });
+
+  it("a partial that met the threshold keeps polling until the reconnection lands", { timeout: 15000 }, async () => {
+    /* Threshold met, WispHub down: the money needs nothing more, so the
+       page must not say "cuando llegue el resto" — and it must keep
+       watching, or "en unos minutos" never becomes "ya está activo". */
+    await shortManualPayment([
+      { ...withheld, reconnectionStatus: "queued" },
+      { ...withheld, reconnectionStatus: "reconnected" },
+    ]);
+
+    expect(
+      await screen.findByText(/se reactivará en unos minutos/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/cuando llegue el resto/i)).not.toBeInTheDocument();
+    /* the poll flips it without any tap */
+    expect(
+      await screen.findByText(/ya está activo/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+  });
+
+  it("'Ver los datos para transferir' lands on the transfer data, not the upload form", async () => {
+    /* `retry` alone left the remembered step at `proof`, so this button
+       landed on "Envía tu comprobante" — promising the CLABE and showing
+       a file picker. */
+    await shortManualPayment([withheld]);
+    await screen.findByText("Pago incompleto", {}, { timeout: 8000 });
+
+    await userEvent.click(screen.getByRole("button", { name: /ver los datos para transferir/i }));
+    expect(
+      await screen.findByRole("heading", { name: /haz tu transferencia/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Total a pagar")).toBeInTheDocument();
   });
 });
 

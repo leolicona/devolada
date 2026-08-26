@@ -23,6 +23,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | Store's continuous balance | **Caja** / **Balance** | `balance` (derived) | "corte" |
 | Cash handover to the ISP | **Entrega** | `cash_drop` | "corte" |
 | Fee paid by the end customer | **Cargo por servicio** | `service_fee` | — |
+| Period's billed charge (invoice total) | **Cargo del periodo** | `invoice` / `invoice_cents` | "mensualidad" (the invoice can bill more than the plan — debt-truth D16) |
 | Store's earnings | **Comisión** | `commission` | (never shown to the end customer) |
 | Ledger entry | **Movimiento** | `ledger_entry` | — |
 | MikroTik reactivation | **Reconexión** | `reconnection` (`queued/reconnected/failed`) | — |

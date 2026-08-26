@@ -328,7 +328,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
       data: {
         directPaymentId: row.id,
         /* `expired` cannot happen inline (the schedule starts now) */
-        status: row.status as "validating" | "confirmed" | "invalid" | "unapplied",
+        status: row.status as "validating" | "confirmed" | "partial" | "invalid" | "unapplied",
         error: publicError(row.lastError),
       },
     },

@@ -54,7 +54,7 @@ describe("US-C05: the customer leaves with a folio they can keep", () => {
     });
     /* The text is finished copy, not fields to assemble (D2) */
     expect(data.text).toContain("Folio: DV-RCPT01");
-    expect(data.text).toContain("Mensualidad: $399.00");
+    expect(data.text).toContain("Cargo del periodo: $399.00");
     expect(data.text).toContain("Cargo por servicio: $15.00");
     expect(data.text).toContain("Total pagado: $414.00");
     expect(data.text).toContain("Abarrotes La Esquina");

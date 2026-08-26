@@ -296,7 +296,14 @@ export function PaymentPage({ token }: { token: string }) {
     refetchInterval: (query) => {
       const s = query.state.data;
       if (!s) return POLL_MS;
-      const open = s.status === "validating" || (s.status === "confirmed" && s.reconnectionStatus !== "reconnected");
+      const open =
+        s.status === "validating" ||
+        (s.status === "confirmed" && s.reconnectionStatus !== "reconnected") ||
+        /* A partial that met the threshold can still have its reconnection
+           in the queue (WispHub down). `withheld` is terminal; `queued` is
+           a promise the page has to keep watching, or "en unos minutos"
+           never turns into "ya está activo". */
+        (s.status === "partial" && s.reconnectionStatus === "queued");
       return open ? POLL_MS : false;
     },
   });
@@ -374,19 +381,18 @@ export function PaymentPage({ token }: { token: string }) {
         reading.gate.senderBank !== "ok";
       if (gated) return { proofId, reading };
 
-      /* Measured 2026-08-19: `sender.amount` is a **filter** in apiCEP's
-         direct mode, not a hint. A known-good clave re-sent with a wrong
-         amount comes back as the same faceless `invalid` a nonexistent
-         transfer does. So a receipt whose amount does not match the debt
-         cannot be found no matter how right the clave is — and the amount
-         is the one field the confirmation screen never shows. Refusing
-         here turns six hours of "Verificando" into two numbers, in three
-         seconds, for zero credits. */
+      /* partial-payment D1/D12: the amount printed on the receipt is what
+         travels to Banxico, so a transfer that fell short is findable and
+         lands as a `partial` row — a short reading is a valid submission,
+         never a refusal. Only a reading *above* the debt is stopped here:
+         that is a misread, not a payment (nobody's receipt claims more
+         than they sent), and its lookup can only ever answer a faceless
+         `not_found` six hours long. */
       const expected = link.data?.totalCents;
       if (
         reading.amountCents != null &&
         expected != null &&
-        reading.amountCents !== expected
+        reading.amountCents > expected
       ) {
         return { proofId, reading };
       }
@@ -566,25 +572,47 @@ export function PaymentPage({ token }: { token: string }) {
                 <>
                   Recibimos <Amount cents={status.receivedCents} /> de{" "}
                   <Amount cents={status.debtCents ?? 0} />.{" "}
+                  {/* Three different facts, three sentences: reconnected
+                      is done, queued needs no more money (the threshold
+                      was met), and only withheld waits for the rest. */}
                   {status.reconnectionStatus === "reconnected"
                     ? "Tu servicio ya está activo."
-                    : "Tu servicio se reactivará cuando llegue el resto."}
+                    : status.reconnectionStatus === "queued"
+                      ? "Tu servicio se reactivará en unos minutos."
+                      : "Tu servicio se reactivará cuando llegue el resto."}
                 </>
               ) : (
                 "Recibimos tu pago, pero no cubre todo el adeudo."
               )}
             </p>
             {"missingCents" in status && status.missingCents ? (
-              <p className="text-sm font-medium">
+              /* The one number the payer has to act on — it gets the
+                 weight of an amount, not of a footnote (D7). */
+              <p className="text-xl font-semibold">
                 Faltan <Amount cents={status.missingCents} />
               </p>
             ) : null}
             {"folio" in status && status.folio && (
               <p className="font-mono text-sm text-ink-soft">Folio {status.folio}</p>
             )}
-            {/* The next action is another transfer, so the instructions
-                stay one tap away instead of making them hunt for the CLABE */}
-            <Button variant="secondary" onClick={retry}>
+            {/* UI contract: the SPEI instructions stay visible — the next
+                action is another transfer, and hiding the CLABE behind a
+                tap is a way to lose the payer. */}
+            {data.speiClabe && (
+              <div className="border-y border-line-soft">
+                <CopyField label="CLABE" value={data.speiClabe} />
+              </div>
+            )}
+            {/* Back to step 1, where the fresh debt and the rest of the
+                data live. `retry` alone left the remembered step at
+                `proof`, so this button used to land on the upload form. */}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                goTo("transfer");
+                retry();
+              }}
+            >
               Ver los datos para transferir
             </Button>
           </>
@@ -705,18 +733,20 @@ export function PaymentPage({ token }: { token: string }) {
       );
     }
 
-    /* The amount does not match the debt, and a lookup with it is proven
-       to fail (apiCEP filters on `sender.amount`). Say both numbers: it
-       is the only thing the payer can act on, and it is the answer they
-       would otherwise get six hours from now, or never. */
+    /* The reading claims *more* than the debt: a misread, not a payment
+       (partial-payment D12 — the contract keeps this direction refused).
+       A lookup with it is proven to fail, so say both numbers now: it is
+       the answer the payer would otherwise get six hours from now, or
+       never. A reading that claims *less* is a short transfer, which is
+       a valid submission and lands as `partial` (D1). */
     const readAmount = reading.amountCents;
-    if (readAmount != null && data.totalCents != null && readAmount !== data.totalCents) {
+    if (readAmount != null && data.totalCents != null && readAmount > data.totalCents) {
       return (
         <Card className="space-y-4 p-6">
           {stepHeader(2, "El monto no coincide")}
           <Alert variant="warning" layout="icon">
             <TriangleAlert aria-hidden />
-            El monto de tu comprobante no coincide con tu adeudo, así que no podemos verificarlo.
+            El monto de tu comprobante es mayor que tu adeudo, así que no podemos verificarlo.
           </Alert>
           <div className="divide-y divide-line-soft border-y border-line-soft">
             <div className="flex items-center justify-between py-2">
@@ -767,7 +797,19 @@ export function PaymentPage({ token }: { token: string }) {
           busy={busy}
           draft={reading}
           submitLabel="Confirmar y verificar"
-          onSubmit={(transfer) => pay.mutate({ transfer, proofId })}
+          onSubmit={(transfer) =>
+            pay.mutate({
+              transfer,
+              proofId,
+              /* D12: a short reading can reach this form now, and the
+                 lookup must ask Banxico with the receipt's own amount —
+                 asking with the expected total finds nothing. The status
+                 rides along for the same reason it does on the silent
+                 path. */
+              receiptStatus: reading.receiptStatus ?? undefined,
+              receiptAmountCents: reading.amountCents ?? undefined,
+            })
+          }
         />
 
         {submitError && (
@@ -799,9 +841,10 @@ export function PaymentPage({ token }: { token: string }) {
         <div>
           <AmountBreakdown
             lines={[
-              { label: "Mensualidad", cents: data.invoiceCents! },
+              /* debt-truth D16: the invoice total, not the plan's price */
+              { label: "Cargo del periodo", cents: data.invoiceCents! },
               /* debt-truth D11: what was already owed gets its own line.
-                 Folded into the mensualidad it would be a number that
+                 Folded into the period's charge it would be a number that
                  matches no plan and explains nothing. */
               ...(data.carriedBalanceCents
                 ? [{ label: "Adeudo anterior", cents: data.carriedBalanceCents }]

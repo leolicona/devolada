@@ -140,7 +140,9 @@ export function ConfirmScreen() {
           <AmountBreakdown
             className="mt-5 border-t border-line-soft pt-4"
             lines={[
-              { label: "Mensualidad", cents: quote.invoiceCents },
+              /* debt-truth D16: the invoice total, not the plan's price —
+                 "Mensualidad" would mislabel a reconnection charge */
+              { label: "Cargo del periodo", cents: quote.invoiceCents },
               /* debt-truth D11: the carried balance is its own line. A
                  shopkeeper shown an unfamiliar total with no explanation
                  does not charge. */

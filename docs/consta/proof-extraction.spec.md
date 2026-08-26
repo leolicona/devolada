@@ -331,6 +331,9 @@ configuration if it ever misbehaves in production.
     produce `not_found`, never a verdict of our own — the reading is never
     promoted to evidence when the CEP is missing (US-V09, D3, D10,
     `validation.spec.md` D11)
+13. Every `validations` row records the sender bank on both doors, so
+    `valid` rows accumulate the Banxico-confirmed (bank, clave) pairs D13
+    derives shape from (US-V10, D13)
 
 ## Definition of Done
 
@@ -359,6 +362,13 @@ configuration if it ever misbehaves in production.
       *"revisa este dato"* in three seconds rather than six hours of
       *"Verificando"* — is what the asking half buys; the silent half is
       what keeps the other payers from being asked at all
+- [x] Migration `0004`: `validations.sender_bank`, written on both doors
+      (D13); scenario 13 automated
+- [ ] **The Nu rule acts as a soft signal somewhere.** D13 names the rule
+      and its thresholds but wires nothing: the natural first consumer is
+      the second-reader flow — a shape mismatch is a cheap reason to
+      re-read or ask before buying a `not_found`. Separate PR; the contract
+      shape (a field on `gate`? on `reading`?) is decided there
 - [ ] **The DNS gap of D7 is closed or accepted in writing.** The address
       checks refuse a URL that *says* it is internal; a public hostname whose
       DNS answer is private is not caught, because a Worker never sees the
@@ -421,6 +431,52 @@ second opinion all along.
   prerequisite either way, so nothing built now is thrown away. **Rejected**:
   building `expected` today (API semantics cannot be un-shipped, and one
   internal consumer is not evidence of the right shape).
+
+## Decisions — clave shape per bank (US-V10, 2026-08-26)
+
+A spike asked whether knowing the sender bank lets the gate check the clave
+more precisely. Banxico publishes no per-bank format — each bank invents its
+own — so the only honest source is claves Banxico itself confirmed, and Consta
+already holds them: a `validations` row with `status = 'valid'` is a
+(bank, clave) pair the CEP lookup proved, because a wrong bank is answered
+`invalid` (BUG-007's measurement).
+
+What the dev D1 held on 2026-08-26:
+
+| bank | distinct confirmed claves | shape |
+|---|---|---|
+| NUBANK | 23 | always 28 chars, prefix `NU3A` |
+| BBVA MEXICO | 2 | 24 chars, prefix `MBAN01` + date + sequence |
+
+And the failure the shape would catch is already in the log: the `invalid`
+transfer rows carry NU-prefixed claves of **27 and 29** characters — real
+misreads and typos, each of which passed D4's range and bought a credit. Of
+the live reader misreads above, the dropped `K` (27 chars) is caught by a
+Nu-length rule; the transposed `PF` (28 chars) is not and never will be —
+shape still cannot check content.
+
+- **D13 — Per-bank clave shape is a soft signal, derived only from
+  Banxico-confirmed claves, and it never rejects.** D4 stands untouched:
+  `^[A-Za-z0-9]{6,30}$` plus the vocabulary is the only *gate*. A per-bank
+  rule (prefix + length) may lower confidence in a reading and trigger a
+  cheap correction — a re-read, or asking the payer to confirm one field —
+  and may never 400. Two thresholds, written here so nobody re-derives them:
+  a rule **graduates at ≥10 distinct confirmed claves with 0
+  counterexamples**, and a single confirmed counterexample retires it (the
+  bank changed shape, or has more than one — both real; a confirmed clave is
+  never noise). Today exactly one rule is graduated: **NUBANK = prefix `NU`,
+  length 28**. BBVA (n=2) stays telemetry. To make the dataset accumulate,
+  `validations` gains `sender_bank` (migration `0004`) — before it, the
+  transfer door recorded the clave and dropped the bank, and the pair had to
+  be reconstructed by prefix. **Deriving rules dynamically from D1 is
+  deferred with a payment condition: build it when a second bank reaches ≥10
+  confirmed claves.** One known rule does not justify machinery that
+  re-measures it. **Rejected**: a hard per-bank gate — BUG-006's fixed-28
+  multiplied by 97 banks that change shape silently, and on the receipt door
+  the bank comes from the same reading as the clave, so a misread bank would
+  apply the wrong rule to a correct clave; public format tables — none
+  exist, and "measured once, silent when it runs out" is the trust model
+  this spec already refuses.
 
 ## Open questions
 

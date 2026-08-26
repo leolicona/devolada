@@ -95,10 +95,17 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   as validation D13. Amount-plus-date matching is **refused by design**:
   customers of one ISP pay the same monthly fee to the same CLABE on the
   same day — partial-payment already documents that collision pool — so
-  amount alone collides by construction. Whether BBVA's or Klar's
-  notification emails carry the tracking key (or attach their own
-  reference) is **unmeasured**, and the spike in the DoD settles it —
-  per bank — before the parser is designed. **Rejected for v1, recorded as open**: a `weak` strength
+  amount alone collides by construction. **Measured 2026-08-26,
+  Klar, n=1** (a real $50.00 BBVA → Klar transfer): the "Recibiste una
+  transferencia" email carries **both** keys — the clave de rastreo
+  (`MBAN…`, 24 chars, inside D13's 6–30 range) and Klar's own
+  `Referencia` — plus amount, sender bank, account tail and timestamp.
+  From `contacto@klar.mx`; the `d=klar.mx` DKIM signature (selector
+  `s1`, rsa-sha256) **verified cryptographically** against live DNS
+  (dkimpy, offline spike). BBVA's receive notification is still
+  unmeasured, and so is DKIM survival through a real Gmail
+  auto-forward — the spike in the DoD settles both before the parser
+  is built. **Rejected for v1, recorded as open**: a `weak` strength
   for amount-unique-in-window matches.
 
 - **D5 — The match is computed at `/validate` time; no outbound webhook.**
@@ -240,7 +247,13 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       keeps the parser honest — one layout cannot pass as "the" format.
       The parser and D4's `matchedOn` set are designed from that
       evidence, per bank, and this spec is updated with what was
-      measured
+      measured. **Progress 2026-08-26**: Klar measured (n=1) — both
+      keys present, `d=klar.mx` DKIM verified against live DNS; see D4.
+      Still owed: more Klar samples, BBVA's receive notification (the
+      pilot's bank — a Klar → BBVA transfer produces one), and the
+      auto-forwarded copy (Gmail's *automatic* forwarding, not the
+      Reenviar button — a manual forward rewrites the message and
+      proves nothing about lock (c))
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;

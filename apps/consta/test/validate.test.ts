@@ -57,7 +57,11 @@ const settledResponse = {
   downloads: { cepXml: "https://storage.apicep.cloud/x.xml", cepPdf: "https://storage.apicep.cloud/x.pdf" },
 };
 
-function mockApiCep(reply: unknown, expectBody?: (body: Record<string, unknown>) => void) {
+function mockApiCep(
+  reply: unknown,
+  expectBody?: (body: Record<string, unknown>) => void,
+  opts: { status?: number; headers?: Record<string, string> } = {},
+) {
   fetchMock
     .get(APICEP_ORIGIN)
     .intercept({
@@ -68,7 +72,9 @@ function mockApiCep(reply: unknown, expectBody?: (body: Record<string, unknown>)
         return true;
       },
     })
-    .reply(200, JSON.stringify(reply), { headers: { "Content-Type": "application/json" } });
+    .reply(opts.status ?? 200, JSON.stringify(reply), {
+      headers: { "Content-Type": "application/json", ...(opts.headers ?? {}) },
+    });
 }
 
 async function postValidate(key: string, body: unknown, overrides: Record<string, unknown> = {}) {
@@ -172,20 +178,22 @@ describe("POST /validate — transfer door", () => {
     expect(data.alreadyValidated).toBe(true);
   });
 
-  it("scenario 7: a provider error surfaces as 502 PROVIDER_ERROR and logs nothing", async () => {
+  it("scenario 7 (amended by D15): a provider outage is retryable, and the billed call is logged", async () => {
     const { id: keyId, key } = await seedApiKey();
-    fetchMock
-      .get(APICEP_ORIGIN)
-      .intercept({ method: "POST", path: "/validate-transfer" })
-      .reply(503, JSON.stringify({ error: "Service temporarily unavailable" }));
+    mockApiCep({ error: "Service temporarily unavailable" }, undefined, { status: 503 });
 
     const res = await postValidate(key, directRequest);
     expect(res.status).toBe(502);
-    const { error } = (await res.json()) as { error: { code: string } };
-    expect(error.code).toBe("PROVIDER_ERROR");
+    const { error } = (await res.json()) as { error: { code: string; retryable: boolean } };
+    expect(error.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(error.retryable).toBe(true);
 
+    /* D15: a response came back, so the row is written — with no verdict.
+       Verdict-bearing rows stay selectable with `status IS NOT NULL`. */
     const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
-    expect(rows).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].providerHttpStatus).toBe(503);
   });
 
   /* Scenarios 24, 25 and 14 (D11, D10) — the shapes behind BUG-003. */
@@ -228,21 +236,216 @@ describe("POST /validate — transfer door", () => {
     expect(data.hint).toBeUndefined();
   });
 
-  it("US-V06: a status apiCEP has not published yet is a failure, never a verdict (D10)", async () => {
+  it("US-V06, scenario 14: a status apiCEP has not published yet is a retryable failure, never a verdict (D10, D9)", async () => {
     const { id: keyId, key } = await seedApiKey();
     mockApiCep({ validationId: "prov-uuid-11", status: "under_review", validation: {} });
 
     const res = await postValidate(key, directRequest);
     expect(res.status).toBe(502);
-    const { error } = (await res.json()) as { error: { code: string } };
-    /* D9 will rename this `PROVIDER_UNAVAILABLE` and attach
-       `retryable`; what D10 fixes here is the verdict, not the code. */
-    expect(error.code).toBe("PROVIDER_ERROR");
+    const { error } = (await res.json()) as { error: { code: string; retryable: boolean } };
+    /* The regression that guards D10's whole point: never `invalid` */
+    expect(error.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(error.retryable).toBe(true);
 
     /* Fail toward "we do not know": no verdict was reached, so no
-       verdict is logged and nobody is told their transfer is fake. */
+       verdict is logged and nobody is told their transfer is fake. The
+       call still reached the provider, so its billed row exists (D15) —
+       with `status: null` and the provider's id. */
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].providerValidationId).toBe("prov-uuid-11");
+  });
+});
+
+/* Scenarios 8–15 and 21–23: the failure taxonomy (D9) and what every call
+   records (D14, D15, D16). Each mock serves one row of the D9 table —
+   together they are the regression suite for "no permanent failure ever
+   becomes a long silence". The 4xx/5xx shapes come from the 2026-08-19
+   probe where measured, and from apiCEP's published reference where not
+   (405, 422, 429, 500 — marked published-unverified in
+   docs/integrations/apicep.md). */
+describe("The failure taxonomy (D9, D14–D16)", () => {
+  it("US-V06, scenario 8: a 500 is retryable, with no promise about when", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep({ error: "Internal server error" }, undefined, { status: 500 });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(502);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(error.retryable).toBe(true);
+    expect(error.retryAfter).toBeUndefined();
+  });
+
+  it("US-V06, scenario 9: a 429 says when to come back, in the response and in the header", async () => {
+    const { key } = await seedApiKey();
+    const reset = "2026-09-16T17:59:12.203+00:00";
+    mockApiCep({ error: "Rate limit exceeded" }, undefined, {
+      status: 429,
+      headers: { "X-RateLimit-Reset": reset },
+    });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(503);
+    expect(res.headers.get("Retry-After")).toBe(reset);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("PROVIDER_RATE_LIMITED");
+    expect(error.retryable).toBe(true);
+    /* Echoed verbatim: retrying before this moment deepens the outage */
+    expect(error.retryAfter).toBe(reset);
+  });
+
+  it("US-V06, scenario 10: a revoked token is never the caller's to retry — apiCEP's own transient 401 is", async () => {
+    const { key } = await seedApiKey();
+    /* The failure that cost six hours on 2026-08-18 (BUG-002): the body,
+       not the status, says whether an operator must act. */
+    mockApiCep({ error: "Invalid or revoked API token" }, undefined, { status: 401 });
+    const revoked = await postValidate(key, directRequest);
+    expect(revoked.status).toBe(502);
+    const revokedError = ((await revoked.json()) as { error: Record<string, unknown> }).error;
+    expect(revokedError.code).toBe("PROVIDER_AUTH_FAILED");
+    expect(revokedError.retryable).toBe(false);
+
+    /* Measured once against a good token, gone on retry: Consta always
+       sends the header, so this 401 is apiCEP's outage, not our secret */
+    mockApiCep({ error: "Missing or invalid Authorization header" }, undefined, { status: 401 });
+    const transient = await postValidate(key, directRequest);
+    expect(transient.status).toBe(502);
+    const transientError = ((await transient.json()) as { error: Record<string, unknown> }).error;
+    expect(transientError.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(transientError.retryable).toBe(true);
+  });
+
+  it("US-V06, scenarios 11+23: a bare 400 means the request must change — and its headerless row still logs", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep({ error: "system must be either 'SPEI' or 'SPID'" }, undefined, { status: 400 });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(422);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("REQUEST_REJECTED");
+    expect(error.retryable).toBe(false);
+    expect(error.hint).toBeUndefined();
+
+    /* D15: apiCEP charges a credit for a request it rejects with 400
+       (measured), so the row exists — and scenario 23: a 400 carries no
+       rate-limit headers, which must read as nulls, never as a failure */
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].providerHttpStatus).toBe(400);
+    expect(rows[0].quotaRemaining).toBeNull();
+    expect(rows[0].providerMs).toBeNull();
+  });
+
+  it("US-V06, scenario 12: the envelope-shaped 400 is rejected the same way, and its billed validationId is recorded", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* Measured 2026-08-19 (same institution both sides): a full response
+       envelope wearing a 400. The old adapter threw before parsing it,
+       discarding the id of a call it was charged for. */
+    mockApiCep(
+      {
+        validationId: "prov-uuid-e400",
+        status: "error",
+        error: "El banco emisor y el banco receptor no pueden ser la misma institución.",
+        confidence: 1,
+        validation: { banxicoConfirmed: false },
+      },
+      undefined,
+      { status: 400 },
+    );
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(422);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("REQUEST_REJECTED");
+    expect(error.retryable).toBe(false);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].providerValidationId).toBe("prov-uuid-e400");
+  });
+
+  it("US-V06: a duplicated reference says how to fix itself (422 → provide_tracking_key)", async () => {
+    const { key } = await seedApiKey();
+    /* Published, unverified: Devolada always sends the tracking key, so
+       only an integrator searching by reference alone can land here. */
+    mockApiCep({ error: "Referencia duplicada en Banxico" }, undefined, { status: 422 });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(422);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("REQUEST_REJECTED");
+    expect(error.retryable).toBe(false);
+    expect(error.hint).toBe("provide_tracking_key");
+  });
+
+  it("US-V06, scenario 13: an unreadable receipt names the missing fields, and never rides a schedule", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    const missing = ["fecha de la operación", "clave de rastreo o número de referencia"];
+    mockApiCep({
+      validationId: "prov-uuid-ocr",
+      status: "error",
+      error: "El OCR no pudo extraer los siguientes datos obligatorios",
+      missingFields: missing,
+    });
+
+    /* No AI binding: the image goes straight to the provider's OCR door,
+       so the provider's own "I could not read this" is what comes back */
+    const res = await postValidate(key, receiptRequest, { AI: undefined });
+    expect(res.status).toBe(422);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("RECEIPT_UNREADABLE");
+    expect(error.retryable).toBe(false);
+    /* Verbatim: this is the one OCR failure apiCEP names out loud, and
+       the difference between "Verificando tu pago" for six hours and
+       "falta la fecha en tu comprobante" in seconds */
+    expect(error.missingFields).toEqual(missing);
+
+    /* The OCR ran, so the call was billed and belongs in the log (D15) */
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].mode).toBe("receipt");
+  });
+
+  it("US-V06, scenario 15: a hung provider is Consta's deadline to report, and an unanswered call is not logged", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    fetchMock
+      .get(APICEP_ORIGIN)
+      .intercept({ method: "POST", path: "/validate-transfer" })
+      .reply(200, JSON.stringify(settledResponse), { headers: { "Content-Type": "application/json" } })
+      .delay(500);
+
+    /* The deadline exists so Consta answers before its caller's 30 s
+       cuts first (D16); tests shrink it rather than wait 25 s */
+    const res = await postValidate(key, directRequest, { APICEP_DEADLINE_MS: "50" });
+    expect(res.status).toBe(502);
+    const { error } = (await res.json()) as { error: Record<string, unknown> };
+    expect(error.code).toBe("PROVIDER_UNAVAILABLE");
+    expect(error.retryable).toBe(true);
+
+    /* No response came back, so nothing was measured and no row is
+       written — the one failure D15 cannot price is the one it must not
+       invent a row for */
     const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
     expect(rows).toHaveLength(0);
+  });
+
+  it("US-V08, scenario 21: a valid verdict records what it cost, how long it took, and what is left", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep(settledResponse, undefined, {
+      headers: { "X-Processing-Time": "6500ms", "X-RateLimit-Remaining": "767" },
+    });
+
+    const res = await postValidate(key, directRequest);
+    expect(res.status).toBe(200);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows[0].providerHttpStatus).toBe(200);
+    expect(rows[0].providerMs).toBe(6500);
+    expect(rows[0].quotaRemaining).toBe(767);
   });
 });
 

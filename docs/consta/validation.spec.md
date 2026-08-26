@@ -69,7 +69,8 @@ that. The driving measurement: **Banxico publishes a CEP in at most ~30
 minutes**, so any wait longer than that is not patience, it is a failure we
 could not name.
 
-- **D9 — A failure says whether waiting can help.** The error envelope grows
+- **D9 — A failure says whether waiting can help.** *(built 2026-08-25.)* The
+  error envelope grows
   two fields the consumer cannot derive: `retryable: boolean` and, when it is
   knowable, `retryAfter` (ISO 8601). Five codes replace the single
   `PROVIDER_ERROR`:
@@ -82,6 +83,21 @@ could not name.
   | `PROVIDER_UNAVAILABLE` | 401 saying `Missing or invalid Authorization header` | 502 | `true` — Consta always sends the header, so this is apiCEP's fault, and it cleared on retry when measured |
   | `REQUEST_REJECTED` | 400, 405, 422 | 422 | **`false`** — the request must change |
   | `RECEIPT_UNREADABLE` | 200 + `status: "error"` on the receipt door | 422 | **`false`**, carries `missingFields` |
+
+  The 422 (a reference number duplicated in Banxico; published, unverified)
+  additionally carries `hint: "provide_tracking_key"` — the one remedy apiCEP
+  documents. This extends D11's hint pattern (`verify_inputs`) to the error
+  envelope: the code says what happened, the hint says what to do, and the
+  hint vocabulary is closed and documented here. Devolada cannot hit this
+  row (its client requires the tracking key); an integrator searching by
+  reference alone can. **Rejected**: a dedicated `REFERENCE_AMBIGUOUS` code —
+  the category ("your request must change", not retryable, 422) is the same,
+  only the remedy differs, and a remedy is what hints are for.
+
+  A 200 whose `status: "error"` arrives on the **transfer** door has never
+  been observed (the measured business-rule rejections wear a 400), so it is
+  an unknown and follows D10: `PROVIDER_UNAVAILABLE`, retryable — never a
+  rejection invented from a shape nobody has seen.
 
   **A 401 is not one thing**: apiCEP returns five distinct bodies under that
   one code (`docs/integrations/apicep.md`, Auth), and one of them cleared on a
@@ -150,6 +166,7 @@ could not name.
 ### Seeing the cost before it bites (added 2026-08-19)
 
 - **D14 — Every call records what it cost, how long it took, and what is left.**
+  *(built 2026-08-25.)*
   Three columns on `validations`: `providerHttpStatus`, `providerMs` (from
   `X-Processing-Time`) and `quotaRemaining` (from `X-RateLimit-Remaining`).
   Measured: those headers ride 200s only, and the plan is **800 calls per
@@ -159,7 +176,8 @@ could not name.
   2026-08-17 for want of reading one header. **Rejected**: an external metrics
   sink — the append-only log is already the billing record (D6), and one place
   is enough.
-- **D15 — The log records billed calls, not successful ones.** Measured
+- **D15 — The log records billed calls, not successful ones.** *(built
+  2026-08-25.)* Measured
   2026-08-19: **apiCEP charges a credit for a request it rejects with 400.**
   Two valid calls drop `X-RateLimit-Remaining` by one each; slip a malformed
   one between them and it drops by two. D6's "billing is a SUM over this
@@ -172,11 +190,18 @@ could not name.
   the row is what will tell us. **Rejected**: a second `provider_errors` table
   (two logs to reconcile for one invoice); leaving D6 alone (it hides what we
   are charged).
-- **D16 — Consta owns a deadline, strictly under its caller's.** The adapter's
+- **D16 — Consta owns a deadline, strictly under its caller's.** *(built
+  2026-08-25.)* The adapter's
   `fetch` gets `AbortSignal.timeout`, set below the api's `CONSTA_TIMEOUT_MS`.
-  The adapter has none today, so the caller times out first, treats it as
-  retryable and calls again — while Consta's original call completes, writes a
-  row, bills a credit invisibly and sets apiCEP's `cepPreviouslyValidated`.
+  Before this the adapter had none, so the caller timed out first, treated it
+  as retryable and called again — while Consta's original call completed,
+  wrote a row, billed a credit invisibly and set apiCEP's
+  `cepPreviouslyValidated`. The number is **25 s**: under the caller's 30 s,
+  above the ~19 s measured worst case for a healthy validation
+  (`docs/integrations/apicep.md`). Overridable via `APICEP_DEADLINE_MS` only
+  so tests can make a mock hang without waiting 25 s. A deadline or network
+  failure got no response, so it writes **no** `validations` row — the one
+  failure D15 cannot price is the one it must not invent a row for.
   That is precisely what told an honest payment `TRANSFER_ALREADY_USED` on
   2026-08-18 (direct-payment D8's carve-out). Whoever times out first must be
   the party able to report it. **Rejected**: no deadline (a Worker's own limit
@@ -236,18 +261,21 @@ apiCEP offers no sandbox, test keys or free credits (docs checked
 mock of `/validate-transfer` on port 8789 (`sandbox/apicep-mock.mjs`), and
 `APICEP_BASE_URL=http://localhost:8789` in `.dev.vars` points the adapter at
 it — D2 is what makes this a one-line switch. Scenarios ride the tracking
-key: `PEND` → pending, `DUP` → replay flag, `BAD` → invalid, `ERR` →
-provider error; anything else validates. Remove the override to hit the real
-provider.
+key: `PEND` → pending, `DUP` → replay flag, `BAD` → invalid contradicted,
+`NF` → invalid not_found, `ERR` → 503, `E500` → 500, `R429` → 429 with
+`X-RateLimit-Reset`, `A401` → fatal 401, `A401T` → apiCEP's transient 401,
+`B400` → bare 400, `E400` → envelope-shaped 400 with a `validationId`,
+`D422` → duplicated reference, `UNK` → unrecognised status, `HANG` → never
+answers (D16); anything else validates with the measured 200 headers
+(rate-limit trio + `X-Processing-Time`). An `imageUrl` containing
+`unreadable` answers `status: "error"` with `missingFields`. Remove the
+override to hit the real provider.
 
-**The mock has to grow before D9–D16 are testable.** It models one failure
-(HTTP 503) out of the nine apiCEP can produce, and none of the shapes the
-2026-08-19 probe measured: the rate-limit headers, `X-Processing-Time`, the
-envelope-shaped 400, a bare `{error}` 400, a 401, a 429 with
-`X-RateLimit-Reset`, `status: "error"` with `missingFields`, and an
-unrecognised `status`. Each new scenario below names the mock behaviour it
-needs, and the mock is part of the same change — a decision that cannot be
-provoked locally is a decision nobody can regression-test.
+*(The paragraph that stood here — "the mock has to grow before D9–D16 are
+testable" — was the to-do list for the scenario table above; the 2026-08-25
+build closed it. A decision that cannot be provoked locally is a decision
+nobody can regression-test, so every taxonomy scenario names the mock key
+that serves its shape.)*
 
 ## Provider notes (measured live, 2026-08-17)
 
@@ -390,7 +418,9 @@ the routes 404.
 5. Bad key and revoked key → 401; no provider call, no log row (D5)
 6. Admin issues a key (plaintext once, hash stored) and revokes it; wrong
    admin token → 401 (US-V05, D5)
-7. Provider error → 502 `PROVIDER_ERROR`, no `validations` row (D6)
+7. Provider error → 502 with `retryable: true`, and the billed call **is**
+   logged with `status: null` (D6 as amended by D9/D15 — this scenario
+   originally answered `PROVIDER_ERROR` and logged nothing)
 
 ### The failure taxonomy — one case per row of the D9 table (added 2026-08-19)
 
@@ -500,22 +530,31 @@ regression suite for "no permanent failure ever becomes a long silence".
       the two halves is only half the fix: `apps/api` now rides its schedule
       on `not_found` and terminates only on `contradicted` (direct-payment
       D17). A verdict nobody consumes changes nothing.
-- [ ] Scenario 14 still answers `PROVIDER_ERROR`, not D9's
-      `PROVIDER_UNAVAILABLE` with `retryable: false`. D10 fixes the verdict;
-      D9 will fix the code.
+- [x] Scenario 14 now answers D9's `PROVIDER_UNAVAILABLE`, `retryable: true`
+      (closed by the D9 build, 2026-08-25)
 
-### D9, D14–D16 (proposed 2026-08-19, not yet built)
+### D9, D14–D16 (built 2026-08-25)
 
-- [ ] Scenarios 8–13, 15 and 21–23 automated, each citing its story
-- [ ] `sandbox/apicep-mock.mjs` serves every response shape those scenarios
-      need — rate-limit headers, `X-Processing-Time`, both 400 shapes, 401,
-      429, `status: "error"` with `missingFields`, an unrecognised status, and
-      a hang past the deadline
-- [ ] Migration for `validations`: `status` nullable, plus
+Built mock-first, deliberately: the 405/422/429/500 shapes stay
+published-unverified (`docs/integrations/apicep.md`, open items), so the
+adapter codes defensively against them and the live probes stay parked —
+provoking a 429 costs the plan's remaining quota, and a 422 needs a
+duplicated reference nobody can manufacture on demand.
+
+- [x] Scenarios 8–13, 15 and 21–23 automated, each citing its story
+      (`test/validate.test.ts`, "The failure taxonomy")
+- [x] `sandbox/apicep-mock.mjs` serves every response shape those scenarios
+      need — rate-limit headers, `X-Processing-Time`, both 400 shapes, 401
+      (fatal and transient), 429, `status: "error"` with `missingFields`, an
+      unrecognised status, a 422 with the hint, and a hang past the deadline
+- [x] Migration for `validations` (`0003`): `status` nullable, plus
       `provider_http_status`, `provider_ms`, `quota_remaining` (D14, D15)
-- [ ] `docs/integrations/apicep.md` updated with anything the build measures
-      that the probe did not
+- [x] `docs/integrations/apicep.md` gap list updated: the contract is now
+      honoured except where noted there (nothing new was measured — no live
+      calls were spent on this build)
 - [ ] **Hand-off recorded, not assumed**: `direct-payment.spec.md` D7 consumes
       `retryable` and re-argues its pending budget against Banxico's ~30
       minutes. Consta shipping D9 does not shorten anyone's wait by itself —
-      it only makes shortening it possible.
+      it only makes shortening it possible. *(Deliberately left to the
+      consumer's own PR: that spec is being edited in a parallel worktree,
+      and two features touching one spec serialize — CICD.md rule 3.)*

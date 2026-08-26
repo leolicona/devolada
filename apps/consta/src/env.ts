@@ -6,6 +6,9 @@ export type Bindings = {
      elsewhere. Unset base → the real apiCEP. */
   APICEP_TOKEN?: string;
   APICEP_BASE_URL?: string;
+  /* D16 deadline override, in ms. Unset → 25 s, strictly under the
+     caller's 30 s. Exists so tests can make a mock hang cheaply. */
+  APICEP_DEADLINE_MS?: string;
   /* Guards /admin/keys (validation spec D5). Unset → the routes 404. */
   CONSTA_ADMIN_TOKEN?: string;
   /* The receipt reader (proof-extraction D1, D5). Unset binding → the image

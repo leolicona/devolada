@@ -24,7 +24,7 @@ export async function requireApiKey(
   const header = c.req.header("Authorization") ?? "";
   const key = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (!key.startsWith("ck_")) {
-    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR", retryable: false } }, 401);
   }
   const keyHash = await hashApiKey(key);
   const db = drizzle(c.env.DB);
@@ -33,7 +33,7 @@ export async function requireApiKey(
     .from(apiKeys)
     .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)));
   if (!row) {
-    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR", retryable: false } }, 401);
   }
   c.set("apiKey", row);
   await next();

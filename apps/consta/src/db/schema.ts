@@ -22,8 +22,11 @@ export const apiKeys = sqliteTable("api_keys", {
   revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
 });
 
-/* Append-only log (validation spec D6): one row per validation that reached
-   the provider. Never UPDATE/DELETE — billing is a SUM over this table. */
+/* Append-only log (validation spec D6, amended by D15): one row per
+   request that reached the provider and got any response back, non-2xx
+   included — apiCEP bills a credit for a request it rejects with 400
+   (measured 2026-08-19), so a log of successes was not a billing record.
+   Never UPDATE/DELETE — billing is a SUM over this table. */
 export const validations = sqliteTable(
   "validations",
   {
@@ -32,7 +35,9 @@ export const validations = sqliteTable(
       .notNull()
       .references(() => apiKeys.id),
     mode: text("mode", { enum: ["transfer", "receipt"] }).notNull(),
-    status: text("status", { enum: ["valid", "pending", "invalid"] }).notNull(),
+    /* NULL = the call failed before any verdict existed (D15). Rows that
+       carry a verdict stay selectable with `status IS NOT NULL`. */
+    status: text("status", { enum: ["valid", "pending", "invalid"] }),
     /* D11: which kind of `invalid`. NULL for every other verdict — and the
        column that will finally say how often `not_found` is a real payment
        we could not see rather than a claim we should refuse. */
@@ -46,6 +51,15 @@ export const validations = sqliteTable(
     /* Provider breadcrumbs: their id and raw CEP status ("EN PROCESO"…) */
     providerValidationId: text("provider_validation_id"),
     cepStatus: text("cep_status"),
+    /* D14 — what the call cost and how long it took. From response
+       headers, which ride 200s only, so NULL is normal on failures.
+       `provider_ms` is the instrument that will say whether a faceless
+       `invalid` ever reached Banxico (1–2 s early fail vs 6–7 s lookup);
+       `quota_remaining` makes the 800-per-period plan visible before the
+       429 does. */
+    providerHttpStatus: integer("provider_http_status"),
+    providerMs: integer("provider_ms"),
+    quotaRemaining: integer("quota_remaining"),
     createdAt: createdAt(),
   },
   (t) => [index("validations_key_idx").on(t.apiKeyId, t.createdAt)],

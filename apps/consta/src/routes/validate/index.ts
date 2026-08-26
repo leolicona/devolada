@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { validations } from "../../db/schema";
 import { requireApiKey } from "../../auth/api-key";
 import { apiCepProvider } from "../../provider/apicep";
-import { ProviderError, type ReceiptInput, type TransferInput } from "../../provider/types";
+import { ProviderFailure, type ReceiptInput, type TransferInput } from "../../provider/types";
 import type { Bindings, Variables } from "../../env";
 import { BANKS } from "../../provider/banks";
 import { extractions } from "../../db/schema";
@@ -35,6 +35,8 @@ validateRoute.post(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
+          /* D19: every error says whether waiting can help — envelope law */
+          retryable: false,
           issues,
           ...(bankIssue ? { acceptedBanks: BANKS } : {}),
         },
@@ -149,9 +151,61 @@ validateRoute.post(
     try {
       verdict = await apiCepProvider(c.env).validate(input);
     } catch (err) {
-      if (err instanceof ProviderError) {
-        console.error("provider error:", err.message);
-        return c.json({ success: false, error: { code: "PROVIDER_ERROR" } }, 502);
+      if (err instanceof ProviderFailure) {
+        console.error(`provider failure [${err.code}]:`, err.message);
+        /* D15 — the log records billed calls, not successful ones. A
+           response came back, so apiCEP (probably) charged for it; a row
+           with `status: null` is how the invoice stays a SUM over this
+           table. No response (network, deadline) → nothing was measured
+           → no row. */
+        if (err.extra.telemetry) {
+          const [row] = await db
+            .insert(validations)
+            .values({
+              apiKeyId,
+              mode: input.mode,
+              status: null,
+              trackingKey: (input.mode === "transfer" ? input.trackingKey : null) ?? null,
+              referenceNumber: input.mode === "transfer" ? (input.referenceNumber ?? null) : null,
+              amountCents: input.mode === "transfer" ? input.amountCents : null,
+              transferDate: input.mode === "transfer" ? input.date : null,
+              /* Scenario 12: the envelope-shaped 400 carries the id of a
+                 call we were billed for — recorded even though it failed */
+              providerValidationId: err.extra.providerValidationId ?? null,
+              providerHttpStatus: err.extra.telemetry.httpStatus,
+              providerMs: err.extra.telemetry.providerMs,
+              quotaRemaining: err.extra.telemetry.quotaRemaining,
+            })
+            .returning({ id: validations.id });
+          if (extractionId) {
+            await db.update(extractions).set({ validationId: row.id }).where(eq(extractions.id, extractionId));
+          }
+        }
+        /* D9 — the envelope says whether waiting can help, so the caller
+           stops guessing. Our HTTP status mirrors the taxonomy: 503 when
+           the provider is rate-limited (with Retry-After), 422 when the
+           request itself must change, 502 for everything Consta cannot
+           promise anything about. */
+        const httpStatus =
+          err.code === "PROVIDER_RATE_LIMITED" ? 503
+          : err.code === "REQUEST_REJECTED" || err.code === "RECEIPT_UNREADABLE" ? 422
+          : 502;
+        if (err.code === "PROVIDER_RATE_LIMITED" && err.extra.retryAfter) {
+          c.header("Retry-After", err.extra.retryAfter);
+        }
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: err.code,
+              retryable: err.retryable,
+              ...(err.extra.retryAfter ? { retryAfter: err.extra.retryAfter } : {}),
+              ...(err.extra.hint ? { hint: err.extra.hint } : {}),
+              ...(err.extra.missingFields ? { missingFields: err.extra.missingFields } : {}),
+            },
+          },
+          httpStatus,
+        );
       }
       throw err;
     }
@@ -171,6 +225,12 @@ validateRoute.post(
         transferDate: (input.mode === "transfer" ? input.date : verdict.cep?.date) ?? null,
         providerValidationId: verdict.providerValidationId,
         cepStatus: verdict.cepStatus,
+        /* D14: cost and latency ride every row. `providerMs` on a
+           faceless `invalid` is the one clue whether Banxico was ever
+           asked (1–2 s early fail vs 6–7 s real lookup). */
+        providerHttpStatus: verdict.telemetry.httpStatus,
+        providerMs: verdict.telemetry.providerMs,
+        quotaRemaining: verdict.telemetry.quotaRemaining,
       })
       .returning({ id: validations.id });
 
@@ -198,6 +258,11 @@ validateRoute.post(
            licence to tell a customer their transfer does not exist. */
         ...(verdict.reason ? { reason: verdict.reason } : {}),
         ...(verdict.reason === "not_found" ? { hint: "verify_inputs" } : {}),
+        /* D18: `contradicted` says which way when Banxico said it —
+           "DEVUELTO" lets a caller tell its customer "your bank returned
+           the transfer" instead of a generic mismatch. Banxico's word
+           about the payer's own transfer, so nothing foreign leaks. */
+        ...(verdict.reason === "contradicted" && verdict.cepStatus ? { cepStatus: verdict.cepStatus } : {}),
         alreadyValidated: verdict.alreadyValidated,
         ...(verdict.cep ? { cep: verdict.cep } : {}),
         ...(verdict.downloads ? { downloads: verdict.downloads } : {}),

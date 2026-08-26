@@ -115,7 +115,7 @@ sets no bound.
 - Accepted: **JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC**, **1 MB max**. PDF matters — several Mexican banks issue the comprobante as one.
 - `beneficiary` is required in OCR mode, and it is **not read from the image**: receipts mask the destination CLABE (Nu prints `••••8274`), so apiCEP matches the beneficiary the caller sends against Banxico's record. No OCR can recover it.
 - The claimed `date` in direct mode is a **hint, not a filter**: a validation claiming `2026-08-15` returned a CEP dated `2026-08-17`. Compare the returned date yourself (direct-payment D11 does).
-- **Sender and beneficiary bank may not be the same institution** — measured 2026-08-19: HTTP 400 in 432 ms with *"El banco emisor y el banco receptor no pueden ser la misma institución. Las transferencias SPEI y SPID deben realizarse entre instituciones distintas."* This is a coverage hole, not an error: a payer who banks where the ISP banks cannot be validated through apiCEP at all. Intra-bank transfers never produce a SPEI CEP, so the limit is Banxico's, not the provider's.
+- **Sender and beneficiary bank may not be the same institution** — measured 2026-08-19: HTTP 400 in 432 ms with *"El banco emisor y el banco receptor no pueden ser la misma institución. Las transferencias SPEI y SPID deben realizarse entre instituciones distintas."* This is a coverage hole, not an error: a payer who banks where the ISP banks cannot be validated through apiCEP at all. Intra-bank transfers never produce a SPEI CEP, so the limit is Banxico's, not the provider's. Since 2026-08-25 Consta refuses this at its own edge on the transfer door (validation.spec.md D17) — this 400 also bills a credit, and the provider's rejection never names the reason stably — so only the OCR door, where the sender bank cannot be known beforehand, can still reach it.
 
 ### `bank`: never rejected, and still decides the verdict
 
@@ -217,8 +217,10 @@ apiCEP says these ride "every response". **They do not** — measured
 | `X-RateLimit-Reset` | yes | **no** | ISO 8601 reset — `2026-09-16T17:59:12.203+00:00` |
 | `X-Processing-Time` | yes | sometimes | provider-side total, e.g. `2550ms` |
 
-Consta reads none of them, so no log has ever shown one. The quota figures
-above came from a `curl`, not from our own telemetry.
+Since 2026-08-25 Consta records `X-Processing-Time` and
+`X-RateLimit-Remaining` on every `validations` row (validation.spec.md D14),
+so quota and provider latency are finally our own telemetry. The quota
+figures above came from a `curl`, before that existed.
 
 **Quota is not what the plan page implies.** 800 per period, resetting
 monthly, with 767 left after roughly a month of spikes and a dozen probe
@@ -303,8 +305,13 @@ row we have never seen.)*
 | `429` | plan quota exhausted | **yes, but only after `X-RateLimit-Reset`** — retrying before it deepens the outage |
 | `500` | provider fault | **yes** |
 
-Only `500` is genuinely transient. Consta collapses all seven into one
-retryable `PROVIDER_ERROR`; see the gap list below.
+Only `500` is genuinely transient. Since 2026-08-25 Consta names each row
+(validation.spec.md D9): `PROVIDER_UNAVAILABLE` (500, network, its own
+deadline, the transient 401), `PROVIDER_RATE_LIMITED` (429, echoing
+`X-RateLimit-Reset` as `retryAfter`), `PROVIDER_AUTH_FAILED` (the fatal
+401 bodies), `REQUEST_REJECTED` (400/405/422, the 422 with
+`hint: "provide_tracking_key"`), and `RECEIPT_UNREADABLE` (200 +
+`status: "error"` on the receipt door, `missingFields` passed through).
 
 **A 400 still bills a credit.** Measured twice on 2026-08-19: fire two valid
 requests and `X-RateLimit-Remaining` falls by one each; slip a malformed one
@@ -326,9 +333,10 @@ full response envelope wearing a 400:
   "processingTime": { "ocr": "0ms", "total": "1.3s" } }
 ```
 
-The same-institution rejection is the second kind. Consta throws on
-`!res.ok` **before parsing the body**, so the `validationId` of a call it was
-charged for is discarded unread.
+The same-institution rejection is the second kind. Consta reads the body of
+every non-2xx before classifying it (2026-08-25, validation.spec.md D9/D15),
+so the envelope's `validationId` lands in the `validations` log even though
+the call failed — it was billed, and the log is the billing record.
 
 ## Measured behaviour
 
@@ -346,7 +354,7 @@ charged for is discarded unread.
 
 ## Environment, limits and cost
 
-No sandbox, no test keys, no free credits (docs checked 2026-08-17). A **free Welcome plan** exists — 50 requests / 30 days on signup at `app.apicep.cloud` — enough for smoke checks. Dev therefore carries its own mock: `pnpm sandbox` in `apps/consta` serves `/validate-transfer` on port 8789, with scenarios keyed off the tracking key (`PEND`, `DUP`, `BAD`, `NF`, `ERR`). Pointing `APICEP_BASE_URL` at it is a one-line switch, which is what Consta's adapter boundary (its D2) buys.
+No sandbox, no test keys, no free credits (docs checked 2026-08-17). A **free Welcome plan** exists — 50 requests / 30 days on signup at `app.apicep.cloud` — enough for smoke checks. Dev therefore carries its own mock: `pnpm sandbox` in `apps/consta` serves `/validate-transfer` on port 8789, with scenarios keyed off the tracking key — verdicts (`PEND`, `DUP`, `BAD`, `NF`) and, since 2026-08-25, every failure shape in the taxonomy (`E500`, `R429`, `A401`/`A401T`, `B400`/`E400`, `D422`, `UNK`, `HANG`, `ERR`; full list in validation.spec.md, Local sandbox). Pointing `APICEP_BASE_URL` at it is a one-line switch, which is what Consta's adapter boundary (its D2) buys.
 
 Cost is roughly **$0.25 MXN per call**, which sets the budgets in direct-payment D13. apiCEP recommends **~1 s between calls** for bulk work; nothing here batches yet, but direct-payment D7's re-validation schedule is the first thing that could.
 
@@ -355,30 +363,25 @@ Document URLs (`cepXml`, `cepPdf`, `originalImage`) are **deleted after 15 days*
 ## Where Consta does not yet honour this contract
 
 Recorded here so the next reader does not mistake this file for a description
-of the code. Detail and priority in the analysis that produced this update.
+of the code. The 2026-08-25 build (validation.spec.md D9, D14–D16) closed
+most of the original list: every non-2xx is now classified with its body
+read (the five-code taxonomy above), an unrecognised `status` fails toward
+"we do not know" (D10), the rate-limit and timing headers land on every
+`validations` row (D14/D15), the bank vocabulary is a closed enum (D12), the
+adapter carries its own 25 s deadline (D16), and the mock serves every shape
+the taxonomy needs. What remains:
 
-- **Every HTTP failure is one retryable code.** `apicep.ts` captures
-  `res.status` into `ProviderError` and never reads it again; the route maps
-  the lot to 502 `PROVIDER_ERROR`. 401, 422 and 429 each need different
-  handling and get none (BUG-002).
-- **An unrecognised `status` becomes `invalid`.** `mapStatus`'s fallback is
-  the harshest verdict, so a value apiCEP adds tomorrow would read as "this
-  transfer is fake" — against D3's entire premise.
-- **The rate-limit headers are discarded**, so quota is invisible until a 429
-  arrives, and the credits question stays open for want of reading one header.
-- **`bank` is `z.string().min(1)`.** apiCEP will not reject a wrong name, it
-  will answer `invalid` — so this is the one field where our Zod is the only
-  thing standing between a real payment and a false negative.
-- **The body of a non-2xx is never parsed**, so `missingFields`, the
-  `validationId` of a billed 400, and the whole business-rule envelope are
-  discarded unread.
 - **`confidence`, `extracted` and `banxicoConfirmed` are not modelled** — the
   first two deliberately (`extracted` must never decide money), the third by
   omission.
-- **The adapter's `fetch` carries no timeout**, so Consta can outlive its own
-  caller's deadline.
-- **The mock models none of this** — no 429, no 422, no `missingFields`, no
-  headers, no envelope-shaped 400 — so nothing above is testable until it does.
+- **The consumer still guesses.** `apps/api/src/consta/client.ts` reads every
+  non-2xx from Consta as retryable `CONSTA_UNAVAILABLE` (401 aside), so
+  `retryable: false` does not yet stop Devolada's re-validation schedule.
+  That hand-off is direct-payment D7's to build (validation.spec.md, D9
+  Definition of Done).
+- **The taxonomy's 405/422/429/500 rows are still published, unverified** —
+  the adapter codes defensively against shapes nobody here has observed (see
+  Open items).
 
 ## Open items
 

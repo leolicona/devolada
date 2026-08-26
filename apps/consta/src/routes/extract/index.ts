@@ -114,6 +114,8 @@ extractRoute.post(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
+          /* D19: every error says whether waiting can help — envelope law */
+          retryable: false,
           issues: result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
         },
       },

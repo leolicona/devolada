@@ -45,6 +45,10 @@ export const validations = sqliteTable(
     alreadyValidated: integer("already_validated", { mode: "boolean" }).notNull().default(false),
     /* What was claimed/extracted, for audit and support */
     trackingKey: text("tracking_key"),
+    /* proof-extraction D13: kept so the pair (bank, clave) accumulates on
+       the transfer door too. Per-bank clave shape is derived only from
+       rows Banxico confirmed (`status = 'valid'`), never from claims. */
+    senderBank: text("sender_bank"),
     referenceNumber: text("reference_number"),
     amountCents: integer("amount_cents"),
     transferDate: text("transfer_date"),

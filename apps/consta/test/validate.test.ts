@@ -882,6 +882,25 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.reason).toBe("not_found");
     expect(data.hint).toBe("verify_inputs");
   });
+
+  it("US-V10, scenario 13: every row records the sender bank on both doors (D13)", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* The transfer door used to record the clave and drop the bank, so
+       the Banxico-confirmed (bank, clave) pair D13 derives shape from
+       had to be reconstructed by prefix. Now it accumulates on its own. */
+    mockApiCep(settledResponse);
+    await postValidate(key, directRequest);
+    mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse);
+    await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) });
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.status).toBe("valid");
+      expect(row.senderBank).toBe("BBVA MEXICO");
+    }
+  });
 });
 
 describe("US-V11: the provider's reading is exposed (proof-extraction D11)", () => {

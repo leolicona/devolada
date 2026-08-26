@@ -169,6 +169,7 @@ validateRoute.post(
               mode: input.mode,
               status: null,
               trackingKey: (input.mode === "transfer" ? input.trackingKey : null) ?? null,
+              senderBank: input.mode === "transfer" ? input.senderBank : null,
               referenceNumber: input.mode === "transfer" ? (input.referenceNumber ?? null) : null,
               amountCents: input.mode === "transfer" ? input.amountCents : null,
               transferDate: input.mode === "transfer" ? input.date : null,
@@ -223,6 +224,9 @@ validateRoute.post(
         reason: verdict.reason,
         alreadyValidated: verdict.alreadyValidated,
         trackingKey: (input.mode === "transfer" ? input.trackingKey : verdict.cep?.trackingKey) ?? null,
+        /* proof-extraction D13: the pair (bank, clave) is what per-bank
+           clave shape is derived from, and only `valid` rows count */
+        senderBank: (input.mode === "transfer" ? input.senderBank : verdict.cep?.senderBank) ?? null,
         referenceNumber: input.mode === "transfer" ? (input.referenceNumber ?? null) : null,
         amountCents: (input.mode === "transfer" ? input.amountCents : verdict.cep?.amountCents) ?? null,
         transferDate: (input.mode === "transfer" ? input.date : verdict.cep?.date) ?? null,

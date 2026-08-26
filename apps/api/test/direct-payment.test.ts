@@ -2233,3 +2233,179 @@ describe("US-D13: the amount the payer really sent", () => {
     expect("speiBeneficiaryName" in data).toBe(false);
   });
 });
+
+describe("US-D14: the classifier at minute two", () => {
+  /* A reader-sourced payment whose inline attempt found nothing: image
+     stored, misread clave on the row, one attempt spent. */
+  const CROSS_ROW = {
+    amountCents: 51400,
+    invoiceCents: 49900,
+    serviceFeeCents: 1500,
+    proofMode: "transfer",
+    trackingKey: "NU3AMISREADQRNKJHK000000X8P",
+    senderBank: "NUBANK",
+    claimedAmountCents: 51400,
+    proofKey: "lk-1/proof-1",
+    validationAttempts: 1,
+    lastError: "TRANSFER_NOT_FOUND",
+  } as const;
+
+  async function seedCross(over: Record<string, unknown> = {}) {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        ...CROSS_ROW,
+        transferDate: new Date().toISOString().slice(0, 10),
+        nextValidationAt: new Date(now.getTime() - 1000),
+        ...over,
+      })
+      .returning();
+    return { isp, link, payment, now, db };
+  }
+
+  const statusOf = async (id: string) => {
+    const res = await (await app()).request(`/direct-payments/${id}/status`, {}, testEnv);
+    return (await res.json()).data as Record<string, unknown>;
+  };
+
+  it("scenario 1: the cross sends the image with providerOcr, and a valid adopts the CEP's key", async () => {
+    const { payment, now, db } = await seedCross();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const captured = mockConsta({
+      cep: {
+        trackingKey: "NU3AREALQKRNKJHK00000000X8P",
+        amountCents: 51400,
+        date: new Date().toISOString().slice(0, 10),
+        senderBank: "NUBANK",
+        senderName: "JANELY REYES",
+        receiverBank: "STP",
+        beneficiaryName: "WifiPlus SA de CV",
+      },
+    });
+
+    await sweepDirectPayments(testEnv, now);
+    const sent = captured.body as Record<string, unknown>;
+    expect(sent.providerOcr).toBe(true);
+    expect(String(sent.receiptUrl)).toContain("proof");
+    expect(sent.transfer).toBeUndefined();
+
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+    /* reading-check D7: the index ends up holding the truth */
+    expect(row.trackingKey).toBe("NU3AREALQKRNKJHK00000000X8P");
+  });
+
+  it("scenario 2: a matching reading writes agreed, and the ride keeps its schedule", async () => {
+    const { payment, now, db } = await seedCross();
+    mockConsta({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: {
+        trackingKey: CROSS_ROW.trackingKey,
+        amountCents: 51400,
+        date: "2026-08-26",
+        senderBank: "Nubank",
+        referenceNumber: "260826",
+      },
+    });
+
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.disputedFields).toBeNull();
+    expect((await statusOf(payment.id)).readingCheck).toBe("agreed");
+  });
+
+  it("scenario 3+5: a differing clave and amount write disputed, with the fields named", async () => {
+    const { payment, now, db } = await seedCross();
+    mockConsta({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: {
+        trackingKey: "NU3AOTHERREADING00000000X8P",
+        amountCents: 40000,
+        date: "2026-08-26",
+        senderBank: "Nubank",
+        referenceNumber: null,
+      },
+    });
+
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.readingCheck).toBe("disputed");
+    const data = await statusOf(payment.id);
+    expect(data.readingCheck).toBe("disputed");
+    expect(data.disputedFields).toEqual(["trackingKey", "amount"]);
+  });
+
+  it("scenario 6: a blind cross stays null on the wire — no evidence is the same as no cross", async () => {
+    const { payment, now, db } = await seedCross();
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    /* Internally recorded so the cross never repeats (D5)… */
+    expect(row.readingCheck).toBe("blind");
+    /* …and invisible to the page, which keeps today's behaviour */
+    const data = await statusOf(payment.id);
+    expect(data.readingCheck).toBeNull();
+    expect("disputedFields" in data).toBe(false);
+  });
+
+  it("scenario 7: a bank-name difference alone raises nothing", async () => {
+    const { payment, now, db } = await seedCross();
+    mockConsta({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: {
+        trackingKey: CROSS_ROW.trackingKey,
+        amountCents: 51400,
+        date: "2026-08-26",
+        senderBank: "NU MEXICO",
+        referenceNumber: null,
+      },
+    });
+
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.readingCheck).toBe("agreed");
+  });
+
+  it("scenario 9: a manual-door payment (no image) never crosses", async () => {
+    const { payment, now, db } = await seedCross({ proofKey: null });
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    await sweepDirectPayments(testEnv, now);
+    const sent = captured.body as Record<string, unknown>;
+    expect(sent.transfer).toBeDefined();
+    expect(sent.providerOcr).toBeUndefined();
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.readingCheck).toBeNull();
+  });
+
+  it("scenario 8: expiry keeps the agreement, so the page can pre-diagnose", async () => {
+    const past = new Date(Date.now() - 13 * 60 * 60 * 1000);
+    const { payment, now } = await seedCross({
+      readingCheck: "agreed",
+      validationAttempts: 7,
+      createdAt: past,
+    });
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+
+    await sweepDirectPayments(testEnv, now);
+    const data = await statusOf(payment.id);
+    expect(data.status).toBe("expired");
+    expect(data.readingCheck).toBe("agreed");
+  });
+});

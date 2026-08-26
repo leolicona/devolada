@@ -1,5 +1,5 @@
 ---
-status: draft
+status: in-development
 stories: [US-D14]
 domain: direct-payment
 updated: 2026-08-26
@@ -69,6 +69,6 @@ The sweep's 2-minute slot for eligible payments calls Consta's receipt door (US-
 ## Definition of Done
 
 - [x] **Gate: US-V11's measurement** — passed 2026-08-26: `extracted` arrives complete on the faceless `invalid`; plan A active
-- [ ] Scenarios 1–10 automated (api + pago suites), each citing US-D14
-- [ ] `validation-status-ux` D1/D3 amended: clock escalation scoped to payments without evidence (agreed payments never escalate by clock)
+- [x] Scenarios 1–10 automated, each citing US-D14: 1–3, 5–9 in `direct-payment.test.ts` ("US-D14" block) with 2/3/8's page halves in `pago.test.tsx`; 4 is direct-payment D18's unchanged/supersede pair, already pinned; 10 is D3's fraud note, held by the agreement never touching the verdict path
+- [x] `validation-status-ux` D1 amended: clock escalation scoped to payments without evidence (agreed payments never escalate by clock)
 - [ ] Manual check on deployed dev: a deliberately misread clave is disputed and corrected inside five minutes

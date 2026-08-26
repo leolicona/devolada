@@ -42,7 +42,14 @@ export type ConstaRequest =
         beneficiary: ConstaBeneficiary;
       };
     }
-  | { receiptUrl: string; beneficiary: ConstaBeneficiary };
+  | {
+      receiptUrl: string;
+      beneficiary: ConstaBeneficiary;
+      /* proof-extraction D11: skip Consta's reader — the provider's OCR
+         reads the image itself. The reading-check cross (US-D14) sets
+         this: the same model checking itself is no second opinion. */
+      providerOcr?: true;
+    };
 
 export type ConstaVerdict = {
   validationId: string;
@@ -61,6 +68,17 @@ export type ConstaVerdict = {
     receiverBank: string;
     beneficiaryName: string;
   };
+  /* proof-extraction D11: what the provider's OCR read off the image —
+     a reading, never a verdict. Present on provider-OCR calls only, and
+     it survives failure (measured 2026-08-26), which is exactly when the
+     reading-check comparison needs it. */
+  reading?: {
+    trackingKey: string | null;
+    amountCents: number | null;
+    date: string | null;
+    senderBank: string | null;
+    referenceNumber: string | null;
+  } | null;
 };
 
 /* proof-extraction D6: the reading, before a credit is spent. This is

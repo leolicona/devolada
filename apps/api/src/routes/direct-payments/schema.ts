@@ -198,6 +198,12 @@ export const directPaymentStatusResponse = z.object({
   /* claimed-amount D3: what the payment asked Banxico with, so the
      correction form pre-fills the amount that actually travelled */
   claimedAmountCents: z.number().int().nullable().optional(),
+  /* reading-check D3/D4: the minute-two classification. "agreed" lets
+     the page retire the clock; "disputed" opens the form now with the
+     disputed fields empty. A blind cross stays null on the wire — no
+     evidence is the same as no cross, and the page behaves as today. */
+  readingCheck: z.enum(["agreed", "disputed"]).nullable().optional(),
+  disputedFields: z.array(z.enum(["trackingKey", "amount"])).optional(),
   /* The receipt's own `Estatus`: decides whether the payer is asked to
      confirm or simply told their bank has not released it yet */
   receiptStatus: z.string().nullable().optional(),

@@ -1,8 +1,8 @@
 ---
 status: in development
-stories: [US-V09, US-V10]
+stories: [US-V09, US-V10, US-V11]
 domain: consta
-updated: 2026-08-19
+updated: 2026-08-26
 debt: []
 ---
 
@@ -365,6 +365,54 @@ configuration if it ever misbehaves in production.
       address it connected to. Integrators pass short-lived signed URLs today,
       which is a mitigation and not a fix
 
+## Decisions — the second reader (US-V11, 2026-08-26)
+
+Live testing gave the reader its first real-world measurement, and it is worse
+than the 30/30 of 2026-08-19: on four Nu receipts the model misread the clave
+on three — a dropped `K` (reproduced identically on two captures of the same
+receipt) and a transposed `PF`. All deterministic, all shape-valid, so the
+gate passed them and each bought a `not_found` ride. The reader's content is
+verified by nobody except the payer — and the provider has been holding a
+second opinion all along.
+
+- **D11 — The receipt door's response exposes the provider's reading.** apiCEP
+  returns `extracted` — *what the picture said* — on every OCR-mode call, and
+  the mapper has been discarding it. The validate response (receipt door only)
+  gains a `reading` object: `{ trackingKey, amountCents, date, senderBank,
+  referenceNumber }`, mapped from `extracted`, plus `missingFields` surfaced on
+  the success envelope when the provider names unread fields. Labeled in the
+  contract the way apicep.md demands: **a reading, never a verdict** —
+  `extracted` is attacker-controlled (measured with a forged receipt), so it
+  can inform a client's UX or a comparison, and can never decide money; the
+  money still comes from `cep` (Banxico's record) alone. **Gated on one
+  measurement, first**: whether `extracted` comes back on a *failed*
+  receipt-door validation — the open question below, one captured call. If it
+  only accompanies success, the field ships anyway (it is still the second
+  opinion on every validated receipt, and the raw material of D12) but the
+  first consumer's plan A collapses to its plan B
+  (`direct-payment/reading-check.spec.md`). **The probe consumes receipts**:
+  `cepPreviouslyValidated` is permanent, so the measurement uses an
+  already-consumed comprobante or a fabricated one, never a virgin useful one.
+  **Rejected**: keeping the mapper as-is (throwing away a reading the caller
+  already paid for); exposing the full `extracted` verbatim (senderName,
+  beneficiaryName and paymentConcept invite exactly the trust-the-pixels
+  integrations apicep.md warns against — the five fields above are the ones a
+  reading consumer legitimately compares).
+
+- **D12 — The comparison stays client-side today, and its migration path is
+  named: `expected`.** The first consumer (Devolada's reading-check) compares
+  its own reading against D11's, on its side — Consta does not learn what the
+  client believes, and no comparison semantics are frozen into this contract
+  on a sample of one integrator. But the mission this is walking toward is
+  reconciliation: the day that feature is specced, the validate request grows
+  `expected: { trackingKey?, amountCents?, … }` — *"this is what my books
+  say"* — and the response answers per field: `matched | disputed | unread`.
+  That primitive *is* invoice/receipt reconciliation in the singular;
+  reconciling a batch is running it N times against a ledger. D11 is its
+  prerequisite either way, so nothing built now is thrown away. **Rejected**:
+  building `expected` today (API semantics cannot be un-shipped, and one
+  internal consumer is not evidence of the right shape).
+
 ## Open questions
 
 - **Does `extracted` come back on a faceless receipt-door `invalid`?** Never
@@ -372,7 +420,8 @@ configuration if it ever misbehaves in production.
   if apiCEP reports what it read even when it fails, then how often its OCR is
   actually wrong becomes measurable for the first time — the number D2's
   withdrawn cost argument needed and never had. One captured response body
-  answers it.
+  answers it. *(2026-08-26: now the gate of D11 — and of
+  reading-check plan A on the Devolada side.)*
 - **Was 2026-08-18 a misread or an unpublished CEP?** Still unsettled, and it
   is settleable: run **both doors on the same receipt inside the same
   minute** — the image through the receipt door, the clave read off it by hand

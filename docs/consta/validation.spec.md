@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08]
 domain: consta
-updated: 2026-08-19
+updated: 2026-08-26
 debt: []
 ---
 
@@ -406,6 +406,13 @@ Response:
     alreadyValidated: boolean,
     cep?: { trackingKey, amountCents, date, senderBank, senderName,
             receiverBank, beneficiaryName, digitalSignature? },
+    reading?: { trackingKey?, amountCents?, date?, senderBank?,
+                referenceNumber? },    // receipt door only: what the provider's
+                                       // OCR read off the image — a READING,
+                                       // never a verdict (proof-extraction D11,
+                                       // 2026-08-26); money comes from `cep`
+    missingFields?: ["clave de rastreo"],  // receipt door: fields the provider
+                                           // says it could not read (D11)
     downloads?: { cepXml?, cepPdf? }   // provider URLs, expire in 15 days
 } }
 ```

@@ -181,8 +181,12 @@ to emit these literals.
   "processingTime": { "ocr": "1.20s", "validation": "3.45s", "total": "4.68s" } }
 ```
 
-Everything above is confirmed live except **`downloads.originalImage`**, which
-apiCEP documents and we have never seen returned.
+Everything above is confirmed live. **`downloads.originalImage`** was finally
+seen on 2026-08-26 — on an OCR-mode `invalid`, of all places — and it carries
+a privacy consequence: the provider **re-hosts the submitted receipt at a
+public storage URL** (`https://storage.apicep.cloud/public/receipts/…`) for
+its 15-day window. Anything sent through the OCR door becomes a public-if-you-
+know-the-URL image on the provider's storage.
 
 **`confidence` is not the OCR quality signal it looks like.** It came back
 `1` on every direct-mode call measured on 2026-08-19 — including ones with no
@@ -190,9 +194,12 @@ image at all and `processingTime.ocr: "0ms"`, and including a request apiCEP
 rejected with a 400. Whatever it scores, it is not "how well I read your
 receipt" in direct mode, and its behaviour in OCR mode is untested. It was
 listed here as the field that would separate *illegible* from *nonexistent*;
-that hope now needs a receipt-door measurement before anything is built on it.
+the receipt-door measurement arrived 2026-08-26: **`confidence: 1` in OCR mode
+too**, on a fabricated screenshot — it is not a quality signal in either mode.
 
-`downloads` is `{}` — present but empty — on an `invalid` verdict, not absent.
+`downloads` is `{}` — present but empty — on a direct-mode `invalid`, not
+absent; an OCR-mode `invalid` (measured 2026-08-26) instead carried
+`originalImage` alone.
 
 The real `cepDetails` is far richer than the eight fields Consta maps: a
 captured response also carried `speiKey`, `cdaChain`, `certificateNumber`,
@@ -266,6 +273,16 @@ All arrive inside a 200 *(published; only the first has been seen here)*:
      "missingFields": ["fecha de la operación", "clave de rastreo o número de referencia"] }
    ```
 4. **No `potentialBeneficiaries` candidate matched** the extracted data.
+
+**Measured 2026-08-26 — `extracted` survives failure, complete.** A fabricated
+receipt (28-character clave that exists nowhere, $3.50, real beneficiary
+CLABE) through OCR mode answered `invalid` with `banxicoConfirmed: false`, no
+`cepDetails`, `cepPreviouslyValidated: null` — the faceless shape — and the
+**full `extracted`**: the nonexistent clave transcribed perfectly, reference,
+amount, date, both banks, both names, the concept. OCR 3.54 s, validation
+1.23 s, one credit. This is the measurement `proof-extraction` D11 gated on:
+the provider's reading is available on every OCR call, success or failure, so
+a second opinion exists exactly when the first one is in doubt.
 
 **This changes how our OCR false negative reads.** apiCEP *has* a channel for
 "I could not read this" — case 3, with the field names spelled out — and our

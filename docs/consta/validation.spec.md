@@ -393,7 +393,9 @@ Request (exactly one door):
 ```
 { transfer: { date: "YYYY-MM-DD", amountCents, senderBank, trackingKey? | referenceNumber?,
               beneficiary: { bank, clabe? | phoneNumber? | cardNumber?, name? } } }
-{ receiptUrl: "https://…", beneficiary?: {…}, potentialBeneficiaries?: [{…}] }
+{ receiptUrl: "https://…", beneficiary?: {…}, potentialBeneficiaries?: [{…}],
+  providerOcr?: true }   // skip the edge reader; the provider reads the image
+                         // itself (proof-extraction D11) — the second opinion
 ```
 
 Response:
@@ -407,7 +409,7 @@ Response:
     cep?: { trackingKey, amountCents, date, senderBank, senderName,
             receiverBank, beneficiaryName, digitalSignature? },
     reading?: { trackingKey?, amountCents?, date?, senderBank?,
-                referenceNumber? },    // receipt door only: what the provider's
+                referenceNumber? },    // provider-OCR calls only: what its
                                        // OCR read off the image — a READING,
                                        // never a verdict (proof-extraction D11,
                                        // 2026-08-26); money comes from `cep`

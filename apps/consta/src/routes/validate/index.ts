@@ -77,7 +77,10 @@ validateRoute.post(
        takes exactly one beneficiary. So a caller using it keeps the OCR
        door — that is this spec's answer to its own open question, rather
        than quietly dropping a field from the contract. */
-    const readable = input.mode === "receipt" && Boolean(body.beneficiary);
+    /* D11: `providerOcr` keeps the image on the OCR door on purpose — a
+       caller that already holds a reading wants the provider's eyes, not
+       a second pass of the same model. */
+    const readable = input.mode === "receipt" && Boolean(body.beneficiary) && !body.providerOcr;
     if (readable && input.mode === "receipt" && c.env.AI) {
       let extracted: ExtractionResult;
       try {
@@ -265,6 +268,10 @@ validateRoute.post(
         ...(verdict.reason === "contradicted" && verdict.cepStatus ? { cepStatus: verdict.cepStatus } : {}),
         alreadyValidated: verdict.alreadyValidated,
         ...(verdict.cep ? { cep: verdict.cep } : {}),
+        /* D11: the provider's reading — a reading, never a verdict. It
+           survives failure (measured 2026-08-26), which is exactly when a
+           caller comparing readings needs it. */
+        ...(verdict.reading ? { reading: verdict.reading } : {}),
         ...(verdict.downloads ? { downloads: verdict.downloads } : {}),
       },
     });

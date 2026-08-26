@@ -69,10 +69,18 @@ export const validateRequestSchema = z
     receiptUrl: z.string().url().optional(),
     beneficiary: beneficiarySchema.optional(),
     potentialBeneficiaries: z.array(beneficiarySchema).min(1).optional(),
+    /* proof-extraction D11: skip Consta's own reader and let the
+       provider's OCR read the image. For a caller that already holds a
+       reading (its own, or Consta's /read), re-reading with the same
+       model is not a second opinion — the provider's eyes are. */
+    providerOcr: z.boolean().optional(),
   })
   .superRefine((body, ctx) => {
     if (!body.transfer === !body.receiptUrl) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "exactly one of transfer or receiptUrl" });
+    }
+    if (body.providerOcr && !body.receiptUrl) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "providerOcr only applies to the receipt door" });
     }
     if (body.transfer && (body.beneficiary || body.potentialBeneficiaries)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "the transfer door carries its own beneficiary" });

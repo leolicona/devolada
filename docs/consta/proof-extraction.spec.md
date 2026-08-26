@@ -365,6 +365,51 @@ configuration if it ever misbehaves in production.
       address it connected to. Integrators pass short-lived signed URLs today,
       which is a mitigation and not a fix
 
+## Open items — a second reader (reserved 2026-08-26, owner session)
+
+Live testing gave the reader its first real-world measurement, and it is worse
+than the 30/30 of 2026-08-19: on four Nu receipts the model misread the clave
+on three — a dropped `K` (reproduced identically on two captures of the same
+receipt) and a transposed `PF`. All deterministic, all shape-valid, so the
+gate passed them and each one bought a `not_found` ride. The correction doors
+absorbed the cost, which is their job — but the reader's content is currently
+verified by nobody except the payer. Three items, in order of cost:
+
+1. **The cross-door retry.** When a reader-sourced submission has ridden N
+   `not_found` slots, one scheduled attempt re-sends the *image* through the
+   receipt door: apiCEP re-reads it with its own OCR and validates in the same
+   paid call — a call that slot was going to spend anyway. Measured in its
+   favour: apiCEP read the full 28-character clave correctly on the exact
+   receipt where our reader dropped the `K`. Its known weakness (1 in 3
+   receipts fails faceless, direct-payment D2) is why this is a retry, not a
+   replacement.
+2. **Stop discarding `extracted` and `missingFields`.** The provider mapper
+   keeps only `cepDetails` (Banxico's record) and drops apiCEP's own reading
+   of the image. Kept, it is the second opinion on every receipt-door call —
+   and the disagreement signal below. `extracted` never decides money
+   (attacker-controlled, apicep.md); it is a *reading*, same trust tier as our
+   own reader's.
+3. **Disagreement asks the human, and asks them about the receipt — never
+   about the machines.** Owner decision on the copy: when two readings of the
+   same field disagree (ours vs `extracted`, or ours vs a future character
+   verifier), the page says **"Confirma tu clave de rastreo"** and the field
+   arrives **empty** — the payer validates against the one source of truth in
+   their hand, the comprobante. Never *"we read X, the bank read Y — which
+   matches?"*: that asks a person to diff two machine outputs, and a
+   pre-filled candidate invites the click-through confirmation that let the
+   dropped `K` survive two rounds (D18's empty-field law already covers
+   this: two machines disagreeing is precisely "a field the gate did not
+   pass"). The disagreement itself is an internal trigger and stays off the
+   screen.
+
+A fourth candidate stays gated on measurement: a classical-OCR character
+verifier (Google Cloud Vision or equivalent) checking that the reader's clave
+appears letter-for-letter in the raw text of the image — strong exactly where
+vision models are weak, but it is a new vendor with a per-image price, and
+the `(read, confirmed)` pairs the extractions table already accumulates are
+the instrument that says whether it earns its keep. Decide with that number,
+not with four receipts.
+
 ## Open questions
 
 - **Does `extracted` come back on a faceless receipt-door `invalid`?** Never
@@ -372,7 +417,8 @@ configuration if it ever misbehaves in production.
   if apiCEP reports what it read even when it fails, then how often its OCR is
   actually wrong becomes measurable for the first time — the number D2's
   withdrawn cost argument needed and never had. One captured response body
-  answers it.
+  answers it. *(2026-08-26: it also gates Open item 2 above — surfacing
+  `extracted` is only as useful as its presence on failures.)*
 - **Was 2026-08-18 a misread or an unpublished CEP?** Still unsettled, and it
   is settleable: run **both doors on the same receipt inside the same
   minute** — the image through the receipt door, the clave read off it by hand

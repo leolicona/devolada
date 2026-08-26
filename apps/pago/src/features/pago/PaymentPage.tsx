@@ -136,7 +136,13 @@ function TransferForm({
 }) {
   const [trackingKey, setTrackingKey] = useState(draft?.trackingKey ?? "");
   const [senderBank, setSenderBank] = useState(draft?.senderBank ?? "");
-  const [date, setDate] = useState(draft?.date ?? new Date().toISOString().slice(0, 10));
+  /* validation-status-ux D6: a draft with no date arrives empty — the
+     machine did not read one, and pre-filling *today* invents a value
+     that merely looks confirmed. Only the manual door, where the payer
+     types everything, keeps today as the honest same-day prior. */
+  const [date, setDate] = useState(
+    draft ? (draft.date ?? "") : new Date().toISOString().slice(0, 10),
+  );
   /* D16/BUG-006: the same shape the API enforces, so the button is
      honest — a key that cannot validate never gets a paid call. */
   const valid =
@@ -261,6 +267,13 @@ export function PaymentPage({ token }: { token: string }) {
   };
   /* The fallback door, opened on purpose and never closed again (D19) */
   const [manualDoor, setManualDoor] = useState(false);
+  /* validation-status-ux D7: the live payment a fresh proof supersedes —
+     set when the payer walks out of "Verificando" through "Subir otro
+     comprobante", cleared when the new submission lands. */
+  const [resubmitOf, setResubmitOf] = useState<string | null>(null);
+  /* validation-status-ux D2: the correction door inside the calm phase.
+     Opening it is deliberate; it never opens itself. */
+  const [correcting, setCorrecting] = useState(false);
 
   const link = useQuery<LinkStatusResponse, ApiError>({
     queryKey: ["link", token],
@@ -332,7 +345,11 @@ export function PaymentPage({ token }: { token: string }) {
         method: "POST",
         body: JSON.stringify(body),
       }),
-    onSuccess: setPayment,
+    onSuccess: (result) => {
+      setPayment(result);
+      setResubmitOf(null);
+      setCorrecting(false);
+    },
   });
 
   /* D18 — the machine reads, the human confirms, the direct door
@@ -369,7 +386,10 @@ export function PaymentPage({ token }: { token: string }) {
            both, so pay the way we always did */
         return api<PayResponse>(`/direct-payments/links/${token}/pay`, {
           method: "POST",
-          body: JSON.stringify({ proofId }),
+          body: JSON.stringify({
+            proofId,
+            ...(resubmitOf ? { supersedes: resubmitOf } : {}),
+          }),
         });
       }
       /* D18: a reading that failed the gate is the one case where the
@@ -378,7 +398,10 @@ export function PaymentPage({ token }: { token: string }) {
       const gated =
         reading.isReceipt === false ||
         reading.gate.trackingKey !== "ok" ||
-        reading.gate.senderBank !== "ok";
+        reading.gate.senderBank !== "ok" ||
+        /* validation-status-ux D6: an unread date is a missing field,
+           like clave and banco — never silently today's. */
+        reading.date == null;
       if (gated) return { proofId, reading };
 
       /* partial-payment D1/D12: the amount printed on the receipt is what
@@ -405,9 +428,12 @@ export function PaymentPage({ token }: { token: string }) {
         method: "POST",
         body: JSON.stringify({
           proofId,
+          ...(resubmitOf ? { supersedes: resubmitOf } : {}),
           transfer: {
             trackingKey: reading.trackingKey,
             senderBank: reading.senderBank,
+            /* D6 gated null dates above, so this fallback never fires;
+               it only keeps the shape total for the type. */
             date: reading.date ?? new Date().toISOString().slice(0, 10),
           },
           receiptStatus: reading.receiptStatus ?? undefined,
@@ -419,8 +445,11 @@ export function PaymentPage({ token }: { token: string }) {
       });
     },
     onSuccess: (result) => {
-      if ("directPaymentId" in result) setPayment(result);
-      else setDraft(result as { proofId: string; reading: ProofReading });
+      if ("directPaymentId" in result) {
+        setPayment(result);
+        setResubmitOf(null);
+        setCorrecting(false);
+      } else setDraft(result as { proofId: string; reading: ProofReading });
     },
   });
 
@@ -463,6 +492,7 @@ export function PaymentPage({ token }: { token: string }) {
       ? {
           status: payment.status,
           validationAttempts: 1,
+          nextValidationAt: null,
           error: payment.error,
           trackingKey: null,
           senderBank: null,
@@ -473,8 +503,22 @@ export function PaymentPage({ token }: { token: string }) {
   if (payment && status) {
     const retry = () => {
       setPayment(null);
+      setCorrecting(false);
       pay.reset();
       upload.reset();
+      void queryClient.invalidateQueries({ queryKey: ["link", token] });
+    };
+    /* validation-status-ux D7: the payer who knows the receipt is wrong
+       walks back to step 2, and the fresh submission supersedes this
+       payment — without that, they would race their own tracking-key
+       claim and be told TRANSFER_ALREADY_USED by themselves. */
+    const startOverWithReceipt = () => {
+      setResubmitOf(payment.directPaymentId);
+      setPayment(null);
+      setCorrecting(false);
+      pay.reset();
+      upload.reset();
+      goTo("proof");
       void queryClient.invalidateQueries({ queryKey: ["link", token] });
     };
     return (
@@ -492,30 +536,70 @@ export function PaymentPage({ token }: { token: string }) {
               /* D18: the receipt's own Estatus is the one discriminator
                  we have. "En proceso" means the bank has not released
                  the transfer — there is nothing for the payer to
-                 correct, and asking would invite them to break a
-                 reading that was right. */
+                 correct, at any attempt (validation-status-ux D1). */
               const enProceso = /proceso/i.test(status.receiptStatus ?? "");
 
-              if (notFound && enProceso) {
+              if (!notFound) {
                 return (
                   <p className="text-sm text-ink-soft">
-                    Tu comprobante dice “{status.receiptStatus}”: tu banco todavía no libera la
-                    transferencia. Seguiremos intentando y no necesitas hacer nada.
+                    Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes
+                    dejar esta página abierta.
                   </p>
                 );
               }
 
-              if (notFound && payment) {
-                /* Asked on the *first* not_found, not after the schedule
-                   runs out — waiting six hours to ask is the silence
-                   this whole flow exists to remove. The schedule keeps
-                   running underneath; whichever resolves first wins. */
-                return (
-                  <div className="space-y-4">
+              /* validation-status-ux D1–D5: honesty staged over time.
+                 The clock is `validationAttempts` — the inline attempt
+                 is #1 and the D7 slots [2,8,20,45,120,360] follow, so
+                 the 45-minute attempt is #5: calm through 20 minutes,
+                 the open form from 45. The long-wait copy keys on
+                 distance instead — it exists to name the hour exactly
+                 when the next attempt is far away. */
+              const nextAt = status.nextValidationAt ?? null;
+              const farAway = nextAt != null && nextAt - Date.now() > 90 * 60 * 1000;
+              const escalated = status.validationAttempts >= 5;
+              const nextHour = nextAt
+                ? new Date(nextAt).toLocaleTimeString("es-MX", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : null;
+              const showForm = !enProceso && (correcting || (escalated && !farAway));
+
+              return (
+                <div className="space-y-4">
+                  {enProceso ? (
                     <p className="text-sm text-ink-soft">
-                      Seguimos verificando tu pago; a veces Banxico tarda en publicarlo. De paso,
-                      revisa que estos datos coincidan con tu comprobante y corrígelos si hace falta.
+                      Tu comprobante dice “{status.receiptStatus}”: tu banco todavía no libera la
+                      transferencia. Seguiremos intentando y no necesitas hacer nada.
                     </p>
+                  ) : farAway ? (
+                    /* D5: promise only what the system will do — the
+                       cron keeps this hour; nobody "sends news" */
+                    <p className="text-sm text-ink-soft">
+                      Está tardando más de lo esperado.
+                      {nextHour && (
+                        <> Volveremos a intentarlo automáticamente alrededor de las {nextHour}.</>
+                      )}{" "}
+                      Puedes cerrar esta página y volver después, o contactar a tu proveedor de
+                      internet con tu comprobante.
+                    </p>
+                  ) : escalated ? (
+                    /* D3: the copy suspects the wait, never the payer */
+                    <p className="text-sm text-ink-soft">
+                      Está tardando más de lo normal. Revisa que estos datos coincidan con tu
+                      comprobante y corrígelos si hace falta.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-ink-soft">
+                      Validación en proceso: esperamos la respuesta de Banxico. No necesitas hacer
+                      nada.
+                    </p>
+                  )}
+
+                  {showForm ? (
+                    /* The schedule keeps running underneath; whichever
+                       resolves first wins (D3). */
                     <TransferForm
                       busy={busy}
                       draft={{
@@ -532,15 +616,58 @@ export function PaymentPage({ token }: { token: string }) {
                         })
                       }
                     />
-                  </div>
-                );
-              }
+                  ) : (
+                    status.trackingKey && (
+                      /* D2: verifying is free, editing is deliberate */
+                      <Collapsible>
+                        <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors duration-150 hover:text-ink">
+                          Ver los datos enviados
+                          <ChevronDown
+                            className="size-5 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                            aria-hidden
+                          />
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="space-y-3 border-t border-line-soft pt-3">
+                            <div className="divide-y divide-line-soft">
+                              <div className="py-2">
+                                <p className="text-sm text-ink-soft">Clave de rastreo</p>
+                                <p className="break-all font-mono text-sm text-ink">
+                                  {status.trackingKey}
+                                </p>
+                              </div>
+                              {status.senderBank && (
+                                <div className="py-2">
+                                  <p className="text-sm text-ink-soft">Banco</p>
+                                  <p className="text-sm text-ink">{status.senderBank}</p>
+                                </div>
+                              )}
+                              {status.transferDate && (
+                                <div className="py-2">
+                                  <p className="text-sm text-ink-soft">Fecha</p>
+                                  <p className="text-sm text-ink">{status.transferDate}</p>
+                                </div>
+                              )}
+                            </div>
+                            <Button variant="secondary" onClick={() => setCorrecting(true)}>
+                              Corregir estos datos
+                            </Button>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )
+                  )}
 
-              return (
-                <p className="text-sm text-ink-soft">
-                  Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar
-                  esta página abierta.
-                </p>
+                  {/* D7: the way out for the payer who already knows the
+                      receipt is wrong — on every not_found screen */}
+                  <Button
+                    variant="ghost"
+                    className="h-12 w-full text-sm"
+                    onClick={startOverWithReceipt}
+                  >
+                    Subir otro comprobante
+                  </Button>
+                </div>
               );
             })()}
           </>
@@ -770,7 +897,10 @@ export function PaymentPage({ token }: { token: string }) {
     }
 
     const missing =
-      reading.gate.trackingKey !== "ok" || reading.gate.senderBank !== "ok";
+      reading.gate.trackingKey !== "ok" ||
+      reading.gate.senderBank !== "ok" ||
+      /* validation-status-ux D6: an unread date is a missing field too */
+      reading.date == null;
     return (
       <Card className="space-y-4 p-6">
         {stepHeader(2, "Confirma estos datos")}
@@ -801,6 +931,7 @@ export function PaymentPage({ token }: { token: string }) {
             pay.mutate({
               transfer,
               proofId,
+              ...(resubmitOf ? { supersedes: resubmitOf } : {}),
               /* D12: a short reading can reach this form now, and the
                  lookup must ask Banxico with the receipt's own amount —
                  asking with the expected total finds nothing. The status
@@ -920,7 +1051,12 @@ export function PaymentPage({ token }: { token: string }) {
       {manualDoor ? (
         <div className="space-y-4 border-t border-line-soft pt-5">
           <h2 className="text-base font-semibold">Datos de tu transferencia</h2>
-          <TransferForm busy={busy} onSubmit={(transfer) => pay.mutate({ transfer })} />
+          <TransferForm
+            busy={busy}
+            onSubmit={(transfer) =>
+              pay.mutate({ transfer, ...(resubmitOf ? { supersedes: resubmitOf } : {}) })
+            }
+          />
         </div>
       ) : (
         <Button variant="ghost" className="h-12 w-full text-sm" onClick={() => setManualDoor(true)}>

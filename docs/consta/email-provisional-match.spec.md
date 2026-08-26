@@ -95,10 +95,10 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   as validation D13. Amount-plus-date matching is **refused by design**:
   customers of one ISP pay the same monthly fee to the same CLABE on the
   same day — partial-payment already documents that collision pool — so
-  amount alone collides by construction. Whether BBVA's notification
-  emails carry the tracking key (or attach their own reference) is
-  **unmeasured**, and the spike in the DoD settles it before the parser
-  is designed. **Rejected for v1, recorded as open**: a `weak` strength
+  amount alone collides by construction. Whether BBVA's or Klar's
+  notification emails carry the tracking key (or attach their own
+  reference) is **unmeasured**, and the spike in the DoD settles it —
+  per bank — before the parser is designed. **Rejected for v1, recorded as open**: a `weak` strength
   for amount-unique-in-window matches.
 
 - **D5 — The match is computed at `/validate` time; no outbound webhook.**
@@ -231,21 +231,26 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
 
 ## Definition of Done
 
-- [ ] **Spike first, blocking**: 3–5 real BBVA "Transferencia recibida"
-      emails from the pilot ISP's mailbox, measured for: does the body
-      carry the clave de rastreo? a bank reference? does BBVA's DKIM
-      survive a Gmail auto-forward intact? The parser and D4's
-      `matchedOn` set are designed from that evidence, and this spec is
-      updated with what was measured
+- [ ] **Spike first, blocking**: 3–5 real "Transferencia recibida"
+      emails **per bank, from BBVA (the pilot ISP's bank) and Klar (the
+      owner's own account — the NUBANK → KLAR transfer already measured
+      in validation.spec.md landed there)**, measured for: does the body
+      carry the clave de rastreo? a bank reference? does each bank's
+      DKIM survive a Gmail auto-forward intact? Two banks from day one
+      keeps the parser honest — one layout cannot pass as "the" format.
+      The parser and D4's `matchedOn` set are designed from that
+      evidence, per bank, and this spec is updated with what was
+      measured
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;
       the local sandbox grows a way to inject a raw email so every lock
       is provokable offline
 - [ ] Migration for the two tables + the `validations` column
-- [ ] Deployed to dev; one real end-to-end: a real transfer to the pilot
-      ISP's BBVA account, the real forwarded email, `provisionalMatch`
-      on a live `/validate` before the CEP exists
+- [ ] Deployed to dev; one real end-to-end: a real transfer to a
+      measured account (the pilot's BBVA, or Klar as the rehearsal), the
+      real forwarded email, `provisionalMatch` on a live `/validate`
+      before the CEP exists
 - [ ] Hand-off recorded: the Devolada half starts its own spec/worktree
       from the section above (CICD rule 3 — it touches settings and
       direct-payment specs being edited in parallel today)
@@ -259,5 +264,6 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
   poll-time minutes hurt (D5).
 - **Per-bank regex fast path** over the AI reader, measured against the
   spike's sample set (D8).
-- **More bank domains** — the closed list starts with BBVA (the pilot);
-  each new bank adds its domains and a sample-email measurement.
+- **More bank domains** — the closed list starts with BBVA (the pilot)
+  and Klar (the rehearsal account); each new bank adds its domains and
+  a sample-email measurement.

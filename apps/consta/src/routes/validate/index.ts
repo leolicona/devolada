@@ -35,6 +35,8 @@ validateRoute.post(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
+          /* D19: every error says whether waiting can help — envelope law */
+          retryable: false,
           issues,
           ...(bankIssue ? { acceptedBanks: BANKS } : {}),
         },
@@ -256,6 +258,11 @@ validateRoute.post(
            licence to tell a customer their transfer does not exist. */
         ...(verdict.reason ? { reason: verdict.reason } : {}),
         ...(verdict.reason === "not_found" ? { hint: "verify_inputs" } : {}),
+        /* D18: `contradicted` says which way when Banxico said it —
+           "DEVUELTO" lets a caller tell its customer "your bank returned
+           the transfer" instead of a generic mismatch. Banxico's word
+           about the payer's own transfer, so nothing foreign leaks. */
+        ...(verdict.reason === "contradicted" && verdict.cepStatus ? { cepStatus: verdict.cepStatus } : {}),
         alreadyValidated: verdict.alreadyValidated,
         ...(verdict.cep ? { cep: verdict.cep } : {}),
         ...(verdict.downloads ? { downloads: verdict.downloads } : {}),

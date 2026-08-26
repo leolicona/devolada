@@ -20,7 +20,7 @@ app.route("/admin/keys", adminKeysRoute);
 
 app.onError((err, c) => {
   console.error(err);
-  return c.json({ success: false, error: { code: "INTERNAL_SERVER_ERROR" } }, 500);
+  return c.json({ success: false, error: { code: "INTERNAL_SERVER_ERROR", retryable: true } }, 500);
 });
 
 export { app };

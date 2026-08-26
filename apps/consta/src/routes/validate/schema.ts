@@ -49,6 +49,15 @@ const transferSchema = z
   })
   .refine((t) => t.trackingKey || t.referenceNumber, {
     message: "trackingKey or referenceNumber is required",
+  })
+  /* D17 — an intra-bank transfer never produces a SPEI CEP (the limit is
+     Banxico's), and apiCEP charges a credit for rejecting it (measured
+     2026-08-19: the same-institution 400 bills like any call). Refusing
+     here is free and carries the actual reason, which the provider's
+     rejection never names in a stable way. */
+  .refine((t) => t.senderBank !== t.beneficiary.bank, {
+    message:
+      "senderBank and beneficiary.bank are the same institution — SPEI transfers only exist between different banks, so no CEP can validate this",
   });
 
 /* One endpoint, two doors (spec D1): exactly one of transfer / receiptUrl.

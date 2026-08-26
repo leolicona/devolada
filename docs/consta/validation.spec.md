@@ -132,6 +132,40 @@ could not name.
   verdict; the field is recorded under D14 so the question can be settled with
   data.
 
+### The contract hardened by review (added 2026-08-25)
+
+A case-by-case walk of every answer Consta can give (the 12-case synthesis
+of 2026-08-25) found three places where the contract knew less than the code
+did. All three are additive.
+
+- **D17 — The same institution on both sides is refused at the edge.**
+  An intra-bank transfer never produces a SPEI CEP — the limit is Banxico's —
+  and apiCEP charges a credit for rejecting the request (measured 2026-08-19,
+  the envelope-shaped 400). A cross-field Zod refine now answers an instant
+  `VALIDATION_ERROR` naming the real reason, which the provider's rejection
+  never states in a stable form. Same argument as D12: our edge is the only
+  thing standing between a caller and a paid, unnamed failure. **Accepted
+  limit**: the OCR door cannot be pre-checked (the sender bank comes from
+  apiCEP's own reading of the image), so that path can still reach the
+  provider's billed 400 → `REQUEST_REJECTED`.
+- **D18 — `contradicted` says which way, when Banxico said it.** The verdict
+  now carries `cepStatus` (`"DEVUELTO"`, …) whenever the contradiction came
+  with one, so a caller can tell its customer *"tu banco devolvió la
+  transferencia"* instead of a generic mismatch. It is Banxico's word about
+  the payer's own transfer — nothing foreign leaks. `not_found` never
+  carries it: there is no word of Banxico's to relay, and inventing one
+  would undo D11.
+- **D19 — `retryable` is envelope law.** D9 gave provider failures a
+  `retryable` field; every other error (`VALIDATION_ERROR`,
+  `AUTHENTICATION_ERROR`, `NOT_FOUND`, `INTERNAL_SERVER_ERROR`) now carries
+  it too. The rule a consumer programs is one line — retryable → wait and
+  resend the same thing; not retryable → stop and change something — and a
+  code Consta adds tomorrow is handled correctly by consumers that never
+  heard of it. This is D9's own premise applied to ourselves: retryability
+  is the server's knowledge to state, never the caller's to infer from a
+  code table it must keep in sync. Every future endpoint carries the field;
+  this paragraph is the law that makes forgetting it a spec violation.
+
 ### Refusing what cannot possibly validate (added 2026-08-19)
 
 - **D12 — The bank vocabulary is enforced here, because the provider does not.**
@@ -485,6 +519,17 @@ regression suite for "no permanent failure ever becomes a long silence".
     plus `hint: "verify_inputs"` — the response that must never be rendered to
     a customer as "your transfer does not exist" (US-V06, D11)
 
+### Hardened by the 2026-08-25 review
+
+26. `senderBank` equal to `beneficiary.bank` → 400 `VALIDATION_ERROR` naming
+    the intra-bank reason, **no provider call and no `validations` row** —
+    the billed, unnamed 400 converted into a free, named refusal (US-V07, D17)
+27. `contradicted` with `cepStatus: "DEVUELTO"` carries `cepStatus` in the
+    response; `not_found` never does (US-V06, D18)
+28. Every error envelope carries `retryable` — asserted on
+    `VALIDATION_ERROR` and `AUTHENTICATION_ERROR`, the two that D9 did not
+    cover (US-V06, D19)
+
 ## Definition of Done
 
 - [x] Scenarios automated in `apps/consta/test/` (workerd + local D1 +
@@ -558,3 +603,11 @@ duplicated reference nobody can manufacture on demand.
       it only makes shortening it possible. *(Deliberately left to the
       consumer's own PR: that spec is being edited in a parallel worktree,
       and two features touching one spec serialize — CICD.md rule 3.)*
+
+### D17–D19 (built 2026-08-25)
+
+- [x] Cross-field refine on the transfer door; scenario 26 automated (D17)
+- [x] `cepStatus` rides `contradicted` and never `not_found`; scenario 27
+      automated (D18)
+- [x] `retryable` on every error envelope — validate, extract, auth
+      middleware, admin keys, `onError`; scenario 28 automated (D19)

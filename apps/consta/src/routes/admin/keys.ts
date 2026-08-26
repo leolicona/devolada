@@ -16,7 +16,7 @@ adminKeysRoute.use("*", async (c, next) => {
   const secret = c.env.CONSTA_ADMIN_TOKEN;
   if (!secret) return c.notFound();
   if (c.req.header("Authorization") !== `Bearer ${secret}`) {
-    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR", retryable: false } }, 401);
   }
   await next();
 });
@@ -25,7 +25,7 @@ adminKeysRoute.post(
   "/",
   zValidator("json", z.object({ name: z.string().min(1) }), (result, c) => {
     if (!result.success) {
-      return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
+      return c.json({ success: false, error: { code: "VALIDATION_ERROR", retryable: false } }, 400);
     }
   }),
   async (c) => {
@@ -49,7 +49,7 @@ adminKeysRoute.delete("/:id", async (c) => {
     .where(and(eq(apiKeys.id, c.req.param("id")), isNull(apiKeys.revokedAt)))
     .returning({ id: apiKeys.id });
   if (!revoked.length) {
-    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+    return c.json({ success: false, error: { code: "NOT_FOUND", retryable: false } }, 404);
   }
   return c.json({ success: true, data: { id: revoked[0].id } });
 });

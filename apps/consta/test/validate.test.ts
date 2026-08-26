@@ -234,6 +234,23 @@ describe("POST /validate — transfer door", () => {
     expect(data.status).toBe("invalid");
     expect(data.reason).toBe("contradicted");
     expect(data.hint).toBeUndefined();
+    /* D18, scenario 27: Banxico's word travels — the caller can say "tu
+       banco devolvió la transferencia" instead of a generic mismatch */
+    expect(data.cepStatus).toBe("DEVUELTO");
+  });
+
+  it("US-V06, scenario 27: `not_found` carries no cepStatus — there is no word of Banxico's to relay", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep({
+      validationId: "prov-uuid-14",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+    });
+
+    const res = await postValidate(key, directRequest);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.reason).toBe("not_found");
+    expect(data.cepStatus).toBeUndefined();
   });
 
   it("US-V06, scenario 14: a status apiCEP has not published yet is a retryable failure, never a verdict (D10, D9)", async () => {
@@ -504,6 +521,9 @@ describe("API keys (D5)", () => {
   it("scenario 5: a bad key and a revoked key both 401 without touching the provider", async () => {
     const res = await postValidate("ck_deadbeef", directRequest);
     expect(res.status).toBe(401);
+    /* D19: even an auth error states it — retrying the same key is useless */
+    const { error } = (await res.json()) as { error: { retryable: boolean } };
+    expect(error.retryable).toBe(false);
 
     const { id, key } = await seedApiKey();
     const revoke = await app.request(
@@ -540,6 +560,8 @@ describe("Refused before a credit is spent (D12, D13)", () => {
     expect(error.code).toBe("VALIDATION_ERROR");
     expect(error.issues.some((i) => i.path === "transfer.senderBank")).toBe(true);
     expect(error.acceptedBanks).toContain("NUBANK");
+    /* D19: the envelope law — every error says whether waiting helps */
+    expect((error as unknown as { retryable: boolean }).retryable).toBe(false);
 
     const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
     expect(rows).toHaveLength(0);
@@ -580,6 +602,33 @@ describe("Refused before a credit is spent (D12, D13)", () => {
       transfer: { ...directRequest.transfer, trackingKey: "  MBAN01002508150012345678\n" },
     });
     expect(res.status).toBe(200);
+  });
+
+  it("US-V07, scenario 26: the same institution on both sides is refused free, with the real reason (D17)", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* Measured 2026-08-19: apiCEP rejects this with an envelope-shaped
+       400 — and bills a credit for it. An intra-bank transfer never
+       produces a SPEI CEP (Banxico's limit), so no retry, no rewording
+       and no amount of waiting can ever validate it. */
+    const res = await postValidate(key, {
+      transfer: {
+        ...directRequest.transfer,
+        senderBank: "BANORTE",
+        beneficiary: { bank: "BANORTE", clabe: "072180001234567895" },
+      },
+    });
+    expect(res.status).toBe(400);
+    const { error } = (await res.json()) as {
+      error: { code: string; retryable: boolean; issues: { message: string }[] };
+    };
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.retryable).toBe(false);
+    expect(error.issues.some((i) => i.message.includes("same institution"))).toBe(true);
+
+    /* No interceptor was registered: the whole point is that this never
+       reaches the provider and never spends the credit it used to */
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(0);
   });
 
   it("US-V07: a 10-character key is accepted — the check is a range, not Nu's 28", async () => {

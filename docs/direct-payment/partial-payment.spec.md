@@ -88,7 +88,7 @@ Admin feed: a `partial` payment appears with its own label — *"Pago parcial"* 
 ## Definition of Done
 
 - [x] Scenarios 1–7, 11–13 automated in the API layer (`direct-payment.test.ts`, `US-D10` block +6 and two superseded scenarios rewritten); scenario 10 is the store suite, unchanged and still passing
-- [ ] Scenario 8 (the manual door with a short amount) — D12 leaves it to D18's correction path; it needs the amount field there before it can be asserted
+- [x] Scenario 8 (the manual door with a short amount) — paid by `claimed-amount` D3 (2026-08-26): the typed amount travels to Banxico (US-D13 scenario 2), and `settle()` never cared where the claim came from (scenario 1 here)
 - [x] Scenario 9 with Testing Library (`pago.test.tsx`, "US-D10: the partial state" +3 and scenario 57 rewritten): the three amounts and no percentage, the CLABE still visible, the queued copy that keeps polling, and the button that lands on the transfer data
 - [x] The ISP can set both controls from Configuración, with the default (100 / $0) explained in one line — and the sentence recomputed live as the numbers change (`settings.test.ts` "US-D10" +3, `settings.test.tsx` "US-D10" +2)
 - [ ] Deployed check against a live tenant with a real router: a short transfer leaves the customer cut and its money on `saldo`; the remainder reconnects them

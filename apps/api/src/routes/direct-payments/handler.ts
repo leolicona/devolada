@@ -140,7 +140,9 @@ export async function getLinkStatus(c: Ctx, token: string) {
       totalCents: debt.totalCents + serviceFeeCents,
       speiClabe: isp.speiClabe!,
       speiBank: isp.speiBank!,
-      speiBeneficiaryName: isp.speiBeneficiaryName!,
+      /* claimed-amount D5: recommended, not required — omitted when the
+         ISP has not configured it, and the page hides the row */
+      ...(isp.speiBeneficiaryName ? { speiBeneficiaryName: isp.speiBeneficiaryName } : {}),
       reference: link.customerUsuario,
     };
     return c.json({ success: true, data });
@@ -192,12 +194,18 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     }
     /* A supersede without transfer data is the re-upload door
        (validation-status-ux D7): a fresh proof is a new attempt by
-       definition, so only a typed correction can be "unchanged". */
+       definition, so only a typed correction can be "unchanged".
+       claimed-amount D4: the amount joins the comparison — changing only
+       the amount changes what Banxico is asked, so it is a real
+       correction. An omitted field matches whatever the row holds (older
+       clients and older rows never sent one). */
     const unchanged =
       body.transfer != null &&
       prior.trackingKey === body.transfer.trackingKey.toUpperCase() &&
       prior.senderBank === body.transfer.senderBank &&
-      prior.transferDate === body.transfer.date;
+      prior.transferDate === body.transfer.date &&
+      (body.transfer.amountCents == null ||
+        body.transfer.amountCents === (prior.claimedAmountCents ?? prior.amountCents));
     if (unchanged) {
       /* Nothing to correct. Keep the row, its schedule and its attempt
          count, and spend nothing — a second row would carry the same
@@ -288,9 +296,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         amountCents,
         invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
         carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
-        /* The reader's amount, kept so the lookup asks Banxico about the
-           transfer the payer actually made (partial-payment D5) */
-        claimedAmountCents: body.receiptAmountCents ?? null,
+        /* claimed-amount D1/D3: the payer's own number wins — a human
+           who confirmed (or typed) the amount outranks the raw reading;
+           the silent path still carries the reader's. Kept so the lookup
+           asks Banxico about the transfer the payer actually made
+           (partial-payment D5). */
+        claimedAmountCents: body.transfer?.amountCents ?? body.receiptAmountCents ?? null,
         serviceFeeCents,
         proofMode: body.transfer ? "transfer" : "receipt",
         trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,
@@ -547,6 +558,9 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
       trackingKey: payment.trackingKey,
       senderBank: payment.senderBank,
       transferDate: payment.transferDate,
+      /* claimed-amount D3: the amount this payment asked Banxico with,
+         so the correction form pre-fills what actually travelled */
+      claimedAmountCents: payment.claimedAmountCents,
       receiptStatus: payment.receiptStatus,
     },
   });

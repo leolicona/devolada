@@ -42,8 +42,9 @@ function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
          `configured` alone would report a channel that silently refuses every
          payment. `bankUnknown` is what the settings screen shows the ISP. */
       bankUnknown: Boolean(isp.speiBank) && !speiBankIsKnown(isp),
-      configured:
-        Boolean(isp.speiClabe && isp.speiBeneficiaryName) && speiBankIsKnown(isp),
+      /* claimed-amount D5: the beneficiary name is recommended, not part
+         of "configured" — apiCEP never required it. */
+      configured: Boolean(isp.speiClabe) && speiBankIsKnown(isp),
     },
     /* partial-payment D2/D4: the short-payment dial, defaults 100 / $0 */
     reconnection: {

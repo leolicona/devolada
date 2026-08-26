@@ -59,10 +59,12 @@ export function speiBankIsKnown(isp: Isp): boolean {
    `KLAR`, so every payment to it failed the moment D16 shipped, and failed
    *retryably*, which is the six-hour silence rather than an honest refusal. */
 export function speiAvailable(env: Bindings, isp: Isp): boolean {
+  /* claimed-amount D5: the beneficiary name is recommended, never
+     required — apiCEP asks only for clabe + bank, and the gates that
+     demanded the name were all ours. */
   return Boolean(
     isp.speiClabe &&
       speiBankIsKnown(isp) &&
-      isp.speiBeneficiaryName &&
       isp.wisphubApiKey &&
       env.CONSTA_BASE_URL &&
       env.CONSTA_API_KEY,
@@ -154,8 +156,9 @@ export async function runValidation(
   if (!env.CONSTA_BASE_URL || !env.CONSTA_API_KEY) {
     return retryLater("CONSTA_NOT_CONFIGURED");
   }
-  if (!isp.speiClabe || !isp.speiBank || !isp.speiBeneficiaryName) {
-    /* The ISP un-configured SPEI between submission and this attempt */
+  if (!isp.speiClabe || !isp.speiBank) {
+    /* The ISP un-configured SPEI between submission and this attempt.
+       The beneficiary name is not part of this check (claimed-amount D5). */
     return retryLater("SPEI_NOT_CONFIGURED");
   }
   if (!speiBankIsKnown(isp)) {
@@ -169,7 +172,9 @@ export async function runValidation(
   const beneficiary = {
     bank: isp.speiBank,
     clabe: isp.speiClabe,
-    name: isp.speiBeneficiaryName,
+    /* claimed-amount D5: sent when configured, omitted when not — whether
+       apiCEP matches on it is unmeasured, so omitting beats guessing. */
+    ...(isp.speiBeneficiaryName ? { name: isp.speiBeneficiaryName } : {}),
   };
   const request: ConstaRequest =
     payment.proofMode === "transfer"
@@ -181,9 +186,10 @@ export async function runValidation(
             /* partial-payment D5: the amount is a **search criterion**,
                not an assertion. Asking with what we expected finds
                nothing when the payer fell short, so what travels is what
-               the receipt said — the same choice Consta already makes on
-               its own receipt door. The manual door has no reading, so
-               it still asks with the expected total. */
+               the receipt said — or, on the manual door, what the payer
+               typed (claimed-amount D1/D3: the truth about the amount
+               lives on the receipt or with the human, never in the
+               debt). The fallback covers rows born before that field. */
             amountCents: payment.claimedAmountCents ?? payment.amountCents,
             senderBank: payment.senderBank ?? "",
             trackingKey: payment.trackingKey ?? "",

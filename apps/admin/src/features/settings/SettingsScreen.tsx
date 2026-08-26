@@ -232,8 +232,10 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
   /* Empty = clear: fall back to the store fee (D3) */
   const feeCents = fee.trim() === "" ? null : parseMoney(fee);
   const feeValid = fee.trim() === "" || feeCents !== null;
-  const valid =
-    clabeValid && bank.trim().length >= 2 && beneficiary.trim().length >= 3 && feeValid;
+  /* claimed-amount D5: the beneficiary name is recommended, not required —
+     empty is a valid configuration, and the API takes ≥3 chars or null */
+  const beneficiaryValid = beneficiary.trim() === "" || beneficiary.trim().length >= 3;
+  const valid = clabeValid && bank.trim().length >= 2 && beneficiaryValid && feeValid;
 
   return (
     <SectionCard title="Pago directo por SPEI">
@@ -300,7 +302,7 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
           </Select>
         </div>
         <div>
-          <Label htmlFor="spei-beneficiary">Nombre del beneficiario</Label>
+          <Label htmlFor="spei-beneficiary">Nombre del beneficiario (opcional)</Label>
           <Input
             id="spei-beneficiary"
             className="mt-1"
@@ -308,6 +310,9 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
             onChange={(e) => setBeneficiary(e.target.value)}
             placeholder="Como aparece en tu cuenta"
           />
+          <p className="mt-1 text-sm text-ink-soft">
+            Recomendado: es lo que tu cliente compara antes de transferir.
+          </p>
         </div>
         <div>
           <Label htmlFor="spei-fee">Cargo por servicio SPEI</Label>
@@ -332,7 +337,8 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
           save.mutate({
             speiClabe: clabe.trim(),
             speiBank: bank === "" ? null : bank,
-            speiBeneficiaryName: beneficiary.trim(),
+            /* D5: empty clears — the API takes ≥3 chars or null */
+            speiBeneficiaryName: beneficiary.trim() === "" ? null : beneficiary.trim(),
             speiServiceFeeCents: feeCents,
           })
         }

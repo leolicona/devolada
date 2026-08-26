@@ -50,6 +50,13 @@ export const payRequest = z
            happened. Refusing here is the only way the payer ever learns. */
         senderBank: z.string().trim().pipe(z.enum(BANKS)),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        /* claimed-amount D3: the amount the payer says they transferred.
+           Pre-filled with the expected total on the page, editable —
+           only the payer knows what really left their account, and the
+           lookup asks Banxico with it. Never what is charged: the charge
+           comes from the CEP and a fresh debt read, so lying here cannot
+           buy a cheaper payment (same posture as receiptAmountCents). */
+        amountCents: z.number().int().positive().optional(),
       })
       .optional(),
     /* D18: the payment this submission corrects. Set only when the payer
@@ -188,6 +195,9 @@ export const directPaymentStatusResponse = z.object({
   trackingKey: z.string().nullable().optional(),
   senderBank: z.string().nullable().optional(),
   transferDate: z.string().nullable().optional(),
+  /* claimed-amount D3: what the payment asked Banxico with, so the
+     correction form pre-fills the amount that actually travelled */
+  claimedAmountCents: z.number().int().nullable().optional(),
   /* The receipt's own `Estatus`: decides whether the payer is asked to
      confirm or simply told their bank has not released it yet */
   receiptStatus: z.string().nullable().optional(),

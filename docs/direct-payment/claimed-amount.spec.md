@@ -26,7 +26,7 @@ This spec pays the "Open items — reserved for one follow-up PR" of `partial-pa
 
 ## Contract
 
-`POST /direct-payments/links/:token/pay` — `transfer` gains `amountCents` (integer cents, positive, optional). The row's `claimed_amount_cents` becomes `receiptAmountCents ?? transfer.amountCents ?? NULL`. The client-supplied amount is **never** what is charged — that stays computed from the fresh WispHub read; it is only what the lookup asks Banxico with (same posture as `receiptAmountCents`, D18). The supersede "unchanged" comparison includes it (D4).
+`POST /direct-payments/links/:token/pay` — `transfer` gains `amountCents` (integer cents, positive, optional). The row's `claimed_amount_cents` becomes `transfer.amountCents ?? receiptAmountCents ?? NULL` — the human-confirmed number outranks the raw reading (the pair still measures the reader, D18); the silent path, which asks no human, keeps carrying the reader's. The client-supplied amount is **never** what is charged — that stays computed from the fresh WispHub read; it is only what the lookup asks Banxico with (same posture as `receiptAmountCents`, D18). The supersede "unchanged" comparison includes it (D4).
 
 `GET /direct-payments/:id/status` — gains `claimedAmountCents` (nullable), so the correction form can pre-fill the amount the payment actually asked with (D3).
 
@@ -58,6 +58,6 @@ No migrations. `claimed_amount_cents` (from `partial-payment` D12) simply stops 
 
 ## Definition of Done
 
-- [ ] Scenarios 1–8 automated (api + pago + settings suites), each citing US-D13
-- [ ] `partial-payment.spec.md` Open items section replaced with a pointer here; its Contract line about the page refusal amended (D2); `direct-payment.spec.md` D18 amended (D3 reverses its amount rejection)
+- [x] Scenarios 1–8 automated, each citing US-D13: 1 rides the rewritten US-D03 walk (`pago.test.tsx`), 2/5/6/8 in `direct-payment.test.ts` ("US-D13" block) with 2's page half and 3 in `pago.test.tsx`, 4 stays pinned by US-D10's scenario 6, 7 across `direct-payment.test.ts`, `settings.test.ts`, `settings.test.tsx` and `pago.test.tsx`
+- [x] `partial-payment.spec.md` Open items section replaced with a pointer here; its Contract line about the page refusal amended (D2); `direct-payment.spec.md` D18 amended (D3 reverses its amount rejection)
 - [ ] Manual check on deployed dev with a real transfer: a short amount typed in the manual door is found and lands `partial`

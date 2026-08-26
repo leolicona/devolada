@@ -579,7 +579,13 @@ export function PaymentPage({ token }: { token: string }) {
                     <p className="text-sm text-ink-soft">
                       Está tardando más de lo esperado.
                       {nextHour && (
-                        <> Volveremos a intentarlo automáticamente alrededor de las {nextHour}.</>
+                        /* es-MX hours end in "a.m."/"p.m." — their dot
+                           closes the sentence; adding ours prints ".." */
+                        <>
+                          {" "}
+                          Volveremos a intentarlo automáticamente alrededor de las {nextHour}
+                          {nextHour.endsWith(".") ? "" : "."}
+                        </>
                       )}{" "}
                       Puedes cerrar esta página y volver después, o contactar a tu proveedor de
                       internet con tu comprobante.
@@ -589,6 +595,14 @@ export function PaymentPage({ token }: { token: string }) {
                     <p className="text-sm text-ink-soft">
                       Está tardando más de lo normal. Revisa que estos datos coincidan con tu
                       comprobante y corrígelos si hace falta.
+                    </p>
+                  ) : correcting ? (
+                    /* The payer opened the correction door themselves —
+                       "no necesitas hacer nada" over an open form would
+                       contradict the form (design review, PR #88) */
+                    <p className="text-sm text-ink-soft">
+                      Seguimos verificando. Revisa que estos datos coincidan con tu comprobante y
+                      corrígelos si hace falta.
                     </p>
                   ) : (
                     <p className="text-sm text-ink-soft">

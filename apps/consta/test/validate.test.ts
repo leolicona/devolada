@@ -239,6 +239,30 @@ describe("POST /validate — transfer door", () => {
     expect(data.cepStatus).toBe("DEVUELTO");
   });
 
+  it("US-V03: `invalid` with a settled cepStatus is 'ask again', never a contradiction", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* Measured live 2026-08-26: a real BBVA transfer at T+63s answered
+       `invalid` WITH cepStatus LIQUIDADO in 2.1s (the gave-up-early
+       band); the identical request at T+103s answered `valid` in 9.3s.
+       A settled CEP cannot contradict the claim it settles — trusting
+       it as evidence killed a real payment, and only the payer's manual
+       retry saved it. */
+    mockApiCep({
+      validationId: "prov-uuid-liq",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepStatus: "LIQUIDADO", cepPreviouslyValidated: null },
+    });
+
+    const res = await postValidate(key, directRequest);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("pending");
+    expect(data.reason).toBeUndefined();
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows[0].status).toBe("pending");
+    expect(rows[0].cepStatus).toBe("LIQUIDADO");
+  });
+
   it("US-V06, scenario 27: `not_found` carries no cepStatus — there is no word of Banxico's to relay", async () => {
     const { key } = await seedApiKey();
     mockApiCep({

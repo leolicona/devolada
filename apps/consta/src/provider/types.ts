@@ -67,6 +67,17 @@ export type ProviderVerdict = {
   } | null;
   /* Provider-hosted CEP documents; their URLs expire (apiCEP: 15 days) */
   downloads: { cepXml?: string; cepPdf?: string } | null;
+  /* proof-extraction D11: what the provider's OCR read off the image — a
+     READING, never a verdict. Present only on OCR-mode calls (measured
+     2026-08-26: it survives failure, complete); null on the transfer
+     door, where "extracted" would only echo the caller's own input. */
+  reading: {
+    trackingKey: string | null;
+    amountCents: number | null;
+    date: string | null;
+    senderBank: string | null;
+    referenceNumber: string | null;
+  } | null;
 };
 
 /* D9 — a failure names itself and says whether waiting can help. Five

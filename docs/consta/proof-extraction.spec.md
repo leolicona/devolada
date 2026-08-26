@@ -393,6 +393,15 @@ second opinion all along.
   (`direct-payment/reading-check.spec.md`). **The probe consumes receipts**:
   `cepPreviouslyValidated` is permanent, so the measurement uses an
   already-consumed comprobante or a fabricated one, never a virgin useful one.
+  **Found at implementation (2026-08-26), and now part of this decision**:
+  Consta's receipt door *prefers its own reader* — a gate-passing extraction
+  is converted to a transfer-door call, so the provider's OCR never runs and
+  `extracted` merely echoes our own reading. A caller that already holds a
+  reading gains nothing from a second pass of the same model, so the request
+  grows **`providerOcr: true`** (receipt door only): skip the reader, let the
+  provider's eyes read the image. `reading` is returned only on provider-OCR
+  calls — on the transfer door `extracted` is an echo of the caller's input,
+  and an echo is not a second opinion.
   **Rejected**: keeping the mapper as-is (throwing away a reading the caller
   already paid for); exposing the full `extracted` verbatim (senderName,
   beneficiaryName and paymentConcept invite exactly the trust-the-pixels
@@ -415,13 +424,12 @@ second opinion all along.
 
 ## Open questions
 
-- **Does `extracted` come back on a faceless receipt-door `invalid`?** Never
-  captured, and it is now the **cheapest unanswered question in this spec**:
-  if apiCEP reports what it read even when it fails, then how often its OCR is
-  actually wrong becomes measurable for the first time — the number D2's
-  withdrawn cost argument needed and never had. One captured response body
-  answers it. *(2026-08-26: now the gate of D11 — and of
-  reading-check plan A on the Devolada side.)*
+- ~~**Does `extracted` come back on a faceless receipt-door `invalid`?**~~
+  **Answered 2026-08-26** (apicep.md, "Measured 2026-08-26"): yes, complete —
+  a fabricated receipt with a nonexistent clave answered the faceless
+  `invalid` with the full `extracted`, the clave transcribed perfectly. D11's
+  gate is open and reading-check's plan A stands. The provider's own OCR
+  error rate is now measurable for the first time.
 - **Was 2026-08-18 a misread or an unpublished CEP?** Still unsettled, and it
   is settleable: run **both doors on the same receipt inside the same
   minute** — the image through the receipt door, the clave read off it by hand

@@ -883,3 +883,86 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.hint).toBe("verify_inputs");
   });
 });
+
+describe("US-V11: the provider's reading is exposed (proof-extraction D11)", () => {
+  /* The faceless invalid the measurement of 2026-08-26 captured: no
+     cepDetails, no cepStatus — and the full `extracted` riding along. */
+  const facelessWithExtracted = {
+    validationId: "prov-uuid-v11",
+    status: "invalid",
+    confidence: 1,
+    extracted: {
+      senderBank: "Nubank",
+      receiverBank: "KLAR",
+      trackingKey: "NU3AHQZW04X9V7B2K5M8P1R6T3YC",
+      referenceNumber: "260826",
+      amount: 3.5,
+      date: "2026-08-26",
+      senderName: "PRUEBA QA",
+      beneficiaryName: "CUENTA DE PRUEBA",
+      paymentConcept: "Transferencia",
+    },
+    validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+  };
+
+  it("providerOcr keeps the image on the OCR door and the reading survives failure", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep(facelessWithExtracted, (body) => {
+      expect(body.imageUrl).toBe(PROOF_URL);
+      expect(body.sender).toBeUndefined();
+    });
+
+    /* AI bound and deliberately unused: the caller asked for the
+       provider's eyes, not a second pass of the same model */
+    const res = await postValidate(
+      key,
+      { ...receiptRequest, providerOcr: true },
+      { AI: aiReturning(GOOD_READING) },
+    );
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("not_found");
+    expect(data.source).toBe("provider-ocr");
+    /* A reading, never a verdict: cents at our edge, names dropped */
+    expect(data.reading).toEqual({
+      trackingKey: "NU3AHQZW04X9V7B2K5M8P1R6T3YC",
+      amountCents: 350,
+      date: "2026-08-26",
+      senderBank: "Nubank",
+      referenceNumber: "260826",
+    });
+  });
+
+  it("no extracted in the provider's answer → no reading in ours", async () => {
+    const { key } = await seedApiKey();
+    mockApiCep({
+      validationId: "prov-uuid-v11b",
+      status: "invalid",
+      validation: { banxicoConfirmed: false },
+    });
+
+    const res = await postValidate(key, { ...receiptRequest, providerOcr: true }, { AI: undefined });
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("invalid");
+    expect("reading" in data).toBe(false);
+  });
+
+  it("the transfer door never carries a reading — an echo is not a second opinion", async () => {
+    const { key } = await seedApiKey();
+    /* apiCEP echoes `extracted` on direct mode too (measured on a
+       business-rule 400 in apicep.md) — it must not surface as a reading */
+    mockApiCep({ ...settledResponse, extracted: { trackingKey: "MBAN01002508150012345678" } });
+
+    const res = await postValidate(key, directRequest);
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(data.status).toBe("valid");
+    expect("reading" in data).toBe(false);
+  });
+
+  it("providerOcr on the transfer door is refused before any credit", async () => {
+    const { key } = await seedApiKey();
+    const res = await postValidate(key, { ...directRequest, providerOcr: true });
+    expect(res.status).toBe(400);
+  });
+});

@@ -26,6 +26,17 @@ type ApiCepResponse = {
   status?: string;
   error?: string;
   missingFields?: string[];
+  /* What the provider's OCR read off the image (proof-extraction D11).
+     Measured 2026-08-26: present and complete even on a faceless
+     `invalid`. The other fields it carries (names, concept) are dropped
+     on purpose — they invite trust-the-pixels integrations. */
+  extracted?: {
+    trackingKey?: string;
+    amount?: number;
+    date?: string;
+    senderBank?: string;
+    referenceNumber?: string;
+  };
   validation?: {
     cepStatus?: string;
     cepPreviouslyValidated?: boolean | null;
@@ -247,6 +258,20 @@ export function apiCepProvider(env: {
             }
           : null,
         downloads: body.downloads ?? null,
+        /* D11: only the OCR door produces a reading — on the transfer
+           door `extracted` merely echoes the caller's own input, and an
+           echo is not a second opinion */
+        reading:
+          input.mode === "receipt" && body.extracted
+            ? {
+                trackingKey: body.extracted.trackingKey ?? null,
+                amountCents:
+                  body.extracted.amount != null ? Math.round(body.extracted.amount * 100) : null,
+                date: body.extracted.date ?? null,
+                senderBank: body.extracted.senderBank ?? null,
+                referenceNumber: body.extracted.referenceNumber ?? null,
+              }
+            : null,
       } satisfies ProviderVerdict;
     },
   };

@@ -743,6 +743,10 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(screen.getByText("$600.00")).toBeInTheDocument();
     expect(screen.getByText("$514.00")).toBeInTheDocument();
     expect(paid).toHaveLength(0);
+    /* D2 amended: consent about the surplus, never proofreading — the
+       clean-gate screen carries the surplus sentence and nothing else;
+       the minute-two cross owns content verification now */
+    expect(screen.queryByText(/si algo no coincide/i)).not.toBeInTheDocument();
 
     /* Confirming travels with the receipt's own amount (D1: the receipt
        is the source of truth, the debt only judges) */

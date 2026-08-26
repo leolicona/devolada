@@ -990,15 +990,21 @@ export function PaymentPage({ token }: { token: string }) {
       <Card className="space-y-4 p-6">
         {stepHeader(2, "Confirma estos datos")}
 
-        {/* Say plainly that a machine read this and the payer decides.
-            The alternative — silently pre-filling and hoping — is how a
-            misread becomes six hours of "Verificando". */}
-        <Alert variant={missing ? "warning" : "default"} layout="icon">
-          {missing ? <TriangleAlert aria-hidden /> : <ScanLine aria-hidden />}
-          {missing
-            ? "Leímos tu comprobante pero no pudimos sacar todos los datos. Complétalos y revísalos antes de continuar."
-            : "Leímos estos datos de tu comprobante. Revísalos: si algo no coincide, corrígelo."}
-        </Alert>
+        {/* Only the incomplete reading asks the human for work — they
+            are COMPLETING fields no machine could read, and it is the
+            one free correction point. With a clean gate this screen
+            exists only for the surplus consent below, and the proofread
+            ask is retired (claimed-amount D2, amended 2026-08-26): the
+            measured truth is that nobody proofreads 28 characters, and
+            the minute-two cross now owns content verification
+            (reading-check). */}
+        {missing && (
+          <Alert variant="warning" layout="icon">
+            <TriangleAlert aria-hidden />
+            Leímos tu comprobante pero no pudimos sacar todos los datos. Complétalos y revísalos
+            antes de continuar.
+          </Alert>
+        )}
 
         {reading.receiptStatus && /proceso/i.test(reading.receiptStatus) && (
           <Alert variant="warning" layout="icon">

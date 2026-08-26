@@ -212,6 +212,24 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
     expect(after.spei.effectiveServiceFeeCents).toBe(after.serviceFeeCents);
   });
 
+  it("US-D13 scenario 7: SPEI is configured without a beneficiary name", async () => {
+    await seedIsp();
+
+    /* claimed-amount D5: clabe + a known bank are the whole requirement —
+       the provider never asked for the name, only our gates did */
+    const res = await (await app()).request(
+      ...send("/settings", "PATCH", {
+        speiClabe: "646180157000000004",
+        speiBank: "STP",
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.spei.configured).toBe(true);
+    expect(data.spei.beneficiaryName).toBeNull();
+  });
+
   it("rejects a malformed CLABE and stays unconfigured by default", async () => {
     await seedIsp();
 

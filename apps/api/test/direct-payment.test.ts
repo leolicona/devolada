@@ -1231,6 +1231,80 @@ describe("D8: one transfer pays once", () => {
     expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
   });
 
+  it("scenario 18d (US-D12 scenario 15): the same clave with different data supersedes the owning row", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const first = await payTransfer();
+    expect(first.status).toBe(201);
+    const firstId = (await first.json()).data.directPaymentId;
+
+    /* Same clave, corrected date: the payer is fixing the row they
+       already own — attaching would discard the correction (found live
+       2026-08-26: a stale row kept asking Banxico with the wrong data
+       while the payer read "no los actualiza"). */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const corrected = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TRANSFER.transfer, date: "2026-08-18" },
+    });
+    expect(corrected.status).toBe(201);
+    const rows = await drizzle(env.DB).select().from(directPayments);
+    expect(rows).toHaveLength(2);
+    const old = rows.find((r) => r.id === firstId)!;
+    expect(old.status).toBe("superseded");
+    const fresh = rows.find((r) => r.id !== firstId)!;
+    expect(fresh.transferDate).toBe("2026-08-18");
+    /* The chain survives, so D8's own-attempt carve-out still traces */
+    expect(fresh.supersedesId).toBe(firstId);
+  });
+
+  it("scenario 18e (US-D12 scenario 16): a cross-link refusal restores the prior it had released", async () => {
+    const { isp } = await seedLinkedIsp();
+    await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({
+        ispId: isp.id,
+        token: "tok9876zyxwvut99",
+        wisphubCustomerId: "7",
+        customerUsuario: "otro@wifiplus",
+      });
+    /* Another customer's live payment owns clave TRACK002ABC */
+    mockCustomerLookup([{ ...wisphubCustomer(), id_servicio: 7, usuario: "otro@wifiplus" }], 1);
+    mockPendingInvoices([{ id_factura: 43, cliente: { usuario: "otro@wifiplus" }, total: 499 }], 1);
+    mockConsta({ status: "pending", cep: undefined });
+    expect(
+      (
+        await payTransfer("tok9876zyxwvut99", {
+          transfer: { ...TRANSFER.transfer, trackingKey: "TRACK002ABC" },
+        })
+      ).status,
+    ).toBe(201);
+
+    /* The payer's own payment, about to be corrected */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const first = await payTransfer();
+    const firstId = (await first.json()).data.directPaymentId;
+
+    /* The correction lands on the other customer's clave: refused — and
+       the prior it had released must come back, schedule included */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const collided = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TRANSFER.transfer, trackingKey: "TRACK002ABC" },
+      supersedes: firstId,
+    });
+    expect(collided.status).toBe(409);
+    const db = drizzle(env.DB);
+    const [prior] = await db.select().from(directPayments).where(eq(directPayments.id, firstId));
+    expect(prior.status).toBe("validating");
+    expect(prior.nextValidationAt).not.toBeNull();
+  });
+
   it("scenario 18c: a terminal owner on the payer's own link still refuses (US-D12, D9)", async () => {
     const { isp, link } = await seedLinkedIsp();
     await drizzle(env.DB)
@@ -2043,5 +2117,119 @@ describe("US-D10 / US-L01: the commission is never forgiven", () => {
     /* `settlement` D1 derives the platform's share from exactly this
        column, and a spei charge carries no store commission (D6). */
     expect(charge.storeId).toBeNull();
+  });
+});
+
+describe("US-D13: the amount the payer really sent", () => {
+  /* The manual door's body once claimed-amount D3 ships: the payer's
+     own number rides with the data they already typed. */
+  const TYPED = {
+    transfer: {
+      trackingKey: "TRACK001XYZ",
+      senderBank: "NUBANK",
+      date: "2026-08-17",
+      amountCents: 40000,
+    },
+  };
+
+  it("scenario 2: the typed amount is what travels to Banxico", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payTransfer("tok2345abcdefgh2", TYPED);
+    expect(res.status).toBe(201);
+    const [payment] = await drizzle(env.DB).select().from(directPayments);
+    expect(payment.claimedAmountCents).toBe(40000);
+    const sent = captured.body as { transfer: { amountCents: number } };
+    expect(sent.transfer.amountCents).toBe(40000);
+  });
+
+  it("scenario 5: only a changed amount supersedes; four equal fields spend nothing", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const first = await payTransfer("tok2345abcdefgh2", TYPED);
+    expect(first.status).toBe(201);
+    const firstId = (await first.json()).data.directPaymentId;
+
+    /* Identical four fields → the row is kept before any WispHub or
+       Consta call — no mocks are armed, so reaching one would fail */
+    const same = await payTransfer("tok2345abcdefgh2", { ...TYPED, supersedes: firstId });
+    expect(same.status).toBe(200);
+    expect((await same.json()).data.directPaymentId).toBe(firstId);
+
+    /* A new amount changes what Banxico is asked: a real correction */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const edited = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TYPED.transfer, amountCents: 35000 },
+      supersedes: firstId,
+    });
+    expect(edited.status).toBe(201);
+    const rows = await drizzle(env.DB).select().from(directPayments);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.id === firstId)?.status).toBe("superseded");
+    expect(rows.find((r) => r.id !== firstId)?.claimedAmountCents).toBe(35000);
+  });
+
+  it("scenario 6: the status answers with the claimed amount", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const res = await payTransfer("tok2345abcdefgh2", TYPED);
+    const { directPaymentId } = (await res.json()).data;
+
+    const status = await (await app()).request(
+      `/direct-payments/${directPaymentId}/status`,
+      {},
+      testEnv,
+    );
+    const { data } = await status.json();
+    expect(data.claimedAmountCents).toBe(40000);
+  });
+
+  it("scenario 8: the claim cannot change the charge — the CEP decides", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta(); /* the CEP says 51400 arrived */
+    mockReconnection("Activo");
+
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TYPED.transfer, amountCents: 99900 },
+    });
+    expect((await res.json()).data.status).toBe("confirmed");
+    const [charge] = await drizzle(env.DB).select().from(charges);
+    expect(charge.totalCents).toBe(51400);
+  });
+
+  it("scenario 7: no beneficiary name — validation runs, the request omits it, the link hides it", async () => {
+    await seedLinkedIsp({ speiBeneficiaryName: null });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    const captured = mockConsta();
+    mockReconnection("Activo");
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.status).toBe("confirmed");
+    const sent = captured.body as { transfer: { beneficiary: Record<string, unknown> } };
+    expect("name" in sent.transfer.beneficiary).toBe(false);
+
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const link = await (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2",
+      {},
+      testEnv,
+    );
+    const { data } = await link.json();
+    expect(data.status).toBe("debt");
+    expect("speiBeneficiaryName" in data).toBe(false);
   });
 });

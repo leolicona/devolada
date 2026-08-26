@@ -123,15 +123,26 @@ function TransferForm({
   onSubmit,
   busy,
   draft,
+  amountCents,
   submitLabel = "Verificar mi pago",
 }: {
-  onSubmit: (t: { trackingKey: string; senderBank: string; date: string }) => void;
+  onSubmit: (t: {
+    trackingKey: string;
+    senderBank: string;
+    date: string;
+    amountCents: number;
+  }) => void;
   busy: boolean;
   /* D18: what the reader proposed. Every field is editable and none is
      trusted — the payer is the one who confirms, and a field the gate
      did not pass arrives here empty rather than pre-filled with
      something that merely looks confirmable. */
   draft?: TransferDraft;
+  /* claimed-amount D3: the field's starting value — the expected total,
+     or what the payment already claimed. Pre-filled so the exact payer
+     confirms without touching it; editable because only the payer knows
+     what really left their account. */
+  amountCents?: number | null;
   submitLabel?: string;
 }) {
   const [trackingKey, setTrackingKey] = useState(draft?.trackingKey ?? "");
@@ -143,12 +154,19 @@ function TransferForm({
   const [date, setDate] = useState(
     draft ? (draft.date ?? "") : new Date().toISOString().slice(0, 10),
   );
+  const [amount, setAmount] = useState(
+    amountCents != null ? (amountCents / 100).toFixed(2) : "",
+  );
+  /* Pesos in, integer cents out — the only place the page parses money,
+     and only because the payer is the source of truth here (D1). */
+  const amountOk = /^\d+(\.\d{1,2})?$/.test(amount.trim()) && Number.parseFloat(amount) > 0;
   /* D16/BUG-006: the same shape the API enforces, so the button is
      honest — a key that cannot validate never gets a paid call. */
   const valid =
     /^[A-Za-z0-9]{6,30}$/.test(trackingKey.trim()) &&
     senderBank !== "" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(date);
+    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    amountOk;
   return (
     <div className="space-y-4">
       <Field label="Clave de rastreo">
@@ -163,6 +181,21 @@ function TransferForm({
           onChange={(e) => setTrackingKey(e.target.value)}
           placeholder="Está en tu comprobante"
           className="font-mono text-sm"
+          autoComplete="off"
+        />
+      </Field>
+      <Field label="Monto transferido">
+        {/* claimed-amount D1/D3: what travels to Banxico is what the
+            payer says they sent — the debt only suggests the default.
+            The $ prefix is the same anchor the admin's money inputs
+            carry: an input cannot render through <Amount>, but it can
+            still look like pesos. */}
+        <Input
+          prefix="$"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0.00"
           autoComplete="off"
         />
       </Field>
@@ -190,7 +223,14 @@ function TransferForm({
       <Button
         size="critical"
         disabled={!valid || busy}
-        onClick={() => onSubmit({ trackingKey: trackingKey.trim(), senderBank: senderBank.trim(), date })}
+        onClick={() =>
+          onSubmit({
+            trackingKey: trackingKey.trim(),
+            senderBank: senderBank.trim(),
+            date,
+            amountCents: Math.round(Number.parseFloat(amount) * 100),
+          })
+        }
       >
         <ShieldCheck className="size-5" aria-hidden />
         {busy ? "Enviando…" : submitLabel}
@@ -407,10 +447,10 @@ export function PaymentPage({ token }: { token: string }) {
       /* partial-payment D1/D12: the amount printed on the receipt is what
          travels to Banxico, so a transfer that fell short is findable and
          lands as a `partial` row — a short reading is a valid submission,
-         never a refusal. Only a reading *above* the debt is stopped here:
-         that is a misread, not a payment (nobody's receipt claims more
-         than they sent), and its lookup can only ever answer a faceless
-         `not_found` six hours long. */
+         never a refusal. A reading *above* the debt is routed to the
+         confirmation screen instead of travelling silently (claimed-amount
+         D2): the payer sees both numbers and where the surplus goes
+         before anything is spent — informed, not refused. */
       const expected = link.data?.totalCents;
       if (
         reading.amountCents != null &&
@@ -437,9 +477,8 @@ export function PaymentPage({ token }: { token: string }) {
             date: reading.date ?? new Date().toISOString().slice(0, 10),
           },
           receiptStatus: reading.receiptStatus ?? undefined,
-          /* The server holds the real rule (D18): it has the fresh debt
-             and refuses with AMOUNT_MISMATCH. The check above is only a
-             short-circuit so our own page answers instantly. */
+          /* partial-payment D12: the reader's amount is the claim on this
+             silent path — no human was asked, so nothing outranks it */
           receiptAmountCents: reading.amountCents ?? undefined,
         }),
       });
@@ -497,6 +536,7 @@ export function PaymentPage({ token }: { token: string }) {
           trackingKey: null,
           senderBank: null,
           transferDate: null,
+          claimedAmountCents: null,
           receiptStatus: null,
         }
       : null);
@@ -621,6 +661,10 @@ export function PaymentPage({ token }: { token: string }) {
                         senderBank: status.senderBank,
                         date: status.transferDate,
                       }}
+                      /* claimed-amount D3: what this payment asked with,
+                         falling back to the expected total — the fourth
+                         correctable field for the stuck payer */
+                      amountCents={status.claimedAmountCents ?? data.totalCents ?? null}
                       submitLabel="Confirmar estos datos"
                       onSubmit={(transfer) =>
                         pay.mutate({
@@ -882,41 +926,12 @@ export function PaymentPage({ token }: { token: string }) {
       );
     }
 
-    /* The reading claims *more* than the debt: a misread, not a payment
-       (partial-payment D12 — the contract keeps this direction refused).
-       A lookup with it is proven to fail, so say both numbers now: it is
-       the answer the payer would otherwise get six hours from now, or
-       never. A reading that claims *less* is a short transfer, which is
-       a valid submission and lands as `partial` (D1). */
-    const readAmount = reading.amountCents;
-    if (readAmount != null && data.totalCents != null && readAmount > data.totalCents) {
-      return (
-        <Card className="space-y-4 p-6">
-          {stepHeader(2, "El monto no coincide")}
-          <Alert variant="warning" layout="icon">
-            <TriangleAlert aria-hidden />
-            El monto de tu comprobante es mayor que tu adeudo, así que no podemos verificarlo.
-          </Alert>
-          <div className="divide-y divide-line-soft border-y border-line-soft">
-            <div className="flex items-center justify-between py-2">
-              <p className="text-sm text-ink-soft">Tu comprobante</p>
-              <Amount cents={readAmount} className="font-semibold" />
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <p className="text-sm text-ink-soft">Tu adeudo</p>
-              <Amount cents={data.totalCents} className="font-semibold" />
-            </div>
-          </div>
-          <p className="text-sm text-ink-soft">
-            Si transferiste otra cantidad, contacta a tu proveedor de internet para resolverlo. Si
-            crees que leímos mal el comprobante, sube otra captura.
-          </p>
-          <Button variant="secondary" onClick={startOver}>
-            Subir otro comprobante
-          </Button>
-        </Card>
-      );
-    }
+    /* claimed-amount D2: a reading above the debt is informed, never
+       refused — the refusal's justification (an inflated misread buying
+       six silent hours) died when the correction doors shipped, and the
+       server already settles the overpayment (the surplus lands as
+       credit with the ISP, partial-payment D10). The sentence renders
+       inside the confirmation screen below. */
 
     const missing =
       reading.gate.trackingKey !== "ok" ||
@@ -945,9 +960,31 @@ export function PaymentPage({ token }: { token: string }) {
           </Alert>
         )}
 
+        {/* claimed-amount D2: both numbers in pesos and what happens to
+            the difference — informed, not refused. One span, on purpose:
+            the Alert lays out its direct children, and loose <Amount>
+            elements became columns that spilled out of the box (design
+            review, PR #90). */}
+        {reading.amountCents != null &&
+          data.totalCents != null &&
+          reading.amountCents > data.totalCents && (
+            <Alert layout="icon">
+              <ScanLine aria-hidden />
+              <span>
+                Tu comprobante dice <Amount cents={reading.amountCents} /> y tu adeudo es{" "}
+                <Amount cents={data.totalCents} />. El sobrante quedará a favor con tu proveedor
+                para tu siguiente factura.
+              </span>
+            </Alert>
+          )}
+
         <TransferForm
           busy={busy}
           draft={reading}
+          /* claimed-amount D3: the receipt's own amount is the honest
+             default here; the human's confirmation of it wins over the
+             raw reading (the pair still measures the reader, D18) */
+          amountCents={reading.amountCents ?? data.totalCents ?? null}
           submitLabel="Confirmar y verificar"
           onSubmit={(transfer) =>
             pay.mutate({
@@ -1030,7 +1067,11 @@ export function PaymentPage({ token }: { token: string }) {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="divide-y divide-line-soft border-t border-line-soft">
-              <CopyField label="Beneficiario" value={data.speiBeneficiaryName!} />
+              {/* claimed-amount D5: shown when the ISP configured it,
+                  hidden when not — the field is recommended, not required */}
+              {data.speiBeneficiaryName && (
+                <CopyField label="Beneficiario" value={data.speiBeneficiaryName} />
+              )}
               {data.speiBank && <CopyField label="Banco" value={data.speiBank} />}
               {data.reference && <CopyField label="Concepto" value={data.reference} />}
             </div>
@@ -1075,6 +1116,9 @@ export function PaymentPage({ token }: { token: string }) {
           <h2 className="text-base font-semibold">Datos de tu transferencia</h2>
           <TransferForm
             busy={busy}
+            /* claimed-amount D3: pre-filled with the expected total so
+               the exact payer confirms without touching it */
+            amountCents={data.totalCents ?? null}
             onSubmit={(transfer) =>
               pay.mutate({ transfer, ...(resubmitOf ? { supersedes: resubmitOf } : {}) })
             }

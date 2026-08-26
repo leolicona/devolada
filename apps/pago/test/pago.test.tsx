@@ -140,11 +140,17 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
 
     expect(await screen.findByText(/estamos verificando tu transferencia/i)).toBeInTheDocument();
     expect(screen.getByText("Verificando pago")).toBeInTheDocument();
-    /* D1 principle: the client sent only its own transfer data */
+    /* US-D13 D3 (amends D1's posture): the amount travels too, pre-filled
+       with the expected total the untouched field carries — the payer is
+       the source of truth for it, the debt only suggests the default. It
+       still cannot change what is charged (scenario 8 there). */
     expect(paid[0]).toMatchObject({
-      transfer: { trackingKey: "TRACK001XYZ", senderBank: "NUBANK" },
+      transfer: {
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        amountCents: 51400,
+      },
     });
-    expect(JSON.stringify(paid[0])).not.toContain("amount");
 
     /* the poll flips it to the green moment (US-D03) */
     expect(await screen.findByText("Pago confirmado", {}, { timeout: 8000 })).toBeInTheDocument();
@@ -444,6 +450,72 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     });
   });
 
+  it("US-D13 scenario 6: the correction form pre-fills the amount the payment asked with", async () => {
+    const paid: unknown[] = [];
+    /* The stuck payment claimed $400.00 — a short transfer whose row
+       remembers it. The correction form must offer that number, not the
+       debt's: the payer is correcting their own claim. */
+    server.use(...silentThen({ receiptStatus: "Aceptada", claimedAmountCents: 40000 }, paid));
+    await uploadReceipt();
+
+    await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
+    await userEvent.click(screen.getByRole("button", { name: /ver los datos enviados/i }));
+    await userEvent.click(screen.getByRole("button", { name: /corregir estos datos/i }));
+
+    expect(await screen.findByLabelText(/monto transferido/i)).toHaveValue("400.00");
+  });
+
+  it("US-D13 scenario 2: the manual door's amount is editable, and the edited number travels", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(
+          payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }),
+          201,
+        );
+      }),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 1,
+            error: null,
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    await openManualForm();
+
+    /* Pre-filled with the expected total — the exact payer never touches
+       it (D3). This payer transferred $499.00 instead. */
+    const amount = screen.getByLabelText(/monto transferido/i);
+    expect(amount).toHaveValue("514.00");
+    await userEvent.clear(amount);
+    await userEvent.type(amount, "499");
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ transfer: { amountCents: 49900 } });
+  });
+
+  it("US-D13 scenario 7: without a configured beneficiary name the row simply is not there", async () => {
+    const { speiBeneficiaryName: _omitted, ...nameless } = debtLink;
+    server.use(handlers.link(() => ok(linkStatusResponse.parse(nameless))));
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /ver los demás datos/i }, { timeout: 8000 }),
+    );
+    /* Banco and concepto still render; the missing name leaves no gap */
+    expect(screen.getAllByText("Banco").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Beneficiario")).not.toBeInTheDocument();
+  });
+
   it("US-D12 scenario 2: from the 45-minute attempt the form is in the foreground, still suspecting the wait", async () => {
     const paid: unknown[] = [];
     /* The inline attempt is #1 and the D7 slots follow, so the
@@ -574,7 +646,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     });
   });
 
-  it("a receipt claiming more than the debt is still refused — a misread, not a payment", async () => {
+  it("a receipt claiming more than the debt is informed, never refused (US-D13, D2)", async () => {
     const paid: unknown[] = [];
     server.use(
       handlers.link(() => ok(debtLink)),
@@ -585,18 +657,38 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
         paid.push(body);
         return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
       }),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 1,
+            error: null,
+          }),
+        ),
+      ),
     );
     await uploadReceipt();
 
-    /* Measured 2026-08-19: apiCEP filters on `sender.amount`, so a lookup
-       with an amount nobody transferred can only ever come back as a
-       faceless `not_found` and six hours of "Verificando". Both numbers,
-       in three seconds, instead. */
-    expect(await screen.findByText(/es mayor que tu adeudo/i)).toBeInTheDocument();
+    /* US-D13 D2: the confirmation screen says both numbers and where the
+       surplus goes, before anything is spent — the old refusal died with
+       the correction doors. */
+    expect(
+      await screen.findByText(/el sobrante quedará a favor/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText("$600.00")).toBeInTheDocument();
     expect(screen.getByText("$514.00")).toBeInTheDocument();
     expect(paid).toHaveLength(0);
-  });
+
+    /* Confirming travels with the receipt's own amount (D1: the receipt
+       is the source of truth, the debt only judges) */
+    await userEvent.click(screen.getByRole("button", { name: /confirmar y verificar/i }));
+    expect(await screen.findByText("Verificando pago", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(paid).toHaveLength(1);
+    expect(paid[0]).toMatchObject({
+      transfer: { amountCents: 60000 },
+      receiptAmountCents: 60000,
+    });
+  }, 20_000);
 
   it("a used transfer reads as exactly that (D8)", async () => {
     server.use(

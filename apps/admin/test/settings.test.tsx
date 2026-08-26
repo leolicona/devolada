@@ -29,6 +29,48 @@ const settings = (over: Record<string, unknown> = {}) =>
     ...over,
   });
 
+describe("US-D13: the beneficiary name is recommended, never required", () => {
+  it("scenario 7: SPEI saves with clabe and bank alone, sending null for the name", async () => {
+    const patches: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      /* The bank is already picked; only the CLABE is typed here */
+      handlers.settings(() =>
+        ok(
+          settings({
+            spei: {
+              clabe: null,
+              bank: "STP",
+              beneficiaryName: null,
+              serviceFeeCents: null,
+              effectiveServiceFeeCents: 1500,
+              bankUnknown: false,
+              configured: false,
+            },
+          }),
+        ),
+      ),
+      handlers.settlement(() => ok({ months: [] })),
+      handlers.patchSettings((body) => {
+        patches.push(body);
+        return ok(settings());
+      }),
+    );
+    renderApp("/settings");
+
+    const clabe = await screen.findByLabelText("CLABE");
+    await userEvent.type(clabe, "646180157000000004");
+
+    /* claimed-amount D5: the field says it is optional, and empty is a
+       valid configuration — the save is not held hostage to it */
+    expect(screen.getByLabelText(/nombre del beneficiario/i)).toHaveValue("");
+    const saveButton = screen.getByRole("button", { name: /guardar pago directo/i });
+    expect(saveButton).toBeEnabled();
+    await userEvent.click(saveButton);
+    expect(patches).toMatchObject([{ speiBeneficiaryName: null }]);
+  });
+});
+
 describe("US-A04: the split is saved with its share visible", () => {
   it("shows the platform share while typing and saves the two numbers", async () => {
     const patches: unknown[] = [];

@@ -29,7 +29,13 @@ function CustomerCard({ customer }: { customer: CustomerResult }) {
             <StatusBadge
               status={customer.serviceStatus === "unknown" ? "active" : customer.serviceStatus}
             />
-            <Amount cents={customer.monthlyFeeCents} className="text-sm font-semibold" />
+            {/* debt-truth D7: what they owe, invoices plus anything
+                carried — not the plan's list price, which is what this
+                showed before and could be short of the real debt. */}
+            <Amount
+              cents={customer.invoiceCents + customer.carriedBalanceCents}
+              className="text-sm font-semibold"
+            />
           </div>
         </Link>
       </Card>

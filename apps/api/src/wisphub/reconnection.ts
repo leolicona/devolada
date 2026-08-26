@@ -20,7 +20,7 @@ export type AttemptState = {
 };
 
 export type AttemptResult = AttemptState & {
-  status: "reconnected" | "queued";
+  status: "reconnected" | "queued" | "withheld";
   /* WISPHUB_AUTH_FAILED does not count toward the attempt budget (D5) */
   error: "WISPHUB_AUTH_FAILED" | "WISPHUB_UNAVAILABLE" | "NOT_ACTIVE_YET" | null;
 };
@@ -31,9 +31,16 @@ export async function attemptReconnection(
   ispId: string,
   /* usuario for every lookup; the numeric id only for the PATCH (D8) */
   customer: { usuario: string; wisphubId: string },
-  monthlyFeeCents: number,
+  /* The whole debt this payment settles — pending invoices plus the
+     carried balance (debt-truth D7/D15). Devolada's service fee is not
+     in it: that money is not the ISP's. */
+  debtCents: number,
   now: Date,
   state: AttemptState,
+  /* partial-payment D5: `false` records the money and leaves the cut in
+     place. The money still travels — the ISP's books are right either
+     way — only the router is left alone. */
+  reconnect = true,
 ): Promise<AttemptResult> {
   let { invoiceId, paymentRegistered } = state;
   try {
@@ -62,11 +69,23 @@ export async function attemptReconnection(
         invoiceId = await wisphub.findPendingInvoiceId(customer.usuario, now);
       }
       if (invoiceId === null) {
-        invoiceId = await wisphub.createInvoice(customer.usuario, monthlyFeeCents, date);
+        /* debt-truth D15: nothing pending, so the payment needs a vehicle
+           — and the vehicle is empty on purpose. Sizing it to the debt
+           would add that debt to WispHub's running account, and the
+           customer's payment would clear only the invoice we just
+           invented. Measured: 72.00 carried + a 72.00 invoice, paid
+           72.00, leaves 72.00 carried.
+
+           This is the ordinary aftermath of a short payment, not an edge:
+           the invoice closed as "Pagada" and the payer came back with the
+           rest. */
+        invoiceId = await wisphub.createInvoice(customer.usuario, 0, date, "Adeudo anterior");
       }
 
       try {
-        await wisphub.registerPayment(invoiceId, paymentMethodId, monthlyFeeCents, dateTime);
+        /* The payment settles the whole account, whichever invoice carries
+           it (D15) — so what travels is the debt, not one invoice's total. */
+        await wisphub.registerPayment(invoiceId, paymentMethodId, debtCents, dateTime, reconnect);
       } catch (e) {
         /* 422 is WispHub refusing to pay a paid invoice — which means
            the money already landed (an overlapping attempt, or a payment
@@ -74,6 +93,15 @@ export async function attemptReconnection(
         if (!(e instanceof WispHubError && e.status === 422)) throw e;
       }
       paymentRegistered = true;
+    }
+
+    /* partial-payment D5: the money is on the ISP's books and the cut was
+       deliberately left in place. There is nothing to verify and nothing
+       to retry — reading the customer here would find them suspended and
+       report `queued`, which would send the sweep chasing a reconnection
+       nobody asked for and end in a red "Fallido" for a flow that worked. */
+    if (!reconnect) {
+      return { status: "withheld", invoiceId, paymentRegistered, error: null };
     }
 
     const verified = await wisphub.getCustomer(customer.usuario);

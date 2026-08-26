@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { charges, directPayments, isps, paymentLinks } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
+import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
   isUniqueViolation,
   runValidation,
@@ -109,10 +110,13 @@ export async function getLinkStatus(c: Ctx, token: string) {
       wisphub.getCustomer(link.customerUsuario),
       pendingInvoicesForDisplay(isp.id, wisphub, now),
     ]);
-    const owes = pending.invoices.some((f) => f.usuario === link.customerUsuario);
+    /* debt-truth D7: invoices plus the carried balance. A payer whose
+       invoice closed on a short payment owes a remainder that the
+       invoice list alone cannot see. */
+    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
     const customerName = customer?.name ?? link.customerUsuario;
 
-    if (!owes || !customer) {
+    if (debt.totalCents === 0 || !customer) {
       const data: LinkStatusResponse = {
         ispName: isp.name,
         customerName,
@@ -121,17 +125,19 @@ export async function getLinkStatus(c: Ctx, token: string) {
       return c.json({ success: true, data });
     }
 
-    /* D15: one invoice at a time, oldest first — the amount is the
-       plan's mensualidad plus the SPEI fee, same computation as the
-       store flow */
+    /* D21 replaces D15: the page shows the whole debt, because WispHub
+       applies a payment to the customer and not to one invoice. Asking
+       for one invoice's total would ask for a number that reconnects
+       nobody. */
     const serviceFeeCents = speiFeeCents(isp);
     const data: LinkStatusResponse = {
       ispName: isp.name,
       customerName,
       status: "debt",
-      monthlyFeeCents: customer.monthlyFeeCents,
+      invoiceCents: debt.invoiceCents,
+      carriedBalanceCents: debt.carriedBalanceCents,
       serviceFeeCents,
-      totalCents: customer.monthlyFeeCents + serviceFeeCents,
+      totalCents: debt.totalCents + serviceFeeCents,
       speiClabe: isp.speiClabe!,
       speiBank: isp.speiBank!,
       speiBeneficiaryName: isp.speiBeneficiaryName!,
@@ -224,23 +230,39 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   } catch (e) {
     return wisphubFailure(c, e);
   }
-  const owes = pending.invoices.some((f) => f.usuario === link.customerUsuario);
-  if (!customer || (!owes && (pending.complete || customer.billingStatus === "paid"))) {
+  const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+  if (
+    !customer ||
+    (debt.totalCents === 0 &&
+      (pending.complete ||
+        customer.carriedBalanceCents < 0 ||
+        customer.billingStatus === "paid"))
+  ) {
     return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
   }
 
   const serviceFeeCents = speiFeeCents(isp);
-  const amountCents = customer.monthlyFeeCents + serviceFeeCents;
+  /* Same rule as the store path: only D4's truncation fallback falls back
+     to the plan's price. A zero invoice line beside a carried balance is
+     a real number, not a missing one. */
+  const debtUnknown = debt.totalCents === 0;
+  const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
+  const amountCents = ispDebtCents + serviceFeeCents;
 
-  /* D18: the debt is now known, and so is what the receipt claimed. If
-     they disagree the provider lookup is already lost — `sender.amount`
-     is a filter, so it would answer the same faceless `invalid` a
-     nonexistent transfer gets, and the payer would wait out the whole
-     schedule to be told nothing. Refuse now, with the code that already
-     means this to them. No row, no credit. */
-  if (body.receiptAmountCents != null && body.receiptAmountCents !== amountCents) {
-    return c.json({ success: false, error: { code: "AMOUNT_MISMATCH" } }, 409);
-  }
+  /* partial-payment D1 supersedes the refusal that stood here. It read
+     the receipt's amount, compared it against the expected total and
+     answered `AMOUNT_MISMATCH` with no row written — while the money was
+     already in the ISP's account.
+
+     The comparison itself was never the problem: Consta sends the amount
+     **printed on the receipt** to Banxico (proof-extraction), so a short
+     transfer comes back as a real CEP for the real amount. We had the
+     answer and threw it away. Now the amount that came back decides how
+     much was settled (D5), and the row records it either way.
+
+     A misread still corrects itself without this guard: an amount that
+     was never transferred finds no CEP, which is a `not_found` and rides
+     D17's schedule while D18 asks the payer to check their data. */
 
   /* Release the old claim *before* the insert: the corrected row may well
      be claiming a clave that only differs by a character, and D8's index
@@ -260,7 +282,11 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         paymentLinkId: link.id,
         ispId: isp.id,
         amountCents,
-        monthlyFeeCents: customer.monthlyFeeCents,
+        invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
+        carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+        /* The reader's amount, kept so the lookup asks Banxico about the
+           transfer the payer actually made (partial-payment D5) */
+        claimedAmountCents: body.receiptAmountCents ?? null,
         serviceFeeCents,
         proofMode: body.transfer ? "transfer" : "receipt",
         trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,
@@ -302,7 +328,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
       data: {
         directPaymentId: row.id,
         /* `expired` cannot happen inline (the schedule starts now) */
-        status: row.status as "validating" | "confirmed" | "invalid" | "unapplied",
+        status: row.status as "validating" | "confirmed" | "partial" | "invalid" | "unapplied",
         error: publicError(row.lastError),
       },
     },
@@ -454,6 +480,19 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
       status: payment.status,
       ...(charge
         ? { reconnectionStatus: charge.reconnectionStatus, folio: charge.folio }
+        : {}),
+      /* D7: what arrived, what was owed and what is missing — in money,
+         computed here so the page never does arithmetic about a policy
+         the payer did not agree to. */
+      ...(payment.receivedCents !== null
+        ? {
+            receivedCents: payment.receivedCents,
+            debtCents: payment.invoiceCents + payment.carriedBalanceCents,
+            missingCents: Math.max(
+              0,
+              payment.invoiceCents + payment.carriedBalanceCents - payment.receivedCents,
+            ),
+          }
         : {}),
       validationAttempts: payment.validationAttempts,
       error: publicError(payment.lastError),

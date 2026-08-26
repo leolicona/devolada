@@ -22,6 +22,7 @@ const wisphubCustomer = {
   estado: "Suspendido",
   estado_facturas: "Pendiente de Pago",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { id: 71342, nombre: "Zona dia 15" },
 };
 
@@ -40,8 +41,8 @@ function mockWispHubUserLookup(results: unknown[] = [wisphubCustomer]) {
 /* Debt truth (debt-truth spec D1): the quote's billingStatus comes from
    the pending-invoice list, not from estado_facturas. */
 function mockPendingInvoices(
-  results: { id_factura: number; cliente: { usuario: string } }[] = [
-    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" } },
+  results: { id_factura: number; cliente: { usuario: string }; total: number }[] = [
+    { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
   ],
 ) {
   fetchMock
@@ -76,7 +77,9 @@ describe("US-C02: the quote is computed server-side", () => {
       billingStatus: "due",
     });
     expect(data.quote).toEqual({
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      /* debt-truth D11: its own field, zero when nothing is carried */
+      carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       totalCents: 51400,
     });

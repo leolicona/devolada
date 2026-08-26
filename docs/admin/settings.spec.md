@@ -24,8 +24,8 @@ The Configuración section: the WispHub API key that makes reconnection possible
 ## Contract (ISP session only)
 
 - `GET /charges/feed` → `today: { count, totalCents, startedAtMs }` — the boundary the server counted from (D5)
-- `GET /settings` → `{ serviceFeeCents, storeCommissionCents, platformShareCents, timezone, timeFormat, wisphub: { configured, keyTail } }`
-- `PATCH /settings` — any of `{ serviceFeeCents, storeCommissionCents, timezone, timeFormat, wisphubApiKey }` → the `GET` shape
+- `GET /settings` → `{ serviceFeeCents, storeCommissionCents, platformShareCents, timezone, timeFormat, wisphub: { configured, keyTail }, reconnection: { thresholdPercent, floorCents } }` — the last added 2026-08-25 by `direct-payment/partial-payment.spec.md` D2/D4 (defaults 100 / 0)
+- `PATCH /settings` — any of `{ serviceFeeCents, storeCommissionCents, timezone, timeFormat, wisphubApiKey, reconnectionThresholdPercent, reconnectionFloorCents }` → the `GET` shape; the threshold is an integer 0–100, the floor a nonnegative integer of cents
   - 400 `COMMISSION_EXCEEDS_FEE` (D4) · 400 on an unknown timezone (allow-list of the three Mexican zones) · Zod at the edge for the rest
   - a `wisphubApiKey` in the body is always re-tested; the response carries `wisphubTest: { ok, code }` (D3)
 - `POST /settings/wisphub/test` — `{ apiKey? }` → `{ ok: true, sampleCustomerCount }` · `{ ok: false, code: "WISPHUB_AUTH_FAILED" | "WISPHUB_UNAVAILABLE" }` (200 either way: the test succeeded in telling us the answer)
@@ -36,6 +36,7 @@ The Configuración section: the WispHub API key that makes reconnection possible
 
 - `/settings`, three cards: **Conexión con WispHub** (masked key `••••1234` or "Sin configurar", field for a new key, "Probar conexión", plain result), **Cobro y comisiones** (service fee and store commission in pesos, with the platform share computed live below), **Zona horaria y hora** (timezone `Select` with the three Mexican zones named in plain es-MX, and a 12h/24h `Select` showing a live example).
 - Saving is per card, each with its own state; a saved card says so.
+- **Reconexión con pago incompleto** (added 2026-08-25, `partial-payment` D2/D4): the threshold percentage and the floor in pesos, with the meaning of the current values computed in one live sentence — the default (100 / $0) reads "El servicio regresa cuando el pago cubre todo el adeudo."
 - The shell shows the missing-key banner while `wisphubConfigured` is false (D8).
 - Plain es-MX. Amounts through `formatMoney`/`parseMoney`, never floats.
 

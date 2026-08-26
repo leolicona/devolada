@@ -36,10 +36,13 @@ export type SweepReport = {
 /* The first attempt, made inline when the store records the charge
    (charge-record D2). Shares the scheduling rules with the sweep. */
 export function firstAttemptSchedule(
-  result: { status: "reconnected" | "queued"; error: string | null },
+  result: { status: "reconnected" | "queued" | "withheld"; error: string | null },
   now: Date,
 ): { attempts: number; nextAttemptAt: Date | null } {
-  if (result.status === "reconnected") return { attempts: 1, nextAttemptAt: null };
+  /* Both terminal: one because the service came back, the other because
+     it was deliberately not restored (partial-payment D5). Neither is
+     something the sweep should touch again. */
+  if (result.status !== "queued") return { attempts: 1, nextAttemptAt: null };
   if (result.error === "WISPHUB_AUTH_FAILED") {
     return { attempts: 0, nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)) };
   }
@@ -107,7 +110,11 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
         usuario: charge.customerUsuario ?? charge.wisphubCustomerId,
         wisphubId: charge.wisphubCustomerId,
       },
-      charge.monthlyFeeCents,
+      /* What this charge settles for the ISP (debt-truth D7): the
+         invoice total plus whatever the customer was carrying. Stored at
+         record time, so a retry days later registers the same number the
+         shopkeeper collected — not a debt that moved meanwhile. */
+      charge.invoiceCents + charge.carriedBalanceCents,
       now,
       {
         invoiceId: charge.wisphubInvoiceId,

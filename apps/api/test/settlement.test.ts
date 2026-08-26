@@ -26,7 +26,7 @@ async function seedCharge(
       wisphubCustomerId: "6",
       customerUsuario: "greyes@wifiplus",
       customerName: "Janely",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
       serviceFeeCents,
       totalCents: 49900 + serviceFeeCents,
       createdAt,

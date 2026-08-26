@@ -13,6 +13,10 @@ const pesos = (cents: number) =>
 const statusLine: Record<Charge["reconnectionStatus"], string> = {
   reconnected: "Tu internet ya está activo.",
   queued: "Tu internet se reactiva en unos minutos.",
+  /* partial-payment D7: in pesos, and the whole truth. A receipt that
+     says the service is coming back when it is not is the one thing this
+     status exists to prevent. */
+  withheld: "Tu pago quedó registrado. Tu internet se reactiva cuando llegue el resto del adeudo.",
   failed: "Tu pago quedó registrado. Si tu internet sigue sin servicio, comunícate con tu proveedor y menciona tu folio.",
 };
 
@@ -22,7 +26,14 @@ export function receiptText(charge: Charge, storeName: string): string {
     ``,
     `Folio: ${charge.folio}`,
     `Cliente: ${charge.customerName}`,
-    `Mensualidad: $${pesos(charge.monthlyFeeCents)}`,
+    /* debt-truth D16: the invoice total, not the plan's price */
+    `Cargo del periodo: $${pesos(charge.invoiceCents)}`,
+    /* debt-truth D11: what the customer was already carrying gets its own
+       line. Folding it into the period's charge would show a number that
+       does not match their plan and explain nothing. */
+    ...(charge.carriedBalanceCents > 0
+      ? [`Adeudo anterior: $${pesos(charge.carriedBalanceCents)}`]
+      : []),
     `Cargo por servicio: $${pesos(charge.serviceFeeCents)}`,
     `Total pagado: $${pesos(charge.totalCents)}`,
     `Pagaste en: ${storeName}`,

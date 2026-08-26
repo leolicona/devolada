@@ -5,6 +5,8 @@ import { charges, directPayments, isps, paymentLinks } from "../db/schema";
 import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
 import { WispHub, WispHubError } from "../wisphub/client";
+import { NO_DEBT, debtOf } from "../wisphub/debt";
+import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
 import { invalidatePendingInvoices } from "../wisphub/cache";
 import { firstAttemptSchedule } from "../reconnection/queue";
@@ -132,7 +134,13 @@ export async function runValidation(
             /* D2/Consta D1: amount and beneficiary are server-supplied;
                only the customer's own transfer data travels from input */
             date: payment.transferDate ?? now.toISOString().slice(0, 10),
-            amountCents: payment.amountCents,
+            /* partial-payment D5: the amount is a **search criterion**,
+               not an assertion. Asking with what we expected finds
+               nothing when the payer fell short, so what travels is what
+               the receipt said — the same choice Consta already makes on
+               its own receipt door. The manual door has no reading, so
+               it still asks with the expected total. */
+            amountCents: payment.claimedAmountCents ?? payment.amountCents,
             senderBank: payment.senderBank ?? "",
             trackingKey: payment.trackingKey ?? "",
             beneficiary,
@@ -236,18 +244,18 @@ export async function runValidation(
   }
 
   const cep = verdict.cep;
-  /* On the transfer door the amount traveled to Banxico as a search
-     criterion, so `valid` already implies the amount. The receipt door
-     validates whatever the receipt claims — the $1-receipt hole — so
-     the returned CEP is compared against the expected total. */
-  if (cep && cep.amountCents !== payment.amountCents) {
-    return update({
-      ...base,
-      status: "invalid",
-      nextValidationAt: null,
-      lastError: "AMOUNT_MISMATCH",
-    });
-  }
+  /* partial-payment D1 replaces the `AMOUNT_MISMATCH` refusal that stood
+     here. A CEP that disagrees with the expected total is not a lie — it
+     is a transfer that really happened for a different amount, with the
+     money already in the ISP's account. Refusing it discarded the only
+     record that it arrived.
+
+     What the CEP says was transferred is what settles the debt (D5), and
+     how much of it is missing decides `partial` vs `confirmed` (D6). The
+     $1-receipt case D11 guarded is still handled, differently and better:
+     a real $1 transfer becomes a real $1 partial payment, which buys no
+     reconnection at the default threshold and is visible to the ISP
+     instead of vanishing. */
   if (cep?.date) {
     const cepMs = Date.parse(`${cep.date}T00:00:00Z`);
     if (Number.isFinite(cepMs) && now.getTime() - cepMs > STALE_TRANSFER_DAYS * 24 * 3600 * 1000) {
@@ -304,12 +312,14 @@ export async function runValidation(
     const code = e instanceof WispHubError ? e.code : "WISPHUB_UNAVAILABLE";
     return retryLater(code, base);
   }
-  const mine = pending.invoices.filter((f) => f.usuario === link.customerUsuario);
-  const invoiceId = mine.length ? Math.min(...mine.map((f) => f.invoiceId)) : null;
-  if (invoiceId === null) {
-    /* Debt-truth D4: a truncated list cannot prove "owes nothing" */
-    const provenSettled =
-      pending.complete || customer?.billingStatus === "paid";
+  /* debt-truth D7: the debt is the pending invoices plus what the
+     customer carries. Read fresh — between submission and here the debt
+     can have been settled elsewhere (D14) or grown. */
+  const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+  if (debt.totalCents === 0) {
+    /* Debt-truth D4/D14: a truncated list cannot prove "owes nothing",
+       but `saldo` is never truncated and it said nothing either. */
+    const provenSettled = pending.complete || customer?.billingStatus === "paid";
     if (provenSettled) {
       /* The money already moved to the ISP's CLABE: never register a
          second WispHub payment, never drop the proof (D14). */
@@ -321,6 +331,20 @@ export async function runValidation(
       });
     }
   }
+  const ispDebtCents = debt.totalCents || (customer?.planPriceCents ?? payment.invoiceCents);
+
+  /* D5: what the CEP says arrived is what settles the debt, and the
+     ISP's threshold decides whether it earns the service back. Both
+     branches register the money — the ISP's books are right either way;
+     only the router is left alone. */
+  const receivedCents = cep?.amountCents ?? payment.amountCents;
+  const settlement = settle({
+    receivedCents,
+    ispDebtCents,
+    serviceFeeCents: payment.serviceFeeCents,
+    thresholdPercent: isp.reconnectionThresholdPercent,
+    floorCents: isp.reconnectionFloorCents,
+  });
 
   /* D6: a direct charge has no store, no commission, no ledger entries —
      but the same folio, the same reconnection flow, the same feed. */
@@ -337,9 +361,18 @@ export async function runValidation(
       customerName: customer?.name ?? link.customerUsuario,
       customerZone: customer?.zone ?? null,
       customerPhone: customer?.phone ?? null,
-      monthlyFeeCents: payment.monthlyFeeCents,
-      serviceFeeCents: payment.serviceFeeCents,
-      totalCents: payment.amountCents,
+      /* D9: the charge records what actually arrived, not what was
+         asked for. The money moved, so the platform statement and the
+         ISP's feed must both see it. */
+      invoiceCents: settlement.ispRegisteredCents,
+      carriedBalanceCents: 0,
+      /* D14: the whole fee, always. `settlement` D1 derives the
+         platform's share from this column, and the money the payer sent
+         reached the ISP's bank whatever its size — so the fee is a
+         receivable against the ISP, never something the shortfall
+         cancels. */
+      serviceFeeCents: settlement.feeAccruedCents,
+      totalCents: receivedCents,
     })
     .returning();
 
@@ -351,9 +384,10 @@ export async function runValidation(
     wisphub,
     isp.id,
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
-    payment.monthlyFeeCents,
+    settlement.ispRegisteredCents,
     now,
-    { invoiceId, paymentRegistered: false },
+    { invoiceId: debt.invoiceId, paymentRegistered: false },
+    settlement.reconnect,
   );
   const schedule = firstAttemptSchedule(attempt, now);
   await db
@@ -371,7 +405,8 @@ export async function runValidation(
 
   return update({
     ...base,
-    status: "confirmed",
+    receivedCents,
+    status: settlement.status,
     chargeId: charge.id,
     confirmedAt: now,
     /* D18: who Banxico says sent the money. Recorded and acted on by

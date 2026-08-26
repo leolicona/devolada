@@ -25,6 +25,7 @@ const customer = (over: Record<string, unknown> = {}) => ({
   estado: "Activo",
   estado_facturas: "Pagadas",
   precio_plan: "499.00",
+  saldo: "0.00",
   zona: { nombre: "Centro" },
   ...over,
 });

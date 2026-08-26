@@ -18,7 +18,8 @@ const feed = feedResponse.parse({
       channel: "store",
       reconnectionStatus: "failed",
       totalCents: 41400,
-      monthlyFeeCents: 39900,
+      invoiceCents: 39900,
+      carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
@@ -83,6 +84,7 @@ const settings = settingsResponse.parse({
     bankUnknown: false,
     configured: false,
   },
+  reconnection: { thresholdPercent: 100, floorCents: 0 },
 });
 
 describe("US-P04: the harness reports what it should", () => {

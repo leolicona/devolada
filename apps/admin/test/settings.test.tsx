@@ -25,6 +25,7 @@ const settings = (over: Record<string, unknown> = {}) =>
       bankUnknown: false,
       configured: false,
     },
+    reconnection: { thresholdPercent: 100, floorCents: 0 },
     ...over,
   });
 
@@ -124,7 +125,8 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       channel: "store" as const,
       reconnectionStatus: "reconnected" as const,
       totalCents: 41400,
-      monthlyFeeCents: 39900,
+      invoiceCents: 39900,
+      carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
@@ -142,5 +144,62 @@ describe("US-A04: the configured format reaches every time on screen", () => {
     renderApp("/");
 
     expect(await screen.findByText("14:30")).toBeInTheDocument();
+  });
+});
+
+/* docs/direct-payment/partial-payment.spec.md D2/D4 (US-D10): the dial
+   for short payments, with its meaning computed on screen — the default
+   (100 / $0) explained in one line, as the spec's DoD asks. */
+describe("US-D10: the reconnection dial is set from Configuración", () => {
+  it("explains the current values in one sentence and saves both numbers", async () => {
+    const patches: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.settings(() => ok(settings())),
+      handlers.settlement(() => ok({ months: [] })),
+      handlers.patchSettings((body) => {
+        patches.push(body);
+        return ok(settings({ reconnection: { thresholdPercent: 70, floorCents: 20000 } }));
+      }),
+    );
+    renderApp("/settings");
+
+    /* the default, explained without arithmetic homework */
+    expect(
+      await screen.findByText(/el servicio regresa cuando el pago cubre todo el adeudo/i),
+    ).toBeInTheDocument();
+
+    const percent = screen.getByLabelText("Porcentaje mínimo del adeudo");
+    await userEvent.clear(percent);
+    await userEvent.type(percent, "70");
+    const floor = screen.getByLabelText("Mínimo en pesos");
+    await userEvent.clear(floor);
+    await userEvent.type(floor, "200.00");
+
+    /* the sentence follows the fields, live */
+    expect(
+      screen.getByText(/cubre al menos el 70% del adeudo y no es menor a \$200\.00/i),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /guardar reconexión/i }));
+    expect(patches).toEqual([
+      { reconnectionThresholdPercent: 70, reconnectionFloorCents: 20000 },
+    ]);
+  });
+
+  it("blocks a percentage above 100 before it reaches the API", async () => {
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.settings(() => ok(settings())),
+      handlers.settlement(() => ok({ months: [] })),
+    );
+    renderApp("/settings");
+
+    const percent = await screen.findByLabelText("Porcentaje mínimo del adeudo");
+    await userEvent.clear(percent);
+    await userEvent.type(percent, "101");
+
+    expect(screen.getByText(/entre 0 y 100/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /guardar reconexión/i })).toBeDisabled();
   });
 });

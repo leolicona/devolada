@@ -20,10 +20,11 @@ function quote(
       zone: "Zona dia 15",
       serviceStatus: "suspended",
       billingStatus: overrides.billingStatus ?? "due",
-      monthlyFeeCents: 49900,
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
       hasPhone: overrides.hasPhone ?? true,
     },
-    quote: { monthlyFeeCents: 49900, serviceFeeCents: 1500, totalCents: 51400 },
+    quote: { invoiceCents: 49900, carriedBalanceCents: 0, serviceFeeCents: 1500, totalCents: 51400 },
     cap: { balanceCents: 0, capCents: 500000, blocked: overrides.blocked ?? false },
   });
 }
@@ -41,7 +42,7 @@ describe("US-C02: the screen shows identity, breakdown and the charge button", (
     mount(quote());
 
     expect(await screen.findByRole("heading", { name: "Janely" })).toBeInTheDocument();
-    expect(screen.getByText("Mensualidad")).toBeInTheDocument();
+    expect(screen.getByText("Cargo del periodo")).toBeInTheDocument();
     expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
     expect(screen.getByText("Servicio suspendido")).toBeInTheDocument();
 
@@ -92,7 +93,8 @@ function mountWithoutPhone() {
         folio: "DV-A1B2C3",
         customerName: "Janely",
         totalCents: 51400,
-        monthlyFeeCents: 49900,
+        invoiceCents: 49900,
+        carriedBalanceCents: 0,
         serviceFeeCents: 1500,
         reconnectionStatus: "queued",
         text: "Comprobante",
@@ -137,5 +139,49 @@ describe("US-C07: the phone is asked for only when nobody has one", () => {
 
     await screen.findByText("Folio DV-A1B2C3");
     expect(sent.body).toEqual({ usuario: "greyes@wifiplus" });
+  });
+});
+
+/* docs/charges/debt-truth.spec.md (2026-08-20 revision) scenario 9 —
+   US-C08, D11. A shopkeeper shown an unfamiliar total with no
+   explanation does not charge, so the carried debt is a line of its own
+   and never folded into the mensualidad. */
+describe("US-C08: a carried balance is its own line", () => {
+  const withCarried = () =>
+    customerQuoteResponse.parse({
+      customer: {
+        wisphubId: 6,
+        usuario: "greyes@wifiplus",
+        name: "Janely",
+        zone: "Zona dia 15",
+        serviceStatus: "suspended",
+        billingStatus: "due",
+        invoiceCents: 49900,
+        carriedBalanceCents: 15000,
+        hasPhone: true,
+      },
+      quote: {
+        invoiceCents: 49900,
+        carriedBalanceCents: 15000,
+        serviceFeeCents: 1500,
+        totalCents: 66400,
+      },
+      cap: { balanceCents: 0, capCents: 500000, blocked: false },
+    });
+
+  it("shows 'Adeudo anterior' beside the mensualidad, and the total covers both", async () => {
+    mount(withCarried());
+
+    expect(await screen.findByText("Cargo del periodo")).toBeInTheDocument();
+    expect(screen.getByText("Adeudo anterior")).toBeInTheDocument();
+    expect(screen.getByText("Cargo por servicio")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cobrar \$664\.00/i })).toBeEnabled();
+  });
+
+  it("omits the line entirely when nothing is carried", async () => {
+    mount(quote());
+
+    expect(await screen.findByText("Cargo del periodo")).toBeInTheDocument();
+    expect(screen.queryByText("Adeudo anterior")).not.toBeInTheDocument();
   });
 });

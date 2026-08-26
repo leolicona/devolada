@@ -16,7 +16,8 @@ export const linkStatusResponse = z.object({
   ispName: z.string(),
   customerName: z.string().optional(),
   status: z.enum(["debt", "no_debt", "unavailable"]),
-  monthlyFeeCents: z.number().int().optional(),
+  invoiceCents: z.number().int().optional(),
+  carriedBalanceCents: z.number().int().optional(),
   serviceFeeCents: z.number().int().optional(),
   totalCents: z.number().int().optional(),
   speiClabe: z.string().optional(),
@@ -148,7 +149,10 @@ export const proofReadingResponse = z.object({
 
 export const payResponse = z.object({
   directPaymentId: z.string(),
-  status: z.enum(["validating", "confirmed", "invalid", "unapplied"]),
+  /* `partial` included: the inline attempt can finish the validation, and
+     a short transfer's verdict travels back on the POST itself — the
+     status endpoint is not the only door it comes through (US-D10 D6). */
+  status: z.enum(["validating", "confirmed", "partial", "invalid", "unapplied"]),
   error: publicPaymentError.nullable(),
 });
 
@@ -157,12 +161,19 @@ export const directPaymentStatusResponse = z.object({
   status: z.enum([
     "validating",
     "confirmed",
+    "partial",
     "invalid",
     "expired",
     "unapplied",
     "superseded",
   ]),
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed"]).optional(),
+  /* partial-payment D7: the page speaks in pesos, never in percentages,
+     so the three numbers it needs arrive computed. Present once a
+     verdict exists. */
+  receivedCents: z.number().int().optional(),
+  debtCents: z.number().int().optional(),
+  missingCents: z.number().int().optional(),
+  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),
   error: publicPaymentError.nullable(),

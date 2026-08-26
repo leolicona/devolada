@@ -71,7 +71,7 @@ describe("US-K03: the ledger lists entries with their context", () => {
         folio: "DV-TEST01",
         wisphubCustomerId: "1",
         customerName: "Janely",
-        monthlyFeeCents: 39900,
+        invoiceCents: 39900,
         serviceFeeCents: 1500,
         totalCents: 41400,
       })

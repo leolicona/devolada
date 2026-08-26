@@ -25,7 +25,10 @@ through everything else — **a list row can render correctly and say nothing**,
   an amount but not the store; the Entregas history row printed `A..` and `1...`.
   A `min-w-0 flex-1` column beside fixed-width siblings collapses to zero and
   `truncate` hides the collapse. The suite now asserts that each list's identifying
-  text has a non-zero box at the 360px floor.
+  text has a non-zero box at the 360px floor. (Amended 2026-08-25 by the PRs
+  #81–#83 review, finding 7: the same walk now flags any leaf whose text contains
+  `NaN` — a stub that drifts from the wire shape makes `formatMoney(undefined)`
+  render `$NaN` without throwing, and every geometry assertion passes over it.)
 - **D2 — `StatusBadge` gets store statuses of its own.** `active`/`suspended` served
   both the subscriber's internet and the store's account, so a corner store read
   "Servicio activo" under a Wi-Fi icon, and a suspended *store* would have told the

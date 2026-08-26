@@ -186,8 +186,12 @@ function TransferForm({
       </Field>
       <Field label="Monto transferido">
         {/* claimed-amount D1/D3: what travels to Banxico is what the
-            payer says they sent — the debt only suggests the default. */}
+            payer says they sent — the debt only suggests the default.
+            The $ prefix is the same anchor the admin's money inputs
+            carry: an input cannot render through <Amount>, but it can
+            still look like pesos. */}
         <Input
+          prefix="$"
           inputMode="decimal"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -957,15 +961,20 @@ export function PaymentPage({ token }: { token: string }) {
         )}
 
         {/* claimed-amount D2: both numbers in pesos and what happens to
-            the difference — informed, not refused */}
+            the difference — informed, not refused. One span, on purpose:
+            the Alert lays out its direct children, and loose <Amount>
+            elements became columns that spilled out of the box (design
+            review, PR #90). */}
         {reading.amountCents != null &&
           data.totalCents != null &&
           reading.amountCents > data.totalCents && (
             <Alert layout="icon">
               <ScanLine aria-hidden />
-              Tu comprobante dice <Amount cents={reading.amountCents} /> y tu adeudo es{" "}
-              <Amount cents={data.totalCents} />. El sobrante quedará a favor con tu proveedor
-              para tu siguiente factura.
+              <span>
+                Tu comprobante dice <Amount cents={reading.amountCents} /> y tu adeudo es{" "}
+                <Amount cents={data.totalCents} />. El sobrante quedará a favor con tu proveedor
+                para tu siguiente factura.
+              </span>
             </Alert>
           )}
 

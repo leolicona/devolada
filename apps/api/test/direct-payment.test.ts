@@ -1183,21 +1183,78 @@ describe("D8: one transfer pays once", () => {
     expect(await drizzle(env.DB).select().from(charges)).toHaveLength(0);
   });
 
-  it("scenario 18: a second submission of the same transfer dies at the index", async () => {
+  it("scenario 18: resubmitting your own live transfer attaches to it (US-D12, D9)", async () => {
     await seedLinkedIsp();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
     const first = await payTransfer();
     expect(first.status).toBe(201);
+    const firstId = (await first.json()).data.directPaymentId;
 
-    /* same tracking key while the first is still alive: no WispHub
-       call, no Consta call — the database refuses */
+    /* Same clave while the first row is still validating: a deterministic
+       misread re-uploaded, the payer racing only themselves. No second
+       row, no Consta call — the answer is the row they already own. */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const second = await payTransfer();
+    expect(second.status).toBe(200);
+    const { data } = await second.json();
+    expect(data.directPaymentId).toBe(firstId);
+    expect(data.status).toBe("validating");
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
+  });
+
+  it("scenario 18b: another customer's live clave still refuses at the index (US-D12, D9)", async () => {
+    const { isp } = await seedLinkedIsp();
+    await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({
+        ispId: isp.id,
+        token: "tok9876zyxwvut99",
+        wisphubCustomerId: "7",
+        customerUsuario: "otro@wifiplus",
+      });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    expect((await payTransfer()).status).toBe(201);
+
+    /* The same clave from a different payment link: the collision pool
+       D18 warns about — same ISP, same day, another customer. Refused. */
+    mockCustomerLookup([{ ...wisphubCustomer(), id_servicio: 7, usuario: "otro@wifiplus" }], 1);
+    mockPendingInvoices([{ id_factura: 43, cliente: { usuario: "otro@wifiplus" }, total: 499 }], 1);
+    const second = await payTransfer("tok9876zyxwvut99");
     expect(second.status).toBe(409);
     const body = await second.json();
+    expect(body.error.code).toBe("TRANSFER_ALREADY_USED");
+    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
+  });
+
+  it("scenario 18c: a terminal owner on the payer's own link still refuses (US-D12, D9)", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    await drizzle(env.DB)
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: "2026-08-17",
+        status: "confirmed",
+      });
+
+    /* The transfer already bought something: attaching would show a live
+       "Verificando" over a consumed clave. The refusal is honest here. */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const res = await payTransfer();
+    expect(res.status).toBe(409);
+    const body = await res.json();
     expect(body.error.code).toBe("TRANSFER_ALREADY_USED");
     expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
   });

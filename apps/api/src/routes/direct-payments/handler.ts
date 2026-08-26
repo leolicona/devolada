@@ -286,58 +286,69 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
       .where(eq(directPayments.id, superseded.id));
   }
 
+  /* claimed-amount D1/D3: the payer's own number wins — a human who
+     confirmed (or typed) the amount outranks the raw reading; the silent
+     path still carries the reader's. Kept so the lookup asks Banxico
+     about the transfer the payer actually made (partial-payment D5). */
+  const claimedCents = body.transfer?.amountCents ?? body.receiptAmountCents ?? null;
+  const rowValues = {
+    paymentLinkId: link.id,
+    ispId: isp.id,
+    amountCents,
+    invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
+    carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+    claimedAmountCents: claimedCents,
+    serviceFeeCents,
+    proofMode: (body.transfer ? "transfer" : "receipt") as "transfer" | "receipt",
+    trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,
+    senderBank: body.transfer?.senderBank ?? null,
+    transferDate: body.transfer?.date ?? null,
+    proofKey: body.proofId ?? null,
+    receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
+    supersedesId: superseded?.id ?? null,
+    /* The row is born owned by the sweep (D7). The inline attempt
+       below is an optimisation, not the mechanism: if it never
+       finishes — a worker evicted, a provider that stalls past its
+       deadline, a deploy mid-flight — the payment is still due at
+       its first slot. Without this the row kept
+       `next_validation_at = NULL`, which `sweepDirectPayments`
+       cannot select, so it was never retried and never expired:
+       the customer's money had moved and nothing would ever look
+       at it again (found live, 2026-08-18).
+
+       No race with the inline attempt: the first slot is +2 min and
+       a validation answers in ~15 s. */
+    nextValidationAt: nextValidationSlot(now, now),
+  };
+
+  /* On any refusal after this point the prior's claim must come back:
+     it was released for a submission that did not happen (D9 amendment,
+     found live 2026-08-26 — a cross-link collision left the prior
+     superseded with no successor, an orphan nothing would ever poll). */
+  const restorePrior = async () => {
+    if (superseded) {
+      await db
+        .update(directPayments)
+        .set({ status: "validating", nextValidationAt: superseded.nextValidationAt })
+        .where(eq(directPayments.id, superseded.id));
+    }
+  };
+
   let payment;
   try {
-    [payment] = await db
-      .insert(directPayments)
-      .values({
-        paymentLinkId: link.id,
-        ispId: isp.id,
-        amountCents,
-        invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
-        carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
-        /* claimed-amount D1/D3: the payer's own number wins — a human
-           who confirmed (or typed) the amount outranks the raw reading;
-           the silent path still carries the reader's. Kept so the lookup
-           asks Banxico about the transfer the payer actually made
-           (partial-payment D5). */
-        claimedAmountCents: body.transfer?.amountCents ?? body.receiptAmountCents ?? null,
-        serviceFeeCents,
-        proofMode: body.transfer ? "transfer" : "receipt",
-        trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,
-        senderBank: body.transfer?.senderBank ?? null,
-        transferDate: body.transfer?.date ?? null,
-        proofKey: body.proofId ?? null,
-        receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
-        supersedesId: superseded?.id ?? null,
-        /* The row is born owned by the sweep (D7). The inline attempt
-           below is an optimisation, not the mechanism: if it never
-           finishes — a worker evicted, a provider that stalls past its
-           deadline, a deploy mid-flight — the payment is still due at
-           its first slot. Without this the row kept
-           `next_validation_at = NULL`, which `sweepDirectPayments`
-           cannot select, so it was never retried and never expired:
-           the customer's money had moved and nothing would ever look
-           at it again (found live, 2026-08-18).
-
-           No race with the inline attempt: the first slot is +2 min and
-           a validation answers in ~15 s. */
-        nextValidationAt: nextValidationSlot(now, now),
-      })
-      .returning();
+    [payment] = await db.insert(directPayments).values(rowValues).returning();
   } catch (e) {
     /* D8: the partial unique index is what makes one transfer pay
        once — racing concurrent submissions included */
-    if (isUniqueViolation(e)) {
-      /* validation-status-ux D9: the reader's misreads are deterministic,
-         so a re-uploaded capture reproduces the same wrong clave — and a
-         payer whose "Verificando" context is gone collides with their own
-         live row. Attach to it instead of accusing them with somebody
-         else's transfer. Any other owner — another link, or a terminal
-         row that already consumed the transfer — still refuses. */
-      const collidingKey = body.transfer?.trackingKey.toUpperCase();
-      if (collidingKey) {
-        const [own] = await db
+    if (!isUniqueViolation(e)) throw e;
+    /* validation-status-ux D9: the reader's misreads are deterministic,
+       so a re-uploaded capture reproduces the same wrong clave — and a
+       payer whose "Verificando" context is gone collides with their own
+       live row. Any owner that is not theirs — another link, or a
+       terminal row that already consumed the transfer — still refuses. */
+    const collidingKey = body.transfer?.trackingKey.toUpperCase();
+    const [own] = collidingKey
+      ? await db
           .select()
           .from(directPayments)
           .where(
@@ -346,24 +357,56 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
               eq(directPayments.trackingKey, collidingKey),
               eq(directPayments.status, "validating"),
             ),
-          );
-        if (own) {
-          return c.json(
-            {
-              success: true,
-              data: {
-                directPaymentId: own.id,
-                status: "validating" as const,
-                error: publicError(own.lastError),
-              },
-            },
-            200,
-          );
-        }
-      }
+          )
+      : [undefined];
+    if (!own) {
+      await restorePrior();
       return c.json({ success: false, error: { code: "TRANSFER_ALREADY_USED" } }, 409);
     }
-    throw e;
+
+    /* D9 amended (found live 2026-08-26): attach only when the whole
+       submission matches — the first D9 compared the clave alone, so a
+       payer correcting *other* fields toward a clave they already owned
+       had those edits silently discarded. */
+    const sameSubmission =
+      own.senderBank === (body.transfer?.senderBank ?? null) &&
+      own.transferDate === (body.transfer?.date ?? null) &&
+      (claimedCents == null || claimedCents === (own.claimedAmountCents ?? own.amountCents));
+    if (sameSubmission) {
+      return c.json(
+        {
+          success: true,
+          data: {
+            directPaymentId: own.id,
+            status: "validating" as const,
+            error: publicError(own.lastError),
+          },
+        },
+        200,
+      );
+    }
+
+    /* The same clave with different data is the payer correcting the
+       owning row: supersede it and take its place, chain intact (D8). */
+    await db
+      .update(directPayments)
+      .set({ status: "superseded", nextValidationAt: null })
+      .where(eq(directPayments.id, own.id));
+    try {
+      [payment] = await db
+        .insert(directPayments)
+        .values({ ...rowValues, supersedesId: own.id })
+        .returning();
+    } catch (e2) {
+      if (!isUniqueViolation(e2)) throw e2;
+      /* A second owner in the same instant: give both claims back */
+      await db
+        .update(directPayments)
+        .set({ status: "validating", nextValidationAt: own.nextValidationAt })
+        .where(eq(directPayments.id, own.id));
+      await restorePrior();
+      return c.json({ success: false, error: { code: "TRANSFER_ALREADY_USED" } }, 409);
+    }
   }
 
   /* Inline attempt, then the sweep takes over (D7) — the same split as

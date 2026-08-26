@@ -91,6 +91,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V08** — As the operator, every call records what the provider charged, how long it took and how much quota is left, so the channel's cost and health are visible before it breaks.
 - **US-V09** — As an integrator, a receipt image is read reliably and validated through the door that does not miss, so a customer who really paid is not told their transfer could not be verified.
 - **US-V10** — As an integrator, when a receipt cannot be read I am told which field failed and nothing is charged, so I can ask the customer to correct one thing instead of leaving them waiting.
+- **US-V11** — As an integrator, a receipt-door validation also returns what the provider's OCR read off the image — a second, independent reading I can compare against my own, clearly labeled as a reading and never a verdict. *(reserved 2026-08-26; gated on measuring whether the provider returns its reading on failures)*
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
@@ -106,6 +107,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D11** — As an ISP, I choose whether my customer pays the SPEI service fee or I absorb it, and either way my customer is shown a single number to transfer. *(reserved 2026-08-20)*
 - **US-D12** — As an end customer whose transfer Banxico has not published yet, the page stays calm while the wait is normal, asks me to review my data only when it stops being normal, tells me when the next automatic attempt will run, and always lets me correct my data or start over with another receipt. *(reserved 2026-08-25)*
 - **US-D13** — As an end customer, the amount that is checked against Banxico is the amount I actually transferred — read from my receipt or typed by me — so a transfer for a different amount than my debt is found and settled, never lost. *(reserved 2026-08-26; measured the same day: correct clave and date, three `not_found`, only because the system asked with the debt instead of the transfer)*
+- **US-D14** — As an end customer whose transfer is not found on the first attempt, a second reading of my receipt happens within minutes: if both readings agree the page waits with evidence and never asks me by the clock; if they disagree I am asked to confirm exactly the disputed field against my receipt. *(reserved 2026-08-26)*
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -236,13 +238,14 @@ Owner's decisions:
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
-| [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10 | proposed |
+| [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11 | proposed |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |
 | [direct-payment/partial-payment.spec.md](direct-payment/partial-payment.spec.md) | direct-payment | US-D10 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
 | [direct-payment/validation-status-ux.spec.md](direct-payment/validation-status-ux.spec.md) | direct-payment | US-D12 | in development |
 | [direct-payment/claimed-amount.spec.md](direct-payment/claimed-amount.spec.md) | direct-payment | US-D13 | in development |
+| [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | draft |
 
 ## Cross-cutting layers
 

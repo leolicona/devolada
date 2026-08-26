@@ -611,3 +611,26 @@ duplicated reference nobody can manufacture on demand.
       automated (D18)
 - [x] `retryable` on every error envelope — validate, extract, auth
       middleware, admin keys, `onError`; scenario 28 automated (D19)
+
+## Open items
+
+- **A learned `retryAfter` on `not_found`/`pending` (discussed 2026-08-25,
+  not committed).** Consta is the only party that can measure Banxico's real
+  publication delay: its append-only log links a transfer's retries by
+  tracking key, so `first valid − first not_found`, per bank pair, is a SQL
+  query over data D14 already records — and every future integrator widens
+  the dataset. The bounded version: infer the timing and **suggest** it by
+  extending D9's existing `retryAfter` field to `not_found`/`pending`
+  responses ("asking again before this is spending in vain"). Consta never
+  schedules, never promises, and omits the field when a bank pair lacks
+  samples; the caller's static schedule (direct-payment D7) remains the
+  floor. Three gates before building anything: (1) the offline query must
+  show per-cell signal on real volume — today the log holds a handful of
+  rows; (2) the "do pending re-checks bill?" question must be answered
+  first (`quota_remaining` is the instrument, one unsettled transfer the
+  cost), because free re-checks change what timing precision is worth;
+  (3) consumer copy discipline: a suggestion must never render as a
+  promised confirmation time — no upper bound on publication has ever been
+  measured. **Rejected now**: Consta scheduling retries itself with
+  webhooks (a stateful scheduler is another product's worth of complexity
+  for little gain while integrators own a cron).

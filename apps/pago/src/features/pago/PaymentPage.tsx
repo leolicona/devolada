@@ -645,7 +645,15 @@ export function PaymentPage({ token }: { token: string }) {
                               {status.transferDate && (
                                 <div className="py-2">
                                   <p className="text-sm text-ink-soft">Fecha</p>
-                                  <p className="text-sm text-ink">{status.transferDate}</p>
+                                  {/* Anchored to local midnight: bare
+                                      "YYYY-MM-DD" parses as UTC and in
+                                      Mexico that prints yesterday. */}
+                                  <p className="text-sm text-ink">
+                                    {new Date(`${status.transferDate}T00:00:00`).toLocaleDateString(
+                                      "es-MX",
+                                      { day: "numeric", month: "long", year: "numeric" },
+                                    )}
+                                  </p>
                                 </div>
                               )}
                             </div>

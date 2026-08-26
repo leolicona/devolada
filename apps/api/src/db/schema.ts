@@ -283,6 +283,14 @@ export const directPayments = sqliteTable(
        faceless `not_found` and six hours of silence for a real payment.
        Null on the manual door, where nobody read anything. */
     claimedAmountCents: integer("claimed_amount_cents"),
+    /* reading-check D1–D5: what the minute-two cross said. 'agreed' —
+       the provider's OCR read the same clave and amount (evidence, the
+       clock escalation retires); 'disputed' — at least one machine is
+       wrong, the human is asked now; 'blind' — the provider could not
+       read the image, no evidence either way. NULL = no cross ran. */
+    readingCheck: text("reading_check", { enum: ["agreed", "disputed", "blind"] }),
+    /* JSON array, set only on 'disputed' (D4): which fields to empty */
+    disputedFields: text("disputed_fields"),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     /* unapplied (D14): the CEP was real but the debt was settled
        elsewhere meanwhile — visible, never silent */

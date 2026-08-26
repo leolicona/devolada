@@ -604,6 +604,15 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
       /* claimed-amount D3: the amount this payment asked Banxico with,
          so the correction form pre-fills what actually travelled */
       claimedAmountCents: payment.claimedAmountCents,
+      /* reading-check D3/D4: 'blind' travels as null — no evidence is
+         the same as no cross, and the page must not know the difference */
+      readingCheck:
+        payment.readingCheck === "agreed" || payment.readingCheck === "disputed"
+          ? payment.readingCheck
+          : null,
+      ...(payment.readingCheck === "disputed" && payment.disputedFields
+        ? { disputedFields: JSON.parse(payment.disputedFields) }
+        : {}),
       receiptStatus: payment.receiptStatus,
     },
   });

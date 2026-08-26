@@ -249,7 +249,7 @@ Owner's decisions:
 | [direct-payment/returning-customer-access.spec.md](direct-payment/returning-customer-access.spec.md) | direct-payment | US-D08 | in development |
 | [direct-payment/validation-status-ux.spec.md](direct-payment/validation-status-ux.spec.md) | direct-payment | US-D12 | in development |
 | [direct-payment/claimed-amount.spec.md](direct-payment/claimed-amount.spec.md) | direct-payment | US-D13 | in development |
-| [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | draft |
+| [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | in development |
 
 ## Cross-cutting layers
 

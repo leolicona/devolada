@@ -537,6 +537,7 @@ export function PaymentPage({ token }: { token: string }) {
           senderBank: null,
           transferDate: null,
           claimedAmountCents: null,
+          readingCheck: null,
           receiptStatus: null,
         }
       : null);
@@ -598,13 +599,21 @@ export function PaymentPage({ token }: { token: string }) {
               const nextAt = status.nextValidationAt ?? null;
               const farAway = nextAt != null && nextAt - Date.now() > 90 * 60 * 1000;
               const escalated = status.validationAttempts >= 5;
+              /* reading-check D3/D4: the minute-two cross. Agreement is
+                 evidence — the clock escalation retires. A dispute asks
+                 the human now, about exactly the fields the two readers
+                 disagreed on. */
+              const agreed = status.readingCheck === "agreed";
+              const disputed = status.readingCheck === "disputed";
+              const disputedSet = new Set(status.disputedFields ?? []);
               const nextHour = nextAt
                 ? new Date(nextAt).toLocaleTimeString("es-MX", {
                     hour: "numeric",
                     minute: "2-digit",
                   })
                 : null;
-              const showForm = !enProceso && (correcting || (escalated && !farAway));
+              const showForm =
+                !enProceso && (correcting || disputed || (escalated && !agreed && !farAway));
 
               return (
                 <div className="space-y-4">
@@ -612,6 +621,21 @@ export function PaymentPage({ token }: { token: string }) {
                     <p className="text-sm text-ink-soft">
                       Tu comprobante dice “{status.receiptStatus}”: tu banco todavía no libera la
                       transferencia. Seguiremos intentando y no necesitas hacer nada.
+                    </p>
+                  ) : disputed ? (
+                    /* D4: the ask names the field and points at the
+                       receipt — the payer arbitrates against the one
+                       source of truth in their hand, never between two
+                       machines. Copy-paste is the way out of typing 28
+                       characters on a phone. */
+                    <p className="text-sm text-ink-soft">
+                      {disputedSet.has("trackingKey") && disputedSet.has("amount")
+                        ? "Confirma tu clave de rastreo y el monto transferido mirando tu comprobante."
+                        : disputedSet.has("amount")
+                          ? "Confirma el monto transferido mirando tu comprobante."
+                          : "Confirma tu clave de rastreo mirando tu comprobante."}{" "}
+                      {disputedSet.has("trackingKey") &&
+                        "Puedes copiarla desde tu app del banco, o escribirla tal como aparece en tu comprobante."}
                     </p>
                   ) : farAway ? (
                     /* D5: promise only what the system will do — the
@@ -630,11 +654,21 @@ export function PaymentPage({ token }: { token: string }) {
                       Puedes cerrar esta página y volver después, o contactar a tu proveedor de
                       internet con tu comprobante.
                     </p>
-                  ) : escalated ? (
+                  ) : escalated && !agreed ? (
                     /* D3: the copy suspects the wait, never the payer */
                     <p className="text-sm text-ink-soft">
                       Está tardando más de lo normal. Revisa que estos datos coincidan con tu
                       comprobante y corrígelos si hace falta.
+                    </p>
+                  ) : agreed && !correcting ? (
+                    /* reading-check D3: calm backed by evidence — two
+                       independent readers returned the same data, so the
+                       wait is Banxico's, and the form never opens by
+                       clock. Agreement never validates: the verdict is
+                       still Banxico's alone. */
+                    <p className="text-sm text-ink-soft">
+                      Revisamos tu comprobante dos veces y los datos coinciden. Solo esperamos la
+                      respuesta de Banxico — no necesitas hacer nada.
                     </p>
                   ) : correcting ? (
                     /* The payer opened the correction door themselves —
@@ -656,15 +690,24 @@ export function PaymentPage({ token }: { token: string }) {
                        resolves first wins (D3). */
                     <TransferForm
                       busy={busy}
+                      /* reading-check D4: a disputed field arrives EMPTY
+                         — there is no neutral reading to pre-fill when
+                         the machines disagree, and a pre-filled clave
+                         gets confirmed, not proofread (measured). The
+                         undisputed fields stay pre-filled. */
                       draft={{
-                        trackingKey: status.trackingKey,
+                        trackingKey: disputedSet.has("trackingKey") ? null : status.trackingKey,
                         senderBank: status.senderBank,
                         date: status.transferDate,
                       }}
                       /* claimed-amount D3: what this payment asked with,
                          falling back to the expected total — the fourth
                          correctable field for the stuck payer */
-                      amountCents={status.claimedAmountCents ?? data.totalCents ?? null}
+                      amountCents={
+                        disputedSet.has("amount")
+                          ? null
+                          : (status.claimedAmountCents ?? data.totalCents ?? null)
+                      }
                       submitLabel="Confirmar estos datos"
                       onSubmit={(transfer) =>
                         pay.mutate({
@@ -830,11 +873,16 @@ export function PaymentPage({ token }: { token: string }) {
             <StatusBadge status="paymentExpired" size="md" />
             {/* D17: "no pudimos verificarlo" is a statement about us, not
                 an accusation about the payer — and when we know which
-                wall we hit, we say which. */}
+                wall we hit, we say which. reading-check D6: an agreed
+                payment that still expired carries a diagnosis — the data
+                matches the receipt and Banxico never published — so the
+                ISP receives a pre-diagnosed case instead of a mystery. */}
             <p className="text-sm text-ink-soft">
-              {status.error
-                ? payErrorCopy(status.error)
-                : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
+              {status.readingCheck === "agreed"
+                ? "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano."
+                : status.error
+                  ? payErrorCopy(status.error)
+                  : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
             </p>
           </>
         )}

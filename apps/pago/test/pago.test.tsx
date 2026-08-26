@@ -465,6 +465,71 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(await screen.findByLabelText(/monto transferido/i)).toHaveValue("400.00");
   });
 
+  it("US-D14 scenario 2: agreement retires the clock — attempt 5 shows evidence, never the form", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      ...silentThen(
+        { receiptStatus: "Aceptada", validationAttempts: 5, readingCheck: "agreed" },
+        paid,
+      ),
+    );
+    await uploadReceipt();
+
+    /* Without the agreement, attempt 5 opens the pre-filled form. With
+       it, the calm is backed by two readers and the form never opens by
+       clock (reading-check D3). */
+    expect(
+      await screen.findByText(/revisamos tu comprobante dos veces/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
+    /* The doors stay: verifying is free, editing is deliberate */
+    expect(screen.getByRole("button", { name: /ver los datos enviados/i })).toBeInTheDocument();
+  });
+
+  it("US-D14 scenario 3: a dispute opens the form now, with the disputed clave empty", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      ...silentThen(
+        {
+          receiptStatus: "Aceptada",
+          validationAttempts: 2,
+          readingCheck: "disputed",
+          disputedFields: ["trackingKey"],
+          claimedAmountCents: 51400,
+        },
+        paid,
+      ),
+    );
+    await uploadReceipt();
+
+    /* reading-check D4: minute three, not minute forty-five — and the
+       ask is about the receipt, never about the machines */
+    expect(
+      await screen.findByText(/confirma tu clave de rastreo/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/copiarla desde tu app del banco/i)).toBeInTheDocument();
+    /* The disputed field arrives empty; the undisputed ones pre-filled */
+    expect(screen.getByLabelText(/clave de rastreo/i)).toHaveValue("");
+    expect(screen.getByLabelText(/monto transferido/i)).toHaveValue("514.00");
+    expect(screen.getByLabelText(/banco desde el que pagaste/i)).toHaveValue("NUBANK");
+  });
+
+  it("US-D14 scenario 8: an agreed payment that expires carries its diagnosis", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      ...silentThen(
+        { status: "expired", validationAttempts: 8, readingCheck: "agreed", error: null },
+        paid,
+      ),
+    );
+    await uploadReceipt();
+
+    expect(
+      await screen.findByText(/banxico no publicó la transferencia/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/puede registrar tu pago a mano/i)).toBeInTheDocument();
+  });
+
   it("US-D13 scenario 2: the manual door's amount is editable, and the edited number travels", async () => {
     const paid: unknown[] = [];
     server.use(

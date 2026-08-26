@@ -75,6 +75,29 @@ export function isUniqueViolation(e: unknown): boolean {
   return /UNIQUE constraint failed/i.test(String(e instanceof Error ? e.message : e));
 }
 
+/* reading-check D2/D5: the minute-two comparison. Clave and amount are
+   the two Banxico search filters (both measured) — the only fields that
+   can raise a dispute; a bank-name or date difference never wakes the
+   human. No clave from the provider means no second opinion: blind, and
+   the payment keeps today's exact behaviour. */
+export function classifyReading(
+  payment: Pick<DirectPayment, "trackingKey" | "claimedAmountCents" | "amountCents">,
+  reading: { trackingKey: string | null; amountCents: number | null } | null,
+): { readingCheck: "agreed" | "disputed" | "blind"; disputedFields: string | null } {
+  if (!reading?.trackingKey) return { readingCheck: "blind", disputedFields: null };
+  const disputed: string[] = [];
+  if (reading.trackingKey.toUpperCase() !== (payment.trackingKey ?? "").toUpperCase()) {
+    disputed.push("trackingKey");
+  }
+  const claimed = payment.claimedAmountCents ?? payment.amountCents;
+  if (reading.amountCents != null && reading.amountCents !== claimed) {
+    disputed.push("amount");
+  }
+  return disputed.length
+    ? { readingCheck: "disputed", disputedFields: JSON.stringify(disputed) }
+    : { readingCheck: "agreed", disputedFields: null };
+}
+
 /* validation-status-ux D8: the provider's replay flag is permanent per
    CEP, but the D8 carve-out (`isRetry`) is per row — and supersede
    creates a fresh row with both counters at zero. A payer whose earlier
@@ -176,8 +199,30 @@ export async function runValidation(
        apiCEP matches on it is unmeasured, so omitting beats guessing. */
     ...(isp.speiBeneficiaryName ? { name: isp.speiBeneficiaryName } : {}),
   };
-  const request: ConstaRequest =
-    payment.proofMode === "transfer"
+  /* reading-check D1: attempt 2 sends the image, not the data. A
+     reader-sourced payment whose inline attempt found nothing gets the
+     provider's own OCR as a second, independent reading — in the same
+     paid call the slot was going to spend anyway. `providerOcr` is what
+     makes it independent (proof-extraction D11): without it Consta's
+     reader runs again, and the same model checking itself is no second
+     opinion. Attempt-based, not slot-based, so a payment whose inline
+     attempt never ran still gets its cross on the attempt after its
+     first not_found. */
+  const crossCheck =
+    payment.proofMode === "transfer" &&
+    payment.proofKey != null &&
+    payment.validationAttempts === 1 &&
+    payment.lastError === "TRANSFER_NOT_FOUND" &&
+    payment.readingCheck === null;
+
+  const request: ConstaRequest = crossCheck
+    ? {
+        /* D12: a short-lived signed URL, never the bucket itself */
+        receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
+        beneficiary,
+        providerOcr: true,
+      }
+    : payment.proofMode === "transfer"
       ? {
           transfer: {
             /* D2/Consta D1: amount and beneficiary are server-supplied;
@@ -258,7 +303,15 @@ export async function runValidation(
        paying customer a liar. It rides the schedule instead, and the
        code survives on the row so the ISP can see why. */
     if (verdict.reason !== "contradicted") {
-      return retryLater("TRANSFER_NOT_FOUND", base, { lateSlot: true });
+      /* reading-check D2–D5: the cross that still found nothing carries
+         its classification — agreement is evidence the page can retire
+         the clock on; a dispute asks the human now; blindness changes
+         nothing. Written once, with the same retry the schedule keeps. */
+      return retryLater(
+        "TRANSFER_NOT_FOUND",
+        { ...base, ...(crossCheck ? classifyReading(payment, verdict.reading ?? null) : {}) },
+        { lateSlot: true },
+      );
     }
     return update({
       ...base,
@@ -322,10 +375,18 @@ export async function runValidation(
     }
   }
 
-  /* Receipt door: claim the tracking key the CEP revealed. The partial
-     unique index is the D8 defense — losing this claim means another
-     live payment already owns the transfer. */
-  if (payment.proofMode === "receipt" && cep?.trackingKey && !payment.trackingKey) {
+  /* Claim the tracking key the CEP revealed. The partial unique index is
+     the D8 defense — losing this claim means another live payment
+     already owns the transfer. Two rows earn it: a receipt-door row that
+     never had a key, and (reading-check D7) a cross-validated row whose
+     stored key was the misread the CEP just corrected — the index must
+     end up holding the truth. */
+  const adoptKey =
+    cep?.trackingKey &&
+    (payment.proofMode === "receipt"
+      ? !payment.trackingKey
+      : crossCheck && cep.trackingKey !== payment.trackingKey);
+  if (adoptKey && cep?.trackingKey) {
     try {
       await db
         .update(directPayments)

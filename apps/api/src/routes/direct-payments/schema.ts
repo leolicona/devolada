@@ -176,6 +176,10 @@ export const directPaymentStatusResponse = z.object({
   reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),
+  /* validation-status-ux D5: ms epoch of the next automatic attempt, so
+     the page can say "volveremos a intentarlo alrededor de las {hora}".
+     Null once terminal. */
+  nextValidationAt: z.number().int().nullable().optional(),
   error: publicPaymentError.nullable(),
   /* D18: what the silent attempt was built from, so the confirmation
      screen can render from the row rather than from whatever the browser

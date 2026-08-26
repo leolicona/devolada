@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { charges, directPayments, isps, paymentLinks } from "../db/schema";
@@ -73,6 +73,46 @@ export function isUniqueViolation(e: unknown): boolean {
   return /UNIQUE constraint failed/i.test(String(e instanceof Error ? e.message : e));
 }
 
+/* validation-status-ux D8: the provider's replay flag is permanent per
+   CEP, but the D8 carve-out (`isRetry`) is per row — and supersede
+   creates a fresh row with both counters at zero. A payer whose earlier
+   attempt validated the CEP (a `valid` whose response was lost) and who
+   then corrects or re-uploads the same receipt must not be told their
+   own transfer belongs to somebody else. The chain is the trace: any
+   superseded ancestor that reached the provider counts, and so does a
+   prior payment on the same link holding the same tracking key — the
+   receipt door's shape, where no `supersedesId` survives a terminal
+   prior. A flag with no trace of either kind still refuses. */
+async function tracesToOwnAttempt(
+  db: DB,
+  payment: DirectPayment,
+  cepTrackingKey: string | null,
+): Promise<boolean> {
+  const attempted = (p: DirectPayment) => p.validationAttempts > 0 || p.constaStatus !== null;
+
+  let cursor = payment.supersedesId;
+  for (let hops = 0; cursor && hops < 20; hops++) {
+    const [prior] = await db.select().from(directPayments).where(eq(directPayments.id, cursor));
+    if (!prior) break;
+    if (attempted(prior)) return true;
+    cursor = prior.supersedesId;
+  }
+
+  const key = payment.trackingKey ?? cepTrackingKey;
+  if (!key) return false;
+  const siblings = await db
+    .select()
+    .from(directPayments)
+    .where(
+      and(
+        eq(directPayments.paymentLinkId, payment.paymentLinkId),
+        eq(directPayments.trackingKey, key),
+        ne(directPayments.id, payment.id),
+      ),
+    );
+  return siblings.some(attempted);
+}
+
 export async function runValidation(
   env: Bindings,
   db: DB,
@@ -94,12 +134,16 @@ export async function runValidation(
 
   /* A retryable failure rides the D7 schedule like a pending CEP; when
      the schedule is exhausted the honest terminal state is `expired` —
-     everything gathered so far stays on the row for the ISP. */
+     everything gathered so far stays on the row for the ISP. Only
+     `not_found` passes `lateSlot` (validation-status-ux D4): the extra
+     T+12h attempt exists for the transfer Banxico may still publish,
+     never for our own outages. */
   const retryLater = (
     error: string,
     base: Partial<typeof directPayments.$inferInsert> = {},
+    opts: { lateSlot?: boolean } = {},
   ) => {
-    const slot = nextValidationSlot(payment.createdAt, now);
+    const slot = nextValidationSlot(payment.createdAt, now, opts);
     return update(
       slot
         ? { ...base, lastError: error, nextValidationAt: slot }
@@ -208,7 +252,7 @@ export async function runValidation(
        paying customer a liar. It rides the schedule instead, and the
        code survives on the row so the ISP can see why. */
     if (verdict.reason !== "contradicted") {
-      return retryLater("TRANSFER_NOT_FOUND", base);
+      return retryLater("TRANSFER_NOT_FOUND", base, { lateSlot: true });
     }
     return update({
       ...base,
@@ -230,7 +274,11 @@ export async function runValidation(
 
   /* valid — necessary, not sufficient (D11): the CEP must match the debt */
 
-  if (verdict.alreadyValidated && !isRetry) {
+  if (
+    verdict.alreadyValidated &&
+    !isRetry &&
+    !(await tracesToOwnAttempt(db, payment, verdict.cep?.trackingKey ?? null))
+  ) {
     /* D8: the flag with no local record means the CEP was validated
        outside Devolada — rejected, but visible in the admin feed so
        the ISP can resolve it with the customer. (A local record would

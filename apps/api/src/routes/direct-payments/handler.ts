@@ -190,10 +190,14 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     if (!prior || prior.status !== "validating") {
       return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
     }
+    /* A supersede without transfer data is the re-upload door
+       (validation-status-ux D7): a fresh proof is a new attempt by
+       definition, so only a typed correction can be "unchanged". */
     const unchanged =
-      prior.trackingKey === body.transfer!.trackingKey.toUpperCase() &&
-      prior.senderBank === body.transfer!.senderBank &&
-      prior.transferDate === body.transfer!.date;
+      body.transfer != null &&
+      prior.trackingKey === body.transfer.trackingKey.toUpperCase() &&
+      prior.senderBank === body.transfer.senderBank &&
+      prior.transferDate === body.transfer.date;
     if (unchanged) {
       /* Nothing to correct. Keep the row, its schedule and its attempt
          count, and spend nothing — a second row would carry the same
@@ -495,6 +499,14 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
           }
         : {}),
       validationAttempts: payment.validationAttempts,
+      /* validation-status-ux D5: when the system will try again, so the
+         page can promise an hour instead of "news" on a channel that
+         does not exist. Null once terminal — every terminal write
+         already clears the column. */
+      nextValidationAt:
+        payment.status === "validating"
+          ? (payment.nextValidationAt?.getTime() ?? null)
+          : null,
       error: publicError(payment.lastError),
       /* D18: enough for the confirmation screen to render from the row
          instead of from whatever the browser still holds. A reload must

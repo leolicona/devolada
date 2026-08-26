@@ -833,7 +833,10 @@ describe("D17: a not-found is not a refusal", () => {
     expect(row.lastError).toBeNull();
   });
 
-  it("scenario 38: not_found to the end of the schedule → `expired`, never `invalid`", async () => {
+  it("scenario 38 (US-D12): not_found at the end of the schedule earns the late slot, not expiry", async () => {
+    /* validation-status-ux D4 amends this scenario: the 6-hour wall now
+       buys one last attempt at T+12h before the payment expires — one
+       credit for the bank that releases a held transfer next morning. */
     const { isp, link } = await seedLinkedIsp();
     const now = new Date();
     const db = drizzle(env.DB);
@@ -858,17 +861,21 @@ describe("D17: a not-found is not a refusal", () => {
 
     mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
     const report = await sweepDirectPayments(testEnv, now);
-    expect(report.expired).toBe(1);
+    expect(report.stillValidating).toBe(1);
     const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
-    expect(row.status).toBe("expired");
+    expect(row.status).toBe("validating");
     expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
+    expect(row.nextValidationAt?.getTime()).toBe(
+      payment.createdAt.getTime() + 720 * 60 * 1000,
+    );
 
-    /* US-D04: the page is told which wall it hit, so it can say "we
-       could not verify it" instead of "your transfer does not exist" */
+    /* US-D12 D5: the page is told WHEN the late attempt runs, so it can
+       promise an hour instead of news on a channel that does not exist */
     const status = await (await app()).request(`/direct-payments/${payment.id}/status`, {}, testEnv);
     const { data } = await status.json();
-    expect(data.status).toBe("expired");
+    expect(data.status).toBe("validating");
     expect(data.error).toBe("TRANSFER_NOT_FOUND");
+    expect(data.nextValidationAt).toBe(row.nextValidationAt?.getTime());
   });
 
   it("scenario 39: `invalid` with reason contradicted is still terminal, on the first attempt", async () => {
@@ -903,6 +910,262 @@ describe("D17: a not-found is not a refusal", () => {
 
     const [row] = await drizzle(env.DB).select().from(directPayments);
     expect(row.nextValidationAt).not.toBeNull();
+  });
+});
+
+/* docs/direct-payment/validation-status-ux.spec.md (US-D12): the late
+   slot (D4/D5) and the own-attempt carve-out across supersede (D8). */
+describe("US-D12: the late slot and the own-attempt carve-out", () => {
+  type Seed = Partial<typeof directPayments.$inferInsert>;
+  const BASE_ROW = {
+    amountCents: 51400,
+    invoiceCents: 49900,
+    serviceFeeCents: 1500,
+    proofMode: "transfer",
+    trackingKey: "TRACK001XYZ",
+    senderBank: "NUBANK",
+  } as const;
+  async function insertPayment(
+    link: { id: string },
+    isp: { id: string },
+    now: Date,
+    over: Seed = {},
+  ) {
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        ...BASE_ROW,
+        transferDate: new Date().toISOString().slice(0, 10),
+        nextValidationAt: new Date(now.getTime() - 1000),
+        ...over,
+      })
+      .returning();
+    return payment;
+  }
+
+  it("scenario 5: the late attempt still not_found → expired at last; found → the normal confirmation", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+
+    /* half one: T+12.5h, the 720 slot already ran out too */
+    const first = await insertPayment(link, isp, now, {
+      constaStatus: "invalid",
+      lastError: "TRANSFER_NOT_FOUND",
+      validationAttempts: 7,
+      createdAt: new Date(now.getTime() - 12.5 * 60 * 60 * 1000),
+    });
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    let report = await sweepDirectPayments(testEnv, now);
+    expect(report.expired).toBe(1);
+    let [row] = await db.select().from(directPayments).where(eq(directPayments.id, first.id));
+    expect(row.status).toBe("expired");
+    expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
+
+    /* D5: once terminal, the promised hour is gone from the status */
+    const status = await (await app()).request(
+      `/direct-payments/${first.id}/status`,
+      {},
+      testEnv,
+    );
+    const { data } = await status.json();
+    expect(data.nextValidationAt).toBeNull();
+
+    /* half two: the CEP the bank released overnight is found at T+12h
+       and confirms like any other valid — the slot exists for exactly
+       this payment. Same link: the expired row released its claim. */
+    await db.delete(directPayments).where(eq(directPayments.id, first.id));
+    const second = await insertPayment(link, isp, now, {
+      constaStatus: "invalid",
+      lastError: "TRANSFER_NOT_FOUND",
+      validationAttempts: 7,
+      createdAt: new Date(now.getTime() - 12 * 60 * 60 * 1000 - 30 * 1000),
+    });
+    mockConsta();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    report = await sweepDirectPayments(testEnv, now);
+    expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
+    [row] = await db.select().from(directPayments).where(eq(directPayments.id, second.id));
+    expect(row.status).toBe("confirmed");
+  });
+
+  it("scenario 6: a channel failure at the end of the schedule gets no late slot", async () => {
+    /* D4: the T+12h attempt is for the transfer Banxico may still
+       publish, never for our own outages */
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const payment = await insertPayment(link, isp, now, {
+      constaStatus: "pending",
+      lastError: "CONSTA_UNAVAILABLE",
+      validationAttempts: 6,
+      createdAt: new Date(now.getTime() - 6 * 60 * 60 * 1000 - 1000),
+    });
+    consta().intercept({ method: "POST", path: "/validate" }).reply(
+      503,
+      JSON.stringify({
+        success: false,
+        error: { code: "PROVIDER_UNAVAILABLE", retryable: true },
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.expired).toBe(1);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("expired");
+    expect(row.lastError).toBe("CONSTA_UNAVAILABLE");
+  });
+
+  it("scenario 11: the replay flag traced through `supersedesId` is the payer's own retry, not a stranger", async () => {
+    /* D8: a valid that reached the provider but died locally, then a
+       corrected re-submission — the fresh row has zero attempts, and
+       the flag must resolve on the verdict's merits anyway */
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const [prior] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        status: "superseded",
+        constaStatus: "valid",
+        validationAttempts: 2,
+        nextValidationAt: null,
+      })
+      .returning();
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        supersedesId: prior.id,
+        nextValidationAt: new Date(now.getTime() - 1000),
+      })
+      .returning();
+
+    mockConsta({ alreadyValidated: true });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.confirmed).toBe(1);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+    expect(row.lastError).toBeNull();
+  });
+
+  it("scenario 11b: on the receipt door the trace is the same link holding the same revealed key", async () => {
+    /* D8: no supersedesId survives a terminal prior, but the tracking
+       key the CEP reveals matches the payer's own dead attempt */
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    await db.insert(directPayments).values({
+      paymentLinkId: link.id,
+      ispId: isp.id,
+      amountCents: 51400,
+      invoiceCents: 49900,
+      serviceFeeCents: 1500,
+      proofMode: "transfer",
+      trackingKey: "TRACK001XYZ",
+      senderBank: "NUBANK",
+      transferDate: new Date().toISOString().slice(0, 10),
+      status: "expired",
+      constaStatus: "valid",
+      validationAttempts: 7,
+      nextValidationAt: null,
+    });
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "receipt",
+        proofKey: `${link.id}/proof-r1`,
+        nextValidationAt: new Date(now.getTime() - 1000),
+      })
+      .returning();
+
+    mockConsta({ alreadyValidated: true });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.confirmed).toBe(1);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+  });
+
+  it("scenario 12: a chain that never reached the provider does not soften the flag", async () => {
+    /* D8 stands: the ancestor was superseded before any call landed, so
+       the flag can only mean a validation outside this payment */
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const [prior] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACKOLD9999",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        status: "superseded",
+        validationAttempts: 0,
+        nextValidationAt: null,
+      })
+      .returning();
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        supersedesId: prior.id,
+        nextValidationAt: new Date(now.getTime() - 1000),
+      })
+      .returning();
+
+    mockConsta({ alreadyValidated: true });
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.invalid).toBe(1);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("invalid");
+    expect(row.lastError).toBe("TRANSFER_ALREADY_USED");
+    expect(await db.select().from(charges)).toHaveLength(0);
   });
 });
 

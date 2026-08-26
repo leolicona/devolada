@@ -1,8 +1,8 @@
 ---
-status: proposed
+status: in-development
 stories: [US-D12]
 domain: direct-payment
-updated: 2026-08-25
+updated: 2026-08-26
 debt: []
 ---
 
@@ -26,23 +26,21 @@ Everything here is presentation and scheduling over data that already exists.
 One field is added to one response (D5); one slot is added to one schedule
 (D4). No new table, no new endpoint.
 
-**Where this lands**: decided here, built in the consumer PR that follows the
-`feat/partial-payment` merge — `PaymentPage.tsx` and `direct-payment.spec.md`
-are being edited in that worktree, and the coexistence rule (CICD.md) says
-this spec does not touch what another worktree holds. The amendments to
-direct-payment D18 noted below are applied to that file in the same consumer
-PR, not now.
+**Where this landed**: decided 2026-08-25 while `PaymentPage.tsx` and
+`direct-payment.spec.md` were held by the `feat/partial-payment` worktree;
+built 2026-08-26, the day after that merge. The amendments to direct-payment
+D7/D8/D18 are applied to that file in the same PR.
 
 ## Decisions
 
-- **D1 — Escalation is staged by `validationAttempts`, and only for `TRANSFER_NOT_FOUND`.** The D7 schedule ([2, 8, 20, 45, 120, 360] minutes) makes the attempt counter a clock the frontend already receives. Attempts 1–3 (up to the 20-minute slot): the calm phase (D2). Attempt 4 onward (45 minutes in): the open pre-filled form (D3). The measured unpublished-CEP window (T+62 min) means even the 45-minute ask still overlaps honest waiting — which is why the form's copy never accuses (D3), and why escalating *earlier* was rejected: on attempt 1 the overwhelming prior is "Banxico has not published yet", and an open form at minute two converts that prior into worry. **Amends** direct-payment D18's "asked on the first not_found": the ask moves from attempt 1 to attempt 4, but the payer who already doubts their data does not wait — the correction door is present from attempt 1 inside the calm phase. **Preserved from D18**: a receipt whose own `Estatus` says "En proceso" keeps the calm message at *any* attempt — the bank has not released the transfer, and there is nothing to correct.
+- **D1 — Escalation is staged by `validationAttempts`, and only for `TRANSFER_NOT_FOUND`.** The D7 schedule ([2, 8, 20, 45, 120, 360] minutes) makes the attempt counter a clock the frontend already receives. Attempts through the 20-minute slot: the calm phase (D2). From the 45-minute attempt: the open pre-filled form (D3). **Counting, as built**: the inline attempt at submission is #1 and the D7 slots follow, so the 45-minute attempt is `validationAttempts >= 5` — the page keys on the row's counter, not on wall time. The measured unpublished-CEP window (T+62 min) means even the 45-minute ask still overlaps honest waiting — which is why the form's copy never accuses (D3), and why escalating *earlier* was rejected: on attempt 1 the overwhelming prior is "Banxico has not published yet", and an open form at minute two converts that prior into worry. **Amends** direct-payment D18's "asked on the first not_found": the ask moves from attempt 1 to attempt 4, but the payer who already doubts their data does not wait — the correction door is present from attempt 1 inside the calm phase. **Preserved from D18**: a receipt whose own `Estatus` says "En proceso" keeps the calm message at *any* attempt — the bank has not released the transfer, and there is nothing to correct.
 - **D2 — The calm phase shows the process, and keeps the data one tap away.** Badge `validating`, message: *"Validación en proceso: esperamos la respuesta de Banxico. No necesitas hacer nada."* Below it, a Collapsible (the same primitive the page already uses for "Ver los demás datos"): **"Ver los datos enviados"** opens a read-only clave/banco/fecha summary, and inside it a **"Corregir estos datos"** button opens the pre-filled `TransferForm`. Verifying is free; editing is deliberate. **Rejected**: data always visible (competes with the calm it is supposed to transmit); message only with no data until minute 45 (the payer who already suspects their clave loses exactly the early correction US-D09 bought).
-- **D3 — The escalated phase is the form, with copy that suspects the wait, not the payer.** From attempt 4: the pre-filled form in the foreground, headed by *"Está tardando más de lo normal. Revisa que estos datos coincidan con tu comprobante y corrígelos si hace falta."* The schedule keeps running underneath; whichever resolves first wins (unchanged from D18). Submitting a correction supersedes the live payment, as today.
+- **D3 — The escalated phase is the form, with copy that suspects the wait, not the payer.** From the 45-minute attempt: the pre-filled form in the foreground, headed by *"Está tardando más de lo normal. Revisa que estos datos coincidan con tu comprobante y corrígelos si hace falta."* The schedule keeps running underneath; whichever resolves first wins (unchanged from D18). Submitting a correction supersedes the live payment, as today.
 - **D4 — Expiry earns one late retry first.** A payment that exhausts the 360-minute schedule with `lastError = TRANSFER_NOT_FOUND` does not become `expired`: it takes one final slot at **720 minutes** (T+12h), and only if that attempt also fails does it expire. Cost: one provider credit per stuck payment, buying the rare bank that releases a held transfer the next morning. Scope is exact: `contradicted` still dies immediately (it is a verdict); channel failures (`CONSTA_UNAVAILABLE` etc.) still expire at 360 as today — the late slot is for the transfer Banxico may still publish, not for our own outages. **Rejected**: a second full schedule round (up to seven more credits against measured evidence that almost none would heal); keeping plain expiry with softer copy (closes the door on the next-morning release for the price of one credit).
 - **D5 — The copy promises only what the system will do, and says when.** The status response gains `nextValidationAt` (nullable, ms epoch — the row already holds it), so the long-wait screen can say: *"Está tardando más de lo esperado. Volveremos a intentarlo automáticamente alrededor de las {hora}. Puedes cerrar esta página y volver después, o contactar a tu proveedor de internet con tu comprobante."* **Rejected**: "te daremos noticias en breve" — it promises a channel (push, SMS, a human review) that does not exist; the page only knows anything while it is open and polling. "Volveremos a intentarlo a las {hora}" is a promise the cron keeps.
 - **D6 — An unread date is an empty field, not today's date.** The `TransferForm` defaults the date to today; in the D18 confirmation screen that silently invents a value the reader never produced — against D18's own law that no unconfirmed field is pre-filled with something that merely looks confirmable. When the reading carries no date, the confirmation form's date arrives empty and the gate treats it as missing ("Complétalos y revísalos"), like clave and banco. The default-to-today survives only in the manual door, where the payer types everything and same-day is the honest prior. apiCEP treats the date as a hint, so the *lookup* cost of a wrong guess is low — the cost is to the D18 contract, not to Banxico.
 - **D7 — Every `not_found` screen carries the way out: another receipt.** A ghost button **"Subir otro comprobante"** on all three phases (calm, escalated, long wait) returns the payer to step 2; the new submission supersedes the live payment — releasing its tracking-key claim — exactly as a data correction does today. The payer who uploaded the wrong receipt (another transfer, an old capture) knows it before any schedule does; without this door they wait hours for a validation they already know is lost. The per-link attempt budget (direct-payment D13, `TOO_MANY_ATTEMPTS`) is the existing guard against abuse. **Rejected**: offering it only from minute 45+ (punishes the most honest, most fixable mistake) or only pre-expiry (same, worse).
-- **D8 — A payer's own past attempt is a retry, not a stranger's validation.** The provider marks a CEP as previously-validated forever (apicep.md, `cepPreviouslyValidated`), and direct-payment D8's carve-out for that flag is per *row*: `isRetry = validationAttempts > 0 || constaStatus !== null`. But supersede — the mechanism D3 and D7 lean on — creates a *fresh* row with both counters at zero. Chain it: an earlier attempt reaches the provider and validates the CEP (a `valid` whose response was lost, or a `valid` that died locally on `AMOUNT_MISMATCH`), the payer corrects or re-uploads the same receipt, and the fresh row reads the flag as somebody else's validation → **`TRANSFER_ALREADY_USED` to an honest payer retrying their own transfer**, with copy ("ya fue utilizada para otro pago") that is simply false. The fix: `isRetry` also holds when the flagged CEP can be traced to the payer's own prior attempt — the fresh row already carries `supersedesId`, so follow that chain; and on the receipt door (no `supersedesId` after a terminal prior), a prior payment on the *same link* whose tracking key matches the revealed one counts the same way. What D8 does **not** relax: the flag with no local trace of any kind still means "validated outside this payment" and still refuses (direct-payment D8 stands).
+- **D8 — A payer's own past attempt is a retry, not a stranger's validation.** The provider marks a CEP as previously-validated forever (apicep.md, `cepPreviouslyValidated`), and direct-payment D8's carve-out for that flag is per *row*: `isRetry = validationAttempts > 0 || constaStatus !== null`. But supersede — the mechanism D3 and D7 lean on — creates a *fresh* row with both counters at zero. Chain it: an earlier attempt reaches the provider and validates the CEP (a `valid` whose response was lost, or one that died locally — e.g. `STALE_TRANSFER`; `AMOUNT_MISMATCH` no longer exists since partial-payment D1), the payer corrects or re-uploads the same receipt, and the fresh row reads the flag as somebody else's validation → **`TRANSFER_ALREADY_USED` to an honest payer retrying their own transfer**, with copy ("ya fue utilizada para otro pago") that is simply false. The fix: `isRetry` also holds when the flagged CEP can be traced to the payer's own prior attempt — the fresh row already carries `supersedesId`, so follow that chain; and on the receipt door (no `supersedesId` after a terminal prior), a prior payment on the *same link* whose tracking key matches the revealed one counts the same way. What D8 does **not** relax: the flag with no local trace of any kind still means "validated outside this payment" and still refuses (direct-payment D8 stands).
 
 ## Contract
 
@@ -71,8 +69,8 @@ None. `next_validation_at` already exists on `direct_payments`.
 status name: all three phases render under `validating`).
 
 1. **Calm** (attempts 1–3, or "En proceso" at any attempt): message + Collapsible read-only data + "Corregir estos datos" + "Subir otro comprobante" (D2, D7).
-2. **Escalated** (attempt ≥ 4): open pre-filled form, non-accusing copy, "Subir otro comprobante" below (D3, D7).
-3. **Long wait** (schedule exhausted, late slot pending): the D5 copy with the next attempt's hour, the provider-contact line, and both doors (D5, D7).
+2. **Escalated** (the 45-minute attempt onward): open pre-filled form, non-accusing copy, "Subir otro comprobante" below (D3, D7).
+3. **Long wait**: the D5 copy with the next attempt's hour, the provider-contact line, and both doors (D5, D7). **As built**, the page recognises it by distance — the next attempt more than 90 minutes away — which covers the late slot and also the schedule's own 2 h → 6 h gap: naming the hour is useful exactly when the hour is far.
 4. **Expired** (late slot also failed): as today — `TRANSFER_NOT_FOUND` copy pointing at the provider with the receipt.
 
 ## Scenarios
@@ -80,7 +78,7 @@ status name: all three phases render under `validating`).
 All cite US-D12.
 
 1. First `not_found` (attempt 1) → calm phase: no open form, data behind the Collapsible, both doors present (D1, D2, D7)
-2. Attempt 4 with `TRANSFER_NOT_FOUND` → the open pre-filled form with the non-accusing copy (D1, D3)
+2. The 45-minute attempt (`validationAttempts` 5) with `TRANSFER_NOT_FOUND` → the open pre-filled form with the non-accusing copy (D1, D3)
 3. `receiptStatus` matching "proceso" → calm message at attempt 5, no form in the foreground (D1)
 4. Schedule exhausted at 360 with `TRANSFER_NOT_FOUND` → status stays `validating`, `nextValidationAt` points at the 720 slot, the page shows the hour (D4, D5)
 5. The 720 attempt returns `not_found` → `expired`; returns `valid` → the normal confirmation path, WispHub charge included (D4)
@@ -89,17 +87,17 @@ All cite US-D12.
 8. "Subir otro comprobante" from the calm phase → back to step 2; the new pay supersedes the old payment and its tracking-key claim is released (D7)
 9. `status` response during `validating` carries `nextValidationAt`; after any terminal status it is null (D5, Contract)
 10. `contradicted` at any attempt → `invalid` immediately, no staging, no late slot (D1, D4)
-11. A payment whose prior attempt validated the CEP at the provider but died locally (lost response, or `AMOUNT_MISMATCH`) is superseded and re-submitted with the same tracking key → the new attempt treats `alreadyValidated` as its own retry and resolves on the verdict's merits — never `TRANSFER_ALREADY_USED` (D8)
+11. A payment whose prior attempt validated the CEP at the provider but died locally (a lost response) is superseded and re-submitted with the same tracking key → the new attempt treats `alreadyValidated` as its own retry and resolves on the verdict's merits — never `TRANSFER_ALREADY_USED` (D8)
 12. The same CEP flagged by the provider with no prior attempt anywhere on the link → `TRANSFER_ALREADY_USED`, as today (D8)
 
 ## Definition of Done
 
-Blocked on the `feat/partial-payment` merge (see "Where this lands").
+Unblocked by the `feat/partial-payment` merge (2026-08-26).
 
-- [ ] Scenarios 1–12 automated (`apps/pago/test/` for 1–3, 7–8; `apps/api` tests for 4–6, 9–12), each citing US-D12
-- [ ] `nextValidationAt` in the status response schema and handler
-- [ ] `nextValidationSlot` grows the conditional 720 slot; expiry rule split by `lastError`
-- [ ] `PaymentPage.tsx` renders the three phases from `validationAttempts` + `nextValidationAt`
-- [ ] `isRetry` follows the `supersedesId` chain (and the same-link tracking-key match on the receipt door) before reading `alreadyValidated` as a stranger's validation (D8)
-- [ ] direct-payment.spec.md D18 amended (ask moves to attempt 4; unread date arrives empty), D7 amended (late slot) and D8 amended (own-attempt carve-out crosses supersede) — in the same PR, once that file is free
+- [x] Scenarios 1–12 automated (`apps/pago/test/` for 1–3, 7–8; `apps/api` tests for 4–6, 9–12), each citing US-D12
+- [x] `nextValidationAt` in the status response schema and handler
+- [x] `nextValidationSlot` grows the conditional 720 slot; expiry rule split by `lastError`
+- [x] `PaymentPage.tsx` renders the three phases from `validationAttempts` + `nextValidationAt`
+- [x] `isRetry` follows the `supersedesId` chain (and the same-link tracking-key match on the receipt door) before reading `alreadyValidated` as a stranger's validation (D8)
+- [x] direct-payment.spec.md D18 amended (the ask moves to the 45-minute attempt; unread date arrives empty), D7 amended (late slot) and D8 amended (own-attempt carve-out crosses supersede)
 - [ ] Manual check on deployed dev: a not_found payment walks calm → escalated with the clock, and "Subir otro comprobante" restarts cleanly

@@ -384,7 +384,9 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
 
   it("scenario 51: a receipt still 'En proceso' is told to wait, and never shown a form", async () => {
     const paid: unknown[] = [];
-    server.use(...silentThen({ receiptStatus: "En proceso" }, paid));
+    /* US-D12 D1: "En proceso" stays calm at ANY attempt — attempt 5
+       would open the form for everyone else */
+    server.use(...silentThen({ receiptStatus: "En proceso", validationAttempts: 5 }, paid));
     await uploadReceipt();
 
     expect(
@@ -396,30 +398,40 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(screen.queryByText(/no válido/i)).not.toBeInTheDocument();
   });
 
-  it("scenario 52: an 'Aceptada' receipt opens the confirmation on the first not_found", async () => {
+  it("scenario 52 (US-D12): the first not_found stays calm — the data waits behind a door, not in a form", async () => {
     const paid: unknown[] = [];
     server.use(...silentThen({ receiptStatus: "Aceptada" }, paid));
     await uploadReceipt();
 
-    /* Asked on the first attempt, not after the schedule runs out —
-       waiting six hours to ask is the silence this flow removes */
+    /* validation-status-ux D1/D2: on attempt 1 the overwhelming prior is
+       "Banxico has not published yet" — an open form at minute two reads
+       as an accusation. The doors are present; nothing is open. */
     expect(
-      await screen.findByText(/seguimos verificando tu pago/i, {}, { timeout: 8000 }),
+      await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 }),
     ).toBeInTheDocument();
-    expect(await screen.findByLabelText(/clave de rastreo/i)).toHaveValue(
+    expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no válido/i)).not.toBeInTheDocument();
+
+    /* Verifying is free: the collapsible shows what was submitted */
+    await userEvent.click(screen.getByRole("button", { name: /ver los datos enviados/i }));
+    expect(screen.getByText("NU3AGKMP3ASP8QQQ4U8J8F0K1E4K")).toBeInTheDocument();
+    /* Editing is deliberate: one more tap opens the pre-filled form */
+    await userEvent.click(screen.getByRole("button", { name: /corregir estos datos/i }));
+    expect(screen.getByLabelText(/clave de rastreo/i)).toHaveValue(
       "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
     );
-    /* framed as a wait, never as an accusation */
-    expect(screen.queryByText(/no válido/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/revisa los datos e intenta de nuevo/i)).not.toBeInTheDocument();
   });
 
-  it("scenario 53: a correction re-submits with `supersedes` and carries the image forward", async () => {
+  it("scenario 53 (US-D12): a correction through the door re-submits with `supersedes` and carries the image forward", async () => {
     const paid: unknown[] = [];
     server.use(...silentThen({ receiptStatus: "Aceptada" }, paid));
     await uploadReceipt();
 
-    const key = await screen.findByLabelText(/clave de rastreo/i, {}, { timeout: 8000 });
+    await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
+    await userEvent.click(screen.getByRole("button", { name: /ver los datos enviados/i }));
+    await userEvent.click(screen.getByRole("button", { name: /corregir estos datos/i }));
+
+    const key = await screen.findByLabelText(/clave de rastreo/i);
     await userEvent.clear(key);
     await userEvent.type(key, "HSBC712057");
     await userEvent.click(screen.getByRole("button", { name: /confirmar estos datos/i }));
@@ -429,6 +441,91 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
       proofId: "link-1/proof-1",
       supersedes: "dp-1",
       transfer: { trackingKey: "HSBC712057" },
+    });
+  });
+
+  it("US-D12 scenario 2: from the 45-minute attempt the form is in the foreground, still suspecting the wait", async () => {
+    const paid: unknown[] = [];
+    /* The inline attempt is #1 and the D7 slots follow, so the
+       45-minute attempt is #5 — the moment the wait stops being normal */
+    server.use(...silentThen({ validationAttempts: 5 }, paid));
+    await uploadReceipt();
+
+    expect(
+      await screen.findByText(/tardando más de lo normal/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText(/clave de rastreo/i)).toHaveValue(
+      "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+    );
+    /* still framed as a wait, never as an accusation */
+    expect(screen.queryByText(/no válido/i)).not.toBeInTheDocument();
+  });
+
+  it("US-D12 scenario 4: the long wait names the hour of the next attempt and the way to a human", async () => {
+    const paid: unknown[] = [];
+    const lateAt = Date.now() + 6 * 60 * 60 * 1000;
+    server.use(...silentThen({ validationAttempts: 7, nextValidationAt: lateAt }, paid));
+    await uploadReceipt();
+
+    /* D5: a promise the cron keeps — the hour of the late attempt —
+       never "te daremos noticias" on a channel that does not exist */
+    const copy = await screen.findByText(/tardando más de lo esperado/i, {}, { timeout: 8000 });
+    const hour = new Date(lateAt).toLocaleTimeString("es-MX", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    expect(copy.textContent).toContain(`alrededor de las ${hour}`);
+    expect(copy.textContent).toMatch(/contactar a tu proveedor/i);
+    /* no form in the foreground — the doors stay */
+    expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /subir otro comprobante/i })).toBeInTheDocument();
+  });
+
+  it("US-D12 scenario 7: an unread date arrives empty in the confirmation, never today's", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() => ok(readOk({ date: null }))),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+    );
+    await uploadReceipt();
+
+    /* D6: a date the machine did not read is a missing field, like clave
+       and banco — pre-filling today invents a confirmable-looking value */
+    expect(await screen.findByText(/no pudimos sacar todos los datos/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("");
+    /* nothing was spent on an invented date */
+    expect(paid).toHaveLength(0);
+  });
+
+  it("US-D12 scenario 8: 'Subir otro comprobante' walks back to step 2 and the fresh proof supersedes", async () => {
+    const paid: unknown[] = [];
+    server.use(...silentThen({}, paid));
+    await uploadReceipt();
+
+    await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
+    /* D7: the payer who knows the receipt is wrong does not wait out a
+       validation they already know is lost */
+    await userEvent.click(screen.getByRole("button", { name: /subir otro comprobante/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /envía tu comprobante/i }),
+    ).toBeInTheDocument();
+    const picker = screen.getByLabelText(/captura o comprobante/i);
+    await userEvent.upload(picker, new File([new Uint8Array(100)], "cep2.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
+
+    /* the new submission releases the old claim instead of racing it —
+       without `supersedes` the payer would be told TRANSFER_ALREADY_USED
+       by their own first attempt */
+    await waitFor(() => expect(paid).toHaveLength(2));
+    expect(paid[1]).toMatchObject({
+      supersedes: "dp-1",
+      transfer: { trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K" },
     });
   });
 

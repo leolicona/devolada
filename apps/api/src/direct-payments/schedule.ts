@@ -8,17 +8,27 @@
 
 export const REVALIDATION_OFFSETS_MINUTES = [2, 8, 20, 45, 120, 360];
 
-/* After the last slot there is nothing left to try: 6 h from
-   submission the payment is `expired` and the customer is told to
-   contact their ISP. */
-export const EXPIRY_MINUTES = 360;
+/* validation-status-ux D4: a payment whose only failure is `not_found`
+   earns one late retry at T+12h before it is called expired — one
+   credit, buying the rare bank that releases a held transfer the next
+   morning. Only that failure: `contradicted` is a verdict, and a
+   channel outage is our problem, not something Banxico may still
+   publish. */
+export const LATE_SLOT_MINUTES = 720;
 
 const minutes = (n: number) => n * 60 * 1000;
 
 /* The next slot strictly after `now`, or null when the schedule is
    exhausted — the caller turns null into `expired`. */
-export function nextValidationSlot(createdAt: Date, now: Date): Date | null {
-  for (const offset of REVALIDATION_OFFSETS_MINUTES) {
+export function nextValidationSlot(
+  createdAt: Date,
+  now: Date,
+  opts: { lateSlot?: boolean } = {},
+): Date | null {
+  const offsets = opts.lateSlot
+    ? [...REVALIDATION_OFFSETS_MINUTES, LATE_SLOT_MINUTES]
+    : REVALIDATION_OFFSETS_MINUTES;
+  for (const offset of offsets) {
     const at = createdAt.getTime() + minutes(offset);
     if (at > now.getTime()) return new Date(at);
   }

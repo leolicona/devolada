@@ -160,6 +160,18 @@ function mapVerdict(
     return { status: "pending", reason: null };
   }
   if (body.status === "invalid") {
+    /* D11 amended 2026-08-26: "not yet" wears two masks. EN PROCESO —
+       the CEP exists, the transfer has not settled. And the mirror,
+       measured live: `invalid` WITH cepStatus LIQUIDADO — the transfer
+       settled, the provider has not assimilated it (T+63s: invalid +
+       LIQUIDADO in 2.1s, the gave-up-early band; T+103s: the same
+       request came back valid in 9.3s). A settled CEP cannot contradict
+       the claim it settles, so this is never a verdict — it is "ask
+       again", and the schedule does exactly that. A *real* mismatch
+       that keeps answering this way rides to an honest expiry instead
+       of dying as a false "your bank says it failed". `contradicted`
+       stays reserved for evidence that resolves: DEVUELTO, CANCELADA. */
+    if (cepStatus === "LIQUIDADO") return { status: "pending", reason: null };
     const evidence = Boolean(body.validation?.cepDetails) || cepStatus !== null;
     return { status: "invalid", reason: evidence ? "contradicted" : "not_found" };
   }

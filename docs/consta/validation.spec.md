@@ -130,7 +130,18 @@ could not name.
   **Rejected**: inferring the cause from `providerMs` — the wrong-bank case
   came back in 1.3 s against 5.9–7.0 s for a real lookup, but n=3 is not a
   verdict; the field is recorded under D14 so the question can be settled with
-  data.
+  data. **Amended 2026-08-26, measured live**: `invalid` with
+  `cepStatus: LIQUIDADO` is **not** a contradiction — a settled CEP cannot
+  contradict the claim it settles. A real BBVA transfer at T+63s answered
+  exactly that shape in 2.1 s (the gave-up-early band), and the identical
+  request at T+103s answered `valid` in 9.3 s; trusting the first as evidence
+  killed a real payment, saved only by the payer's manual retry. The mapping
+  now reads it as "not yet" — the mirror of EN PROCESO — and maps it to
+  `pending`, so it rides the caller's schedule. A *legitimate* mismatch that
+  keeps answering `invalid`+LIQUIDADO (never yet measured) rides to an honest
+  expiry instead of dying as a false "your bank says it failed".
+  `contradicted` stays reserved for evidence that resolves: DEVUELTO,
+  CANCELADA.
 
 ### The contract hardened by review (added 2026-08-25)
 
@@ -154,7 +165,8 @@ did. All three are additive.
   transferencia"* instead of a generic mismatch. It is Banxico's word about
   the payer's own transfer — nothing foreign leaks. `not_found` never
   carries it: there is no word of Banxico's to relay, and inventing one
-  would undo D11.
+  would undo D11. *(2026-08-26: `LIQUIDADO` can no longer arrive here — the
+  D11 amendment reads it as `pending` before this decision is consulted.)*
 - **D19 — `retryable` is envelope law.** D9 gave provider failures a
   `retryable` field; every other error (`VALIDATION_ERROR`,
   `AUTHENTICATION_ERROR`, `NOT_FOUND`, `INTERNAL_SERVER_ERROR`) now carries

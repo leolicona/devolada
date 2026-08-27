@@ -15,6 +15,11 @@ import { makeFolio } from "../routes/charges/handler";
 import { nextValidationSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
 import { demoVerdict, isDemoLink } from "./demo";
+import {
+  maybeProvisionalRelease,
+  notifyProvisionalExpiry,
+  releaseEvidenceFor,
+} from "./provisional";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -164,17 +169,24 @@ export async function runValidation(
      `not_found` passes `lateSlot` (validation-status-ux D4): the extra
      T+12h attempt exists for the transfer Banxico may still publish,
      never for our own outages. */
-  const retryLater = (
+  const retryLater = async (
     error: string,
     base: Partial<typeof directPayments.$inferInsert> = {},
     opts: { lateSlot?: boolean } = {},
   ) => {
     const slot = nextValidationSlot(payment.createdAt, now, opts);
-    return update(
+    const row = await update(
       slot
         ? { ...base, lastError: error, nextValidationAt: slot }
         : { ...base, status: "expired", lastError: error, nextValidationAt: null },
     );
+    /* provisional-release D8: a released ride that just expired is the
+       one exception the ISP signed up to hear about — after a fresh debt
+       check, and never blocking the sweep. */
+    if (!slot && row.provisionalReleaseAt != null) {
+      await notifyProvisionalExpiry(env, isp, link, now);
+    }
+    return row;
   };
 
   if (!env.CONSTA_BASE_URL || !env.CONSTA_API_KEY) {
@@ -322,11 +334,19 @@ export async function runValidation(
          its classification — agreement is evidence the page can retire
          the clock on; a dispute asks the human now; blindness changes
          nothing. Written once, with the same retry the schedule keeps. */
-      return retryLater(
-        "TRANSFER_NOT_FOUND",
-        { ...base, ...(crossCheck ? classifyReading(payment, verdict.reading ?? null) : {}) },
-        { lateSlot: true },
+      const classification = crossCheck ? classifyReading(payment, verdict.reading ?? null) : {};
+      /* provisional-release D1: an agreed cross or the human's own typed
+         data is evidence enough to buy the promise while Banxico thinks */
+      const release = await maybeProvisionalRelease(
+        env,
+        db,
+        isp,
+        link,
+        payment,
+        releaseEvidenceFor(payment, "not_found", classification),
+        now,
       );
+      return retryLater("TRANSFER_NOT_FOUND", { ...base, ...classification, ...release }, { lateSlot: true });
     }
     return update({
       ...base,
@@ -337,13 +357,29 @@ export async function runValidation(
   }
 
   if (verdict.status === "pending") {
-    /* Consta's D3: "not found yet" is never "fake". Ride the schedule. */
-    const slot = nextValidationSlot(payment.createdAt, now);
-    return update(
-      slot
-        ? { ...base, nextValidationAt: slot, lastError: null }
-        : { ...base, status: "expired", nextValidationAt: null, lastError: null },
+    /* Consta's D3: "not found yet" is never "fake". Ride the schedule.
+       provisional-release D1: `pending` is the strongest evidence short
+       of `valid` — the provider says the transfer EXISTS in process —
+       so it buys the promise at minute zero. */
+    const release = await maybeProvisionalRelease(
+      env,
+      db,
+      isp,
+      link,
+      payment,
+      releaseEvidenceFor(payment, "pending"),
+      now,
     );
+    const slot = nextValidationSlot(payment.createdAt, now);
+    const row = await update(
+      slot
+        ? { ...base, ...release, nextValidationAt: slot, lastError: null }
+        : { ...base, ...release, status: "expired", nextValidationAt: null, lastError: null },
+    );
+    if (!slot && row.provisionalReleaseAt != null) {
+      await notifyProvisionalExpiry(env, isp, link, now);
+    }
+    return row;
   }
 
   /* valid — necessary, not sufficient (D11): the CEP must match the debt */

@@ -157,13 +157,40 @@ Every row of `GET /facturas/` carries `total`, `sub_total`, `descuento`,
 proration in prose (*"Total dias a pagar: 31"*). `saldo` likewise rides in the
 customer list serializer. Reading either costs **no extra call**.
 
+### The payment promise is the give-service-without-money primitive (measured 2026-08-27)
+
+`POST /promesa-pago/ { id_factura, fecha_limite, accion }` → 201 with the
+promise object. Probed against the demo tenant with a real CHR router behind
+the customer (provisional-release spec US-D15):
+
+- `accion` is **required** and is the same router switch `registrar-pago`
+  carries. **With `accion: 1` on a physically suspended customer, WispHub's
+  API session removed the router's `Moroso` entry and set `estado` to
+  `Activo` in the same second the 201 landed** — service back, no money
+  registered anywhere.
+- `fecha_limite` normalises to `"YYYY-MM-DD 00:00"` (day granularity).
+- A paid invoice is refused: 400 *"La factura N ya esta Pagada"*.
+- The API is create-only: `GET /promesa-pago/` answers 405. The promise
+  list and its delete live in the panel. Registering the payment deletes
+  the promise by itself (their docs, consistent with the panel).
+- `OPTIONS` gives name and description but **no field schema** — the DRF
+  400s are the real documentation here (`id_factura`, not `factura`).
+- Unmeasured on a one-day demo tenant: the re-cut cadence after the
+  promise lapses, and the protective behavior on an active customer whose
+  cut date arrives. Pending the pilot ISP.
+
 ### Writes that do not work
 
-- **`estado` on a customer needs a real router.** `PATCH {"estado":"Suspendido"}`
+- **`estado` is not a write, it is a wish.** `PATCH {"estado":"Suspendido"}`
   answers 200 and echoes the value, but the customer reads back `Activo` when no
   reachable device backs it — WispHub's cut is an entry in the router's `Moroso`
-  address-list, so with nothing to act on the state falls back. With a real
-  router behind the customer it persists.
+  address-list, so with nothing to act on the state falls back. **Re-measured
+  2026-08-27 with a real, connected, WispHub-managed CHR behind the customer:
+  still no cut — the PATCH triggered zero router API activity and the state
+  fell back to `Activo` within seconds.** The 2026-08-20 note that it
+  "persists with a real router" did not survive this second look. The real
+  cut is the panel's Suspender action (observed: `Moroso` entry + persistent
+  `Suspendido`); no API route for it is known.
 - **A customer cannot be moved between zones.** `PATCH {"zona":{"id":N}}` answers
   **500** with an HTML page, with or without an `ip` alongside. `zona.id` is
   writable per `OPTIONS`; `router.id` is `read_only` (zone and router are one to

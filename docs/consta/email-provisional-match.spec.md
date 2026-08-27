@@ -118,7 +118,7 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   | Klar | n=2, two sender banks, identical labels | yes (24 and 28 chars) | yes | verified — `d=klar.mx`; **survives Gmail auto-forward** (D3) | **supported** |
   | Banco Azteca | n=1 | yes (`SPIN-…`, 27 chars **with a hyphen** — see Open items) | yes | verified — `d=bazdigital.com`, their own infra | **supported** |
   | Nu | n=1 | no | no | verified — `d=nu.com.mx` | **unsupported** — only amount, date, time, sender name |
-  | BBVA (the pilot's bank) | checked in-app 2026-08-27 | — | — | — | **impossible — BBVA sends no email at all** for received transfers; push and SMS only |
+  | BBVA (the pilot's bank) | owner's in-app check + official docs, 2026-08-27 | — | — | — | **impossible — no email channel exists**: push and SMS only (sources below) |
 
   Four lessons the table teaches: the parser is **per-bank by
   construction** — each domain on the closed list carries its own
@@ -294,13 +294,23 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       email carries **no matchable key** — Nu documented as
       strong-match-unsupported (D4). Banco Azteca measured (n=1): both
       keys present, DKIM verified from `bazdigital.com` — supported
-      (D4). **Closed 2026-08-27**: BBVA measured by absence — it
-      sends no email for received transfers (push/SMS only, checked
-      in-app), so there is nothing to sample; D4's table records it
-      as impossible and the hand-off carries the consequence for the
-      pilot. Sample counts stay small (n≤2 per bank) and grow during
-      the parser build, but every design question the spike existed
-      to answer is answered
+      (D4). **Closed 2026-08-27**: BBVA measured by absence, from two
+      independent directions. The owner's in-app check found no email
+      option, and BBVA México's own product page for "Notificaciones
+      BBVA" (bbva.mx/personas/servicios-digitales/notificaciones.html,
+      fetched 2026-08-27) names **SMS and push as the only channels**
+      while explicitly covering received deposits — the word "correo"
+      does not appear once; the alerts landing likewise. The contrast
+      that makes the absence meaningful: BBVA **Spain** documents
+      email notifications for the same product family, so it is a
+      per-country capability Mexico does not offer. **Residual
+      unknown, recorded rather than assumed**: BBVA Net Cash (the
+      business portal an ISP may actually use) documents app/SMS
+      notices only, but its configuration lives behind the login and
+      was not inspected — if the pilot has Net Cash, one look inside
+      its avisos settles it for free. Sample counts stay small (n≤2
+      per bank) and grow during the parser build, but every design
+      question the spike existed to answer is answered
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;

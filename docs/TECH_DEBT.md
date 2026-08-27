@@ -2,6 +2,12 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-016 — D13 may falsely reject SPIN tracking keys (the hyphen is unmeasured)
+- Status: open · Origin: consta/email-provisional-match.spec.md spike (2026-08-27)
+- A real SPIN by OXXO transfer arrived carrying the clave `SPIN-20260824010834IVJWHVYH` — hyphen included — as relayed by Banco Azteca's own notification email. validation.spec.md D13 enforces `^[A-Za-z0-9]{6,30}$`, so a SPIN payer who types the clave exactly as their bank shows it would be refused at the edge with `VALIDATION_ERROR` — the false-reject class D12/D13 exist to prevent, at OXXO scale. Whether Banxico registers the hyphen as part of the clave is unmeasured (n=1 sighting, no CEP lookup yet).
+- Why it was reasonable: found by the email spike, outside that spec's scope; no SPIN payer has reached Devolada yet; the fix belongs to validation.spec.md, which is being edited from its own worktrees (CICD rule 3), and it needs one measurement before any code moves.
+- Payable when/by: two free lookups at banxico.org.mx/cep with the measured transfer's data, clave with and without the hyphen (the owner holds it). If the hyphen is part of the registered clave → widen D13's charset in validation.spec.md, its own PR, with a scenario citing US-V07; if Banxico stores it without → normalize hyphens out at every claiming edge (Devolada's forms, the email parser) and leave D13 as is.
+
 ## TD-015 — The customer's return trip survives one device only
 - Status: open · Origin: returning-customer-access.spec.md (D10), 2026-08-17
 - Phase 1 remembers the payment link in that device's `localStorage`, so the customer who keeps the same phone and never clears it comes back for free. Everyone else — new phone, cleared browser, a link opened in WhatsApp's in-app browser whose storage was evicted — still has to ask the ISP to send the link again. Phase 2 (a passkey bound to the payment link, D4–D8) is specified and rejected-alternatives are recorded, but not built.

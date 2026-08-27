@@ -339,13 +339,13 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
   rows of D4's table (`klar.mx`, `bazdigital.com`, `nu.com.mx` — the
   last as evidence-only) plus BBVA once measured; each new bank adds
   its domains and a sample-email measurement.
-- **A hyphen in a real clave de rastreo — flagged to validation D13,
-  2026-08-27.** Azteca's measured email shows
-  `SPIN-20260824010834IVJWHVYH` (sender: SPIN by OXXO). If Banxico
-  registers that clave *with* the hyphen, validation D13's
-  `^[A-Za-z0-9]{6,30}$` refuses it at the edge and a real payment
-  from a SPIN customer is falsely rejected today — the exact failure
-  D12/D13 exist to prevent. To measure (one CEP lookup at
-  banxico.org.mx/cep with and without the hyphen) before touching
-  D13; this spec only records the sighting. Cross-spec: any fix lands
-  in `validation.spec.md`, its own PR (CICD rule 3).
+- **A hyphen in a real clave de rastreo — escalated to TD-016
+  (2026-08-27).** Azteca's measured email shows
+  `SPIN-20260824010834IVJWHVYH` (sender: SPIN by OXXO), which
+  validation D13's `^[A-Za-z0-9]{6,30}$` would refuse at the edge
+  today. Out of this spike's scope, so the sighting, the measurement
+  that settles it and the payment condition live in
+  `docs/TECH_DEBT.md` **TD-016** — this spec only contributed the
+  evidence. SPIN itself is a supported bank: `SPIN BY OXXO` is in
+  apiCEP's 97-name vocabulary and in Consta's enum
+  (`provider/banks.ts`), so only the clave's shape is in question.

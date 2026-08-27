@@ -84,7 +84,7 @@ const settings = settingsResponse.parse({
     bankUnknown: false,
     configured: false,
   },
-  reconnection: { thresholdPercent: 100, floorCents: 0 },
+  reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
 });
 
 describe("US-P04: the harness reports what it should", () => {

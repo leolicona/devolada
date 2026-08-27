@@ -1,0 +1,1 @@
+ALTER TABLE `direct_payments` ADD `release_kind` text;

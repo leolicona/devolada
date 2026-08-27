@@ -207,6 +207,17 @@ export const directPaymentStatusResponse = z.object({
   /* The receipt's own `Estatus`: decides whether the payer is asked to
      confirm or simply told their bank has not released it yet */
   receiptStatus: z.string().nullable().optional(),
+  /* provisional-release D9 (US-D15): present only when the service was
+     actually given back, with the evidence that bought it — the page
+     never speaks in conditionals */
+  provisionalRelease: z
+    .object({
+      evidence: z.enum(["pending", "agreed", "human"]).nullable(),
+      /* which face acted: reconnect (was suspended) | protect (was
+         current) — the copy differs and must never lie */
+      kind: z.enum(["reconnect", "protect"]).nullable(),
+    })
+    .optional(),
 });
 
 /* POST /direct-payments/links/:token/proof (D12) */

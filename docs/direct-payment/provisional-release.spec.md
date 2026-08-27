@@ -114,6 +114,33 @@ row, no ledger movement and no WispHub payment exist until `confirmed`** —
 the confirmed flow then runs exactly as today (and finds the service
 already up).
 
+**Amended 2026-08-27 — the spike ran, against the demo tenant and a real
+MikroTik (CHR lab). Plan A won and plan B is dead:**
+
+- `POST /api/promesa-pago/ { id_factura, fecha_limite, accion }` → 201.
+  `accion` is required; `fecha_limite` normalises to `"YYYY-MM-DD 00:00"`
+  (day granularity — the deadline lands on the day after the schedule's
+  end, so the worst extra window after an expiry is under 24 h plus
+  WispHub's own cut cadence); a paid invoice is refused with a 400; the
+  API is create-only (GET answers 405 — list and delete live in the
+  panel); registering the payment deletes the promise by itself.
+- **A promise with `accion: 1` on a physically suspended customer
+  reactivated the service in the same second**: WispHub's own API session
+  removed the router's `Moroso` entry and `estado` went `Activo` the
+  moment the 201 landed.
+- **Plan B does not exist**: `PATCH {"estado": "Suspendido"}` answers 200,
+  triggers no router work even with a real, connected, WispHub-managed
+  router behind the customer, and reads back `Activo`. Devolada could not
+  cut a service even if it wanted to — which is the best possible answer:
+  every cut and every take-back is WispHub's, never ours.
+- Still unmeasured (the one-day demo tenant cannot show them): the exact
+  re-cut cadence after a promise lapses, and the promise's protective
+  behavior against the scheduled cut on an active customer. Both are
+  timing refinements, not mechanisms; measured with the pilot ISP, and
+  until then the ISP email (D8) promises no automatic re-cut deadline.
+- v1 note: the promise lives on an invoice, so a carried-balance-only
+  debt (no pending invoice) keeps today's flow.
+
 ### D4 — The refs travel always; the release never depends on them
 
 Every validation call to Consta carries `customerRef` — an HMAC of the
@@ -183,14 +210,22 @@ bank app and registering by hand stays the final fallback.
 When a released payment expires, Devolada re-checks the debt in WispHub
 before acting — the `unapplied` lesson: never punish on stale state.
 
-- The invoice is still pending → the service is re-suspended (natively
-  under plan A; by Devolada's sweep under plan B) and the payer sees the
-  honest copy (D9).
-- The debt was settled elsewhere meanwhile → nothing is touched.
+- The invoice is still pending → the payer sees the honest copy (D9) and
+  the ISP gets the email below.
+- The debt was settled elsewhere meanwhile → nothing at all: no email, no
+  alarm.
 
-Each expiry-after-release also sends **one email to the ISP** (the Resend
-pipe of `email/sender.ts`, one new template): it is the rare exception the
-ISP signed up to know about, and their bank app is the last arbiter.
+**Amended 2026-08-27 (spike consequence): Devolada never takes the
+service back — it cannot.** Plan B measured dead means every cut is
+WispHub's: the promise lapses on its own at `fecha_limite`, and the cut
+re-applies on WispHub's cadence. Less surface, less risk, and the most
+delicate action in the product stays where it always lived.
+
+Each expiry-after-release with the debt still pending sends **one email
+to the ISP** (the Resend pipe of `email/sender.ts`, one new template): it
+is the rare exception the ISP signed up to know about, and their bank app
+is the last arbiter. Until the lapse cadence is measured with the pilot,
+the email promises no automatic re-cut deadline.
 
 ### D9 — The copy never speaks in conditionals
 
@@ -266,18 +301,23 @@ feed is untouched: the `charge` arrives at `confirmed`, as always.
 
 ## Definition of Done
 
-- [ ] Spike recorded in `docs/integrations/wisphub.md`: payment-promise API
+- [x] Spike recorded in `docs/integrations/wisphub.md`: payment-promise API
       (create, auto-re-suspend, active-customer behavior) → plan A or B
-      chosen, this spec amended with the verified contract.
-- [ ] Migration: `provisionalReleaseAt`, `releaseEvidence`, and the
-      rejected-attempt table (D6).
-- [ ] Release evaluation wired into the validation flow (D1/D2), once per
-      payment, with the revocation query of D5.
+      chosen, this spec amended with the verified contract. *(2026-08-27:
+      plan A chosen, plan B measured dead; lapse cadence and
+      active-customer protection pend the pilot — D3 amendment)*
+- [x] Migration: `provisionalReleaseAt`, `releaseEvidence`, and the
+      rejected-attempt table (D6). *(2026-08-27, migration 0014)*
+- [x] Release evaluation wired into the validation flow (D1/D2), once per
+      payment, with the revocation query of D5. *(2026-08-27, tested
+      under US-D15)*
 - [x] `customerRef` (HMAC) and `paymentRef` sent to Consta on every
       validation, toggle state irrespective (D4). *(2026-08-27, tested
       under US-D15; `CUSTOMER_REF_SECRET` unset → no refs, never a block)*
-- [ ] Expiry-after-release path: debt re-check, take-back, payer copy, one
-      ISP email (D8).
+- [ ] Expiry-after-release path: debt re-check, payer copy, one ISP email
+      (D8; the take-back is WispHub's own, per the amendment). *(partial
+      2026-08-27: re-check + email built and tested; payer copy pends the
+      page slice)*
 - [ ] Manual retry on the expired page, one per payment, never re-releasing
       (D7).
 - [ ] Settings toggle in admin next to threshold/floor (D10).

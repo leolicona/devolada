@@ -302,6 +302,22 @@ export class WispHub {
     return Number.parseInt(match[1], 10);
   }
 
+  /* provisional-release D3 (US-D15), measured live 2026-08-27: the
+     payment promise is WispHub's own "keep the service while the payment
+     arrives" primitive. With `accion: 1` it acts on the router in the
+     same second — the Moroso entry of a physically suspended customer
+     was removed and `estado` went Activo the moment the 201 landed. It
+     refuses a paid invoice with a 400, normalises `fecha_limite` to
+     "YYYY-MM-DD 00:00", auto-deletes when the payment is registered, and
+     its API is create-only (GET answers 405 — the list and the delete
+     live in the panel). `deadline` is a YYYY-MM-DD date. */
+  async createPaymentPromise(invoiceId: number, deadline: string): Promise<void> {
+    await this.request("/promesa-pago/", {
+      method: "POST",
+      body: JSON.stringify({ id_factura: invoiceId, fecha_limite: deadline, accion: 1 }),
+    });
+  }
+
   /* The opt-in switch for payment-triggered reactivation (spike finding;
      reconnection-queue D9). Defaults to false on every customer, so a
      suspended customer's payment would reactivate nothing without this.

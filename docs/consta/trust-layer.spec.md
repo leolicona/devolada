@@ -16,12 +16,24 @@ history of this payer's past validations, reported next to the verdict —
 never instead of it** (the doctrine US-V13 already established for the email
 provisional match; this is the second member of that family).
 
-The prize for Devolada, the first consumer: a customer who has paid on time
-fourteen times uploads a receipt, the CEP is not published yet, and instead
-of watching a spinner for an hour they get their internet back in minute two
-— because their ISP turned on a switch that says *this evidence is enough
-for me*. The switch, the threshold and the risk are the ISP's. Consta only
-brings the numbers.
+**Amended 2026-08-27 (owner critique, while designing the first consumer):**
+the original prize paragraph here described Devolada gating early release on
+this history — and the arithmetic killed it: a monthly payer needs ~5
+payments to reach a useful sample, and a brand-new ISP starts every customer
+at zero, for a feature whose reason to exist is the experience *now*.
+Devolada's real design (US-D15) releases on per-transaction evidence from
+day one — a vote of confidence — and uses history only to **revoke** it,
+from its own rows (an expired payment is client state this layer can only
+infer as `abandoned`). The trust block is not in that v1 rule, and this spec
+did not change one line because of it: the measurement layer has no opinion
+about thresholds, which is the point.
+
+What Devolada takes from this layer on day one is the cheap half — the refs
+and the collection, because history only accumulates forward. The computed
+block serves the consumers whose loss function does demand history: the
+tightening rule Devolada builds *if* measured release outcomes turn out bad,
+and the tenant that ships goods (irrecoverable loss) and needs the whitelist
+reading an ISP never did.
 
 ## The one law of this layer
 
@@ -167,6 +179,11 @@ SUM over the append-only log at request time, the same law that derives a
 store's balance from `ledger_entries`. A bug in the aggregation is fixed by
 fixing a query, not by migrating corrupted counters.
 
+**Implementation splits on purpose (amended 2026-08-27):** the columns and
+the collection ship first — history only accumulates forward, and every
+month without the refs is a month of evidence lost. The computed block
+ships when its first consumer calls for it; nothing downstream waits on it.
+
 ### D8 — The wire contract
 
 Request (both doors, all optional):
@@ -247,11 +264,16 @@ knowing what the sample does and does not prove.
 
 ## Open items
 
-- **Devolada as first consumer** — its own future spec (US-D series): a
-  settings toggle ("Reconectar provisionalmente mientras Banxico confirma"),
-  its threshold, its composition with `readingCheck = agreed`, and the hard
-  branch this spec deliberately does not decide: what happens to a
-  provisionally reconnected service when the payment later expires.
+- **Devolada as first consumer** — its own spec (US-D15, designed
+  2026-08-27): a settings toggle ("Reconectar provisionalmente mientras
+  Banxico confirma") that releases on per-transaction evidence (`pending`,
+  or `not_found` with an agreed cross-reading / human-typed data), and
+  revokes from Devolada's **own** payment rows — an expired payment is
+  client state this layer can only infer as `abandoned`, so the client's
+  local truth wins for revocation. The trust block enters that story only
+  as the instrument for tightening with evidence, if measured release
+  outcomes demand it. The hard branch (a provisionally reconnected service
+  whose payment later expires) is decided there, not here.
 - **Configurable half-life** per API key (v2, if a real tenant's cycle
   demands it; the block already reports the value so the contract is ready).
 - **Payer-consented portability** — parked behind the legal gate named in

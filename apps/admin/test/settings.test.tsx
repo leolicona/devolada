@@ -25,7 +25,7 @@ const settings = (over: Record<string, unknown> = {}) =>
       bankUnknown: false,
       configured: false,
     },
-    reconnection: { thresholdPercent: 100, floorCents: 0 },
+    reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
     ...over,
   });
 
@@ -201,7 +201,15 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
       handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
-        return ok(settings({ reconnection: { thresholdPercent: 70, floorCents: 20000 } }));
+        return ok(
+          settings({
+            reconnection: {
+              thresholdPercent: 70,
+              floorCents: 20000,
+              provisionalReleaseEnabled: false,
+            },
+          }),
+        );
       }),
     );
     renderApp("/settings");
@@ -225,7 +233,49 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /guardar reconexión/i }));
     expect(patches).toEqual([
-      { reconnectionThresholdPercent: 70, reconnectionFloorCents: 20000 },
+      {
+        reconnectionThresholdPercent: 70,
+        reconnectionFloorCents: 20000,
+        provisionalReleaseEnabled: false,
+      },
+    ]);
+  });
+
+  it("US-D15 D10: the protection switch rides the same save, off by default", async () => {
+    const patches: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(ispActor)),
+      handlers.settings(() => ok(settings())),
+      handlers.settlement(() => ok({ months: [] })),
+      handlers.patchSettings((body) => {
+        patches.push(body);
+        return ok(
+          settings({
+            reconnection: {
+              thresholdPercent: 100,
+              floorCents: 0,
+              provisionalReleaseEnabled: true,
+            },
+          }),
+        );
+      }),
+    );
+    renderApp("/settings");
+
+    const toggle = await screen.findByRole("switch", {
+      name: /proteger el servicio mientras banxico confirma/i,
+    });
+    expect(toggle).not.toBeChecked();
+
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole("button", { name: /guardar reconexión/i }));
+
+    expect(patches).toEqual([
+      {
+        reconnectionThresholdPercent: 100,
+        reconnectionFloorCents: 0,
+        provisionalReleaseEnabled: true,
+      },
     ]);
   });
 

@@ -47,16 +47,15 @@ alone.
 
 ## Should Fix
 
-1. **The release sentence deserves a visual carrier**: in
-   `review-pago-liberado-pendiente-375.png` and
-   `review-pago-liberado-evidencia-375.png`, the page's biggest moment —
-   the internet is back — renders as `text-ink-soft` body copy under the
-   hourglass badge, visually identical to "Estamos verificando…". The
-   surplus alert of US-D13 set the precedent: a load-bearing sentence
-   rides an `Alert` with an icon. _Fix: carry the release sentence in an
-   `Alert variant="success" layout="icon"` (e.g. `Wifi` icon) while the
-   badge stays "Verificando pago" — the status is still Banxico's; the
-   good news is the service, and icon + text keeps the color law._
+1. **The release sentence deserves a visual carrier** — **FIXED
+   2026-08-27, same review cycle**: the release sentence now rides an
+   `Alert variant="success" layout="icon"` — `Wifi` for the reconnect
+   face, `ShieldCheck` for protect — while the badge stays "Verificando
+   pago": the status is still Banxico's; the good news is the service,
+   and icon + text keeps the color law. The screenshots in this folder
+   are the post-fix captures; the pre-fix state (soft body copy under
+   the hourglass badge, visually identical to "Estamos verificando…")
+   lives in git history one commit back.
 
 ## Could Improve
 

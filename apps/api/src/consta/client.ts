@@ -32,7 +32,7 @@ export type ConstaBeneficiary = {
   name?: string;
 };
 
-export type ConstaRequest =
+export type ConstaRequest = (
   | {
       transfer: {
         date: string;
@@ -49,7 +49,16 @@ export type ConstaRequest =
          reads the image itself. The reading-check cross (US-D14) sets
          this: the same model checking itself is no second opinion. */
       providerOcr?: true;
-    };
+    }
+) & {
+  /* provisional-release D4 / trust-layer D1: opaque history refs, sent
+     on every call from day one, toggle state irrespective — history only
+     accumulates forward. `customerRef` is an HMAC of the WispHub usuario
+     (the id is recognisable, so it never travels naked); `paymentRef` is
+     the direct_payments id, chaining the attempts of one payment. */
+  customerRef?: string;
+  paymentRef?: string;
+};
 
 export type ConstaVerdict = {
   validationId: string;

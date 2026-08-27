@@ -273,8 +273,9 @@ feed is untouched: the `charge` arrives at `confirmed`, as always.
       rejected-attempt table (D6).
 - [ ] Release evaluation wired into the validation flow (D1/D2), once per
       payment, with the revocation query of D5.
-- [ ] `customerRef` (HMAC) and `paymentRef` sent to Consta on every
-      validation, toggle state irrespective (D4).
+- [x] `customerRef` (HMAC) and `paymentRef` sent to Consta on every
+      validation, toggle state irrespective (D4). *(2026-08-27, tested
+      under US-D15; `CUSTOMER_REF_SECRET` unset → no refs, never a block)*
 - [ ] Expiry-after-release path: debt re-check, take-back, payer copy, one
       ISP email (D8).
 - [ ] Manual retry on the expired page, one per payment, never re-releasing

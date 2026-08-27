@@ -4,6 +4,7 @@ import type { Bindings } from "../env";
 import { charges, directPayments, isps, paymentLinks } from "../db/schema";
 import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
+import { customerRefFor } from "../consta/refs";
 import { WispHub, WispHubError } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { settle } from "./partial";
@@ -215,12 +216,24 @@ export async function runValidation(
     payment.lastError === "TRANSFER_NOT_FOUND" &&
     payment.readingCheck === null;
 
+  /* provisional-release D4: the refs travel on every call — cross,
+     transfer and receipt doors alike — from day one, toggle state
+     irrespective. History only accumulates forward, and the month it is
+     not collected is evidence lost. The release rule reads none of it. */
+  const refs = env.CUSTOMER_REF_SECRET
+    ? {
+        customerRef: await customerRefFor(env.CUSTOMER_REF_SECRET, link.customerUsuario),
+        paymentRef: payment.id,
+      }
+    : {};
+
   const request: ConstaRequest = crossCheck
     ? {
         /* D12: a short-lived signed URL, never the bucket itself */
         receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
         beneficiary,
         providerOcr: true,
+        ...refs,
       }
     : payment.proofMode === "transfer"
       ? {
@@ -240,12 +253,14 @@ export async function runValidation(
             trackingKey: payment.trackingKey ?? "",
             beneficiary,
           },
+          ...refs,
         }
       : {
           /* D12: what Consta receives is a short-lived signed URL, never
              the bucket itself */
           receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
           beneficiary,
+          ...refs,
         };
 
   /* D8 carve-out (a): a prior attempt may have set the provider's replay

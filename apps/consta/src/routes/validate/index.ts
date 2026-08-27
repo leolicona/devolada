@@ -179,6 +179,10 @@ validateRoute.post(
               providerHttpStatus: err.extra.telemetry.httpStatus,
               providerMs: err.extra.telemetry.providerMs,
               quotaRemaining: err.extra.telemetry.quotaRemaining,
+              /* trust-layer D1: failed rows keep their refs too — a chain
+                 whose attempts vanish on failure would lie about itself */
+              customerRef: body.customerRef ?? null,
+              paymentRef: body.paymentRef ?? null,
             })
             .returning({ id: validations.id });
           if (extractionId) {
@@ -238,6 +242,9 @@ validateRoute.post(
         providerHttpStatus: verdict.telemetry.httpStatus,
         providerMs: verdict.telemetry.providerMs,
         quotaRemaining: verdict.telemetry.quotaRemaining,
+        /* trust-layer D1: the opt-in refs, stored verbatim and opaque */
+        customerRef: body.customerRef ?? null,
+        paymentRef: body.paymentRef ?? null,
       })
       .returning({ id: validations.id });
 

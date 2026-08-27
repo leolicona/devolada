@@ -112,6 +112,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D12** — As an end customer whose transfer Banxico has not published yet, the page stays calm while the wait is normal, asks me to review my data only when it stops being normal, tells me when the next automatic attempt will run, and always lets me correct my data or start over with another receipt. *(reserved 2026-08-25)*
 - **US-D13** — As an end customer, the amount that is checked against Banxico is the amount I actually transferred — read from my receipt or typed by me — so a transfer for a different amount than my debt is found and settled, never lost. *(reserved 2026-08-26; measured the same day: correct clave and date, three `not_found`, only because the system asked with the debt instead of the transfer)*
 - **US-D14** — As an end customer whose transfer is not found on the first attempt, a second reading of my receipt happens within minutes: if both readings agree the page waits with evidence and never asks me by the clock; if they disagree I am asked to confirm exactly the disputed field against my receipt. *(reserved 2026-08-26)*
+- **US-D15** — As an end customer whose transfer carries evidence of good faith, my service is not interrupted while Banxico confirms — reconnected if I was suspended, protected from the cut if I was current — and only a burned ride or proven bad faith closes that fast lane for me, never an error that was not mine. *(reserved 2026-08-27; mechanism gated on measuring WispHub's payment-promise API)*
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -252,6 +253,7 @@ Owner's decisions:
 | [direct-payment/validation-status-ux.spec.md](direct-payment/validation-status-ux.spec.md) | direct-payment | US-D12 | in development |
 | [direct-payment/claimed-amount.spec.md](direct-payment/claimed-amount.spec.md) | direct-payment | US-D13 | in development |
 | [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | in development |
+| [direct-payment/provisional-release.spec.md](direct-payment/provisional-release.spec.md) | direct-payment | US-D15 | proposed |
 
 ## Cross-cutting layers
 

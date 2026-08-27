@@ -92,9 +92,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V09** — As an integrator, a receipt image is read reliably and validated through the door that does not miss, so a customer who really paid is not told their transfer could not be verified.
 - **US-V10** — As an integrator, when a receipt cannot be read I am told which field failed and nothing is charged, so I can ask the customer to correct one thing instead of leaving them waiting.
 - **US-V11** — As an integrator, a receipt-door validation also returns what the provider's OCR read off the image — a second, independent reading I can compare against my own, clearly labeled as a reading and never a verdict. *(reserved 2026-08-26; gated on measuring whether the provider returns its reading on failures)*
-- **US-V12** — As a business owner, I forward my bank's "transfer received" emails to a secret address once, and Consta verifies each one really came from my bank before it can count as evidence.
-- **US-V13** — As an integrator, while Banxico has not published the CEP yet, a validation whose claim matches a verified bank email carries a provisional match next to the verdict — never instead of it — so I can decide to grant service now.
-- **US-V14** — As an integrator, I create one inbound address per mailbox I serve, read its recent emails (the forwarding-confirmation code included), scope matching to it, and revoke it when it leaks.
+- **US-V12 — US-V14** — *Retired 2026-08-27; never reuse these IDs.* They belonged to bank-email provisional match, discarded before any code: the pilot's bank (BBVA) sends no email for received transfers at all, coverage measured fragile by construction (2 of 4 banks usable, per-bank parsers forever), and the demand window was never measured. The full spec, the spike's measurements (per-bank email capability table, DKIM survives Gmail auto-forward, the SPIN hyphen that became TD-016) and the rejection reasons live in branch `feat/email-provisional-match` (PR #93, reverted). The successor is the adaptive retry schedule that pays TD-013.
 - **US-V15** — As an integrator, a `pending` or `not_found` verdict for a payer I have named carries that payer's measured history — eventual-valid rate with its sample size, incidents, and my own tenant baseline — next to the verdict, never instead of it, so I can decide to release service early with my own threshold and my own risk. *(reserved 2026-08-27)*
 
 ### Direct SPEI payment (D)
@@ -244,7 +242,6 @@ Owner's decisions:
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11 | proposed |
-| [consta/email-provisional-match.spec.md](consta/email-provisional-match.spec.md) | consta | US-V12, US-V13, US-V14 | proposed |
 | [consta/trust-layer.spec.md](consta/trust-layer.spec.md) | consta | US-V15 | proposed |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |
 | [direct-payment/partial-payment.spec.md](direct-payment/partial-payment.spec.md) | direct-payment | US-D10 | in development |

@@ -2453,6 +2453,8 @@ describe("US-D15: the provisional release", () => {
     expect(row.status).toBe("validating");
     expect(row.provisionalReleaseAt).not.toBeNull();
     expect(row.releaseEvidence).toBe("pending");
+    /* the seed customer is Suspendido: the reconnect face, never protect */
+    expect(row.releaseKind).toBe("reconnect");
   });
 
   it("scenario 8: toggle off — byte-identical to today, no WispHub round", async () => {

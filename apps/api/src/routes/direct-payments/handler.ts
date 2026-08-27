@@ -642,7 +642,12 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
          and which evidence bought it, because evidence and consequence
          are one sentence. Absent = never released. */
       ...(payment.provisionalReleaseAt
-        ? { provisionalRelease: { evidence: payment.releaseEvidence } }
+        ? {
+            provisionalRelease: {
+              evidence: payment.releaseEvidence,
+              kind: payment.releaseKind,
+            },
+          }
         : {}),
     },
   });

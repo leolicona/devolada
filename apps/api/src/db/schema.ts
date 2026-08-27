@@ -358,6 +358,13 @@ export const directPayments = sqliteTable(
        derived later. Null = never released. */
     provisionalReleaseAt: integer("provisional_release_at", { mode: "timestamp_ms" }),
     releaseEvidence: text("release_evidence", { enum: ["pending", "agreed", "human"] }),
+    /* D2's two faces, recorded at the moment of truth: `reconnect` — the
+       customer was suspended and the promise gave the service back;
+       `protect` — the customer was current and the promise shields them
+       from the scheduled cut. The page's copy hangs on this (D9): "tu
+       internet ya volvió" must never be said to someone whose internet
+       never left. */
+    releaseKind: text("release_kind", { enum: ["reconnect", "protect"] }),
     createdAt: createdAt(),
   },
   (t) => [

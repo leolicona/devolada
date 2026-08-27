@@ -160,7 +160,13 @@ export async function maybeProvisionalRelease(
     if (!ok) return {};
 
     await wisphub.createPaymentPromise(debt.invoiceId, promiseDeadline(payment.createdAt));
-    return { provisionalReleaseAt: now, releaseEvidence: evidence };
+    return {
+      provisionalReleaseAt: now,
+      releaseEvidence: evidence,
+      /* D2/D9: which face acted — recorded now because the page must
+         never tell an active customer their internet "came back" */
+      releaseKind: customer?.serviceStatus === "suspended" ? ("reconnect" as const) : ("protect" as const),
+    };
   } catch (e) {
     console.warn(
       `provisional release skipped for ${payment.id}:`,

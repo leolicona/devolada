@@ -211,7 +211,12 @@ export const directPaymentStatusResponse = z.object({
      actually given back, with the evidence that bought it — the page
      never speaks in conditionals */
   provisionalRelease: z
-    .object({ evidence: z.enum(["pending", "agreed", "human"]).nullable() })
+    .object({
+      evidence: z.enum(["pending", "agreed", "human"]).nullable(),
+      /* which face acted: reconnect (was suspended) | protect (was
+         current) — the copy differs and must never lie */
+      kind: z.enum(["reconnect", "protect"]).nullable(),
+    })
     .optional(),
 });
 

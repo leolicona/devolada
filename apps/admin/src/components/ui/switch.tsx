@@ -16,10 +16,13 @@ export function Switch({ className, ...props }: ComponentPropsWithoutRef<typeof 
       )}
       {...props}
     >
+      {/* Geometry stays on the spacing scale (no arbitrary values): the
+          track's inner width is 42px (44 − borders), the thumb 20px with
+          a 2px inset — so "checked" is exactly translate-x-5. */}
       <SwitchPrimitive.Thumb
         className={cn(
           "block size-5 translate-x-0.5 rounded-full bg-background shadow-sm transition-transform duration-150",
-          "data-[state=checked]:translate-x-[22px]",
+          "data-[state=checked]:translate-x-5",
         )}
       />
     </SwitchPrimitive.Root>

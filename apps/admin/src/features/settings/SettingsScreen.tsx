@@ -444,12 +444,10 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
             pierde esta vía rápida por 90 días.
           </p>
         </div>
-        <Switch
-          id="provisional-release"
-          checked={provisional}
-          onCheckedChange={setProvisional}
-          aria-label="Proteger el servicio mientras Banxico confirma"
-        />
+        {/* The accessible name comes from the Label above via htmlFor —
+            an aria-label here would override that association instead of
+            adding to it */}
+        <Switch id="provisional-release" checked={provisional} onCheckedChange={setProvisional} />
       </div>
 
       <Button

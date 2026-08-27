@@ -314,16 +314,23 @@ feed is untouched: the `charge` arrives at `confirmed`, as always.
 - [x] `customerRef` (HMAC) and `paymentRef` sent to Consta on every
       validation, toggle state irrespective (D4). *(2026-08-27, tested
       under US-D15; `CUSTOMER_REF_SECRET` unset → no refs, never a block)*
-- [ ] Expiry-after-release path: debt re-check, payer copy, one ISP email
-      (D8; the take-back is WispHub's own, per the amendment). *(partial
-      2026-08-27: re-check + email built and tested; payer copy pends the
-      page slice)*
-- [ ] Manual retry on the expired page, one per payment, never re-releasing
-      (D7).
-- [ ] Settings toggle in admin next to threshold/floor (D10).
-- [ ] The copy table of D9 in the payment page, one message per state,
-      no conditionals.
-- [ ] Tests cite US-D15: the ten scenarios and the revocation taxonomy.
+- [x] Expiry-after-release path: debt re-check, payer copy, one ISP email
+      (D8; the take-back is WispHub's own, per the amendment).
+      *(2026-08-27)*
+- [x] Manual retry on the expired page, one per payment, never
+      re-releasing (D7; `retryAvailable` on status, one per clave, and a
+      retry that validates flips the expired ride to `superseded` — the
+      lift). *(2026-08-27)*
+- [x] Settings toggle in admin next to threshold/floor (D10; shadcn
+      Switch themed by tokens). *(2026-08-27)*
+- [x] The copy table of D9 in the payment page, one message per state, no
+      conditionals — with `releaseKind` recorded at release time so
+      "tu internet ya volvió" is never said to a `protect` face.
+      *(2026-08-27)*
+- [x] Tests cite US-D15: the revocation taxonomy and scenarios 1, 3, 4,
+      7, 8, 9 plus the D2 threshold and the D9 copy states. *(2026-08-27;
+      scenarios 2, 6 and 10 pend live measurement with the pilot — the
+      cut race and the blind-form path need clocks no unit test owns)*
 
 ## Open items
 

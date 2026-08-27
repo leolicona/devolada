@@ -1581,7 +1581,6 @@ describe("D18: reading a proof so a human can confirm it", () => {
     extractionId: "ex-1",
     source: "reader",
     isReceipt: true,
-    amountCents: 51400,
     trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
     senderBank: "NUBANK",
     amountCents: 51400,
@@ -2536,6 +2535,50 @@ describe("US-D15: the provisional release", () => {
 
     const [row] = await drizzle(env.DB).select().from(directPayments);
     expect(row.provisionalReleaseAt).toBeNull();
+  });
+
+  it("D7/scenario 4: the retry that validates lifts the burned ride", async () => {
+    const { link } = await seedLinkedIsp();
+    /* the released ride that expired — Banxico was just late */
+    const [ride] = await drizzle(env.DB)
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: link.ispId,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        status: "expired",
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        provisionalReleaseAt: new Date(Date.now() - 7 * 3600 * 1000),
+        releaseEvidence: "agreed",
+        releaseKind: "reconnect",
+      })
+      .returning();
+
+    /* D7: the expired page is offered exactly one retry for this clave */
+    const st = await (await app()).request(`/direct-payments/${ride.id}/status`, {}, testEnv);
+    expect((await st.json()).data.retryAvailable).toBe(true);
+
+    /* the payer claims it next morning; the CEP has published by now */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta();
+    mockReconnection("Activo");
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    expect(data.status).toBe("confirmed");
+
+    /* the vote of confidence was vindicated: the ride is no longer
+       `expired`, so the D5 revocation lifts with it */
+    const [old] = await drizzle(env.DB)
+      .select()
+      .from(directPayments)
+      .where(eq(directPayments.id, ride.id));
+    expect(old.status).toBe("superseded");
   });
 
   it("D6/scenario 7: another customer's clave is recorded at the edge and revokes", async () => {

@@ -46,10 +46,13 @@ function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
          of "configured" — apiCEP never required it. */
       configured: Boolean(isp.speiClabe) && speiBankIsKnown(isp),
     },
-    /* partial-payment D2/D4: the short-payment dial, defaults 100 / $0 */
+    /* partial-payment D2/D4: the short-payment dial, defaults 100 / $0.
+       provisional-release D10: one switch next to them, no dials — the
+       fixed rule lives in the spec, the same threshold and floor apply. */
     reconnection: {
       thresholdPercent: isp.reconnectionThresholdPercent,
       floorCents: isp.reconnectionFloorCents,
+      provisionalReleaseEnabled: isp.provisionalReleaseEnabled,
     },
   };
 }
@@ -114,6 +117,9 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
         : {}),
       ...(body.reconnectionFloorCents !== undefined
         ? { reconnectionFloorCents: body.reconnectionFloorCents }
+        : {}),
+      ...(body.provisionalReleaseEnabled !== undefined
+        ? { provisionalReleaseEnabled: body.provisionalReleaseEnabled }
         : {}),
     })
     .where(eq(isps.id, isp.id));

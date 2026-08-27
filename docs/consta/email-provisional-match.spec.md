@@ -107,27 +107,30 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   as validation D13. Amount-plus-date matching is **refused by design**:
   customers of one ISP pay the same monthly fee to the same CLABE on the
   same day — partial-payment already documents that collision pool — so
-  amount alone collides by construction. **Measured 2026-08-26,
-  Klar, n=2** (real transfers: $50.00 from BBVA, $3.00 from NUBANK):
-  the "Recibiste una transferencia" email carries **both** keys — the
-  clave de rastreo (24 chars from BBVA, 28 from Nu, both inside D13's
-  6–30 range) and the SPEI `Referencia` — plus amount, sender bank,
-  account tail and timestamp, under **identical labels across both
-  samples and both sender banks**. From `contacto@klar.mx`; the
-  `d=klar.mx` DKIM signature (selector `s1`, rsa-sha256) verified
-  cryptographically against live DNS in both, original and forwarded
-  copy alike (D3). **Measured 2026-08-26, Nu, n=1 — the first negative**:
-  Nu's "¡Recibiste una transferencia!" (`nu@nu.com.mx`, DKIM verified)
-  carries **neither key** — only amount, date, time and sender name.
-  A business receiving on Nu therefore **cannot strong-match at all**;
-  its only future door is the weak match recorded in Open items. This
-  is the measurement that makes the parser per-bank by construction:
-  each bank on the domain list carries its own "which keys its email
-  can yield" table, and a bank that yields none is documented as
-  unsupported rather than silently unmatched. BBVA (the pilot's bank)
-  is still unmeasured — the spike in the DoD settles it before the
-  parser is built. **Rejected for v1, recorded as open**: a `weak` strength
-  for amount-unique-in-window matches.
+  amount alone collides by construction.
+
+  **What each bank's email can yield — measured 2026-08-26/27, real
+  transfers and real .eml files, DKIM checked with dkimpy against live
+  DNS:**
+
+  | receiving bank | samples | tracking key | reference | DKIM (sender domain) | strong match |
+  |---|---|---|---|---|---|
+  | Klar | n=2, two sender banks, identical labels | yes (24 and 28 chars) | yes | verified — `d=klar.mx`; **survives Gmail auto-forward** (D3) | **supported** |
+  | Banco Azteca | n=1 | yes (`SPIN-…`, 27 chars **with a hyphen** — see Open items) | yes | verified — `d=bazdigital.com`, their own infra | **supported** |
+  | Nu | n=1 | no | no | verified — `d=nu.com.mx` | **unsupported** — only amount, date, time, sender name |
+  | BBVA (the pilot's bank) | — | *unmeasured — the spike's remaining debt* | | | |
+
+  Three lessons the table already teaches: the parser is **per-bank by
+  construction** — each domain on the closed list carries its own
+  "which keys this email yields" row, and a bank that yields none
+  (Nu) is documented as unsupported rather than silently unmatched;
+  the **sender domain is not guessable** from the bank's name
+  (Azteca mails from `bazdigital.com`, not `bancoazteca.com.mx`) —
+  the list grows only by measurement; and **amount formatting varies**
+  (Azteca prints `$3,000` with no cents), so the parser never assumes
+  a money shape. **Rejected for v1, recorded as open**: a `weak`
+  strength for amount-unique-in-window matches — Nu-receiving
+  businesses are its only known customer so far.
 
 - **D5 — The match is computed at `/validate` time; no outbound webhook.**
   The Email Worker only verifies and stores. When the integrator
@@ -274,9 +277,11 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       auto-forwarded copy**, original recipient recoverable from the
       forward; see D3 and D4. Nu measured (n=1): DKIM verifies but the
       email carries **no matchable key** — Nu documented as
-      strong-match-unsupported (D4). Still owed: BBVA's receive
-      notification (the pilot's bank — a transfer into a BBVA account
-      produces one; email alerts may need enabling in the BBVA app)
+      strong-match-unsupported (D4). Banco Azteca measured (n=1): both
+      keys present, DKIM verified from `bazdigital.com` — supported
+      (D4). Still owed: BBVA's receive notification (the pilot's
+      bank — a transfer into a BBVA account produces one; email alerts
+      may need enabling in the BBVA app)
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;
@@ -300,6 +305,17 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
   poll-time minutes hurt (D5).
 - **Per-bank regex fast path** over the AI reader, measured against the
   spike's sample set (D8).
-- **More bank domains** — the closed list starts with BBVA (the pilot)
-  and Klar (the rehearsal account); each new bank adds its domains and
-  a sample-email measurement.
+- **More bank domains** — the closed list starts with the measured
+  rows of D4's table (`klar.mx`, `bazdigital.com`, `nu.com.mx` — the
+  last as evidence-only) plus BBVA once measured; each new bank adds
+  its domains and a sample-email measurement.
+- **A hyphen in a real clave de rastreo — flagged to validation D13,
+  2026-08-27.** Azteca's measured email shows
+  `SPIN-20260824010834IVJWHVYH` (sender: SPIN by OXXO). If Banxico
+  registers that clave *with* the hyphen, validation D13's
+  `^[A-Za-z0-9]{6,30}$` refuses it at the edge and a real payment
+  from a SPIN customer is falsely rejected today — the exact failure
+  D12/D13 exist to prevent. To measure (one CEP lookup at
+  banxico.org.mx/cep with and without the hyphen) before touching
+  D13; this spec only records the sighting. Cross-spec: any fix lands
+  in `validation.spec.md`, its own PR (CICD rule 3).

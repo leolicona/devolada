@@ -587,10 +587,30 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
   if (payment.chargeId) {
     [charge] = await db.select().from(charges).where(eq(charges.id, payment.chargeId));
   }
+  /* provisional-release D7: the expired page offers exactly one manual
+     retry per clave — self-selection: the payer who really paid claims
+     it (six more hours published the late CEP), the fabricator has no
+     reason to. Spent = another expired row already re-claimed this key. */
+  let retryAvailable = false;
+  if (payment.status === "expired" && payment.trackingKey) {
+    const spent = await db
+      .select({ id: directPayments.id })
+      .from(directPayments)
+      .where(
+        and(
+          eq(directPayments.paymentLinkId, payment.paymentLinkId),
+          eq(directPayments.trackingKey, payment.trackingKey),
+          eq(directPayments.status, "expired"),
+          sql`${directPayments.id} != ${payment.id}`,
+        ),
+      );
+    retryAvailable = spent.length === 0;
+  }
   return c.json({
     success: true,
     data: {
       status: payment.status,
+      ...(payment.status === "expired" ? { retryAvailable } : {}),
       ...(charge
         ? { reconnectionStatus: charge.reconnectionStatus, folio: charge.folio }
         : {}),

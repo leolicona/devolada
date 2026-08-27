@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
 
@@ -363,6 +364,7 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
   const save = useSaveSettings();
   const [percent, setPercent] = useState(String(settings.reconnection.thresholdPercent));
   const [floor, setFloor] = useState(pesos(settings.reconnection.floorCents));
+  const [provisional, setProvisional] = useState(settings.reconnection.provisionalReleaseEnabled);
 
   const pct = /^\d{1,3}$/.test(percent.trim()) ? Number.parseInt(percent.trim(), 10) : null;
   const floorCents = parseMoney(floor);
@@ -429,10 +431,35 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
         )}
       </p>
 
+      {/* provisional-release D10 (US-D15): one switch, no dials. The rule
+          is fixed and reasoned in the spec; the threshold and floor above
+          apply to it unchanged, so the ISP keeps ONE reconnection policy. */}
+      <div className="flex items-start justify-between gap-4 rounded-md border border-border px-4 py-3">
+        <div>
+          <Label htmlFor="provisional-release">Proteger el servicio mientras Banxico confirma</Label>
+          <p className="mt-1 text-sm text-ink-soft">
+            Cuando el comprobante trae evidencia de buena fe, el cliente suspendido se reconecta
+            provisionalmente y el cliente al corriente no se corta mientras se valida su
+            transferencia. Si Banxico no la confirma, el corte vuelve a aplicar y ese cliente
+            pierde esta vía rápida por 90 días.
+          </p>
+        </div>
+        <Switch
+          id="provisional-release"
+          checked={provisional}
+          onCheckedChange={setProvisional}
+          aria-label="Proteger el servicio mientras Banxico confirma"
+        />
+      </div>
+
       <Button
         disabled={!valid || save.isPending}
         onClick={() =>
-          save.mutate({ reconnectionThresholdPercent: pct!, reconnectionFloorCents: floorCents! })
+          save.mutate({
+            reconnectionThresholdPercent: pct!,
+            reconnectionFloorCents: floorCents!,
+            provisionalReleaseEnabled: provisional,
+          })
         }
       >
         {save.isPending ? "Guardando…" : "Guardar reconexión"}

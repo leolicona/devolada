@@ -218,6 +218,9 @@ export const directPaymentStatusResponse = z.object({
       kind: z.enum(["reconnect", "protect"]).nullable(),
     })
     .optional(),
+  /* provisional-release D7: on `expired` only — whether the one manual
+     retry per clave is still unclaimed */
+  retryAvailable: z.boolean().optional(),
 });
 
 /* POST /direct-payments/links/:token/proof (D12) */

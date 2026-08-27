@@ -530,6 +530,78 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(screen.getByText(/puede registrar tu pago a mano/i)).toBeInTheDocument();
   });
 
+  it("US-D15 D9: a release retires the clock and says the internet is back", async () => {
+    const paid: unknown[] = [];
+    /* Attempt 5 opens the form for everyone else; a released ride shows
+       its one fused sentence instead — evidence and consequence together */
+    server.use(
+      ...silentThen(
+        {
+          receiptStatus: "Aceptada",
+          validationAttempts: 5,
+          provisionalRelease: { evidence: "human", kind: "reconnect" },
+        },
+        paid,
+      ),
+    );
+    await uploadReceipt();
+
+    expect(
+      await screen.findByText(/tu internet ya volvió/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
+  });
+
+  it("US-D15 D9: the protect face never says the internet came back", async () => {
+    const paid: unknown[] = [];
+    /* A current customer's service never left — "ya volvió" would lie */
+    server.use(
+      ...silentThen(
+        {
+          error: null,
+          provisionalRelease: { evidence: "pending", kind: "protect" },
+        },
+        paid,
+      ),
+    );
+    await uploadReceipt();
+
+    expect(
+      await screen.findByText(/tu servicio sigue activo/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ya volvió/i)).not.toBeInTheDocument();
+  });
+
+  it("US-D15 D7: the expired page offers one retry, and the claim re-travels the same data", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      ...silentThen(
+        {
+          status: "expired",
+          validationAttempts: 8,
+          error: null,
+          provisionalRelease: { evidence: "agreed", kind: "reconnect" },
+          retryAvailable: true,
+          claimedAmountCents: 51400,
+        },
+        paid,
+      ),
+    );
+    await uploadReceipt();
+
+    expect(await screen.findByText(/volvió a pausa/i, {}, { timeout: 8000 })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /reintentar ahora/i }));
+
+    await waitFor(() => expect(paid).toHaveLength(2));
+    expect(paid[1]).toMatchObject({
+      transfer: {
+        trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+        senderBank: "NUBANK",
+        amountCents: 51400,
+      },
+    });
+  });
+
   it("US-D13 scenario 2: the manual door's amount is editable, and the edited number travels", async () => {
     const paid: unknown[] = [];
     server.use(

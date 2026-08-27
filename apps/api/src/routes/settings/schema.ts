@@ -59,6 +59,8 @@ export const settingsResponse = z.object({
   reconnection: z.object({
     thresholdPercent: z.number().int().min(0).max(100),
     floorCents: z.number().int().nonnegative(),
+    /* provisional-release D10 (US-D15): the one switch, no dials */
+    provisionalReleaseEnabled: z.boolean(),
   }),
 });
 
@@ -80,6 +82,9 @@ export const settingsPatchRequest = z
        of the same dial, never a separate switch that could disagree. */
     reconnectionThresholdPercent: z.number().int().min(0).max(100),
     reconnectionFloorCents: z.number().int().nonnegative(),
+    /* provisional-release D10: on = evidence buys the promise while
+       Banxico confirms; the fixed rule lives in the spec */
+    provisionalReleaseEnabled: z.boolean(),
   })
   .partial();
 

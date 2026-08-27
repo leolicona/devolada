@@ -579,12 +579,20 @@ export function PaymentPage({ token }: { token: string }) {
                  the transfer — there is nothing for the payer to
                  correct, at any attempt (validation-status-ux D1). */
               const enProceso = /proceso/i.test(status.receiptStatus ?? "");
+              /* provisional-release D9: the service was actually given
+                 back (or shielded) — evidence and consequence are ONE
+                 sentence, and "tu internet ya volvió" is never said to
+                 someone whose internet never left (`protect`). */
+              const release = status.provisionalRelease ?? null;
 
               if (!notFound) {
                 return (
                   <p className="text-sm text-ink-soft">
-                    Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes
-                    dejar esta página abierta.
+                    {release
+                      ? release.kind === "protect"
+                        ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
+                        : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."
+                      : "Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar esta página abierta."}
                   </p>
                 );
               }
@@ -613,7 +621,8 @@ export function PaymentPage({ token }: { token: string }) {
                   })
                 : null;
               const showForm =
-                !enProceso && (correcting || disputed || (escalated && !agreed && !farAway));
+                !enProceso &&
+                (correcting || disputed || (escalated && !agreed && !release && !farAway));
 
               return (
                 <div className="space-y-4">
@@ -636,6 +645,20 @@ export function PaymentPage({ token }: { token: string }) {
                           : "Confirma tu clave de rastreo mirando tu comprobante."}{" "}
                       {disputedSet.has("trackingKey") &&
                         "Puedes copiarla desde tu app del banco, o escribirla tal como aparece en tu comprobante."}
+                    </p>
+                  ) : release && !correcting ? (
+                    /* D9: one sentence, evidence fused with consequence.
+                       The release retires the clock the way `agreed`
+                       does — a customer whose service is back must never
+                       read the worry copy. */
+                    <p className="text-sm text-ink-soft">
+                      {release.kind === "protect"
+                        ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
+                        : release.evidence === "agreed"
+                          ? "Revisamos tu comprobante dos veces y los datos coinciden. Tu internet ya volvió mientras esperamos la respuesta de Banxico — no necesitas hacer nada."
+                          : release.evidence === "human"
+                            ? "Gracias por confirmar tus datos. Tu internet ya volvió mientras Banxico responde."
+                            : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
                     </p>
                   ) : farAway ? (
                     /* D5: promise only what the system will do — the
@@ -876,14 +899,44 @@ export function PaymentPage({ token }: { token: string }) {
                 wall we hit, we say which. reading-check D6: an agreed
                 payment that still expired carries a diagnosis — the data
                 matches the receipt and Banxico never published — so the
-                ISP receives a pre-diagnosed case instead of a mystery. */}
+                ISP receives a pre-diagnosed case instead of a mystery.
+                provisional-release D7/D9: the retry is self-selection —
+                the payer who really paid claims it, and six more hours
+                have usually published the late CEP. A released ride is
+                told plainly that the service went back to pause. */}
             <p className="text-sm text-ink-soft">
-              {status.readingCheck === "agreed"
-                ? "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano."
-                : status.error
-                  ? payErrorCopy(status.error)
-                  : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
+              {status.provisionalRelease
+                ? status.retryAvailable
+                  ? "Banxico no publicó tu transferencia y tu servicio volvió a pausa. Si ya pagaste, reintenta ahora — o contacta a tu proveedor de internet con tu comprobante."
+                  : "Banxico no publicó tu transferencia y tu servicio volvió a pausa. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano."
+                : status.readingCheck === "agreed"
+                  ? status.retryAvailable
+                    ? "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Si ya pagaste, reintenta ahora — o contacta a tu proveedor de internet con tu comprobante."
+                    : "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano."
+                  : status.error
+                    ? payErrorCopy(status.error)
+                    : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
             </p>
+            {status.retryAvailable && status.trackingKey && status.senderBank && (
+              <Button
+                variant="secondary"
+                disabled={pay.isPending}
+                onClick={() =>
+                  pay.mutate({
+                    transfer: {
+                      trackingKey: status.trackingKey,
+                      senderBank: status.senderBank,
+                      ...(status.transferDate ? { date: status.transferDate } : {}),
+                      ...(status.claimedAmountCents != null
+                        ? { amountCents: status.claimedAmountCents }
+                        : {}),
+                    },
+                  })
+                }
+              >
+                {pay.isPending ? "Enviando…" : "Reintentar ahora"}
+              </Button>
+            )}
           </>
         )}
 

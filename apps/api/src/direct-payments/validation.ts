@@ -426,6 +426,28 @@ export async function runValidation(
     }
   }
 
+  /* provisional-release D7: a retry that reaches `valid` resolves the
+     expired ride it re-claims — the vote of confidence was vindicated,
+     so the ride must stop being `expired` (that is what lifts the D5
+     revocation). `superseded` is the honest word: a later row of the
+     same transfer took its place. */
+  {
+    const rideKey = payment.trackingKey ?? cep?.trackingKey;
+    if (rideKey) {
+      await db
+        .update(directPayments)
+        .set({ status: "superseded", nextValidationAt: null })
+        .where(
+          and(
+            eq(directPayments.paymentLinkId, payment.paymentLinkId),
+            eq(directPayments.trackingKey, rideKey),
+            eq(directPayments.status, "expired"),
+            ne(directPayments.id, payment.id),
+          ),
+        );
+    }
+  }
+
   /* Claim the tracking key the CEP revealed. The partial unique index is
      the D8 defense — losing this claim means another live payment
      already owns the transfer. Two rows earn it: a receipt-door row that

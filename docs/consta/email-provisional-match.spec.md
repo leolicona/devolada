@@ -118,19 +118,26 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   | Klar | n=2, two sender banks, identical labels | yes (24 and 28 chars) | yes | verified — `d=klar.mx`; **survives Gmail auto-forward** (D3) | **supported** |
   | Banco Azteca | n=1 | yes (`SPIN-…`, 27 chars **with a hyphen** — see Open items) | yes | verified — `d=bazdigital.com`, their own infra | **supported** |
   | Nu | n=1 | no | no | verified — `d=nu.com.mx` | **unsupported** — only amount, date, time, sender name |
-  | BBVA (the pilot's bank) | — | *unmeasured — the spike's remaining debt* | | | |
+  | BBVA (the pilot's bank) | checked in-app 2026-08-27 | — | — | — | **impossible — BBVA sends no email at all** for received transfers; push and SMS only |
 
-  Three lessons the table already teaches: the parser is **per-bank by
+  Four lessons the table teaches: the parser is **per-bank by
   construction** — each domain on the closed list carries its own
   "which keys this email yields" row, and a bank that yields none
   (Nu) is documented as unsupported rather than silently unmatched;
   the **sender domain is not guessable** from the bank's name
   (Azteca mails from `bazdigital.com`, not `bancoazteca.com.mx`) —
-  the list grows only by measurement; and **amount formatting varies**
+  the list grows only by measurement; **amount formatting varies**
   (Azteca prints `$3,000` with no cents), so the parser never assumes
-  a money shape. **Rejected for v1, recorded as open**: a `weak`
-  strength for amount-unique-in-window matches — Nu-receiving
-  businesses are its only known customer so far.
+  a money shape; and **a bank can be out not by content but by
+  absence** — the email channel itself is optional for banks, and
+  BBVA, the pilot's own bank, does not offer it. The pilot's path to
+  this feature is therefore a **supported receiving account** (Klar
+  and Azteca are the measured options today), which is an onboarding
+  conversation, not a line of code — recorded in the hand-off below.
+  **Rejected for v1, recorded as open**: a `weak` strength for
+  amount-unique-in-window matches — Nu-receiving businesses are its
+  only known customer, and it cannot help BBVA, where no email exists
+  to match at any strength.
 
 - **D5 — The match is computed at `/validate` time; no outbound webhook.**
   The Email Worker only verifies and stores. When the integrator
@@ -202,6 +209,14 @@ the owner, not from scratch — same pattern as validation D9's hand-off:
   is opt-in, never default.
 - The onboarding card shows the secret address, the registered mailbox,
   and surfaces the Gmail confirmation code via D6's endpoint.
+- **The onboarding must say which banks can feed this.** Measured
+  2026-08-27: BBVA — the pilot's bank — sends no email for received
+  transfers (push/SMS only), so an ISP receiving on BBVA cannot turn
+  this feature on at all. The card names the supported banks (D4's
+  table) and frames the alternative honestly: provisional approval
+  needs a receiving account at a bank that emails, e.g. Klar or
+  Azteca. A toggle that silently never fires would be worse than no
+  toggle.
 
 ## Contract
 
@@ -262,7 +277,7 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
 
 ## Definition of Done
 
-- [ ] **Spike first, blocking**: 3–5 real "Transferencia recibida"
+- [x] **Spike first, blocking**: 3–5 real "Transferencia recibida"
       emails **per bank, from BBVA (the pilot ISP's bank) and Klar (the
       owner's own account — the NUBANK → KLAR transfer already measured
       in validation.spec.md landed there)**, measured for: does the body
@@ -279,9 +294,13 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       email carries **no matchable key** — Nu documented as
       strong-match-unsupported (D4). Banco Azteca measured (n=1): both
       keys present, DKIM verified from `bazdigital.com` — supported
-      (D4). Still owed: BBVA's receive notification (the pilot's
-      bank — a transfer into a BBVA account produces one; email alerts
-      may need enabling in the BBVA app)
+      (D4). **Closed 2026-08-27**: BBVA measured by absence — it
+      sends no email for received transfers (push/SMS only, checked
+      in-app), so there is nothing to sample; D4's table records it
+      as impossible and the hand-off carries the consequence for the
+      pilot. Sample counts stay small (n≤2 per bank) and grow during
+      the parser build, but every design question the spike existed
+      to answer is answered
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;
@@ -289,18 +308,19 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       is provokable offline
 - [ ] Migration for the two tables + the `validations` column
 - [ ] Deployed to dev; one real end-to-end: a real transfer to a
-      measured account (the pilot's BBVA, or Klar as the rehearsal), the
-      real forwarded email, `provisionalMatch` on a live `/validate`
-      before the CEP exists
+      measured supported account (Klar or Azteca — BBVA cannot, D4),
+      the real forwarded email, `provisionalMatch` on a live
+      `/validate` before the CEP exists
 - [ ] Hand-off recorded: the Devolada half starts its own spec/worktree
       from the section above (CICD rule 3 — it touches settings and
       direct-payment specs being edited in parallel today)
 
 ## Open items
 
-- **Weak matches** (amount unique in window, `strength: "weak"`) — only
-  if the spike shows BBVA emails carry no usable key, and then behind
-  its own decision here.
+- **Weak matches** (amount unique in window, `strength: "weak"`) —
+  Nu-receiving businesses are the only known customer (D4); BBVA is
+  not one, since no email exists there to match at any strength.
+  Behind its own decision here if ever built.
 - **Outbound webhooks per key** — v2 immediacy, only when data shows the
   poll-time minutes hurt (D5).
 - **Per-bank regex fast path** over the AI reader, measured against the

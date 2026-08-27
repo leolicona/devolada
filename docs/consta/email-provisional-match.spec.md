@@ -89,6 +89,18 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   alone (a `From` is forged in one SMTP line); the secret address alone
   (it travels in every forwarded header and can leak).
 
+  **Locks (c) and (d) measured feasible, 2026-08-26.** A real Klar
+  notification was auto-forwarded by a real Gmail rule (filter →
+  "Forward it to"): the `d=klar.mx` signature **verified on the
+  forwarded copy** (dkimpy against live DNS), so the bank's DKIM does
+  survive Gmail's forward — the sentence "usually carries the original
+  DKIM intact" is now a measurement, n=1, for the Gmail → Gmail path.
+  The copy also kept the original `To`, both `Delivered-To` headers
+  and `X-Forwarded-For` naming the chain, so lock (d)'s original
+  recipient is recoverable exactly as assumed. Other forwarding
+  clients (Outlook) remain unmeasured and go the same way: measure,
+  then trust.
+
 - **D4 — Strong match only.** An email matches a validation when its
   tracking key equals the claimed `trackingKey`, or its bank reference
   equals the claimed `referenceNumber` — exact, after the same trimming
@@ -96,16 +108,16 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   customers of one ISP pay the same monthly fee to the same CLABE on the
   same day — partial-payment already documents that collision pool — so
   amount alone collides by construction. **Measured 2026-08-26,
-  Klar, n=1** (a real $50.00 BBVA → Klar transfer): the "Recibiste una
-  transferencia" email carries **both** keys — the clave de rastreo
-  (`MBAN…`, 24 chars, inside D13's 6–30 range) and Klar's own
-  `Referencia` — plus amount, sender bank, account tail and timestamp.
-  From `contacto@klar.mx`; the `d=klar.mx` DKIM signature (selector
-  `s1`, rsa-sha256) **verified cryptographically** against live DNS
-  (dkimpy, offline spike). BBVA's receive notification is still
-  unmeasured, and so is DKIM survival through a real Gmail
-  auto-forward — the spike in the DoD settles both before the parser
-  is built. **Rejected for v1, recorded as open**: a `weak` strength
+  Klar, n=2** (real transfers: $50.00 from BBVA, $3.00 from NUBANK):
+  the "Recibiste una transferencia" email carries **both** keys — the
+  clave de rastreo (24 chars from BBVA, 28 from Nu, both inside D13's
+  6–30 range) and the SPEI `Referencia` — plus amount, sender bank,
+  account tail and timestamp, under **identical labels across both
+  samples and both sender banks**. From `contacto@klar.mx`; the
+  `d=klar.mx` DKIM signature (selector `s1`, rsa-sha256) verified
+  cryptographically against live DNS in both, original and forwarded
+  copy alike (D3). BBVA's receive notification is still unmeasured —
+  the spike in the DoD settles it before the parser is built. **Rejected for v1, recorded as open**: a `weak` strength
   for amount-unique-in-window matches.
 
 - **D5 — The match is computed at `/validate` time; no outbound webhook.**
@@ -247,13 +259,13 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       keeps the parser honest — one layout cannot pass as "the" format.
       The parser and D4's `matchedOn` set are designed from that
       evidence, per bank, and this spec is updated with what was
-      measured. **Progress 2026-08-26**: Klar measured (n=1) — both
-      keys present, `d=klar.mx` DKIM verified against live DNS; see D4.
-      Still owed: more Klar samples, BBVA's receive notification (the
-      pilot's bank — a Klar → BBVA transfer produces one), and the
-      auto-forwarded copy (Gmail's *automatic* forwarding, not the
-      Reenviar button — a manual forward rewrites the message and
-      proves nothing about lock (c))
+      measured. **Progress 2026-08-26**: Klar measured (n=2, two
+      different sender banks, identical layout) — both keys present,
+      `d=klar.mx` DKIM verified on the original **and on a real Gmail
+      auto-forwarded copy**, original recipient recoverable from the
+      forward; see D3 and D4. Still owed: BBVA's receive notification
+      (the pilot's bank — a Klar → BBVA transfer produces one; email
+      alerts may need enabling in the BBVA app)
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;

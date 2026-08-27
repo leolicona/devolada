@@ -116,8 +116,17 @@ reconnection, feed alerts) is a recorded hand-off, not built here.
   samples and both sender banks**. From `contacto@klar.mx`; the
   `d=klar.mx` DKIM signature (selector `s1`, rsa-sha256) verified
   cryptographically against live DNS in both, original and forwarded
-  copy alike (D3). BBVA's receive notification is still unmeasured —
-  the spike in the DoD settles it before the parser is built. **Rejected for v1, recorded as open**: a `weak` strength
+  copy alike (D3). **Measured 2026-08-26, Nu, n=1 — the first negative**:
+  Nu's "¡Recibiste una transferencia!" (`nu@nu.com.mx`, DKIM verified)
+  carries **neither key** — only amount, date, time and sender name.
+  A business receiving on Nu therefore **cannot strong-match at all**;
+  its only future door is the weak match recorded in Open items. This
+  is the measurement that makes the parser per-bank by construction:
+  each bank on the domain list carries its own "which keys its email
+  can yield" table, and a bank that yields none is documented as
+  unsupported rather than silently unmatched. BBVA (the pilot's bank)
+  is still unmeasured — the spike in the DoD settles it before the
+  parser is built. **Rejected for v1, recorded as open**: a `weak` strength
   for amount-unique-in-window matches.
 
 - **D5 — The match is computed at `/validate` time; no outbound webhook.**
@@ -263,9 +272,11 @@ All under `Authorization: Bearer ck_…`; errors carry `retryable`
       different sender banks, identical layout) — both keys present,
       `d=klar.mx` DKIM verified on the original **and on a real Gmail
       auto-forwarded copy**, original recipient recoverable from the
-      forward; see D3 and D4. Still owed: BBVA's receive notification
-      (the pilot's bank — a Klar → BBVA transfer produces one; email
-      alerts may need enabling in the BBVA app)
+      forward; see D3 and D4. Nu measured (n=1): DKIM verifies but the
+      email carries **no matchable key** — Nu documented as
+      strong-match-unsupported (D4). Still owed: BBVA's receive
+      notification (the pilot's bank — a transfer into a BBVA account
+      produces one; email alerts may need enabling in the BBVA app)
 - [ ] Email Routing verified on the `devoladapago.com` zone: catch-all
       (or address rules) delivering `in-*` to the Consta Email Worker
 - [ ] Scenarios automated in `apps/consta/test/` citing their stories;

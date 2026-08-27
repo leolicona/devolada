@@ -12,6 +12,9 @@ export function Input({ className, prefix, ...props }: InputProps) {
     <input
       className={cn(
         "h-10 w-full rounded-sm border border-input bg-well text-sm text-foreground placeholder:text-ink-faint focus:border-ring focus-visible:outline-none disabled:opacity-50",
+        /* design-review D7 (packages/ui input): the UA's own clear
+           button paints in the browser's accent, outside our tokens. */
+        "[&::-webkit-search-cancel-button]:hidden",
         prefix ? "pl-7 pr-3" : "px-3",
         className,
       )}

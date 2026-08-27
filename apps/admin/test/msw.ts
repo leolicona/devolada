@@ -58,6 +58,8 @@ export const handlers = {
     http.post("/cash-drops/:id/confirm", () => r()),
   disputeCashDrop: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/cash-drops/:id/dispute", async ({ request }) => r(await request.json())),
+  linksSearch: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/direct-payments/links/search", ({ request }) => r(new URL(request.url))),
 };
 
 export const server = setupServer();

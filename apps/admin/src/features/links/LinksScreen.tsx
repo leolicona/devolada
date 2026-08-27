@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Share2, Link as LinkIcon, AlertCircle } from "lucide-react";
+import { Search, Share2, Link as LinkIcon, AlertCircle, Check } from "lucide-react";
 import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,25 @@ import type { LinksSearchResponse } from "@devolada/api/direct-payments-schema";
 export function LinksScreen() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  /* design-review: the clipboard call can reject, and either way the
+     admin is about to paste into a customer chat — the button says
+     which of the two happened. */
+  const [copyResult, setCopyResult] = useState<{ id: number; ok: boolean } | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
+
+  const handleCopy = async (result: LinksSearchResponse["results"][0]) => {
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(result.url);
+    } catch {
+      ok = false;
+    }
+    setCopyResult({ id: result.wisphubId, ok });
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopyResult(null), 2000);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -43,7 +62,8 @@ export function LinksScreen() {
       </div>
 
       <div className="mt-6">
-        <div className="relative max-w-md">
+        <label className="relative block max-w-md">
+          <span className="sr-only">Buscar cliente</span>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
           <Input
             type="search"
@@ -52,7 +72,7 @@ export function LinksScreen() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-        </div>
+        </label>
       </div>
 
       {isConfigError && (
@@ -122,13 +142,28 @@ export function LinksScreen() {
                   <Button
                     variant="outline"
                     className="shrink-0"
-                    onClick={() => {
-                      navigator.clipboard.writeText(result.url);
-                    }}
+                    onClick={() => void handleCopy(result)}
                     title="Copiar enlace"
+                    aria-live="polite"
                   >
-                    <LinkIcon className="size-4" aria-hidden />
-                    <span className="sr-only">Copiar</span>
+                    {copyResult?.id === result.wisphubId ? (
+                      copyResult.ok ? (
+                        <>
+                          <Check className="mr-2 size-4" aria-hidden />
+                          Copiado
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="mr-2 size-4" aria-hidden />
+                          No se copió
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" aria-hidden />
+                        <span className="sr-only">Copiar</span>
+                      </>
+                    )}
                   </Button>
                   
                   <Button

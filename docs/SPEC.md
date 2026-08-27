@@ -95,6 +95,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V12** — As a business owner, I forward my bank's "transfer received" emails to a secret address once, and Consta verifies each one really came from my bank before it can count as evidence.
 - **US-V13** — As an integrator, while Banxico has not published the CEP yet, a validation whose claim matches a verified bank email carries a provisional match next to the verdict — never instead of it — so I can decide to grant service now.
 - **US-V14** — As an integrator, I create one inbound address per mailbox I serve, read its recent emails (the forwarding-confirmation code included), scope matching to it, and revoke it when it leaks.
+- **US-V15** — As an integrator, a `pending` or `not_found` verdict for a payer I have named carries that payer's measured history — eventual-valid rate with its sample size, incidents, and my own tenant baseline — next to the verdict, never instead of it, so I can decide to release service early with my own threshold and my own risk. *(reserved 2026-08-27)*
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
@@ -243,6 +244,7 @@ Owner's decisions:
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11 | proposed |
 | [consta/email-provisional-match.spec.md](consta/email-provisional-match.spec.md) | consta | US-V12, US-V13, US-V14 | proposed |
+| [consta/trust-layer.spec.md](consta/trust-layer.spec.md) | consta | US-V15 | proposed |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |
 | [direct-payment/partial-payment.spec.md](direct-payment/partial-payment.spec.md) | direct-payment | US-D10 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |

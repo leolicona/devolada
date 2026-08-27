@@ -1009,3 +1009,64 @@ describe("US-V11: the provider's reading is exposed (proof-extraction D11)", () 
     expect(res.status).toBe(400);
   });
 });
+
+/* trust-layer spec (US-V15) — the collection half: the opaque refs land
+   on the log verbatim, on failures too, and an oversized ref is refused
+   before a credit is spent. The computed block ships later (spec D7's
+   split); these rows are what it will SUM over. */
+describe("US-V15: the history refs (trust-layer D1)", () => {
+  const refs = { customerRef: "a".repeat(64), paymentRef: "pay-123" };
+
+  it("stores customerRef and paymentRef verbatim on the logged row", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep(settledResponse);
+
+    const res = await postValidate(key, { ...directRequest, ...refs });
+    expect(res.status).toBe(200);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].customerRef).toBe(refs.customerRef);
+    expect(rows[0].paymentRef).toBe("pay-123");
+  });
+
+  it("without refs nothing is collected — the opt-in is structural", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep(settledResponse);
+
+    await postValidate(key, directRequest);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows[0].customerRef).toBeNull();
+    expect(rows[0].paymentRef).toBeNull();
+  });
+
+  it("a ref past 128 chars is refused before any credit", async () => {
+    const { id: keyId, key } = await seedApiKey();
+
+    const res = await postValidate(key, { ...directRequest, customerRef: "x".repeat(129) });
+    expect(res.status).toBe(400);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("a billed failure keeps its refs — the chain must not lie about itself", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* The envelope-shaped 400: billed, logged with status null (D15) */
+    mockApiCep(
+      { validationId: "prov-billed-1", error: "Solicitud inválida" },
+      undefined,
+      { status: 400, headers: { "X-Processing-Time": "100ms" } },
+    );
+
+    const res = await postValidate(key, { ...directRequest, ...refs });
+    expect(res.status).toBe(422);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].customerRef).toBe(refs.customerRef);
+    expect(rows[0].paymentRef).toBe("pay-123");
+  });
+});

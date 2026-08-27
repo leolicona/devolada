@@ -60,6 +60,13 @@ const transferSchema = z
       "senderBank and beneficiary.bank are the same institution — SPEI transfers only exist between different banks, so no CEP can validate this",
   });
 
+/* trust-layer D1 — opaque refs, ≤128 chars, never interpreted. Sending
+   `customerRef` is the opt-in for history collection; without it nothing
+   is collected and nothing else changes. The guide tells callers to send
+   an identifier that means nothing outside their own database (an
+   internal id, or an HMAC when the natural id is recognisable). */
+const opaqueRef = z.string().trim().min(1).max(128);
+
 /* One endpoint, two doors (spec D1): exactly one of transfer / receiptUrl.
    The receipt door needs someone to match against: a beneficiary or a
    candidate list, not both. */
@@ -69,6 +76,8 @@ export const validateRequestSchema = z
     receiptUrl: z.string().url().optional(),
     beneficiary: beneficiarySchema.optional(),
     potentialBeneficiaries: z.array(beneficiarySchema).min(1).optional(),
+    customerRef: opaqueRef.optional(),
+    paymentRef: opaqueRef.optional(),
     /* proof-extraction D11: skip Consta's own reader and let the
        provider's OCR read the image. For a caller that already holds a
        reading (its own, or Consta's /read), re-reading with the same

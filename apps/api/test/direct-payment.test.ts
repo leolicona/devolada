@@ -6,6 +6,7 @@ import { charges, directPayments, ledgerEntries, paymentLinks } from "../src/db/
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
+import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
 import { app, seedIsp, sessionCookieHeader } from "./helpers";
 
@@ -61,6 +62,10 @@ const testEnv = {
   PROOFS: fakeProofs(),
   CONSTA_BASE_URL: CONSTA_ORIGIN,
   CONSTA_API_KEY: "ck_test",
+  /* provisional-release D4: with the secret set, every Consta call in
+     this suite carries the opaque refs — extra fields the older
+     assertions never look at, exactly like production */
+  CUSTOMER_REF_SECRET: "test-ref-secret",
 } as typeof env & Bindings;
 
 beforeAll(() => {
@@ -2407,5 +2412,44 @@ describe("US-D14: the classifier at minute two", () => {
     const data = await statusOf(payment.id);
     expect(data.status).toBe("expired");
     expect(data.readingCheck).toBe("agreed");
+  });
+});
+
+/* provisional-release D4 (US-D15) — the collection half: the opaque refs
+   ride every Consta call from day one, toggle state irrespective, and
+   the recognisable usuario never travels naked. */
+describe("US-D15: the history refs travel always (D4)", () => {
+  it("customerRef is the HMAC of the usuario, paymentRef is the payment id", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(captured.body!.paymentRef).toBe(row.id);
+
+    const ref = String(captured.body!.customerRef);
+    expect(ref).toMatch(/^[0-9a-f]{64}$/);
+    expect(ref).not.toContain("greyes");
+    expect(ref).toBe(await customerRefFor("test-ref-secret", "greyes@wifiplus"));
+  });
+
+  it("without the secret nothing travels and nothing blocks", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    const res = await (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/pay",
+      post(TRANSFER),
+      { ...testEnv, CUSTOMER_REF_SECRET: undefined },
+    );
+    expect(res.status).toBe(201);
+    expect(captured.body!.customerRef).toBeUndefined();
+    expect(captured.body!.paymentRef).toBeUndefined();
   });
 });

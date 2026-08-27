@@ -13,8 +13,8 @@ Consta has never helped with: *do I make my customer wait, or do I give the
 service now and let Banxico confirm behind me?* Today the integrator decides
 that blind. This spec gives the decision its missing input: **the measured
 history of this payer's past validations, reported next to the verdict —
-never instead of it** (the doctrine US-V13 already established for the email
-provisional match; this is the second member of that family).
+never instead of it** (a doctrine first written for the email provisional
+match — that feature was discarded in PR #101, and the doctrine outlived it).
 
 **Amended 2026-08-27 (owner critique, while designing the first consumer):**
 the original prize paragraph here described Devolada gating early release on
@@ -141,7 +141,7 @@ The `trust` block is attached to the verdict exactly when the client is
 deciding whether to wait: verdicts `pending` and `invalid`/`not_found`, and
 only when the request carried a `customerRef`. Never on `valid` (redundant)
 and never on `contradicted` (a real DEVUELTO is not bridged by history —
-US-V13's "never instead of the verdict" applies with no exception).
+the "never instead of the verdict" rule applies with no exception).
 
 There is no emission floor. A payer with one closed chain shows n = 1; a
 payer with none shows zeros — and still gets a useful answer, because the
@@ -250,9 +250,12 @@ knowing what the sample does and does not prove.
 
 ## Definition of Done
 
-- [ ] Migration: `customer_ref`, `payment_ref` on `validations` + index on
+- [x] Migration: `customer_ref`, `payment_ref` on `validations` + index on
       (`api_key_id`, `customer_ref`); the log stays append-only.
-- [ ] Both doors accept and store the two refs; Zod caps at 128 opaque chars.
+      *(2026-08-27, migration 0005)*
+- [x] Both doors accept and store the two refs; Zod caps at 128 opaque
+      chars. *(2026-08-27, tested under US-V15 — failed rows keep their
+      refs too)*
 - [ ] Chain derivation (paymentRef, tracking-key fallback, four states, 24 h
       abandonment, self-exclusion) implemented as queries, no state tables.
 - [ ] `trust` block on `pending`/`not_found` with decay, raw counts,

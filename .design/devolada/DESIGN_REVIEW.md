@@ -40,8 +40,8 @@ to someone. Two regressions of already-settled decisions also slipped
 in: the search input resurrects the browser's blue native ✕ that a
 previous review had banished (the shared `Input`'s D7 comment), and it
 ships with no accessible name while the tienda's twin search carries
-one. Both Must fixes and the native ✕ were applied on this branch
-(marked below); the remaining Should items stay open.
+one. Every Must and Should item was fixed on this branch (marked
+below); only the Could improve list stays open.
 
 ## Must Fix
 
@@ -85,18 +85,21 @@ one. Both Must fixes and the native ✕ were applied on this branch
    "j" shows "No pudimos cargar los enlaces" with a Reintentar that can
    never succeed — an error state for a normal typing moment.
    _Fix: `enabled` at `>= 2` trimmed characters; below that, keep the
-   instruction sentence on screen._
+   instruction sentence on screen._ **Fixed in this branch** — and a
+   test pins it: one typed character keeps the instruction sentence.
 3. **Rows glow on hover but do nothing** (`LinksScreen.tsx:112`):
    `hover:bg-muted` is copied from `StoresScreen`, where the whole row
    is a link — here only the two buttons act, so the row promises an
    affordance it doesn't have, and similar components stop behaving
    similarly. _Fix: drop the row hover; the buttons carry their own._
+   **Fixed in this branch.**
 4. **Results appear unannounced** (`LinksScreen.tsx:108`): the feed's
    list carries `aria-live="polite"` (`FeedScreen.tsx:266`); the search
    results — which appear, change and empty while focus stays in the
    input — carry nothing, so a screen-reader user types into silence.
    _Fix: `aria-live="polite"` on the results region, covering the
-   no-results sentence too._
+   no-results sentence too._ **Fixed in this branch** — a persistent
+   live region wraps both the list and the no-results sentence.
 
 ## Could Improve
 

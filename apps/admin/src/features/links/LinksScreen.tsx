@@ -39,10 +39,15 @@ export function LinksScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  /* design-review: the contract 400s under 2 characters, so firing at 1
+     showed an error screen for a normal typing moment. */
+  const query = debouncedSearch.trim();
+  const searching = query.length >= 2;
+
   const { data, isPending, isError, refetch, isRefetching, error } = useQuery<LinksSearchResponse, ApiError>({
-    queryKey: ["payment-links", "search", debouncedSearch],
-    queryFn: () => api<LinksSearchResponse>(`/direct-payments/links/search?q=${encodeURIComponent(debouncedSearch)}`),
-    enabled: debouncedSearch.trim().length > 0,
+    queryKey: ["payment-links", "search", query],
+    queryFn: () => api<LinksSearchResponse>(`/direct-payments/links/search?q=${encodeURIComponent(query)}`),
+    enabled: searching,
     retry: false,
   });
 
@@ -97,7 +102,7 @@ export function LinksScreen() {
         />
       )}
 
-      {isPending && debouncedSearch.trim().length > 0 && !isError && (
+      {isPending && searching && !isError && (
         <Card className="mt-6 p-4">
           {[0, 1, 2].map((k) => (
             <div key={k} className="flex items-center gap-4 py-3">
@@ -111,74 +116,80 @@ export function LinksScreen() {
         </Card>
       )}
 
-      {!isPending && !isError && data?.results.length === 0 && debouncedSearch.trim().length > 0 && (
-        <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-          No se encontraron clientes con "{debouncedSearch}".
-        </p>
-      )}
-
-      {!debouncedSearch.trim() && !isError && (
+      {!searching && !isError && (
         <p className="mt-6 max-w-lg text-sm text-muted-foreground">
           Busca a un cliente por nombre, usuario o teléfono para obtener su enlace permanente de pago por transferencia.
         </p>
       )}
 
-      {data && data.results.length > 0 && (
-        <Card className="mt-6">
-          <ul className="divide-y divide-line-soft">
-            {data.results.map((result) => (
-              <li
-                key={result.wisphubId}
-                className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 transition-colors duration-150 hover:bg-muted sm:flex"
-              >
-                <div className="min-w-0 sm:flex-1">
-                  <span className="block text-sm font-medium">{result.name || result.usuario}</span>
-                  <span className="block text-sm text-muted-foreground">
-                    {result.usuario} {result.phone ? `· ${result.phone}` : ""}
-                  </span>
-                </div>
+      {/* design-review: results arrive while focus stays in the input,
+          so the region announces them — the feed's list already does. */}
+      <div aria-live="polite">
+        {!isPending && !isError && data?.results.length === 0 && searching && (
+          <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+            No se encontraron clientes con "{query}".
+          </p>
+        )}
+
+        {data && data.results.length > 0 && (
+          <Card className="mt-6">
+            <ul className="divide-y divide-line-soft">
+              {data.results.map((result) => (
+                <li
+                  key={result.wisphubId}
+                  /* design-review: no row hover — unlike StoresScreen the
+                     row itself does nothing, only its buttons act */
+                  className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 sm:flex"
+                >
+                  <div className="min-w-0 sm:flex-1">
+                    <span className="block text-sm font-medium">{result.name || result.usuario}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {result.usuario} {result.phone ? `· ${result.phone}` : ""}
+                    </span>
+                  </div>
                 
-                <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
-                  <Button
-                    variant="outline"
-                    className="shrink-0"
-                    onClick={() => void handleCopy(result)}
-                    title="Copiar enlace"
-                    aria-live="polite"
-                  >
-                    {copyResult?.id === result.wisphubId ? (
-                      copyResult.ok ? (
-                        <>
-                          <Check className="mr-2 size-4" aria-hidden />
-                          Copiado
-                        </>
+                  <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
+                    <Button
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => void handleCopy(result)}
+                      title="Copiar enlace"
+                      aria-live="polite"
+                    >
+                      {copyResult?.id === result.wisphubId ? (
+                        copyResult.ok ? (
+                          <>
+                            <Check className="mr-2 size-4" aria-hidden />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="mr-2 size-4" aria-hidden />
+                            No se copió
+                          </>
+                        )
                       ) : (
                         <>
-                          <AlertCircle className="mr-2 size-4" aria-hidden />
-                          No se copió
+                          <LinkIcon className="size-4" aria-hidden />
+                          <span className="sr-only">Copiar</span>
                         </>
-                      )
-                    ) : (
-                      <>
-                        <LinkIcon className="size-4" aria-hidden />
-                        <span className="sr-only">Copiar</span>
-                      </>
-                    )}
-                  </Button>
+                      )}
+                    </Button>
                   
-                  <Button
-                    className="shrink-0"
-                    onClick={() => handleShare(result)}
-                  >
-                    <Share2 className="mr-2 size-4" aria-hidden />
-                    Compartir
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+                    <Button
+                      className="shrink-0"
+                      onClick={() => handleShare(result)}
+                    >
+                      <Share2 className="mr-2 size-4" aria-hidden />
+                      Compartir
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
     </main>
   );
 }

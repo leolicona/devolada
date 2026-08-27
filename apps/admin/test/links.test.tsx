@@ -45,6 +45,22 @@ describe("US-D07: the search box has an accessible name", () => {
   });
 });
 
+describe("US-D07: one character is not a search", () => {
+  it("keeps the instruction sentence instead of firing a doomed query", async () => {
+    /* The contract 400s under 2 characters; no handler registered, so
+       any request here would fail the test with an MSW error screen. */
+    server.use(handlers.session(() => ok(ispActor)));
+    renderApp("/links");
+
+    await userEvent.type(await screen.findByLabelText(/buscar cliente/i), "j");
+    /* Past the 400ms debounce */
+    await new Promise((r) => setTimeout(r, 600));
+
+    expect(screen.getByText(/busca a un cliente por nombre/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos cargar/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("US-D07: Copiar says what happened", () => {
   it("confirms with 'Copiado' after writing the link", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);

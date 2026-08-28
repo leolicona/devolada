@@ -67,6 +67,7 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          CUSTOMER_REF_SECRET: ${{ secrets.CUSTOMER_REF_SECRET }}
         run: |
           if [ -z "$BETTER_AUTH_SECRET" ]; then
             echo "::error::BETTER_AUTH_SECRET is not set in the production environment."
@@ -79,6 +80,15 @@ jobs:
             echo "No RESEND_API_KEY in the production environment — skipping (TD-011)."
           else
             printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env prod
+          fi
+          # provisional-release D4, and see the note in deploy-dev.yml:
+          # unset means no payer history is collected — silent, and the
+          # lost month cannot be recovered later. Must stay STABLE:
+          # rotating it orphans every ref written under the old value.
+          if [ -z "$CUSTOMER_REF_SECRET" ]; then
+            echo "::warning::No CUSTOMER_REF_SECRET in the production environment — payer history is NOT accumulating in Consta (provisional-release D4, BUG-010)."
+          else
+            printf '%s' "$CUSTOMER_REF_SECRET" | pnpm exec wrangler secret put CUSTOMER_REF_SECRET --env prod
           fi
       - name: Build store PWA (prod API baked in)
         working-directory: apps/tienda

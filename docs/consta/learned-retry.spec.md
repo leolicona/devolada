@@ -207,7 +207,15 @@ How Devolada's sweep pays TD-013, in its own PR, on
 - The early skeleton is fixed: the inline attempt at T+0 and the +2 slot
   always run — they serve the majority that confirms in seconds, and the
   suggestion rides their responses for free (the credit was being spent
-  anyway).
+  anyway). **A third reason arrived from live traffic on 2026-08-28**:
+  the caller's reading-check cross (Devolada's US-D14) is scheduled
+  through the very field the suggestion writes, and that cross is what
+  rescues a misread clave — a receipt read as `NU3A17KL…` against
+  Banxico's `NU3AI7KL…` was confirmed at 2.8 min by the cross instead of
+  dying `expired` six hours later. A suggestion free to move the first
+  retry would delay every such rescue by as much. Any consumer with a
+  second-reading step inherits this: the skeleton is not only about the
+  fast majority.
 - When a response carries `retryAfter`, the next attempt is scheduled
   **exactly there** — before or after the next static slot. Earlier is
   the whole latency win; later is the whole credit win.

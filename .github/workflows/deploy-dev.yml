@@ -71,6 +71,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CONSTA_API_KEY: ${{ secrets.CONSTA_API_KEY }}
+          CUSTOMER_REF_SECRET: ${{ secrets.CUSTOMER_REF_SECRET }}
         run: |
           if [ -z "$RESEND_API_KEY" ]; then
             echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
@@ -83,6 +84,19 @@ jobs:
             echo "::warning::No CONSTA_API_KEY in the dev environment — the SPEI channel stays unavailable."
           else
             printf '%s' "$CONSTA_API_KEY" | pnpm exec wrangler secret put CONSTA_API_KEY --env dev
+          fi
+          # provisional-release D4: the HMAC key that pseudonymises the
+          # WispHub usuario into `customerRef`. Unset is not a broken
+          # deploy — validation never depends on it — but it is silent
+          # data loss: no refs travel, so no payer history accumulates,
+          # and "the month it is not collected is evidence lost". Found
+          # exactly that way on dev, BUG-010.
+          # It must stay STABLE: rotating it re-pseudonymises every
+          # payer, orphaning all history written under the old value.
+          if [ -z "$CUSTOMER_REF_SECRET" ]; then
+            echo "::warning::No CUSTOMER_REF_SECRET in the dev environment — payer history is NOT accumulating in Consta (provisional-release D4, BUG-010)."
+          else
+            printf '%s' "$CUSTOMER_REF_SECRET" | pnpm exec wrangler secret put CUSTOMER_REF_SECRET --env dev
           fi
           # Required: Better Auth signs every session cookie with it
           # (better-auth.spec.md). Without it the deployed API would sign

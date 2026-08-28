@@ -183,6 +183,11 @@ fixing a query, not by migrating corrupted counters.
 the collection ship first — history only accumulates forward, and every
 month without the refs is a month of evidence lost. The computed block
 ships when its first consumer calls for it; nothing downstream waits on it.
+**The first consumer arrived the same day**: Devolada's graduation shadow
+(provisional-release D12) — it stores the block next to each release
+decision so the future data rule is calibrated from labeled outcomes
+instead of guesses. A reader, never a decider: exactly the consumer this
+layer was built for.
 
 ### D8 — The wire contract
 

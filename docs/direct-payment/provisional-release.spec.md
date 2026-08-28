@@ -268,6 +268,51 @@ bought the release, recorded at the moment it happened because it is
 point-in-time. The rejected-attempt record of D6 is a new small table. The
 feed is untouched: the `charge` arrives at `confirmed`, as always.
 
+### D12 — The graduation path: the data model arrives payer by payer, calibrated by its own shadow
+
+*(added 2026-08-27, designed with the owner)*
+
+The vote of confidence is the right rule for a payer with no history —
+and the wrong one to keep forever for a payer with plenty. The migration
+to a data-driven rule is not a cutover day: **it is a tide that rises one
+payer at a time**, and this decision builds the instrument that tells the
+tide when to rise.
+
+**The shadow (built now).** Every release evaluation asks Consta the
+question it already answers on the same call — the payer's measured
+history (US-V15 `trust` block) — and stores a snapshot of it on the
+payment row (`trustSnapshot`, JSON, null when the block is absent). The
+flow is strictly one-directional: Consta answers and its role ends;
+Devolada joins that answer with what only Devolada knows — whether the
+vote was given, on which evidence, and how the payment ended. The rule
+decides **nothing** differently; the shadow only writes. Each release
+thereby becomes a fully labeled row: *history at the moment of decision →
+decision → outcome* — context that cannot be reconstructed later, which
+is why starting the shadow late impoverishes the dataset forever.
+
+**The graduation gate (built now, off until calibrated).** The mature
+rule is per-payer:
+
+> history rich enough (`effectiveN ≥ K`) → the payer's own record
+> decides; otherwise → the vote of confidence, unchanged.
+
+`K` does not exist yet, on purpose: it is exactly the number the shadow
+table produces (*"at K = 3, the history rule would have called X% of
+outcomes right against the open rule's Y%"*). Inventing K today is the
+two-blind-profiles mistake again. The gate ships as code behind the
+condition `K != null`, and K is written here, with its measured table,
+when the data speaks.
+
+**What graduation buys (never what it gates).** For this vertical the
+payer's record adds privileges above the default — the named first case
+is `blind`: a payer with a clean, sufficient history is released even
+when the machines could not read the image, their history vouching where
+the transaction cannot. Graduation never *removes* the default from
+newcomers: restricting the open rule is a different act (the D10
+tightening), justified only by its own measured trigger, and always
+visible to the ISP whose toggle it is — money is never re-ruled in
+silence.
+
 ## Scenarios
 
 1. **The suspended regular** — receipt at minute 0, `not_found`, cross
@@ -332,8 +377,24 @@ feed is untouched: the `charge` arrives at `confirmed`, as always.
       scenarios 2, 6 and 10 pend live measurement with the pilot — the
       cut race and the blind-form path need clocks no unit test owns)*
 
+## Definition of Done — D12 (the shadow)
+
+- [ ] Consta computes and attaches the `trust` block (US-V15 D3–D8: the
+      chains, the decay, `effectiveN`, incidents, the median and
+      `tenantBaseline`) on `pending`/`not_found` verdicts with a
+      `customerRef`.
+- [ ] `trustSnapshot` column on `direct_payments`, written at every
+      release evaluation with the block as received (null when absent);
+      the release decision provably unchanged.
+- [ ] Tests cite US-D15 D12: the snapshot lands with the release row,
+      the decision is byte-identical with and without a block, and the
+      graduation gate stays inert while K is null.
+
 ## Open items
 
+- **K, the graduation threshold** — chosen from the shadow table when it
+  has enough labeled outcomes, and written into D12 with the table that
+  chose it. Until then the gate stays off.
 - **Tightening with evidence** — if D10's measured expiry-after-release
   rate is bad, the harder rule is built from the US-V15 trust block, and
   the profile selector question reopens with real rates in the copy.

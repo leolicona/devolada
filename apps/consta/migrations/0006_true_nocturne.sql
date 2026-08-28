@@ -1,0 +1,1 @@
+ALTER TABLE `validations` ADD `beneficiary_bank` text;

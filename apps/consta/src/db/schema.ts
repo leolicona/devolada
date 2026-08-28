@@ -52,6 +52,13 @@ export const validations = sqliteTable(
     referenceNumber: text("reference_number"),
     amountCents: integer("amount_cents"),
     transferDate: text("transfer_date"),
+    /* learned-retry D2: the receiving side of the transfer, from the
+       caller's own `beneficiary.bank`. The request always carried it and
+       this table dropped it (measured 2026-08-27) — it is what the
+       receiver and pair cells of the latency ladder group over. NULL on
+       receipt-door calls matched against a candidate list, and on every
+       row written before the column existed. */
+    beneficiaryBank: text("beneficiary_bank"),
     /* Provider breadcrumbs: their id and raw CEP status ("EN PROCESO"…) */
     providerValidationId: text("provider_validation_id"),
     cepStatus: text("cep_status"),

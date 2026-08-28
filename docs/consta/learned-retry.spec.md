@@ -1,8 +1,8 @@
 ---
-status: proposed
+status: in development
 stories: [US-V16]
 domain: consta
-updated: 2026-08-27
+updated: 2026-08-28
 debt: []
 ---
 
@@ -112,6 +112,20 @@ hiding it:
   applies only when it moves a cell's suggestion by more than a
   threshold, over a long rolling window.
 
+**Amendment, 2026-08-28 (built this way): no aggregate table and no
+cron.** The suggestion is computed at request time over the rolling
+window, and the hysteresis is **rounding**: percentiles are rounded up
+to the step grid, so suggestions move in coarse steps and the
+measurement grid they create holds still. Two reasons. The trust layer
+set the law the day before this built ("every trust number is a SUM at
+request time — no aggregate tables, ever"), and a derived table beside
+an append-only log is exactly the stored-balance shape this repo
+forbids everywhere else. And the arithmetic is honest: at the
+provider's 800-calls-per-month ceiling the whole window fits in one
+query. The precomputed table (and its cron) earns its way back in on
+the day the window query is a measured cost, not before — that is its
+payment condition, recorded here instead of built speculatively.
+
 The numeric parameters — minimum n per cell, window length, hysteresis
 threshold, the exact percentile pair — are **proposed by the phase-0
 report from stored data**, not invented here. Written hypothesis, to be
@@ -189,10 +203,9 @@ spec's build order:
    conclusive, since other traffic shares the quota.
 3. **Copy discipline** — D5.3, enforced at every consumer.
 
-Phase 1 (the `beneficiary_bank` migration, the periodic aggregation —
-Consta has no cron trigger today, one is added — and `retryAfter` on
-`not_found`/`pending`) builds only after the report's verdict on gates
-1–2.
+Phase 1 (the `beneficiary_bank` migration and `retryAfter` on
+`not_found`/`pending`, computed at request time per the D4 amendment —
+no cron after all) builds only after the report's verdict on gates 1–2.
 
 **The gates, answered 2026-08-27 (first run against dev):**
 
@@ -231,10 +244,14 @@ Consta has no cron trigger today, one is added — and `retryAfter` on
       2026-08-27: passive evidence plus the isolated live pair — quota
       524 → 523 across two identical checks 13 s apart. Re-checks bill;
       no dedupe, no cache)*
-- [ ] Phase 1 (gated on phase 0): migration for `beneficiary_bank` +
-      logged at both insert sites; rolling aggregation behind a cron
-      trigger; `retryAfter` on `not_found`/`pending` per D3; scenario
-      tests citing US-V16
+- [x] Phase 1 (gated on phase 0): migration for `beneficiary_bank` +
+      logged at both insert sites; `retryAfter` on `not_found`/`pending`
+      per D3, computed at request time (D4 amendment — no aggregate
+      table, no cron); scenario tests citing US-V16 *(built 2026-08-28:
+      migration `0006`, `src/retry/suggest.ts`, six scenarios in
+      `test/learned-retry.test.ts`. The owner started phase 1 at n = 27
+      knowing the cold-start guard operates until the global cell
+      crosses 30 — silence until then is the designed behaviour)*
 - [ ] Phase 2 (own PR, `apps/api`): the sweep consumes `retryAfter` per
       D6; TD-013 closed; `direct-payment.spec.md` D7 updated as consumer
 

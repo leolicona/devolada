@@ -12,6 +12,7 @@ import { extractions } from "../../db/schema";
 import { extractProof, type ExtractionResult } from "../../extraction";
 import { extractionFailure, readingPayload, recordExtraction } from "../extract";
 import { trustBlock } from "../../trust/history";
+import { suggestRetryAfter } from "../../retry/suggest";
 import { validateRequestSchema } from "./schema";
 
 export const validateRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -151,6 +152,12 @@ validateRoute.post(
       }
     }
 
+    /* learned-retry D2: the receiving side of the transfer, recorded at
+       last — the request always carried it and the log dropped it. A
+       receipt matched against a candidate list has no single receiver. */
+    const beneficiaryBank =
+      input.mode === "transfer" ? input.beneficiary.bank : (body.beneficiary?.bank ?? null);
+
     let verdict;
     try {
       verdict = await apiCepProvider(c.env).validate(input);
@@ -174,6 +181,7 @@ validateRoute.post(
               referenceNumber: input.mode === "transfer" ? (input.referenceNumber ?? null) : null,
               amountCents: input.mode === "transfer" ? input.amountCents : null,
               transferDate: input.mode === "transfer" ? input.date : null,
+              beneficiaryBank,
               /* Scenario 12: the envelope-shaped 400 carries the id of a
                  call we were billed for — recorded even though it failed */
               providerValidationId: err.extra.providerValidationId ?? null,
@@ -235,6 +243,7 @@ validateRoute.post(
         referenceNumber: input.mode === "transfer" ? (input.referenceNumber ?? null) : null,
         amountCents: (input.mode === "transfer" ? input.amountCents : verdict.cep?.amountCents) ?? null,
         transferDate: (input.mode === "transfer" ? input.date : verdict.cep?.date) ?? null,
+        beneficiaryBank,
         providerValidationId: verdict.providerValidationId,
         cepStatus: verdict.cepStatus,
         /* D14: cost and latency ride every row. `providerMs` on a
@@ -283,6 +292,24 @@ validateRoute.post(
         )
       : null;
 
+    /* learned-retry D1/D3: the moment when asking again stops being
+       spending in vain, on exactly the verdicts where the caller is
+       deciding when to ask again. Omitted in cold start and past the
+       learned range — silence, never a guess (D5). Rides the same
+       verdicts as the trust block, and for the same reason. */
+    const retryAfter =
+      verdict.status === "pending" ||
+      (verdict.status === "invalid" && verdict.reason === "not_found")
+        ? await suggestRetryAfter(db, {
+            trackingKey:
+              (input.mode === "transfer" ? input.trackingKey : verdict.cep?.trackingKey) ?? null,
+            senderBank:
+              (input.mode === "transfer" ? input.senderBank : verdict.cep?.senderBank) ?? null,
+            beneficiaryBank,
+            now: new Date(),
+          })
+        : null;
+
     return c.json({
       success: true,
       data: {
@@ -297,6 +324,9 @@ validateRoute.post(
            licence to tell a customer their transfer does not exist. */
         ...(verdict.reason ? { reason: verdict.reason } : {}),
         ...(verdict.reason === "not_found" ? { hint: "verify_inputs" } : {}),
+        /* learned-retry D1: a suggestion, never a promise — the caller's
+           own schedule remains the floor and the tail */
+        ...(retryAfter ? { retryAfter } : {}),
         /* D18: `contradicted` says which way when Banxico said it —
            "DEVUELTO" lets a caller tell its customer "your bank returned
            the transfer" instead of a generic mismatch. Banxico's word

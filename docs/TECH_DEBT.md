@@ -20,6 +20,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - D7's schedule (+2, +8, +20, +45 min, +2 h, +6 h) comes from published evidence (Banxico's ~30-minute CEP rule; apiCEP's "seconds normally, hours sometimes"), not from our own traffic, and it is the same for every receiving bank. The `direct_payments` log already records everything needed to do better: `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank.
 - Why it was reasonable: with zero real payments there is no distribution to learn from; shipping the evidence-based constant first is what produces the data.
 - Paid by: once enough confirmed direct payments accumulate, derive the per-bank latency distribution from the log and tune the schedule (possibly per receiving bank) — plus revisit the early cadence when apiCEP answers whether pending re-checks consume credits.
+- Payment in progress (2026-08-27): the measurement moved to where the cross-integrator data lives — Consta learns the distribution and suggests `retryAfter` on `not_found`/`pending` (US-V16, `docs/consta/learned-retry.spec.md`). This debt closes when Devolada's sweep consumes the suggestion (learned-retry D6, own PR): early skeleton and tail stay fixed, `retryAfter` governs the middle.
 
 ## TD-014 — Captured customer phones have no ISP-facing view or delete
 - Status: **open** · Origin: charges/customer-phone.spec.md D5 (2026-08-17)

@@ -208,11 +208,14 @@ Consta has no cron trigger today, one is added — and `retryAfter` on
    distribution is credit-shaped, not latency-shaped. Caveat, stated
    not hidden: dev traffic includes lab rehearsals; the verdict firms
    up as pilot volume replaces it.
-2. **Gate 2 — pending re-checks bill.** Passive evidence, 30
-   consecutive re-check pairs, `quota_remaining` delta never 0, delta
-   exactly 1 on 2–6 min gaps where no other traffic fits. Recorded in
-   `docs/integrations/apicep.md`'s open items. Probes between slots are
-   therefore **not free** — that branch closes (see Open items).
+2. **Gate 2 — re-checks bill, measured live and isolated.** Passive
+   evidence first (30 consecutive re-check pairs, `quota_remaining`
+   delta never 0), then the clean cut on 2026-08-27: two identical
+   re-checks of an unsettleable transfer (a superseded misread tracking
+   key), 13 s apart, no other log row between them — quota 524 → 523.
+   One credit each; apiCEP neither dedupes nor caches. Recorded in
+   `docs/integrations/apicep.md`. Probes between slots are therefore
+   **not free** — that branch closes (see Open items).
 3. **Gate 3** — unchanged; enforced at every consumer.
 
 ## Build
@@ -224,9 +227,10 @@ Consta has no cron trigger today, one is added — and `retryAfter` on
       hypothesis asks, so phase 1 waits for the last few confirmations
       of pilot volume, not for a redesign)*
 - [x] Phase 0 — gate 2: the `quota_remaining` experiment; record the
-      answer in `docs/integrations/apicep.md`'s gap list *(answered
-      2026-08-27 by passive evidence — re-checks bill; the isolated live
-      re-check remains optional belt-and-braces)*
+      answer in `docs/integrations/apicep.md`'s gap list *(closed
+      2026-08-27: passive evidence plus the isolated live pair — quota
+      524 → 523 across two identical checks 13 s apart. Re-checks bill;
+      no dedupe, no cache)*
 - [ ] Phase 1 (gated on phase 0): migration for `beneficiary_bank` +
       logged at both insert sites; rolling aggregation behind a cron
       trigger; `retryAfter` on `not_found`/`pending` per D3; scenario

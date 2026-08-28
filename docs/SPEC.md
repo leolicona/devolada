@@ -94,6 +94,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V11** — As an integrator, a receipt-door validation also returns what the provider's OCR read off the image — a second, independent reading I can compare against my own, clearly labeled as a reading and never a verdict. *(reserved 2026-08-26; gated on measuring whether the provider returns its reading on failures)*
 - **US-V12 — US-V14** — *Retired 2026-08-27; never reuse these IDs.* They belonged to bank-email provisional match, discarded before any code: the pilot's bank (BBVA) sends no email for received transfers at all, coverage measured fragile by construction (2 of 4 banks usable, per-bank parsers forever), and the demand window was never measured. The full spec, the spike's measurements (per-bank email capability table, DKIM survives Gmail auto-forward, the SPIN hyphen that became TD-016) and the rejection reasons live in branch `feat/email-provisional-match` (PR #93, reverted). The successor is the adaptive retry schedule that pays TD-013.
 - **US-V15** — As an integrator, a `pending` or `not_found` verdict for a payer I have named carries that payer's measured history — eventual-valid rate with its sample size, incidents, and my own tenant baseline — next to the verdict, never instead of it, so I can decide to release service early with my own threshold and my own risk. *(reserved 2026-08-27)*
+- **US-V16** — As an integrator, a `not_found` or `pending` verdict tells me when asking again stops being spending in vain — a retry moment learned from measured traffic for my bank pair, omitted when the data is not there — so my schedule wastes neither credits on impossible attempts nor minutes in the gaps between my own slots. *(reserved 2026-08-27; gated on the phase-0 report: per-cell signal and the does-pending-bill answer; pays Devolada's TD-013 through its consumer PR)*
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
@@ -243,6 +244,7 @@ Owner's decisions:
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11 | proposed |
 | [consta/trust-layer.spec.md](consta/trust-layer.spec.md) | consta | US-V15 | proposed |
+| [consta/learned-retry.spec.md](consta/learned-retry.spec.md) | consta | US-V16 | proposed |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |
 | [direct-payment/partial-payment.spec.md](direct-payment/partial-payment.spec.md) | direct-payment | US-D10 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |

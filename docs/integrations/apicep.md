@@ -235,9 +235,10 @@ calls. Devolada's D7 re-validation schedule fires up to six calls per
 unsettled payment; 800 is about 130 fully-retried payments a month. That
 ceiling deserves a number in a spec before the channel carries volume.
 
-`X-RateLimit-Remaining` is also the instrument that closes the credits
-question open with apiCEP since 2026-08-17: read it either side of a pending
-re-check and the answer costs one call.
+`X-RateLimit-Remaining` is also the instrument that closed the credits
+question open with apiCEP since 2026-08-17: read either side of an isolated
+re-check on 2026-08-27, it answered — every re-check bills one credit
+(open items below).
 
 ### The field that decides money
 
@@ -403,7 +404,7 @@ the taxonomy needs. What remains:
 
 ## Open items
 
-- **Read `X-RateLimit-Remaining` around a pending re-check** and close the credits question apiCEP has not answered since 2026-08-17. The instrument now exists; it needs one unsettled transfer to measure against. Until then direct-payment D7's cadence stays priced as if every re-check bills.
+- ~~**Read `X-RateLimit-Remaining` around a pending re-check** and close the credits question apiCEP has not answered since 2026-08-17.~~ **Closed 2026-08-27, measured live** (phase 0 of `docs/consta/learned-retry.spec.md`). Two lines of evidence, both pointing the same way: (1) passive — across 30 consecutive re-check pairs of unsettled transfers in the dev log, the `quota_remaining` delta was never 0; (2) isolated — two identical re-checks of one unsettleable transfer (a superseded misread tracking key), 13 s apart, no other log row between them: quota 524 → 523. **Re-checks bill, exactly 1 credit each; apiCEP neither dedupes nor caches a repeated lookup.** D7's cadence stays priced as it already was; the "free probes" branch of learned-retry is dead.
 - **Decide what 800 calls a month buys.** That is the real ceiling, and D7's six-attempt schedule spends against it. Nothing in any spec names a budget.
 - Capture a `status: "error"` body from the receipt door — one dark-screenshot reproduction would tell us whether we get `missingFields` or a bare confidence-0, and whether `confidence` means anything in OCR mode.
 - Still unverified: **422** on a duplicated reference number, **429** and whether it carries `Retry-After`, **405**, and **500** — the provider has never failed on us, so the only condition Consta treats as retryable is one nobody here has observed. The 422 is cheap to provoke if a duplicate reference can be found; 429 costs 800 calls and will likely first be seen in production.

@@ -118,6 +118,22 @@ report from stored data**, not invented here. Written hypothesis, to be
 confirmed or corrected: n ≥ 30, 28-day window, 5-minute threshold,
 p50/p90.
 
+**Measured 2026-08-27 (phase-0 run on dev, 27 confirmed transfers): the
+distribution is bimodal, and that changes what the stepping does.**
+24 of 27 confirmed on the first attempt (p50 = 0); **zero** confirmed
+between minute 1 and minute 46; the remaining 3 landed in (46, 121],
+(120, 363] and (361, 1592] minutes. Two consequences:
+
+- With p50 = 0, D3's stepping degenerates gracefully: elapsed is always
+  past p50, so every suggestion is "p90" — one jump, which is exactly
+  right for a bimodal shape. The two-step ladder stays for the day a
+  bank with a genuine middle hump shows up.
+- Tail censoring is enormous — (361, 1592] is a fact, not a typo: a
+  resubmission re-attempted a key after the schedule was exhausted, and
+  the join by tracking key correctly kept first-seen as the origin. With
+  n = 3 in the tail, the p90 estimate (121 min) is a sketch, not a
+  number to obey yet.
+
 ### D5 — Guards that do not move
 
 1. **No upper bound is ever assumed.** Measured 2026-08-19: two real CEPs
@@ -178,12 +194,39 @@ Consta has no cron trigger today, one is added — and `retryAfter` on
 `not_found`/`pending`) builds only after the report's verdict on gates
 1–2.
 
+**The gates, answered 2026-08-27 (first run against dev):**
+
+1. **Gate 1 — close, and the shape is the real finding.** The global
+   cell holds 27 (hypothesis asks 30). One receiver in the whole
+   dataset (KLAR — the pilot ISP's bank), so the receiver cells are the
+   global cell wearing a name; senders split NUBANK (23) / BBVA (3),
+   both instant-dominated. The signal is not "bank X publishes at ~25
+   min" — no such bank appears. The signal is the **dead middle**: the
+   +8, +20 and +45 slots caught *nothing* in this data (everything
+   confirms instantly or takes hours), so each slow transfer burns 3
+   credits there for free. The learned suggestion's value on this
+   distribution is credit-shaped, not latency-shaped. Caveat, stated
+   not hidden: dev traffic includes lab rehearsals; the verdict firms
+   up as pilot volume replaces it.
+2. **Gate 2 — pending re-checks bill.** Passive evidence, 30
+   consecutive re-check pairs, `quota_remaining` delta never 0, delta
+   exactly 1 on 2–6 min gaps where no other traffic fits. Recorded in
+   `docs/integrations/apicep.md`'s open items. Probes between slots are
+   therefore **not free** — that branch closes (see Open items).
+3. **Gate 3** — unchanged; enforced at every consumer.
+
 ## Build
 
-- [ ] Phase 0 — report: run `scripts/cep-latency-report.mjs` against dev;
-      record the verdict and the proposed parameters in D4
-- [ ] Phase 0 — gate 2: the `quota_remaining` experiment; record the
-      answer in `docs/integrations/apicep.md`'s gap list
+- [x] Phase 0 — report: run `scripts/cep-latency-report.mjs` against dev;
+      record the verdict and the proposed parameters in D4 *(run
+      2026-08-27: bimodal shape, dead middle slots, tail p90 a sketch at
+      n = 3 — findings in D4 and D7; global cell at 27 of the 30 the
+      hypothesis asks, so phase 1 waits for the last few confirmations
+      of pilot volume, not for a redesign)*
+- [x] Phase 0 — gate 2: the `quota_remaining` experiment; record the
+      answer in `docs/integrations/apicep.md`'s gap list *(answered
+      2026-08-27 by passive evidence — re-checks bill; the isolated live
+      re-check remains optional belt-and-braces)*
 - [ ] Phase 1 (gated on phase 0): migration for `beneficiary_bank` +
       logged at both insert sites; rolling aggregation behind a cron
       trigger; `retryAfter` on `not_found`/`pending` per D3; scenario
@@ -196,6 +239,8 @@ Consta has no cron trigger today, one is added — and `retryAfter` on
 - **`/stats` per cell** (percentiles, sample sizes): deferred until
   US-D12's expectation copy or an integrator asks. The aggregate table
   phase 1 builds is the same data; only the public surface is deferred.
-- **Probes between slots**: only if gate 2 answers that `pending`
-  re-checks are free — then densifying the measurement costs nothing and
-  the interval censoring of D4 narrows on its own.
+- ~~**Probes between slots**: only if gate 2 answers that `pending`
+  re-checks are free.~~ **Closed 2026-08-27**: gate 2 answered — re-checks
+  bill (D7). Densifying the measurement costs real credits, so the
+  interval censoring of D4 is permanent and the upper-bound rule is not
+  a stopgap, it is the design.

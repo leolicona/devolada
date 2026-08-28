@@ -244,7 +244,7 @@ Owner's decisions:
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11 | proposed |
 | [consta/trust-layer.spec.md](consta/trust-layer.spec.md) | consta | US-V15 | proposed |
-| [consta/learned-retry.spec.md](consta/learned-retry.spec.md) | consta | US-V16 | proposed |
+| [consta/learned-retry.spec.md](consta/learned-retry.spec.md) | consta | US-V16 | in development |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |
 | [direct-payment/partial-payment.spec.md](direct-payment/partial-payment.spec.md) | direct-payment | US-D10 | in development |
 | [direct-payment/admin-links-view.spec.md](direct-payment/admin-links-view.spec.md) | direct-payment | US-D07 | in development |

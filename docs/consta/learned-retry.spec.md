@@ -112,6 +112,42 @@ hiding it:
   applies only when it moves a cell's suggestion by more than a
   threshold, over a long rolling window.
 
+**Second amendment, 2026-08-28 — the population rules, found by the
+owner's own two transfers.** The clock here starts at the upload, not at
+the transfer: a receipt transferred at night and uploaded the next
+morning validated "in 0 minutes" (`…E7Q7M7VNFT`, transfer date 08-27,
+first attempt 08-28 07:55, valid instantly) while a fresh transfer took
+~7 minutes through a real miss (`…0081336239`, not_found 08:04, valid
+08:11) — squarely inside the "dead middle" the first phase-0 run
+declared empty. Raw measurement mixes Banxico's latency with the
+payer's upload lag, and the mix poisons the suggestion in the worst
+direction: polluted cells said p50 = 0 / p90 = 121, which would have
+sent a fresh 15-minute transfer to a 120-minute retry — worse than the
+static table this feature exists to beat. Two rules keep the cells
+honest:
+
+1. **Only transfers whose first attempt missed are measured.** They are
+   the exact population the suggestion serves — it only ever fires
+   after a miss — anchored where the suggestion anchors. A CEP that was
+   already there on the first ask never needed a retry and must not
+   shape one. (This also expels the misread-tracking-key chains: the
+   wrong key never reaches `valid`, so it never measured anything; the
+   corrected key is measured on its own anchor.)
+2. **A miss counts only if it asked with the search inputs that
+   eventually validated** (same amount, same date). A `not_found`
+   caused by our own misread amount measures human correction time, not
+   Banxico — the log stores the inputs per attempt, so the rule is a
+   filter, not new data. The live anchor obeys the same rule: after a
+   correction, elapsed runs from the first honest ask.
+
+Residual bias, named: a late upload that still misses enters with a
+shorter observed wait, pulling suggestions slightly *earlier* — the
+conservative direction (a credit at risk, never customer wait). Rerun
+against dev with these rules: conditional n = 6 of 30 raw — the honest
+cold start is colder, and correctly so. **Capturing the receipt's
+printed time** (which would let the anchor start at the transfer
+itself) stays an open item with its own gate below.
+
 **Amendment, 2026-08-28 (built this way): no aggregate table and no
 cron.** The suggestion is computed at request time over the rolling
 window, and the hysteresis is **rounding**: percentiles are rounded up
@@ -220,7 +256,14 @@ no cron after all) builds only after the report's verdict on gates 1–2.
    credits there for free. The learned suggestion's value on this
    distribution is credit-shaped, not latency-shaped. Caveat, stated
    not hidden: dev traffic includes lab rehearsals; the verdict firms
-   up as pilot volume replaces it.
+   up as pilot volume replaces it. **Corrected 2026-08-28 (second D4
+   amendment): the "dead middle" was partly an artifact of upload
+   lag.** Under the conditional population the middle is alive — the
+   rerun shows conditional p50 ≈ 21 min in the global cell, and the
+   first real per-bank difference (BBVA misses resolve in ~6–21 min,
+   NUBANK misses in hours). Conditional n = 6, so the cold-start
+   guard operates; the raw column stays in the report to show the
+   pollution.
 2. **Gate 2 — re-checks bill, measured live and isolated.** Passive
    evidence first (30 consecutive re-check pairs, `quota_remaining`
    delta never 0), then the clean cut on 2026-08-27: two identical
@@ -252,6 +295,11 @@ no cron after all) builds only after the report's verdict on gates 1–2.
       `test/learned-retry.test.ts`. The owner started phase 1 at n = 27
       knowing the cold-start guard operates until the global cell
       crosses 30 — silence until then is the designed behaviour)*
+- [x] D4 second amendment (2026-08-28): the population rules, after the
+      owner's two live transfers exposed the upload-lag bias — only
+      first-attempt misses count, only honest asks anchor; two new
+      scenarios in the suite (eight total) and the report shows raw vs
+      conditional side by side
 - [ ] Phase 2 (own PR, `apps/api`): the sweep consumes `retryAfter` per
       D6; TD-013 closed; `direct-payment.spec.md` D7 updated as consumer
 
@@ -265,3 +313,14 @@ no cron after all) builds only after the report's verdict on gates 1–2.
   bill (D7). Densifying the measurement costs real credits, so the
   interval censoring of D4 is permanent and the upper-bound rule is not
   a stopgap, it is the design.
+- **The receipt's printed time.** Receipts print the hour; we store only
+  the date, so the anchor starts at the upload instead of the transfer
+  (the bias D4's second amendment works around). Reading the hour would
+  let elapsed run from the transfer itself — sharper suggestions for
+  late-ish uploads that still miss. Costs before building: per-bank
+  time formats (the exact fragility that killed US-V12–V14), coverage
+  only on the receipt door (apiCEP's `operationDate` carries no time,
+  the manual door asks for none), and it is `extracted`-class data — an
+  anchor hint, never a verdict input. Gate: build only if the
+  conditional data shows late-but-missing uploads are frequent enough
+  that the sharper anchor saves real minutes.

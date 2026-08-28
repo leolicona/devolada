@@ -64,7 +64,8 @@ const payments = query(
 
 const attempts = query(
   "consta",
-  `SELECT tracking_key, status, reason, cep_status, quota_remaining, created_at
+  `SELECT tracking_key, status, reason, cep_status, quota_remaining,
+          amount_cents, transfer_date, created_at
    FROM validations WHERE tracking_key IS NOT NULL ORDER BY created_at`,
 );
 
@@ -111,12 +112,22 @@ for (const [key, rows] of byKey) {
 
   if (!firstValid) continue;
   const p = paymentByKey.get(key);
+  /* D4 second amendment — the two population rules. Rule 2: only
+     attempts that asked with the inputs that validated ("honest asks");
+     rule 1: the first honest ask must have missed, or the transfer
+     measures upload lag / correction time, not Banxico. */
+  const honest = rows.filter(
+    (r) => r.amount_cents === firstValid.amount_cents && r.transfer_date === firstValid.transfer_date,
+  );
+  const conditional = honest.length > 0 && honest[0].status !== "valid";
   measured.push({
     key,
     sender: firstValid.sender_bank ?? p?.sender_bank ?? "?",
     receiver: p?.receiver_bank ?? "?",
     lowerMin: lastMiss ? min(ms(lastMiss.created_at) - firstSeen) : 0,
     upperMin: min(ms(firstValid.created_at) - firstSeen),
+    conditional,
+    condUpperMin: conditional ? min(ms(firstValid.created_at) - ms(honest[0].created_at)) : null,
     attempts: rows.filter((r) => ms(r.created_at) <= ms(firstValid.created_at)).length,
   });
 }
@@ -151,30 +162,34 @@ lines.push("");
 if (measured.length === 0) {
   lines.push("_No transfer reached `valid` yet — nothing to measure._");
 } else {
-  lines.push("| tracking key | sender → receiver | CEP appeared in | attempts spent |");
-  lines.push("|---|---|---|---|");
+  lines.push("| tracking key | sender → receiver | CEP appeared in | attempts spent | counts? |");
+  lines.push("|---|---|---|---|---|");
   for (const m of measured.sort((a, b) => a.upperMin - b.upperMin)) {
     lines.push(
-      `| \`${m.key}\` | ${m.sender} → ${m.receiver} | (${m.lowerMin}, ${m.upperMin}] min | ${m.attempts} |`,
+      `| \`${m.key}\` | ${m.sender} → ${m.receiver} | (${m.lowerMin}, ${m.upperMin}] min | ${m.attempts} | ${m.conditional ? "✓" : "✗ first honest ask succeeded"} |`,
     );
   }
 }
 lines.push("");
 
-lines.push("## Ladder cells (percentiles over the upper bound)");
+lines.push("## Ladder cells — conditional population vs raw (D4, second amendment)");
 lines.push("");
-lines.push("| cell | n | p50 | p90 | median blur |");
-lines.push("|---|---|---|---|---|");
+lines.push("| cell | n raw | n cond ​| p50 cond | p90 cond | p90 raw | median blur |");
+lines.push("|---|---|---|---|---|---|---|");
 for (const [name, list] of [...cells.entries()].sort((a, b) => b[1].length - a[1].length)) {
   const uppers = list.map((m) => m.upperMin).sort((a, b) => a - b);
+  const cond = list.filter((m) => m.conditional).map((m) => m.condUpperMin).sort((a, b) => a - b);
   const blurs = list.map((m) => m.upperMin - m.lowerMin).sort((a, b) => a - b);
-  const open = list.length >= MIN_N ? " ✅" : "";
+  const open = cond.length >= MIN_N ? " ✅" : "";
+  const c = (p) => (cond.length ? `${pct(cond, p)} min` : "—");
   lines.push(
-    `| ${name} | ${list.length}${open} | ${pct(uppers, 0.5)} min | ${pct(uppers, 0.9)} min | ±${pct(blurs, 0.5)} min |`,
+    `| ${name} | ${list.length} | ${cond.length}${open} | ${c(0.5)} | ${c(0.9)} | ${pct(uppers, 0.9)} min | ±${pct(blurs, 0.5)} min |`,
   );
 }
 lines.push("");
-lines.push(`"Median blur" is the interval width — how much the schedule's own slots censor the measurement (spec D4).`);
+lines.push(
+  `Only "n cond" opens a cell: transfers whose first honest ask missed. The raw column stays to show the pollution — a receipt uploaded late validates "in 0 minutes" while measuring the upload lag, not Banxico (measured live 2026-08-28). "Median blur" is the interval width — the schedule's own slots censoring the measurement (spec D4).`,
+);
 lines.push("");
 
 lines.push("## Gate 2 — passive evidence (do pending re-checks bill?)");
@@ -190,13 +205,13 @@ if (quotaDeltas.length === 0) {
 }
 lines.push("");
 
-const openCells = [...cells.entries()].filter(([, l]) => l.length >= MIN_N);
-lines.push("## Gate 1 — verdict");
+const openCells = [...cells.entries()].filter(([, l]) => l.filter((m) => m.conditional).length >= MIN_N);
+lines.push("## Gate 1 — verdict (conditional population)");
 lines.push("");
 lines.push(
   openCells.length > 0
-    ? `${openCells.length} cell(s) reach n ≥ ${MIN_N}: ${openCells.map(([n]) => n).join(", ")}. Phase 1 has signal to start from.`
-    : `No cell reaches n ≥ ${MIN_N} yet. Not enough volume — the spec stays \`proposed\` and waits for data (that is a result, not a failure).`,
+    ? `${openCells.length} cell(s) reach conditional n ≥ ${MIN_N}: ${openCells.map(([n]) => n).join(", ")}. The suggestion has signal to operate on.`
+    : `No cell reaches conditional n ≥ ${MIN_N} yet. The suggestion stays silent (cold-start guard) and waits for transfers whose first honest ask missed — that is a result, not a failure.`,
 );
 lines.push("");
 

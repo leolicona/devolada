@@ -306,6 +306,10 @@ validateRoute.post(
             senderBank:
               (input.mode === "transfer" ? input.senderBank : verdict.cep?.senderBank) ?? null,
             beneficiaryBank,
+            /* D4 rule 2: the elapsed anchor counts only attempts that
+               asked with these same inputs */
+            amountCents: input.mode === "transfer" ? input.amountCents : null,
+            transferDate: input.mode === "transfer" ? input.date : null,
             now: new Date(),
           })
         : null;

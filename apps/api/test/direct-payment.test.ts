@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { charges, directPayments, ledgerEntries, paymentLinks, proofRejections } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
+import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
 import { customerRefFor } from "../src/consta/refs";
@@ -2671,5 +2672,126 @@ describe("US-D15: the history refs travel always (D4)", () => {
     expect(res.status).toBe(201);
     expect(captured.body!.customerRef).toBeUndefined();
     expect(captured.body!.paymentRef).toBeUndefined();
+  });
+});
+
+/* TD-013 paid: the sweep obeys Consta's learned `retryAfter`
+   (learned-retry D6, direct-payment D7 amendment). The suggestion rules
+   the middle of the schedule; the early skeleton and the horizon never
+   move. */
+describe("D7 amended: the learned retryAfter governs the middle", () => {
+  const min = (n: number) => n * 60 * 1000;
+
+  it("US-D04: a suggestion skips the futile middle slots", () => {
+    const createdAt = new Date(Date.now() - min(2));
+    const suggestedAt = new Date(createdAt.getTime() + min(26));
+    const slot = nextValidationSlot(createdAt, new Date(), { suggestedAt });
+    expect(slot!.getTime()).toBe(suggestedAt.getTime());
+  });
+
+  it("US-D04: a suggestion may come EARLIER than the next static slot — the latency win", () => {
+    const createdAt = new Date(Date.now() - min(46));
+    /* next static would be +120; the evidence says +50 */
+    const suggestedAt = new Date(createdAt.getTime() + min(50));
+    const slot = nextValidationSlot(createdAt, new Date(), { suggestedAt });
+    expect(slot!.getTime()).toBe(suggestedAt.getTime());
+  });
+
+  it("US-D04: before the +2 slot the ladder rules — the fast majority never waits on a percentile", () => {
+    const createdAt = new Date();
+    const suggestedAt = new Date(createdAt.getTime() + min(26));
+    const slot = nextValidationSlot(createdAt, createdAt, { suggestedAt });
+    expect(slot!.getTime()).toBe(createdAt.getTime() + min(2));
+  });
+
+  it("US-D04: a suggestion is clamped to the horizon — expiry is product law", () => {
+    const createdAt = new Date(Date.now() - min(10));
+    const suggestedAt = new Date(createdAt.getTime() + min(30 * 60));
+    const slot = nextValidationSlot(createdAt, new Date(), { lateSlot: true, suggestedAt });
+    expect(slot!.getTime()).toBe(createdAt.getTime() + min(720));
+  });
+
+  it("US-D04: a stale suggestion falls back to the static ladder", () => {
+    const createdAt = new Date(Date.now() - min(46));
+    const suggestedAt = new Date(createdAt.getTime() + min(10));
+    const slot = nextValidationSlot(createdAt, new Date(), { suggestedAt });
+    expect(slot!.getTime()).toBe(createdAt.getTime() + min(120));
+  });
+
+  it("US-D04: a malformed or absent suggestion simply does not exist", () => {
+    expect(suggestedSlot("not-a-date")).toBeNull();
+    expect(suggestedSlot(undefined)).toBeNull();
+    expect(suggestedSlot("2026-08-28T12:00:00.000Z")!.toISOString()).toBe("2026-08-28T12:00:00.000Z");
+  });
+
+  it("US-D04: a not_found verdict with retryAfter books the suggested attempt through the sweep", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const createdAt = new Date(now.getTime() - min(2));
+    const suggested = new Date(createdAt.getTime() + min(26));
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        constaStatus: "pending",
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt,
+      })
+      .returning();
+
+    mockConsta({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      retryAfter: suggested.toISOString(),
+    });
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
+    /* +8 and +20 are skipped: the next attempt is exactly the suggestion */
+    expect(row.nextValidationAt!.getTime()).toBe(suggested.getTime());
+  });
+
+  it("US-D04: a pending verdict carries the suggestion the same way", async () => {
+    const { isp, link } = await seedLinkedIsp();
+    const now = new Date();
+    const createdAt = new Date(now.getTime() - min(2));
+    const suggested = new Date(createdAt.getTime() + min(26));
+    const db = drizzle(env.DB);
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        constaStatus: "pending",
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt,
+      })
+      .returning();
+
+    mockConsta({ status: "pending", cep: undefined, retryAfter: suggested.toISOString() });
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.nextValidationAt!.getTime()).toBe(suggested.getTime());
   });
 });

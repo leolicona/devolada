@@ -257,6 +257,7 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     expect((await before.json()).data.reconnection).toEqual({
       thresholdPercent: 100,
       floorCents: 0,
+      provisionalReleaseEnabled: false,
     });
 
     const saved = await client.request(
@@ -270,11 +271,27 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     expect((await saved.json()).data.reconnection).toEqual({
       thresholdPercent: 70,
       floorCents: 20000,
+      provisionalReleaseEnabled: false,
     });
 
     const [isp] = await drizzle(env.DB).select().from(isps);
     expect(isp.reconnectionThresholdPercent).toBe(70);
     expect(isp.reconnectionFloorCents).toBe(20000);
+  });
+
+  it("US-D15 D10: the provisional-release switch saves, and off is the default", async () => {
+    await seedIsp();
+    const client = await app();
+
+    const saved = await client.request(
+      ...send("/settings", "PATCH", { provisionalReleaseEnabled: true }),
+      env,
+    );
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).data.reconnection.provisionalReleaseEnabled).toBe(true);
+
+    const [isp] = await drizzle(env.DB).select().from(isps);
+    expect(isp.provisionalReleaseEnabled).toBe(true);
   });
 
   it("refuses a percentage outside 0–100 and a negative floor", async () => {
@@ -298,6 +315,7 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     expect((await res.json()).data.reconnection).toEqual({
       thresholdPercent: 100,
       floorCents: 0,
+      provisionalReleaseEnabled: false,
     });
   });
 

@@ -32,6 +32,10 @@ export type Bindings = {
      own decision (consta validation spec D8). Key is a worker secret. */
   CONSTA_BASE_URL?: string;
   CONSTA_API_KEY?: string;
+  /* provisional-release D4: secret behind the HMAC that pseudonymises
+     the WispHub usuario before it travels to Consta as `customerRef`.
+     Unset → no refs travel; validation is never blocked by it. */
+  CUSTOMER_REF_SECRET?: string;
   /* TD-015, temporary: comma-separated payment-link tokens whose
      validation is simulated instead of asked of Banxico, so a demo can
      reach the green screen — a real CEP has no measured upper bound on

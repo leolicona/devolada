@@ -64,9 +64,20 @@ export const validations = sqliteTable(
     providerHttpStatus: integer("provider_http_status"),
     providerMs: integer("provider_ms"),
     quotaRemaining: integer("quota_remaining"),
+    /* trust-layer D1/D7 — opaque history refs the caller chooses. Sending
+       `customer_ref` is the opt-in for history collection; `payment_ref`
+       chains the attempts of one payment. Never interpreted, never joined
+       against anything but themselves, and stored on failed rows too: the
+       log stays faithful. Every trust number is a SUM over these at
+       request time — no aggregate tables, ever. */
+    customerRef: text("customer_ref"),
+    paymentRef: text("payment_ref"),
     createdAt: createdAt(),
   },
-  (t) => [index("validations_key_idx").on(t.apiKeyId, t.createdAt)],
+  (t) => [
+    index("validations_key_idx").on(t.apiKeyId, t.createdAt),
+    index("validations_customer_idx").on(t.apiKeyId, t.customerRef),
+  ],
 );
 
 /* D8 — Consta stores the reading, never the image.

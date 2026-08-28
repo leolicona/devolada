@@ -1009,3 +1009,196 @@ describe("US-V11: the provider's reading is exposed (proof-extraction D11)", () 
     expect(res.status).toBe(400);
   });
 });
+
+/* trust-layer spec (US-V15) — the collection half: the opaque refs land
+   on the log verbatim, on failures too, and an oversized ref is refused
+   before a credit is spent. The computed block ships later (spec D7's
+   split); these rows are what it will SUM over. */
+describe("US-V15: the history refs (trust-layer D1)", () => {
+  const refs = { customerRef: "a".repeat(64), paymentRef: "pay-123" };
+
+  it("stores customerRef and paymentRef verbatim on the logged row", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep(settledResponse);
+
+    const res = await postValidate(key, { ...directRequest, ...refs });
+    expect(res.status).toBe(200);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].customerRef).toBe(refs.customerRef);
+    expect(rows[0].paymentRef).toBe("pay-123");
+  });
+
+  it("without refs nothing is collected — the opt-in is structural", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    mockApiCep(settledResponse);
+
+    await postValidate(key, directRequest);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows[0].customerRef).toBeNull();
+    expect(rows[0].paymentRef).toBeNull();
+  });
+
+  it("a ref past 128 chars is refused before any credit", async () => {
+    const { id: keyId, key } = await seedApiKey();
+
+    const res = await postValidate(key, { ...directRequest, customerRef: "x".repeat(129) });
+    expect(res.status).toBe(400);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("a billed failure keeps its refs — the chain must not lie about itself", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    /* The envelope-shaped 400: billed, logged with status null (D15) */
+    mockApiCep(
+      { validationId: "prov-billed-1", error: "Solicitud inválida" },
+      undefined,
+      { status: 400, headers: { "X-Processing-Time": "100ms" } },
+    );
+
+    const res = await postValidate(key, { ...directRequest, ...refs });
+    expect(res.status).toBe(422);
+
+    const rows = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].customerRef).toBe(refs.customerRef);
+    expect(rows[0].paymentRef).toBe("pay-123");
+  });
+});
+
+/* trust-layer spec (US-V15 D3–D8) — the computed block: chains with
+   outcomes, recency decay, the baseline that gives a rate its meaning,
+   and the doctrine that Consta measures and never decides. */
+describe("US-V15: the trust block", () => {
+  const DAY = 24 * 3600 * 1000;
+  const PAYER = "payer-hist-1";
+
+  /* A closed, resolved chain: one valid validation, aged as asked */
+  const seedChain = (
+    keyId: string,
+    over: Partial<typeof validations.$inferInsert> = {},
+    daysAgo = 10,
+  ) =>
+    db()
+      .insert(validations)
+      .values({
+        apiKeyId: keyId,
+        mode: "transfer",
+        status: "valid",
+        trackingKey: `SEED${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+        customerRef: PAYER,
+        paymentRef: `pay-${Math.random().toString(36).slice(2, 10)}`,
+        createdAt: new Date(Date.now() - daysAgo * DAY),
+        ...over,
+      });
+
+  const pendingReply = { validationId: "prov-trust-1", status: "pending" };
+
+  it("scenario 1: the regular — chains counted, rate 1, decay discounting the old", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedChain(keyId, {}, 10);
+    await seedChain(keyId, {}, 10);
+    /* a chain a half-life away weighs ~0.5 */
+    await seedChain(keyId, {}, 90);
+    mockApiCep(pendingReply);
+
+    const res = await postValidate(key, {
+      ...directRequest,
+      customerRef: PAYER,
+      paymentRef: "pay-in-flight",
+    });
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    const trust = data.trust as Record<string, unknown>;
+    expect(trust).toBeDefined();
+    const sample = trust.sample as Record<string, number>;
+    expect(sample.chains).toBe(3);
+    expect(sample.halfLifeDays).toBe(90);
+    /* 0.93 + 0.93 + 0.5 ≈ 2.4 — the n the rate really rests on */
+    expect(sample.effectiveN).toBeGreaterThan(2.1);
+    expect(sample.effectiveN).toBeLessThan(2.6);
+    expect(trust.eventualValidRate).toBe(1);
+    expect((trust.raw as Record<string, number>).resolvedValid).toBe(3);
+    expect((trust.tenantBaseline as Record<string, number>).chains).toBe(3);
+  });
+
+  it("scenario 2: the stranger — zeros for the payer, the baseline still travels", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedChain(keyId, {}, 10);
+    mockApiCep(pendingReply);
+
+    const res = await postValidate(key, {
+      ...directRequest,
+      customerRef: "recien-llegado",
+      paymentRef: "pay-first-ever",
+    });
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    const trust = data.trust as Record<string, unknown>;
+    expect((trust.sample as Record<string, number>).chains).toBe(0);
+    expect(trust.eventualValidRate).toBeNull();
+    /* day-one value: about you I know nothing; your peers resolve fine */
+    expect((trust.tenantBaseline as Record<string, number>).chains).toBe(1);
+    expect((trust.tenantBaseline as Record<string, number>).eventualValidRate).toBe(1);
+  });
+
+  it("D3: the chain in flight never vouches for itself", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedChain(keyId, { paymentRef: "pay-mine" }, 10);
+    await seedChain(keyId, {}, 10);
+    mockApiCep(pendingReply);
+
+    /* revalidating the same payment: its own prior valid must not count */
+    const res = await postValidate(key, {
+      ...directRequest,
+      customerRef: PAYER,
+      paymentRef: "pay-mine",
+    });
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    expect(
+      ((data.trust as Record<string, unknown>).sample as Record<string, number>).chains,
+    ).toBe(1);
+  });
+
+  it("scenarios 3–4: incidents surface and are never suppressed", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedChain(keyId, {}, 20);
+    /* a DEVUELTO chain and a reused-CEP attempt */
+    await seedChain(keyId, { status: "invalid", reason: "contradicted" }, 5);
+    await seedChain(keyId, { alreadyValidated: true }, 3);
+    mockApiCep(pendingReply);
+
+    const res = await postValidate(key, {
+      ...directRequest,
+      customerRef: PAYER,
+      paymentRef: "pay-in-flight",
+    });
+    const { data } = (await res.json()) as { data: Record<string, unknown> };
+    const trust = data.trust as Record<string, unknown>;
+    const raw = trust.raw as Record<string, number>;
+    expect(raw.contradicted).toBe(1);
+    expect(raw.alreadyUsedAttempts).toBe(1);
+    expect(trust.lastIncidentAt).not.toBeNull();
+    expect(trust.eventualValidRate as number).toBeLessThan(1);
+  });
+
+  it("D5: no block on a valid verdict, and none without a customerRef", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedChain(keyId, {}, 10);
+
+    mockApiCep(settledResponse);
+    const valid = await postValidate(key, {
+      ...directRequest,
+      customerRef: PAYER,
+      paymentRef: "pay-x",
+    });
+    expect("trust" in ((await valid.json()) as { data: object }).data).toBe(false);
+
+    mockApiCep(pendingReply);
+    const noRef = await postValidate(key, directRequest);
+    expect("trust" in ((await noRef.json()) as { data: object }).data).toBe(false);
+  });
+});

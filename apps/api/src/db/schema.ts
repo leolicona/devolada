@@ -74,6 +74,14 @@ export const isps = sqliteTable("isps", {
     .notNull()
     .default(100),
   reconnectionFloorCents: integer("reconnection_floor_cents").notNull().default(0),
+  /* provisional-release D10 (US-D15): one switch, no dials. On, a payment
+     with per-transaction evidence buys a WispHub payment promise while
+     Banxico confirms — reconnecting the suspended, protecting the current
+     from the cut. The rule behind it is fixed and lives in the spec;
+     the threshold and floor above apply to it unchanged. */
+  provisionalReleaseEnabled: integer("provisional_release_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: createdAt(),
 });
 
@@ -344,6 +352,19 @@ export const directPayments = sqliteTable(
     nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
     lastError: text("last_error"),
     confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    /* provisional-release D1/D11 (US-D15): the moment the vote of
+       confidence bought a WispHub payment promise, and which evidence
+       bought it — point-in-time facts, recorded because they cannot be
+       derived later. Null = never released. */
+    provisionalReleaseAt: integer("provisional_release_at", { mode: "timestamp_ms" }),
+    releaseEvidence: text("release_evidence", { enum: ["pending", "agreed", "human"] }),
+    /* D2's two faces, recorded at the moment of truth: `reconnect` — the
+       customer was suspended and the promise gave the service back;
+       `protect` — the customer was current and the promise shields them
+       from the scheduled cut. The page's copy hangs on this (D9): "tu
+       internet ya volvió" must never be said to someone whose internet
+       never left. */
+    releaseKind: text("release_kind", { enum: ["reconnect", "protect"] }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -360,6 +381,30 @@ export const directPayments = sqliteTable(
         sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired', 'superseded')`,
       ),
   ],
+);
+
+/* provisional-release D6 (US-D15): the edge rejection gets a memory. A
+   reused clave dies today at the unique index above with a 409 and left
+   no row anywhere — but a revocation signal needs one, and knowing WHICH
+   payment owned the clave is what turns own-vs-other into a query
+   instead of a guess. Append-only; a row is an attempt, never a verdict. */
+export const proofRejections = sqliteTable(
+  "proof_rejections",
+  {
+    id: id(),
+    ispId: text("isp_id")
+      .notNull()
+      .references(() => isps.id),
+    /* Who tried */
+    paymentLinkId: text("payment_link_id")
+      .notNull()
+      .references(() => paymentLinks.id),
+    /* Whose clave it was */
+    ownerPaymentId: text("owner_payment_id").references(() => directPayments.id),
+    trackingKey: text("tracking_key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("proof_rejections_link_idx").on(t.paymentLinkId, t.createdAt)],
 );
 
 export const invitations = sqliteTable(

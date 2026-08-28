@@ -13,8 +13,8 @@ Consta has never helped with: *do I make my customer wait, or do I give the
 service now and let Banxico confirm behind me?* Today the integrator decides
 that blind. This spec gives the decision its missing input: **the measured
 history of this payer's past validations, reported next to the verdict —
-never instead of it** (the doctrine US-V13 already established for the email
-provisional match; this is the second member of that family).
+never instead of it** (a doctrine first written for the email provisional
+match — that feature was discarded in PR #101, and the doctrine outlived it).
 
 **Amended 2026-08-27 (owner critique, while designing the first consumer):**
 the original prize paragraph here described Devolada gating early release on
@@ -141,7 +141,7 @@ The `trust` block is attached to the verdict exactly when the client is
 deciding whether to wait: verdicts `pending` and `invalid`/`not_found`, and
 only when the request carried a `customerRef`. Never on `valid` (redundant)
 and never on `contradicted` (a real DEVUELTO is not bridged by history —
-US-V13's "never instead of the verdict" applies with no exception).
+the "never instead of the verdict" rule applies with no exception).
 
 There is no emission floor. A payer with one closed chain shows n = 1; a
 payer with none shows zeros — and still gets a useful answer, because the
@@ -183,6 +183,11 @@ fixing a query, not by migrating corrupted counters.
 the collection ship first — history only accumulates forward, and every
 month without the refs is a month of evidence lost. The computed block
 ships when its first consumer calls for it; nothing downstream waits on it.
+**The first consumer arrived the same day**: Devolada's graduation shadow
+(provisional-release D12) — it stores the block next to each release
+decision so the future data rule is calibrated from labeled outcomes
+instead of guesses. A reader, never a decider: exactly the consumer this
+layer was built for.
 
 ### D8 — The wire contract
 
@@ -250,15 +255,25 @@ knowing what the sample does and does not prove.
 
 ## Definition of Done
 
-- [ ] Migration: `customer_ref`, `payment_ref` on `validations` + index on
+- [x] Migration: `customer_ref`, `payment_ref` on `validations` + index on
       (`api_key_id`, `customer_ref`); the log stays append-only.
-- [ ] Both doors accept and store the two refs; Zod caps at 128 opaque chars.
-- [ ] Chain derivation (paymentRef, tracking-key fallback, four states, 24 h
+      *(2026-08-27, migration 0005)*
+- [x] Both doors accept and store the two refs; Zod caps at 128 opaque
+      chars. *(2026-08-27, tested under US-V15 — failed rows keep their
+      refs too)*
+- [x] Chain derivation (paymentRef, tracking-key fallback, four states, 24 h
       abandonment, self-exclusion) implemented as queries, no state tables.
-- [ ] `trust` block on `pending`/`not_found` with decay, raw counts,
+      *(2026-08-27, `src/trust/history.ts` — one read serves payer and
+      baseline; chain keys scoped by customerRef so the fallback never
+      fuses two payers)*
+- [x] `trust` block on `pending`/`not_found` with decay, raw counts,
       incidents, median and `tenantBaseline`; absent everywhere else.
-- [ ] Tests cite US-V15: the seven scenarios, decay arithmetic, and the
-      self-exclusion of the in-flight chain.
+      *(2026-08-27; `eventualValidRate` is null — not 0 — over an empty
+      sample: a rate over nothing is no measurement)*
+- [x] Tests cite US-V15: the regular with decay arithmetic, the stranger
+      with the traveling baseline, self-exclusion of the in-flight chain,
+      incidents never suppressed, and absence on valid / without a ref.
+      *(2026-08-27, 56/56)*
 - [ ] Integration guide page: what Consta stores and does not, the HMAC
       guidance, the rule-of-three table, the shrinkage formula.
 

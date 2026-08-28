@@ -4,6 +4,7 @@ import type { Bindings } from "../env";
 import { charges, directPayments, isps, paymentLinks } from "../db/schema";
 import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
+import { customerRefFor } from "../consta/refs";
 import { WispHub, WispHubError } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { settle } from "./partial";
@@ -14,6 +15,11 @@ import { makeFolio } from "../routes/charges/handler";
 import { nextValidationSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
 import { demoVerdict, isDemoLink } from "./demo";
+import {
+  maybeProvisionalRelease,
+  notifyProvisionalExpiry,
+  releaseEvidenceFor,
+} from "./provisional";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -163,17 +169,24 @@ export async function runValidation(
      `not_found` passes `lateSlot` (validation-status-ux D4): the extra
      T+12h attempt exists for the transfer Banxico may still publish,
      never for our own outages. */
-  const retryLater = (
+  const retryLater = async (
     error: string,
     base: Partial<typeof directPayments.$inferInsert> = {},
     opts: { lateSlot?: boolean } = {},
   ) => {
     const slot = nextValidationSlot(payment.createdAt, now, opts);
-    return update(
+    const row = await update(
       slot
         ? { ...base, lastError: error, nextValidationAt: slot }
         : { ...base, status: "expired", lastError: error, nextValidationAt: null },
     );
+    /* provisional-release D8: a released ride that just expired is the
+       one exception the ISP signed up to hear about — after a fresh debt
+       check, and never blocking the sweep. */
+    if (!slot && row.provisionalReleaseAt != null) {
+      await notifyProvisionalExpiry(env, isp, link, now);
+    }
+    return row;
   };
 
   if (!env.CONSTA_BASE_URL || !env.CONSTA_API_KEY) {
@@ -215,12 +228,24 @@ export async function runValidation(
     payment.lastError === "TRANSFER_NOT_FOUND" &&
     payment.readingCheck === null;
 
+  /* provisional-release D4: the refs travel on every call — cross,
+     transfer and receipt doors alike — from day one, toggle state
+     irrespective. History only accumulates forward, and the month it is
+     not collected is evidence lost. The release rule reads none of it. */
+  const refs = env.CUSTOMER_REF_SECRET
+    ? {
+        customerRef: await customerRefFor(env.CUSTOMER_REF_SECRET, link.customerUsuario),
+        paymentRef: payment.id,
+      }
+    : {};
+
   const request: ConstaRequest = crossCheck
     ? {
         /* D12: a short-lived signed URL, never the bucket itself */
         receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
         beneficiary,
         providerOcr: true,
+        ...refs,
       }
     : payment.proofMode === "transfer"
       ? {
@@ -240,12 +265,14 @@ export async function runValidation(
             trackingKey: payment.trackingKey ?? "",
             beneficiary,
           },
+          ...refs,
         }
       : {
           /* D12: what Consta receives is a short-lived signed URL, never
              the bucket itself */
           receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
           beneficiary,
+          ...refs,
         };
 
   /* D8 carve-out (a): a prior attempt may have set the provider's replay
@@ -307,11 +334,19 @@ export async function runValidation(
          its classification — agreement is evidence the page can retire
          the clock on; a dispute asks the human now; blindness changes
          nothing. Written once, with the same retry the schedule keeps. */
-      return retryLater(
-        "TRANSFER_NOT_FOUND",
-        { ...base, ...(crossCheck ? classifyReading(payment, verdict.reading ?? null) : {}) },
-        { lateSlot: true },
+      const classification = crossCheck ? classifyReading(payment, verdict.reading ?? null) : {};
+      /* provisional-release D1: an agreed cross or the human's own typed
+         data is evidence enough to buy the promise while Banxico thinks */
+      const release = await maybeProvisionalRelease(
+        env,
+        db,
+        isp,
+        link,
+        payment,
+        releaseEvidenceFor(payment, "not_found", classification),
+        now,
       );
+      return retryLater("TRANSFER_NOT_FOUND", { ...base, ...classification, ...release }, { lateSlot: true });
     }
     return update({
       ...base,
@@ -322,13 +357,29 @@ export async function runValidation(
   }
 
   if (verdict.status === "pending") {
-    /* Consta's D3: "not found yet" is never "fake". Ride the schedule. */
-    const slot = nextValidationSlot(payment.createdAt, now);
-    return update(
-      slot
-        ? { ...base, nextValidationAt: slot, lastError: null }
-        : { ...base, status: "expired", nextValidationAt: null, lastError: null },
+    /* Consta's D3: "not found yet" is never "fake". Ride the schedule.
+       provisional-release D1: `pending` is the strongest evidence short
+       of `valid` — the provider says the transfer EXISTS in process —
+       so it buys the promise at minute zero. */
+    const release = await maybeProvisionalRelease(
+      env,
+      db,
+      isp,
+      link,
+      payment,
+      releaseEvidenceFor(payment, "pending"),
+      now,
     );
+    const slot = nextValidationSlot(payment.createdAt, now);
+    const row = await update(
+      slot
+        ? { ...base, ...release, nextValidationAt: slot, lastError: null }
+        : { ...base, ...release, status: "expired", nextValidationAt: null, lastError: null },
+    );
+    if (!slot && row.provisionalReleaseAt != null) {
+      await notifyProvisionalExpiry(env, isp, link, now);
+    }
+    return row;
   }
 
   /* valid — necessary, not sufficient (D11): the CEP must match the debt */
@@ -372,6 +423,28 @@ export async function runValidation(
         nextValidationAt: null,
         lastError: "STALE_TRANSFER",
       });
+    }
+  }
+
+  /* provisional-release D7: a retry that reaches `valid` resolves the
+     expired ride it re-claims — the vote of confidence was vindicated,
+     so the ride must stop being `expired` (that is what lifts the D5
+     revocation). `superseded` is the honest word: a later row of the
+     same transfer took its place. */
+  {
+    const rideKey = payment.trackingKey ?? cep?.trackingKey;
+    if (rideKey) {
+      await db
+        .update(directPayments)
+        .set({ status: "superseded", nextValidationAt: null })
+        .where(
+          and(
+            eq(directPayments.paymentLinkId, payment.paymentLinkId),
+            eq(directPayments.trackingKey, rideKey),
+            eq(directPayments.status, "expired"),
+            ne(directPayments.id, payment.id),
+          ),
+        );
     }
   }
 

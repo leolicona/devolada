@@ -2,10 +2,11 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { charges, directPayments, ledgerEntries, paymentLinks } from "../src/db/schema";
+import { charges, directPayments, ledgerEntries, paymentLinks, proofRejections } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
+import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
 import { app, seedIsp, sessionCookieHeader } from "./helpers";
 
@@ -61,6 +62,10 @@ const testEnv = {
   PROOFS: fakeProofs(),
   CONSTA_BASE_URL: CONSTA_ORIGIN,
   CONSTA_API_KEY: "ck_test",
+  /* provisional-release D4: with the secret set, every Consta call in
+     this suite carries the opaque refs — extra fields the older
+     assertions never look at, exactly like production */
+  CUSTOMER_REF_SECRET: "test-ref-secret",
 } as typeof env & Bindings;
 
 beforeAll(() => {
@@ -1576,7 +1581,6 @@ describe("D18: reading a proof so a human can confirm it", () => {
     extractionId: "ex-1",
     source: "reader",
     isReceipt: true,
-    amountCents: 51400,
     trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
     senderBank: "NUBANK",
     amountCents: 51400,
@@ -2407,5 +2411,265 @@ describe("US-D14: the classifier at minute two", () => {
     const data = await statusOf(payment.id);
     expect(data.status).toBe("expired");
     expect(data.readingCheck).toBe("agreed");
+  });
+});
+
+/* provisional-release (US-D15) — the vote of confidence: per-transaction
+   evidence buys a WispHub payment promise while Banxico confirms;
+   history only revokes. */
+function mockPromise() {
+  const captured: { body?: Record<string, unknown> } = {};
+  wh()
+    .intercept({
+      method: "POST",
+      path: "/api/promesa-pago/",
+      body: (raw) => {
+        captured.body = JSON.parse(String(raw));
+        return true;
+      },
+    })
+    .reply(...json({ id_factura: 42, fecha_limite: "2026-01-01 00:00" }));
+  return captured;
+}
+
+describe("US-D15: the provisional release", () => {
+  it("scenario 1: a pending verdict at minute zero buys the promise with accion 1", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    /* one customer+invoices round for the submit, one for the release */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({ status: "pending", cep: undefined });
+    const promise = mockPromise();
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    expect(promise.body!.id_factura).toBe(42);
+    expect(promise.body!.accion).toBe(1);
+    expect(String(promise.body!.fecha_limite)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.status).toBe("validating");
+    expect(row.provisionalReleaseAt).not.toBeNull();
+    expect(row.releaseEvidence).toBe("pending");
+    /* the seed customer is Suspendido: the reconnect face, never protect */
+    expect(row.releaseKind).toBe("reconnect");
+  });
+
+  it("scenario 8: toggle off — byte-identical to today, no WispHub round", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).toBeNull();
+    expect(row.releaseEvidence).toBeNull();
+  });
+
+  it("D1: the manual door's not_found releases on human evidence", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockPromise();
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.status).toBe("validating");
+    expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
+    expect(row.releaseEvidence).toBe("human");
+    expect(row.provisionalReleaseAt).not.toBeNull();
+  });
+
+  it("scenario 9: a burned ride revokes the fast lane — the road stays open", async () => {
+    const { link } = await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    /* the prior released ride that expired and was never resolved */
+    await drizzle(env.DB)
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: link.ispId,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        status: "expired",
+        proofMode: "transfer",
+        trackingKey: "OLDKEY001",
+        provisionalReleaseAt: new Date(Date.now() - 10 * 24 * 3600 * 1000),
+        releaseEvidence: "human",
+      });
+
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    /* no mockPromise: a promise call would leave a pending interceptor */
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const rows = await drizzle(env.DB)
+      .select()
+      .from(directPayments)
+      .where(eq(directPayments.trackingKey, "TRACK001XYZ"));
+    expect(rows[0].status).toBe("validating");
+    expect(rows[0].provisionalReleaseAt).toBeNull();
+  });
+
+  it("D2: a claim under the ISP's threshold buys nothing", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({ status: "pending", cep: undefined });
+
+    /* the manual door's editable amount: a $10 claim against a $499 debt */
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TRANSFER.transfer, amountCents: 1000 },
+    });
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).toBeNull();
+  });
+
+  it("D7/scenario 4: the retry that validates lifts the burned ride", async () => {
+    const { link } = await seedLinkedIsp();
+    /* the released ride that expired — Banxico was just late */
+    const [ride] = await drizzle(env.DB)
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: link.ispId,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        status: "expired",
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        provisionalReleaseAt: new Date(Date.now() - 7 * 3600 * 1000),
+        releaseEvidence: "agreed",
+        releaseKind: "reconnect",
+      })
+      .returning();
+
+    /* D7: the expired page is offered exactly one retry for this clave */
+    const st = await (await app()).request(`/direct-payments/${ride.id}/status`, {}, testEnv);
+    expect((await st.json()).data.retryAvailable).toBe(true);
+
+    /* the payer claims it next morning; the CEP has published by now */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta();
+    mockReconnection("Activo");
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    expect(data.status).toBe("confirmed");
+
+    /* the vote of confidence was vindicated: the ride is no longer
+       `expired`, so the D5 revocation lifts with it */
+    const [old] = await drizzle(env.DB)
+      .select()
+      .from(directPayments)
+      .where(eq(directPayments.id, ride.id));
+    expect(old.status).toBe("superseded");
+  });
+
+  it("D6/scenario 7: another customer's clave is recorded at the edge and revokes", async () => {
+    const { link, isp } = await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    /* a second customer on the same ISP whose payment owns the clave */
+    const [otherLink] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({
+        ispId: isp.id,
+        token: "tok9999zzzzzzzz9",
+        wisphubCustomerId: "9",
+        customerUsuario: "arellano@wifiplus",
+      })
+      .returning();
+    await drizzle(env.DB)
+      .insert(directPayments)
+      .values({
+        paymentLinkId: otherLink.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        status: "validating",
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+      });
+
+    /* the double-spend attempt dies at the index, and now leaves a row */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const rejected = await payTransfer();
+    expect(rejected.status).toBe(409);
+
+    const marks = await drizzle(env.DB).select().from(proofRejections);
+    expect(marks).toHaveLength(1);
+    expect(marks[0].paymentLinkId).toBe(link.id);
+    expect(marks[0].trackingKey).toBe("TRACK001XYZ");
+
+    /* the next attempt with a clean clave rides — but the fast lane is shut */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined });
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { ...TRANSFER.transfer, trackingKey: "CLEANKEY99" },
+    });
+    expect(res.status).toBe(201);
+
+    const rows = await drizzle(env.DB)
+      .select()
+      .from(directPayments)
+      .where(eq(directPayments.trackingKey, "CLEANKEY99"));
+    expect(rows[0].status).toBe("validating");
+    expect(rows[0].provisionalReleaseAt).toBeNull();
+  });
+});
+
+/* provisional-release D4 (US-D15) — the collection half: the opaque refs
+   ride every Consta call from day one, toggle state irrespective, and
+   the recognisable usuario never travels naked. */
+describe("US-D15: the history refs travel always (D4)", () => {
+  it("customerRef is the HMAC of the usuario, paymentRef is the payment id", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(captured.body!.paymentRef).toBe(row.id);
+
+    const ref = String(captured.body!.customerRef);
+    expect(ref).toMatch(/^[0-9a-f]{64}$/);
+    expect(ref).not.toContain("greyes");
+    expect(ref).toBe(await customerRefFor("test-ref-secret", "greyes@wifiplus"));
+  });
+
+  it("without the secret nothing travels and nothing blocks", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockConsta({ status: "pending", cep: undefined });
+
+    const res = await (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/pay",
+      post(TRANSFER),
+      { ...testEnv, CUSTOMER_REF_SECRET: undefined },
+    );
+    expect(res.status).toBe(201);
+    expect(captured.body!.customerRef).toBeUndefined();
+    expect(captured.body!.paymentRef).toBeUndefined();
   });
 });

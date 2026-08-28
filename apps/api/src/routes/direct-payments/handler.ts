@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { charges, directPayments, isps, paymentLinks } from "../../db/schema";
+import { charges, directPayments, isps, paymentLinks, proofRejections } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
@@ -360,6 +360,29 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           )
       : [undefined];
     if (!own) {
+      /* provisional-release D6: the rejection gets a memory. Which
+         payment owns the clave decides everything downstream — another
+         customer's is the shape of double-spending (revokes the fast
+         lane 12 months), the payer's own terminal row is confusion and
+         never counts. Recorded before answering; the 409 is unchanged. */
+      if (collidingKey) {
+        const [owner] = await db
+          .select({ id: directPayments.id })
+          .from(directPayments)
+          .where(
+            and(
+              eq(directPayments.ispId, link.ispId),
+              eq(directPayments.trackingKey, collidingKey),
+              sql`${directPayments.status} NOT IN ('invalid', 'expired', 'superseded')`,
+            ),
+          );
+        await db.insert(proofRejections).values({
+          ispId: link.ispId,
+          paymentLinkId: link.id,
+          ownerPaymentId: owner?.id ?? null,
+          trackingKey: collidingKey,
+        });
+      }
       await restorePrior();
       return c.json({ success: false, error: { code: "TRANSFER_ALREADY_USED" } }, 409);
     }
@@ -564,10 +587,30 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
   if (payment.chargeId) {
     [charge] = await db.select().from(charges).where(eq(charges.id, payment.chargeId));
   }
+  /* provisional-release D7: the expired page offers exactly one manual
+     retry per clave — self-selection: the payer who really paid claims
+     it (six more hours published the late CEP), the fabricator has no
+     reason to. Spent = another expired row already re-claimed this key. */
+  let retryAvailable = false;
+  if (payment.status === "expired" && payment.trackingKey) {
+    const spent = await db
+      .select({ id: directPayments.id })
+      .from(directPayments)
+      .where(
+        and(
+          eq(directPayments.paymentLinkId, payment.paymentLinkId),
+          eq(directPayments.trackingKey, payment.trackingKey),
+          eq(directPayments.status, "expired"),
+          sql`${directPayments.id} != ${payment.id}`,
+        ),
+      );
+    retryAvailable = spent.length === 0;
+  }
   return c.json({
     success: true,
     data: {
       status: payment.status,
+      ...(payment.status === "expired" ? { retryAvailable } : {}),
       ...(charge
         ? { reconnectionStatus: charge.reconnectionStatus, folio: charge.folio }
         : {}),
@@ -614,6 +657,18 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
         ? { disputedFields: JSON.parse(payment.disputedFields) }
         : {}),
       receiptStatus: payment.receiptStatus,
+      /* provisional-release D9: the page never speaks in conditionals,
+         so it must know whether the service was actually given back —
+         and which evidence bought it, because evidence and consequence
+         are one sentence. Absent = never released. */
+      ...(payment.provisionalReleaseAt
+        ? {
+            provisionalRelease: {
+              evidence: payment.releaseEvidence,
+              kind: payment.releaseKind,
+            },
+          }
+        : {}),
     },
   });
 }

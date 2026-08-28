@@ -52,3 +52,39 @@ export async function sendAuthCode(
   });
   if (!res.ok) throw new Error(`resend failed: ${res.status}`);
 }
+
+/* provisional-release D8 (US-D15): the one exception the ISP signed up
+   to know about — a provisionally released payment that expired with the
+   debt still pending. The promise lapses on its own; the ISP's bank app
+   is the last arbiter. Copy is es-MX product copy, like the codes. */
+export async function sendProvisionalExpiry(
+  env: Bindings,
+  to: string,
+  customer: { name: string; usuario: string },
+): Promise<void> {
+  const subject = `Reconexión provisional sin confirmar — ${customer.name}`;
+  const html =
+    `<p>El pago de <strong>${customer.name}</strong> (${customer.usuario}) no fue ` +
+    `confirmado por Banxico en 6 horas y su servicio estaba liberado provisionalmente.</p>` +
+    `<p>Su deuda sigue pendiente y la promesa de pago vence sola, así que el corte ` +
+    `vuelve a aplicar según WispHub. Si el cliente te muestra su comprobante, ` +
+    `verifica la transferencia en tu app del banco — puedes registrar su pago a mano.</p>`;
+  if (!env.RESEND_API_KEY) {
+    console.log(`[provisional-expiry] ${to} → ${customer.usuario}`);
+    return;
+  }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM ?? "Devolada <onboarding@resend.dev>",
+      to,
+      subject,
+      html,
+    }),
+  });
+  if (!res.ok) throw new Error(`resend failed: ${res.status}`);
+}

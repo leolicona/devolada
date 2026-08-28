@@ -261,12 +261,19 @@ knowing what the sample does and does not prove.
 - [x] Both doors accept and store the two refs; Zod caps at 128 opaque
       chars. *(2026-08-27, tested under US-V15 — failed rows keep their
       refs too)*
-- [ ] Chain derivation (paymentRef, tracking-key fallback, four states, 24 h
+- [x] Chain derivation (paymentRef, tracking-key fallback, four states, 24 h
       abandonment, self-exclusion) implemented as queries, no state tables.
-- [ ] `trust` block on `pending`/`not_found` with decay, raw counts,
+      *(2026-08-27, `src/trust/history.ts` — one read serves payer and
+      baseline; chain keys scoped by customerRef so the fallback never
+      fuses two payers)*
+- [x] `trust` block on `pending`/`not_found` with decay, raw counts,
       incidents, median and `tenantBaseline`; absent everywhere else.
-- [ ] Tests cite US-V15: the seven scenarios, decay arithmetic, and the
-      self-exclusion of the in-flight chain.
+      *(2026-08-27; `eventualValidRate` is null — not 0 — over an empty
+      sample: a rate over nothing is no measurement)*
+- [x] Tests cite US-V15: the regular with decay arithmetic, the stranger
+      with the traveling baseline, self-exclusion of the in-flight chain,
+      incidents never suppressed, and absence on valid / without a ref.
+      *(2026-08-27, 56/56)*
 - [ ] Integration guide page: what Consta stores and does not, the HMAC
       guidance, the rule-of-three table, the shrinkage formula.
 

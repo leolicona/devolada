@@ -11,6 +11,7 @@ import { BANKS } from "../../provider/banks";
 import { extractions } from "../../db/schema";
 import { extractProof, type ExtractionResult } from "../../extraction";
 import { extractionFailure, readingPayload, recordExtraction } from "../extract";
+import { trustBlock } from "../../trust/history";
 import { validateRequestSchema } from "./schema";
 
 export const validateRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -258,6 +259,30 @@ validateRoute.post(
         .where(eq(extractions.id, extractionId));
     }
 
+    /* trust-layer D5: the payer's measured history rides the verdicts
+       where the caller is deciding whether to wait — pending and the
+       faceless not_found — and only when the caller named the payer.
+       Never on valid (redundant) or contradicted (a real DEVUELTO is
+       not bridged by history). The row just written belongs to the
+       chain in flight, which D3 excludes from its own evidence. */
+    const wantsTrust =
+      body.customerRef &&
+      (verdict.status === "pending" ||
+        (verdict.status === "invalid" && verdict.reason === "not_found"));
+    const trust = wantsTrust
+      ? await trustBlock(
+          db,
+          apiKeyId,
+          body.customerRef!,
+          {
+            paymentRef: body.paymentRef ?? null,
+            trackingKey:
+              (input.mode === "transfer" ? input.trackingKey : verdict.cep?.trackingKey) ?? null,
+          },
+          new Date(),
+        )
+      : null;
+
     return c.json({
       success: true,
       data: {
@@ -284,6 +309,7 @@ validateRoute.post(
            caller comparing readings needs it. */
         ...(verdict.reading ? { reading: verdict.reading } : {}),
         ...(verdict.downloads ? { downloads: verdict.downloads } : {}),
+        ...(trust ? { trust } : {}),
       },
     });
   },

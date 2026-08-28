@@ -19,6 +19,7 @@ import {
   maybeProvisionalRelease,
   notifyProvisionalExpiry,
   releaseEvidenceFor,
+  trustSnapshotFor,
 } from "./provisional";
 
 /* One validation attempt of a direct payment (direct-payment spec).
@@ -346,7 +347,13 @@ export async function runValidation(
         releaseEvidenceFor(payment, "not_found", classification),
         now,
       );
-      return retryLater("TRANSFER_NOT_FOUND", { ...base, ...classification, ...release }, { lateSlot: true });
+      /* D12: the graduation shadow rides the same write */
+      const shadow = trustSnapshotFor(payment, verdict.trust);
+      return retryLater(
+        "TRANSFER_NOT_FOUND",
+        { ...base, ...classification, ...release, ...shadow },
+        { lateSlot: true },
+      );
     }
     return update({
       ...base,
@@ -370,11 +377,13 @@ export async function runValidation(
       releaseEvidenceFor(payment, "pending"),
       now,
     );
+    /* D12: the graduation shadow rides the same write */
+    const shadow = trustSnapshotFor(payment, verdict.trust);
     const slot = nextValidationSlot(payment.createdAt, now);
     const row = await update(
       slot
-        ? { ...base, ...release, nextValidationAt: slot, lastError: null }
-        : { ...base, ...release, status: "expired", nextValidationAt: null, lastError: null },
+        ? { ...base, ...release, ...shadow, nextValidationAt: slot, lastError: null }
+        : { ...base, ...release, ...shadow, status: "expired", nextValidationAt: null, lastError: null },
     );
     if (!slot && row.provisionalReleaseAt != null) {
       await notifyProvisionalExpiry(env, isp, link, now);

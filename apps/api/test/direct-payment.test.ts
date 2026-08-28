@@ -2635,6 +2635,73 @@ describe("US-D15: the provisional release", () => {
   });
 });
 
+/* provisional-release D12 (US-D15) — the graduation shadow: Consta's
+   trust block is stored next to the decision and its outcome, the rule
+   reads none of it while K is null, and the labeled dataset grows with
+   every evaluation — released or not. */
+describe("US-D15 D12: the graduation shadow", () => {
+  const TRUST = {
+    customerRef: "a".repeat(64),
+    sample: { chains: 14, effectiveN: 11.2, halfLifeDays: 90 },
+    eventualValidRate: 1,
+    raw: { resolvedValid: 14, abandoned: 0, contradicted: 0, alreadyUsedAttempts: 0 },
+    lastIncidentAt: null,
+    medianMinutesToValid: 4,
+    tenantBaseline: { eventualValidRate: 0.96, chains: 410, effectiveN: 236.5 },
+  };
+
+  it("the snapshot lands with the release row, as received", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({ status: "pending", cep: undefined, trust: TRUST });
+    mockPromise();
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).not.toBeNull();
+    expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST);
+  });
+
+  it("a terrible history changes nothing while K is null — the gate is inert", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    /* the worst record the block can carry: the shadow must note it and
+       the vote of confidence must ignore it */
+    const terrible = {
+      ...TRUST,
+      eventualValidRate: 0,
+      raw: { resolvedValid: 0, abandoned: 6, contradicted: 0, alreadyUsedAttempts: 0 },
+    };
+    mockConsta({ status: "pending", cep: undefined, trust: terrible });
+    mockPromise();
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).not.toBeNull();
+    expect(JSON.parse(row.trustSnapshot!).eventualValidRate).toBe(0);
+  });
+
+  it("the notebook grows without a release too — toggle off still snapshots", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined, trust: TRUST });
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).toBeNull();
+    expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST);
+  });
+});
+
 /* provisional-release D4 (US-D15) — the collection half: the opaque refs
    ride every Consta call from day one, toggle state irrespective, and
    the recognisable usuario never travels naked. */

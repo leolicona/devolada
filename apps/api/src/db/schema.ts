@@ -365,6 +365,13 @@ export const directPayments = sqliteTable(
        internet ya volvió" must never be said to someone whose internet
        never left. */
     releaseKind: text("release_kind", { enum: ["reconnect", "protect"] }),
+    /* provisional-release D12 — the graduation shadow: Consta's trust
+       block as received at the release evaluation, JSON, frozen once a
+       release happens. History at the moment of decision cannot be
+       rebuilt later; joined with the outcome, each release becomes the
+       labeled row that will one day produce K. The rule reads none of
+       it while K is null. */
+    trustSnapshot: text("trust_snapshot"),
     createdAt: createdAt(),
   },
   (t) => [

@@ -88,6 +88,21 @@ export type ConstaVerdict = {
     senderBank: string | null;
     referenceNumber: string | null;
   } | null;
+  /* trust-layer US-V15: the payer's measured history, on pending and
+     not_found verdicts when refs traveled. A measurement, never a
+     verdict — v1 stores it as the graduation shadow (provisional-release
+     D12) and decides nothing with it. Kept loosely typed on purpose:
+     the snapshot is stored as received, and the day K exists the rule
+     will read the fields it needs. */
+  trust?: {
+    customerRef: string;
+    sample: { chains: number; effectiveN: number; halfLifeDays: number };
+    eventualValidRate: number | null;
+    raw: Record<string, number>;
+    lastIncidentAt: string | null;
+    medianMinutesToValid: number | null;
+    tenantBaseline: { eventualValidRate: number | null; chains: number; effectiveN: number };
+  };
 };
 
 /* proof-extraction D6: the reading, before a credit is spent. This is

@@ -379,16 +379,18 @@ silence.
 
 ## Definition of Done — D12 (the shadow)
 
-- [ ] Consta computes and attaches the `trust` block (US-V15 D3–D8: the
+- [x] Consta computes and attaches the `trust` block (US-V15 D3–D8: the
       chains, the decay, `effectiveN`, incidents, the median and
       `tenantBaseline`) on `pending`/`not_found` verdicts with a
-      `customerRef`.
-- [ ] `trustSnapshot` column on `direct_payments`, written at every
-      release evaluation with the block as received (null when absent);
-      the release decision provably unchanged.
-- [ ] Tests cite US-D15 D12: the snapshot lands with the release row,
-      the decision is byte-identical with and without a block, and the
-      graduation gate stays inert while K is null.
+      `customerRef`. *(2026-08-27, `apps/consta/src/trust/history.ts`)*
+- [x] `trustSnapshot` column on `direct_payments`, written at every
+      release evaluation with the block as received (frozen once a
+      release happened — that moment's history is the labeled row); the
+      release decision provably unchanged. *(2026-08-27, migration 0016)*
+- [x] Tests cite US-D15 D12: the snapshot lands with the release row, a
+      terrible history changes nothing while K is null (the gate is
+      inert), and the notebook grows on unreleased rows too.
+      *(2026-08-27, 232/232)*
 
 ## Open items
 

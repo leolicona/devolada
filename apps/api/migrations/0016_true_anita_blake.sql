@@ -1,0 +1,1 @@
+ALTER TABLE `direct_payments` ADD `trust_snapshot` text;

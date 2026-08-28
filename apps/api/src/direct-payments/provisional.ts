@@ -29,6 +29,24 @@ const SCHEDULE_MS = 6 * 3600 * 1000;
 
 export type ReleaseEvidence = "pending" | "agreed" | "human";
 
+/* D12 — the graduation threshold. Null until the shadow table produces
+   it: the gate in maybeProvisionalRelease stays inert, and K lands here
+   with its measured table written into the spec. Never invent it. */
+export const GRADUATION_K: number | null = null;
+
+/* D12 — the graduation shadow. The block as received rides the same row
+   update the verdict was going to write; frozen once a release happened
+   (that moment's history is the labeled row — later attempts must not
+   repaint it). Absent block → no write, so a prior snapshot survives. */
+export function trustSnapshotFor(
+  payment: DirectPayment,
+  trust: unknown,
+): Partial<typeof directPayments.$inferInsert> {
+  if (payment.provisionalReleaseAt != null) return {};
+  if (trust === undefined) return {};
+  return { trustSnapshot: JSON.stringify(trust ?? null) };
+}
+
 /* D1 — release fires on the first evidence, never on the upload. The
    kind names who vouched: the provider (`pending` = the transfer exists
    in process), two independent machines (`agreed`), or the payer's own
@@ -133,6 +151,14 @@ export async function maybeProvisionalRelease(
   if (!isp.provisionalReleaseEnabled) return {};
   if (payment.provisionalReleaseAt) return {};
   if (!isp.wisphubApiKey) return {};
+
+  /* D12: the graduation gate. When K exists, a payer whose history is
+     rich enough (effectiveN >= K) is judged by their own record here
+     instead of the open rule — the cutover is an assignment, not a
+     project. Inert until the shadow table produces K. */
+  if (GRADUATION_K != null) {
+    /* unreachable in v1 by design */
+  }
 
   try {
     if (await isRevoked(db, payment, now)) return {};

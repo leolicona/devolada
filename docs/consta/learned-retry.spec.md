@@ -324,3 +324,39 @@ no cron after all) builds only after the report's verdict on gates 1–2.
   anchor hint, never a verdict input. Gate: build only if the
   conditional data shows late-but-missing uploads are frequent enough
   that the sharper anchor saves real minutes.
+- **A learned tail: deep steps past p90 (grilled with the owner
+  2026-08-28, committed as gated).** D3 goes silent past p90 and the
+  caller's static tail (+45/+2 h/+6 h/+12 h) takes over — a tail that
+  was never measured (Banxico's published ~30-minute rule plus product
+  judgment, both since contradicted by our own data: T+62, T+49, and a
+  CEP at 26.5 h that the schedule expired and only a resubmission
+  rescued). The conditional cut shows the same waste structure the
+  middle had: NUBANK misses resolve at ~6 h, so their +45 and +2 h
+  checks are near-guaranteed losses. The committed shape:
+  - **Mechanism**: extend D3's stepping with deep steps from the same
+    cell (past p90 → suggest the next observed tail percentile). Same
+    `retryAfter` field; the consumer contract (D6) does not change one
+    line — it already obeys the field when present and walks its static
+    ladder when absent.
+  - **Governance**: a cell's deep steps open only when it holds
+    **≥ 30 transfers that went past p90** — the tail's own n bar, the
+    same cold-start philosophy that governs the middle. Data turns it
+    on, data turns it off; no config, no calendar coupling. At an
+    ISP-from-zero launch every option is identical (silence); this one
+    self-activates as volume arrives, receiver cells shared across
+    tenants by construction.
+  - **What never moves**: the expiry horizon (≤ 12 h) is product law,
+    not a learnable; the **final pre-expiry check is sacred** — a
+    payment is never expired on stale information. Suggestions place
+    checks *inside* the horizon, nothing else.
+  - **Prerequisite (goes in the TD-013 consumer PR, correct on its
+    own)**: Devolada's expiry today is coupled to slot exhaustion
+    (`nextValidationSlot` → null → `expired`), so a dynamic tail that
+    skips futile checks would expire *early*. The consumer PR anchors
+    expiry to the time horizon with a guaranteed final check,
+    decoupled from how many attempts ran.
+  - **US-D15 is a bonus, not a gate**: provisional release makes tail
+    waits invisible to the customer, collapsing the residual risk of a
+    misplaced deep suggestion to a credit — but this item does not wait
+    for it. The n bar answers "is the suggestion trustworthy"; US-D15
+    answers "how much does a rare miss hurt"; they compose.

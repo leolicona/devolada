@@ -300,8 +300,12 @@ no cron after all) builds only after the report's verdict on gates 1–2.
       first-attempt misses count, only honest asks anchor; two new
       scenarios in the suite (eight total) and the report shows raw vs
       conditional side by side
-- [ ] Phase 2 (own PR, `apps/api`): the sweep consumes `retryAfter` per
+- [x] Phase 2 (own PR, `apps/api`): the sweep consumes `retryAfter` per
       D6; TD-013 closed; `direct-payment.spec.md` D7 updated as consumer
+      *(built 2026-08-28, `feat/td013-consumer`: suggestion rules the
+      middle, clamped to skeleton and horizon — expiry only ever follows
+      a fresh check, the tail item's prerequisite; eight scenarios cite
+      US-D04)*
 
 ## Open items
 

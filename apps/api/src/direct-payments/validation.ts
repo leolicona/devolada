@@ -12,7 +12,7 @@ import { attemptReconnection } from "../wisphub/reconnection";
 import { invalidatePendingInvoices } from "../wisphub/cache";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/charges/handler";
-import { nextValidationSlot } from "./schedule";
+import { nextValidationSlot, suggestedSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
 import { demoVerdict, isDemoLink } from "./demo";
 import {
@@ -172,7 +172,7 @@ export async function runValidation(
   const retryLater = async (
     error: string,
     base: Partial<typeof directPayments.$inferInsert> = {},
-    opts: { lateSlot?: boolean } = {},
+    opts: { lateSlot?: boolean; suggestedAt?: Date | null } = {},
   ) => {
     const slot = nextValidationSlot(payment.createdAt, now, opts);
     const row = await update(
@@ -346,7 +346,14 @@ export async function runValidation(
         releaseEvidenceFor(payment, "not_found", classification),
         now,
       );
-      return retryLater("TRANSFER_NOT_FOUND", { ...base, ...classification, ...release }, { lateSlot: true });
+      /* learned-retry D6: the verdict may carry the learned moment when
+         asking again stops being waste — it governs the middle of the
+         schedule (schedule.ts clamps it to skeleton and horizon). */
+      return retryLater(
+        "TRANSFER_NOT_FOUND",
+        { ...base, ...classification, ...release },
+        { lateSlot: true, suggestedAt: suggestedSlot(verdict.retryAfter) },
+      );
     }
     return update({
       ...base,
@@ -370,7 +377,11 @@ export async function runValidation(
       releaseEvidenceFor(payment, "pending"),
       now,
     );
-    const slot = nextValidationSlot(payment.createdAt, now);
+    const slot = nextValidationSlot(payment.createdAt, now, {
+      /* learned-retry D6: same consumption as not_found — no late slot,
+         per validation-status-ux D4 */
+      suggestedAt: suggestedSlot(verdict.retryAfter),
+    });
     const row = await update(
       slot
         ? { ...base, ...release, nextValidationAt: slot, lastError: null }

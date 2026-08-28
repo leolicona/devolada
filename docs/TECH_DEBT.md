@@ -16,10 +16,11 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Payable when: support requests to re-send links become routine, **or** the WABA work opens this surface anyway (SPEC.md, owner decision 2026-08-17) — whichever comes first. Build it as specified: credentials against `payment_links`, its own `pago.*` rpID, discoverable credentials, and the in-app-browser guard verified on a real Android phone.
 
 ## TD-013 — The re-validation schedule is a global constant, not learned per bank
-- Status: open · Origin: direct-payment.spec.md (D7), owner decision 2026-08-17
+- Status: **paid** (2026-08-28, `feat/td013-consumer`) · Origin: direct-payment.spec.md (D7), owner decision 2026-08-17
 - D7's schedule (+2, +8, +20, +45 min, +2 h, +6 h) comes from published evidence (Banxico's ~30-minute CEP rule; apiCEP's "seconds normally, hours sometimes"), not from our own traffic, and it is the same for every receiving bank. The `direct_payments` log already records everything needed to do better: `created_at`, `confirmed_at`, `validation_attempts` and the receiving bank.
 - Why it was reasonable: with zero real payments there is no distribution to learn from; shipping the evidence-based constant first is what produces the data.
 - Paid by: once enough confirmed direct payments accumulate, derive the per-bank latency distribution from the log and tune the schedule (possibly per receiving bank) — plus revisit the early cadence when apiCEP answers whether pending re-checks consume credits.
+- Paid in three acts: US-V16 measured the distribution from the log (phase 0: bimodal shape, dead middle, re-checks bill), Consta learned to suggest `retryAfter` per bank cell with honest population rules (phase 1), and the sweep now obeys the suggestion in the middle of D7's schedule — early skeleton and horizon fixed (D7 amendment 2026-08-28, tests cite US-D04). The per-bank tuning this debt asked for happens in Consta's ladder, where every integrator's traffic sharpens it.
 - Payment in progress (2026-08-27): the measurement moved to where the cross-integrator data lives — Consta learns the distribution and suggests `retryAfter` on `not_found`/`pending` (US-V16, `docs/consta/learned-retry.spec.md`). This debt closes when Devolada's sweep consumes the suggestion (learned-retry D6, own PR): early skeleton and tail stay fixed, `retryAfter` governs the middle.
 
 ## TD-014 — Captured customer phones have no ISP-facing view or delete

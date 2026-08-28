@@ -67,6 +67,11 @@ export type ConstaVerdict = {
      missing value is read as the ambiguous one — an older Consta must
      not be able to turn an unverifiable payment back into a refusal. */
   reason?: "contradicted" | "not_found";
+  /* learned-retry (consta US-V16): when Banxico's answer is "not yet",
+     the moment when asking again stops being spending in vain — learned
+     from measured traffic per bank cell, omitted in cold start. A
+     suggestion, never a promise: D7's schedule stays floor and tail. */
+  retryAfter?: string;
   alreadyValidated: boolean;
   cep?: {
     trackingKey: string;

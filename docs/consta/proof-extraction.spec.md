@@ -1,8 +1,8 @@
 ---
 status: in development
-stories: [US-V09, US-V10, US-V11]
+stories: [US-V09, US-V10, US-V11, US-V17]
 domain: consta
-updated: 2026-08-26
+updated: 2026-08-30
 debt: []
 ---
 
@@ -268,11 +268,17 @@ regression test asserts both halves, including the one we cannot catch.
       receiptStatus: "Aceptada" | "En proceso" | null,
       gate: { trackingKey: "ok" | "malformed" | "missing",
               senderBank:  "ok" | "unknown" | "missing",
-              amount:      "ok" | "malformed" | "missing" } } }
+              amount:      "ok" | "malformed" | "missing",
+              shape:       "ok" | "mismatch" | "unknown" },   // D15: informs, never refuses
+      suggestedBank?: "AZTECA" } }                            // D16: only with no usable bank, only when exactly one shape fits
 ```
 
 `gate` is the field a caller acts on: anything but `ok` means asking the
-customer, not spending a credit.
+customer, not spending a credit. `shape` is the one exception: a `mismatch`
+is a reason to re-read or ask, not a refusal — the caller may still spend.
+`/validate` carries `shape` at the top level on both doors (the reader's
+verdict on the image door, the caller's clave on the transfer door); the
+provider-OCR route, which reads nothing here, carries none.
 
 **`amount` is in the gate because apiCEP's direct mode requires
 `sender.amount`** — a reading without one cannot buy a lookup at all. The
@@ -334,6 +340,18 @@ configuration if it ever misbehaves in production.
 13. Every `validations` row records the sender bank on both doors, so
     `valid` rows accumulate the Banxico-confirmed (bank, clave) pairs D13
     derives shape from (US-V10, D13)
+14. Rules recompute from the log: a bank at 9 distinct confirmed claves
+    derives nothing; its 10th graduates it with no deploy and no write
+    (US-V17, D14)
+15. A clave that fails its claimed bank's graduated shape returns
+    `shape: "mismatch"` on `/extract` — and `/validate` still proceeds and
+    still spends; nothing is refused. The fixtures are Azteca's live pair:
+    the dropped trailing `I` and the `I` read as `1` (US-V17, D15)
+16. A bank with no graduated rule returns `shape: "unknown"`: the first
+    customer of a new bank meets today's behavior exactly (US-V17, D14, D15)
+17. A reading with no bank whose clave fits exactly one graduated rule
+    carries `suggestedBank`; one that fits two rules carries none, and the
+    gate is unchanged in both cases (US-V17, D16)
 
 ## Definition of Done
 
@@ -364,11 +382,17 @@ configuration if it ever misbehaves in production.
       what keeps the other payers from being asked at all
 - [x] Migration `0004`: `validations.sender_bank`, written on both doors
       (D13); scenario 13 automated
-- [ ] **The Nu rule acts as a soft signal somewhere.** D13 names the rule
-      and its thresholds but wires nothing: the natural first consumer is
-      the second-reader flow — a shape mismatch is a cheap reason to
-      re-read or ask before buying a `not_found`. Separate PR; the contract
-      shape (a field on `gate`? on `reading`?) is decided there
+- [x] **The Nu rule acts as a soft signal somewhere.** *Decided 2026-08-30
+      (D14–D16, US-V17)*: it acts as `shape` on the gate, together with
+      BBVA's and Azteca's rules — built the same day
+- [x] Scenarios 14–17 automated in `apps/consta/test/validate.test.ts`,
+      with the derivation seeded from fixture rows, not mocks — the query
+      is the feature (D14). Migration `0007`: `extractions.shape` and
+      `extractions.suggested_bank`, so the false-alarm rate is a query
+- [ ] **Devolada consumes both signals** (separate PR): `shape: "mismatch"`
+      re-reads or asks before `/validate`; `suggestedBank` preselects the
+      bank picker with a one-tap confirm — the Azteca population stops
+      scrolling 97 names
 - [ ] **The DNS gap of D7 is closed or accepted in writing.** The address
       checks refuse a URL that *says* it is internal; a public hostname whose
       DNS answer is private is not caught, because a Worker never sees the
@@ -471,12 +495,94 @@ shape still cannot check content.
   be reconstructed by prefix. **Deriving rules dynamically from D1 is
   deferred with a payment condition: build it when a second bank reaches ≥10
   confirmed claves.** One known rule does not justify machinery that
-  re-measures it. **Rejected**: a hard per-bank gate — BUG-006's fixed-28
+  re-measures it. *(Paid 2026-08-30: BBVA reached 11 and Azteca 10 the same
+  day — the machinery is D14–D16 below.)* **Rejected**: a hard per-bank gate — BUG-006's fixed-28
   multiplied by 97 banks that change shape silently, and on the receipt door
   the bank comes from the same reading as the clave, so a misread bank would
   apply the wrong rule to a correct clave; public format tables — none
   exist, and "measured once, silent when it runs out" is the trust model
   this spec already refuses.
+
+## Decisions — the shape rules act (US-V17, 2026-08-30)
+
+D13's payment condition fired on 2026-08-30: BBVA reached 11 distinct
+Banxico-confirmed claves and Azteca 10, the same day, both with zero
+counterexamples. Three banks now hold a graduated shape:
+
+| bank | confirmed | shape |
+|---|---|---|
+| NUBANK | 26 | 28 chars, prefix `NU3A` |
+| BBVA MEXICO | 11 | 24 chars: `MBAN0100` + date `YYMMDD` + 10-digit sequence (`YYMMDD` settled by a clave from a second calendar day) |
+| AZTECA | 10 | 19 chars: **18 digits + a literal trailing `I`** |
+
+Seeding Azteca measured two things the spike could not:
+
+- **The misreads the shape catches happened live.** The `invalid` rows of
+  2026-08-30 hold the clave sent without its trailing `I` (18 chars, twice)
+  and with the `I` read as a `1` — the classic I↔1 confusion. Every one
+  passed D4's range, bought a credit, and was corrected by hand minutes
+  later. `18 digits + I` flags all of them for free.
+- **Azteca receipts do not print the bank's name.** The reader returns
+  `gate.senderBank: "missing"` on every Azteca receipt, so every Azteca
+  payer is asked to pick from 97 names — not an edge case, that bank's
+  entire population. This is what D16 exists for, and it was found by
+  paying, not by planning.
+
+**Day one is smaller than the table.** D14 derives only from rows that
+carry `sender_bank`, and the log is append-only — nothing is backfilled by
+prefix. Rows written before migration `0004` deployed (2026-08-26) count for
+nothing. On 2026-08-30 that meant **Azteca graduates at once (10 with the
+column), BBVA sits at 8 and Nu at 2**; the other two graduate on their own as
+real transfers arrive, with no deploy. The table above is what Banxico
+confirmed; this paragraph is what the machine can prove.
+
+- **D14 — A rule is recomputed from `valid` rows, never stored, and the
+  thresholds live in the query.** The derivation is one pass over the
+  append-only log: for each bank with **≥10 distinct confirmed claves**
+  that all agree on a length, build a per-position template — a letter
+  every sample shares is literal, a position that is always a digit is
+  `\d`, always a letter `[A-Z]`, anything else any alphanumeric. Samples of
+  two lengths derive no rule (a second channel, a silent change — both
+  real). **Digits are never literal**, found at implementation: BBVA and
+  Azteca both embed the date as `YYMMDD`, so "longest common prefix" over
+  ten same-day claves would freeze today's date into the rule and
+  false-alarm the first payer of tomorrow. Letters carry the bank's own
+  marks — Nu's `NU`, BBVA's `MBAN`, Azteca's trailing `I` — and those are
+  what the rule keeps. A counterexample never needs detecting: the next
+  recomputation includes it, the shared property dissolves, and the rule
+  loosens or dies by construction — D13's "one confirmed counterexample
+  retires it" becomes arithmetic instead of a process. No rules table, no
+  cron, no generated file: a stored rule is a cached opinion that can drift
+  from the log that justifies it. The query is one indexed pass over
+  hundreds of rows, cached in-memory per isolate with a short TTL.
+  **Rejected**: a `bank_rules` table (drift, plus someone must own
+  invalidation); deriving at deploy time (a bank would graduate only when
+  somebody happens to deploy).
+- **D15 — The shape verdict is a field, never a refusal.** The gate gains
+  `shape: "ok" | "mismatch" | "unknown"` — `unknown` when the claimed bank
+  has no graduated rule (a bank's first customer meets silence, not
+  suspicion: the cold start behaves exactly like today), `mismatch` when a
+  rule exists and the clave does not fit it. A mismatch changes no routing
+  and blocks no call: on `/extract` it is the caller's cheap reason to
+  re-read or ask before spending; `/validate` proceeds and spends. The
+  signal informs, the caller decides — D6's two-step is where the saving
+  happens, and D4 stands untouched as the only thing that refuses.
+  **Rejected**: refusing on mismatch (BUG-006 times 97 banks that change
+  shape silently); auto-triggering a second read inside `/validate` (spends
+  the caller's latency on a decision that is theirs).
+- **D16 — A reading with no bank whose clave fits exactly one graduated
+  rule carries a suggestion — to confirm, never to send.** When
+  `gate.senderBank` is `missing` or `unknown` and the clave matches
+  **exactly one** graduated bank's shape, the response gains
+  `suggestedBank`; the gate itself is unchanged. Two rules matching → no
+  suggestion. The consumer's move is a preselected picker and one tap —
+  *"¿Tu banco es Banco Azteca?"* — so D4's sentence still governs: it stays
+  a question for the payer, because shape is not a fingerprint. Ninety-seven
+  banks can collide (STP also issues long numeric claves), and a wrong
+  suggestion confirmed by a hurried payer is the silent false rejection this
+  spec exists to kill. **Rejected**: auto-filling the bank from shape (a
+  guess wearing a suggestion's clothes); suggesting on the strongest partial
+  match (confidence theater with no measured base rate).
 
 ## Open questions
 
@@ -503,6 +609,12 @@ shape still cannot check content.
   image against a list of candidate accounts and a direct-mode call takes
   exactly one beneficiary, so the field cannot cross to the reader route. It
   stays in the contract; it simply selects the other door.
+- **A free shape check for a hand-typed clave.** The transfer door is where
+  Azteca's credits were actually lost (every 2026-08-30 miss was typed, not
+  read), and today its `shape` arrives *after* the spend. `/extract` needs
+  an image. The cheap answer is a consumer-side check against `GET /banks`
+  grown to carry each graduated shape — or a tiny `POST /shape`. Decided by
+  the first consumer that needs it, not here.
 - **Is `sender.amount` a hint or a filter in direct mode?** The claimed *date*
   is documented as a hint — a validation claiming `2026-08-15` returned a CEP
   dated `2026-08-17` — and nobody has tested whether the amount behaves the

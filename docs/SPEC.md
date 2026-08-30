@@ -95,6 +95,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V12 — US-V14** — *Retired 2026-08-27; never reuse these IDs.* They belonged to bank-email provisional match, discarded before any code: the pilot's bank (BBVA) sends no email for received transfers at all, coverage measured fragile by construction (2 of 4 banks usable, per-bank parsers forever), and the demand window was never measured. The full spec, the spike's measurements (per-bank email capability table, DKIM survives Gmail auto-forward, the SPIN hyphen that became TD-016) and the rejection reasons live in branch `feat/email-provisional-match` (PR #93, reverted). The successor is the adaptive retry schedule that pays TD-013.
 - **US-V15** — As an integrator, a `pending` or `not_found` verdict for a payer I have named carries that payer's measured history — eventual-valid rate with its sample size, incidents, and my own tenant baseline — next to the verdict, never instead of it, so I can decide to release service early with my own threshold and my own risk. *(reserved 2026-08-27)*
 - **US-V16** — As an integrator, a `not_found` or `pending` verdict tells me when asking again stops being spending in vain — a retry moment learned from measured traffic for my bank pair, omitted when the data is not there — so my schedule wastes neither credits on impossible attempts nor minutes in the gaps between my own slots. *(reserved 2026-08-27; gated on the phase-0 report: per-cell signal and the does-pending-bill answer; pays Devolada's TD-013 through its consumer PR)*
+- **US-V17** — As an integrator, a reading whose clave does not fit its bank's learned shape warns me before I spend a credit, and a reading whose receipt names no bank suggests the one bank its clave's shape fits — a warning and a suggestion for my customer to confirm, never a refusal and never a guess sent onward. *(reserved 2026-08-30; per-bank shapes derived only from Banxico-confirmed claves, thresholds in proof-extraction D14)*
 
 ### Direct SPEI payment (D)
 - **US-D01** — As an end customer with bank access, I open my payment link and see whether I owe anything; if I do, I see the exact amount and SPEI instructions (CLABE, beneficiary, amount, reference).
@@ -242,7 +243,7 @@ Owner's decisions:
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
-| [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11 | proposed |
+| [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11, US-V17 | proposed |
 | [consta/trust-layer.spec.md](consta/trust-layer.spec.md) | consta | US-V15 | proposed |
 | [consta/learned-retry.spec.md](consta/learned-retry.spec.md) | consta | US-V16 | in development |
 | [direct-payment/direct-payment.spec.md](direct-payment/direct-payment.spec.md) | direct-payment | US-D01, US-D02, US-D03, US-D04, US-D05, US-D06, US-D09, US-D11 | in development |

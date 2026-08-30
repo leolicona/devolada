@@ -1,6 +1,7 @@
-import { beforeAll, afterEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
+import { resetShapeRules } from "../src/extraction";
 import {
   aiReturning,
   app,
@@ -815,7 +816,8 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.senderBank).toBe("BBVA MEXICO");
     expect(data.amountCents).toBe(51400);
     expect(data.receiptStatus).toBe("Aceptada");
-    expect(data.gate).toEqual({ trackingKey: "ok", senderBank: "ok", amount: "ok" });
+    /* D15: `unknown` — BBVA has no graduated rule in this test's log */
+    expect(data.gate).toEqual({ trackingKey: "ok", senderBank: "ok", amount: "ok", shape: "unknown" });
 
     /* No provider interceptor was registered, and none was needed: the
        whole promise of this door is that a caller can show a customer
@@ -1200,5 +1202,126 @@ describe("US-V15: the trust block", () => {
     mockApiCep(pendingReply);
     const noRef = await postValidate(key, directRequest);
     expect("trust" in ((await noRef.json()) as { data: object }).data).toBe(false);
+  });
+});
+
+/* docs/consta/proof-extraction.spec.md scenarios 14–17 (US-V17). The
+   rules are derived from rows seeded straight into the log — the query
+   is the feature, so nothing here is stubbed except the reader. */
+describe("US-V17: the shape rules act (proof-extraction D14–D16)", () => {
+  beforeEach(() => resetShapeRules());
+
+  /* Azteca as measured 2026-08-30: 18 digits and a literal trailing I */
+  const aztecaClave = (i: number) => `260831070865${String(690000 + i * 137).padStart(6, "0")}I`;
+  /* The live pair: both alphanumeric, both inside D4's range, both spent */
+  const DROPPED_I = "260831070865708465";
+  const I_AS_ONE = "2608310708661202861";
+
+  async function seedConfirmed(apiKeyId: string, bank: string, claves: string[]) {
+    await db()
+      .insert(validations)
+      .values(
+        claves.map((trackingKey) => ({
+          apiKeyId,
+          mode: "transfer" as const,
+          status: "valid" as const,
+          senderBank: bank,
+          trackingKey,
+          amountCents: 100,
+          transferDate: "2026-08-30",
+        })),
+      );
+    resetShapeRules();
+  }
+
+  const aztecaReading = (claveDeRastreo: string, banco: string | null = "AZTECA") => ({
+    esComprobante: true,
+    claveDeRastreo,
+    banco,
+    monto: 1.0,
+    fecha: "2026-08-30",
+    estatus: "Aceptada",
+  });
+
+  type Extracted = { data: { gate: Record<string, string>; suggestedBank?: string } };
+
+  async function extractWith(key: string, reading: ReturnType<typeof aztecaReading>) {
+    mockProof(PNG(), "image/png");
+    const res = await postExtract(key, { receiptUrl: PROOF_URL }, { AI: aiReturning(reading) });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as Extracted).data;
+  }
+
+  it("scenario 14: nine confirmed claves derive nothing; the tenth graduates with no deploy and no write", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedConfirmed(keyId, "AZTECA", Array.from({ length: 9 }, (_, i) => aztecaClave(i)));
+    expect((await extractWith(key, aztecaReading(DROPPED_I))).gate.shape).toBe("unknown");
+
+    await seedConfirmed(keyId, "AZTECA", [aztecaClave(9)]);
+    expect((await extractWith(key, aztecaReading(DROPPED_I))).gate.shape).toBe("mismatch");
+  });
+
+  it("scenario 15: a mismatch is a field on both doors — and /validate still proceeds and spends", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedConfirmed(keyId, "AZTECA", Array.from({ length: 10 }, (_, i) => aztecaClave(i)));
+
+    /* The I read as a 1: nineteen characters, every one alphanumeric */
+    const data = await extractWith(key, aztecaReading(I_AS_ONE));
+    expect(data.gate.trackingKey).toBe("ok");
+    expect(data.gate.shape).toBe("mismatch");
+    const [extraction] = await db().select().from(extractions);
+    expect(extraction.shape).toBe("mismatch");
+
+    /* Image door: the reading rides into the paid call unchanged */
+    mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse, (body) => {
+      expect((body.sender as Record<string, unknown>).trackingKey).toBe(I_AS_ONE);
+    });
+    let res = await postValidate(key, receiptRequest, { AI: aiReturning(aztecaReading(I_AS_ONE)) });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: { shape: string } }).data.shape).toBe("mismatch");
+
+    /* Transfer door: where Azteca's credits were actually lost */
+    mockApiCep(settledResponse);
+    res = await postValidate(key, {
+      transfer: { ...directRequest.transfer, senderBank: "AZTECA", trackingKey: DROPPED_I },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: { shape: string } }).data.shape).toBe("mismatch");
+
+    const spent = await db().select().from(validations).where(eq(validations.apiKeyId, keyId));
+    expect(spent).toHaveLength(12); // 10 seeds + 2 calls that spent
+  });
+
+  it("scenario 16: a bank with no graduated rule meets silence, not suspicion", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedConfirmed(keyId, "AZTECA", Array.from({ length: 10 }, (_, i) => aztecaClave(i)));
+    /* BBVA has no rule here; its clave is checked by the range alone */
+    const data = await extractWith(key, { ...GOOD_READING, banco: "BBVA MEXICO" });
+    expect(data.gate.shape).toBe("unknown");
+    expect(data.suggestedBank).toBeUndefined();
+  });
+
+  it("scenario 17: a reading with no bank suggests the one bank its shape fits — and none when two fit", async () => {
+    const { id: keyId, key } = await seedApiKey();
+    await seedConfirmed(keyId, "AZTECA", Array.from({ length: 10 }, (_, i) => aztecaClave(i)));
+
+    /* Azteca's receipts print no bank name (measured 2026-08-30) */
+    let data = await extractWith(key, aztecaReading(aztecaClave(3), null));
+    expect(data.gate.senderBank).toBe("missing");
+    expect(data.gate.shape).toBe("unknown");
+    expect(data.suggestedBank).toBe("AZTECA");
+    const [extraction] = await db().select().from(extractions);
+    expect(extraction.suggestedBank).toBe("AZTECA");
+
+    /* A reading that names its bank is never second-guessed by shape */
+    data = await extractWith(key, aztecaReading(aztecaClave(3)));
+    expect(data.suggestedBank).toBeUndefined();
+
+    /* A second bank with the same shape: shape is not a fingerprint */
+    await seedConfirmed(keyId, "KLAR", Array.from({ length: 10 }, (_, i) => aztecaClave(100 + i)));
+    data = await extractWith(key, aztecaReading(aztecaClave(3), null));
+    expect(data.gate.senderBank).toBe("missing");
+    expect(data.suggestedBank).toBeUndefined();
   });
 });

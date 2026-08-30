@@ -126,6 +126,11 @@ export const extractions = sqliteTable(
     receiptStatus: text("receipt_status"),
     gateTrackingKey: text("gate_tracking_key"),
     gateSenderBank: text("gate_sender_bank"),
+    /* D15/D16: the soft signals, recorded so their false-alarm rate is a
+       query and not a guess — `shape` is a verdict on the reading, and
+       `suggested_bank` is what the payer was offered to confirm */
+    shape: text("shape", { enum: ["ok", "mismatch", "unknown"] }),
+    suggestedBank: text("suggested_bank"),
     rawOutput: text("raw_output"),
     /* Set only when the reading went on to buy a provider call */
     validationId: text("validation_id").references(() => validations.id),

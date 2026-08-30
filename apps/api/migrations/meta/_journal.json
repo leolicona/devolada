@@ -120,6 +120,13 @@
       "when": 1787958094152,
       "tag": "0016_lucky_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788115551924,
+      "tag": "0017_broken_impossible_man",
+      "breakpoints": true
     }
   ]
 }

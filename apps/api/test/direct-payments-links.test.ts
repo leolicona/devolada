@@ -134,3 +134,74 @@ describe("US-D07: the WhatsApp link carries the country code", () => {
     expect(new URL(data.results[0].waLink).pathname).toBe("/");
   });
 });
+
+/* D5 — the link's identity is the usuario; the numeric id is a cache.
+   Measured live on dev (2026-08-30): the demo tenant reseeds daily and
+   recycles ids, so old links answered no_debt for customers that owed. */
+describe("US-D07 D5: the usuario is the identity, the numeric id is a cache", () => {
+  it("a new usuario on a recycled id gets a new token; the old link keeps its own", async () => {
+    await seedIsp({ wisphubApiKey: "wh-key-1" });
+    /* yesterday's tenant: id 13 belongs to 0011 */
+    mockSearch([customer({ id_servicio: 13, usuario: "0011@wifiplus", nombre: "Leo Licona" })]);
+    const oldUrl = (await (await search("0011@wifiplus")).json()).data.results[0].url;
+
+    /* reseeded tenant: id 13 now belongs to Esteban, a different person */
+    mockSearch([customer({ id_servicio: 13, usuario: "esteban@wifiplus", nombre: "Esteban" })]);
+    const { data } = await (await search("esteban@wifiplus")).json();
+    expect(data.results[0].usuario).toBe("esteban@wifiplus");
+    /* the stranger's token is never handed over */
+    expect(data.results[0].url).not.toBe(oldUrl);
+
+    /* the dead link survives with its token: its payment history points at it */
+    const rows = await drizzle(env.DB).select().from(paymentLinks);
+    expect(rows).toHaveLength(2);
+    const old = rows.find((r) => r.customerUsuario === "0011@wifiplus");
+    expect(oldUrl.endsWith(`/p/${old?.token}`)).toBe(true);
+  });
+
+  it("a re-seen usuario keeps its token while its numeric id refreshes", async () => {
+    await seedIsp({ wisphubApiKey: "wh-key-1" });
+    mockSearch([customer({ id_servicio: 6, usuario: "greyes@wifiplus" })]);
+    const firstUrl = (await (await search()).json()).data.results[0].url;
+
+    mockSearch([customer({ id_servicio: 99, usuario: "greyes@wifiplus" })]);
+    expect((await (await search()).json()).data.results[0].url).toBe(firstUrl);
+
+    const rows = await drizzle(env.DB).select().from(paymentLinks);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].wisphubCustomerId).toBe("99");
+  });
+
+  it("a customer without usuario gets no link and no empty row (the review's open item)", async () => {
+    await seedIsp({ wisphubApiKey: "wh-key-1" });
+    mockSearch([
+      customer({ id_servicio: 20, usuario: null }),
+      customer({ id_servicio: 7, usuario: "mcolunga@wifiplus" }),
+    ]);
+
+    const { data } = await (await search()).json();
+    expect(data.results).toHaveLength(1);
+    expect(data.results[0].usuario).toBe("mcolunga@wifiplus");
+
+    const rows = await drizzle(env.DB).select().from(paymentLinks);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].customerUsuario).toBe("mcolunga@wifiplus");
+  });
+
+  it("the batch generator follows the same rule on a recycled id", async () => {
+    await seedIsp({ wisphubApiKey: "wh-key-1" });
+    mockSearch([customer({ id_servicio: 13, usuario: "0011@wifiplus" })]);
+    await search("0011@wifiplus");
+
+    /* GET /links lists through the same lazy batch insert */
+    mockSearch([customer({ id_servicio: 13, usuario: "esteban@wifiplus" })]);
+    const res = await (await app()).request("/direct-payments/links", asIsp, env);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    const usuarios = data.links.map((l: { usuario: string }) => l.usuario);
+    expect(usuarios).toContain("0011@wifiplus");
+    expect(usuarios).toContain("esteban@wifiplus");
+    const tokens = new Set(data.links.map((l: { url: string }) => l.url));
+    expect(tokens.size).toBe(2);
+  });
+});

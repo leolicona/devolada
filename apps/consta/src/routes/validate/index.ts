@@ -10,7 +10,9 @@ import type { Bindings, Variables } from "../../env";
 import { BANKS } from "../../provider/banks";
 import { extractions } from "../../db/schema";
 import { extractProof, type ExtractionResult } from "../../extraction";
-import { extractionFailure, readingPayload, recordExtraction } from "../extract";
+import { extractionFailure, readingPayload, recordExtraction, shapeSignals } from "../extract";
+import { checkShape, loadShapeRules, type ShapeVerdict } from "../../extraction";
+import type { Bank } from "../../provider/banks";
 import { trustBlock } from "../../trust/history";
 import { suggestRetryAfter } from "../../retry/suggest";
 import { validateRequestSchema } from "./schema";
@@ -74,6 +76,10 @@ validateRoute.post(
        file and no source; the receipt door always has one, and the PDF
        route has an extraction row *and* still belongs to the provider. */
     let source: "reader" | "provider-ocr" | null = input.mode === "receipt" ? "provider-ocr" : null;
+    /* D15: the shape verdict on whatever clave is about to be spent —
+       the reader's on the image door, the caller's on the transfer door.
+       Null when nothing here read a clave (the provider's OCR route). */
+    let shape: ShapeVerdict | null = null;
     /* `potentialBeneficiaries` is an OCR-mode feature: apiCEP matches the
        image against a list of candidate accounts, and a direct-mode call
        takes exactly one beneficiary. So a caller using it keeps the OCR
@@ -110,25 +116,35 @@ validateRoute.post(
 
       if (extracted && extracted.route === "reader") {
         const { reading, gated } = extracted;
+        /* D15/D16: computed once, recorded on every outcome, and blocking
+           none of them — a mismatch rides into the paid call below */
+        const signals = await shapeSignals(db, extracted);
+        shape = signals.shape;
         /* The lead case: measured live, an image with no receipt in it
            makes apiCEP answer `error`, which is retryable, so the payment
            rides Devolada's whole six-hour schedule at up to seven paid
            calls. It stops here for the price of one Workers AI call. */
         if (!reading.isReceipt) {
-          await recordExtraction(db, apiKeyId, "not_a_receipt", extracted);
+          await recordExtraction(db, apiKeyId, "not_a_receipt", extracted, { signals });
           return c.json(
-            { success: false, error: { code: "RECEIPT_UNREADABLE", retryable: false, ...readingPayload(extracted) } },
+            {
+              success: false,
+              error: { code: "RECEIPT_UNREADABLE", retryable: false, ...readingPayload(extracted, signals) },
+            },
             422,
           );
         }
         if (!gated.passes) {
-          await recordExtraction(db, apiKeyId, "gated", extracted);
+          await recordExtraction(db, apiKeyId, "gated", extracted, { signals });
           return c.json(
-            { success: false, error: { code: "RECEIPT_INCOMPLETE", retryable: false, ...readingPayload(extracted) } },
+            {
+              success: false,
+              error: { code: "RECEIPT_INCOMPLETE", retryable: false, ...readingPayload(extracted, signals) },
+            },
             422,
           );
         }
-        extractionId = await recordExtraction(db, apiKeyId, "passed", extracted);
+        extractionId = await recordExtraction(db, apiKeyId, "passed", extracted, { signals });
         source = "reader";
         /* D3: the reading chose *which* Banxico record to ask about. It
            never decides whether that record pays a debt — amount and date
@@ -150,6 +166,13 @@ validateRoute.post(
       } else if (extracted) {
         extractionId = await recordExtraction(db, apiKeyId, "routed", extracted);
       }
+    }
+
+    /* The transfer door is where Azteca's credits were actually lost
+       (2026-08-30: the dropped trailing I, the I typed as 1 — all
+       hand-typed). The verdict rides the response; the call still spends. */
+    if (shape === null && input.mode === "transfer" && source === null) {
+      shape = checkShape(await loadShapeRules(db), input.senderBank as Bank, input.trackingKey ?? null);
     }
 
     /* learned-retry D2: the receiving side of the transfer, recorded at
@@ -321,6 +344,8 @@ validateRoute.post(
         /* D2, so a caller can see which door actually read the file */
         ...(source ? { source } : {}),
         ...(extractionId ? { extractionId } : {}),
+        /* D15: a field, never a refusal */
+        ...(shape ? { shape } : {}),
         status: verdict.status,
         /* D11: `invalid` alone is not enough for the caller to act on.
            `not_found` is ambiguous by construction, so it travels with

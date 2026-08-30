@@ -268,11 +268,17 @@ regression test asserts both halves, including the one we cannot catch.
       receiptStatus: "Aceptada" | "En proceso" | null,
       gate: { trackingKey: "ok" | "malformed" | "missing",
               senderBank:  "ok" | "unknown" | "missing",
-              amount:      "ok" | "malformed" | "missing" } } }
+              amount:      "ok" | "malformed" | "missing",
+              shape:       "ok" | "mismatch" | "unknown" },   // D15: informs, never refuses
+      suggestedBank?: "AZTECA" } }                            // D16: only with no usable bank, only when exactly one shape fits
 ```
 
 `gate` is the field a caller acts on: anything but `ok` means asking the
-customer, not spending a credit.
+customer, not spending a credit. `shape` is the one exception: a `mismatch`
+is a reason to re-read or ask, not a refusal — the caller may still spend.
+`/validate` carries `shape` at the top level on both doors (the reader's
+verdict on the image door, the caller's clave on the transfer door); the
+provider-OCR route, which reads nothing here, carries none.
 
 **`amount` is in the gate because apiCEP's direct mode requires
 `sender.amount`** — a reading without one cannot buy a lookup at all. The
@@ -376,12 +382,13 @@ configuration if it ever misbehaves in production.
       what keeps the other payers from being asked at all
 - [x] Migration `0004`: `validations.sender_bank`, written on both doors
       (D13); scenario 13 automated
-- [ ] **The Nu rule acts as a soft signal somewhere.** *Decided 2026-08-30
+- [x] **The Nu rule acts as a soft signal somewhere.** *Decided 2026-08-30
       (D14–D16, US-V17)*: it acts as `shape` on the gate, together with
-      BBVA's and Azteca's rules; done when scenarios 14–17 land
-- [ ] Scenarios 14–17 automated in `apps/consta/test/validate.test.ts`,
+      BBVA's and Azteca's rules — built the same day
+- [x] Scenarios 14–17 automated in `apps/consta/test/validate.test.ts`,
       with the derivation seeded from fixture rows, not mocks — the query
-      is the feature (D14)
+      is the feature (D14). Migration `0007`: `extractions.shape` and
+      `extractions.suggested_bank`, so the false-alarm rate is a query
 - [ ] **Devolada consumes both signals** (separate PR): `shape: "mismatch"`
       re-reads or asks before `/validate`; `suggestedBank` preselects the
       bank picker with a one-tap confirm — the Azteca population stops
@@ -521,12 +528,27 @@ Seeding Azteca measured two things the spike could not:
   entire population. This is what D16 exists for, and it was found by
   paying, not by planning.
 
+**Day one is smaller than the table.** D14 derives only from rows that
+carry `sender_bank`, and the log is append-only — nothing is backfilled by
+prefix. Rows written before migration `0004` deployed (2026-08-26) count for
+nothing. On 2026-08-30 that meant **Azteca graduates at once (10 with the
+column), BBVA sits at 8 and Nu at 2**; the other two graduate on their own as
+real transfers arrive, with no deploy. The table above is what Banxico
+confirmed; this paragraph is what the machine can prove.
+
 - **D14 — A rule is recomputed from `valid` rows, never stored, and the
   thresholds live in the query.** The derivation is one pass over the
-  append-only log: for each bank with **≥10 distinct confirmed claves**,
-  keep the length if every sample agrees on it, the longest common prefix,
-  and the longest common suffix; a bank whose samples share none of those
-  derives no rule. A counterexample never needs detecting: the next
+  append-only log: for each bank with **≥10 distinct confirmed claves**
+  that all agree on a length, build a per-position template — a letter
+  every sample shares is literal, a position that is always a digit is
+  `\d`, always a letter `[A-Z]`, anything else any alphanumeric. Samples of
+  two lengths derive no rule (a second channel, a silent change — both
+  real). **Digits are never literal**, found at implementation: BBVA and
+  Azteca both embed the date as `YYMMDD`, so "longest common prefix" over
+  ten same-day claves would freeze today's date into the rule and
+  false-alarm the first payer of tomorrow. Letters carry the bank's own
+  marks — Nu's `NU`, BBVA's `MBAN`, Azteca's trailing `I` — and those are
+  what the rule keeps. A counterexample never needs detecting: the next
   recomputation includes it, the shared property dissolves, and the rule
   loosens or dies by construction — D13's "one confirmed counterexample
   retires it" becomes arithmetic instead of a process. No rules table, no
@@ -587,6 +609,12 @@ Seeding Azteca measured two things the spike could not:
   image against a list of candidate accounts and a direct-mode call takes
   exactly one beneficiary, so the field cannot cross to the reader route. It
   stays in the contract; it simply selects the other door.
+- **A free shape check for a hand-typed clave.** The transfer door is where
+  Azteca's credits were actually lost (every 2026-08-30 miss was typed, not
+  read), and today its `shape` arrives *after* the spend. `/extract` needs
+  an image. The cheap answer is a consumer-side check against `GET /banks`
+  grown to carry each graduated shape — or a tiny `POST /shape`. Decided by
+  the first consumer that needs it, not here.
 - **Is `sender.amount` a hint or a filter in direct mode?** The claimed *date*
   is documented as a hint — a validation claiming `2026-08-15` returned a CEP
   dated `2026-08-17` — and nobody has tested whether the amount behaves the

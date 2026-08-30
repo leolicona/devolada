@@ -4,17 +4,39 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { extractions } from "../../db/schema";
 import { requireApiKey } from "../../auth/api-key";
 import {
+  checkShape,
   extractProof,
+  loadShapeRules,
   ProofFetchError,
   ReaderError,
+  suggestBank,
   type ExtractionResult,
+  type ShapeVerdict,
 } from "../../extraction";
+import type { Bank } from "../../provider/banks";
 import type { Bindings, Variables } from "../../env";
 import { extractRequestSchema } from "./schema";
 
 export const extractRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 type Outcome = "passed" | "gated" | "not_a_receipt" | "unreadable" | "refused" | "routed";
+
+export type ShapeSignals = { shape: ShapeVerdict; suggestedBank: Bank | null };
+
+/* D15/D16 — the shape rules act on a reading, and only on a clave that
+   passed the gate: a malformed clave already has a louder answer. The
+   suggestion exists only when the reading named no usable bank. */
+export async function shapeSignals(db: DrizzleD1Database, result: ExtractionResult): Promise<ShapeSignals> {
+  if (result.route !== "reader" || result.gated.gate.trackingKey !== "ok") {
+    return { shape: "unknown", suggestedBank: null };
+  }
+  const { gated } = result;
+  const rules = await loadShapeRules(db);
+  return {
+    shape: checkShape(rules, gated.senderBank, gated.trackingKey),
+    suggestedBank: gated.gate.senderBank === "ok" ? null : suggestBank(rules, gated.trackingKey),
+  };
+}
 
 /* D9 — a rejection at the edge is logged but never billed. Every path out
    of here writes exactly one `extractions` row, including the ones that
@@ -25,7 +47,7 @@ export async function recordExtraction(
   apiKeyId: string,
   outcome: Outcome,
   result: ExtractionResult | null,
-  extra: { validationId?: string | null; note?: string } = {},
+  extra: { validationId?: string | null; note?: string; signals?: ShapeSignals } = {},
 ): Promise<string> {
   const proof = result?.proof ?? null;
   const reading = result?.route === "reader" ? result.reading : null;
@@ -49,6 +71,8 @@ export async function recordExtraction(
       receiptStatus: reading?.status ?? null,
       gateTrackingKey: gated?.gate.trackingKey ?? null,
       gateSenderBank: gated?.gate.senderBank ?? null,
+      shape: extra.signals?.shape ?? null,
+      suggestedBank: extra.signals?.suggestedBank ?? null,
       rawOutput: reading?.raw ?? extra.note ?? null,
       validationId: extra.validationId ?? null,
     })
@@ -70,7 +94,10 @@ export function extractionFailure(err: unknown): { code: string; status: 422 | 5
   return null;
 }
 
-export function readingPayload(result: ExtractionResult) {
+export function readingPayload(
+  result: ExtractionResult,
+  signals: ShapeSignals = { shape: "unknown", suggestedBank: null },
+) {
   if (result.route === "provider-ocr") {
     /* A PDF was fetched and recognised, and deliberately not read here
        (D2). Saying so is more useful than inventing empty fields. */
@@ -86,6 +113,7 @@ export function readingPayload(result: ExtractionResult) {
         trackingKey: "missing" as const,
         senderBank: "missing" as const,
         amount: "missing" as const,
+        shape: "unknown" as const,
       },
     };
   }
@@ -100,7 +128,11 @@ export function readingPayload(result: ExtractionResult) {
     amountCents: gated.amountCents,
     date: reading.date,
     receiptStatus: reading.status,
-    gate: gated.gate,
+    /* D15: a field, never a refusal — the caller decides what a
+       mismatch is worth before spending */
+    gate: { ...gated.gate, shape: signals.shape },
+    /* D16: to confirm, never to send */
+    ...(signals.suggestedBank ? { suggestedBank: signals.suggestedBank } : {}),
   };
 }
 
@@ -139,7 +171,8 @@ extractRoute.post(
       return c.json({ success: false, error: { code: failure.code, retryable: failure.status === 502 } }, failure.status);
     }
 
-    const payload = readingPayload(result);
+    const signals = await shapeSignals(db, result);
+    const payload = readingPayload(result, signals);
     const outcome: Outcome =
       result.route === "provider-ocr"
         ? "routed"
@@ -149,7 +182,7 @@ extractRoute.post(
             ? "passed"
             : "gated";
 
-    const extractionId = await recordExtraction(db, apiKeyId, outcome, result);
+    const extractionId = await recordExtraction(db, apiKeyId, outcome, result, { signals });
     /* No apiCEP call happened on this path at all — that is the contract
        of this endpoint, not an implementation detail (D6). */
     return c.json({ success: true, data: { extractionId, ...payload } });

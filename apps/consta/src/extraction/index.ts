@@ -5,8 +5,10 @@ import { gateReading, type GatedReading } from "./gate";
 export { ProofFetchError, MAX_PROOF_BYTES } from "./fetch";
 export { ReaderError } from "./reader";
 export { gateReading, resolveBank } from "./gate";
+export { checkShape, loadShapeRules, resetShapeRules, suggestBank } from "./shape";
 export type { Reading } from "./reader";
 export type { Gate, GatedReading } from "./gate";
+export type { ShapeRule, ShapeVerdict } from "./shape";
 export { DEFAULT_MODEL } from "./reader";
 
 /* D2 — routing is by what the file *is*, never by whether something failed.

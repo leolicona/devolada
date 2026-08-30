@@ -60,6 +60,26 @@ export type ConstaRequest = (
   paymentRef?: string;
 };
 
+/* trust-layer US-V15: the payer's measured history, attached by Consta
+   on `pending`/`not_found` verdicts when a `customerRef` traveled —
+   evidence next to the verdict, never instead of it. This client stores
+   it verbatim (provisional-release D12, the shadow) and decides nothing
+   with it; the shape mirrors Consta's `TrustBlock`. */
+export type ConstaTrust = {
+  customerRef: string;
+  sample: { chains: number; effectiveN: number; halfLifeDays: number };
+  eventualValidRate: number | null;
+  raw: {
+    resolvedValid: number;
+    abandoned: number;
+    contradicted: number;
+    alreadyUsedAttempts: number;
+  };
+  lastIncidentAt: string | null;
+  medianMinutesToValid: number | null;
+  tenantBaseline: { eventualValidRate: number | null; chains: number; effectiveN: number };
+};
+
 export type ConstaVerdict = {
   validationId: string;
   status: "valid" | "pending" | "invalid";
@@ -72,6 +92,10 @@ export type ConstaVerdict = {
      from measured traffic per bank cell, omitted in cold start. A
      suggestion, never a promise: D7's schedule stays floor and tail. */
   retryAfter?: string;
+  /* trust-layer D5: present exactly when the caller is deciding whether
+     to wait — `pending`/`not_found` with a customerRef — never on
+     `valid` or `contradicted`. */
+  trust?: ConstaTrust;
   alreadyValidated: boolean;
   cep?: {
     trackingKey: string;

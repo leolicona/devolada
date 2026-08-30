@@ -117,3 +117,14 @@ Format:
 - Cost: the refs are the opt-in for history collection and history only accumulates forward, so the window between shipping the refs and this fix is **evidence that cannot be recovered** — the exact loss D12's "starting the shadow late impoverishes the dataset forever" names. It also means the D12 shadow would have been built against an empty block.
 - Fix: `CUSTOMER_REF_SECRET` synced in both deploy workflows, with a `::warning::` naming the consequence when it is absent, and a note that the value must stay **stable** — rotating it re-pseudonymises every payer and orphans all history written under the old one.
 - Regression test: none in code — the defect lives in the deploy, not the app (the app's own behaviour with and without the secret is already covered under US-D15). The deploy log's warning is the standing check.
+
+
+## BUG-011 — "Ver los datos para transferir" resurfaced the receipt's stale draft
+- Status: **fixed** (2026-08-30)
+- Detected: 2026-08-30 · live on dev, on a phone, rehearsing the partial flow with a real receipt
+- Affected spec: docs/direct-payment/partial-payment.spec.md (D7, scenario 9), docs/direct-payment/direct-payment.spec.md (D18, D19)
+- Symptom: a receipt-born payment landed `partial`; tapping "Ver los datos para transferir" — whose promise is the CLABE and the fresh debt — opened "Paso 2 de 2: Confirma estos datos" instead, pre-filled with the old reading (the spent clave, the short amount) and the "no pudimos sacar todos los datos" warning. The payer who owed the rest was handed the form that re-submits the payment they already made.
+- Root cause: the D18 draft (the reading waiting for the payer to confirm it) renders **ahead of the step machine**, and nothing consumed it when the payment was born — `pay.onSuccess` set the payment and left the draft alive behind it. The partial screen's button cleared the payment (`retry()`) and set the step, but the surviving draft outranked both. The button's own comment records its twin: "`retry` alone left the remembered step at `proof`, so this button used to land on the upload form" — the step was fixed, the draft was a second state with the same defect.
+- **The lesson**: a screen that renders by its own `if` ahead of a state machine is a second state machine. Every transition that "goes back" has to clear it too, or it wins by position. When one going-back path forgets one such state, look for the others: this bug and its documented twin were the same omission on two different variables.
+- Fix: the draft is consumed where the payment is born (`pay.onSuccess`), and `retry()` clears it defensively — whatever screen calls retry wants the step machine, never a stale draft in front of it.
+- Regression test: `apps/pago/test/pago.test.tsx` — "BUG-011: after a receipt-born partial, the button lands on the CLABE, not the stale draft", verified to fail without the fix.

@@ -977,6 +977,64 @@ describe("US-D10: the partial state", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Total a pagar")).toBeInTheDocument();
   });
+
+  it("BUG-011: after a receipt-born partial, the button lands on the CLABE, not the stale draft", async () => {
+    /* The draft (D18) renders ahead of the step machine, and the pay
+       success never consumed it — so this button used to resurface the
+       old reading, complete with the "no pudimos sacar todos los datos"
+       warning, instead of the transfer data it promises. */
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() =>
+        ok(
+          proofReadingResponse.parse({
+            source: "reader",
+            isReceipt: true,
+            amountCents: 30000,
+            trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+            senderBank: null,
+            date: "2026-08-19",
+            receiptStatus: "Aceptada",
+            gate: { trackingKey: "ok", senderBank: "unknown", amount: "ok" },
+          }),
+        ),
+      ),
+      handlers.pay(() =>
+        ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201),
+      ),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            validationAttempts: 1,
+            error: null,
+            ...withheld,
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    await goToProof();
+    const picker = screen.getByLabelText(/captura o comprobante/i);
+    await userEvent.upload(picker, new File([new Uint8Array(100)], "cep.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
+
+    /* the incomplete reading asks the payer to finish it (D18) */
+    expect(await screen.findByText(/no pudimos sacar todos los datos/i)).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar y verificar/i }));
+
+    await screen.findByText("Pago incompleto", {}, { timeout: 8000 });
+    await userEvent.click(screen.getByRole("button", { name: /ver los datos para transferir/i }));
+
+    /* the draft was consumed when the payment was born: step 1 renders,
+       and nothing about the old reading survives */
+    expect(
+      await screen.findByRole("heading", { name: /haz tu transferencia/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos sacar todos los datos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/confirma estos datos/i)).not.toBeInTheDocument();
+  });
 });
 
 /* docs/direct-payment/direct-payment.spec.md scenarios 57–62 (D19): the

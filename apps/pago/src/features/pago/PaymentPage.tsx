@@ -489,6 +489,10 @@ export function PaymentPage({ token }: { token: string }) {
         setPayment(result);
         setResubmitOf(null);
         setCorrecting(false);
+        /* BUG-011: the draft is consumed when the payment is born. Left
+           alive, it outranks the step machine and resurfaces the old
+           reading when a later screen clears the payment. */
+        setDraft(null);
       } else setDraft(result as { proofId: string; reading: ProofReading });
     },
   });
@@ -546,6 +550,9 @@ export function PaymentPage({ token }: { token: string }) {
     const retry = () => {
       setPayment(null);
       setCorrecting(false);
+      /* BUG-011, second belt: whatever screen calls retry wants the step
+         machine, never a stale draft rendering in front of it. */
+      setDraft(null);
       pay.reset();
       upload.reset();
       void queryClient.invalidateQueries({ queryKey: ["link", token] });

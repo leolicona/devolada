@@ -16,6 +16,7 @@ import { nextValidationSlot, suggestedSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
 import { demoVerdict, isDemoLink } from "./demo";
 import {
+  historyVouches,
   maybeProvisionalRelease,
   notifyProvisionalExpiry,
   releaseEvidenceFor,
@@ -319,6 +320,16 @@ export async function runValidation(
     constaStatus: verdict.status,
   };
 
+  /* provisional-release D12 — the shadow only writes. The trust block as
+     received rides the same row update the release evaluation was going
+     to write (null when the block is absent), and stops writing once a
+     release fired, so the snapshot that bought the decision survives
+     later attempts. The release rule reads none of it. */
+  const shadow =
+    payment.provisionalReleaseAt == null
+      ? { trustSnapshot: verdict.trust ? JSON.stringify(verdict.trust) : null }
+      : {};
+
   if (verdict.status === "invalid") {
     /* D17/BUG-003: only a contradicted CEP is a refusal. Consta's
        `not_found` — no cepDetails, no cepStatus — is the absence of an
@@ -343,7 +354,10 @@ export async function runValidation(
         isp,
         link,
         payment,
-        releaseEvidenceFor(payment, "not_found", classification),
+        releaseEvidenceFor(payment, "not_found", classification) ??
+          /* D12 graduation, first privilege: a rich, clean record vouches
+             where the machines could not read. Inert until K exists. */
+          (historyVouches(verdict.trust) ? "history" : null),
         now,
       );
       /* learned-retry D6: the verdict may carry the learned moment when
@@ -351,7 +365,7 @@ export async function runValidation(
          schedule (schedule.ts clamps it to skeleton and horizon). */
       return retryLater(
         "TRANSFER_NOT_FOUND",
-        { ...base, ...classification, ...release },
+        { ...base, ...classification, ...release, ...shadow },
         { lateSlot: true, suggestedAt: suggestedSlot(verdict.retryAfter) },
       );
     }
@@ -384,8 +398,8 @@ export async function runValidation(
     });
     const row = await update(
       slot
-        ? { ...base, ...release, nextValidationAt: slot, lastError: null }
-        : { ...base, ...release, status: "expired", nextValidationAt: null, lastError: null },
+        ? { ...base, ...release, ...shadow, nextValidationAt: slot, lastError: null }
+        : { ...base, ...release, ...shadow, status: "expired", nextValidationAt: null, lastError: null },
     );
     if (!slot && row.provisionalReleaseAt != null) {
       await notifyProvisionalExpiry(env, isp, link, now);

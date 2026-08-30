@@ -7,6 +7,7 @@ import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
+import { historyVouches } from "../src/direct-payments/provisional";
 import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
 import { app, seedIsp, sessionCookieHeader } from "./helpers";
@@ -158,6 +159,20 @@ type ConstaData = {
   reason?: "contradicted" | "not_found";
   alreadyValidated?: boolean;
   cep?: Record<string, unknown> | undefined;
+  retryAfter?: string;
+  trust?: typeof TRUST_BLOCK;
+};
+
+/* trust-layer US-V15: the block exactly as Consta ships it — the D8 wire
+   example, reused verbatim so "as received" means something. */
+const TRUST_BLOCK = {
+  customerRef: "a".repeat(64),
+  sample: { chains: 14, effectiveN: 11.2, halfLifeDays: 90 },
+  eventualValidRate: 1,
+  raw: { resolvedValid: 14, abandoned: 0, contradicted: 0, alreadyUsedAttempts: 0 },
+  lastIncidentAt: null as string | null,
+  medianMinutesToValid: 4,
+  tenantBaseline: { eventualValidRate: 0.96, chains: 410, effectiveN: 236.5 },
 };
 
 /* Intercepts POST /validate and captures the request body for the
@@ -2672,6 +2687,115 @@ describe("US-D15: the history refs travel always (D4)", () => {
     expect(res.status).toBe(201);
     expect(captured.body!.customerRef).toBeUndefined();
     expect(captured.body!.paymentRef).toBeUndefined();
+  });
+});
+
+/* provisional-release D12 (US-D15) — the shadow only writes: the trust
+   block as received lands next to every release evaluation, the release
+   decision is byte-identical with and without it, and the graduation
+   gate stays inert while K is null. */
+describe("US-D15 D12: the shadow", () => {
+  it("the snapshot lands with the release row, as received", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
+    mockPromise();
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).not.toBeNull();
+    /* the block bought nothing: the evidence is the verdict's own */
+    expect(row.releaseEvidence).toBe("pending");
+    expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST_BLOCK);
+  });
+
+  it("without a block the decision is byte-identical and the shadow records null", async () => {
+    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockConsta({ status: "pending", cep: undefined });
+    mockPromise();
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    /* same decision as with the block: released, on the same evidence */
+    expect(row.provisionalReleaseAt).not.toBeNull();
+    expect(row.releaseEvidence).toBe("pending");
+    expect(row.trustSnapshot).toBeNull();
+  });
+
+  it("toggle off: the evaluation still writes the shadow and decides nothing", async () => {
+    await seedLinkedIsp();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+
+    const [row] = await drizzle(env.DB).select().from(directPayments);
+    expect(row.provisionalReleaseAt).toBeNull();
+    expect(row.releaseEvidence).toBeNull();
+    expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST_BLOCK);
+  });
+
+  it("a released row keeps the snapshot that bought the decision", async () => {
+    const { isp, link } = await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    const now = new Date();
+    const db = drizzle(env.DB);
+    /* the history as it looked at decision time — one chain fewer */
+    const decisionTime = {
+      ...TRUST_BLOCK,
+      sample: { ...TRUST_BLOCK.sample, chains: 13, effectiveN: 10.4 },
+    };
+    const [payment] = await db
+      .insert(directPayments)
+      .values({
+        paymentLinkId: link.id,
+        ispId: isp.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: new Date().toISOString().slice(0, 10),
+        constaStatus: "pending",
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt: new Date(now.getTime() - 2 * 60 * 1000),
+        provisionalReleaseAt: new Date(now.getTime() - 60 * 1000),
+        releaseEvidence: "pending",
+        releaseKind: "reconnect",
+        trustSnapshot: JSON.stringify(decisionTime),
+      })
+      .returning();
+
+    /* the retry's block has moved on; the snapshot must not */
+    mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
+    await sweepDirectPayments(testEnv, now);
+
+    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    expect(JSON.parse(row.trustSnapshot!)).toEqual(decisionTime);
+  });
+
+  it("the graduation gate stays inert while K is null", () => {
+    /* rich and clean — and still no privilege: K does not exist */
+    expect(historyVouches(TRUST_BLOCK)).toBe(false);
+    /* the day the shadow table writes K, the same record vouches… */
+    expect(historyVouches(TRUST_BLOCK, 3)).toBe(true);
+    /* …but an incident or a thin sample never does */
+    expect(historyVouches({ ...TRUST_BLOCK, raw: { ...TRUST_BLOCK.raw, contradicted: 1 } }, 3)).toBe(false);
+    expect(
+      historyVouches({ ...TRUST_BLOCK, raw: { ...TRUST_BLOCK.raw, alreadyUsedAttempts: 1 } }, 3),
+    ).toBe(false);
+    expect(historyVouches({ ...TRUST_BLOCK, sample: { ...TRUST_BLOCK.sample, effectiveN: 2 } }, 3)).toBe(false);
+    expect(historyVouches(undefined, 3)).toBe(false);
   });
 });
 

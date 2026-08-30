@@ -27,7 +27,34 @@ const DAY_MS = 24 * 3600 * 1000;
 /* The D7 validation schedule dies 6 h after creation */
 const SCHEDULE_MS = 6 * 3600 * 1000;
 
-export type ReleaseEvidence = "pending" | "agreed" | "human";
+export type ReleaseEvidence = "pending" | "agreed" | "human" | "history";
+
+/* D12 — the graduation threshold. K does not exist yet, on purpose: it
+   is exactly the number the shadow table produces ("at K = 3, the
+   history rule would have called X% of outcomes right against the open
+   rule's Y%"). Inventing it today is the two-blind-profiles mistake
+   again. When the data speaks, K is written into the spec with the
+   table that chose it — and only then does the gate below wake. */
+export const GRADUATION_K: number | null = null;
+
+/* D12 — the graduation gate: what graduation buys, never what it gates.
+   A payer whose own record is rich enough (`effectiveN ≥ K`) and clean
+   (no contradicted chain, no reused proof — the same incidents D5
+   revokes on) earns privileges above the default; the first named case
+   is `blind`, releasing where the machines could not read the image.
+   Behind `K != null` it is provably inert: while K is null this returns
+   false for every payer and the vote of confidence rules alone. */
+export function historyVouches(
+  trust: { sample: { effectiveN: number }; raw: { contradicted: number; alreadyUsedAttempts: number } } | undefined,
+  k: number | null = GRADUATION_K,
+): boolean {
+  if (k == null || !trust) return false;
+  return (
+    trust.sample.effectiveN >= k &&
+    trust.raw.contradicted === 0 &&
+    trust.raw.alreadyUsedAttempts === 0
+  );
+}
 
 /* D1 — release fires on the first evidence, never on the upload. The
    kind names who vouched: the provider (`pending` = the transfer exists

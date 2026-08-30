@@ -2,7 +2,7 @@
 status: proposed
 stories: [US-D15]
 domain: direct-payment
-updated: 2026-08-27
+updated: 2026-08-30
 debt: []
 ---
 
@@ -263,9 +263,10 @@ it is built when the data justifies it, or never.
 ### D11 — Data
 
 `direct_payments` gains `provisionalReleaseAt` (timestamp, null) and
-`releaseEvidence` (`pending` | `agreed` | `human`, null) — which evidence
-bought the release, recorded at the moment it happened because it is
-point-in-time. The rejected-attempt record of D6 is a new small table. The
+`releaseEvidence` (`pending` | `agreed` | `human` | `history`, null) —
+which evidence bought the release, recorded at the moment it happened
+because it is point-in-time (`history` is D12's graduation privilege,
+unreachable until K exists). The rejected-attempt record of D6 is a new small table. The
 feed is untouched: the `charge` arrives at `confirmed`, as always.
 
 ### D12 — The graduation path: the data model arrives payer by payer, calibrated by its own shadow
@@ -307,7 +308,8 @@ when the data speaks.
 payer's record adds privileges above the default — the named first case
 is `blind`: a payer with a clean, sufficient history is released even
 when the machines could not read the image, their history vouching where
-the transaction cannot. Graduation never *removes* the default from
+the transaction cannot (recorded as `releaseEvidence: history`, the
+fourth value of D11's enum — wired 2026-08-30, inert while K is null). Graduation never *removes* the default from
 newcomers: restricting the open rule is a different act (the D10
 tightening), justified only by its own measured trigger, and always
 visible to the ISP whose toggle it is — money is never re-ruled in
@@ -379,16 +381,21 @@ silence.
 
 ## Definition of Done — D12 (the shadow)
 
-- [ ] Consta computes and attaches the `trust` block (US-V15 D3–D8: the
+- [x] Consta computes and attaches the `trust` block (US-V15 D3–D8: the
       chains, the decay, `effectiveN`, incidents, the median and
       `tenantBaseline`) on `pending`/`not_found` verdicts with a
-      `customerRef`.
-- [ ] `trustSnapshot` column on `direct_payments`, written at every
+      `customerRef`. *(2026-08-27, shipped with US-V15 —
+      trust-layer.spec.md DoD)*
+- [x] `trustSnapshot` column on `direct_payments`, written at every
       release evaluation with the block as received (null when absent);
-      the release decision provably unchanged.
-- [ ] Tests cite US-D15 D12: the snapshot lands with the release row,
+      the release decision provably unchanged. *(2026-08-30, migration
+      0016; the write stops once a release fired, so the snapshot that
+      bought the decision survives later attempts)*
+- [x] Tests cite US-D15 D12: the snapshot lands with the release row,
       the decision is byte-identical with and without a block, and the
-      graduation gate stays inert while K is null.
+      graduation gate stays inert while K is null. *(2026-08-30, plus:
+      the shadow still writes with the toggle off — a "no" is a label
+      too — and a released row keeps its decision-time snapshot)*
 
 ## Open items
 

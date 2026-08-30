@@ -357,7 +357,10 @@ export const directPayments = sqliteTable(
        bought it — point-in-time facts, recorded because they cannot be
        derived later. Null = never released. */
     provisionalReleaseAt: integer("provisional_release_at", { mode: "timestamp_ms" }),
-    releaseEvidence: text("release_evidence", { enum: ["pending", "agreed", "human"] }),
+    /* `history` is D12's graduation privilege — the payer's own record
+       vouching where the machines could not read. Unreachable until the
+       shadow table writes K; TS-level only, no SQL change. */
+    releaseEvidence: text("release_evidence", { enum: ["pending", "agreed", "human", "history"] }),
     /* D2's two faces, recorded at the moment of truth: `reconnect` — the
        customer was suspended and the promise gave the service back;
        `protect` — the customer was current and the promise shields them
@@ -365,6 +368,13 @@ export const directPayments = sqliteTable(
        internet ya volvió" must never be said to someone whose internet
        never left. */
     releaseKind: text("release_kind", { enum: ["reconnect", "protect"] }),
+    /* D12 — the shadow: the payer's measured history (Consta's US-V15
+       `trust` block) exactly as received at the release evaluation,
+       verbatim JSON; null when the block was absent. Frozen here because
+       the block decays with time and Devolada holds no log to recompute
+       it: each release becomes a labeled row — history at decision →
+       decision → outcome. Read by nobody in v1; it exists to choose K. */
+    trustSnapshot: text("trust_snapshot"),
     createdAt: createdAt(),
   },
   (t) => [

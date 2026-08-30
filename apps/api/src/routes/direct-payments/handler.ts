@@ -701,8 +701,13 @@ export async function listLinks(c: Ctx, cursor?: string) {
             customerUsuario: customer.usuario,
           })),
         )
-        /* Existing links keep their token: the link is permanent (D1) */
-        .onConflictDoNothing();
+        /* D5: the usuario is the identity — an existing usuario keeps
+           its token (the link is permanent while its usuario exists) and
+           only the numeric id, a cache WispHub may recycle, refreshes. */
+        .onConflictDoUpdate({
+          target: [paymentLinks.ispId, paymentLinks.customerUsuario],
+          set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
+        });
     }
   } catch (e) {
     return wisphubFailure(c, e);
@@ -760,6 +765,10 @@ export async function searchLinks(c: Ctx, q: string) {
   } catch (e) {
     return wisphubFailure(c, e);
   }
+  /* A customer without usuario cannot own a link (D5): a row with
+     customer_usuario = "" would be a link that never resolves. The
+     batch generator already skips them; this path does too. */
+  customers = customers.filter((customer) => customer.usuario !== "");
 
   if (customers.length) {
     await db
@@ -772,23 +781,30 @@ export async function searchLinks(c: Ctx, q: string) {
           customerUsuario: customer.usuario,
         })),
       )
-      /* Existing links keep their token: the link is permanent (D1) */
-      .onConflictDoNothing();
+      /* D5: same rule as the batch generator above — the usuario keeps
+         its token, the recycled numeric id only refreshes the cache. */
+      .onConflictDoUpdate({
+        target: [paymentLinks.ispId, paymentLinks.customerUsuario],
+        set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
+      });
   }
 
-  const customerIds = customers.map((c) => String(c.wisphubId));
-  let links: { wisphubCustomerId: string; token: string }[] = [];
-  if (customerIds.length) {
+  /* Joined by usuario, the identity — never by the numeric id: a
+     recycled id can match a dead link of a previous customer, and that
+     token must not reach the new person (D5). */
+  const usuarios = customers.map((c) => c.usuario);
+  let links: { customerUsuario: string; token: string }[] = [];
+  if (usuarios.length) {
     links = await db
-      .select({ wisphubCustomerId: paymentLinks.wisphubCustomerId, token: paymentLinks.token })
+      .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
       .from(paymentLinks)
-      .where(and(eq(paymentLinks.ispId, isp.id), inArray(paymentLinks.wisphubCustomerId, customerIds)));
+      .where(and(eq(paymentLinks.ispId, isp.id), inArray(paymentLinks.customerUsuario, usuarios)));
   }
-  
-  const linkMap = new Map(links.map((l) => [l.wisphubCustomerId, l.token]));
+
+  const linkMap = new Map(links.map((l) => [l.customerUsuario, l.token]));
 
   const results = customers.flatMap((customer) => {
-    const token = linkMap.get(String(customer.wisphubId));
+    const token = linkMap.get(customer.usuario);
     /* No token means the insert above skipped this customer; a link to
        `/p/undefined` is worse than one row missing from the results. */
     if (!token) return [];

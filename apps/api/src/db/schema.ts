@@ -253,13 +253,16 @@ export const paymentLinks = sqliteTable(
       .references(() => isps.id),
     token: text("token").notNull().unique(),
     /* Numeric WispHub id (as string) for the auto-activate PATCH;
-       the usuario is what every lookup needs — same split as charges */
+       the usuario is what every lookup needs — same split as charges.
+       The usuario is the link's identity (admin-links-view D5): the
+       numeric id is a cache WispHub may recycle to a different person,
+       so it is refreshed on sight and never keys anything. */
     wisphubCustomerId: text("wisphub_customer_id").notNull(),
     customerUsuario: text("customer_usuario").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex("payment_links_isp_customer_idx").on(t.ispId, t.wisphubCustomerId),
+    uniqueIndex("payment_links_isp_usuario_idx").on(t.ispId, t.customerUsuario),
   ],
 );
 

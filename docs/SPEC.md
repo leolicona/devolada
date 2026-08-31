@@ -186,6 +186,9 @@ not here. Owner's priority order (2026-08-16):
    read-only via the API — absent from the detail resource and the PUT
    schema, PATCH ignores it. The fallback is the spec.)*
 4. **Period reports** — *moved with the network 2026-08-31 (`devolada-red`): the aggregations derive from the store ledger, which lives there.*
+   *Successor idea (2026-08-31, from the design-cycle review): **CSV export
+   of Pagos** — the viewer role's accountant job; picked up = reserving a
+   US-ID and a line in a phase 4+ child spec.*
 5. **WhatsApp Business API** — already decided as its own later feature
    (TD-003): real sending for receipts and invitations, `wa.me` stays as the
    fallback.

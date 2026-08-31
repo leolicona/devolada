@@ -262,28 +262,29 @@ stories.
   integration configuration** — they only mean anything where there is a
   service to release.
 
-- **D19 — The SaaS brand will not be Devolada; the name waits behind two
-  gates; the domain stays.** *(Added 2026-08-31, PR #122 review.)* After
-  the extraction (D15), two independent products would share one brand — a
-  collision worse than the rename churn D1 originally feared, and this is
-  the cheapest moment there will ever be: no prod env for Consta, no
-  external consumer, no real production data, a handful of pilot links.
-  So: the **Devolada brand is reserved for the store network**; the SaaS
-  takes a new name once two gates pass — (1) the domain is registrable at
-  a registrar (a DNS signal is not a purchase), (2) IMPI clears the mark.
-  Shortlist, best first: **Nelti** (Nahuatl *neltiliztli* = truth; coined
-  word, easiest at IMPI), Empata, Fedata, Constapago, Clabi. "Consta" and
-  "Constata" are discarded (domains taken; constata.eu is a real
-  collision). The internal name `consta` — folders, `apps/consta`, US-V
-  ids — **never changes**: code is not brand, and that churn is the part
-  D1 was right to reject. **The SaaS retains `devoladapago.com`**: the
-  permanent payment links (direct-payment D1/D8 — the most expensive
-  promise to break, they live for years in WhatsApp chats) are already at
-  `pago.devoladapago.com`, so whoever owns the domain owns the forever
-  redirect; keeping it here avoids coupling the extracted network to our
-  links. Go-live is not blocked — production launches under these
-  prefixes, and the later move to the final domain is one redirect the
-  SaaS itself serves:
+- **D19 — The SaaS keeps the Devolada brand and the domain; the network
+  is born with a new name.** *(Added 2026-08-31 in the PR #122 review;
+  inverted the same day, owner decision.)* The collision D15 creates —
+  two independent products sharing one brand — is resolved by exactly one
+  product keeping the name, and the SaaS is that product. Three reasons:
+  **brand follows the domain** (the permanent payment links, the most
+  expensive promise to break, live at `pago.devoladapago.com` and never
+  move); **the brand equity already built lives on this side** (the
+  domain, the live email sender, the pilot links sitting in WhatsApp
+  chats — all direct-payment channel); and **the network is the cheap
+  side to rename** — it has no operating point under the brand yet, and
+  "de volada" (fast) describes payments, not a physical store network,
+  which needs its own identity anyway. The naming shortlist from the
+  original version of this decision — **Nelti** (Nahuatl *neltiliztli* =
+  truth; coined, easiest at IMPI), Empata, Fedata, Constapago, Clabi;
+  "Consta"/"Constata" discarded (domains taken; constata.eu is a real
+  collision) — passes to the network's naming exercise at its birth. The
+  internal name `consta` — folders, `apps/consta`, US-V ids — **never
+  changes**: code is not brand. One gate remains, now **non-blocking**:
+  verify and file "Devolada" at IMPI before the mark lands in contracts
+  with businesses. One watch item from the pilot: written as one word,
+  "Devolada" can be misread as "devolución" — if payers or businesses
+  actually misread it, this decision returns to the table. Addresses:
 
   | Surface | Address | Note |
   |---|---|---|
@@ -293,11 +294,14 @@ stories.
   | Engine API door (developers) | `consta.devoladapago.com` | as already decided in SPEC.md |
   | Operator panel | `app.devoladapago.com/operador` | a route behind `platform_operator`, not a subdomain; `operador.` reserved if isolation is ever needed |
 
-  **Rejected**: committing to Nelti before IMPI (a failed gate forces the
-  double rename this decision exists to avoid); the network inheriting
-  `devoladapago.com` (it would serve the SaaS's redirects forever — a
-  permanent coupling between separated products); staying Devolada (the
-  collision stands).
+  **Rejected**: the SaaS renaming behind gates — the first version of
+  this decision. It left the domain here but sent the brand away, so the
+  SaaS would operate on `devoladapago.com` under a different name until a
+  future migration: the double rename event, merely postponed, plus an
+  IMPI gamble on a coined word. Also rejected: the network inheriting
+  brand and domain (it would serve the SaaS's redirects forever — a
+  permanent coupling between separated products); both products keeping
+  the name (the collision stands).
 
 - **D20 — One Consta key per business, and one money book.** *(Added
   2026-08-31, PR #122 review.)* Each business gets its own Consta API key,
@@ -354,8 +358,8 @@ store-side auth artifacts.
    Better Auth organizations + roles (child spec: business & memberships,
    US-B01–B03). A fresh design cycle (brief → IA → tasks) for the SaaS
    surfaces precedes this child spec — `.design/devolada/` left with the
-   network (D15). If D19's gates have passed by now, the brand rename
-   folds in here: one rename event, not two.
+   network (D15). No brand rename rides this phase: the SaaS keeps
+   Devolada (D19).
 3. **Prepaid credit** — credit entries, warnings, negative cap, top-up via
    validated SPEI, welcome bonus (child spec, US-B04–B06, US-L03) +
    `/operador` panel (child spec, US-L02).
@@ -384,9 +388,12 @@ them by accident:
 2. **Consta programmatic key issuance (phase 4).** D20's internal door
    amends validation US-V05; the phase 4 child spec decides who may call
    it and how it is secured.
-3. **Brand gates (phase 2 at the latest).** Register the chosen domain at
-   a registrar and consult IMPI; shortlist order in D19. Gates passed
-   before phase 2 lands → the rename folds into phase 2.
+3. **IMPI filing for "Devolada" (non-blocking).** The SaaS keeps the
+   name (D19); verify availability and file the mark at IMPI before it
+   lands in contracts with businesses. Watch item: if payers or
+   businesses misread "Devolada" as "devolución" during the pilot, D19
+   returns to the table. The naming shortlist passes to the network at
+   its birth.
 4. **Per-tenant replay rejection as a Consta opt-in (backlog).** Today
    validation D4 stands: Consta reports `alreadyValidated`, the
    integrator decides. If it ever graduates: opt-in flag per request; its

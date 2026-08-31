@@ -2,7 +2,7 @@
 status: proposed
 stories: [US-B01, US-B02, US-B03, US-B04, US-B05, US-B06, US-R01, US-R02, US-R03, US-R04, US-I01, US-I02, US-I03, US-L02, US-L03]
 domain: platform
-updated: 2026-08-31
+updated: 2026-08-31 # D19-D20 and Open items added in the PR #122 review
 debt: []
 ---
 
@@ -20,7 +20,8 @@ This is an umbrella spec. It fixes the foundation — entities, vocabulary,
 configuration levels, revenue, sequencing — so that no child spec re-decides
 it. Child specs (one per surface, with their own scenarios and contracts)
 detail each part before it is built; this spec is their constitution. Every
-decision below was made by the owner in the pivot interview (2026-08-31).
+decision below was made by the owner in the pivot interview (2026-08-31);
+D19 and D20 landed in the PR #122 review round the same day.
 
 ## Glossary (pivot)
 
@@ -61,8 +62,9 @@ stories.
   Worker and D1 remain separate deployables, but no wall says a Devolada spec
   may not depend on it — the SaaS is its first-party consumer. **Rejected**:
   Devolada as a mere API client of Consta (duplicates tenant, settings and
-  billing for one owner); renaming everything to Consta (live domains, email
-  and links would churn for no user value).
+  billing for one owner). *Revised 2026-08-31 (PR #122 review)*: the naming
+  half of this decision moved to D19 — the original "no rename" rejection
+  did not weigh the brand collision that D15 creates.
 
 - **D2 — The expected amount is an entity: `payment_request` (Cobro).** A
   Cobro has business, customer, amount in cents, concept, due state, and a
@@ -221,6 +223,17 @@ stories.
   and marks US-C/K/E, US-A02/A03 and US-L01 as *retired → devolada-red* in
   SPEC.md, so `main` obeys the golden rule again **before** the first
   rename lands. Both repos are born from the same commit; nothing is lost.
+  *Extended 2026-08-31 (PR #122 review)* — the retirement PR also prunes
+  the cross-cutting docs: FRONTEND.md loses its Store-PWA and store-era
+  Admin sections; `.design/devolada/` (brief, IA, TASKS of the old
+  product) leaves with the network — the design tokens stay, they are
+  product-agnostic; the root CLAUDE.md drops its stale "not created yet"
+  lines; TESTING.md loses its store-surface citations; and
+  ARCHITECTURE.md's Ledger section leaves **generalized, not deleted** —
+  the append-only rule (never UPDATE/DELETE; balances derived with SUM)
+  survives as a house rule, because `credit_entries` and
+  `platform_settings` depend on it. The network is born with its own brand
+  and domain (D19); `devoladapago.com` stays with the SaaS.
   **Rejected**: pivot first (weeks of dragging dead code and its tests
   through the rename); extracting only the PWA (a network without ledger and
   cash-drops is not a rescuable product).
@@ -249,13 +262,67 @@ stories.
   integration configuration** — they only mean anything where there is a
   service to release.
 
+- **D19 — The SaaS brand will not be Devolada; the name waits behind two
+  gates; the domain stays.** *(Added 2026-08-31, PR #122 review.)* After
+  the extraction (D15), two independent products would share one brand — a
+  collision worse than the rename churn D1 originally feared, and this is
+  the cheapest moment there will ever be: no prod env for Consta, no
+  external consumer, no real production data, a handful of pilot links.
+  So: the **Devolada brand is reserved for the store network**; the SaaS
+  takes a new name once two gates pass — (1) the domain is registrable at
+  a registrar (a DNS signal is not a purchase), (2) IMPI clears the mark.
+  Shortlist, best first: **Nelti** (Nahuatl *neltiliztli* = truth; coined
+  word, easiest at IMPI), Empata, Fedata, Constapago, Clabi. "Consta" and
+  "Constata" are discarded (domains taken; constata.eu is a real
+  collision). The internal name `consta` — folders, `apps/consta`, US-V
+  ids — **never changes**: code is not brand, and that churn is the part
+  D1 was right to reject. **The SaaS retains `devoladapago.com`**: the
+  permanent payment links (direct-payment D1/D8 — the most expensive
+  promise to break, they live for years in WhatsApp chats) are already at
+  `pago.devoladapago.com`, so whoever owns the domain owns the forever
+  redirect; keeping it here avoids coupling the extracted network to our
+  links. Go-live is not blocked — production launches under these
+  prefixes, and the later move to the final domain is one redirect the
+  SaaS itself serves:
+
+  | Surface | Address | Note |
+  |---|---|---|
+  | Payer links | `pago.devoladapago.com` | live today; never moves while the promise stands |
+  | Business dashboard | `app.devoladapago.com` | replaces the store-era `admin.` |
+  | SaaS API (BFF) | `api.devoladapago.com` | |
+  | Engine API door (developers) | `consta.devoladapago.com` | as already decided in SPEC.md |
+  | Operator panel | `app.devoladapago.com/operador` | a route behind `platform_operator`, not a subdomain; `operador.` reserved if isolation is ever needed |
+
+  **Rejected**: committing to Nelti before IMPI (a failed gate forces the
+  double rename this decision exists to avoid); the network inheriting
+  `devoladapago.com` (it would serve the SaaS's redirects forever — a
+  permanent coupling between separated products); staying Devolada (the
+  collision stands).
+
+- **D20 — One Consta key per business, and one money book.** *(Added
+  2026-08-31, PR #122 review.)* Each business gets its own Consta API key,
+  issued by the SaaS when the business is created, through a new
+  **internal programmatic issuance door** — an explicit amendment to
+  validation's US-V05 ("keys by hand"), scheduled for the phase 4 child
+  spec: programmatic issuance is for the first-party consumer only;
+  third-party keys stay manual. The key boundary keeps trust-layer D2's
+  isolation honest — payer histories separate per business at the key,
+  not by prefix discipline in SaaS code. Money has **one book**: the
+  prepaid debit lives only in `credit_entries` (US-L03, D5); Consta's
+  per-key validation log stays what US-V08 made it — provider-cost
+  telemetry — and is never a second billing book. **Rejected**: one
+  platform key with a prefixed `customerRef` (isolation by convention; a
+  prefix bug mixes payer histories across businesses); billing
+  authoritative in Consta (two money systems that can diverge, and the
+  welcome bonus and negative cap do not exist in Consta's model).
+
 ## Schema (sketch — child specs own the details)
 
 New and renamed tables; all money in integer cents, ids as today.
 
 - `businesses` (was `isps`): name, CLABE + bank + beneficiary, fee-payer
   switch, timezone/time format, reconciliation policy (`toleranceCents`,
-  `overTreatment`), status.
+  `overTreatment`), Consta key reference (D20), status.
 - `memberships`: user ↔ business, role (`owner|admin|operator|viewer`) —
   via Better Auth organizations.
 - `customers`: per business, `source` + external ids (WispHub customer id /
@@ -285,15 +352,60 @@ store-side auth artifacts.
    retirement PR here (D15). No feature work before this lands.
 2. **Foundation rename** — D14 migrations, glossary swap in SPEC.md,
    Better Auth organizations + roles (child spec: business & memberships,
-   US-B01–B03).
+   US-B01–B03). A fresh design cycle (brief → IA → tasks) for the SaaS
+   surfaces precedes this child spec — `.design/devolada/` left with the
+   network (D15). If D19's gates have passed by now, the brand rename
+   folds in here: one rename event, not two.
 3. **Prepaid credit** — credit entries, warnings, negative cap, top-up via
    validated SPEI, welcome bonus (child spec, US-B04–B06, US-L03) +
    `/operador` panel (child spec, US-L02).
 4. **Cobros mirror & reconciliation surfaces** — payment_requests from
    WispHub, class computation, payments list + filters + proof view, link
-   page lists Cobros (child specs, US-R01–R04).
+   page lists Cobros (child specs, US-R01–R04). Includes Consta's
+   programmatic key issuance (D20; amends US-V05 in its own decision).
 5. **Integrations hub** — page, key management (reuses settings D1–D3
    verbatim), mapping UI, observation mode (child spec, US-I01–I03).
+
+## Open items
+
+Recorded from the PR #122 review (2026-08-31) so no child spec answers
+them by accident:
+
+1. **provisional-release D10 amendment (phase 5).** D18 moves the vote of
+   confidence to the integration; provisional-release D10 still says
+   "Settings". The phase 5 child spec amends it formally: the toggle
+   lives on the integrations page as its own **pre-verdict** switch —
+   never a fourth row of the class→action mapping (D9 is post-verdict);
+   observation mode pauses provisional actions too; revocation
+   (provisional-release D5/D8) is an adapter action, so both halves of
+   the cycle live in one layer; the good-faith evidence stays
+   adapter-agnostic oracle machinery — an adapter only declares whether
+   it offers a provisional action.
+2. **Consta programmatic key issuance (phase 4).** D20's internal door
+   amends validation US-V05; the phase 4 child spec decides who may call
+   it and how it is secured.
+3. **Brand gates (phase 2 at the latest).** Register the chosen domain at
+   a registrar and consult IMPI; shortlist order in D19. Gates passed
+   before phase 2 lands → the rename folds into phase 2.
+4. **Per-tenant replay rejection as a Consta opt-in (backlog).** Today
+   validation D4 stands: Consta reports `alreadyValidated`, the
+   integrator decides. If it ever graduates: opt-in flag per request; its
+   own error code, never the verdict `invalid` (a policy rejection is not
+   a verdict — same doctrine as D9); evaluated **after** the provider
+   call so learned-retry (US-V16) keeps the `valid` row that closes its
+   latency bracket; formal amendment of validation D4 in its own
+   mini-spec.
+5. **Implementation note, phases 4–5: the internal event bus.** The
+   action side may be built as an internal event architecture within
+   these constraints: the adapter is **bidirectional** — SOURCE runs
+   synchronously inside the reconciliation path (D4's refresh moments),
+   ACTIONS go through the event; the event carries the reconciliation
+   class, never just "validated"; dispatch is acknowledged — observation
+   mode gates *before* dispatch and the outcome returns to the payment
+   row (`done|withheld|failed|observation`) so an operator can retry;
+   `invalid`/`not_found`/`unapplied` never dispatch. Outgoing webhooks
+   and the public API remain D17's backlog — the bus grows into them by
+   adding subscribers, amending nothing here.
 
 ## Out of scope (v1)
 

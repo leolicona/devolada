@@ -106,12 +106,6 @@ jobs:
             exit 1
           fi
           printf '%s' "$BETTER_AUTH_SECRET" | pnpm exec wrangler secret put BETTER_AUTH_SECRET --env dev
-      - name: Build store PWA (dev API baked in)
-        working-directory: apps/tienda
-        run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build
-      - name: Deploy dev store PWA
-        working-directory: apps/tienda
-        run: pnpm --filter @devolada/api exec wrangler deploy --config ../tienda/wrangler.jsonc --env dev
       - name: Build admin (dev API baked in)
         working-directory: apps/admin
         run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build

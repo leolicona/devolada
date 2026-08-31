@@ -8,6 +8,8 @@ debt: []
 
 # Spec: What the design review found
 
+> **2026-08-31, retirement PR**: the store-era capture harness (`tests/design/screenshots.spec.ts`) and its screenshots left with `devolada-red`; later per-PR review specs remain, writing to `.design/screenshots/`.
+
 `.design/devolada/DESIGN_REVIEW.md` judged the built product against the brief with
 42 browser captures. Fifteen findings survived; this spec is the decision record for
 the ones that change shared rules, and the contract for the harness gap that let

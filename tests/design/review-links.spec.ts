@@ -7,7 +7,7 @@ import { stubAdminApi } from "../e2e/stubs";
    and the missing-WispHub-key wall. Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-links.spec.ts */
 
-const OUT = ".design/devolada/screenshots";
+const OUT = ".design/screenshots";
 
 /* The Copiado shot writes to the real clipboard */
 test.use({ permissions: ["clipboard-write"] });

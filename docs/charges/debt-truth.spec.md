@@ -8,6 +8,8 @@ debt: []
 
 # Spec: What the customer owes
 
+> **2026-08-31, retirement PR**: US-C06/US-C08 are retired with the store channel, but this spec's decisions (D5, D7, D8, D11–D16) remain **in force** — the direct SPEI channel cites them throughout (`direct-payments/validation.ts`, `wisphub/debt.ts`, claimed-amount, partial-payment). The debt truth outlived its first consumer.
+
 A customer who already paid could be charged again — and the system would fabricate an invoice to justify it. This spec started by making the pending-invoice list the source of truth for "does this customer owe", everywhere the answer matters: the search results, the confirm screen, and the charge guard.
 
 **Revised 2026-08-20, and the title changed with it.** The invoice list answers *whether* a customer owes only while every payment is a whole one. Measured against a live tenant with a real router (`.design/devolada/PARTIAL_PAYMENT_SPIKE.md`), WispHub turns out to keep a **running account**: a payment is applied to the customer, not to the invoice, and anything left over is carried in the customer's `saldo`. So a partly paid invoice closes as `Pagada`, the pending list empties, and the debt survives somewhere this spec was not looking. D7–D12 finish the argument D1 began: the invoices are half the truth, the carried balance is the other half, and the *amount* was never being read at all.

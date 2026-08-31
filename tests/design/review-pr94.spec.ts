@@ -7,7 +7,7 @@ import { PAGO } from "../../playwright.config";
    this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-pr94.spec.ts */
 
-const OUT = ".design/devolada/screenshots";
+const OUT = ".design/screenshots";
 
 const envelope = (data: unknown) => ({
   status: 200,

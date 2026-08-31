@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN, TIENDA } from "../../playwright.config";
-import { stubAdminApi, stubStoreApi } from "./stubs";
+import { ADMIN } from "../../playwright.config";
+import { stubAdminApi } from "./stubs";
 
 /* docs/polish/responsive.spec.md — US-P03.
 
@@ -80,42 +80,6 @@ async function expectNothingClipped(page: Page) {
 test.describe("US-P05: every list row says what it is about at 360px", () => {
   test.use({ viewport: PHONE });
 
-  test("Tiendas shows which store each row is", async ({ page }) => {
-    await stubAdminApi(page);
-    await page.goto(`${ADMIN}/stores`);
-    await expect(page.getByText("Abarrotes La Esquina")).toBeVisible();
-    await expectNothingClipped(page);
-  });
-
-  test("the Entregas history shows the store and the date", async ({ page }) => {
-    await stubAdminApi(page);
-    await page.goto(`${ADMIN}/cash-drops`);
-    await expect(page.getByText("Entrega confirmada")).toBeVisible();
-    await expectNothingClipped(page);
-  });
-
-  test("the confirm screen shows the whole customer name", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/charge/greyes%40wifiplus`);
-    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
-    await expectNothingClipped(page);
-  });
-
-  test("a search result shows the whole customer name", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(TIENDA);
-    await page.getByLabel("Buscar cliente").fill("Janely");
-    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
-    await expectNothingClipped(page);
-  });
-
-  test("Movimientos shows the whole entry name", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/ledger`);
-    await expect(page.getByText(/Cobro · Janely/)).toBeVisible();
-    await expectNothingClipped(page);
-  });
-
   test("the charge feed shows customer and store", async ({ page }) => {
     await stubAdminApi(page);
     await page.goto(ADMIN);
@@ -123,51 +87,6 @@ test.describe("US-P05: every list row says what it is about at 360px", () => {
     await expectNothingClipped(page);
   });
 
-  test("Caja shows the whole store name", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/cashbox`);
-    await expect(page.getByText("Abarrotes La Esquina")).toBeVisible();
-    await expectNothingClipped(page);
-  });
-});
-
-test.describe("US-P03: the store PWA works on a 360px phone", () => {
-  test.use({ viewport: PHONE });
-
-  test("Caja fits, scrolls only downward, and its controls are thumb-sized", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/cashbox`);
-    await expect(page.getByText("Abarrotes La Esquina")).toBeVisible();
-
-    await expectNoHorizontalScroll(page);
-    await expectTouchTargets(page, 44);
-
-    /* The balance is the screen: it must not be truncated at the floor */
-    const amount = page.getByText("$910.00").first();
-    await expect(amount).toBeVisible();
-  });
-
-  test("the charge action is a 64px target in the thumb zone", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/cashbox/drop`);
-
-    const submit = page.getByRole("button", { name: /registrar entrega/i });
-    await expect(submit).toBeVisible();
-    const box = (await submit.boundingBox())!;
-    expect(box.height, "the decisive action is a 48px+ target").toBeGreaterThanOrEqual(48);
-    /* Full width at the floor: no hunting for a narrow button */
-    expect(box.width).toBeGreaterThan(PHONE.width * 0.8);
-  });
-
-  test("Movimientos keeps its amounts on screen", async ({ page }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/ledger`);
-    await expect(page.getByText(/Cobro · Janely/)).toBeVisible();
-
-    await expectNoHorizontalScroll(page);
-    /* A long customer name must not push the amount out of the row */
-    await expect(page.getByText("+$414.00")).toBeVisible();
-  });
 });
 
 test.describe("US-P03: the admin follows the ISP to a phone", () => {
@@ -191,22 +110,6 @@ test.describe("US-P03: the admin follows the ISP to a phone", () => {
 
     await expect(page.getByRole("navigation", { name: "Secciones", exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Secciones, barra inferior" })).toBeHidden();
-  });
-
-  test("confirming a handover is reachable on a phone", async ({ page }) => {
-    await stubAdminApi(page);
-    await page.setViewportSize(PHONE);
-    await page.goto(`${ADMIN}/cash-drops`);
-
-    const confirm = page.getByRole("button", { name: /confirmar entrega/i });
-    await expect(confirm).toBeVisible();
-    const box = (await confirm.boundingBox())!;
-    expect(box.height).toBeGreaterThanOrEqual(40);
-    await expectNoHorizontalScroll(page);
-
-    /* Two taps, and the second one is a dialog (cash-drops D6) */
-    await confirm.click();
-    await expect(page.getByRole("alertdialog")).toBeVisible();
   });
 
   test("the charge feed does not scroll sideways at tablet width", async ({ page }) => {

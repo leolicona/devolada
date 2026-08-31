@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in development
 stories: [US-B01, US-B02, US-B03, US-B04, US-B05, US-B06, US-R01, US-R02, US-R03, US-R04, US-I01, US-I02, US-I03, US-L02, US-L03]
 domain: platform
 updated: 2026-08-31 # D19-D20 and Open items added in the PR #122 review
@@ -352,8 +352,9 @@ store-side auth artifacts.
 
 ## Sequencing (each phase = its own PRs, child specs where marked)
 
-1. **Extraction** — create `devolada-red` from current `main`; then the
-   retirement PR here (D15). No feature work before this lands.
+1. **Extraction** — ✅ executed 2026-08-31: `devolada-red` created from
+   `main` at the tag `stores-network-final` (full history), and the
+   retirement PR pruned this repo (D15). No feature work landed before it.
 2. **Foundation rename** — D14 migrations, glossary swap in SPEC.md,
    Better Auth organizations + roles (child spec: business & memberships,
    US-B01–B03). A fresh design cycle (brief → IA → tasks) for the SaaS

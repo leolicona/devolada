@@ -34,7 +34,7 @@ describe("US-S01: D6 — the login and drop fields keep the size their screen as
   });
 });
 
-describe("US-K01, US-K02: D5 — the Caja primitives carry meaning, not just a recipe", () => {
+describe("US-P01, US-P04: the Alert primitive carries meaning, not just a recipe", () => {
   it("Alert is announced and takes the variant the caller asked for", () => {
     render(<Alert variant="destructive">El monto no puede ser mayor a tu balance.</Alert>);
     const alert = screen.getByRole("alert");

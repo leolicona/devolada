@@ -67,7 +67,7 @@ const ledgerEntries = [
     cls: "text-success",
   },
   {
-    title: "Comisión de la tienda",
+    title: "Cargo por servicio",
     meta: "14:32 · Sobre folio DV-000184",
     cents: -900,
     cls: "text-ink-soft",

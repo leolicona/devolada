@@ -9,7 +9,7 @@ import { ispActor } from "../e2e/stubs";
    Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-pr104-105.spec.ts */
 
-const OUT = ".design/devolada/screenshots";
+const OUT = ".design/screenshots";
 
 const envelope = (data: unknown) => ({
   status: 200,

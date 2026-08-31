@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN, TIENDA } from "../../playwright.config";
-import { stubAdminApi, stubStoreApi } from "./stubs";
+import { ADMIN } from "../../playwright.config";
+import { stubAdminApi } from "./stubs";
 
 /* docs/polish/accessibility.spec.md — US-P04, paying TD-010.
 
@@ -85,68 +85,6 @@ async function expectTabOrder(page: Page, expected: RegExp[]): Promise<void> {
     expectRinged(stops[i], `stop ${i + 1}`);
   }
 }
-
-test.describe("US-P04: the charge path is walkable by keyboard (TD-010)", () => {
-  test("search opens focused and is reachable; results before tabs, every stop ringed", async ({
-    page,
-  }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/`);
-
-    /* customer-search: the input holds focus on open — the shopkeeper
-       types the ID without touching anything first */
-    const search = page.getByPlaceholder("ID, teléfono o nombre");
-    await expect(search).toBeFocused();
-
-    await search.fill("Janely");
-    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
-
-    /* Rest the page, then prove the input is IN the tab order — not
-       only autofocused: Tab leaves it, Shift+Tab comes back, and the
-       return shows a visible indicator against true resting styles. */
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await snapshotRestingStyles(page);
-    await page.keyboard.press("Tab"); /* → Limpiar búsqueda */
-    await page.keyboard.press("Shift+Tab"); /* → back into the input */
-    const input = await readStop(page);
-    expect(input?.label).toMatch(/ID, teléfono o nombre/);
-    expectRinged(input, "the search input");
-
-    /* From the input: clear → the result → the three tabs. The result
-       comes before the navigation: content first, escape after. */
-    await expectTabOrder(page, [
-      /Limpiar búsqueda/,
-      /Janely Guadalupe Reyes/,
-      /^Cobrar$/,
-      /^Caja$/,
-      /^Movimientos$/,
-    ]);
-  });
-
-  test("Enter on a result opens the confirm screen; one Tab reaches the money", async ({
-    page,
-  }) => {
-    await stubStoreApi(page);
-    await page.goto(`${TIENDA}/`);
-    await page.getByPlaceholder("ID, teléfono o nombre").fill("Janely");
-    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
-
-    /* Keyboard only from here: Tab to the result, Enter to open it */
-    await page.keyboard.press("Tab"); /* Limpiar búsqueda */
-    await page.keyboard.press("Tab"); /* the result */
-    await page.keyboard.press("Enter");
-
-    /* The quote has to be on screen before the walk starts */
-    const pay = page.getByRole("button", { name: /cobrar \$514\.00/i });
-    await expect(pay).toBeVisible();
-
-    /* The decisive action is the first stop of the new screen */
-    await snapshotRestingStyles(page);
-    const stop = await nextStop(page);
-    expect(stop?.label).toMatch(/Cobrar \$514\.00/);
-    expectRinged(stop, "the charge button");
-  });
-});
 
 test.describe("US-P04: the admin's confirm flow is walkable by keyboard (TD-010)", () => {
   test.use({ viewport: { width: 1280, height: 900 } });

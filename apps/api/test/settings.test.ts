@@ -2,7 +2,7 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { isps } from "../src/db/schema";
-import { app, seedIsp, seedStore, sessionCookieHeader } from "./helpers";
+import { app, seedIsp, sessionCookieHeader } from "./helpers";
 
 /* docs/admin/settings.spec.md scenarios 1–3. */
 
@@ -60,9 +60,6 @@ describe("US-A04: the ISP reads its settings without reading its key", () => {
 
     expect(data).toMatchObject({
       serviceFeeCents: 1500,
-      storeCommissionCents: 900,
-      /* D4: derived, never stored */
-      platformShareCents: 600,
       timezone: "America/Mexico_City",
       timeFormat: "12h",
       wisphub: { configured: true, keyTail: "1234" },
@@ -71,27 +68,16 @@ describe("US-A04: the ISP reads its settings without reading its key", () => {
     expect(JSON.stringify(data)).not.toContain("SECRETKEY");
   });
 
-  it("a store session gets 403", async () => {
-    const isp = await seedIsp();
-    await seedStore(isp.id);
-    const res = await (await app()).request(
-      "/settings",
-      { headers: { Cookie: await sessionCookieHeader("5512345678") } },
-      env,
-    );
-    expect(res.status).toBe(403);
-  });
 });
 
-describe("US-A04: saving the split, the zone and the format", () => {
-  it("saves the fields and refuses a commission above the fee", async () => {
+describe("US-A04: saving the fee, the zone and the format", () => {
+  it("saves the fields", async () => {
     await seedIsp();
     const client = await app();
 
     const ok = await client.request(
       ...send("/settings", "PATCH", {
         serviceFeeCents: 2000,
-        storeCommissionCents: 1200,
         timezone: "America/Hermosillo",
         timeFormat: "24h",
       }),
@@ -100,19 +86,9 @@ describe("US-A04: saving the split, the zone and the format", () => {
     expect(ok.status).toBe(200);
     expect((await ok.json()).data).toMatchObject({
       serviceFeeCents: 2000,
-      storeCommissionCents: 1200,
-      platformShareCents: 800,
       timezone: "America/Hermosillo",
       timeFormat: "24h",
     });
-
-    /* D4: the store cannot earn more than the customer pays */
-    const tooMuch = await client.request(
-      ...send("/settings", "PATCH", { storeCommissionCents: 2500 }),
-      env,
-    );
-    expect(tooMuch.status).toBe(400);
-    expect((await tooMuch.json()).error.code).toBe("COMMISSION_EXCEEDS_FEE");
 
     /* An unknown zone would silently move a business day */
     const badZone = await client.request(
@@ -319,21 +295,4 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     });
   });
 
-  it("a store session cannot touch the dial", async () => {
-    const isp = await seedIsp();
-    await seedStore(isp.id);
-    const res = await (await app()).request(
-      "/settings",
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: await sessionCookieHeader("5512345678"),
-        },
-        body: JSON.stringify({ reconnectionThresholdPercent: 0 }),
-      },
-      env,
-    );
-    expect(res.status).toBe(403);
-  });
 });

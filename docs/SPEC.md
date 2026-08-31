@@ -2,14 +2,17 @@
 
 The project's sacred index. **Golden rule: if it exists in the code but is not here, it's wrong.**
 
-A network of payment points in neighborhood corner stores for ISPs running WispHub. The customer pays their monthly internet fee at the store around the corner, their service reconnects automatically within seconds, the store earns a commission with zero investment, and the ISP collects faster without field collection runs.
+Direct SPEI payments with automatic validation for service businesses — today, ISPs running WispHub: the customer opens their permanent payment link, transfers to the ISP's own CLABE, the transfer is validated against Banxico (through Consta) and the service reconnects on its own.
 
-> **Pivot (decided 2026-08-31, proposed)**: the product becomes the SPEI
+> **Pivot (decided 2026-08-31)**: the product becomes the SPEI
 > validation-and-reconciliation platform — the oracle of truth; operational
-> actions live behind integrations. The store network above moves to its own
-> repo (`devolada-red`). Umbrella spec: [platform/pivot.spec.md](platform/pivot.spec.md).
-> Until its retirement PR lands, the description above and every story below
-> remain the truth of `main`.
+> actions live behind integrations. Umbrella spec:
+> [platform/pivot.spec.md](platform/pivot.spec.md). **Phase 1 (extraction)
+> executed 2026-08-31**: the store network — payment points in neighborhood
+> corner stores — lives in its own repo, `devolada-red` (github.com/leolicona/
+> devolada-red), born from the whole of `main` at the tag
+> `stores-network-final`. Its stories below are marked retired; its specs,
+> apps and routes left this repo in the retirement PR.
 
 ## Spec-driven workflow rules (adapted)
 
@@ -22,23 +25,16 @@ A network of payment points in neighborhood corner stores for ISPs running WispH
 
 ## Glossary
 
-Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico); code identifiers are English. One word per concept, no synonyms.
+Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico); code identifiers are English. One word per concept, no synonyms. *(2026-08-31: the store-network rows — Caja, Entrega, Comisión, Movimiento, Invitación, Techo de saldo, Liquidación — retired to `devolada-red`; the pivot glossary in platform/pivot.spec.md takes over in phase 2.)*
 
 | Concept | UI copy (es-MX) | Code (English) | Never |
 |---------|-----------------|----------------|-------|
 | Customer payment transaction | **Cobro** | `charge` | "pago" (only on the end-customer receipt) |
-| Store's continuous balance | **Caja** / **Balance** | `balance` (derived) | "corte" |
-| Cash handover to the ISP | **Entrega** | `cash_drop` | "corte" |
 | Fee paid by the end customer | **Cargo por servicio** | `service_fee` | — |
 | Period's billed charge (invoice total) | **Cargo del periodo** | `invoice` / `invoice_cents` | "mensualidad" (the invoice can bill more than the plan — debt-truth D16) |
-| Store's earnings | **Comisión** | `commission` | (never shown to the end customer) |
-| Ledger entry | **Movimiento** | `ledger_entry` | — |
 | MikroTik reactivation | **Reconexión** | `reconnection` (`queued/reconnected/failed`) | — |
 | Receipt with unique folio | **Comprobante** / **Folio** | `receipt` / `folio` | "ticket" |
-| Store's initial access | **Invitación** | `invitation` (`sent/accepted`) | — |
-| Balance threshold | **Techo de saldo** | `balance_cap` | — |
 | Device biometric sign-in | **Huella / rostro** | `passkey` | "biometría", "WebAuthn" (never in copy) |
-| Platform's share collection | **Liquidación** | `settlement` | "corte" |
 | One-time email code | **Código** | `otp` | "token", "OTP", "enlace" (never in copy) |
 | Customer's permanent SPEI page | **Link de pago** | `payment_link` | — |
 | Bank-transfer payment (no store) | **Pago directo** | `direct_payment` (`validating/confirmed/invalid/expired/unapplied`) | "depósito" |
@@ -47,42 +43,31 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 ## User Stories
 
 ### Auth & sessions (S)
-- **US-S01** — As a store, I log in with phone + password and my session lasts for weeks on my device.
+- **US-S01** — *Retired 2026-08-31 → `devolada-red` (store login by phone).*
 - **US-S02** — As a signed-in user, I never see "session expired" during normal operation: tokens renew on their own.
-- **US-S03** — As an ISP, suspending a store revokes its access immediately, even mid-session.
+- **US-S03** — *Retired 2026-08-31 → `devolada-red` (store suspension). The mechanism — DB status check on every request — stays law for ISPs (sessions spec, ARCHITECTURE.md).*
 - **US-S04** — As an ISP, I sign up with email + password and verify my email with a code (Resend) before operating. *(link → code 2026-08-15, better-auth.spec.md D4)*
-- **US-S05** — As a store, I receive an invitation via WhatsApp/SMS and set my password **and recovery email** from the link. *(email added 2026-08-15, better-auth.spec.md D8)*
+- **US-S05** — *Retired 2026-08-31 → `devolada-red` (store invitations; better-auth D8).*
 - **US-S06** — As any user, my email is my master recovery key: a code sent to it restores my access. As a store, the ISP can also re-send my invitation. *(rewritten 2026-08-15; was ISP-only and link-based)*
 - **US-S07** — As any user, I can enable my device's fingerprint or face (passkey) and sign in with one touch, no email or password involved.
 
 ### Charges (C)
-- **US-C01** — As a store, I search for the customer by ID, phone or name and see only the minimum needed to confirm their identity.
-- **US-C02** — As a store, I charge the exact monthly fee with a visible breakdown (monthly fee + service fee).
-- **US-C03** — As an end customer, my service reconnects automatically within seconds after paying; the store sees the status live.
-- **US-C04** — As a store, a charge is never rejected because of WispHub failures: it gets recorded and the reconnection is queued with retries.
-- **US-C05** — As an end customer, I receive a receipt via WhatsApp/SMS with a unique folio.
-- **US-C06** — As an end customer, I can only be charged what I actually owe: a debt that no longer exists cannot be charged again. *(added 2026-08-16, found live: WispHub's summary label lags the invoices in both directions)*
-- **US-C07** — As a store, when WispHub has no phone for the customer, I can save it once during the charge, and the receipt opens straight into their chat — this time and every time after. *(reserved 2026-08-17, backlog #3; WispHub write-back probed and impossible)*
-- **US-C08** — As an end customer, I am charged exactly what I owe — the whole of it, including anything carried over from a payment that fell short — and a debt that was only half paid never becomes invisible. *(reserved 2026-08-20, found live: WispHub keeps a running account, so a partly paid invoice closes as "Pagada" and the rest survives in `saldo`, where nothing was looking)*
+- **US-C01 — US-C08** — *Retired 2026-08-31 → `devolada-red`; never reuse these IDs.* The store charge flow in full. Two invariants they bred stay law here: the debt truth (C06/C08 → [charges/debt-truth.spec.md](charges/debt-truth.spec.md), whose decisions the direct channel cites throughout) and never-rejected-by-WispHub (C04 → the reconnection queue, which the spei channel rides).
 
 ### Cash box (K)
-- **US-K01** — As a store, I see my balance (the ISP's cash in my hands) and my commission for the current drop cycle; every number breaks down into its ledger entries. *(commission per cycle 2026-08-17, cashbox.spec.md D5 — was "accumulated"; the drop is the shopkeeper's corte)*
-- **US-K02** — As a store, I record a cash drop that stays pending until the ISP confirms it.
-- **US-K03** — As a store, I browse my immutable ledger (charges, commissions, cash drops).
-- **US-K04** — As a store, the balance cap warns me as I approach it and blocks charges once exceeded, with a clear explanation.
+- **US-K01 — US-K04** — *Retired 2026-08-31 → `devolada-red`; never reuse these IDs.*
 
 ### Cash drops — admin side (E)
-- **US-E01** — As an ISP, I confirm receipt of a cash drop and the store's balance goes down.
-- **US-E02** — As an ISP, I dispute a cash drop with a note if the amount doesn't match; both sides see the same ledger to resolve it.
+- **US-E01 — US-E02** — *Retired 2026-08-31 → `devolada-red`; never reuse these IDs.*
 
 ### Admin (A)
 - **US-A01** — As an ISP, I watch charges appear in real time with their reconnection status; failed ones demand my attention.
-- **US-A02** — As an ISP, I register stores and send them invitations; I can re-send one while it hasn't been accepted.
-- **US-A03** — As an ISP, I manage each store: commission, balance cap, suspend, view its ledger.
+- **US-A02** — *Retired 2026-08-31 → `devolada-red` (store registration).*
+- **US-A03** — *Retired 2026-08-31 → `devolada-red` (store management).*
 - **US-A04** — As an ISP, I configure my WispHub API Key (validated live), the service fee and the commission split.
 
 ### Platform (L)
-- **US-L01** — As the platform, my share of every charge accrues per ISP and per month; as an ISP, I see each month's statement with exactly what to transfer and the reference to use. *(reserved 2026-08-17, backlog #1)*
+- **US-L01** — *Retired 2026-08-31 → `devolada-red` (settlement statement v1); superseded here by the prepaid credit (pivot D5, US-B04–B06/US-L03).*
 - **US-L02** — As the platform operator, every global rule — validation fee, welcome bonus, negative-balance cap, inheritable defaults, retry schedule, top-up CLABE — lives in one versioned place I edit from an operator panel, and every change keeps its date and author. *(reserved 2026-08-31, pivot)*
 - **US-L03** — As the platform, every confirmed validation debits the business's prepaid credit at the current fee — never per attempt, never a percentage. *(reserved 2026-08-31, pivot)*
 
@@ -158,7 +143,9 @@ Pivot stories (platform/pivot.spec.md); the bridge to operational actions.
 
 ## Features by Phase
 
-Operational detail in `.design/devolada/TASKS.md` (execution layer).
+*Store-era build record (phases 0–6), kept as history: its artifacts and
+execution layer (`.design/devolada/TASKS.md`) live in `devolada-red` now.
+The pivot's own sequencing lives in platform/pivot.spec.md.*
 
 - **Phase 0 — Risk**: WispHub spike (payment → reactivation). ✅ executed 2026-08-13 (`.design/devolada/WISPHUB_SPIKE.md`). The router flip was **rehearsed on a real RouterOS 2026-08-17** (CHR linked to the demo tenant via WispHub's VPN; full suspend → charge → reactivate loop observed on the router — reconnection-queue.spec.md DoD); the pilot ISP's own hardware remains as final confirmation
 - **Phase 1 — Foundation**: live tokens ✅ · shared atoms ✅ · API base with sessions ✅ · ISP signup/access ✅ (email live on `devoladapago.com`, reaching third parties — TD-011 paid)
@@ -198,9 +185,7 @@ not here. Owner's priority order (2026-08-16):
    personal-data commitment to weigh. *(Probed 2026-08-17: `telefono` is
    read-only via the API — absent from the detail resource and the PUT
    schema, PATCH ignores it. The fallback is the spec.)*
-4. **Period reports** — the ledger already holds every movement forever; what
-   is missing are the aggregations: monthly cortes per store and per ISP
-   (charges, commission, drops). Pure derivation, no new writes.
+4. **Period reports** — *moved with the network 2026-08-31 (`devolada-red`): the aggregations derive from the store ledger, which lives there.*
 5. **WhatsApp Business API** — already decided as its own later feature
    (TD-003): real sending for receipts and invitations, `wa.me` stays as the
    fallback.
@@ -253,23 +238,11 @@ Owner's decisions:
 | [auth/sessions.spec.md](auth/sessions.spec.md) | auth | US-S01, US-S02, US-S03 | current |
 | [auth/better-auth.spec.md](auth/better-auth.spec.md) | auth | US-S01, US-S02, US-S04, US-S05, US-S06, US-S07 | in development |
 | [auth/isp-signup.spec.md](auth/isp-signup.spec.md) | auth | US-S04, US-S06 | in development |
-| [auth/store-invitation.spec.md](auth/store-invitation.spec.md) | auth | US-S05 | in development |
-| [store-pwa/shell.spec.md](store-pwa/shell.spec.md) | store-pwa | US-S01, US-S02, US-S03 (UI) | in development |
-| [charges/customer-search.spec.md](charges/customer-search.spec.md) | charges | US-C01 | in development |
-| [charges/charge-confirm.spec.md](charges/charge-confirm.spec.md) | charges | US-C02, US-K04 (partial) | in development |
-| [charges/charge-record.spec.md](charges/charge-record.spec.md) | charges | US-C03, US-C04 | in development |
-| [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retries) | in development |
-| [charges/receipt.spec.md](charges/receipt.spec.md) | charges | US-C05 | in development |
-| [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06, US-C08 | in development |
-| [charges/customer-phone.spec.md](charges/customer-phone.spec.md) | charges | US-C07 | in development |
-| [cashbox/cashbox.spec.md](cashbox/cashbox.spec.md) | cashbox | US-K01, US-K04 | in development |
-| [cashbox/cash-drop-and-ledger.spec.md](cashbox/cash-drop-and-ledger.spec.md) | cashbox | US-K02, US-K03 | in development |
-| [cash-drops/confirm-cash-drop.spec.md](cash-drops/confirm-cash-drop.spec.md) | cash-drops | US-E01, US-E02 | in development |
+| [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retired) | in force (spei channel rides it) |
+| [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06, US-C08 (retired) | decisions in force (direct channel) |
 | [admin/shell.spec.md](admin/shell.spec.md) | admin | US-S04, US-S06 (UI) | in development |
 | [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
-| [admin/stores.spec.md](admin/stores.spec.md) | admin | US-A02, US-A03 | in development |
 | [admin/settings.spec.md](admin/settings.spec.md) | admin | US-A04 | in development |
-| [platform/settlement.spec.md](platform/settlement.spec.md) | platform | US-L01 | in development |
 | [polish/list-states.spec.md](polish/list-states.spec.md) | polish | US-P01 | in development |
 | [polish/dark-and-contrast.spec.md](polish/dark-and-contrast.spec.md) | polish | US-P02, US-P04 (contrast) | in development |
 | [polish/accessibility.spec.md](polish/accessibility.spec.md) | polish | US-P04 | in development |
@@ -288,7 +261,7 @@ Owner's decisions:
 | [direct-payment/claimed-amount.spec.md](direct-payment/claimed-amount.spec.md) | direct-payment | US-D13 | in development |
 | [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | in development |
 | [direct-payment/provisional-release.spec.md](direct-payment/provisional-release.spec.md) | direct-payment | US-D15 | proposed |
-| [platform/pivot.spec.md](platform/pivot.spec.md) | platform | US-B01–B06, US-R01–R04, US-I01–I03, US-L02, US-L03 | proposed |
+| [platform/pivot.spec.md](platform/pivot.spec.md) | platform | US-B01–B06, US-R01–R04, US-I01–I03, US-L02, US-L03 | in development (phase 1 executed) |
 
 ## Cross-cutting layers
 

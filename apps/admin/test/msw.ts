@@ -36,28 +36,11 @@ export const handlers = {
     http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/charges/feed", ({ request }) => r(new URL(request.url))),
-  stores: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/stores", () => r()),
-  createStore: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/stores", () => r()),
-  store: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/stores/:id", () => r()),
-  patchStore: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
-    http.patch("/stores/:id", async ({ request }) => r(await request.json())),
-  resendInvitation: (r: () => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/stores/:id/resend-invitation", () => r()),
-  storeLedger: (r: () => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/stores/:id/ledger", () => r()),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
-  settlement: (r: () => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/settlement", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),
   testWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/settings/wisphub/test", async ({ request }) => r(await request.json())),
-  cashDrops: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/cash-drops", ({ request }) => r(new URL(request.url))),
-  confirmCashDrop: (r: () => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/cash-drops/:id/confirm", () => r()),
-  disputeCashDrop: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/cash-drops/:id/dispute", async ({ request }) => r(await request.json())),
   linksSearch: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/direct-payments/links/search", ({ request }) => r(new URL(request.url))),
 };

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { ADMIN, TIENDA } from "../../playwright.config";
-import { stubAdminApi, stubStoreApi } from "./stubs";
+import { ADMIN } from "../../playwright.config";
+import { stubAdminApi } from "./stubs";
 
 /* docs/polish/dark-and-contrast.spec.md, the half a token file cannot
    prove. contrast-lint measures the palette; this measures the pixels —
@@ -9,10 +9,7 @@ import { stubAdminApi, stubStoreApi } from "./stubs";
    and only a browser knows which colours actually met. */
 
 const screens = [
-  { name: "Caja", url: `${TIENDA}/cashbox`, stub: stubStoreApi, ready: "Abarrotes La Esquina" },
-  { name: "Movimientos", url: `${TIENDA}/ledger`, stub: stubStoreApi, ready: "Comisión" },
   { name: "Cobros", url: ADMIN, stub: stubAdminApi, ready: "Janely Guadalupe Reyes" },
-  { name: "Entregas", url: `${ADMIN}/cash-drops`, stub: stubAdminApi, ready: "Confirmar entrega" },
 ] as const;
 
 for (const theme of ["light", "dark"] as const) {

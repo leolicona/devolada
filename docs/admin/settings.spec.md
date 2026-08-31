@@ -8,6 +8,8 @@ debt: [TD-001]
 
 # Spec: ISP settings
 
+> **2026-08-31, retirement PR**: D4 (commission ≤ fee, the split card) and the settlement card retired with the store network. `serviceFeeCents` survives as the fallback the SPEI fee inherits when unset (direct-payment D3).
+
 The Configuración section: the WispHub API key that makes reconnection possible, the money split between the end customer, the store and the platform, and the display settings that decide what "today" and "2:30 p.m." mean. These are the owner's ISP-level configuration notes, finally given a home.
 
 ## Decisions

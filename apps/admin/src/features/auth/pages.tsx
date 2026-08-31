@@ -130,7 +130,7 @@ export function SignupPage() {
   );
 
   return (
-    <AccessLayout title="Crear cuenta" description="Tu ISP, cobrando en las tiendas de tu zona.">
+    <AccessLayout title="Crear cuenta" description="Tu ISP, cobrando por transferencia sin trabajo manual.">
       <form
         onSubmit={(e) => {
           e.preventDefault();

@@ -8,6 +8,8 @@ debt: [TD-003]
 
 # Spec: Better Auth migration — email codes as the master key, passkeys
 
+> **2026-08-31, retirement PR**: D3 (phone as username) and D8 (store invitations) retired with the store network (`devolada-red`) — the `username()` plugin is removed. Everything ISP-side (email OTP, passkeys, custom domains) stays in force.
+
 Replaces Agnostic Auth with [Better Auth](https://better-auth.com) running
 inside `apps/api`: sessions in our own D1, passwords for daily login (email
 for the ISP, phone for the store), passkeys on top of both, and **email as

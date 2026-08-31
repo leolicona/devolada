@@ -193,7 +193,7 @@ function sources(dir, acc = []) {
   return acc;
 }
 
-for (const dir of ["apps/tienda/src", "apps/admin/src", "packages/ui/src"]) {
+for (const dir of ["apps/admin/src", "apps/pago/src", "packages/ui/src"]) {
   for (const file of sources(join(root, dir))) {
     const text = readFileSync(file, "utf8");
     text.split("\n").forEach((line, i) => {

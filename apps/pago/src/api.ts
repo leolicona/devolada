@@ -1,6 +1,6 @@
 /* Session-less fetch wrapper (direct-payment spec D9): the page is
    public — the link token is the credential, no cookies ride along.
-   Base resolution mirrors the other apps (tienda's api/base.ts): the
+   Base resolution mirrors the admin's (lib/base.ts): the
    dev server never proxies the API; deployed builds get VITE_API_URL
    from the workflow (CICD.md). */
 

@@ -19,7 +19,7 @@ describe("US-S04: login lands on the dashboard shell", () => {
     await userEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     expect(await screen.findByRole("heading", { name: "Cobros" })).toBeInTheDocument();
-    for (const label of ["Tiendas", "Entregas", "Configuración"]) {
+    for (const label of ["Links", "Configuración"]) {
       expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
     expect(router.state.location.pathname).toBe("/");
@@ -88,23 +88,10 @@ describe("US-S06: recovery asks for a código and never leaks existence", () => 
 describe("D3: the guard sends session-less visits to login", () => {
   it("redirects to /login", async () => {
     server.use(handlers.session(() => failResponse("AUTHENTICATION_ERROR", 401)));
-    const router = renderApp("/stores");
+    const router = renderApp("/links");
 
     expect(await screen.findByLabelText("Correo")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
   });
 
-  /* D3 says the guard accepts only ISP actors, and it did not. Both apps
-     share one session cookie (better-auth.spec.md D7), so a store signed
-     in on the PWA drew this shell — banners lit by its missing fields —
-     and then every admin endpoint answered 403. */
-  it("a store's session does not open the admin", async () => {
-    server.use(
-      handlers.session(() => ok({ type: "store", id: "s1", name: "La Esquina", status: "active" })),
-    );
-    const router = renderApp("/stores");
-
-    expect(await screen.findByLabelText("Correo")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/login");
-  });
 });

@@ -35,7 +35,7 @@ export function VerifyEmailBanner({ email }: { email: string }) {
     <Alert variant="warning" className="m-4 space-y-3 lg:mx-8 lg:mt-6">
       <span className="flex items-center gap-2">
         <MailWarning className="size-4 shrink-0" aria-hidden />
-        Confirma tu correo para poder registrar tiendas: escribe el código que enviamos a {email}.
+        Confirma tu correo para operar: escribe el código que enviamos a {email}.
       </span>
       <form onSubmit={confirm} className="flex flex-wrap items-end gap-3" noValidate>
         <div>

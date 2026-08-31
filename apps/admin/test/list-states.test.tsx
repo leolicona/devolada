@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/charges-schema";
-import { storesResponse } from "@devolada/api/stores-schema";
 import { fail, handlers, ispActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
@@ -86,25 +85,4 @@ describe("US-P01: retrying loads the data without leaving the screen", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 
-  it("covers the stores list with the same rule", async () => {
-    let failNext = true;
-    server.use(
-      handlers.session(() => ok(ispActor)),
-      handlers.stores(() => {
-        if (failNext) {
-          failNext = false;
-          return fail("INTERNAL_SERVER_ERROR", 500);
-        }
-        return ok(storesResponse.parse({ stores: [] }));
-      }),
-    );
-    renderApp("/stores");
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/no pudimos cargar tus tiendas/i);
-    expect(screen.queryByText(/todavía no tienes tiendas/i)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /reintentar/i }));
-    /* Only now, with a real answer, may the empty state speak */
-    expect(await screen.findByText(/todavía no tienes tiendas/i)).toBeInTheDocument();
-  });
 });

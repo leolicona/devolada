@@ -3,24 +3,19 @@ import { Link, Navigate, Outlet } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownToLine,
   Banknote,
   KeyRound,
   LogOut,
   Settings,
-  Store,
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logout, useSession } from "../auth/session";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
-import { usePendingDropCount } from "../cash-drops/usePendingDrops";
 
 const sections = [
   { to: "/", label: "Cobros", icon: Banknote, exact: true },
-  { to: "/stores", label: "Tiendas", icon: Store, exact: false },
-  { to: "/cash-drops", label: "Entregas", icon: ArrowDownToLine, exact: false },
   /* "Links", not "Enlaces SPEI": the glossary's word for this is
      "Link de pago" (SPEC.md), so "Enlace" was a synonym for a concept
      already named — and the two words wrapped onto a second line in the
@@ -28,20 +23,6 @@ const sections = [
   { to: "/links", label: "Links", icon: LinkIcon, exact: false },
   { to: "/settings", label: "Configuración", icon: Settings, exact: false },
 ] as const;
-
-/* D8: the count rides the same query as the Entregas screen. Text, not
-   only a dot — a badge that says nothing is decoration (FRONTEND law). */
-function PendingCount({ count, className = "ml-auto" }: { count: number; className?: string }) {
-  if (!count) return null;
-  return (
-    <span
-      className={`rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning ${className}`}
-      aria-label={`${count} ${count === 1 ? "entrega pendiente" : "entregas pendientes"}`}
-    >
-      {count}
-    </span>
-  );
-}
 
 function SuspendedScreen() {
   return (
@@ -57,10 +38,8 @@ function SuspendedScreen() {
   );
 }
 
-/* The links, in both shapes. It owns the pending query, so it only runs
-   once the session is known (this renders after the Shell's guards). */
+/* The links, in both shapes. */
 function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
-  const pendingDrops = usePendingDropCount();
   const sidebar = variant === "sidebar";
 
   return (
@@ -93,12 +72,8 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
           >
             <span className={sidebar ? "contents" : "relative"}>
               <Icon className={sidebar ? "size-4" : "size-5"} aria-hidden />
-              {!sidebar && to === "/cash-drops" && (
-                <PendingCount count={pendingDrops} className="absolute -right-3 -top-1" />
-              )}
             </span>
             {label}
-            {sidebar && to === "/cash-drops" && <PendingCount count={pendingDrops} />}
           </Link>
         ))}
       </div>

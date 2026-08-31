@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { emailOTP, username } from "better-auth/plugins";
+import { emailOTP } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
@@ -60,8 +60,6 @@ export function makeAuth(env: Bindings) {
           }
         },
       }),
-      /* The store's phone is its username (spec D3) */
-      username(),
       passkey({
         rpID: env.PASSKEY_RP_ID ?? "localhost",
         rpName: "Devolada",

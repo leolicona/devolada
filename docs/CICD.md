@@ -31,13 +31,13 @@ Rules for two worktrees to coexist:
 
 ## Environments
 
-| Environment | API | Store PWA | Admin | D1 |
-|-------------|-----|-----------|-------|-----|
-| dev | `devolada-api-dev.leolicona-dev.workers.dev` | `devolada-tienda-dev.leolicona-dev.workers.dev` | (not built) | `devolada-db-dev` |
-| prod | `devolada-api` worker | `devolada-tienda` worker | (not built) | `devolada-db-prod` |
-| preview (per PR) | API version upload | **PWA version upload — the URL the client opens** | — | points at `devolada-db-dev` |
+| Environment | API | Admin | Pago | D1 |
+|-------------|-----|-------|------|-----|
+| dev | `devolada-api-dev` | `devolada-admin-dev` | `devolada-pago-dev` | `devolada-db-dev` |
+| prod | `devolada-api` | `devolada-admin` | `devolada-pago` | `devolada-db-prod` |
+| preview (per PR) | API version upload | **admin version upload — the URL the client opens** | version upload | points at `devolada-db-dev` |
 
-Custom domains (`api.devolada.app`, `tienda.devolada.app`, …) replace the `workers.dev` URLs when the zone exists in Cloudflare.
+Custom domains live under `devoladapago.com` (`api.` / `admin.` / `pago.` / `consta.`, and `.dev.` variants — pivot D19 is the map). The store PWA and its `punto.*` domains left with `devolada-red` (2026-08-31).
 
 Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo — and reach the Worker through the sync step in D5. `AUTH_JWT_SECRET` is optional on dev and **required on prod**: the deploy fails without it rather than shipping an API that skips signature checks (TD-001).
 

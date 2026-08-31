@@ -25,10 +25,8 @@ export const timezone = z.enum([
 export const timeFormat = z.enum(["12h", "24h"]);
 
 export const settingsResponse = z.object({
+  /* Survives the store retirement as the SPEI fee's fallback (D3) */
   serviceFeeCents: z.number().int(),
-  storeCommissionCents: z.number().int(),
-  /* D4: derived from the two above, never stored */
-  platformShareCents: z.number().int(),
   timezone,
   timeFormat,
   wisphub: z.object({
@@ -67,7 +65,6 @@ export const settingsResponse = z.object({
 export const settingsPatchRequest = z
   .object({
     serviceFeeCents: z.number().int().nonnegative(),
-    storeCommissionCents: z.number().int().nonnegative(),
     timezone,
     timeFormat,
     wisphubApiKey: z.string().trim().min(8),

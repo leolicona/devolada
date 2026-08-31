@@ -11,8 +11,6 @@ import { renderApp } from "./render";
 const settings = (over: Record<string, unknown> = {}) =>
   settingsResponse.parse({
     serviceFeeCents: 1500,
-    storeCommissionCents: 900,
-    platformShareCents: 600,
     timezone: "America/Mexico_City",
     timeFormat: "12h",
     wisphub: { configured: true, keyTail: "1234" },
@@ -50,7 +48,6 @@ describe("US-D13: the beneficiary name is recommended, never required", () => {
           }),
         ),
       ),
-      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(settings());
@@ -71,57 +68,25 @@ describe("US-D13: the beneficiary name is recommended, never required", () => {
   });
 });
 
-describe("US-A04: the split is saved with its share visible", () => {
-  it("shows the platform share while typing and saves the two numbers", async () => {
+describe("US-A04: the service fee is saved", () => {
+  it("saves the fee that the SPEI channel falls back to", async () => {
     const patches: unknown[] = [];
     server.use(
       handlers.session(() => ok(ispActor)),
       handlers.settings(() => ok(settings())),
-      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
-        return ok(settings({ serviceFeeCents: 2000, storeCommissionCents: 1200, platformShareCents: 800 }));
+        return ok(settings({ serviceFeeCents: 2000 }));
       }),
     );
     renderApp("/settings");
 
-    expect(await screen.findByText(/quedan/i)).toHaveTextContent("$6.00");
-
-    const fee = screen.getByLabelText("Cargo por servicio");
+    const fee = await screen.findByLabelText("Cargo por servicio");
     await userEvent.clear(fee);
     await userEvent.type(fee, "20.00");
-    /* D4: derived live from the two fields, before any save */
-    expect(screen.getByText(/quedan/i)).toHaveTextContent("$11.00");
 
-    const commission = screen.getByLabelText("Comisión de la tienda");
-    await userEvent.clear(commission);
-    await userEvent.type(commission, "12.00");
-    expect(screen.getByText(/quedan/i)).toHaveTextContent("$8.00");
-
-    await userEvent.click(screen.getByRole("button", { name: /guardar cobro y comisiones/i }));
-    expect(patches).toEqual([{ serviceFeeCents: 2000, storeCommissionCents: 1200 }]);
-  });
-
-  it("blocks a commission above the fee before it reaches the API", async () => {
-    const patches: unknown[] = [];
-    server.use(
-      handlers.session(() => ok(ispActor)),
-      handlers.settings(() => ok(settings())),
-      handlers.settlement(() => ok({ months: [] })),
-      handlers.patchSettings((body) => {
-        patches.push(body);
-        return ok(settings());
-      }),
-    );
-    renderApp("/settings");
-
-    const commission = await screen.findByLabelText("Comisión de la tienda");
-    await userEvent.clear(commission);
-    await userEvent.type(commission, "30.00");
-
-    expect(screen.getByText(/no puede ser mayor al cargo por servicio/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /guardar cobro y comisiones/i })).toBeDisabled();
-    expect(patches).toEqual([]);
+    await userEvent.click(screen.getByRole("button", { name: /guardar cargo por servicio/i }));
+    expect(patches).toEqual([{ serviceFeeCents: 2000 }]);
   });
 });
 
@@ -132,7 +97,6 @@ describe("US-A04: the key is tested before it is saved", () => {
     server.use(
       handlers.session(() => ok({ ...ispActor, wisphubConfigured: false })),
       handlers.settings(() => ok(settings({ wisphub: { configured: false, keyTail: null } }))),
-      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(settings());
@@ -198,7 +162,6 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
     server.use(
       handlers.session(() => ok(ispActor)),
       handlers.settings(() => ok(settings())),
-      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(
@@ -246,7 +209,6 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
     server.use(
       handlers.session(() => ok(ispActor)),
       handlers.settings(() => ok(settings())),
-      handlers.settlement(() => ok({ months: [] })),
       handlers.patchSettings((body) => {
         patches.push(body);
         return ok(
@@ -283,7 +245,6 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
     server.use(
       handlers.session(() => ok(ispActor)),
       handlers.settings(() => ok(settings())),
-      handlers.settlement(() => ok({ months: [] })),
     );
     renderApp("/settings");
 

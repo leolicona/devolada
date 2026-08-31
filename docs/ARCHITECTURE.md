@@ -5,13 +5,14 @@ Global rules no spec re-decides. Changing them requires updating this file in th
 ## Monorepo
 
 ```
-apps/tienda   → Store mobile PWA (React + Vite + TanStack Router/Query, mobile-first)
-apps/admin    → ISP dashboard (same stack, desktop-first)
+apps/admin    → ISP dashboard (React + Vite + TanStack Router/Query, desktop-first)
+apps/pago     → Public payment page (no sessions, mobile-first)
 apps/api      → Hono + Drizzle + Zod on Cloudflare Workers + D1
+apps/consta   → Consta: SPEI validation engine — own Worker + D1
 packages/ui   → Shared tokens and components (single visual source)
 ```
 
-- pnpm workspaces. Frontend apps live on subdomains (`tienda.` / `admin.` / `api.devolada.app`).
+- pnpm workspaces. Surfaces live on subdomains of `devoladapago.com` (`admin.` / `pago.` / `api.` / `consta.`; the subdomain map is pivot D19). The store PWA (`apps/tienda`) was extracted to `devolada-red` (pivot D15, 2026-08-31).
 - Code identifiers, docs and commits are written in English; **user-facing copy is es-MX** per the SPEC glossary.
 
 ## Code organization
@@ -23,11 +24,11 @@ Adopted 2026-08-14 (critical evaluation of FSD + resource-routes). New code is b
 - **Resource routes**: `src/routes/<resource>/` with `index.ts` (pure router), `schema.ts` (Zod in/out), `handler.ts` (logic) — **when the resource has real logic**. Trivial routers (e.g. `dev`) stay single-file; the three-file split is a tool, not a dogma.
 - **`schema.ts` is the shareable contract**: frontends derive types from it and MSW handlers validate against it (TESTING.md rule 5 becomes mechanical).
 - **Adapters own the outside world**: `src/auth/` (IdP), `src/email/`, `src/wisphub/` — handlers orchestrate, adapters talk to third parties. No fetch to an external service outside an adapter.
-- **Cross-resource invariants get their own module**: the append-only ledger is written by charges *and* cash drops — all ledger writes go through `src/ledger/`, never inline in handlers. Duplicated invariants are dead invariants.
+- **Cross-resource invariants get their own module**: an invariant more than one resource writes lives in one module, never inline in handlers (the retired store ledger set the pattern: every write went through `src/ledger/`). Duplicated invariants are dead invariants.
 
-### Frontend (`apps/tienda`, `apps/admin`)
+### Frontend (`apps/admin`, `apps/pago`)
 
-- **FSD-lite, not orthodox FSD**: one folder per route domain (`src/features/charge/`, `cashbox/`, `ledger/`, `auth/`) encapsulating screens + hooks + local components, plus `src/shared/` (API client, cross-feature utilities). No `entities/widgets` taxonomy — it breeds arbitration nobody performs solo.
+- **FSD-lite, not orthodox FSD**: one folder per route domain (`src/features/feed/`, `links/`, `settings/`, `auth/`) encapsulating screens + hooks + local components, plus `src/shared/` (API client, cross-feature utilities). No `entities/widgets` taxonomy — it breeds arbitration nobody performs solo.
 - **Route files are dumb**: `router.tsx` wires params → feature components. No logic in routes.
 - **Server state lives in TanStack Query only.** The cookie is the session; nobody mirrors it in memory.
 - **Client-state manager: pre-approved, not installed.** When a *second* consumer of shared UI state appears, the tool is Zustand — until then the dependency does not exist. Server state never migrates into it.
@@ -43,19 +44,17 @@ Adopted 2026-08-14 (critical evaluation of FSD + resource-routes). New code is b
 - **Always integer cents** (`totalCents: 41500`). Floats never touch amounts.
 - A single visible format via `formatMoney` / `<Amount>` from `packages/ui` (es-MX, `$1,234.00`, tabular-nums).
 
-## Ledger (continuous cash box)
+## Append-only money history (house rule)
 
-- The `ledger_entries` table is **append-only**: never UPDATE or DELETE. Corrections = counter-entries.
-- A store's balance = `SUM(cents)`. No balance is ever stored; it is always derived.
-- Entry types: `charge` (+total), `commission` (−store share), `cash_drop` (−amount handed over). No operating expenses (product decision).
-- Cash drops are bilateral: the entry stays `pending` until the ISP confirms.
+- Any table that records money history is **append-only**: never UPDATE or DELETE. Corrections = counter-entries; balances are always derived with `SUM`, never stored.
+- The rule was born with the store ledger (now in `devolada-red`) and stays the law here: the pivot's `credit_entries` and `platform_settings` (pivot spec, schema sketch) are its next instances.
 
 ## Sessions & auth
 
 - **Auth follows the Backend-for-Frontend (BFF) pattern — this is a law, not a preference.** `apps/api` is the BFF for both frontends: it alone talks to the IdP (Agnostic Auth), holds and refreshes tokens, and translates them into HTTP-only cookies. Frontends never store tokens, never call the IdP, never attach `Authorization` headers — they send cookies to the BFF and receive envelopes. Any future auth feature (invitations, OAuth, whatever) goes through the BFF or it's wrong.
 - HTTP-only cookies `gm_access` (15 min) + `gm_refresh` (30 days); the browser never sees JWTs.
 - `apps/api` is the only party that talks to Agnostic Auth (see `integrations/agnostic-auth.md`).
-- The middleware checks **status in the DB on every request** — a suspended store or ISP loses access immediately (US-S03).
+- The middleware checks **status in the DB on every request** — a suspended ISP loses access immediately (sessions spec D2).
 - Transparent refresh: if `gm_access` expired and `gm_refresh` is valid, tokens renew and the original request continues.
 - Identical 401 whether the account exists or not: no leaking which phones/emails are registered.
 - IdP configuration errors are never disguised as 401s.
@@ -69,5 +68,5 @@ Adopted 2026-08-14 (critical evaluation of FSD + resource-routes). New code is b
 
 ## Resilience
 
-- A charge is **never rejected** because of WispHub failures (US-C04): it is recorded and the reconnection is queued with idempotent retries per charge.
+- A payment is **never rejected** because of WispHub failures (born as US-C04; the direct channel carries it): it is recorded and the reconnection is queued with idempotent retries per charge.
 - Reconnection statuses: `queued → reconnected | failed`. Failed ones demand visible intervention in the admin.

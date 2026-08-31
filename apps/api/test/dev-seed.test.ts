@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { isps, stores } from "../src/db/schema";
+import { isps } from "../src/db/schema";
 import { makeAuth } from "../src/auth/better";
 import type { Bindings } from "../src/env";
 import { app, cookiesOf, json, PASSWORD } from "./helpers";
@@ -12,20 +12,13 @@ import { app, cookiesOf, json, PASSWORD } from "./helpers";
    user creation and nobody could log into deployed dev again. */
 
 describe("dev seed backfills pre-migration demo rows", () => {
-  it("legacy isp and store rows get a user, and both logins work", async () => {
+  it("a legacy isp row gets a user, and login works", async () => {
     const db = drizzle(env.DB);
-    /* Pre-migration shape: rows exist, no Better Auth user linked */
-    const [isp] = await db
+    /* Pre-migration shape: the row exists, no Better Auth user linked */
+    await db
       .insert(isps)
       .values({ name: "ISP Demo", email: "demo@devolada.app" })
       .returning();
-    await db.insert(stores).values({
-      ispId: isp.id,
-      name: "Abarrotes La Esquina",
-      contactName: "Don Chuy",
-      phone: "5512345678",
-      status: "active",
-    });
 
     const seed = await (await app()).request("/dev/seed", { method: "POST" }, env);
     expect(seed.status).toBe(200);
@@ -36,13 +29,6 @@ describe("dev seed backfills pre-migration demo rows", () => {
       env,
     );
     expect(adminLogin.status).toBe(200);
-
-    const storeLogin = await (await app()).request(
-      "/auth/sign-in/username",
-      json({ username: "5512345678", password: PASSWORD }),
-      env,
-    );
-    expect(storeLogin.status).toBe(200);
 
     /* And running it again stays idempotent */
     const again = await (await app()).request("/dev/seed", { method: "POST" }, env);

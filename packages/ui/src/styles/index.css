@@ -1,4 +1,4 @@
-/* Devolada UI — base stylesheet shared by apps/tienda and apps/admin.
+/* Devolada UI — base stylesheet shared by the apps.
    Imports Tailwind v4, self-hosted fonts and the tokens, and maps the
    tokens to Tailwind utilities via @theme inline. */
 

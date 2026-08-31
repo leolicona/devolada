@@ -1,47 +1,6 @@
-import { charges } from "../db/schema";
-
-/* The receipt (receipt spec). The API owns the text (D2): the same words
-   must reach the customer whether the shopkeeper sends them from their
-   own WhatsApp today or a provider sends them later. */
-
-type Charge = typeof charges.$inferSelect;
-
-const pesos = (cents: number) =>
-  (cents / 100).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-/* D5: the message says what actually happened to the service */
-const statusLine: Record<Charge["reconnectionStatus"], string> = {
-  reconnected: "Tu internet ya está activo.",
-  queued: "Tu internet se reactiva en unos minutos.",
-  /* partial-payment D7: in pesos, and the whole truth. A receipt that
-     says the service is coming back when it is not is the one thing this
-     status exists to prevent. */
-  withheld: "Tu pago quedó registrado. Tu internet se reactiva cuando llegue el resto del adeudo.",
-  failed: "Tu pago quedó registrado. Si tu internet sigue sin servicio, comunícate con tu proveedor y menciona tu folio.",
-};
-
-export function receiptText(charge: Charge, storeName: string): string {
-  return [
-    `Comprobante de pago Devolada`,
-    ``,
-    `Folio: ${charge.folio}`,
-    `Cliente: ${charge.customerName}`,
-    /* debt-truth D16: the invoice total, not the plan's price */
-    `Cargo del periodo: $${pesos(charge.invoiceCents)}`,
-    /* debt-truth D11: what the customer was already carrying gets its own
-       line. Folding it into the period's charge would show a number that
-       does not match their plan and explain nothing. */
-    ...(charge.carriedBalanceCents > 0
-      ? [`Adeudo anterior: $${pesos(charge.carriedBalanceCents)}`]
-      : []),
-    `Cargo por servicio: $${pesos(charge.serviceFeeCents)}`,
-    `Total pagado: $${pesos(charge.totalCents)}`,
-    `Pagaste en: ${storeName}`,
-    ``,
-    statusLine[charge.reconnectionStatus],
-    `Guarda este folio como comprobante.`,
-  ].join("\n");
-}
+/* WhatsApp helpers shared by the direct SPEI channel (receipt spec
+   D2/D3 heritage): the API owns the message and the number. The store
+   receipt text retired to devolada-red. */
 
 /* WhatsApp needs digits with a country code. Mexican numbers arrive from
    WispHub in whatever shape the ISP typed them: 10 digits, with 52, with

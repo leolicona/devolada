@@ -30,12 +30,7 @@
   },
   "exports": {
     "./charges-schema": "./src/routes/charges/schema.ts",
-    "./cashbox-schema": "./src/routes/cashbox/schema.ts",
-    "./cash-drops-schema": "./src/routes/cash-drops/schema.ts",
-    "./ledger-schema": "./src/routes/ledger/schema.ts",
-    "./stores-schema": "./src/routes/stores/schema.ts",
     "./settings-schema": "./src/routes/settings/schema.ts",
-    "./settlement-schema": "./src/routes/settlement/schema.ts",
     "./direct-payments-schema": "./src/routes/direct-payments/schema.ts"
   }
 }

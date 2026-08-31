@@ -8,6 +8,8 @@ debt: [TD-001, TD-005]
 
 # Spec: Sessions (login, transparent refresh, revocation)
 
+> **2026-08-31, retirement PR**: the store-login scenarios retired with the store network (`devolada-red`); the ISP is the only credentialed actor. The mechanism of rule 2 (DB status check on every request) stays law for ISPs.
+
 > **Contract superseded 2026-08-15**: the auth implementation moved to
 > Better Auth and [better-auth.spec.md](better-auth.spec.md) owns the
 > contract now. This spec keeps its history and its scenario numbering,

@@ -8,7 +8,7 @@ import { ispActor } from "../e2e/stubs";
    beneficiary in the admin's SPEI card. Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-pr90.spec.ts */
 
-const OUT = ".design/devolada/screenshots";
+const OUT = ".design/screenshots";
 
 const envelope = (data: unknown) => ({
   status: 200,

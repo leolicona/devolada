@@ -8,6 +8,8 @@ pays: [TD-010]
 
 # Spec: Accessibility, checked on every screen
 
+> **2026-08-31, retirement PR**: the store-PWA screens left with `devolada-red`; the admin and pago halves of this spec stay in force (the admin keyboard walk still pays TD-010).
+
 `FRONTEND.md` has always said AA contrast, icon + text, keyboard and visible focus, `aria-live` on the feed. The palette half is measured (`polish/dark-and-contrast.spec.md`); this is the markup half. axe runs against the DOM the component tests already render, so a missing label or a broken ARIA reference fails in CI instead of waiting for someone with a screen reader to find it.
 
 ## Decisions

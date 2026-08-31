@@ -8,6 +8,8 @@ debt: [TD-014]
 
 # Spec: A slow WispHub never becomes a slow app
 
+> **2026-08-31, retirement PR**: scenarios 3–5, 8–9 and 11 drove the store charge path and retired with it (`devolada-red`); the adapter deadlines, the display cache and the per-tenant payment-method cache stay in force, tested at the adapter/cache level, and the spei channel asserts its own provider-failure behavior in direct-payment tests.
+
 The three apps got slow, and none of the slowness was ours. WispHub stalls on a fraction of its calls and never recovers from those stalls; our adapter had no deadline, so a stall in the provider became a hang in the product. Every screen that reads a customer waits on WispHub, so every screen inherited it.
 
 This spec puts a deadline on every provider call, stops making those calls one after another when they do not depend on each other, and lets the reads that only *display* debt share one fetch — while the reads that *decide* money keep asking WispHub fresh, exactly as `charges/debt-truth.spec.md` requires.

@@ -9,6 +9,8 @@ pays: [TD-009]
 
 # Spec: Reconnection queue
 
+> **2026-08-31, retirement PR**: US-C03/US-C04 are retired with the store channel, but the queue itself remains **in force** — the direct SPEI channel rides it (`direct-payments/validation.ts`, the every-minute sweep). The store charge flow that first fed it lives in `devolada-red`.
+
 The charge is already safe in the ledger the moment the store records it (charge-record D2). This spec is about the other half of US-C04: when the first reconnection attempt does not succeed, something has to keep trying, with a schedule the store and the ISP can see. It opens by paying **TD-009**, the condition we recorded before retries could ship.
 
 ## Decisions

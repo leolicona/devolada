@@ -26,7 +26,6 @@
     "ENVIRONMENT": "dev",
     "API_BASE_URL": "http://localhost:8787",
     "ADMIN_BASE_URL": "http://localhost:5174",
-    "TIENDA_BASE_URL": "http://localhost:5173",
     "PAGO_BASE_URL": "http://localhost:5175",
     /* Local Consta (its own wrangler dev). CONSTA_API_KEY lives in
        .dev.vars, like every secret. */
@@ -65,7 +64,6 @@
         "ENVIRONMENT": "dev",
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://admin.dev.devoladapago.com",
-        "TIENDA_BASE_URL": "https://punto.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://pago.dev.devoladapago.com",
         "CONSTA_BASE_URL": "https://consta.dev.devoladapago.com",
         /* TD-015, temporary — the demo links, deleted after 2026-08-20.
@@ -87,7 +85,7 @@
            listed link is never sent to the provider, so those are the
            only ones that can still validate a real transfer. */
         "DEMO_LINK_TOKENS": "vyzwrf2tnwwwn3xw,96u9as4gmnjuee5d,b6gvm4r77mix983b,7k4d8mwiqmck9ssj",
-        "ALLOWED_ORIGINS": "https://punto.dev.devoladapago.com,https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-tienda-dev.leolicona-dev.workers.dev,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
+        "ALLOWED_ORIGINS": "https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
@@ -111,12 +109,11 @@
         "ENVIRONMENT": "prod",
         "API_BASE_URL": "https://api.devoladapago.com",
         "ADMIN_BASE_URL": "https://admin.devoladapago.com",
-        "TIENDA_BASE_URL": "https://punto.devoladapago.com",
         "PAGO_BASE_URL": "https://pago.devoladapago.com",
         /* No CONSTA_BASE_URL: Consta has no prod env yet (its spec D8).
-           Without it the SPEI channel answers "unavailable" — customers
-           are pointed at the store network instead of a void. */
-        "ALLOWED_ORIGINS": "https://punto.devoladapago.com,https://admin.devoladapago.com,https://pago.devoladapago.com",
+           Without it the SPEI channel answers "unavailable" and the
+           payment page says so instead of showing a void. */
+        "ALLOWED_ORIGINS": "https://admin.devoladapago.com,https://pago.devoladapago.com",
         "PASSKEY_RP_ID": "devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }

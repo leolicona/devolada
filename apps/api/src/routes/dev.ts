@@ -2,20 +2,18 @@ import { Hono } from "hono";
 import { eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { isps, stores, user as userTable } from "../db/schema";
+import { isps, user as userTable } from "../db/schema";
 import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
 import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
-   Seeds a demo ISP and store to verify login with curl. */
+   Seeds a demo ISP to verify login with curl. */
 
 export const dev = new Hono<{ Bindings: Bindings }>();
 
 const DEMO = {
   ispEmail: "demo@devolada.app",
-  storeEmail: "tienda@devolada.app",
-  storePhone: "5512345678",
   password: "devolada123",
 };
 
@@ -51,9 +49,9 @@ dev.post("/seed", async (c) => {
 
   /* Creates the Better Auth user (email pre-verified: demo data) and
      returns its id. The signup OTP goes to the console — harmless. */
-  async function seedUser(name: string, email: string, username?: string) {
+  async function seedUser(name: string, email: string) {
     const { response } = await ba.api.signUpEmail({
-      body: { name, email, password: DEMO.password, ...(username ? { username } : {}) },
+      body: { name, email, password: DEMO.password },
       returnHeaders: true,
     });
     await db
@@ -91,32 +89,10 @@ dev.post("/seed", async (c) => {
       .returning();
   }
 
-  const [existingStore] = await db
-    .select()
-    .from(stores)
-    .where(eq(stores.phone, DEMO.storePhone));
-  if (existingStore && !existingStore.userId) {
-    const userId = await seedUser("Don Chuy", DEMO.storeEmail, DEMO.storePhone);
-    await db.update(stores).set({ userId }).where(eq(stores.id, existingStore.id));
-  }
-  if (!existingStore) {
-    const userId = await seedUser("Don Chuy", DEMO.storeEmail, DEMO.storePhone);
-    await db.insert(stores).values({
-      ispId: isp.id,
-      name: "Abarrotes La Esquina",
-      contactName: "Don Chuy",
-      phone: DEMO.storePhone,
-      zone: "Col. El Mirador",
-      userId,
-      status: "active",
-    });
-  }
-
   return c.json({
     success: true,
     data: {
       admin: { email: DEMO.ispEmail, password: DEMO.password },
-      store: { phone: DEMO.storePhone, password: DEMO.password },
     },
   });
 });

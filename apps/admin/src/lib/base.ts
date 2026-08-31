@@ -2,7 +2,7 @@
    Auth client. Same arrangement as the PWA's api/base.ts.
 
    The dev server cannot proxy the API: `/stores`, `/settings` and
-   `/cash-drops` are SPA routes AND API paths (router.tsx), so a
+   `/links` are SPA routes AND API paths (router.tsx), so a
    same-origin base makes Vite answer them with index.html and the
    screen fails to load. In development the base is the local worker
    instead — `ALLOWED_ORIGINS` already allow-lists this origin for CORS

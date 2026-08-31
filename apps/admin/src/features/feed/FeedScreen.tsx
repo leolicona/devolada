@@ -254,7 +254,7 @@ export function FeedScreen() {
 
       {charges.length === 0 && !feed.isPending && !feed.isError && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Sin cobros por aquí todavía. Aparecerán en cuanto tus tiendas empiecen a cobrar.
+          Sin cobros por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar.
         </p>
       )}
 

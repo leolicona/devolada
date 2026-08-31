@@ -8,6 +8,8 @@ debt: []
 
 # Spec: Live charge feed
 
+> **2026-08-31, retirement PR**: the store channel retired; `channel = 'store'` and `storeName` survive as historical row shapes until the phase-2 rename merges charges into payments (pivot D14). The feed itself is unchanged.
+
 The Cobros section: the ISP watches money come in, in near real time, with the reconnection status of every charge. Reference: Stripe Dashboard.
 
 ## Decisions

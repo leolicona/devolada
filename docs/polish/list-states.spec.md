@@ -8,6 +8,8 @@ debt: []
 
 # Spec: List states — the failed request
 
+> **2026-08-31, retirement PR**: the tienda and store-list scenarios left with `devolada-red`; the rule (a failed list never claims to be empty) stays law on every surviving list.
+
 Both apps already show a skeleton while data loads and an honest sentence when there is none. The third state was missing: **when the request fails, every list currently renders its empty state.** "Todavía no tienes movimientos" is what a shopkeeper sees when the network dropped — and the reasonable thing for them to conclude is that the charge they just made did not record. This spec is about never telling that lie again.
 
 ## Decisions

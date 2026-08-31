@@ -121,15 +121,8 @@ describe("US-A04: today's totals follow the ISP timezone", () => {
 });
 
 describe("D6: tenant isolation is tested, not assumed", () => {
-  it("a store session gets 403 and another ISP sees nothing", async () => {
+  it("another ISP sees nothing", async () => {
     await seedFeed();
-
-    const asStore = await (await app()).request(
-      "/charges/feed",
-      { headers: { Cookie: await sessionCookieHeader("5512345678") } },
-      env,
-    );
-    expect(asStore.status).toBe(403);
 
     await seedIsp({ email: "otro@isp.mx" });
     const otherIsp = await (await app()).request(

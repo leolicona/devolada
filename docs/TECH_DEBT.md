@@ -24,7 +24,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Payment in progress (2026-08-27): the measurement moved to where the cross-integrator data lives — Consta learns the distribution and suggests `retryAfter` on `not_found`/`pending` (US-V16, `docs/consta/learned-retry.spec.md`). This debt closes when Devolada's sweep consumes the suggestion (learned-retry D6, own PR): early skeleton and tail stay fixed, `retryAfter` governs the middle.
 
 ## TD-014 — Captured customer phones have no ISP-facing view or delete
-- Status: **open** · Origin: charges/customer-phone.spec.md D5 (2026-08-17)
+- Status: **died by elimination** (2026-08-31, retirement PR): the capture flow left with the store channel (`src/customer-contacts` deleted); the `customer_contacts` table drops with the phase-2 migrations (pivot D14). · Origin: charges/customer-phone.spec.md D5 (2026-08-17)
 - We store customer phones the shopkeeper captures (`customer_contacts`), but the ISP has no screen to see, correct or delete them; a wrong number is only fixed by typing a new one at the next charge, and a deletion request is handled by hand.
 - Why it was reasonable: the admin has no customer view at all yet — building one screen for one field would invent a surface the IA does not have.
 - Payable when: the admin gets a customer view (natural spot), or the first real deletion request arrives — whichever comes first.
@@ -49,7 +49,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Status: **paid** (2026-08-16, `feat/keyboard-slice`) · Origin: polish/accessibility.spec.md, found by the design review's status pass (2026-08-14)
 - Phase 5 covered the markup (axe), the palette (contrast-lint), the real colour and the touch targets — but **no layer walks the tab order**. The brief asks for full keyboard navigation and visible focus in the dashboard, and `TASKS.md` claimed the accessibility pass covered it. It did not.
 - Why it was reasonable: each polish slice took the half a tool could measure; the tab order needs a browser and a written expectation of the order, which is design work, not just a check.
-- Paid by `tests/e2e/keyboard.spec.ts` (accessibility.spec.md D6): the charge path and the admin's confirm flow walked by Tab against a written order, with a visible indicator **measured as a change** against each element's resting styles (outline, ring or border — a static card shadow cannot pass). The suite proved it can go red: killing the focus styles fails it on the first stop. Findings along the way: both apps already ringed every stop; the search input signals focus by border swap, which the detector now honours.
+- Paid by `tests/e2e/keyboard.spec.ts` (accessibility.spec.md D6): the charge path and the admin's confirm flow walked by Tab against a written order, with a visible indicator **measured as a change** against each element's resting styles (outline, ring or border — a static card shadow cannot pass). The suite proved it can go red: killing the focus styles fails it on the first stop. *(2026-08-31: the store charge-path walk retired with the PWA; the admin walk remains.)* Findings along the way: both apps already ringed every stop; the search input signals focus by border swap, which the detector now honours.
 
 ## TD-009 — The reconnection creates a new invoice even when one is pending
 - Status: **paid** (2026-08-14, `feat/reconnection-queue`) · Origin: E2E check of charges/charge-record.spec.md
@@ -68,7 +68,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - What replaced the old requirement: `BETTER_AUTH_SECRET` in `.dev.vars` and in **both** GitHub environments — the deploy step now *fails* (dev and prod alike) when it is missing, because shipping sessions signed with a public fallback value is the same class of hole. The lesson that survives this entry: a secret is proven by behaviour (sign in, then `/auth/me`), never by `wrangler secret list`.
 
 ## TD-002 — Duplicated design tokens
-- Status: open · Origin: tokens phase
+- Status: **paid by elimination** (2026-08-31, retirement PR): the `.design` mirror left with the store-era design docs (pivot D15); `packages/ui/src/styles/tokens.css` is the only file. · Origin: tokens phase
 - `.design/devolada/DESIGN_TOKENS.css` (document) and `packages/ui/src/styles/tokens.css` (live) are synced by hand. The live file wins.
 - Paid by: a sync script, or declaring the `.design` copy a historical snapshot and no longer maintaining it.
 - 2026-08-14: `contrast-lint.mjs` reads the **live** file only, so the mirror can no longer cause a false pass. The mirror was re-synced by hand with the three values this pass changed (`--color-status-success`, `--color-status-warning`, new `--color-border-input`).

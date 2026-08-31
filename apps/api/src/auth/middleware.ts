@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Actor, Bindings, Variables } from "../env";
-import { isps, session as sessionTable, stores } from "../db/schema";
+import { isps, session as sessionTable } from "../db/schema";
 import { makeAuth } from "./better";
 
 /* Resolves the Better Auth user to our actor. The user's id links via
@@ -13,17 +13,6 @@ export async function findActor(
   user: { id: string; email: string; emailVerified: boolean },
 ): Promise<Actor | null> {
   const db = drizzle(env.DB);
-  const [store] = await db.select().from(stores).where(eq(stores.userId, user.id));
-  if (store) {
-    return {
-      type: "store",
-      id: store.id,
-      ispId: store.ispId,
-      name: store.name,
-      phone: store.phone,
-      status: store.status,
-    };
-  }
   const [isp] = await db.select().from(isps).where(eq(isps.userId, user.id));
   if (isp) {
     return {

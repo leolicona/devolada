@@ -8,6 +8,8 @@ debt: []
 
 # Spec: Responsive, measured in a browser
 
+> **2026-08-31, retirement PR**: the store-PWA scenarios left with `devolada-red`; the admin and pago responsive laws stay in force.
+
 `TESTING.md` layer 4 was reserved for the questions a simulated DOM cannot answer, and rule 6 says so outright: assertions about real colour and layout belong here. This spec builds that layer and uses it for the responsive pass — then lets it check the two things the earlier passes had to leave open, real contrast and touch-target size.
 
 ## Decisions

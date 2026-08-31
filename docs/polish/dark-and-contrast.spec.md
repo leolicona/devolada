@@ -8,6 +8,8 @@ debt: [TD-002]
 
 # Spec: Dark mode and contrast, measured
 
+> **2026-08-31, retirement PR**: the tienda screens left with `devolada-red`; tokens, contrast-lint and the browser contrast pass continue on admin and pago.
+
 The brief made three promises about colour: minimum AA, AAA as the target on amounts and statuses, and a dark palette that is recalibrated rather than inverted. Nothing had ever checked them. This spec turns those promises into a script that runs in CI, and fixes what the first run found.
 
 ## Decisions

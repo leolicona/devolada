@@ -10,7 +10,7 @@ import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/pro
 import { historyVouches } from "../src/direct-payments/provisional";
 import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
-import { app, seedIsp, sessionCookieHeader } from "./helpers";
+import { app, seedIsp } from "./helpers";
 
 /* docs/direct-payment/direct-payment.spec.md scenarios 1–12, 16–24
    (US-D01–US-D04). Consta and WispHub are fetch-mocked respecting
@@ -599,7 +599,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
 });
 
 describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
-  it("scenario 7 + 21: confirmed → spei charge, no store, no ledger entries", async () => {
+  it("scenario 7: confirmed → spei charge, no store, no ledger entries", async () => {
     const { isp } = await seedLinkedIsp();
     /* pay pre-check + validation debt re-check + reconnection verify */
     mockCustomerLookup([wisphubCustomer()], 2);
@@ -625,14 +625,6 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     expect(charge.reconnectionStatus).toBe("reconnected");
     /* D6: no commission, no store balance — nothing in the ledger */
     expect(await db.select().from(ledgerEntries)).toHaveLength(0);
-
-    /* scenario 21 (US-L01 interplay): the full service fee accrues to
-       the platform's settlement — no commission to subtract */
-    const asIsp = { headers: { Cookie: await sessionCookieHeader(isp.email) } };
-    const settlement = await (await app()).request("/settlement", asIsp, testEnv);
-    const { data: s } = await settlement.json();
-    expect(s.months[0].shareCents).toBe(1500);
-    expect(s.months[0].chargeCount).toBe(1);
   });
 
   it("scenario 12: a queued spei charge rides the reconnection sweep", async () => {

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Devolada: a network of payment points in neighborhood corner stores for ISPs running WispHub. Code identifiers, docs and commits are written in **English**; **user-facing copy is es-MX** (the product ships in Mexico). The glossary in `docs/SPEC.md` maps domain terms both ways (Cobro→`charge`, Entrega→`cash_drop`, Movimiento→`ledger_entry`, …) — one word per concept, no synonyms.
+Devolada: direct SPEI payments with automatic validation for service businesses — today, ISPs running WispHub (permanent payment link → transfer to the ISP's CLABE → Banxico validation through Consta → automatic reconnection). The pivot spec (`docs/platform/pivot.spec.md`) is the constitution; the store network was extracted to the `devolada-red` repo (pivot D15, 2026-08-31). Code identifiers, docs and commits are written in **English**; **user-facing copy is es-MX** (the product ships in Mexico). The glossary in `docs/SPEC.md` maps domain terms both ways (Cobro→`charge`, Pago directo→`direct_payment`, Comprobante de transferencia→`proof`, …) — one word per concept, no synonyms.
 
 ## Methodology (not optional)
 
@@ -28,7 +28,7 @@ pnpm -r --if-present test                     # tests (infrastructure defined in
 node scripts/spec-lint.mjs                    # local golden-rule enforcement
 ```
 
-Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` creates a demo ISP (`demo@devolada.app`) and demo store (`5512345678`), password `devolada123`. `/dev/*` routes exist only with `ENVIRONMENT=dev`.
+Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` creates a demo ISP (`demo@devolada.app`), password `devolada123`. `/dev/*` routes exist only with `ENVIRONMENT=dev`.
 
 **Never deploy from a local machine**: every deploy goes through GitHub Actions (`docs/CICD.md`). Trunk-based on `main`; PR → CI + preview; merge → dev; `v*` tag → prod with approval gate. Parallel features use `git worktree` (coexistence rules in CICD.md: distinct ports, per-worktree local D1, one spec per worktree).
 
@@ -36,27 +36,27 @@ Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` cre
 
 ```
 apps/api      Hono + Drizzle + Zod on Cloudflare Workers + D1
-apps/consta   Consta: SPEI transfer-validation API — own product, own Worker + D1 (specs in docs/consta/)
+apps/consta   Consta: the SPEI validation engine — own Worker + D1 (specs in docs/consta/)
+apps/pago     Public payment page (no sessions; mobile-first)
+apps/admin    ISP dashboard (desktop-first)
 packages/ui   Design tokens (Tailwind v4) + shared atoms
-apps/tienda   Store PWA (not created yet; mobile-first)
-apps/admin    ISP dashboard (not created yet; desktop-first)
 ```
 
 Invariants that cut across everything (detail in `docs/ARCHITECTURE.md`):
 
 - **Money is always integer cents**; visible formatting comes solely from `formatMoney`/`<Amount>` in `packages/ui`.
-- **The `ledger_entries` table is an append-only ledger**: never UPDATE/DELETE; corrections = counter-entries; a store's balance is derived with SUM, never stored.
-- **Sessions**: HTTP-only cookies `gm_access`/`gm_refresh`; `apps/api` is the only party talking to the external IdP (Agnostic Auth) and to WispHub — frontends consume the proxy. The middleware (`apps/api/src/auth/middleware.ts`) checks status in the DB on every request (suspension = immediate revocation) and refreshes transparently.
+- **Money history tables are append-only** (house rule, ARCHITECTURE.md): never UPDATE/DELETE; corrections = counter-entries; balances derived with SUM, never stored. The store ledger that embodied it lives in `devolada-red`; the pivot's `credit_entries` is its next instance.
+- **Sessions**: Better Auth lives inside `apps/api` (BFF; HTTP-only cookies); `apps/api` is the only party talking to WispHub and to Consta — frontends consume the proxy. The middleware (`apps/api/src/auth/middleware.ts`) checks status in the DB on every request (suspension = immediate revocation).
 - **A charge is never rejected because of WispHub failures**: it is recorded and the reconnection is queued with visible status (`queued → reconnected | failed`).
 - `ispId` on every business table (latent multi-tenancy); the MVP UI doesn't expose it.
 - API envelope: `{ success: true, data }` | `{ success: false, error: { code } }`; Zod validation at the edge.
 
 ## Frontend
 
-Laws in `docs/FRONTEND.md`; design artifacts (brief, IA, tokens, tasks) in `.design/devolada/`.
+Laws in `docs/FRONTEND.md`. The store-era design layer (`.design/devolada/`) left with `devolada-red`; the SaaS design cycle (brief → IA → tasks) precedes the pivot's phase-2 child spec (pivot D15).
 
 **Use the `/shadcn` skill for every frontend task.** Check the shadcn catalog before writing a component by hand; copy the primitive into the app's `src/components/ui/` and theme it with our tokens. shadcn is the recipe, the tokens are the law. Order: domain atom in `@devolada/ui` → shadcn primitive → new component.
 
 The other essentials: the tokens in `packages/ui/src/styles/tokens.css` are law (zero hardcoded values; mapped to Tailwind via `@theme inline` in `src/styles/index.css`); `StatusBadge` is the only representation of domain statuses; light+dark via `[data-theme]` (dark is its own palette, not inversion); status is never communicated by color alone (always icon + text).
 
-The ordered build plan lives in `.design/devolada/TASKS.md`; tests cite their user story (`US-C02: …`) per `docs/TESTING.md`.
+Tests cite their user story (`US-D03: …`) per `docs/TESTING.md`.

@@ -10,25 +10,17 @@ const envelope = (data: unknown) => ({
   body: JSON.stringify({ success: true, data }),
 });
 
-/* The app is served from the same origin it calls, so a glob for the
-   cashbox endpoint also matches the browser navigating to the /cashbox
-   page. Fulfilling that navigation hands the browser JSON instead of the
-   app, and the screen never renders. Documents always pass through. */
+/* The app is served from the same origin it calls, so a glob for an
+   API endpoint can also match the browser navigating to a page of the
+   same name. Fulfilling that navigation hands the browser JSON instead
+   of the app, and the screen never renders. Documents always pass
+   through. */
 async function apiRoute(page: Page, pattern: string, data: unknown): Promise<void> {
   await page.route(pattern, (route) => {
     if (route.request().resourceType() === "document") return route.fallback();
     return route.fulfill(envelope(data));
   });
 }
-
-export const storeActor = {
-  type: "store",
-  id: "st-1",
-  ispId: "isp-1",
-  name: "Abarrotes La Esquina",
-  phone: "5512345678",
-  status: "active",
-};
 
 export const ispActor = {
   type: "isp",
@@ -44,18 +36,6 @@ export const ispActor = {
 
 const at = Date.UTC(2026, 7, 14, 20, 30);
 
-export const cashbox = {
-  storeName: "Abarrotes La Esquina",
-  balanceCents: 91000,
-  commissionEarnedCents: 1800,
-  cap: { capCents: 500000, approaching: false, blocked: false },
-  lastCashDrop: { id: "d1", cents: 40000, status: "pending", note: null, createdAt: at },
-};
-
-/* Post-debt-truth wire shape (charges D13): `invoiceCents` +
-   `carriedBalanceCents`, never `monthlyFeeCents`. These stubs drifted
-   once and the screens rendered $NaN while every geometry assertion
-   passed — `expectNothingClipped` now watches for that too. */
 export const feed = {
   charges: [
     {
@@ -95,146 +75,9 @@ export const feed = {
   today: { count: 2, totalCents: 92800, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 };
 
-export const stores = {
-  stores: [
-    {
-      id: "st-1",
-      name: "Abarrotes La Esquina",
-      contactName: "Don Chuy",
-      phone: "5512345678",
-      zone: "Col. El Mirador",
-      status: "active",
-      invitationStatus: "accepted",
-      commissionCents: null,
-      balanceCents: 89100,
-      cap: { capCents: 100000, approaching: true, blocked: false },
-    },
-  ],
-};
-
-export const pendingDrops = {
-  drops: [
-    {
-      id: "cd-1",
-      storeId: "st-1",
-      storeName: "Abarrotes La Esquina",
-      storeZone: "Col. El Mirador",
-      cents: 50600,
-      status: "pending",
-      note: null,
-      createdAt: at,
-      confirmedAt: null,
-      storeBalanceCents: 50600,
-    },
-  ],
-  nextCursor: null,
-};
-
-/* The confirmed side of Entregas: the history list renders these, and a
-   long store name is the point — a row that cannot show it is the bug
-   design-review D1 describes. */
-export const resolvedDrops = {
-  drops: [
-    {
-      id: "cd-0",
-      storeId: "st-1",
-      storeName: "Abarrotes La Esquina",
-      storeZone: "Col. El Mirador",
-      cents: 40000,
-      status: "confirmed",
-      note: null,
-      createdAt: at - 86_400_000,
-      confirmedAt: at - 80_000_000,
-      storeBalanceCents: 0,
-    },
-  ],
-  nextCursor: null,
-};
-
-export const ledger = {
-  entries: [
-    {
-      id: "e1",
-      type: "charge",
-      cents: 41400,
-      createdAt: at,
-      reference: { folio: "DV-FEED01", customerName: "Janely Guadalupe Reyes" },
-    },
-    { id: "e2", type: "commission", cents: -900, createdAt: at, reference: null },
-  ],
-  nextCursor: null,
-};
-
-/* The charge path's two screens. A long real name is the point: it is
-   what the confirm screen exists to show (design-review D1). */
-export const customers = {
-  customers: [
-    {
-      wisphubId: 6,
-      usuario: "greyes@wifiplus",
-      name: "Janely Guadalupe Reyes",
-      zone: "Zona dia 15",
-      serviceStatus: "suspended",
-      billingStatus: "due",
-      invoiceCents: 49900,
-      carriedBalanceCents: 0,
-      /* This customer has a number in WispHub (customer-phone US-C07),
-         like the unit fixtures' default. Missing here, it read as
-         `undefined` and the confirm screen offered the optional capture
-         field, which then took the first tab stop away from the charge
-         button and failed the keyboard walk. */
-      hasPhone: true,
-    },
-  ],
-};
-
-export const quote = {
-  customer: customers.customers[0],
-  quote: { invoiceCents: 49900, carriedBalanceCents: 0, serviceFeeCents: 1500, totalCents: 51400 },
-  cap: { balanceCents: 91000, capCents: 500000, blocked: false },
-};
-
-/* One matcher per app: anything the screens ask for gets an answer, so a
-   forgotten route shows up as an empty screen rather than a hang. */
-export async function stubStoreApi(page: Page): Promise<void> {
-  await apiRoute(page, "**/auth/me", storeActor);
-  await apiRoute(page, "**/cashbox", cashbox);
-  await apiRoute(page, "**/ledger*", ledger);
-  /* Newest-first matching: the list, then the detail that shadows it */
-  await page.route(
-    (url) => url.pathname.endsWith("/charges/customers"),
-    (route) =>
-      route.request().resourceType() === "document"
-        ? route.fallback()
-        : route.fulfill(envelope(customers)),
-  );
-  await page.route(
-    (url) => /\/charges\/customers\/[^/]+$/.test(url.pathname),
-    (route) =>
-      route.request().resourceType() === "document"
-        ? route.fallback()
-        : route.fulfill(envelope(quote)),
-  );
-}
-
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", ispActor);
   await apiRoute(page, "**/charges/feed*", feed);
-  await apiRoute(page, "**/stores", stores);
-  await apiRoute(page, "**/cash-drops*", pendingDrops);
-  /* Registered last so it wins over the pending matcher: Playwright tries
-     routes newest-first. */
-  await page.route(
-    (url) => url.pathname.endsWith("/cash-drops") && url.search.includes("scope=resolved"),
-    (route) =>
-      route.request().resourceType() === "document"
-        ? route.fallback()
-        : route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({ success: true, data: resolvedDrops }),
-          }),
-  );
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

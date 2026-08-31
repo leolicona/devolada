@@ -8,6 +8,8 @@ debt: []
 
 # Spec: Admin dashboard shell
 
+> **2026-08-31, retirement PR**: the Tiendas and Entregas sections (and the pending-drops badge) retired with the store network; the nav is Cobros · Links · Configuración. The ≤5-section law (FRONTEND.md) stands.
+
 `apps/admin` is born: the ISP's dashboard shell with the four-section sidebar, and the full access flow — login, signup, email verification, password recovery. This closes the UI half of `auth/isp-signup.spec.md` (its endpoints have waited since Phase 1).
 
 ## Decisions

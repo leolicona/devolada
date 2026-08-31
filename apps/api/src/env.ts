@@ -18,8 +18,6 @@ export type Bindings = {
   ALLOWED_ORIGINS?: string;
   /* Base URL of the admin app (es-MX copy in emails may reference it) */
   ADMIN_BASE_URL: string;
-  /* Base URL of the store PWA, used to build invitation links */
-  TIENDA_BASE_URL: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   /* Dev only: the seed copies this key into the demo ISP row.
@@ -47,14 +45,6 @@ export type Bindings = {
 };
 
 export type Actor =
-  | {
-      type: "store";
-      id: string;
-      ispId: string;
-      name: string;
-      phone: string;
-      status: "invited" | "active" | "suspended";
-    }
   | {
       type: "isp";
       id: string;

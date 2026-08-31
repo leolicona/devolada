@@ -7,7 +7,6 @@ import type {
   SettingsResponse,
   WispHubTestResponse,
 } from "@devolada/api/settings-schema";
-import type { SettlementResponse } from "@devolada/api/settlement-schema";
 import { PasskeyCard } from "../auth/PasskeyCard";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import type { Bank } from "@devolada/api/settings-schema";
@@ -144,67 +143,39 @@ function WispHubCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
-/* D4: the platform share is the difference, computed while typing */
+/* The general service fee. With the store network retired it survives
+   as the fallback the SPEI fee inherits when unset (direct-payment D3). */
 function MoneyCard({ settings }: { settings: SettingsResponse }) {
   const save = useSaveSettings();
   const [fee, setFee] = useState(pesos(settings.serviceFeeCents));
-  const [commission, setCommission] = useState(pesos(settings.storeCommissionCents));
 
   const feeCents = parseMoney(fee);
-  const commissionCents = parseMoney(commission);
-  const valid = feeCents !== null && commissionCents !== null && commissionCents <= feeCents;
-  const share = valid ? feeCents - commissionCents : null;
+  const valid = feeCents !== null;
 
   return (
-    <SectionCard title="Cobro y comisiones">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="service-fee">Cargo por servicio</Label>
-          {/* design-review D8: money fields carry the sign */}
-          <Input
-            id="service-fee"
-            prefix="$"
-            inputMode="decimal"
-            className="mt-1"
-            value={fee}
-            onChange={(e) => setFee(e.target.value)}
-          />
-          <p className="mt-1 text-sm text-ink-soft">Lo que paga el cliente además de su cargo del periodo.</p>
-        </div>
-        <div>
-          <Label htmlFor="store-commission">Comisión de la tienda</Label>
-          <Input
-            id="store-commission"
-            prefix="$"
-            inputMode="decimal"
-            className="mt-1"
-            value={commission}
-            onChange={(e) => setCommission(e.target.value)}
-          />
-          <p className="mt-1 text-sm text-ink-soft">Lo que gana la tienda por cada cobro.</p>
-        </div>
+    <SectionCard title="Cargo por servicio">
+      <div>
+        <Label htmlFor="service-fee">Cargo por servicio</Label>
+        {/* design-review D8: money fields carry the sign */}
+        <Input
+          id="service-fee"
+          prefix="$"
+          inputMode="decimal"
+          className="mt-1"
+          value={fee}
+          onChange={(e) => setFee(e.target.value)}
+        />
+        <p className="mt-1 text-sm text-ink-soft">
+          Lo que paga el cliente además de su cargo del periodo. El pago
+          directo por SPEI usa este monto cuando no tiene uno propio.
+        </p>
       </div>
-
-      <p className="rounded-md border border-border bg-muted px-4 py-3 text-sm">
-        {valid ? (
-          <>
-            Para la plataforma quedan{" "}
-            <span className="font-semibold text-foreground">{formatMoney(share!)}</span> por cobro.
-          </>
-        ) : (
-          <span className="font-medium text-error">
-            La comisión de la tienda no puede ser mayor al cargo por servicio.
-          </span>
-        )}
-      </p>
 
       <Button
         disabled={!valid || save.isPending}
-        onClick={() =>
-          save.mutate({ serviceFeeCents: feeCents!, storeCommissionCents: commissionCents! })
-        }
+        onClick={() => save.mutate({ serviceFeeCents: feeCents! })}
       >
-        {save.isPending ? "Guardando…" : "Guardar cobro y comisiones"}
+        {save.isPending ? "Guardando…" : "Guardar cargo por servicio"}
       </Button>
       {save.isSuccess && !save.isPending && (
         <p role="status" className="text-sm font-medium text-success">
@@ -385,7 +356,7 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
     <SectionCard title="Reconexión con pago incompleto">
       <p className="text-sm text-muted-foreground">
         Cuando una transferencia no cubre todo el adeudo, estos límites deciden si el servicio se
-        reactiva. El pago se registra siempre; en tienda siempre se cobra completo.
+        reactiva. El pago se registra siempre.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -466,68 +437,6 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
         <p role="status" className="text-sm font-medium text-success">
           Guardado.
         </p>
-      )}
-    </SectionCard>
-  );
-}
-
-/* The month name a period key renders as; mid-month noon UTC so no
-   timezone can shift it into a neighbour month. */
-const periodLabel = (period: string): string => {
-  const label = new Intl.DateTimeFormat("es-MX", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${period}-15T12:00:00Z`));
-  return label.charAt(0).toUpperCase() + label.slice(1);
-};
-
-/* Liquidación (settlement spec, US-L01): the per-charge share the card
-   above explains, accumulated by month. Statement only — the transfer
-   confirmation is deliberately out (spec D3). */
-function SettlementCard() {
-  const { data, isPending } = useQuery<SettlementResponse, ApiError>({
-    queryKey: ["settlement"],
-    queryFn: () => api<SettlementResponse>("/settlement"),
-  });
-
-  return (
-    <SectionCard title="Liquidación a la plataforma">
-      <p className="text-sm text-ink-soft">
-        Lo acumulado para la plataforma por tus cobros. Transfiere cada mes con su referencia.
-      </p>
-
-      {isPending && (
-        <div className="space-y-2">
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-2/3" />
-        </div>
-      )}
-
-      {data && data.months.length === 0 && (
-        <p className="text-sm text-ink-soft">
-          Aquí aparecerá lo acumulado para la plataforma con tu primer cobro.
-        </p>
-      )}
-
-      {data && data.months.length > 0 && (
-        <ul className="divide-y divide-line-soft">
-          {data.months.map((month) => (
-            <li key={month.period} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">
-                  {periodLabel(month.period)}
-                  {month.current && <span className="ml-2 text-sm font-normal text-ink-soft">· En curso</span>}
-                </p>
-                <p className="text-sm text-ink-soft">
-                  {month.chargeCount} {month.chargeCount === 1 ? "cobro" : "cobros"} · Ref:{" "}
-                  <span className="font-mono">{month.reference}</span>
-                </p>
-              </div>
-              <Amount cents={month.shareCents} className="shrink-0 text-base font-semibold" />
-            </li>
-          ))}
-        </ul>
       )}
     </SectionCard>
   );
@@ -628,7 +537,6 @@ export function SettingsScreen() {
           <MoneyCard settings={data} />
           <SpeiCard settings={data} />
           <ReconnectionCard settings={data} />
-          <SettlementCard />
           <DisplayCard settings={data} />
           <PasskeyCard />
         </div>

@@ -109,16 +109,11 @@ export async function seedStore(
   overrides: Partial<typeof stores.$inferInsert> = {},
 ) {
   const db = drizzle(env.DB);
+  /* Store rows survive only as historical fixtures for the feed's
+     leftJoin (the store network retired to devolada-red): no auth user,
+     no session — nobody logs in as a store any more. */
   const phone = overrides.phone ?? "5512345678";
   const status = overrides.status ?? "active";
-  /* An invited store has no credentials yet (spec D8) */
-  let userId: string | null = null;
-  if (status !== "invited") {
-    userId = await seedAuthUser("Don Chuy", `store-${phone}@test.devolada.app`, {
-      username: phone,
-    });
-    await seedSession(userId, phone);
-  }
   const [store] = await db
     .insert(stores)
     .values({
@@ -126,7 +121,7 @@ export async function seedStore(
       name: "Abarrotes La Esquina",
       contactName: "Don Chuy",
       phone,
-      userId,
+      userId: null,
       status,
       ...overrides,
     })

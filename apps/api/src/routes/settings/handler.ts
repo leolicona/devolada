@@ -20,10 +20,9 @@ function ispGuard(c: Ctx) {
 /* D1: the key never travels back — only enough of it to be recognised. */
 function toSettings(isp: typeof isps.$inferSelect): SettingsResponse {
   return {
+    /* With the store network retired, this fee survives as the fallback
+       the SPEI fee inherits when unset (direct-payment D3). */
     serviceFeeCents: isp.serviceFeeCents,
-    storeCommissionCents: isp.storeCommissionCents,
-    /* D4: derived, so it cannot drift from the two numbers it comes from */
-    platformShareCents: isp.serviceFeeCents - isp.storeCommissionCents,
     timezone: isp.timezone as SettingsResponse["timezone"],
     timeFormat: isp.timeFormat,
     wisphub: {
@@ -82,13 +81,6 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
   if ("error" in ctx) return ctx.error;
   const [isp] = await ctx.db.select().from(isps).where(eq(isps.id, ctx.actor.id));
 
-  /* D4: the store's share cannot be larger than what the customer pays */
-  const fee = body.serviceFeeCents ?? isp.serviceFeeCents;
-  const commission = body.storeCommissionCents ?? isp.storeCommissionCents;
-  if (commission > fee) {
-    return c.json({ success: false, error: { code: "COMMISSION_EXCEEDS_FEE" } }, 400);
-  }
-
   /* D3: a new key is always re-tested, and the result is reported, not enforced */
   const test = body.wisphubApiKey
     ? await testKey(body.wisphubApiKey, c.env.WISPHUB_BASE_URL)
@@ -98,9 +90,6 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
     .update(isps)
     .set({
       ...(body.serviceFeeCents !== undefined ? { serviceFeeCents: body.serviceFeeCents } : {}),
-      ...(body.storeCommissionCents !== undefined
-        ? { storeCommissionCents: body.storeCommissionCents }
-        : {}),
       ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
       ...(body.timeFormat !== undefined ? { timeFormat: body.timeFormat } : {}),
       ...(body.wisphubApiKey !== undefined ? { wisphubApiKey: body.wisphubApiKey } : {}),

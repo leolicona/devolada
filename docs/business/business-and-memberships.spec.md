@@ -48,11 +48,13 @@ PR #124); its IA decisions are inherited, not re-decided.
   | Change the CLABE | ✓ | — | — | — |
   | Saldo y recargas (phase 3) | ✓ | — | — | — |
   | Integraciones (phase 5) | ✓ | ✓ | — | — |
-  | Usuarios: invite/remove | ✓ | ✓ (operator/viewer only) | — | — |
+  | Usuarios: invite/remove | ✓ | ✓ (operator/viewer only)¹ | — | — |
   | Delete business · transfer ownership | ✓ | — | — | — |
 
-  The viewer never receives the API key tail or the full CLABE (masked to
-  last 4 in their responses). Enforcement is one permission map consulted
+  ¹ *This spec's own refinement, not inherited from pivot D11*: an admin
+  may grant only the roles below their own, so the owner stays the only
+  source of admins. The viewer never receives the API key tail or the
+  full CLABE (masked to last 4 in their responses). Enforcement is one permission map consulted
   by the middleware per area — never per button. es-MX labels: **Dueño /
   Administrador / Operador / Lector**. `platform_operator` (US-L02) is NOT
   a business role: it is a flag on the user, specced in phase 3.
@@ -62,9 +64,11 @@ PR #124); its IA decisions are inherited, not re-decided.
 
 - **D4 — The actor is `{ user, businessId, role, business }`.** `Actor`
   loses its `isp` shape: the middleware resolves the active organization,
-  loads the business row, and the role from the membership. No active
-  organization + memberships exist → the API answers `NO_ACTIVE_BUSINESS`
-  and the client offers the switcher; no memberships at all → the client
+  loads the business row, and the role from the membership. **Exactly one
+  membership → it is activated on sign-in without asking** (the pilot
+  user, and most users forever; the IA's plain-label switcher). Several
+  memberships and none active → the API answers `NO_ACTIVE_BUSINESS` and
+  the client offers the switcher; no memberships at all → the client
   offers "Crear negocio". Suspension has two levels: `business.status =
   'suspended'` → 403 `ACCOUNT_SUSPENDED` for every member (session row
   revoked, as today); a removed membership → the workspace disappears from
@@ -73,7 +77,12 @@ PR #124); its IA decisions are inherited, not re-decided.
 - **D5 — Onboarding collects exactly the pivot's minimum, and the bank is
   picked, never typed.** Wizard: (1) business name → (2) CLABE (18 digits)
   + bank + beneficiary name → (3) done, with "Comparte un link de pago" as
-  the first action. The bank is **pre-selected from the provider
+  the first action. **The business is persisted at completion, in one
+  `POST /businesses` carrying the step 1–2 fields — never at step 1**: an
+  abandoned wizard creates nothing and the next sign-in restarts it (the
+  contract below already had this shape; this sentence makes it a rule).
+  The "channel unavailable" state (direct-payment D3/D4) survives only for
+  legacy rows — a business born through this wizard always has a CLABE. The bank is **pre-selected from the provider
   vocabulary** (`BANKS`, settings schema) by the CLABE's 3-digit bank
   prefix and correctable only by picking from that catalog — a typed name
   outside it poisons every future validation with the faceless `invalid`
@@ -122,10 +131,19 @@ PR #124); its IA decisions are inherited, not re-decided.
   `cash_drops`, `ledger_entries`, `customer_contacts` and the store-era
   `invitations` table. Deployed dev gets `/dev/seed` after deploy; local
   D1s are recreated. `payment_links` is untouched — the pilot links in
-  WhatsApp chats keep working. **Watch one collision**: the organizations
-  plugin ships its own invitation table; the spike (DoD 1) verifies its
-  actual name against our dropped `invitations` before the migration is
-  written.
+  WhatsApp chats keep working. **The existing tenants get their auth twin
+  by backfill, not by seed**: the pilot ISP lives in dev (prod carries no
+  Consta — `wrangler.jsonc` has no `CONSTA_BASE_URL` there), it is not the
+  demo row, and `/dev/seed` only links the demo ISP. So the migration runs
+  in three steps: `orgId` is added **nullable** → a backfill creates one
+  organization plus one **owner** membership per `businesses` row, taking
+  the owner from today's 1:1 link `isps.userId` → `orgId` is hardened to
+  NOT NULL and `userId` is **dropped** (ownership lives in the membership
+  now; a column that says the same thing twice would drift). SQLite allows
+  no other order. Idempotent, so a prod tenant table with zero rows is a
+  no-op. **The invitation table**: Better Auth names its own `invitation`
+  (singular) and ours was `invitations` — probably no collision, and the
+  spike (DoD 1) confirms it before the migration is written.
 
 - **D8 — Member invitations ride the plugin, wearing our email flow.** The
   owner (any role) and admin (operator/viewer only) invite by email; the
@@ -190,8 +208,9 @@ PR #124); its IA decisions are inherited, not re-decided.
    seeded customer answers — the US-B01 happy path, end to end.
 2. CLABE prefix pre-selects the bank; the bank field accepts only catalog
    values (a forged request with a free-text bank → 400, citing D16).
-3. Onboarding without CLABE → business exists, links answer "channel
-   unavailable" as today; the dashboard nags with the setup banner.
+3. Abandoned wizard (leaving at step 1 or 2) creates nothing; the next
+   sign-in restarts it. A forged `POST /businesses` without a CLABE → 400
+   (D5: the minimum is the minimum).
 4. One user, two businesses: switch swaps feed contents entirely; no row of
    business A renders under business B (US-B02, the isolation test).
 5. No active business selected → `NO_ACTIVE_BUSINESS`, client shows switcher.
@@ -207,9 +226,11 @@ PR #124); its IA decisions are inherited, not re-decided.
     `MEMBERSHIP_REVOKED`.
 12. Suspended business: every member's next request → 403
     `ACCOUNT_SUSPENDED`, session revoked (carried over from sessions spec).
-13. Migration integrity: a confirmed pre-migration direct payment (dev
-    seed) appears in the renamed feed with folio, reconnection status and
-    customer intact — the D6 mapping proven by rows, not by reading.
+13. Migration integrity, proven by rows: a confirmed pre-migration direct
+    payment appears in the renamed feed with folio, reconnection status
+    and customer intact (D6), **and** the pre-migration tenant's user
+    signs in, is auto-activated into its backfilled business as owner
+    (D7), and its existing payment links still resolve.
 14. A `partial` payment keeps its two errors apart: a validation error and
     a later reconnection error land in different columns (D6's split).
 
@@ -219,8 +240,10 @@ PR #124); its IA decisions are inherited, not re-decided.
       contract verified in dev — table names (the invitation collision,
       D7), custom roles via access control, `activeOrganizationId`
       behavior on sign-in with N memberships. Findings recorded here.
-- [ ] Migrations run clean on a fresh local D1 and on deployed dev
-      (reseeded); `payment_links` rows survive by test.
+- [ ] Migrations run clean on a fresh local D1 and on deployed dev;
+      the pilot tenant signs in afterwards as owner of its backfilled
+      business with its links intact (D7) — checked on the deployed app,
+      not only by scenario 13.
 - [ ] Scenarios 1–14 automated, citing their stories.
 - [ ] Glossary swap in SPEC.md + `ispId` sweep (D9) in the same PR as the
       rename, spec-lint green.

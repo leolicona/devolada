@@ -4,6 +4,13 @@ The project's sacred index. **Golden rule: if it exists in the code but is not h
 
 A network of payment points in neighborhood corner stores for ISPs running WispHub. The customer pays their monthly internet fee at the store around the corner, their service reconnects automatically within seconds, the store earns a commission with zero investment, and the ISP collects faster without field collection runs.
 
+> **Pivot (decided 2026-08-31, proposed)**: the product becomes the SPEI
+> validation-and-reconciliation platform — the oracle of truth; operational
+> actions live behind integrations. The store network above moves to its own
+> repo (`devolada-red`). Umbrella spec: [platform/pivot.spec.md](platform/pivot.spec.md).
+> Until its retirement PR lands, the description above and every story below
+> remain the truth of `main`.
+
 ## Spec-driven workflow rules (adapted)
 
 1. Every new feature: interview → justified decisions (D1…Dn as mini-ADRs: decision + discarded alternatives + why) → reserve a US-ID here → write `docs/<domain>/<feature>.spec.md` → register it in this index **within the same PR**.
@@ -76,6 +83,8 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 
 ### Platform (L)
 - **US-L01** — As the platform, my share of every charge accrues per ISP and per month; as an ISP, I see each month's statement with exactly what to transfer and the reference to use. *(reserved 2026-08-17, backlog #1)*
+- **US-L02** — As the platform operator, every global rule — validation fee, welcome bonus, negative-balance cap, inheritable defaults, retry schedule, top-up CLABE — lives in one versioned place I edit from an operator panel, and every change keeps its date and author. *(reserved 2026-08-31, pivot)*
+- **US-L03** — As the platform, every confirmed validation debits the business's prepaid credit at the current fee — never per attempt, never a percentage. *(reserved 2026-08-31, pivot)*
 
 ### Consta (V)
 Stories of the adjacent product (see "Adjacent product" below). Its users are
@@ -112,6 +121,31 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-D13** — As an end customer, the amount that is checked against Banxico is the amount I actually transferred — read from my receipt or typed by me — so a transfer for a different amount than my debt is found and settled, never lost. *(reserved 2026-08-26; measured the same day: correct clave and date, three `not_found`, only because the system asked with the debt instead of the transfer)*
 - **US-D14** — As an end customer whose transfer is not found on the first attempt, a second reading of my receipt happens within minutes: if both readings agree the page waits with evidence and never asks me by the clock; if they disagree I am asked to confirm exactly the disputed field against my receipt. *(reserved 2026-08-26)*
 - **US-D15** — As an end customer whose transfer carries evidence of good faith, my service is not interrupted while Banxico confirms — reconnected if I was suspended, protected from the cut if I was current — and only a burned ride or proven bad faith closes that fast lane for me, never an error that was not mine. *(reserved 2026-08-27; mechanism gated on measuring WispHub's payment-promise API)*
+
+### Business & workspaces (B)
+Pivot stories (platform/pivot.spec.md); "business" is the paying tenant, was "ISP".
+
+- **US-B01** — As a business owner, I sign up and start with the minimum: business name, CLABE (format/bank verified) and beneficiary name; everything else runs on platform defaults, and I can share payment links from that moment. *(reserved 2026-08-31, pivot D12)*
+- **US-B02** — As a user, one login gives me all my businesses as isolated workspaces, and I switch between them instantly without re-entering credentials. *(reserved 2026-08-31, pivot D10)*
+- **US-B03** — As a business owner, I invite people with a role — owner, admin, operator or viewer — and each role's reach is enforced: admin never touches the CLABE or the credit, operator operates payments, viewer only reads. *(reserved 2026-08-31, pivot D11)*
+- **US-B04** — As a business, I see my prepaid validation credit, every entry that consumed or added it, and I am warned before it runs out. *(reserved 2026-08-31, pivot D5/D6)*
+- **US-B05** — As a business, I top up my credit with a SPEI transfer validated by the platform itself: I transfer to the platform's CLABE, submit my proof, and the credit lands when it confirms. *(reserved 2026-08-31, pivot D7)*
+- **US-B06** — As an end customer, my proof validates even when the business's credit hits zero — the business goes negative up to a cap; past the cap the link says validation is paused as the business's fault, never mine, and my proof waits and validates on top-up. *(reserved 2026-08-31, pivot D6)*
+
+### Reconciliation (R)
+Pivot stories (platform/pivot.spec.md); Cobro = what is expected, Pago = what arrived.
+
+- **US-R01** — As a business with WispHub, my customers' debts appear as Cobros mirrored from WispHub — refreshed when the link opens, before a verdict applies, and periodically — so a debt paid elsewhere is never charged again. *(reserved 2026-08-31, pivot D4; carries US-C06/C08 forward)*
+- **US-R02** — As a business, every confirmed Pago is classified against its Cobro — exact, short or over — by my own reconciliation policy (tolerance in cents, treatment of surplus), and the class travels with the payment everywhere. *(reserved 2026-08-31, pivot D8)*
+- **US-R03** — As a business, I browse my Pagos filtered by status, date and customer, and one tap shows the transfer evidence behind any of them. *(reserved 2026-08-31, pivot)*
+- **US-R04** — As an end customer, my permanent link lists my open Cobros and the exact amount to transfer; when I owe nothing, it says so. *(reserved 2026-08-31, pivot D3)*
+
+### Integrations hub (I)
+Pivot stories (platform/pivot.spec.md); the bridge to operational actions.
+
+- **US-I01** — As a business, I connect my system from the integrations page: I pick WispHub, paste my API key — write-only, testable before saving — and see it validated live. *(reserved 2026-08-31, pivot D9; reuses settings D1–D3)*
+- **US-I02** — As a business, I map each reconciliation class to an action my integration declares — and for a short payment, reconnection obeys my threshold percent and floor in pesos; invalid or not-found never triggers any action. *(reserved 2026-08-31, pivot D8/D9)*
+- **US-I03** — As a business, a master switch pauses all automatic actions (observation mode): the oracle keeps validating and reconciling while I execute by hand, and my key stays configured. *(reserved 2026-08-31, pivot D9)*
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -253,6 +287,7 @@ Owner's decisions:
 | [direct-payment/claimed-amount.spec.md](direct-payment/claimed-amount.spec.md) | direct-payment | US-D13 | in development |
 | [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | in development |
 | [direct-payment/provisional-release.spec.md](direct-payment/provisional-release.spec.md) | direct-payment | US-D15 | proposed |
+| [platform/pivot.spec.md](platform/pivot.spec.md) | platform | US-B01–B06, US-R01–R04, US-I01–I03, US-L02, US-L03 | proposed |
 
 ## Cross-cutting layers
 

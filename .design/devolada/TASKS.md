@@ -50,6 +50,11 @@ amends US-V05 — its own decision in the child spec).
 - [ ] Cobros section (read-only mirror, freshness label)
 - [ ] Link page lists open Cobros (US-R04) — the one pago-page change
 - [ ] One Consta key per business, issued at business creation (D20)
+- [ ] Send `customerRef`/`paymentRef` on every validation **from the moment
+      the per-business key exists, not before** (US-V15's cheap half;
+      trust-layer D2 chains live in `(apiKeyId, customerRef)`, so refs sent
+      under the platform key would bind history to the wrong tenant and the
+      key switch would lose it — history cannot be backfilled)
 - [ ] Nav rename: feed "Cobros" → "Pagos" when both sections exist
 
 ## Phase 5 — Integrations hub

@@ -19,9 +19,11 @@ api. / consta.              APIs (no UI)
   menu lists the user's businesses + "Crear negocio". Switching swaps the
   whole data context, no re-login. One business → the switcher renders as a
   plain label.
-- **Saldo chip** in the header (US-B04): current credit, always visible,
-  color-stepped (normal / warning at 20% / error at ≤0 / "pausado" past the
-  cap). Tapping it opens Configuración → Saldo y recargas. A chip, not a nav
+- **Saldo chip** in the header (US-B04): current credit, always visible.
+  Each step changes **label and icon, never color alone** (the brief's own
+  law): normal shows the amount; at 20% it gains "Saldo bajo" + its icon;
+  at ≤0, "Sin saldo"; past the cap, "Validación en pausa". The US-B04 child
+  spec's UI Contract states the exact set. Tapping it opens Configuración → Saldo y recargas. A chip, not a nav
   section — it is a status, not a place. **Rejected**: a sixth nav section
   (breaks the ≤5 law); burying it in settings with no ambient signal (a
   business discovers the pause when a customer complains — exactly what D6's
@@ -45,8 +47,11 @@ when the second section exists, so the two words never coexist wrongly).
 
 ### Onboarding (US-B01) — before the shell is useful
 Wizard, one screen per step, skippable nothing: (1) business name →
-(2) CLABE + bank (derived from the first digits, editable) + beneficiary →
-(3) done: the welcome bonus is announced and the first action offered is
+(2) CLABE + bank + beneficiary — the bank is **pre-selected from the
+provider vocabulary** by the CLABE's first digits and correctable only by
+picking from that same catalog, never typed (direct-payment D16; a name
+outside it produces the faceless `invalid` that was BUG-007 — the US-B01
+child spec's UI Contract must cite both) → (3) done: the welcome bonus is announced and the first action offered is
 "Comparte un link de pago". Defaults (timezone, fee payer, tolerance) are
 applied silently — settings can change them later. Signup itself (email +
 code) exists and is untouched.

@@ -20,7 +20,7 @@ the business's own system acts on the verdict.
 | **Owner** | `app.` | Sets up the business in minutes (US-B01), sees money arriving with proof behind every row, trusts the oracle enough to hand it the keys (observation mode is the ramp). |
 | **Admin** | `app.` | Everything the owner sees minus bank/credit controls (US-B03). |
 | **Operator** | `app.` | The daily screen: payments, customers, proofs, retrying a failed action. No settings. |
-| **Viewer** | `app.` | Read-only; exports. Never sees the API key or full bank data. |
+| **Viewer** | `app.` | Read-only. Never sees the API key or full bank data. (CSV export is a backlog one-liner in SPEC.md, not a promise here.) |
 | **Platform operator** (us) | `app.…/operador` | Edits global rules without a deploy; every change keeps author and date (US-L02). |
 
 ## Design principles (inherited + new)

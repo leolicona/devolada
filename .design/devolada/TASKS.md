@@ -43,12 +43,13 @@ Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md
 
 ## Phase 4 — Cobros mirror & reconciliation
 
-Child specs: [cobros-mirror.spec.md](../../docs/reconciliation/cobros-mirror.spec.md)
+Child specs: [cobros-live.spec.md](../../docs/reconciliation/cobros-live.spec.md)
 (US-R01, US-R04) · [payments-and-classes.spec.md](../../docs/reconciliation/payments-and-classes.spec.md)
 (US-R02, US-R03; carries pivot D20 and the trust-layer refs) — written
-2026-09-01 after the phase-4 interview. The mirror refreshes by events and
-on demand with a daily close, never a fixed tick; the WispHub webhook
-spike (CHR lab if events need a router) is the gate.
+2026-09-01 after the phase-4 interview. The Cobros section reads WispHub
+**live** (owner decision after the spike: the mirror bought nothing a link
+open does not already pay), cached 30 s at the api and 2 min in the
+client's query memory; the webhook spike ran — no push surface exists.
 
 - [ ] `payment_requests` mirrored from WispHub; refresh at link-open, before
       verdict, periodic sweep (pivot D4)

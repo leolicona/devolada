@@ -17,7 +17,7 @@ Consta key per business (D20)** and the trust layer's refs (US-V15's
 cheap half), and it performs the **rename** the IA scheduled for the
 moment both sections exist. Decided with the owner in the phase-4
 interview (2026-09-01). Its companion is
-[cobros-mirror.spec.md](cobros-mirror.spec.md).
+[cobros-live.spec.md](cobros-live.spec.md).
 
 ## Decisions
 

@@ -63,15 +63,15 @@
       "vars": {
         "ENVIRONMENT": "dev",
         "API_BASE_URL": "https://api.dev.devoladapago.com",
-        "ADMIN_BASE_URL": "https://admin.dev.devoladapago.com",
-        "PAGO_BASE_URL": "https://pago.dev.devoladapago.com",
+        "ADMIN_BASE_URL": "https://app.dev.devoladapago.com",
+        "PAGO_BASE_URL": "https://link.dev.devoladapago.com",
         "CONSTA_BASE_URL": "https://consta.dev.devoladapago.com",
         /* TD-015, temporary. Empty since the move to the project's own
            Cloudflare account (CICD.md D7, 2026-09-01): the links of the
            2026-08-20 demo were rows of the old dev database, which did not
            travel. Paying TD-015 deletes this var altogether. */
         "DEMO_LINK_TOKENS": "",
-        "ALLOWED_ORIGINS": "https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev",
+        "ALLOWED_ORIGINS": "https://app.dev.devoladapago.com,https://link.dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
@@ -94,12 +94,12 @@
       "vars": {
         "ENVIRONMENT": "prod",
         "API_BASE_URL": "https://api.devoladapago.com",
-        "ADMIN_BASE_URL": "https://admin.devoladapago.com",
-        "PAGO_BASE_URL": "https://pago.devoladapago.com",
+        "ADMIN_BASE_URL": "https://app.devoladapago.com",
+        "PAGO_BASE_URL": "https://link.devoladapago.com",
         /* No CONSTA_BASE_URL: Consta has no prod env yet (its spec D8).
            Without it the SPEI channel answers "unavailable" and the
            payment page says so instead of showing a void. */
-        "ALLOWED_ORIGINS": "https://admin.devoladapago.com,https://pago.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://app.devoladapago.com,https://link.devoladapago.com",
         "PASSKEY_RP_ID": "devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }

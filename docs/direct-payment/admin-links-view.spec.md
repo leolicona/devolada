@@ -34,7 +34,7 @@ Queries WispHub for customers matching `q`. For each matching customer, ensures 
         usuario: "juanperez",
         name: "Juan Perez",
         phone: "5551234567" | null,
-        url: "https://pago.dev.devoladapago.com/p/<token>",
+        url: "https://link.dev.devoladapago.com/p/<token>",
         waLink: "https://wa.me/525551234567?text=<message with the url>"
       }
     ]

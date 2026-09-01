@@ -14,7 +14,7 @@ const results = {
       usuario: "greyes",
       name: "Janely Reyes",
       phone: "5551234567",
-      url: "https://pago.dev.devoladapago.com/p/tok-greyes",
+      url: "https://link.dev.devoladapago.com/p/tok-greyes",
       waLink: "https://wa.me/525551234567?text=hola",
     },
   ],
@@ -69,7 +69,7 @@ describe("US-D07: Copiar says what happened", () => {
     await userEvent.click(await searchReyes());
 
     expect(await screen.findByText("Copiado")).toBeInTheDocument();
-    expect(writeText).toHaveBeenCalledWith("https://pago.dev.devoladapago.com/p/tok-greyes");
+    expect(writeText).toHaveBeenCalledWith("https://link.dev.devoladapago.com/p/tok-greyes");
   });
 
   it("says 'No se copió' when the clipboard refuses", async () => {

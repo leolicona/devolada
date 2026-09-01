@@ -37,7 +37,7 @@ Rules for two worktrees to coexist:
 | prod | `devolada-api` | `devolada-admin` | `devolada-pago` | `devolada-db-prod` |
 | preview (per PR) | API version upload | **admin version upload — the URL the client opens** | version upload | points at `devolada-db-dev` |
 
-Custom domains live under `devoladapago.com` (`api.` / `admin.` / `pago.` / `consta.`, and `.dev.` variants — pivot D19 is the map). The store PWA and its `punto.*` domains left with `devolada-red` (2026-08-31).
+Custom domains live under `devoladapago.com` (`api.` / `app.` for the business / `link.` for the payer / `consta.`, and `.dev.` variants — pivot D19 is the map; `app.`/`link.` replaced `admin.`/`pago.` on 2026-09-01, before any custom domain existed on the new account). The Worker names (`devolada-admin`, `devolada-pago`) and the app directories keep the glossary's words; only the hosts changed. The store PWA and its `punto.*` domains left with `devolada-red` (2026-08-31).
 
 Frontends inject `VITE_API_URL` at build time. Secrets (BETTER_AUTH_SECRET, RESEND_API_KEY, CUSTOMER_REF_SECRET, `PLATFORM_OPERATOR_EMAILS` — the comma-separated operators of the platform, operator-panel D2 —, `CONSTA_ISSUER_TOKEN` — the issue-only door of Consta's `/admin/keys`, set on **both** Workers, payments-and-classes D7 —, Cloudflare token) live in GitHub Environments, never in the repo — and reach the Worker through the sync step in D5. `AUTH_JWT_SECRET` is optional on dev and **required on prod**: the deploy fails without it rather than shipping an API that skips signature checks (TD-001).
 

@@ -9,7 +9,7 @@ detail lands in its child spec's UI Contract. Existing screens are marked
 ```
 app.devoladapago.com        Business dashboard (evolves from apps/admin)
 app.devoladapago.com/operador   Platform operator panel (role-gated route)
-pago.devoladapago.com       Payer page (exists; untouched except US-R04)
+link.devoladapago.com       Payer page (exists; untouched except US-R04)
 api. / consta.              APIs (no UI)
 ```
 

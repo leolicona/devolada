@@ -2,11 +2,11 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { charges } from "../src/db/schema";
+import { payments } from "../src/db/schema";
 import { sweepReconnections, MAX_ATTEMPTS } from "../src/reconnection/queue";
-import { seedBusiness } from "./helpers";
+import { seedBusiness, seedConfirmedPayment } from "./helpers";
 
-/* docs/charges/reconnection-queue.spec.md scenarios 1–6. */
+/* docs/payments/reconnection-queue.spec.md scenarios 1–6. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
 const MINUTE = 60_000;
@@ -72,35 +72,25 @@ const mockVerify = (estado: string) =>
     })
     .reply(...json({ count: 1, results: [customer(estado)] }));
 
-async function seedQueuedCharge(over: Partial<typeof charges.$inferInsert> = {}) {
+async function seedQueuedCharge(over: Partial<typeof payments.$inferInsert> = {}) {
   const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
   const db = drizzle(env.DB);
-  const [charge] = await db
-    .insert(charges)
-    .values({
-      businessId: business.id,
-      folio: `DV-Q${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-      /* Production-faithful: recordCharge stores the numeric id here and
-         the usuario apart (D8). The old seed put the usuario in the id
-         column — a mock that lied (TESTING.md rule 5), hiding that no
-         real retry could ever look the customer up. */
-      wisphubCustomerId: "6",
-      customerUsuario: "greyes@wifiplus",
-      customerName: "Janely",
-      invoiceCents: 49900,
-      serviceFeeCents: 1500,
-      totalCents: 51400,
-      reconnectionStatus: "queued",
-      reconnectionAttempts: 1,
-      nextAttemptAt: new Date(Date.now() - MINUTE),
-      ...over,
-    })
-    .returning();
+  /* Production-faithful: the numeric id and the usuario apart (D8), and
+     the amount to register stored at confirmation (partial-payment D9) */
+  const charge = await seedConfirmedPayment(business, {
+    wisphubCustomerId: "6",
+    customerUsuario: "greyes@wifiplus",
+    registeredCents: 49900,
+    reconnectionStatus: "queued",
+    reconnectionAttempts: 1,
+    nextAttemptAt: new Date(Date.now() - MINUTE),
+    ...over,
+  });
   return { business, charge, db };
 }
 
 const reload = async (db: ReturnType<typeof drizzle>, id: string) =>
-  (await db.select().from(charges).where(eq(charges.id, id)))[0];
+  (await db.select().from(payments).where(eq(payments.id, id)))[0];
 
 describe("US-C04: the queue pays the invoice the customer already has (TD-009)", () => {
   it("reuses a pending invoice and creates none", async () => {
@@ -148,9 +138,9 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
        test as an unmatched request. The old flow re-paid here, and
        WispHub's 422 on a paid invoice killed every retry. */
     await db
-      .update(charges)
+      .update(payments)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
-      .where(eq(charges.id, charge.id));
+      .where(eq(payments.id, charge.id));
     mockVerify("Activo");
 
     await sweepReconnections(env);
@@ -200,9 +190,9 @@ describe("US-C04: the backoff walks and then gives up", () => {
       expect(Math.round(waited)).toBe(wait);
 
       await db
-        .update(charges)
+        .update(payments)
         .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
-        .where(eq(charges.id, charge.id));
+        .where(eq(payments.id, charge.id));
     }
 
     /* One more failure exhausts the budget */
@@ -219,7 +209,9 @@ describe("US-C04: the backoff walks and then gives up", () => {
 
 describe("US-C04: a rejected key is not the store's fault", () => {
   it("reschedules without spending an attempt, unlike an outage", async () => {
-    const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55 });
+    /* business-and-memberships scenario 14: the validation's own error
+       stays where it is while the reconnection writes its own column */
+    const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55, lastError: "PROVIDER_LATE" });
 
     /* D5: WispHub rejects the ISP's key */
     mockAutoActivate();
@@ -230,15 +222,15 @@ describe("US-C04: a rejected key is not the store's fault", () => {
     await sweepReconnections(env);
     const paused = await reload(db, charge.id);
     expect(paused.reconnectionAttempts).toBe(1); /* unchanged */
-    expect(paused.lastError).toBe("WISPHUB_AUTH_FAILED");
+    expect(paused.reconnectionError).toBe("WISPHUB_AUTH_FAILED");
     expect(paused.reconnectionStatus).toBe("queued");
     expect(Math.round((paused.nextAttemptAt!.getTime() - Date.now()) / MINUTE)).toBe(30);
 
     /* An outage is what the backoff is for: it counts */
     await db
-      .update(charges)
+      .update(payments)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
-      .where(eq(charges.id, charge.id));
+      .where(eq(payments.id, charge.id));
     mockAutoActivate();
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
@@ -247,24 +239,20 @@ describe("US-C04: a rejected key is not the store's fault", () => {
     await sweepReconnections(env);
     const counted = await reload(db, charge.id);
     expect(counted.reconnectionAttempts).toBe(2);
-    expect(counted.lastError).toBe("WISPHUB_UNAVAILABLE");
+    expect(counted.reconnectionError).toBe("WISPHUB_UNAVAILABLE");
+    /* D6's split, proven: two failures, two columns */
+    expect(counted.lastError).toBe("PROVIDER_LATE");
   });
 });
 
 describe("US-C03: the sweep only touches what is due", () => {
-  it("leases claimed charges and ignores terminal ones", async () => {
+  it("leases claimed payments and ignores terminal ones", async () => {
     const { charge, db, business } = await seedQueuedCharge({
       nextAttemptAt: new Date(Date.now() + 10 * MINUTE),
     });
     /* A reconnected charge and a future-dated one: neither is due */
-    await db.insert(charges).values({
-      businessId: business.id,
+    await seedConfirmedPayment(business, {
       folio: "DV-DONE01",
-      wisphubCustomerId: "greyes@wifiplus",
-      customerName: "Janely",
-      invoiceCents: 49900,
-      serviceFeeCents: 1500,
-      totalCents: 51400,
       reconnectionStatus: "reconnected",
       nextAttemptAt: new Date(Date.now() - MINUTE),
     });
@@ -274,9 +262,9 @@ describe("US-C03: the sweep only touches what is due", () => {
 
     /* Due now: the sweep claims it and leases it two minutes ahead (D4) */
     await db
-      .update(charges)
+      .update(payments)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
-      .where(eq(charges.id, charge.id));
+      .where(eq(payments.id, charge.id));
     mockAutoActivate();
     mockPaymentMethods();
     mockPendingInvoices([]);

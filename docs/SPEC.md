@@ -30,7 +30,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | Concept | UI copy (es-MX) | Code (English) | Never |
 |---------|-----------------|----------------|-------|
 | The paying tenant | **Negocio** | `business` (table `businesses`; `businessId` everywhere) | "empresa", "ISP" (an ISP is one kind of business) |
-| Customer payment transaction | **Cobro** | `charge` | "pago" (only on the end-customer receipt) — *becomes `payment_request`/`payment` when the payments merge lands (business-and-memberships D6)* |
+| The transfer that arrived and reconciled | **Pago** | `payment` (table `payments`; absorbed the store-era `charge`) | "cobro" (that is the expected side — `payment_request`/Cobro arrives with phase 4) |
 | Who may do what inside a business | **Dueño / Administrador / Operador / Lector** | `role` (`owner/admin/operator/viewer`) | "usuario" as a role name |
 | Fee paid by the end customer | **Cargo por servicio** | `service_fee` | — |
 | Period's billed charge (invoice total) | **Cargo del periodo** | `invoice` / `invoice_cents` | "mensualidad" (the invoice can bill more than the plan — debt-truth D16) |

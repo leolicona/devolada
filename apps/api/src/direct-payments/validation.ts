@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { charges, directPayments, businesses, paymentLinks } from "../db/schema";
+import { payments, businesses, paymentLinks } from "../db/schema";
 import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
 import { customerRefFor } from "../consta/refs";
@@ -11,7 +11,7 @@ import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
 import { invalidatePendingInvoices } from "../wisphub/cache";
 import { firstAttemptSchedule } from "../reconnection/queue";
-import { makeFolio } from "../routes/charges/handler";
+import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
 import { demoVerdict, isDemoLink } from "./demo";
@@ -28,7 +28,7 @@ import {
    like the reconnection queue. */
 
 type DB = DrizzleD1Database;
-export type DirectPayment = typeof directPayments.$inferSelect;
+export type DirectPayment = typeof payments.$inferSelect;
 type PaymentLink = typeof paymentLinks.$inferSelect;
 type Isp = typeof businesses.$inferSelect;
 
@@ -124,7 +124,7 @@ async function tracesToOwnAttempt(
 
   let cursor = payment.supersedesId;
   for (let hops = 0; cursor && hops < 20; hops++) {
-    const [prior] = await db.select().from(directPayments).where(eq(directPayments.id, cursor));
+    const [prior] = await db.select().from(payments).where(eq(payments.id, cursor));
     if (!prior) break;
     if (attempted(prior)) return true;
     cursor = prior.supersedesId;
@@ -134,12 +134,12 @@ async function tracesToOwnAttempt(
   if (!key) return false;
   const siblings = await db
     .select()
-    .from(directPayments)
+    .from(payments)
     .where(
       and(
-        eq(directPayments.paymentLinkId, payment.paymentLinkId),
-        eq(directPayments.trackingKey, key),
-        ne(directPayments.id, payment.id),
+        eq(payments.paymentLinkId, payment.paymentLinkId),
+        eq(payments.trackingKey, key),
+        ne(payments.id, payment.id),
       ),
     );
   return siblings.some(attempted);
@@ -154,12 +154,12 @@ export async function runValidation(
   now: Date,
 ): Promise<DirectPayment> {
   const update = async (
-    values: Partial<typeof directPayments.$inferInsert>,
+    values: Partial<typeof payments.$inferInsert>,
   ): Promise<DirectPayment> => {
     const [row] = await db
-      .update(directPayments)
+      .update(payments)
       .set(values)
-      .where(eq(directPayments.id, payment.id))
+      .where(eq(payments.id, payment.id))
       .returning();
     return row;
   };
@@ -172,7 +172,7 @@ export async function runValidation(
      never for our own outages. */
   const retryLater = async (
     error: string,
-    base: Partial<typeof directPayments.$inferInsert> = {},
+    base: Partial<typeof payments.$inferInsert> = {},
     opts: { lateSlot?: boolean; suggestedAt?: Date | null } = {},
   ) => {
     const slot = nextValidationSlot(payment.createdAt, now, opts);
@@ -290,9 +290,9 @@ export async function runValidation(
   const isRetry = payment.validationAttempts > 0 || payment.constaStatus !== null;
   const attempts = payment.validationAttempts + 1;
   await db
-    .update(directPayments)
+    .update(payments)
     .set({ validationAttempts: attempts })
-    .where(eq(directPayments.id, payment.id));
+    .where(eq(payments.id, payment.id));
 
   let verdict;
   if (isDemoLink(env, link)) {
@@ -460,14 +460,14 @@ export async function runValidation(
     const rideKey = payment.trackingKey ?? cep?.trackingKey;
     if (rideKey) {
       await db
-        .update(directPayments)
+        .update(payments)
         .set({ status: "superseded", nextValidationAt: null })
         .where(
           and(
-            eq(directPayments.paymentLinkId, payment.paymentLinkId),
-            eq(directPayments.trackingKey, rideKey),
-            eq(directPayments.status, "expired"),
-            ne(directPayments.id, payment.id),
+            eq(payments.paymentLinkId, payment.paymentLinkId),
+            eq(payments.trackingKey, rideKey),
+            eq(payments.status, "expired"),
+            ne(payments.id, payment.id),
           ),
         );
     }
@@ -487,13 +487,13 @@ export async function runValidation(
   if (adoptKey && cep?.trackingKey) {
     try {
       await db
-        .update(directPayments)
+        .update(payments)
         .set({
           trackingKey: cep.trackingKey,
           senderBank: cep.senderBank ?? null,
           transferDate: cep.date ?? null,
         })
-        .where(eq(directPayments.id, payment.id));
+        .where(eq(payments.id, payment.id));
     } catch (e) {
       if (isUniqueViolation(e)) {
         return update({
@@ -559,37 +559,23 @@ export async function runValidation(
     floorCents: business.reconnectionFloorCents,
   });
 
-  /* D6: a direct charge has no store, no commission, no ledger entries —
-     but the same folio, the same reconnection flow, the same feed. */
-  const [charge] = await db
-    .insert(charges)
-    .values({
-      businessId: business.id,
-      channel: "spei",
-      directPaymentId: payment.id,
-      folio: makeFolio(),
-      wisphubCustomerId: link.wisphubCustomerId,
-      customerUsuario: link.customerUsuario,
-      customerName: customer?.name ?? link.customerUsuario,
-      customerZone: customer?.zone ?? null,
-      customerPhone: customer?.phone ?? null,
-      /* D9: the charge records what actually arrived, not what was
-         asked for. The money moved, so the platform statement and the
-         ISP's feed must both see it. */
-      invoiceCents: settlement.ispRegisteredCents,
-      carriedBalanceCents: 0,
-      /* D14: the whole fee, always. `settlement` D1 derives the
-         platform's share from this column, and the money the payer sent
-         reached the ISP's bank whatever its size — so the fee is a
-         receivable against the ISP, never something the shortfall
-         cancels. */
-      serviceFeeCents: settlement.feeAccruedCents,
-      totalCents: receivedCents,
-    })
-    .returning();
+  /* business-and-memberships D6: the payment row IS the confirmed record
+     — folio, customer and the registered amount land on it, and the
+     reconnection queue rides it. No twin row. */
+  await update({
+    folio: makeFolio(),
+    wisphubCustomerId: link.wisphubCustomerId,
+    customerUsuario: link.customerUsuario,
+    customerName: customer?.name ?? link.customerUsuario,
+    customerZone: customer?.zone ?? null,
+    customerPhone: customer?.phone ?? null,
+    /* partial-payment D9: what actually arrived is what gets registered
+       against the debt — the number every retry registers again */
+    registeredCents: settlement.ispRegisteredCents,
+  });
 
-  /* provider-latency D4: a charge now exists for this tenant, so the
-     display cache is stale by definition — same rule as the store flow. */
+  /* provider-latency D4: a confirmed payment now exists for this tenant,
+     so the display cache is stale by definition. */
   invalidatePendingInvoices(business.id);
 
   const attempt = await attemptReconnection(
@@ -602,24 +588,11 @@ export async function runValidation(
     settlement.reconnect,
   );
   const schedule = firstAttemptSchedule(attempt, now);
-  await db
-    .update(charges)
-    .set({
-      reconnectionStatus: attempt.status,
-      reconnectionAttempts: schedule.attempts,
-      wisphubInvoiceId: attempt.invoiceId,
-      paymentRegisteredAt: attempt.paymentRegistered ? now : null,
-      nextAttemptAt: schedule.nextAttemptAt,
-      lastError: attempt.error,
-      ...(attempt.status === "reconnected" ? { reconnectedAt: now } : {}),
-    })
-    .where(eq(charges.id, charge.id));
 
   return update({
     ...base,
     receivedCents,
     status: settlement.status,
-    chargeId: charge.id,
     confirmedAt: now,
     /* D18: who Banxico says sent the money. Recorded and acted on by
        nothing — a name unrelated to the subscriber is the only signal
@@ -630,6 +603,14 @@ export async function runValidation(
     cepSenderName: cep?.senderName ?? null,
     nextValidationAt: null,
     lastError: null,
+    /* The queue's first attempt, on the same row (reconnection-queue D2) */
+    reconnectionStatus: attempt.status,
+    reconnectionAttempts: schedule.attempts,
+    wisphubInvoiceId: attempt.invoiceId,
+    paymentRegisteredAt: attempt.paymentRegistered ? now : null,
+    nextAttemptAt: schedule.nextAttemptAt,
+    reconnectionError: attempt.error,
+    ...(attempt.status === "reconnected" ? { reconnectedAt: now } : {}),
   });
 }
 
@@ -661,24 +642,24 @@ export async function sweepDirectPayments(
 
   const due = await db
     .select()
-    .from(directPayments)
+    .from(payments)
     .where(
       and(
-        eq(directPayments.status, "validating"),
-        isNotNull(directPayments.nextValidationAt),
-        lte(directPayments.nextValidationAt, now),
+        eq(payments.status, "validating"),
+        isNotNull(payments.nextValidationAt),
+        lte(payments.nextValidationAt, now),
       ),
     )
-    .orderBy(directPayments.nextValidationAt)
+    .orderBy(payments.nextValidationAt)
     .limit(BATCH);
   if (!due.length) return report;
 
   await db
-    .update(directPayments)
+    .update(payments)
     .set({ nextValidationAt: new Date(now.getTime() + minutes(LEASE_MINUTES)) })
     .where(
       inArray(
-        directPayments.id,
+        payments.id,
         due.map((p) => p.id),
       ),
     );
@@ -723,7 +704,7 @@ export async function validatingCount(env: Bindings): Promise<number> {
   const db = drizzle(env.DB);
   const [row] = await db
     .select({ n: sql<number>`count(*)` })
-    .from(directPayments)
-    .where(eq(directPayments.status, "validating"));
+    .from(payments)
+    .where(eq(payments.status, "validating"));
   return Number(row?.n ?? 0);
 }

@@ -95,7 +95,7 @@ const adminSettings = {
 
 async function stubAdmin(page: Page) {
   await json(page, (u) => u.pathname.endsWith("/auth/me"), businessActor);
-  await json(page, (u) => u.pathname.includes("/charges/feed"), { charges: [] });
+  await json(page, (u) => u.pathname.includes("/payments/feed"), { charges: [] });
   await json(page, (u) => u.pathname.endsWith("/settings"), adminSettings);
   await json(page, (u) => u.pathname.endsWith("/settlement"), { months: [] });
 }

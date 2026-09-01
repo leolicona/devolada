@@ -1,8 +1,8 @@
 import type { Context } from "hono";
-import { and, count, desc, eq, gte, lt, lte, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lt, lte, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { charges } from "../../db/schema";
+import { payments } from "../../db/schema";
 import { startOfBusinessDayMs } from "../../time/business-day";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -18,7 +18,7 @@ export function makeFolio(): string {
 }
 
 /* The ISP's live feed (charge-feed spec). Tenant isolation by businessId (D6). */
-export async function listChargeFeed(
+export async function listPaymentFeed(
   c: Ctx,
   q: {
     cursor?: number;
@@ -34,31 +34,39 @@ export async function listChargeFeed(
   const db = drizzle(c.env.DB);
   const PAGE = 20;
 
+  /* Only money that arrived is a feed row (D6): confirmed and partial */
   const filters = [
-    eq(charges.businessId, actor.id),
-    ...(q.cursor ? [lt(charges.createdAt, new Date(q.cursor))] : []),
-    ...(q.status ? [eq(charges.reconnectionStatus, q.status)] : []),
-    ...(q.from ? [gte(charges.createdAt, new Date(q.from))] : []),
-    ...(q.to ? [lte(charges.createdAt, new Date(q.to))] : []),
+    eq(payments.businessId, actor.id),
+    inArray(payments.status, ["confirmed", "partial"]),
+    ...(q.cursor ? [lt(payments.createdAt, new Date(q.cursor))] : []),
+    ...(q.status ? [eq(payments.reconnectionStatus, q.status)] : []),
+    ...(q.from ? [gte(payments.createdAt, new Date(q.from))] : []),
+    ...(q.to ? [lte(payments.createdAt, new Date(q.to))] : []),
   ];
 
   /* `storeName` stays in the response shape until the payments merge
      revises charge-feed.spec.md (business-and-memberships D6); with the
      store network gone it is always null. */
   const rows = await db
-    .select({ charge: charges })
-    .from(charges)
+    .select({ charge: payments })
+    .from(payments)
     .where(and(...filters))
-    .orderBy(desc(charges.createdAt))
+    .orderBy(desc(payments.createdAt))
     .limit(PAGE + 1);
   const page = rows.slice(0, PAGE);
 
   /* Settings D5: the ISP's timezone decides where its day starts */
   const todayStartMs = startOfBusinessDayMs(actor.timezone);
   const [t] = await db
-    .select({ count: count(), total: sum(charges.totalCents) })
-    .from(charges)
-    .where(and(eq(charges.businessId, actor.id), gte(charges.createdAt, new Date(todayStartMs))));
+    .select({ count: count(), total: sum(payments.receivedCents) })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.businessId, actor.id),
+        inArray(payments.status, ["confirmed", "partial"]),
+        gte(payments.createdAt, new Date(todayStartMs)),
+      ),
+    );
   const today = {
     count: Number(t?.count ?? 0),
     totalCents: Number(t?.total ?? 0),
@@ -68,21 +76,24 @@ export async function listChargeFeed(
   return c.json({
     success: true,
     data: {
+      /* `charges` stays the key until charge-feed.spec.md's phase-4 revision */
       charges: page.map(({ charge }) => ({
         id: charge.id,
-        folio: charge.folio,
+        folio: charge.folio ?? "",
         channel: charge.channel,
-        reconnectionStatus: charge.reconnectionStatus,
-        totalCents: charge.totalCents,
+        reconnectionStatus: charge.reconnectionStatus ?? "queued",
+        /* `totalCents` stays the response's name for what arrived until
+           the phase-4 revision of charge-feed.spec.md */
+        totalCents: charge.receivedCents ?? charge.amountCents,
         invoiceCents: charge.invoiceCents,
         carriedBalanceCents: charge.carriedBalanceCents,
         serviceFeeCents: charge.serviceFeeCents,
-        customerName: charge.customerName,
+        customerName: charge.customerName ?? "",
         storeName: null,
         createdAt: charge.createdAt.getTime(),
         reconnectedAt: charge.reconnectedAt?.getTime() ?? null,
         attempts: charge.reconnectionAttempts,
-        lastError: charge.lastError,
+        lastError: charge.reconnectionError,
       })),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,
       today,

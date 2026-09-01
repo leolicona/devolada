@@ -1,6 +1,6 @@
 import type { Bindings } from "../env";
 import type { ConstaVerdict } from "../consta/client";
-import type { directPayments, businesses, paymentLinks } from "../db/schema";
+import type { payments, businesses, paymentLinks } from "../db/schema";
 
 /* TD-015 — a simulated `valid` verdict for a demo, and nothing else.
 
@@ -28,7 +28,7 @@ import type { directPayments, businesses, paymentLinks } from "../db/schema";
         not a secret and not a database row, so removing the demo is one
         deleted line and one deploy — and the diff says so out loud. */
 
-type DirectPayment = typeof directPayments.$inferSelect;
+type DirectPayment = typeof payments.$inferSelect;
 type PaymentLink = typeof paymentLinks.$inferSelect;
 type Isp = typeof businesses.$inferSelect;
 

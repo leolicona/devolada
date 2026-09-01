@@ -29,7 +29,7 @@
     "wrangler": "^4.0.0"
   },
   "exports": {
-    "./charges-schema": "./src/routes/charges/schema.ts",
+    "./payments-schema": "./src/routes/payments/schema.ts",
     "./settings-schema": "./src/routes/settings/schema.ts",
     "./direct-payments-schema": "./src/routes/direct-payments/schema.ts"
   }

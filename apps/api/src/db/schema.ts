@@ -5,7 +5,6 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
-  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 import { organization } from "./auth-schema";
 
@@ -84,71 +83,6 @@ export const businesses = sqliteTable("businesses", {
   createdAt: createdAt(),
 });
 
-export const charges = sqliteTable(
-  "charges",
-  {
-    id: id(),
-    businessId: text("business_id")
-      .notNull()
-      .references(() => businesses.id),
-    /* 'spei' = direct payment (D6); 'store' survives as a historical
-       value only until the payments merge (business-and-memberships D6) */
-    channel: text("channel", { enum: ["store", "spei"] })
-      .notNull()
-      .default("spei"),
-    directPaymentId: text("direct_payment_id").references(
-      (): AnySQLiteColumn => directPayments.id,
-    ),
-    folio: text("folio").notNull().unique(),
-    wisphubCustomerId: text("wisphub_customer_id").notNull(),
-    customerName: text("customer_name").notNull(),
-    customerZone: text("customer_zone"),
-    /* Copied at record time (receipt spec D4): reading it back from
-       WispHub would make the receipt fail exactly when WispHub is down */
-    customerPhone: text("customer_phone"),
-    /* What the ISP was owed for the period this charge settles — the
-       pending invoice's own total, not the plan's list price
-       (debt-truth D8/D13). Prorations, discounts and any reconnection
-       charge are already inside it. */
-    invoiceCents: integer("invoice_cents").notNull(),
-    /* Debt the customer was already carrying in WispHub's running
-       account (`saldo`, debt-truth D7). Zero for the ordinary case; a
-       credit never lands here, it is netted into `invoiceCents` (D12). */
-    carriedBalanceCents: integer("carried_balance_cents").notNull().default(0),
-    serviceFeeCents: integer("service_fee_cents").notNull(),
-    totalCents: integer("total_cents").notNull(),
-    /* `withheld` (partial-payment D9): the payment was recorded and the
-       service deliberately not restored — a short payment under the
-       ISP's threshold. Terminal, like reconnected and failed. */
-    reconnectionStatus: text("reconnection_status", {
-      enum: ["queued", "reconnected", "failed", "withheld"],
-    })
-      .notNull()
-      .default("queued"),
-    reconnectionAttempts: integer("reconnection_attempts").notNull().default(0),
-    reconnectedAt: integer("reconnected_at", { mode: "timestamp_ms" }),
-    /* Reconnection queue (reconnection-queue spec). The charge row is the
-       queue: `nextAttemptAt` is when it may be touched again (null once
-       terminal), and the invoice id makes a retry pay the same invoice
-       instead of creating a second one (D1, pays TD-009). */
-    wisphubInvoiceId: integer("wisphub_invoice_id"),
-    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
-    lastError: text("last_error"),
-    /* The WispHub usuario, which every retry lookup needs (D8 revision):
-       wisphubCustomerId above is the numeric id and only serves the
-       auto-activate PATCH. Nullable: rows before 0006 predate it. */
-    customerUsuario: text("customer_usuario"),
-    /* Set once registrar-pago landed (D8): later attempts verify only —
-       WispHub refuses paying an already-paid invoice (422, measured). */
-    paymentRegisteredAt: integer("payment_registered_at", { mode: "timestamp_ms" }),
-    createdAt: createdAt(),
-  },
-  (t) => [
-    index("charges_business_created_idx").on(t.businessId, t.createdAt),
-    index("charges_due_idx").on(t.reconnectionStatus, t.nextAttemptAt),
-  ],
-);
-
 export const paymentLinks = sqliteTable(
   "payment_links",
   {
@@ -174,8 +108,8 @@ export const paymentLinks = sqliteTable(
 /* One submitted SPEI proof and its validation lifecycle
    (direct-payment spec). The row is also the re-validation queue (D7):
    `nextValidationAt` is when the sweep may touch it again. */
-export const directPayments = sqliteTable(
-  "direct_payments",
+export const payments = sqliteTable(
+  "payments",
   {
     id: id(),
     paymentLinkId: text("payment_link_id")
@@ -255,7 +189,6 @@ export const directPayments = sqliteTable(
     supersedesId: text("supersedes_id"),
     constaValidationId: text("consta_validation_id"),
     constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
-    chargeId: text("charge_id").references(() => charges.id),
     validationAttempts: integer("validation_attempts").notNull().default(0),
     nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
     lastError: text("last_error"),
@@ -283,14 +216,51 @@ export const directPayments = sqliteTable(
        it: each release becomes a labeled row — history at decision →
        decision → outcome. Read by nobody in v1; it exists to choose K. */
     trustSnapshot: text("trust_snapshot"),
+    /* ---- Absorbed from the retired `charges` twin (business-and-memberships
+       D6): one row is the whole payment, from proof to router. Set at
+       confirmation; null while the payment is still validating. ---- */
+    /* DV- folio, assigned when the money is confirmed (receipt spec heritage) */
+    folio: text("folio").unique(),
+    /* 'spei' today; future channels ride the same row */
+    channel: text("channel", { enum: ["spei"] }).notNull().default("spei"),
+    /* Denormalized at confirmation, same reason as receipt D4: the feed
+       and the queue must not depend on WispHub being up */
+    wisphubCustomerId: text("wisphub_customer_id"),
+    customerUsuario: text("customer_usuario"),
+    customerName: text("customer_name"),
+    customerZone: text("customer_zone"),
+    customerPhone: text("customer_phone"),
+    /* What is registered against the WispHub debt (partial-payment D5/D9:
+       what arrived, applied) — the number every retry registers again */
+    registeredCents: integer("registered_cents"),
+    /* The reconnection queue rides the payment row (reconnection-queue
+       spec D2). `withheld` = deliberately not restored (partial D13). */
+    reconnectionStatus: text("reconnection_status", {
+      enum: ["queued", "reconnected", "failed", "withheld"],
+    }),
+    reconnectionAttempts: integer("reconnection_attempts").notNull().default(0),
+    reconnectedAt: integer("reconnected_at", { mode: "timestamp_ms" }),
+    wisphubInvoiceId: integer("wisphub_invoice_id"),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+    paymentRegisteredAt: integer("payment_registered_at", { mode: "timestamp_ms" }),
+    /* D6's split: `lastError` above is the validation error; this one is
+       the reconnection's. One name for two failures was only tolerable
+       across two tables. */
+    reconnectionError: text("reconnection_error"),
+    /* Born nullable with no semantics (D6): phase 4's child spec defines
+       exacto / corto / excedente; reserved now so the busiest table
+       migrates once. */
+    reconciliationClass: text("reconciliation_class", { enum: ["exact", "short", "over"] }),
     createdAt: createdAt(),
   },
   (t) => [
-    index("direct_payments_link_idx").on(t.paymentLinkId),
-    index("direct_payments_due_idx").on(t.status, t.nextValidationAt),
+    index("payments_link_idx").on(t.paymentLinkId),
+    index("payments_due_idx").on(t.status, t.nextValidationAt),
+    index("payments_reconnection_due_idx").on(t.reconnectionStatus, t.nextAttemptAt),
+    index("payments_business_created_idx").on(t.businessId, t.createdAt),
     /* D8: one transfer pays once — the database, not the provider,
        refuses the second submission, racing ones included */
-    uniqueIndex("direct_payments_isp_tracking_idx")
+    uniqueIndex("payments_business_tracking_idx")
       .on(t.businessId, t.trackingKey)
       .where(
         /* `superseded` joins the exclusions (D18): a corrected reading
@@ -318,7 +288,7 @@ export const proofRejections = sqliteTable(
       .notNull()
       .references(() => paymentLinks.id),
     /* Whose clave it was */
-    ownerPaymentId: text("owner_payment_id").references(() => directPayments.id),
+    ownerPaymentId: text("owner_payment_id").references(() => payments.id),
     trackingKey: text("tracking_key").notNull(),
     createdAt: createdAt(),
   },

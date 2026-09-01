@@ -134,6 +134,13 @@
       "when": 1788221571385,
       "tag": "0018_phase2_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1788225042208,
+      "tag": "0019_payments_merge",
+      "breakpoints": true
     }
   ]
 }

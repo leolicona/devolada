@@ -1,8 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { charges } from "../src/db/schema";
-import { app, seedBusiness, sessionCookieHeader } from "./helpers";
+import { app, seedBusiness, seedConfirmedPayment, sessionCookieHeader } from "./helpers";
 
 /* docs/admin/charge-feed.spec.md scenarios 1–3. */
 
@@ -17,26 +16,24 @@ async function seedFeed() {
   const business = await seedBusiness();
   const db = drizzle(env.DB);
   const base = Date.now() - 60_000;
-  const mk = (i: number, status: "queued" | "reconnected" | "failed") => ({
-    businessId: business.id,
-    /* historical store-channel rows: the value survives the retirement */
-    channel: "store" as const,
-    folio: `DV-FEED${String(i).padStart(2, "0")}`,
-    wisphubCustomerId: "1",
-    customerName: `Cliente ${i}`,
-    invoiceCents: 39900,
-    serviceFeeCents: 1500,
-    totalCents: 41400,
-    reconnectionStatus: status,
-    createdAt: new Date(base + i * 1000),
-  });
-  const rows = [
-    mk(1, "reconnected"),
-    mk(2, "failed"),
-    mk(3, "queued"),
-    mk(4, "reconnected"),
+  const rows: [number, "queued" | "reconnected" | "failed"][] = [
+    [1, "reconnected"],
+    [2, "failed"],
+    [3, "queued"],
+    [4, "reconnected"],
   ];
-  for (const row of rows) await db.insert(charges).values(row);
+  for (const [i, status] of rows) {
+    await seedConfirmedPayment(business, {
+      folio: `DV-FEED${String(i).padStart(2, "0")}`,
+      customerName: `Cliente ${i}`,
+      invoiceCents: 39900,
+      serviceFeeCents: 1500,
+      receivedCents: 41400,
+      registeredCents: 39900,
+      reconnectionStatus: status,
+      createdAt: new Date(base + i * 1000),
+    });
+  }
   return { business, db, base };
 }
 
@@ -44,7 +41,7 @@ describe("US-A01: the ISP sees its charges newest first", () => {
   it("lists newest first and pages by cursor", async () => {
     await seedFeed();
 
-    const res = await (await app()).request("/charges/feed", asBusiness, env);
+    const res = await (await app()).request("/payments/feed", asBusiness, env);
     expect(res.status).toBe(200);
     const { data } = await res.json();
     expect(data.charges).toHaveLength(4);
@@ -60,7 +57,7 @@ describe("US-A01: the ISP sees its charges newest first", () => {
   it("filters by status", async () => {
     await seedFeed();
 
-    const failed = await (await app()).request("/charges/feed?status=failed", asBusiness, env);
+    const failed = await (await app()).request("/payments/feed?status=failed", asBusiness, env);
     const failedData = (await failed.json()).data;
     expect(failedData.charges).toHaveLength(1);
     expect(failedData.charges[0].reconnectionStatus).toBe("failed");
@@ -72,29 +69,28 @@ describe("US-A04: today's totals follow the ISP timezone", () => {
   /* The server reports the boundary it used, so this test never has to
      guess it — it holds at any hour, in any runner timezone. */
   const todayOf = async (client: Awaited<ReturnType<typeof app>>) =>
-    (await (await client.request("/charges/feed", asBusiness, env)).json()).data.today;
+    (await (await client.request("/payments/feed", asBusiness, env)).json()).data.today;
 
   it("reports the boundary it counted from, and it moves with the zone", async () => {
     const business = await seedBusiness({ timezone: "America/Mexico_City" });
-      const db = drizzle(env.DB);
+    const db = drizzle(env.DB);
     const client = await app();
 
     const centre = await todayOf(client);
     expect(centre).toEqual({ count: 0, totalCents: 0, startedAtMs: expect.any(Number) });
 
-    /* One charge on each side of the boundary the server just reported */
-    const charge = (folio: string, at: number) => ({
-      businessId: business.id,
+    /* One payment on each side of the boundary the server just reported */
+    const charge = (folio: string, at: number) =>
+      seedConfirmedPayment(business, {
         folio,
-      wisphubCustomerId: "1",
-      customerName: "Cliente TZ",
-      invoiceCents: 39900,
-      serviceFeeCents: 1500,
-      totalCents: 41400,
-      createdAt: new Date(at),
-    });
-    await db.insert(charges).values(charge("DV-TZ01", centre.startedAtMs - 1));
-    await db.insert(charges).values(charge("DV-TZ02", centre.startedAtMs + 1));
+        customerName: "Cliente TZ",
+        invoiceCents: 39900,
+        serviceFeeCents: 1500,
+        receivedCents: 41400,
+        createdAt: new Date(at),
+      });
+    await charge("DV-TZ01", centre.startedAtMs - 1);
+    await charge("DV-TZ02", centre.startedAtMs + 1);
 
     /* Counting follows the reported boundary exactly: the charge one ms
        before it is yesterday's, the one after it is today's. */
@@ -124,7 +120,7 @@ describe("D6: tenant isolation is tested, not assumed", () => {
 
     await seedBusiness({ email: "otro@business.mx" });
     const otherBusiness = await (await app()).request(
-      "/charges/feed",
+      "/payments/feed",
       { headers: { Cookie: await sessionCookieHeader("otro@business.mx") } },
       env,
     );
@@ -136,22 +132,17 @@ describe("D6: tenant isolation is tested, not assumed", () => {
 describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => {
   it("returns spei charges with channel and no store name", async () => {
     const { business } = await seedFeed();
-    await drizzle(env.DB)
-      .insert(charges)
-      .values({
-        businessId: business.id,
-        channel: "spei",
-        folio: "DV-SPEI01",
-        wisphubCustomerId: "6",
-        customerName: "Janely",
-        invoiceCents: 49900,
-        serviceFeeCents: 1500,
-        totalCents: 51400,
-        reconnectionStatus: "reconnected",
-        createdAt: new Date(),
-      });
+    await seedConfirmedPayment(business, {
+      folio: "DV-SPEI01",
+      customerName: "Janely",
+      invoiceCents: 49900,
+      serviceFeeCents: 1500,
+      receivedCents: 51400,
+      reconnectionStatus: "reconnected",
+      createdAt: new Date(),
+    });
 
-    const res = await (await app()).request("/charges/feed", asBusiness, env);
+    const res = await (await app()).request("/payments/feed", asBusiness, env);
     const { data } = await res.json();
     expect(data.charges).toHaveLength(5);
     expect(data.charges[0]).toMatchObject({
@@ -159,9 +150,9 @@ describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => 
       channel: "spei",
       storeName: null,
     });
-    /* historical store rows keep their channel; the name is gone with the network */
+    /* every row is a direct payment now (business-and-memberships D6) */
     expect(data.charges[1]).toMatchObject({
-      channel: "store",
+      channel: "spei",
       storeName: null,
     });
   });

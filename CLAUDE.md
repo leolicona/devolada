@@ -47,7 +47,7 @@ Invariants that cut across everything (detail in `docs/ARCHITECTURE.md`):
 - **Money is always integer cents**; visible formatting comes solely from `formatMoney`/`<Amount>` in `packages/ui`.
 - **Money history tables are append-only** (house rule, ARCHITECTURE.md): never UPDATE/DELETE; corrections = counter-entries; balances derived with SUM, never stored. The store ledger that embodied it lives in `devolada-red`; the pivot's `credit_entries` is its next instance.
 - **Sessions**: Better Auth lives inside `apps/api` (BFF; HTTP-only cookies); `apps/api` is the only party talking to WispHub and to Consta — frontends consume the proxy. The middleware (`apps/api/src/auth/middleware.ts`) checks status in the DB on every request (suspension = immediate revocation).
-- **A charge is never rejected because of WispHub failures**: it is recorded and the reconnection is queued with visible status (`queued → reconnected | failed`).
+- **A payment is never rejected because of WispHub failures**: it is recorded and the reconnection is queued on the same `payments` row with visible status (`queued → reconnected | failed | withheld`).
 - `ispId` on every business table (latent multi-tenancy); the MVP UI doesn't expose it.
 - API envelope: `{ success: true, data }` | `{ success: false, error: { code } }`; Zod validation at the edge.
 

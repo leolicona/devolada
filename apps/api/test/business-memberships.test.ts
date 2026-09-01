@@ -1,14 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { env } from "cloudflare:test";
+import { beforeAll, describe, expect, it } from "vitest";
+import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { businesses, charges, member, session as sessionTable } from "../src/db/schema";
-import { app, json, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
+import { businesses, member, session as sessionTable } from "../src/db/schema";
+import { app, json, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
 /* docs/business/business-and-memberships.spec.md scenarios 2–11
    (US-B01, US-B02, US-B03). Scenario 13's membership half is the D7
    backfill, checked on deployed dev (DoD); scenario 12 lives in
    sessions.test.ts. */
+
+/* No network: the invitation email must fail closed here (the sender
+   logs and moves on), never reach Resend from a test (TESTING.md rule 8) */
+beforeAll(() => {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
+});
 
 const asUser = async (email: string) => ({
   headers: { Cookie: await sessionCookieHeader(email) },
@@ -74,22 +81,12 @@ describe("US-B01: a business is born with the minimum, in one call", () => {
 describe("US-B02: one login, isolated workspaces", () => {
   it("scenario 4: switching swaps the feed entirely — no row of A under B", async () => {
     const a = await seedBusiness({ wisphubApiKey: "wh-a" });
-    const db = drizzle(env.DB);
-    await db.insert(charges).values({
-      businessId: a.id,
-      folio: "DV-AAAA01",
-      wisphubCustomerId: "1",
-      customerName: "Cliente de A",
-      invoiceCents: 100,
-      serviceFeeCents: 0,
-      totalCents: 100,
-      reconnectionStatus: "reconnected",
-    });
+    await seedConfirmedPayment(a, { folio: "DV-AAAA01", customerName: "Cliente de A" });
 
     /* Creating B makes it the active one */
     const created = await post("demo@devolada.app", "/businesses", MINIMUM);
     const b = (await created.json()).data;
-    let feed = await (await get("demo@devolada.app", "/charges/feed")).json();
+    let feed = await (await get("demo@devolada.app", "/payments/feed")).json();
     expect(feed.data.charges).toHaveLength(0);
 
     /* Back to A through the plugin's switch (envelope-exempt, better-auth D6) */
@@ -104,7 +101,7 @@ describe("US-B02: one login, isolated workspaces", () => {
       env,
     );
     expect(sw.status).toBe(200);
-    feed = await (await get("demo@devolada.app", "/charges/feed")).json();
+    feed = await (await get("demo@devolada.app", "/payments/feed")).json();
     expect(feed.data.charges.map((c: { folio: string }) => c.folio)).toEqual(["DV-AAAA01"]);
 
     const me = await (await get("demo@devolada.app", "/auth/me")).json();
@@ -148,7 +145,7 @@ describe("US-B03: roles reach exactly their areas", () => {
     const business = await seedBusiness();
     await seedMember(business, "operador@wifiplus.mx", "operator");
 
-    expect((await get("operador@wifiplus.mx", "/charges/feed")).status).toBe(200);
+    expect((await get("operador@wifiplus.mx", "/payments/feed")).status).toBe(200);
     const res = await patch("operador@wifiplus.mx", "/settings", { timeFormat: "24h" });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("FORBIDDEN_FOR_ROLE");
@@ -170,7 +167,7 @@ describe("US-B03: roles reach exactly their areas", () => {
 
     expect((await patch("contador@wifiplus.mx", "/settings", { timeFormat: "24h" })).status).toBe(403);
     expect((await post("contador@wifiplus.mx", "/businesses/members", { email: "x@y.mx", role: "viewer" })).status).toBe(403);
-    expect((await get("contador@wifiplus.mx", "/charges/feed")).status).toBe(200);
+    expect((await get("contador@wifiplus.mx", "/payments/feed")).status).toBe(200);
   });
 
   it("scenario 9: an owner invites an existing account, which gains the membership without a new signup", async () => {
@@ -224,7 +221,7 @@ describe("US-B03: roles reach exactly their areas", () => {
   it("scenario 11: a removed member's stale session answers MEMBERSHIP_REVOKED", async () => {
     const business = await seedBusiness();
     await seedMember(business, "operador@wifiplus.mx", "operator");
-    expect((await get("operador@wifiplus.mx", "/charges/feed")).status).toBe(200);
+    expect((await get("operador@wifiplus.mx", "/payments/feed")).status).toBe(200);
 
     const members = await (await get("demo@devolada.app", "/businesses/members")).json();
     const target = members.data.members.find((m: { email: string }) => m.email === "operador@wifiplus.mx");
@@ -236,7 +233,7 @@ describe("US-B03: roles reach exactly their areas", () => {
     );
     expect(removed.status).toBe(200);
 
-    const res = await get("operador@wifiplus.mx", "/charges/feed");
+    const res = await get("operador@wifiplus.mx", "/payments/feed");
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("MEMBERSHIP_REVOKED");
   });

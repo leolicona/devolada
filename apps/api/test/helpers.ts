@@ -1,10 +1,12 @@
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   businesses,
   member,
   organization,
+  paymentLinks,
+  payments,
   session as sessionTable,
   user as userTable,
   verification,
@@ -124,6 +126,55 @@ export async function seedMember(business: { orgId: string }, email: string, rol
   });
   await seedSession(userId, email, business.orgId);
   return userId;
+}
+
+/* A confirmed payment as one row (business-and-memberships D6): the link
+   it came through plus the payment with its folio, customer and
+   reconnection state. `over` shapes the queue/feed scenario. */
+export async function seedConfirmedPayment(
+  business: { id: string },
+  over: Partial<typeof payments.$inferInsert> = {},
+) {
+  const db = drizzle(env.DB);
+  const usuario = over.customerUsuario ?? "greyes@wifiplus";
+  /* One permanent link per customer (direct-payment D1): reuse it */
+  let [link] = await db
+    .select()
+    .from(paymentLinks)
+    .where(and(eq(paymentLinks.businessId, business.id), eq(paymentLinks.customerUsuario, usuario)));
+  if (!link) {
+    [link] = await db
+      .insert(paymentLinks)
+      .values({
+        businessId: business.id,
+        token: `tok${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+        wisphubCustomerId: over.wisphubCustomerId ?? "6",
+        customerUsuario: usuario,
+      })
+      .returning();
+  }
+  const [payment] = await db
+    .insert(payments)
+    .values({
+      paymentLinkId: link.id,
+      businessId: business.id,
+      amountCents: 51400,
+      invoiceCents: 49900,
+      serviceFeeCents: 1500,
+      proofMode: "transfer",
+      status: "confirmed",
+      receivedCents: 51400,
+      registeredCents: 49900,
+      confirmedAt: new Date(),
+      folio: `DV-Q${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+      wisphubCustomerId: "6",
+      customerUsuario: "greyes@wifiplus",
+      customerName: "Janely",
+      reconnectionStatus: "reconnected",
+      ...over,
+    })
+    .returning();
+  return payment;
 }
 
 export function cookiesOf(res: Response): string[] {

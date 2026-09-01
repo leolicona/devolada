@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { feedResponse } from "@devolada/api/charges-schema";
+import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
@@ -128,7 +128,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
     const charge = {
       id: "ch-1",
       folio: "DV-FMT01",
-      channel: "store" as const,
+      channel: "spei" as const,
       reconnectionStatus: "reconnected" as const,
       totalCents: 41400,
       invoiceCents: 39900,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { feedResponse } from "@devolada/api/charges-schema";
+import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
@@ -13,7 +13,7 @@ const feed = feedResponse.parse({
     {
       id: "ch-1",
       folio: "DV-FEED01",
-      channel: "store",
+      channel: "spei",
       reconnectionStatus: "failed",
       totalCents: 41400,
       invoiceCents: 39900,

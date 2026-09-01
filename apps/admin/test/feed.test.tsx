@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { feedResponse } from "@devolada/api/charges-schema";
+import { feedResponse } from "@devolada/api/payments-schema";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
@@ -10,14 +10,14 @@ import { renderApp } from "./render";
 const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   id: "ch-1",
   folio: "DV-FEED01",
-  channel: "store" as const,
+  channel: "spei" as const,
   reconnectionStatus: "reconnected" as const,
   totalCents: 41400,
   invoiceCents: 39900,
   carriedBalanceCents: 0,
   serviceFeeCents: 1500,
   customerName: "Janely",
-  storeName: "Abarrotes La Esquina",
+  storeName: null,
   createdAt: Date.now(),
   reconnectedAt: Date.now(),
   attempts: 1,
@@ -33,7 +33,7 @@ function feedOf(
 }
 
 describe("US-A01: the feed shows rows and expands into detail", () => {
-  it("renders customer, store, badge and amount; expanding shows folio and breakdown", async () => {
+  it("renders customer, channel, badge and amount; expanding shows folio and breakdown", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
@@ -43,7 +43,7 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
     renderApp("/");
 
     const row = await screen.findByRole("button", { name: /janely/i });
-    expect(within(row).getByText("Abarrotes La Esquina")).toBeInTheDocument();
+    expect(within(row).getByText(/Pago directo · SPEI/)).toBeInTheDocument();
     expect(within(row).getByText("Reconectado")).toBeInTheDocument();
     expect(screen.getByText(/hoy:/i)).toHaveTextContent("$828.00");
 

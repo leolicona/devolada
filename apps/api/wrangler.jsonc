@@ -18,7 +18,7 @@
   /* SPEI transfer proofs (direct-payment spec D12). Private: no public
      bucket URL — the API serves objects through signed URLs only. The
      15-day lifecycle rule is bucket config, applied once per env:
-     `wrangler r2 bucket lifecycle add <bucket> --expire-days 15` */
+     `wrangler r2 bucket lifecycle add <bucket> --name expire-15d --expire-days 15` */
   "r2_buckets": [
     { "binding": "PROOFS", "bucket_name": "devolada-transfer-proofs" }
   ],
@@ -52,7 +52,7 @@
         {
           "binding": "DB",
           "database_name": "devolada-db-dev",
-          "database_id": "b1b5bace-f440-488b-99a4-4339570b1360",
+          "database_id": "9928857f-af6c-4c59-a767-311b8de97df0",
           "migrations_dir": "migrations"
         }
       ],
@@ -66,26 +66,12 @@
         "ADMIN_BASE_URL": "https://admin.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://pago.dev.devoladapago.com",
         "CONSTA_BASE_URL": "https://consta.dev.devoladapago.com",
-        /* TD-015, temporary — the demo links, deleted after 2026-08-20.
-           Tokens are permanent (D1), so baking them into the deploy is
-           safe. testISP (leolicona.dev@gmail.com), which is the only ISP
-           on dev with SPEI configured:
-             vyzwrf2tnwwwn3xw  0011@wifiplus  Leo Licona  $3, SUSPENDIDO
-             96u9as4gmnjuee5d  0012@wifiplus  Juana Soto  $2, SUSPENDIDO
-             b6gvm4r77mix983b  0014@wifiplus  Daniel      $3, SUSPENDIDO
-             7k4d8mwiqmck9ssj  0013@wifiplus  Ismael      SUSPENDIDO, no pending invoice
-           All four are suspended, which is the state that makes a
-           reconnection visible, and 0011's invoice sits in the "Router
-           Test Demo" zone, which is the CHR lab router, so paying it
-           brings real hardware back.
-           Ismael is listed and cannot be used yet: every invoice he has
-           is `Pagada`, including one issued today for $0, and we read
-           `estado=1`. A pending invoice is all he needs.
-           The ISP's other 10 links stay off the list on purpose: a
-           listed link is never sent to the provider, so those are the
-           only ones that can still validate a real transfer. */
-        "DEMO_LINK_TOKENS": "vyzwrf2tnwwwn3xw,96u9as4gmnjuee5d,b6gvm4r77mix983b,7k4d8mwiqmck9ssj",
-        "ALLOWED_ORIGINS": "https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-admin-dev.leolicona-dev.workers.dev,*-devolada-pago-dev.leolicona-dev.workers.dev",
+        /* TD-015, temporary. Empty since the move to the project's own
+           Cloudflare account (CICD.md D7, 2026-09-01): the links of the
+           2026-08-20 demo were rows of the old dev database, which did not
+           travel. Paying TD-015 deletes this var altogether. */
+        "DEMO_LINK_TOKENS": "",
+        "ALLOWED_ORIGINS": "https://admin.dev.devoladapago.com,https://pago.dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
@@ -97,7 +83,7 @@
         {
           "binding": "DB",
           "database_name": "devolada-db-prod",
-          "database_id": "706a3cfb-00a0-4aba-87d6-50d059c562d5",
+          "database_id": "91a82e4a-f2ee-4fe7-a209-6109a17d1b78",
           "migrations_dir": "migrations"
         }
       ],

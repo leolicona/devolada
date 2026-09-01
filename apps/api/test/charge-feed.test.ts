@@ -128,6 +128,35 @@ describe("D6: tenant isolation is tested, not assumed", () => {
   });
 });
 
+describe("BUG-012: a partial row carries what was asked, so the feed can name the gap", () => {
+  it("US-D10 / D15: invoiceCents is the ask, totalCents what arrived, status withheld", async () => {
+    const business = await seedBusiness();
+    await seedConfirmedPayment(business, {
+      folio: "DV-PART01",
+      status: "partial",
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
+      serviceFeeCents: 1500,
+      receivedCents: 30000,
+      registeredCents: 30000,
+      reconnectionStatus: "withheld",
+    });
+
+    const res = await (await app()).request("/payments/feed", asBusiness, env);
+    const { data } = await res.json();
+    expect(data.charges).toHaveLength(1);
+    /* The twin used to write invoiceCents = what arrived, and the gap
+       vanished; the lifecycle's own numbers keep it: 49900 asked, 30000 in */
+    expect(data.charges[0]).toMatchObject({
+      folio: "DV-PART01",
+      invoiceCents: 49900,
+      carriedBalanceCents: 0,
+      totalCents: 30000,
+      reconnectionStatus: "withheld",
+    });
+  });
+});
+
 /* docs/direct-payment/direct-payment.spec.md scenario 14. */
 describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => {
   it("returns spei charges with channel and no store name", async () => {

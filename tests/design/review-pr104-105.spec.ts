@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
-import { ispActor } from "../e2e/stubs";
+import { businessActor } from "../e2e/stubs";
 
 /* Design-review captures for PRs #104–#105 (provisional release, US-D15):
    the states the vote of confidence added — the service back at minute
@@ -94,7 +94,7 @@ const adminSettings = {
 };
 
 async function stubAdmin(page: Page) {
-  await json(page, (u) => u.pathname.endsWith("/auth/me"), ispActor);
+  await json(page, (u) => u.pathname.endsWith("/auth/me"), businessActor);
   await json(page, (u) => u.pathname.includes("/charges/feed"), { charges: [] });
   await json(page, (u) => u.pathname.endsWith("/settings"), adminSettings);
   await json(page, (u) => u.pathname.endsWith("/settlement"), { months: [] });

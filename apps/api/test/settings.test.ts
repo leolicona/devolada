@@ -1,8 +1,8 @@
 import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { isps } from "../src/db/schema";
-import { app, seedIsp, sessionCookieHeader } from "./helpers";
+import { businesses } from "../src/db/schema";
+import { app, seedBusiness, sessionCookieHeader } from "./helpers";
 
 /* docs/admin/settings.spec.md scenarios 1–3. */
 
@@ -14,13 +14,13 @@ beforeAll(() => {
 });
 afterEach(() => fetchMock.assertNoPendingInterceptors());
 
-const asIsp = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
+const asBusiness = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
 
 const send = (path: string, method: string, body?: unknown): [string, RequestInit] => [
   path,
   {
     method,
-    headers: { "Content-Type": "application/json", ...asIsp.headers },
+    headers: { "Content-Type": "application/json", ...asBusiness.headers },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   },
 ];
@@ -52,9 +52,9 @@ const oneCustomer = {
 
 describe("US-A04: the ISP reads its settings without reading its key", () => {
   it("returns the split and only the key's tail", async () => {
-    await seedIsp({ wisphubApiKey: "01q9K2Rf.SECRETKEY1234" });
+    await seedBusiness({ wisphubApiKey: "01q9K2Rf.SECRETKEY1234" });
 
-    const res = await (await app()).request("/settings", asIsp, env);
+    const res = await (await app()).request("/settings", asBusiness, env);
     expect(res.status).toBe(200);
     const { data } = await res.json();
 
@@ -72,7 +72,7 @@ describe("US-A04: the ISP reads its settings without reading its key", () => {
 
 describe("US-A04: saving the fee, the zone and the format", () => {
   it("saves the fields", async () => {
-    await seedIsp();
+    await seedBusiness();
     const client = await app();
 
     const ok = await client.request(
@@ -99,7 +99,7 @@ describe("US-A04: saving the fee, the zone and the format", () => {
   });
 
   it("re-tests a key on save and reports the result without blocking it (D3)", async () => {
-    await seedIsp();
+    await seedBusiness();
     mockWispHub({ status: 403 });
 
     const res = await (await app()).request(
@@ -113,14 +113,14 @@ describe("US-A04: saving the fee, the zone and the format", () => {
     expect(data.wisphubTest).toEqual({ ok: false, code: "WISPHUB_AUTH_FAILED" });
 
     const db = drizzle(env.DB);
-    const [isp] = await db.select().from(isps);
-    expect(isp.wisphubApiKey).toBe("bad-key-000000");
+    const [business] = await db.select().from(businesses);
+    expect(business.wisphubApiKey).toBe("bad-key-000000");
   });
 });
 
 describe("US-A04: the connection test speaks for WispHub", () => {
   it("tests a typed key without saving it, and keeps the two failures apart", async () => {
-    await seedIsp();
+    await seedBusiness();
     const client = await app();
 
     mockWispHub({ status: 200, body: oneCustomer });
@@ -136,8 +136,8 @@ describe("US-A04: the connection test speaks for WispHub", () => {
 
     /* D2: testing is not saving */
     const db = drizzle(env.DB);
-    const [isp] = await db.select().from(isps);
-    expect(isp.wisphubApiKey).toBeNull();
+    const [business] = await db.select().from(businesses);
+    expect(business.wisphubApiKey).toBeNull();
 
     /* An outage is not a bad key (D3) */
     mockWispHub({ status: 500 });
@@ -156,7 +156,7 @@ describe("US-A04: the connection test speaks for WispHub", () => {
 /* docs/direct-payment/direct-payment.spec.md scenario 13. */
 describe("US-D05: the ISP configures its SPEI account and fee", () => {
   it("saves CLABE, bank, beneficiary and fee; null fee falls back", async () => {
-    await seedIsp();
+    await seedBusiness();
 
     const res = await (await app()).request(
       ...send("/settings", "PATCH", {
@@ -189,7 +189,7 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
   });
 
   it("US-D13 scenario 7: SPEI is configured without a beneficiary name", async () => {
-    await seedIsp();
+    await seedBusiness();
 
     /* claimed-amount D5: clabe + a known bank are the whole requirement —
        the provider never asked for the name, only our gates did */
@@ -207,7 +207,7 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
   });
 
   it("rejects a malformed CLABE and stays unconfigured by default", async () => {
-    await seedIsp();
+    await seedBusiness();
 
     const bad = await (await app()).request(
       ...send("/settings", "PATCH", { speiClabe: "12345" }),
@@ -215,7 +215,7 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
     );
     expect(bad.status).toBe(400);
 
-    const res = await (await app()).request("/settings", asIsp, env);
+    const res = await (await app()).request("/settings", asBusiness, env);
     const { data } = await res.json();
     expect(data.spei.configured).toBe(false);
     expect(data.spei.effectiveServiceFeeCents).toBe(data.serviceFeeCents);
@@ -226,10 +226,10 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
    numbers that decide whether a short payment buys the service back. */
 describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
   it("reads the defaults (100 / $0) and saves both numbers", async () => {
-    await seedIsp();
+    await seedBusiness();
     const client = await app();
 
-    const before = await client.request("/settings", asIsp, env);
+    const before = await client.request("/settings", asBusiness, env);
     expect((await before.json()).data.reconnection).toEqual({
       thresholdPercent: 100,
       floorCents: 0,
@@ -250,13 +250,13 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
       provisionalReleaseEnabled: false,
     });
 
-    const [isp] = await drizzle(env.DB).select().from(isps);
-    expect(isp.reconnectionThresholdPercent).toBe(70);
-    expect(isp.reconnectionFloorCents).toBe(20000);
+    const [business] = await drizzle(env.DB).select().from(businesses);
+    expect(business.reconnectionThresholdPercent).toBe(70);
+    expect(business.reconnectionFloorCents).toBe(20000);
   });
 
   it("US-D15 D10: the provisional-release switch saves, and off is the default", async () => {
-    await seedIsp();
+    await seedBusiness();
     const client = await app();
 
     const saved = await client.request(
@@ -266,12 +266,12 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     expect(saved.status).toBe(200);
     expect((await saved.json()).data.reconnection.provisionalReleaseEnabled).toBe(true);
 
-    const [isp] = await drizzle(env.DB).select().from(isps);
-    expect(isp.provisionalReleaseEnabled).toBe(true);
+    const [business] = await drizzle(env.DB).select().from(businesses);
+    expect(business.provisionalReleaseEnabled).toBe(true);
   });
 
   it("refuses a percentage outside 0–100 and a negative floor", async () => {
-    await seedIsp();
+    await seedBusiness();
     const client = await app();
 
     const over = await client.request(
@@ -287,7 +287,7 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     expect(negative.status).toBe(400);
 
     /* the refusals changed nothing */
-    const res = await client.request("/settings", asIsp, env);
+    const res = await client.request("/settings", asBusiness, env);
     expect((await res.json()).data.reconnection).toEqual({
       thresholdPercent: 100,
       floorCents: 0,

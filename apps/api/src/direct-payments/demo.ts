@@ -1,6 +1,6 @@
 import type { Bindings } from "../env";
 import type { ConstaVerdict } from "../consta/client";
-import type { directPayments, isps, paymentLinks } from "../db/schema";
+import type { directPayments, businesses, paymentLinks } from "../db/schema";
 
 /* TD-015 — a simulated `valid` verdict for a demo, and nothing else.
 
@@ -30,7 +30,7 @@ import type { directPayments, isps, paymentLinks } from "../db/schema";
 
 type DirectPayment = typeof directPayments.$inferSelect;
 type PaymentLink = typeof paymentLinks.$inferSelect;
-type Isp = typeof isps.$inferSelect;
+type Isp = typeof businesses.$inferSelect;
 
 function demoTokens(env: Bindings): string[] {
   return (env.DEMO_LINK_TOKENS ?? "")
@@ -53,7 +53,7 @@ export function isDemoLink(env: Bindings, link: PaymentLink): boolean {
 
    `senderName` is the one field a human reads afterwards, so it says
    what this row is. It lands in `cep_sender_name` and stays there. */
-export function demoVerdict(payment: DirectPayment, isp: Isp, now: Date): ConstaVerdict {
+export function demoVerdict(payment: DirectPayment, business: Isp, now: Date): ConstaVerdict {
   /* The receipt door claims this key onto the row, so it has to survive
      the same shape check the payer's own input does: alphanumeric, 6–30 */
   const synthetic = `DEMO${payment.id.replace(/[^A-Za-z0-9]/g, "").slice(0, 24).toUpperCase()}`;
@@ -69,8 +69,8 @@ export function demoVerdict(payment: DirectPayment, isp: Isp, now: Date): Consta
       date: now.toISOString().slice(0, 10),
       senderBank: payment.senderBank ?? "DEMO",
       senderName: "PAGO SIMULADO (DEMO)",
-      receiverBank: isp.speiBank ?? "DEMO",
-      beneficiaryName: isp.speiBeneficiaryName ?? "DEMO",
+      receiverBank: business.speiBank ?? "DEMO",
+      beneficiaryName: business.speiBeneficiaryName ?? "DEMO",
     },
   };
 }

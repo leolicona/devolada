@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { feedResponse } from "@devolada/api/charges-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
-import { handlers, ispActor, ok, server } from "./msw";
+import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
@@ -62,7 +62,7 @@ describe("US-P04: the harness reports what it should", () => {
 
 describe("US-P04: the admin passes axe on every section", () => {
   it("Cobros, with an expandable failed charge", async () => {
-    server.use(handlers.session(() => ok(ispActor)), handlers.feed(() => ok(feed)));
+    server.use(handlers.session(() => ok(businessActor)), handlers.feed(() => ok(feed)));
     renderApp("/");
     await screen.findByText("Janely");
     await expectNoViolations(document.body);
@@ -70,7 +70,7 @@ describe("US-P04: the admin passes axe on every section", () => {
 
   it("Configuración, including the missing-key banner", async () => {
     server.use(
-      handlers.session(() => ok({ ...ispActor, wisphubConfigured: false })),
+      handlers.session(() => ok({ ...businessActor, wisphubConfigured: false })),
       handlers.settings(() => ok(settings)),
     );
     renderApp("/settings");

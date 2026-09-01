@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, baPost } from "@/lib/api";
 
-export type IspActor = {
-  type: "isp";
+export type BusinessActor = {
+  type: "business";
   id: string;
   name: string;
   email: string;
@@ -12,20 +12,21 @@ export type IspActor = {
   timezone: string;
   timeFormat: "12h" | "24h";
   wisphubConfigured: boolean;
+  /* business-and-memberships D4: the membership's role and the switcher's list */
+  role: "owner" | "admin" | "operator" | "viewer";
+  orgId: string;
+  userId: string;
+  businesses: { id: string; name: string; role: "owner" | "admin" | "operator" | "viewer" }[];
 };
 
-/* Shell spec D3: the guard accepts only ISP actors. Both apps talk to
-   one API host, so they share one session cookie (better-auth.spec.md
-   D7) — a store signed in on the PWA reaches here with a session that is
-   valid but is not an ISP's. /auth/me answers 200, so the shell used to
-   draw itself (with the verify-email and WispHub banners lit by the
-   store's missing fields) and then every admin endpoint answered 403. */
+/* Shell spec D3: the guard accepts only business actors — the only kind
+   the API resolves now (business-and-memberships D4). */
 export function useSession() {
-  const query = useQuery<IspActor, ApiError>({
+  const query = useQuery<BusinessActor, ApiError>({
     queryKey: ["session"],
     queryFn: async () => {
-      const actor = await api<IspActor>("/auth/me");
-      if (actor.type !== "isp") throw new ApiError("WRONG_ACTOR", 403);
+      const actor = await api<BusinessActor>("/auth/me");
+      if (actor.type !== "business") throw new ApiError("WRONG_ACTOR", 403);
       return actor;
     },
     retry: false,
@@ -51,7 +52,7 @@ export const login = (email: string, password: string) =>
   baPost("/auth/sign-in/email", { email, password });
 
 export const signup = (name: string, email: string, password: string) =>
-  api("/auth/isp/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
+  api("/auth/business/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
 
 export const logout = () => baPost("/auth/sign-out");
 

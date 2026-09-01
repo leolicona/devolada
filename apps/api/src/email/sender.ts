@@ -53,6 +53,43 @@ export async function sendAuthCode(
   if (!res.ok) throw new Error(`resend failed: ${res.status}`);
 }
 
+/* business-and-memberships D8: a member invitation. The link opens the
+   admin's accept page; an invitee who already has an account just gains
+   the membership (US-B02). es-MX product copy. */
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dueño",
+  admin: "Administrador",
+  operator: "Operador",
+  viewer: "Lector",
+};
+
+export async function sendMemberInvitation(
+  env: Bindings,
+  to: string,
+  invite: { businessName: string; role: string; inviterName: string; invitationId: string },
+): Promise<void> {
+  const url = `${env.ADMIN_BASE_URL}/invitaciones/${invite.invitationId}`;
+  const label = ROLE_LABELS[invite.role] ?? invite.role;
+  if (!env.RESEND_API_KEY) {
+    console.log(`[invitación] ${to} → ${invite.businessName} como ${label}: ${url}`);
+    return;
+  }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM ?? "Devolada <onboarding@resend.dev>",
+      to,
+      subject: `${invite.inviterName} te invita a ${invite.businessName} en Devolada`,
+      html: `<p>${invite.inviterName} te invitó a <strong>${invite.businessName}</strong> como <strong>${label}</strong>.</p><p><a href="${url}">Aceptar la invitación</a></p><p>Si no esperabas este correo, ignóralo.</p>`,
+    }),
+  });
+  if (!res.ok) throw new Error(`resend failed: ${res.status}`);
+}
+
 /* provisional-release D8 (US-D15): the one exception the ISP signed up
    to know about — a provisionally released payment that expired with the
    debt still pending. The promise lapses on its own; the ISP's bank app

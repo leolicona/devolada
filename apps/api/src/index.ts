@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { Bindings, Variables } from "./env";
 import { auth } from "./routes/auth";
 import { settingsRoute } from "./routes/settings";
+import { businessesRoute } from "./routes/businesses";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
 import { charges } from "./routes/charges";
@@ -34,6 +35,7 @@ app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 app.route("/auth", auth);
 app.route("/charges", charges);
 app.route("/settings", settingsRoute);
+app.route("/businesses", businessesRoute);
 app.route("/direct-payments", directPaymentsRoute);
 
 /* Seed routes exist in development only */

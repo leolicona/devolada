@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, count, desc, eq, gte, lt, lte, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { charges, stores } from "../../db/schema";
+import { charges } from "../../db/schema";
 import { startOfBusinessDayMs } from "../../time/business-day";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -17,39 +17,37 @@ export function makeFolio(): string {
   return `DV-${out}`;
 }
 
-/* The ISP's live feed (charge-feed spec). Tenant isolation by ispId (D6). */
+/* The ISP's live feed (charge-feed spec). Tenant isolation by businessId (D6). */
 export async function listChargeFeed(
   c: Ctx,
   q: {
     cursor?: number;
     status?: "queued" | "reconnected" | "failed" | "withheld";
-    storeId?: string;
     from?: number;
     to?: number;
   },
 ) {
   const actor = c.get("actor");
-  if (actor.type !== "isp") {
+  if (actor.type !== "business") {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
   }
   const db = drizzle(c.env.DB);
   const PAGE = 20;
 
   const filters = [
-    eq(charges.ispId, actor.id),
+    eq(charges.businessId, actor.id),
     ...(q.cursor ? [lt(charges.createdAt, new Date(q.cursor))] : []),
     ...(q.status ? [eq(charges.reconnectionStatus, q.status)] : []),
-    ...(q.storeId ? [eq(charges.storeId, q.storeId)] : []),
     ...(q.from ? [gte(charges.createdAt, new Date(q.from))] : []),
     ...(q.to ? [lte(charges.createdAt, new Date(q.to))] : []),
   ];
 
-  /* leftJoin: a direct SPEI charge has no store (direct-payment D6) and
-     must still appear in the feed */
+  /* `storeName` stays in the response shape until the payments merge
+     revises charge-feed.spec.md (business-and-memberships D6); with the
+     store network gone it is always null. */
   const rows = await db
-    .select({ charge: charges, storeName: stores.name })
+    .select({ charge: charges })
     .from(charges)
-    .leftJoin(stores, eq(charges.storeId, stores.id))
     .where(and(...filters))
     .orderBy(desc(charges.createdAt))
     .limit(PAGE + 1);
@@ -60,7 +58,7 @@ export async function listChargeFeed(
   const [t] = await db
     .select({ count: count(), total: sum(charges.totalCents) })
     .from(charges)
-    .where(and(eq(charges.ispId, actor.id), gte(charges.createdAt, new Date(todayStartMs))));
+    .where(and(eq(charges.businessId, actor.id), gte(charges.createdAt, new Date(todayStartMs))));
   const today = {
     count: Number(t?.count ?? 0),
     totalCents: Number(t?.total ?? 0),
@@ -70,7 +68,7 @@ export async function listChargeFeed(
   return c.json({
     success: true,
     data: {
-      charges: page.map(({ charge, storeName }) => ({
+      charges: page.map(({ charge }) => ({
         id: charge.id,
         folio: charge.folio,
         channel: charge.channel,
@@ -80,7 +78,7 @@ export async function listChargeFeed(
         carriedBalanceCents: charge.carriedBalanceCents,
         serviceFeeCents: charge.serviceFeeCents,
         customerName: charge.customerName,
-        storeName,
+        storeName: null,
         createdAt: charge.createdAt.getTime(),
         reconnectedAt: charge.reconnectedAt?.getTime() ?? null,
         attempts: charge.reconnectionAttempts,

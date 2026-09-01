@@ -7,15 +7,15 @@ import {
   uniqueIndex,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
-import { user } from "./auth-schema";
+import { organization } from "./auth-schema";
 
 /* Better Auth's tables live in auth-schema.ts; re-exported here so
    drizzle-kit sees a single schema. */
 export * from "./auth-schema";
 
 /* All money in integer cents. Timestamps in ms.
-   Designed for a single pilot ISP, with ispId on every business table to
-   enable multi-tenancy later without structural migration. */
+   `businessId` on every business table: the tenant (pivot glossary:
+   Negocio), which the phase-2 rename made real. */
 
 const id = () =>
   text("id")
@@ -27,22 +27,21 @@ const createdAt = () =>
     .notNull()
     .$defaultFn(() => new Date());
 
-export const isps = sqliteTable("isps", {
+export const businesses = sqliteTable("businesses", {
   id: id(),
-  /* Auth lives in the Better Auth user row (better-auth.spec.md D3):
-     `userId` links there. `email` here is the business/display copy,
-     synced at signup and never read by auth flows. Credentials and
-     verification state have no columns here at all. */
-  userId: text("user_id")
+  /* The auth twin (business-and-memberships D2): one Better Auth
+     organization per business. Ownership and roles live in the
+     organization's memberships, never here. */
+  orgId: text("org_id")
+    .notNull()
     .unique()
-    .references(() => user.id),
+    .references(() => organization.id),
   name: text("name").notNull(),
+  /* Display/business copy of the contact email; auth never reads it */
   email: text("email").notNull().unique(),
   wisphubApiKey: text("wisphub_api_key"),
-  /* Fee the end customer pays, and the store's share of it.
-     The platform's share is the difference. */
+  /* Fee the end customer pays; the SPEI fee falls back to it (direct-payment D3) */
   serviceFeeCents: integer("service_fee_cents").notNull().default(1500),
-  storeCommissionCents: integer("store_commission_cents").notNull().default(900),
   /* Display settings (settings spec D5, D6). Mexico spans three zones, so
      the ISP — not the browser — decides where its business day starts. */
   timezone: text("timezone").notNull().default("America/Mexico_City"),
@@ -85,47 +84,18 @@ export const isps = sqliteTable("isps", {
   createdAt: createdAt(),
 });
 
-export const stores = sqliteTable(
-  "stores",
-  {
-    id: id(),
-    ispId: text("isp_id")
-      .notNull()
-      .references(() => isps.id),
-    name: text("name").notNull(),
-    contactName: text("contact_name").notNull(),
-    phone: text("phone").notNull().unique(),
-    zone: text("zone"),
-    /* null until the invitation is accepted; the Better Auth user holds
-       the shopkeeper's credentials and recovery email (spec D3) */
-    userId: text("user_id")
-      .unique()
-      .references(() => user.id),
-    /* null → inherits storeCommissionCents from the ISP */
-    commissionCents: integer("commission_cents"),
-    balanceCapCents: integer("balance_cap_cents").notNull().default(500000),
-    status: text("status", { enum: ["invited", "active", "suspended"] })
-      .notNull()
-      .default("invited"),
-    createdAt: createdAt(),
-  },
-  (t) => [index("stores_isp_idx").on(t.ispId)],
-);
-
 export const charges = sqliteTable(
   "charges",
   {
     id: id(),
-    ispId: text("isp_id")
+    businessId: text("business_id")
       .notNull()
-      .references(() => isps.id),
-    /* null for channel = 'spei' (direct-payment spec D6): a direct
-       payment involves no store, no commission, no ledger entries */
-    storeId: text("store_id").references(() => stores.id),
-    /* 'store' = cash at a corner store · 'spei' = direct payment (D6) */
+      .references(() => businesses.id),
+    /* 'spei' = direct payment (D6); 'store' survives as a historical
+       value only until the payments merge (business-and-memberships D6) */
     channel: text("channel", { enum: ["store", "spei"] })
       .notNull()
-      .default("store"),
+      .default("spei"),
     directPaymentId: text("direct_payment_id").references(
       (): AnySQLiteColumn => directPayments.id,
     ),
@@ -174,83 +144,18 @@ export const charges = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [
-    index("charges_store_idx").on(t.storeId),
-    index("charges_isp_created_idx").on(t.ispId, t.createdAt),
+    index("charges_business_created_idx").on(t.businessId, t.createdAt),
     index("charges_due_idx").on(t.reconnectionStatus, t.nextAttemptAt),
   ],
 );
 
-export const cashDrops = sqliteTable(
-  "cash_drops",
-  {
-    id: id(),
-    storeId: text("store_id")
-      .notNull()
-      .references(() => stores.id),
-    cents: integer("cents").notNull(),
-    status: text("status", { enum: ["pending", "confirmed", "disputed"] })
-      .notNull()
-      .default("pending"),
-    note: text("note"),
-    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
-    createdAt: createdAt(),
-  },
-  (t) => [index("cash_drops_store_idx").on(t.storeId)],
-);
-
-/* Append-only ledger: never UPDATE or DELETE on this table.
-   Corrections = counter-entries. A store's balance = SUM(cents).
-   charge: +total · commission: −store share · cash_drop: −amount handed over */
-export const ledgerEntries = sqliteTable(
-  "ledger_entries",
-  {
-    id: id(),
-    storeId: text("store_id")
-      .notNull()
-      .references(() => stores.id),
-    type: text("type", { enum: ["charge", "commission", "cash_drop"] }).notNull(),
-    cents: integer("cents").notNull(),
-    chargeId: text("charge_id").references(() => charges.id),
-    cashDropId: text("cash_drop_id").references(() => cashDrops.id),
-    createdAt: createdAt(),
-  },
-  (t) => [index("ledger_entries_store_created_idx").on(t.storeId, t.createdAt)],
-);
-
-/* The phone the shopkeeper captured for a customer WispHub has none for
-   (customer-phone spec D1, D3). WispHub's own `telefono` is read-only
-   through its API — probed 2026-08-17, see integrations/wisphub.md — so
-   this table is the only place such a number can live. It exists to
-   deliver receipts and feeds nothing else (D5). */
-export const customerContacts = sqliteTable(
-  "customer_contacts",
-  {
-    id: id(),
-    ispId: text("isp_id")
-      .notNull()
-      .references(() => isps.id),
-    /* Numeric WispHub id (as string), same split as charges and links */
-    wisphubCustomerId: text("wisphub_customer_id").notNull(),
-    /* 10 national digits, normalized on the way in */
-    phone: text("phone").notNull(),
-    createdAt: createdAt(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (t) => [uniqueIndex("customer_contacts_isp_customer_idx").on(t.ispId, t.wisphubCustomerId)],
-);
-
-/* One permanent link per customer per ISP (direct-payment spec D1, D5):
-   the token is opaque and never expires — the page asks WispHub for the
-   live debt on every open, so the link itself carries no state. */
 export const paymentLinks = sqliteTable(
   "payment_links",
   {
     id: id(),
-    ispId: text("isp_id")
+    businessId: text("business_id")
       .notNull()
-      .references(() => isps.id),
+      .references(() => businesses.id),
     token: text("token").notNull().unique(),
     /* Numeric WispHub id (as string) for the auto-activate PATCH;
        the usuario is what every lookup needs — same split as charges.
@@ -262,7 +167,7 @@ export const paymentLinks = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex("payment_links_isp_usuario_idx").on(t.ispId, t.customerUsuario),
+    uniqueIndex("payment_links_business_usuario_idx").on(t.businessId, t.customerUsuario),
   ],
 );
 
@@ -276,9 +181,9 @@ export const directPayments = sqliteTable(
     paymentLinkId: text("payment_link_id")
       .notNull()
       .references(() => paymentLinks.id),
-    ispId: text("isp_id")
+    businessId: text("business_id")
       .notNull()
-      .references(() => isps.id),
+      .references(() => businesses.id),
     amountCents: integer("amount_cents").notNull(),
     /* Same meaning as on `charges` (debt-truth D8/D13) */
     invoiceCents: integer("invoice_cents").notNull(),
@@ -386,7 +291,7 @@ export const directPayments = sqliteTable(
     /* D8: one transfer pays once — the database, not the provider,
        refuses the second submission, racing ones included */
     uniqueIndex("direct_payments_isp_tracking_idx")
-      .on(t.ispId, t.trackingKey)
+      .on(t.businessId, t.trackingKey)
       .where(
         /* `superseded` joins the exclusions (D18): a corrected reading
            must release its claim, or a clave the machine misread would
@@ -405,9 +310,9 @@ export const proofRejections = sqliteTable(
   "proof_rejections",
   {
     id: id(),
-    ispId: text("isp_id")
+    businessId: text("business_id")
       .notNull()
-      .references(() => isps.id),
+      .references(() => businesses.id),
     /* Who tried */
     paymentLinkId: text("payment_link_id")
       .notNull()
@@ -418,23 +323,4 @@ export const proofRejections = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("proof_rejections_link_idx").on(t.paymentLinkId, t.createdAt)],
-);
-
-export const invitations = sqliteTable(
-  "invitations",
-  {
-    id: id(),
-    storeId: text("store_id")
-      .notNull()
-      .references(() => stores.id),
-    /* Our own random token (better-auth.spec.md D8): single-use, valid
-       7 days from createdAt — checked at redemption, no extra column */
-    token: text("token").notNull().unique(),
-    status: text("status", { enum: ["sent", "accepted"] })
-      .notNull()
-      .default("sent"),
-    acceptedAt: integer("accepted_at", { mode: "timestamp_ms" }),
-    createdAt: createdAt(),
-  },
-  (t) => [index("invitations_store_idx").on(t.storeId)],
 );

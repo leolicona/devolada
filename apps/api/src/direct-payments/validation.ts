@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { charges, directPayments, isps, paymentLinks } from "../db/schema";
+import { charges, directPayments, businesses, paymentLinks } from "../db/schema";
 import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
 import { customerRefFor } from "../consta/refs";
@@ -30,7 +30,7 @@ import {
 type DB = DrizzleD1Database;
 export type DirectPayment = typeof directPayments.$inferSelect;
 type PaymentLink = typeof paymentLinks.$inferSelect;
-type Isp = typeof isps.$inferSelect;
+type Isp = typeof businesses.$inferSelect;
 
 /* D11: a CEP older than this window cannot pay today's debt. Measured
    2026-08-17: apiCEP treats the claimed date as a hint, not a filter,
@@ -42,8 +42,8 @@ const BATCH = 20;
 const minutes = (n: number) => n * 60 * 1000;
 
 /* D3: the SPEI fee falls back to the store fee when unset */
-export function speiFeeCents(isp: Isp): number {
-  return isp.speiServiceFeeCents ?? isp.serviceFeeCents;
+export function speiFeeCents(business: Isp): number {
+  return business.speiServiceFeeCents ?? business.serviceFeeCents;
 }
 
 /* The vocabulary as a lookup. A name outside it cannot resolve a CEP —
@@ -51,8 +51,8 @@ export function speiFeeCents(isp: Isp): number {
    "nothing can validate" case D4 already refuses to show. */
 const KNOWN_BANKS: ReadonlySet<string> = new Set(BANKS);
 
-export function speiBankIsKnown(isp: Isp): boolean {
-  return Boolean(isp.speiBank && KNOWN_BANKS.has(isp.speiBank));
+export function speiBankIsKnown(business: Isp): boolean {
+  return Boolean(business.speiBank && KNOWN_BANKS.has(business.speiBank));
 }
 
 /* D4: the channel exists only when the ISP configured its own account —
@@ -65,14 +65,14 @@ export function speiBankIsKnown(isp: Isp): boolean {
    Measured live on dev 2026-08-19 — an ISP held `Klar` where the list says
    `KLAR`, so every payment to it failed the moment D16 shipped, and failed
    *retryably*, which is the six-hour silence rather than an honest refusal. */
-export function speiAvailable(env: Bindings, isp: Isp): boolean {
+export function speiAvailable(env: Bindings, business: Isp): boolean {
   /* claimed-amount D5: the beneficiary name is recommended, never
      required — apiCEP asks only for clabe + bank, and the gates that
      demanded the name were all ours. */
   return Boolean(
-    isp.speiClabe &&
-      speiBankIsKnown(isp) &&
-      isp.wisphubApiKey &&
+    business.speiClabe &&
+      speiBankIsKnown(business) &&
+      business.wisphubApiKey &&
       env.CONSTA_BASE_URL &&
       env.CONSTA_API_KEY,
   );
@@ -150,7 +150,7 @@ export async function runValidation(
   db: DB,
   payment: DirectPayment,
   link: PaymentLink,
-  isp: Isp,
+  business: Isp,
   now: Date,
 ): Promise<DirectPayment> {
   const update = async (
@@ -185,7 +185,7 @@ export async function runValidation(
        one exception the ISP signed up to hear about — after a fresh debt
        check, and never blocking the sweep. */
     if (!slot && row.provisionalReleaseAt != null) {
-      await notifyProvisionalExpiry(env, isp, link, now);
+      await notifyProvisionalExpiry(env, business, link, now);
     }
     return row;
   };
@@ -193,12 +193,12 @@ export async function runValidation(
   if (!env.CONSTA_BASE_URL || !env.CONSTA_API_KEY) {
     return retryLater("CONSTA_NOT_CONFIGURED");
   }
-  if (!isp.speiClabe || !isp.speiBank) {
+  if (!business.speiClabe || !business.speiBank) {
     /* The ISP un-configured SPEI between submission and this attempt.
        The beneficiary name is not part of this check (claimed-amount D5). */
     return retryLater("SPEI_NOT_CONFIGURED");
   }
-  if (!speiBankIsKnown(isp)) {
+  if (!speiBankIsKnown(business)) {
     /* BUG-008: retrying cannot fix the ISP's own configuration, and Consta
        would refuse it with a 400 the client reads as retryable. Stop here
        and name it, so the ISP sees a configuration problem rather than a
@@ -207,11 +207,11 @@ export async function runValidation(
   }
 
   const beneficiary = {
-    bank: isp.speiBank,
-    clabe: isp.speiClabe,
+    bank: business.speiBank,
+    clabe: business.speiClabe,
     /* claimed-amount D5: sent when configured, omitted when not — whether
        apiCEP matches on it is unmeasured, so omitting beats guessing. */
-    ...(isp.speiBeneficiaryName ? { name: isp.speiBeneficiaryName } : {}),
+    ...(business.speiBeneficiaryName ? { name: business.speiBeneficiaryName } : {}),
   };
   /* reading-check D1: attempt 2 sends the image, not the data. A
      reader-sourced payment whose inline attempt found nothing gets the
@@ -301,7 +301,7 @@ export async function runValidation(
        is the real thing: the fresh WispHub read, the charge, the folio,
        the reconnection. Only Banxico is simulated. */
     console.warn(`TD-015 demo verdict for direct payment ${payment.id} — no provider call`);
-    verdict = demoVerdict(payment, isp, now);
+    verdict = demoVerdict(payment, business, now);
   } else {
     try {
       verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
@@ -351,7 +351,7 @@ export async function runValidation(
       const release = await maybeProvisionalRelease(
         env,
         db,
-        isp,
+        business,
         link,
         payment,
         releaseEvidenceFor(payment, "not_found", classification) ??
@@ -385,7 +385,7 @@ export async function runValidation(
     const release = await maybeProvisionalRelease(
       env,
       db,
-      isp,
+      business,
       link,
       payment,
       releaseEvidenceFor(payment, "pending"),
@@ -402,7 +402,7 @@ export async function runValidation(
         : { ...base, ...release, ...shadow, status: "expired", nextValidationAt: null, lastError: null },
     );
     if (!slot && row.provisionalReleaseAt != null) {
-      await notifyProvisionalExpiry(env, isp, link, now);
+      await notifyProvisionalExpiry(env, business, link, now);
     }
     return row;
   }
@@ -509,8 +509,8 @@ export async function runValidation(
 
   /* D14: between submission and confirmation the debt can be settled
      elsewhere. Re-check before touching WispHub's money. */
-  if (!isp.wisphubApiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base);
-  const wisphub = new WispHub(isp.wisphubApiKey, env.WISPHUB_BASE_URL);
+  if (!business.wisphubApiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base);
+  const wisphub = new WispHub(business.wisphubApiKey, env.WISPHUB_BASE_URL);
   let customer;
   let pending;
   try {
@@ -555,8 +555,8 @@ export async function runValidation(
     receivedCents,
     ispDebtCents,
     serviceFeeCents: payment.serviceFeeCents,
-    thresholdPercent: isp.reconnectionThresholdPercent,
-    floorCents: isp.reconnectionFloorCents,
+    thresholdPercent: business.reconnectionThresholdPercent,
+    floorCents: business.reconnectionFloorCents,
   });
 
   /* D6: a direct charge has no store, no commission, no ledger entries —
@@ -564,8 +564,7 @@ export async function runValidation(
   const [charge] = await db
     .insert(charges)
     .values({
-      ispId: isp.id,
-      storeId: null,
+      businessId: business.id,
       channel: "spei",
       directPaymentId: payment.id,
       folio: makeFolio(),
@@ -591,11 +590,11 @@ export async function runValidation(
 
   /* provider-latency D4: a charge now exists for this tenant, so the
      display cache is stale by definition — same rule as the store flow. */
-  invalidatePendingInvoices(isp.id);
+  invalidatePendingInvoices(business.id);
 
   const attempt = await attemptReconnection(
     wisphub,
-    isp.id,
+    business.id,
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
     settlement.ispRegisteredCents,
     now,
@@ -694,16 +693,16 @@ export async function sweepDirectPayments(
   const linkById = new Map(linkRows.map((l) => [l.id, l]));
   const ispRows = await db
     .select()
-    .from(isps)
-    .where(inArray(isps.id, [...new Set(due.map((p) => p.ispId))]));
+    .from(businesses)
+    .where(inArray(businesses.id, [...new Set(due.map((p) => p.businessId))]));
   const ispById = new Map(ispRows.map((i) => [i.id, i]));
 
   for (const payment of due) {
     const link = linkById.get(payment.paymentLinkId);
-    const isp = ispById.get(payment.ispId);
-    if (!link || !isp) continue; /* unreachable: FKs guarantee both */
+    const business = ispById.get(payment.businessId);
+    if (!link || !business) continue; /* unreachable: FKs guarantee both */
     try {
-      const row = await runValidation(env, db, payment, link, isp, now);
+      const row = await runValidation(env, db, payment, link, business, now);
       if (row.status === "confirmed") report.confirmed++;
       else if (row.status === "invalid") report.invalid++;
       else if (row.status === "expired") report.expired++;

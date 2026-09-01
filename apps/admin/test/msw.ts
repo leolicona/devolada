@@ -1,9 +1,9 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 
-export const ispActor = {
-  type: "isp",
-  id: "isp-1",
+export const businessActor = {
+  type: "business",
+  id: "business-1",
   name: "ISP Demo",
   email: "demo@devolada.app",
   emailVerified: true,
@@ -11,6 +11,10 @@ export const ispActor = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphubConfigured: true,
+  role: "owner",
+  orgId: "org_business-1",
+  userId: "user-1",
+  businesses: [{ id: "business-1", name: "ISP Demo", role: "owner" }],
 } as const;
 
 export const ok = (data: unknown, status = 200) =>
@@ -27,7 +31,7 @@ export const baFail = (code: string, status: number) =>
 export const handlers = {
   session: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/auth/me", () => r()),
   login: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/sign-in/email", () => r()),
-  signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/isp/signup", () => r()),
+  signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/business/signup", () => r()),
   verifyEmail: (r: () => ReturnType<typeof baOk | typeof baFail>) => http.post("/auth/email-otp/verify-email", () => r()),
   sendCode: (r: () => ReturnType<typeof baOk | typeof baFail>) => http.post("/auth/email-otp/send-verification-otp", () => r()),
   requestReset: (r: () => ReturnType<typeof baOk | typeof baFail>) =>

@@ -2,33 +2,36 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { isps, user as userTable } from "../src/db/schema";
-import { app, json, lastCodeFor, seedIsp, sessionOf, PASSWORD } from "./helpers";
+import { businesses, user as userTable, member } from "../src/db/schema";
+import { app, json, lastCodeFor, seedBusiness, sessionOf, PASSWORD } from "./helpers";
 
 /* better-auth.spec.md scenarios 1, 2, 7, 8 — ISP signup with a code as
    the master key (US-S04, US-S06). */
 
-const EMAIL = "nuevo@isp.mx";
+const EMAIL = "nuevo@business.mx";
 
 async function signup() {
   return (await app()).request(
-    "/auth/isp/signup",
+    "/auth/business/signup",
     json({ name: "ISP Nuevo", email: EMAIL, password: PASSWORD }),
     env,
   );
 }
 
 describe("US-S04: ISP signup verifies the email with a code", () => {
-  it("signup returns 201 with a session, links userId, and stores a code", async () => {
+  it("signup returns 201 with a session, an auth twin owned by the user, and a code", async () => {
     const res = await signup();
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.data).toMatchObject({ type: "isp", emailVerified: false });
+    expect(body.data).toMatchObject({ type: "business", emailVerified: false });
     expect(sessionOf(res)).toContain("session_token=");
 
     const db = drizzle(env.DB);
-    const [isp] = await db.select().from(isps).where(eq(isps.email, EMAIL));
-    expect(isp.userId).toBeTruthy();
+    const [business] = await db.select().from(businesses).where(eq(businesses.email, EMAIL));
+    expect(business.orgId).toBeTruthy();
+    /* business-and-memberships D1: the creator is the owner of the twin */
+    const [membership] = await db.select().from(member).where(eq(member.organizationId, business.orgId));
+    expect(membership.role).toBe("owner");
 
     /* The verification code went out through our hook (spec D9) and is
        redeemable — the test mailbox is the verification table */
@@ -72,31 +75,15 @@ describe("US-S04: ISP signup verifies the email with a code", () => {
   });
 
   it("a taken email returns 409 EMAIL_TAKEN (scenario 2)", async () => {
-    await seedIsp({ email: EMAIL });
+    await seedBusiness({ email: EMAIL });
     const res = await signup();
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
-  });
-
-  it("a legacy isp row without a user also answers 409, and never orphans a user", async () => {
-    /* Pre-migration shape: the isps row exists, no Better Auth user.
-       The old check only looked at `user`, created one, and the isps
-       UNIQUE(email) blew up — leaving a user that signs in but resolves
-       to no actor. Measured on deployed dev, 2026-08-15. */
-    const db = drizzle(env.DB);
-    await db.insert(isps).values({ name: "ISP Legado", email: EMAIL });
-
-    const res = await signup();
-    expect(res.status).toBe(409);
-    expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
-
-    const orphans = await db.select().from(userTable).where(eq(userTable.email, EMAIL));
-    expect(orphans).toHaveLength(0);
   });
 
   it("a malformed payload returns 400", async () => {
     const res = await (await app()).request(
-      "/auth/isp/signup",
+      "/auth/business/signup",
       json({ name: "X", email: "no-es-correo", password: "corta" }),
       env,
     );
@@ -106,7 +93,7 @@ describe("US-S04: ISP signup verifies the email with a code", () => {
 
 describe("US-S06: recovery by code restores access (scenario 7)", () => {
   it("email → code → new password signs in; the old password dies", async () => {
-    await seedIsp({ email: EMAIL });
+    await seedBusiness({ email: EMAIL });
 
     const ask = await (await app()).request(
       "/auth/email-otp/request-password-reset",

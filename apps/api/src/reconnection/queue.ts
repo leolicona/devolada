@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { charges, isps } from "../db/schema";
+import { charges, businesses } from "../db/schema";
 import { WispHub } from "../wisphub/client";
 import { attemptReconnection } from "../wisphub/reconnection";
 
@@ -81,12 +81,12 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
   report.claimed = due.length;
 
   /* One key per ISP, not per charge */
-  const ispIds = [...new Set(due.map((c) => c.ispId))];
-  const ispRows = await db.select().from(isps).where(inArray(isps.id, ispIds));
-  const keyByIsp = new Map(ispRows.map((i) => [i.id, i.wisphubApiKey]));
+  const ispIds = [...new Set(due.map((c) => c.businessId))];
+  const ispRows = await db.select().from(businesses).where(inArray(businesses.id, ispIds));
+  const keyByBusiness = new Map(ispRows.map((i) => [i.id, i.wisphubApiKey]));
 
   for (const charge of due) {
-    const apiKey = keyByIsp.get(charge.ispId);
+    const apiKey = keyByBusiness.get(charge.businessId);
     if (!apiKey) {
       /* Same shape as a rejected key: nothing to retry until Configuración */
       await db
@@ -102,7 +102,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
 
     const result = await attemptReconnection(
       new WispHub(apiKey, env.WISPHUB_BASE_URL),
-      charge.ispId,
+      charge.businessId,
       /* D8: lookups need the usuario; the numeric id only serves the
          auto-activate PATCH. Charges from before 0006 have no stored
          usuario — the old identifier keeps their (broken) behavior. */

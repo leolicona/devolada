@@ -7,7 +7,6 @@ import { z } from "zod";
 export const feedQuery = z.object({
   cursor: z.coerce.number().int().positive().optional(),
   status: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
-  storeId: z.string().optional(),
   from: z.coerce.number().int().positive().optional(),
   to: z.coerce.number().int().positive().optional(),
 });

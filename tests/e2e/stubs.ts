@@ -22,9 +22,9 @@ async function apiRoute(page: Page, pattern: string, data: unknown): Promise<voi
   });
 }
 
-export const ispActor = {
-  type: "isp",
-  id: "isp-1",
+export const businessActor = {
+  type: "business",
+  id: "business-1",
   name: "ISP Demo",
   email: "demo@devolada.app",
   emailVerified: true,
@@ -32,6 +32,10 @@ export const ispActor = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphubConfigured: true,
+  role: "owner",
+  orgId: "org_business-1",
+  userId: "user-1",
+  businesses: [{ id: "business-1", name: "ISP Demo", role: "owner" }],
 };
 
 const at = Date.UTC(2026, 7, 14, 20, 30);
@@ -76,7 +80,7 @@ export const feed = {
 };
 
 export async function stubAdminApi(page: Page): Promise<void> {
-  await apiRoute(page, "**/auth/me", ispActor);
+  await apiRoute(page, "**/auth/me", businessActor);
   await apiRoute(page, "**/charges/feed*", feed);
 }
 

@@ -28,7 +28,7 @@ export type AttemptResult = AttemptState & {
 export async function attemptReconnection(
   wisphub: WispHub,
   /* The tenant, for the payment-method cache (provider-latency D5) */
-  ispId: string,
+  businessId: string,
   /* usuario for every lookup; the numeric id only for the PATCH (D8) */
   customer: { usuario: string; wisphubId: string },
   /* The whole debt this payment settles — pending invoices plus the
@@ -59,7 +59,7 @@ export async function attemptReconnection(
         wisphub.ensureAutoActivate(customer.wisphubId).catch((e: unknown) => {
           console.warn(`auto_activar_servicio PATCH failed for ${customer.usuario}:`, e);
         }),
-        cashPaymentMethodId(ispId, wisphub, now),
+        cashPaymentMethodId(businessId, wisphub, now),
       ]);
 
       /* D1 (pays TD-009): reuse before creating. The id we already

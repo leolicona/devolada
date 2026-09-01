@@ -63,7 +63,7 @@ export const payRequest = z
        answered a `not_found` confirmation. If the three fields come back
        unchanged, the existing row is kept and nothing is spent; if they
        changed, the old row is `superseded` so it releases its claim on
-       `(isp_id, tracking_key)` before the new one takes it. */
+       `(business_id, tracking_key)` before the new one takes it. */
     supersedes: z.string().min(1).optional(),
     /* D18: the `Estatus` the reader saw on the receipt, carried forward
        so the row can answer a reload. Client-supplied and harmless: it

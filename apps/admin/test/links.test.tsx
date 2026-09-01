@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { handlers, ispActor, ok, server } from "./msw";
+import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
 /* US-D07, design-review fixes: the copy button answers either way, and
@@ -29,7 +29,7 @@ function stubClipboard(writeText: (text: string) => Promise<void>) {
 
 async function searchReyes() {
   server.use(
-    handlers.session(() => ok(ispActor)),
+    handlers.session(() => ok(businessActor)),
     handlers.linksSearch(() => ok(results)),
   );
   renderApp("/links");
@@ -39,7 +39,7 @@ async function searchReyes() {
 
 describe("US-D07: the search box has an accessible name", () => {
   it("is reachable as 'Buscar cliente', like the tienda's twin", async () => {
-    server.use(handlers.session(() => ok(ispActor)));
+    server.use(handlers.session(() => ok(businessActor)));
     renderApp("/links");
     expect(await screen.findByLabelText(/buscar cliente/i)).toBeInTheDocument();
   });
@@ -49,7 +49,7 @@ describe("US-D07: one character is not a search", () => {
   it("keeps the instruction sentence instead of firing a doomed query", async () => {
     /* The contract 400s under 2 characters; no handler registered, so
        any request here would fail the test with an MSW error screen. */
-    server.use(handlers.session(() => ok(ispActor)));
+    server.use(handlers.session(() => ok(businessActor)));
     renderApp("/links");
 
     await userEvent.type(await screen.findByLabelText(/buscar cliente/i), "j");

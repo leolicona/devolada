@@ -11,15 +11,19 @@ Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
 - [x] Design cycle (this folder) reviewed by the owner (PR #124)
 - [x] Child spec written and registered (PR #125); organizations spike
       green 2026-08-31 (spec's Spike section)
-- [ ] D14 migrations: `isps` → `businesses`; `charges` + `direct_payments`
-      → `payments`; drop orphaned store tables (`stores`, `cash_drops`,
-      `ledger_entries`, `customer_contacts`, `invitations`)
-- [ ] Glossary swap in SPEC.md (pivot glossary takes over)
-- [ ] Better Auth organizations: memberships, roles enforced in the
-      middleware; role-hidden UI in the shell
-- [ ] Workspace switcher + create-business flow (US-B02)
-- [ ] Onboarding wizard (US-B01): name → CLABE/bank/beneficiary → first link
-- [ ] Usuarios settings page (US-B03)
+- [x] D14 migrations, half 1: `isps` → `businesses` with the D7 backfill;
+      store-era tables dropped (migration 0018)
+- [ ] D14 migrations, half 2: `charges` + `direct_payments` → `payments`
+      (spec D6) — its own PR
+- [x] Glossary swap in SPEC.md: Negocio + roles (Cobro/Pago wait for half 2)
+- [x] Better Auth organizations: memberships, roles enforced in the
+      middleware by area (API); role-hidden UI in the shell — frontend PR
+- [x] Create-business + switch (API: `POST /businesses`, plugin set-active);
+      switcher UI — frontend PR
+- [ ] Onboarding wizard UI (US-B01) — frontend PR (`POST /businesses`
+      already takes the D5 minimum)
+- [x] Members API (invite with D3's granting rule, list, remove);
+      Usuarios page — frontend PR
 
 ## Phase 3 — Prepaid credit & operator panel
 

@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { charges } from "../src/db/schema";
 import { sweepReconnections, MAX_ATTEMPTS } from "../src/reconnection/queue";
-import { seedIsp, seedStore } from "./helpers";
+import { seedBusiness } from "./helpers";
 
 /* docs/charges/reconnection-queue.spec.md scenarios 1–6. */
 
@@ -73,14 +73,12 @@ const mockVerify = (estado: string) =>
     .reply(...json({ count: 1, results: [customer(estado)] }));
 
 async function seedQueuedCharge(over: Partial<typeof charges.$inferInsert> = {}) {
-  const isp = await seedIsp({ wisphubApiKey: "wh-key-1" });
-  const store = await seedStore(isp.id);
+  const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
   const db = drizzle(env.DB);
   const [charge] = await db
     .insert(charges)
     .values({
-      ispId: isp.id,
-      storeId: store.id,
+      businessId: business.id,
       folio: `DV-Q${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
       /* Production-faithful: recordCharge stores the numeric id here and
          the usuario apart (D8). The old seed put the usuario in the id
@@ -98,7 +96,7 @@ async function seedQueuedCharge(over: Partial<typeof charges.$inferInsert> = {})
       ...over,
     })
     .returning();
-  return { isp, store, charge, db };
+  return { business, charge, db };
 }
 
 const reload = async (db: ReturnType<typeof drizzle>, id: string) =>
@@ -255,13 +253,12 @@ describe("US-C04: a rejected key is not the store's fault", () => {
 
 describe("US-C03: the sweep only touches what is due", () => {
   it("leases claimed charges and ignores terminal ones", async () => {
-    const { charge, db, isp, store } = await seedQueuedCharge({
+    const { charge, db, business } = await seedQueuedCharge({
       nextAttemptAt: new Date(Date.now() + 10 * MINUTE),
     });
     /* A reconnected charge and a future-dated one: neither is due */
     await db.insert(charges).values({
-      ispId: isp.id,
-      storeId: store.id,
+      businessId: business.id,
       folio: "DV-DONE01",
       wisphubCustomerId: "greyes@wifiplus",
       customerName: "Janely",

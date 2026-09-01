@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/charges-schema";
-import { handlers, ispActor, ok, server } from "./msw";
+import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/admin/charge-feed.spec.md scenarios 4–6. */
@@ -35,7 +35,7 @@ function feedOf(
 describe("US-A01: the feed shows rows and expands into detail", () => {
   it("renders customer, store, badge and amount; expanding shows folio and breakdown", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
         ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [charge()])),
       ),
@@ -58,7 +58,7 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
      strip and the chips on every filter change. */
   it("announces the list, not the whole page", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
         ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [charge()])),
       ),
@@ -76,7 +76,7 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
 describe("D3: failed charges surface on top", () => {
   it("shows the attention strip when failures exist", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
         ok(
           feedOf(
@@ -97,7 +97,7 @@ describe("D5: the status chips re-query the feed", () => {
   it("selecting 'Fallidos' requests status=failed", async () => {
     const seen: (string | null)[] = [];
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) => {
         seen.push(url.searchParams.get("status"));
         return ok(feedOf([charge()]));
@@ -132,7 +132,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
 
   it("scenario 14: the detail shows the ask, the received amount and the missing figure", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
         ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [partial])),
       ),
@@ -158,7 +158,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
 
   it("a full payment keeps its plain breakdown", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
         ok(feedOf(url.searchParams.get("status") === "failed" ? [] : [charge()])),
       ),
@@ -178,7 +178,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
   it("the 'Sin reactivar' chip requests status=withheld", async () => {
     const seen: (string | null)[] = [];
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed((url) => {
         seen.push(url.searchParams.get("status"));
         return ok(feedOf([partial]));

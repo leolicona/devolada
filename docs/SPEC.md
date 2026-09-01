@@ -25,11 +25,13 @@ Direct SPEI payments with automatic validation for service businesses — today,
 
 ## Glossary
 
-Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico); code identifiers are English. One word per concept, no synonyms. *(2026-08-31: the store-network rows — Caja, Entrega, Comisión, Movimiento, Invitación, Techo de saldo, Liquidación — retired to `devolada-red`; the pivot glossary in platform/pivot.spec.md takes over in phase 2.)*
+Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico); code identifiers are English. One word per concept, no synonyms. *(2026-08-31: the store-network rows — Caja, Entrega, Comisión, Movimiento, Invitación, Techo de saldo, Liquidación — retired to `devolada-red`. Phase 2 adopted Negocio and the roles; Cobro/Pago swap with the payments merge.)*
 
 | Concept | UI copy (es-MX) | Code (English) | Never |
 |---------|-----------------|----------------|-------|
-| Customer payment transaction | **Cobro** | `charge` | "pago" (only on the end-customer receipt) |
+| The paying tenant | **Negocio** | `business` (table `businesses`; `businessId` everywhere) | "empresa", "ISP" (an ISP is one kind of business) |
+| Customer payment transaction | **Cobro** | `charge` | "pago" (only on the end-customer receipt) — *becomes `payment_request`/`payment` when the payments merge lands (business-and-memberships D6)* |
+| Who may do what inside a business | **Dueño / Administrador / Operador / Lector** | `role` (`owner/admin/operator/viewer`) | "usuario" as a role name |
 | Fee paid by the end customer | **Cargo por servicio** | `service_fee` | — |
 | Period's billed charge (invoice total) | **Cargo del periodo** | `invoice` / `invoice_cents` | "mensualidad" (the invoice can bill more than the plan — debt-truth D16) |
 | MikroTik reactivation | **Reconexión** | `reconnection` (`queued/reconnected/failed`) | — |

@@ -2,7 +2,7 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { charges, directPayments, ledgerEntries, paymentLinks, proofRejections } from "../src/db/schema";
+import { charges, directPayments, paymentLinks, proofRejections } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
@@ -10,7 +10,7 @@ import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/pro
 import { historyVouches } from "../src/direct-payments/provisional";
 import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
-import { app, seedIsp } from "./helpers";
+import { app, seedBusiness } from "./helpers";
 
 /* docs/direct-payment/direct-payment.spec.md scenarios 1–12, 16–24
    (US-D01–US-D04). Consta and WispHub are fetch-mocked respecting
@@ -217,8 +217,8 @@ const SPEI_CONFIG = {
   speiBeneficiaryName: "WifiPlus SA de CV",
 };
 
-async function seedLinkedIsp(overrides: Parameters<typeof seedIsp>[0] = {}) {
-  const isp = await seedIsp({
+async function seedLinkedBusiness(overrides: Parameters<typeof seedBusiness>[0] = {}) {
+  const business = await seedBusiness({
     wisphubApiKey: "wh-key-1",
     serviceFeeCents: 1500,
     storeCommissionCents: 900,
@@ -228,13 +228,13 @@ async function seedLinkedIsp(overrides: Parameters<typeof seedIsp>[0] = {}) {
   const [link] = await drizzle(env.DB)
     .insert(paymentLinks)
     .values({
-      ispId: isp.id,
+      businessId: business.id,
       token: "tok2345abcdefgh2",
       wisphubCustomerId: "6",
       customerUsuario: "greyes@wifiplus",
     })
     .returning();
-  return { isp, link };
+  return { business, link };
 }
 
 const post = (body: unknown): RequestInit => ({
@@ -253,7 +253,7 @@ async function payTransfer(token = "tok2345abcdefgh2", body: unknown = TRANSFER)
 
 describe("US-D01: the link answers with the live debt", () => {
   it("scenario 1: debt → total, SPEI instructions with the ISP's account", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()]);
     mockPendingInvoices();
 
@@ -270,7 +270,7 @@ describe("US-D01: the link answers with the live debt", () => {
   });
 
   it("uses the SPEI fee when configured (D3)", async () => {
-    await seedLinkedIsp({ speiServiceFeeCents: 800 });
+    await seedLinkedBusiness({ speiServiceFeeCents: 800 });
     mockCustomerLookup([wisphubCustomer()]);
     mockPendingInvoices();
 
@@ -285,7 +285,7 @@ describe("US-D01: the link answers with the live debt", () => {
        "Pagada", the pending list is empty, and the remainder lives in
        `saldo`. Before debt-truth D7 this page answered "Sin adeudo" to
        somebody who owed money and could not pay it. */
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([
       { ...wisphubCustomer(), estado_facturas: "Pagadas", saldo: "150.00" },
     ]);
@@ -300,7 +300,7 @@ describe("US-D01: the link answers with the live debt", () => {
   });
 
   it("scenario 2: no debt → sin adeudo, no SPEI data", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()]);
     mockPendingInvoices([]);
 
@@ -312,13 +312,13 @@ describe("US-D01: the link answers with the live debt", () => {
   });
 
   it("scenario 3: unknown token → 404", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const res = await (await app()).request("/direct-payments/links/nope", {}, testEnv);
     expect(res.status).toBe(404);
   });
 
   it("scenario 23: ISP without SPEI → unavailable, no WispHub call", async () => {
-    await seedLinkedIsp({ speiClabe: null, speiBank: null, speiBeneficiaryName: null });
+    await seedLinkedBusiness({ speiClabe: null, speiBank: null, speiBeneficiaryName: null });
     const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
     const { data } = await res.json();
     expect(data.status).toBe("unavailable");
@@ -330,7 +330,7 @@ describe("US-D01: the link answers with the live debt", () => {
        took money it could never validate — and failed *retryably*, which is
        the six-hour silence rather than an honest refusal. D16 fixed the form;
        nothing checked the value already in the database. */
-    await seedLinkedIsp({ speiBank: "Klar" });
+    await seedLinkedBusiness({ speiBank: "Klar" });
     const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
     const { data } = await res.json();
     expect(data.status).toBe("unavailable");
@@ -338,7 +338,7 @@ describe("US-D01: the link answers with the live debt", () => {
   });
 
   it("scenario 35: the exact spelling keeps the channel open", async () => {
-    await seedLinkedIsp({ speiBank: "KLAR" });
+    await seedLinkedBusiness({ speiBank: "KLAR" });
     mockCustomerLookup([wisphubCustomer()]);
     mockPendingInvoices();
     const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
@@ -350,7 +350,7 @@ describe("US-D01: the link answers with the live debt", () => {
 
 describe("US-D02: submitting proof", () => {
   it("scenario 4: ISP without SPEI → SPEI_NOT_CONFIGURED on pay", async () => {
-    await seedLinkedIsp({ speiClabe: null });
+    await seedLinkedBusiness({ speiClabe: null });
     const res = await payTransfer();
     expect(res.status).toBe(409);
     const body = await res.json();
@@ -358,7 +358,7 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("scenario 6: transfer door — amount and beneficiary are server-supplied", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const captured = mockConsta({ status: "pending", cep: undefined });
@@ -382,7 +382,7 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("scenario 5: receipt door — upload lands in R2, Consta gets a signed URL", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
 
     const form = new FormData();
     form.append("file", new File([new Uint8Array(1024)], "cep.png", { type: "image/png" }));
@@ -411,7 +411,7 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("rejects oversized and unreadable proofs (D12)", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const big = new FormData();
     big.append("file", new File([new Uint8Array(1_000_001)], "cep.png", { type: "image/png" }));
     const tooBig = await (await app()).request(
@@ -435,7 +435,7 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("accepts a PDF comprobante — apiCEP reads them and banks issue them (D12)", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     const form = new FormData();
     form.append("file", new File([new Uint8Array(64)], "cep.pdf", { type: "application/pdf" }));
     const up = await (await app()).request(
@@ -457,12 +457,12 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("scenario 22: the sixth submission in an hour → 429, no provider call", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const db = drizzle(env.DB);
     for (let i = 0; i < 5; i++) {
       await db.insert(directPayments).values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -487,7 +487,7 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("D13: uploads have their own hourly cap, with no submission behind them", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const upload = async () => {
       const form = new FormData();
       form.append("file", new File([new Uint8Array(10)], "cep.png", { type: "image/png" }));
@@ -512,7 +512,7 @@ describe("US-D02: submitting proof", () => {
   });
 
   it("NOTHING_DUE when the customer owes nothing at submission", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices([], 1);
     const res = await payTransfer();
@@ -534,7 +534,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
      answered 400, so "no paid call" is asserted by the absence itself. */
 
   it("US-D02: a bank name outside the vocabulary is refused, before WispHub or the provider", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
 
     /* The three names the old placeholder taught the payer to type. apiCEP
        spells them NUBANK, BBVA MEXICO and BANORTE. */
@@ -549,7 +549,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
   });
 
   it("US-D02: the exact spelling apiCEP accepts does get through", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -563,7 +563,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
   });
 
   it("BUG-006: a tracking key carrying a receipt's two-line wrap is refused", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
 
     /* The first one is the live failure: 29 characters, a space, and a
        Cyrillic З where a 3 belongs. It used to pass, spend $0.25 and land
@@ -584,7 +584,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
   });
 
   it("BUG-006: a ten-character key is accepted — the bound is a range, not Nu's 28", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -600,7 +600,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
 
 describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
   it("scenario 7: confirmed → spei charge, no store, no ledger entries", async () => {
-    const { isp } = await seedLinkedIsp();
+    const { business } = await seedLinkedBusiness();
     /* pay pre-check + validation debt re-check + reconnection verify */
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
@@ -620,15 +620,12 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
 
     const [charge] = await db.select().from(charges);
     expect(charge.channel).toBe("spei");
-    expect(charge.storeId).toBeNull();
     expect(charge.totalCents).toBe(51400);
     expect(charge.reconnectionStatus).toBe("reconnected");
-    /* D6: no commission, no store balance — nothing in the ledger */
-    expect(await db.select().from(ledgerEntries)).toHaveLength(0);
   });
 
   it("scenario 12: a queued spei charge rides the reconnection sweep", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta();
@@ -651,7 +648,7 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
   });
 
   it("scenario 24: two months due → one debt, one payment, nothing left (D21)", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const twoInvoices = [
       { id_factura: 42, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
       { id_factura: 41, cliente: { usuario: "greyes@wifiplus" }, total: 499 },
@@ -696,7 +693,7 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
 
 describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
   it("scenario 8: pending → validating, first D7 slot (+2 min)", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -713,14 +710,14 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
   });
 
   it("scenario 9: the sweep picks it up and Consta now says valid", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -755,14 +752,14 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
   });
 
   it("scenario 10: still pending past 6 h → expired", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -791,7 +788,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
    payment, exact amount, declared `invalid` and dead on the first try. */
 describe("D17: a not-found is not a refusal", () => {
   it("scenario 36: `invalid` with reason not_found keeps the payment alive on the schedule", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
@@ -811,14 +808,14 @@ describe("D17: a not-found is not a refusal", () => {
   });
 
   it("scenario 37: the CEP that appears late is caught by the very next sweep", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -850,14 +847,14 @@ describe("D17: a not-found is not a refusal", () => {
     /* validation-status-ux D4 amends this scenario: the 6-hour wall now
        buys one last attempt at T+12h before the payment expires — one
        credit for the bank that releases a held transfer next morning. */
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -892,7 +889,7 @@ describe("D17: a not-found is not a refusal", () => {
   });
 
   it("scenario 39: `invalid` with reason contradicted is still terminal, on the first attempt", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "invalid", reason: "contradicted", cep: undefined });
@@ -912,7 +909,7 @@ describe("D17: a not-found is not a refusal", () => {
     /* Fail toward "we do not know": a Consta that predates D11, or one
        that grows a third reason, must never be able to turn silence
        back into an accusation. */
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "invalid", cep: undefined });
@@ -940,7 +937,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
   } as const;
   async function insertPayment(
     link: { id: string },
-    isp: { id: string },
+    business: { id: string },
     now: Date,
     over: Seed = {},
   ) {
@@ -949,7 +946,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         ...BASE_ROW,
         transferDate: new Date().toISOString().slice(0, 10),
         nextValidationAt: new Date(now.getTime() - 1000),
@@ -960,12 +957,12 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
   }
 
   it("scenario 5: the late attempt still not_found → expired at last; found → the normal confirmation", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
 
     /* half one: T+12.5h, the 720 slot already ran out too */
-    const first = await insertPayment(link, isp, now, {
+    const first = await insertPayment(link, business, now, {
       constaStatus: "invalid",
       lastError: "TRANSFER_NOT_FOUND",
       validationAttempts: 7,
@@ -991,7 +988,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
        and confirms like any other valid — the slot exists for exactly
        this payment. Same link: the expired row released its claim. */
     await db.delete(directPayments).where(eq(directPayments.id, first.id));
-    const second = await insertPayment(link, isp, now, {
+    const second = await insertPayment(link, business, now, {
       constaStatus: "invalid",
       lastError: "TRANSFER_NOT_FOUND",
       validationAttempts: 7,
@@ -1010,10 +1007,10 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
   it("scenario 6: a channel failure at the end of the schedule gets no late slot", async () => {
     /* D4: the T+12h attempt is for the transfer Banxico may still
        publish, never for our own outages */
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
-    const payment = await insertPayment(link, isp, now, {
+    const payment = await insertPayment(link, business, now, {
       constaStatus: "pending",
       lastError: "CONSTA_UNAVAILABLE",
       validationAttempts: 6,
@@ -1038,14 +1035,14 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     /* D8: a valid that reached the provider but died locally, then a
        corrected re-submission — the fresh row has zero attempts, and
        the flag must resolve on the verdict's merits anyway */
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [prior] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1063,7 +1060,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1090,12 +1087,12 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
   it("scenario 11b: on the receipt door the trace is the same link holding the same revealed key", async () => {
     /* D8: no supersedesId survives a terminal prior, but the tracking
        key the CEP reveals matches the payer's own dead attempt */
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     await db.insert(directPayments).values({
       paymentLinkId: link.id,
-      ispId: isp.id,
+      businessId: business.id,
       amountCents: 51400,
       invoiceCents: 49900,
       serviceFeeCents: 1500,
@@ -1112,7 +1109,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1135,14 +1132,14 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
   it("scenario 12: a chain that never reached the provider does not soften the flag", async () => {
     /* D8 stands: the ancestor was superseded before any call landed, so
        the flag can only mean a validation outside this payment */
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [prior] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1159,7 +1156,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1184,7 +1181,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
 
 describe("D8: one transfer pays once", () => {
   it("scenario 11: alreadyValidated with no local record → rejected, no charge", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ alreadyValidated: true });
@@ -1197,7 +1194,7 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("scenario 18: resubmitting your own live transfer attaches to it (US-D12, D9)", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -1219,11 +1216,11 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("scenario 18b: another customer's live clave still refuses at the index (US-D12, D9)", async () => {
-    const { isp } = await seedLinkedIsp();
+    const { business } = await seedLinkedBusiness();
     await drizzle(env.DB)
       .insert(paymentLinks)
       .values({
-        ispId: isp.id,
+        businessId: business.id,
         token: "tok9876zyxwvut99",
         wisphubCustomerId: "7",
         customerUsuario: "otro@wifiplus",
@@ -1245,7 +1242,7 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("scenario 18d (US-D12 scenario 15): the same clave with different data supersedes the owning row", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -1275,11 +1272,11 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("scenario 18e (US-D12 scenario 16): a cross-link refusal restores the prior it had released", async () => {
-    const { isp } = await seedLinkedIsp();
+    const { business } = await seedLinkedBusiness();
     await drizzle(env.DB)
       .insert(paymentLinks)
       .values({
-        ispId: isp.id,
+        businessId: business.id,
         token: "tok9876zyxwvut99",
         wisphubCustomerId: "7",
         customerUsuario: "otro@wifiplus",
@@ -1319,12 +1316,12 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("scenario 18c: a terminal owner on the payer's own link still refuses (US-D12, D9)", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     await drizzle(env.DB)
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1347,14 +1344,14 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("scenario 19: a re-validation of the same row ignores the replay flag", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1385,7 +1382,7 @@ describe("D8: one transfer pays once", () => {
      told TRANSFER_ALREADY_USED — for a transfer the customer had really
      made, with the money already in the ISP's account. */
   it("D7: the row is born owned by the sweep, before any verdict exists", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     /* The row has to be inspected while the provider is still thinking —
@@ -1419,14 +1416,14 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("D8 carve-out (a): a call that never returned still counts as our own attempt", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1457,7 +1454,7 @@ describe("D8: one transfer pays once", () => {
   });
 
   it("the attempt is recorded before the call, so a lost response leaves a trace", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     /* A provider that fails is the closest a test can get to one that
@@ -1483,7 +1480,7 @@ describe("D11: valid is necessary, not sufficient", () => {
        in the ISP's account, so the refusal discarded the only record it
        arrived. Now it settles $1 of the debt, earns no reconnection at
        the default threshold, and the ISP can see it. */
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
     /* twice: the submission checks the debt, and the validation reads it
        again fresh before deciding what the money settles */
@@ -1512,7 +1509,7 @@ describe("D11: valid is necessary, not sufficient", () => {
   });
 
   it("scenario 17: a CEP older than 30 days → STALE_TRANSFER", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString().slice(0, 10);
@@ -1527,14 +1524,14 @@ describe("D11: valid is necessary, not sufficient", () => {
 
 describe("D14: a validated transfer with nothing left to pay", () => {
   it("scenario 20: paid at a store meanwhile → unapplied, no charge", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -1565,7 +1562,7 @@ describe("D14: a validated transfer with nothing left to pay", () => {
 
 describe("D12: proofs are private", () => {
   it("serves a proof only under a live signature", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     const key = `${link.id}/proof-1`;
     await testEnv.PROOFS.put(key, new Uint8Array([1, 2, 3]), {
       httpMetadata: { contentType: "image/png" },
@@ -1620,7 +1617,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
     );
 
   it("scenario 46: the reading comes back with no provider credit spent", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
     const captured = mockExtract();
 
@@ -1643,7 +1640,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
   });
 
   it("scenario 47: a field the gate refused arrives empty, never as a confirmable guess", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
     mockExtract({
       trackingKey: "NU3AGKMP3ASP8QQ4U8J8F0K1E4K",
@@ -1662,7 +1659,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
   });
 
   it("scenario 48: a proof from another link is not readable through this one", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     await testEnv.PROOFS.put("someone-elses-link/proof-1", new Uint8Array(10));
 
     /* Proofs are token-bound (D12): no cross-link reads, and no provider
@@ -1674,7 +1671,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
   });
 
   it("scenario 49: a confirmed reading pays through the transfer door, with the image kept", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
@@ -1721,7 +1718,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   };
 
   it("scenario 53: confirming the same three values keeps the row and spends no second credit", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const db = drizzle(env.DB);
     const first = await silentAttempt(READ);
 
@@ -1741,7 +1738,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   });
 
   it("scenario 54: a corrected confirmation supersedes the first row and releases its clave", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const db = drizzle(env.DB);
     const first = await silentAttempt(READ);
 
@@ -1769,7 +1766,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   });
 
   it("scenario 55: a superseded row is not swept and cannot be revived", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const db = drizzle(env.DB);
     const first = await silentAttempt(READ);
     await db
@@ -1790,7 +1787,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   });
 
   it("scenario 56: a confirmed payment records who Banxico says sent the money", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockCustomerLookup([wisphubCustomer()], 1);
@@ -1811,7 +1808,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
        asking with the expected amount could only come back faceless —
        and the conclusion was wrong: the fix is to ask with the amount the
        receipt actually shows, which is the transfer the payer made. */
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const captured = mockConsta({ status: "pending", cep: undefined });
@@ -1829,7 +1826,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   });
 
   it("scenario 58b: the matching amount goes through, and omitting it changes nothing", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -1848,14 +1845,14 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   });
 
   it("a supersedes pointing at another link's payment is refused", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     const first = await silentAttempt(READ);
     const db = drizzle(env.DB);
     /* re-home the row on a link this token does not own */
     const [otherLink] = await db
       .insert(paymentLinks)
       .values({
-        ispId: (await db.select().from(directPayments))[0].ispId,
+        businessId: (await db.select().from(directPayments))[0].businessId,
         token: "tok9999zzzzzzzz9",
         wisphubCustomerId: "7",
         customerUsuario: "otro@wifiplus",
@@ -1889,7 +1886,7 @@ describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () =>
   }
 
   it("the demo link confirms with no provider call at all", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     /* pay pre-check + validation debt re-check + reconnection verify —
        the same WispHub traffic a real confirmation makes. No Consta
        interceptor: `assertNoPendingInterceptors` would not catch a call
@@ -1919,7 +1916,7 @@ describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () =>
   });
 
   it("the same token in prod goes to the provider like any other payment", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     /* Consumed or the afterEach fails: prod must reach Consta */
@@ -1931,7 +1928,7 @@ describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () =>
   });
 
   it("an unlisted link on dev is untouched by the allow-list", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -1946,7 +1943,7 @@ describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () =>
        decided in advance by configuration, never by something going
        wrong. With the allow-list empty, a contradicted CEP is invalid,
        exactly as D17 says. */
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "invalid", reason: "contradicted", cep: undefined });
@@ -1981,7 +1978,7 @@ describe("US-D10: a transfer that falls short", () => {
   }
 
   it("scenario 1: below the threshold → partial, accion 0, the cut stays, a charge exists", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(shortCep(30000));
@@ -2010,7 +2007,7 @@ describe("US-D10: a transfer that falls short", () => {
   it("scenario 2: the same transfer with a lenient threshold → accion 1, still partial", async () => {
     /* D6: `partial` is about the debt, not the router. A payment can
        reconnect and still leave a balance. */
-    await seedLinkedIsp({ reconnectionThresholdPercent: 60 });
+    await seedLinkedBusiness({ reconnectionThresholdPercent: 60 });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(shortCep(30000));
@@ -2025,7 +2022,7 @@ describe("US-D10: a transfer that falls short", () => {
   });
 
   it("scenario 3: over the percentage but under the floor → still withheld", async () => {
-    await seedLinkedIsp({ reconnectionThresholdPercent: 60, reconnectionFloorCents: 40000 });
+    await seedLinkedBusiness({ reconnectionThresholdPercent: 60, reconnectionFloorCents: 40000 });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(shortCep(30000));
@@ -2040,7 +2037,7 @@ describe("US-D10: a transfer that falls short", () => {
        our 1500 is not. The customer is reconnected and we eat the fee —
        leaving somebody offline over it would cost more in one support
        call than the fee is worth (D3). */
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(shortCep(49900));
@@ -2063,7 +2060,7 @@ describe("US-D10: a transfer that falls short", () => {
   it("scenario 6: more than the debt → confirmed, and the surplus travels on", async () => {
     /* D10: no special case. Our fee takes its part and the rest goes to
        WispHub, which turns it into a credit against the next cycle. */
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(shortCep(60000));
@@ -2076,7 +2073,7 @@ describe("US-D10: a transfer that falls short", () => {
   });
 
   it("scenario 7: the three amounts reach the page in money, never a percentage", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(shortCep(30000));
@@ -2102,7 +2099,7 @@ describe("US-D10: a transfer that falls short", () => {
    account, so what Devolada holds is a debt the ISP settles monthly. */
 describe("US-D10 / US-L01: the commission is never forgiven", () => {
   it("a short payment still accrues the whole fee to the platform statement", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta({
@@ -2128,7 +2125,6 @@ describe("US-D10 / US-L01: the commission is never forgiven", () => {
     expect(charge.serviceFeeCents).toBe(1500);
     /* `settlement` D1 derives the platform's share from exactly this
        column, and a spei charge carries no store commission (D6). */
-    expect(charge.storeId).toBeNull();
   });
 });
 
@@ -2145,7 +2141,7 @@ describe("US-D13: the amount the payer really sent", () => {
   };
 
   it("scenario 2: the typed amount is what travels to Banxico", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const captured = mockConsta({ status: "pending", cep: undefined });
@@ -2159,7 +2155,7 @@ describe("US-D13: the amount the payer really sent", () => {
   });
 
   it("scenario 5: only a changed amount supersedes; four equal fields spend nothing", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -2189,7 +2185,7 @@ describe("US-D13: the amount the payer really sent", () => {
   });
 
   it("scenario 6: the status answers with the claimed amount", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -2206,7 +2202,7 @@ describe("US-D13: the amount the payer really sent", () => {
   });
 
   it("scenario 8: the claim cannot change the charge — the CEP decides", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta(); /* the CEP says 51400 arrived */
@@ -2221,7 +2217,7 @@ describe("US-D13: the amount the payer really sent", () => {
   });
 
   it("scenario 7: no beneficiary name — validation runs, the request omits it, the link hides it", async () => {
-    await seedLinkedIsp({ speiBeneficiaryName: null });
+    await seedLinkedBusiness({ speiBeneficiaryName: null });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     const captured = mockConsta();
@@ -2263,21 +2259,21 @@ describe("US-D14: the classifier at minute two", () => {
   } as const;
 
   async function seedCross(over: Record<string, unknown> = {}) {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         ...CROSS_ROW,
         transferDate: new Date().toISOString().slice(0, 10),
         nextValidationAt: new Date(now.getTime() - 1000),
         ...over,
       })
       .returning();
-    return { isp, link, payment, now, db };
+    return { business, link, payment, now, db };
   }
 
   const statusOf = async (id: string) => {
@@ -2442,7 +2438,7 @@ function mockPromise() {
 
 describe("US-D15: the provisional release", () => {
   it("scenario 1: a pending verdict at minute zero buys the promise with accion 1", async () => {
-    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     /* one customer+invoices round for the submit, one for the release */
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
@@ -2465,7 +2461,7 @@ describe("US-D15: the provisional release", () => {
   });
 
   it("scenario 8: toggle off — byte-identical to today, no WispHub round", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined });
@@ -2479,7 +2475,7 @@ describe("US-D15: the provisional release", () => {
   });
 
   it("D1: the manual door's not_found releases on human evidence", async () => {
-    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
@@ -2496,13 +2492,13 @@ describe("US-D15: the provisional release", () => {
   });
 
   it("scenario 9: a burned ride revokes the fast lane — the road stays open", async () => {
-    const { link } = await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    const { link } = await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     /* the prior released ride that expired and was never resolved */
     await drizzle(env.DB)
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: link.ispId,
+        businessId: link.businessId,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -2530,7 +2526,7 @@ describe("US-D15: the provisional release", () => {
   });
 
   it("D2: a claim under the ISP's threshold buys nothing", async () => {
-    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta({ status: "pending", cep: undefined });
@@ -2546,13 +2542,13 @@ describe("US-D15: the provisional release", () => {
   });
 
   it("D7/scenario 4: the retry that validates lifts the burned ride", async () => {
-    const { link } = await seedLinkedIsp();
+    const { link } = await seedLinkedBusiness();
     /* the released ride that expired — Banxico was just late */
     const [ride] = await drizzle(env.DB)
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: link.ispId,
+        businessId: link.businessId,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -2590,12 +2586,12 @@ describe("US-D15: the provisional release", () => {
   });
 
   it("D6/scenario 7: another customer's clave is recorded at the edge and revokes", async () => {
-    const { link, isp } = await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    const { link, business } = await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     /* a second customer on the same ISP whose payment owns the clave */
     const [otherLink] = await drizzle(env.DB)
       .insert(paymentLinks)
       .values({
-        ispId: isp.id,
+        businessId: business.id,
         token: "tok9999zzzzzzzz9",
         wisphubCustomerId: "9",
         customerUsuario: "arellano@wifiplus",
@@ -2605,7 +2601,7 @@ describe("US-D15: the provisional release", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: otherLink.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -2648,7 +2644,7 @@ describe("US-D15: the provisional release", () => {
    the recognisable usuario never travels naked. */
 describe("US-D15: the history refs travel always (D4)", () => {
   it("customerRef is the HMAC of the usuario, paymentRef is the payment id", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const captured = mockConsta({ status: "pending", cep: undefined });
@@ -2666,7 +2662,7 @@ describe("US-D15: the history refs travel always (D4)", () => {
   });
 
   it("without the secret nothing travels and nothing blocks", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const captured = mockConsta({ status: "pending", cep: undefined });
@@ -2688,7 +2684,7 @@ describe("US-D15: the history refs travel always (D4)", () => {
    gate stays inert while K is null. */
 describe("US-D15 D12: the shadow", () => {
   it("the snapshot lands with the release row, as received", async () => {
-    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
@@ -2705,7 +2701,7 @@ describe("US-D15 D12: the shadow", () => {
   });
 
   it("without a block the decision is byte-identical and the shadow records null", async () => {
-    await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
     mockConsta({ status: "pending", cep: undefined });
@@ -2722,7 +2718,7 @@ describe("US-D15 D12: the shadow", () => {
   });
 
   it("toggle off: the evaluation still writes the shadow and decides nothing", async () => {
-    await seedLinkedIsp();
+    await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
@@ -2737,7 +2733,7 @@ describe("US-D15 D12: the shadow", () => {
   });
 
   it("a released row keeps the snapshot that bought the decision", async () => {
-    const { isp, link } = await seedLinkedIsp({ provisionalReleaseEnabled: true });
+    const { business, link } = await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     const now = new Date();
     const db = drizzle(env.DB);
     /* the history as it looked at decision time — one chain fewer */
@@ -2749,7 +2745,7 @@ describe("US-D15 D12: the shadow", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -2841,7 +2837,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
   });
 
   it("US-D04: a not_found verdict with retryAfter books the suggested attempt through the sweep", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const createdAt = new Date(now.getTime() - min(2));
     const suggested = new Date(createdAt.getTime() + min(26));
@@ -2850,7 +2846,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,
@@ -2880,7 +2876,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
   });
 
   it("US-D04: a pending verdict carries the suggestion the same way", async () => {
-    const { isp, link } = await seedLinkedIsp();
+    const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const createdAt = new Date(now.getTime() - min(2));
     const suggested = new Date(createdAt.getTime() + min(26));
@@ -2889,7 +2885,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
       .insert(directPayments)
       .values({
         paymentLinkId: link.id,
-        ispId: isp.id,
+        businessId: business.id,
         amountCents: 51400,
         invoiceCents: 49900,
         serviceFeeCents: 1500,

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
-import { ispActor } from "../e2e/stubs";
+import { businessActor } from "../e2e/stubs";
 
 /* Design-review captures for PR #90 (claimed-amount, US-D13): the
    "Monto transferido" field on both forms, the overpay sentence that
@@ -113,7 +113,7 @@ const adminSettings = {
 };
 
 async function stubAdmin(page: Page) {
-  await json(page, (u) => u.pathname.endsWith("/auth/me"), ispActor);
+  await json(page, (u) => u.pathname.endsWith("/auth/me"), businessActor);
   await json(page, (u) => u.pathname.includes("/charges/feed"), {
     charges: [],
     nextCursor: null,

@@ -21,7 +21,7 @@ export type Bindings = {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   /* Dev only: the seed copies this key into the demo ISP row.
-     In real use, every ISP stores its own key in isps.wisphub_api_key. */
+     In real use, every ISP stores its own key in businesses.wisphub_api_key. */
   WISPHUB_API_KEY?: string;
   /* Points the adapter at a sandbox; unset means the real API */
   WISPHUB_BASE_URL?: string;
@@ -44,20 +44,28 @@ export type Bindings = {
   PAGO_BASE_URL: string;
 };
 
-export type Actor =
-  | {
-      type: "isp";
-      id: string;
-      name: string;
-      email: string;
-      emailVerified: boolean;
-      status: "active" | "suspended";
-      /* Settings D7: they ride the session, so no screen needs a second
-         request before it can render a time or a banner */
-      timezone: string;
-      timeFormat: "12h" | "24h";
-      wisphubConfigured: boolean;
-    };
+export type Role = "owner" | "admin" | "operator" | "viewer";
+
+/* business-and-memberships D4: the actor is the user inside its active
+   business, with the role its membership carries. Flat display fields
+   ride along so no screen needs a second request (settings D7). */
+export type Actor = {
+  type: "business";
+  /* The business (tenant) id — what every business table keys on */
+  id: string;
+  orgId: string;
+  name: string;
+  userId: string;
+  email: string;
+  emailVerified: boolean;
+  status: "active" | "suspended";
+  role: Role;
+  timezone: string;
+  timeFormat: "12h" | "24h";
+  wisphubConfigured: boolean;
+  /* Every business this user belongs to — the switcher's list (US-B02) */
+  businesses: { id: string; name: string; role: Role }[];
+};
 
 export type Variables = {
   actor: Actor;

@@ -43,6 +43,13 @@ The feed's current label "Cobros" moves to the *expected* side when phase 4
 lands both sections; until then the feed keeps its name (one rename, done
 when the second section exists, so the two words never coexist wrongly).
 
+**Routes are identifiers, and therefore English** (`/payments`,
+`/payment-requests`, `/links`, `/settings`); the es-MX word is the label,
+never the path. Written down 2026-09-01 (PR #135 review) because the router
+held both conventions — `/nuevo-negocio`, `/invitaciones/:id` and
+`/operador` came in Spanish during phases 2–3. Those three stay until each
+screen is next touched (TD-017); no new Spanish path is added.
+
 ## Screens by section
 
 ### Onboarding (US-B01) — before the shell is useful

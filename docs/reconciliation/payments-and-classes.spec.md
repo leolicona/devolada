@@ -41,15 +41,23 @@ interview (2026-09-01). Its companion is
   business with such an integration is `credit` whatever the policy
   says — not a loosening of the business's rule but a fact about where
   the money already went. A business with no integration keeps `flag`.
-  Phase 5's integration hub shows this on the WispHub card.
+  Phase 5's integration hub shows this on the WispHub card. **The override
+  never reaches `unapplied`** (PR #135 review): an `unapplied` payment is
+  precisely the one *not* registered in WispHub (direct-payment D14, pivot
+  D9: "nothing absorbs it"), so no credit exists for it to have gone to —
+  its effective treatment is always `flag`, "resolver con el cliente",
+  integration or not. Saying "queda a favor del cliente" over money sitting
+  unapplied in the business's bank would be the lie D14 was written to
+  prevent.
 
 - **D3 — The class is computed at the verdict, against the fresh debt.**
   The same numbers `settle()` already uses (partial-payment D5/D8): what
   arrived (`receivedCents`) against the debt read at confirmation — never
   the debt remembered at submission. `reconciliation_class` (born
   nullable, business-and-memberships D6) is written on `confirmed`,
-  `partial` and `unapplied` (`unapplied` = `over` by definition: money with
-  nothing to absorb it); a short payment is `short` even when the
+  `partial` and `unapplied` (`unapplied` = `over` by definition: money
+  arrived against a debt of zero — a class, not a credit; D2 keeps its
+  treatment at `flag`); a short payment is `short` even when the
   integration's threshold reconnects it (phase 5 owns the action; the
   class is the fact). Never on `invalid`/`expired` (no money).
 
@@ -59,7 +67,9 @@ interview (2026-09-01). Its companion is
   class is a `StatusBadge` variant next to the reconnection status — icon
   + text, never color alone. **"Ver comprobante"** opens the proof: the
   CEP as Banxico answered it (clave, amount, date, sender bank, sender
-  name, beneficiary) and, when the payer uploaded a capture, the **image
+  name, beneficiary **name** — the CEP Consta returns carries no account,
+  so the CLABE business-and-memberships D3 masks for viewers never enters
+  through this door) and, when the payer uploaded a capture, the **image
   through a short-lived signed URL** (direct-payment D12's own mechanism).
   The proof is the whole truth — what Banxico said and what the payer
   sent — and it is read for **every role** (a viewer reads; a dispute is
@@ -78,23 +88,42 @@ interview (2026-09-01). Its companion is
   was kept only by waiting).
 
 - **D6 — The rename, in one PR.** The moment the Cobros section exists,
-  the feed of money received is called what it is: nav **Pagos**, route
-  `/pagos`, `GET /payments/feed` answers `{ payments: [...] }` (the
+  the feed of money received is called what it is: nav label **Pagos**,
+  route **`/payments`** (routes are identifiers and therefore English —
+  the rule the IA now states; the inherited Spanish paths are TD-017),
+  `GET /payments/feed` answers `{ payments: [...] }` (the
   `charges` key and the `totalCents` alias retire), and
   `admin/charge-feed.spec.md` is superseded by this spec's Pagos contract
   — its file stays as history with a banner. Never two words for one
   thing, never one word for two (IA).
 
 - **D7 — One Consta key per business, issued when the business is born
-  (pivot D20 executed).** Consta already has the door: `POST /admin/keys`
-  guarded by `CONSTA_ADMIN_TOKEN` (validation US-V05, by hand — now by the
-  first-party consumer). `POST /businesses` calls it and stores
-  `businesses.consta_api_key` (as the WispHub key is stored); every
-  validation of that business's payments uses **its** key; top-ups keep
-  the **platform's** key (prepaid-credit D6). Existing businesses get
-  theirs in a one-shot backfill sweep. Consta's per-key log stays cost
-  telemetry, never billing (pivot D20). The shared token is a Worker
-  secret synced like the others (CICD D5).
+  (pivot D20 executed — now, not deferred; owner decision 2026-09-01).**
+  The owner weighed deferring it until the trust layer (US-V15, still
+  `proposed`) leaves its shadow, and chose to execute: the product must be
+  ready with a key per business from the first real tenant, so the
+  evidence the shadow accumulates lands in the right chain from day one
+  (D8). The door is **issue-only**: validation D5 is amended with
+  `CONSTA_ISSUER_TOKEN`, a second secret that `POST /admin/keys` accepts
+  and `DELETE /admin/keys/:id` refuses — `apps/api` can mint keys for its
+  businesses and nothing else (PR #135 review: handing it the admin token
+  made a compromised SaaS the admin of every Consta tenant, external
+  customers included). `POST /businesses` calls it and stores
+  `businesses.consta_api_key` **in D1, in the row, as the WispHub key is
+  stored** (owner decision: same trust as the other tenant credential;
+  encrypting it would guard a leak that already exposes the WispHub keys).
+  Every validation of that business's payments uses **its** key; top-ups
+  keep the **platform's** key (prepaid-credit D6). Existing businesses get
+  theirs in a one-shot backfill sweep; a business whose key is missing
+  (issuer down at birth) validates under the platform's until the next
+  sweep backfills it, and the feed says nothing — a key is plumbing.
+  Consta's per-key log stays cost telemetry, never billing (pivot D20).
+  Both secrets are synced by their deploys like the others (CICD D5).
+  **Rejected**: deferring to US-V15's activation (nothing lost today, but
+  the owner wants no second migration between the pilot and the trust
+  layer); a prefixed `customerRef` under one key (pivot D20's rejection
+  stands, and the manual Cobro after the pivot brings refs without a
+  tenant suffix).
 
 - **D8 — The trust layer's refs travel from the moment the business's
   key exists — not before.** `customerRef`/`paymentRef` already travel on
@@ -102,7 +131,27 @@ interview (2026-09-01). Its companion is
   this PR they travel under the business's key, so history accumulates in
   the right tenant's chains (trust-layer D2, `(apiKeyId, customerRef)`).
   History sent on dev under the platform key is lost on the switch —
-  accepted (TASKS: refs start when the key exists); dev only.
+  accepted (TASKS: refs start when the key exists); dev only, and the
+  trust layer reads none of it yet (US-V15 `proposed`: Consta measures,
+  the client decides — the switch itself is a later toggle in Devolada,
+  not an automatic threshold).
+
+- **D9 — A suspended business validates nothing, queued rows included
+  (owner decision 2026-09-01).** Suspension (business-and-memberships D3:
+  403 for every member) never touched the public link: `validation.ts`
+  reads no `businesses.status`, so a suspended business's payers kept
+  validating and spending its credit. Now: the link answers 409
+  `BUSINESS_SUSPENDED` (payer copy: "Este negocio no puede recibir pagos
+  por ahora. Contacta a tu proveedor."), and the re-validation sweep
+  **skips** the business's `validating` rows — their schedule freezes
+  where it was, exactly as the credit pause does (prepaid-credit D8), and
+  resumes on reactivation; nothing is expired or refused for having been
+  suspended, since the money may already have moved. Consta's key is
+  **not** revoked: revocation is for a business that leaves, and a
+  revoked key would 401 rows that must resume. **Rejected**: revoking the
+  key as the cut (couples a reversible platform state to an irreversible
+  Consta one); letting queued rows finish (spends the credit of a business
+  the platform just froze).
 
 ## Schema
 
@@ -122,7 +171,8 @@ interview (2026-09-01). Its companion is
 | `GET /payments/:id/proof` | `payments: read` | the CEP fields + `imageUrl` (signed, short-lived) or null |
 | `POST /payments/:id/retry-reconnection` | `payments: operate` | 200 → `queued`; 409 unless the row is `failed` |
 | `PATCH /settings` | `settings: update` | + `toleranceCents`, `overTreatment` (`effectiveOverTreatment` read-only in the GET) |
-| `POST /businesses` | — | issues the Consta key (D7) |
+| `POST /businesses` | — | issues the Consta key through `CONSTA_ISSUER_TOKEN` (D7) |
+| `GET /direct-payments/links/:token` · `POST …/pay` | public | 409 `BUSINESS_SUSPENDED` while the business is suspended (D9) |
 
 ## UI Contract
 
@@ -142,7 +192,8 @@ interview (2026-09-01). Its companion is
 ## Scenarios
 
 1. Received = asked → `exact`; received = asked − $1 with tolerance $0 →
-   `short`; tolerance raised to $1 → `exact` (D1).
+   `short`; with the tolerance raised to $1, a **new** payment $1 short →
+   `exact` while the earlier row keeps `short` (D1, D3: computed once).
 2. Received > asked → `over`; `unapplied` → `over` (D3).
 3. A business with WispHub: effective treatment `credit` although the
    policy says `flag`; without an integration: `flag` (D2).
@@ -161,16 +212,26 @@ interview (2026-09-01). Its companion is
 9. `POST /businesses` issues a Consta key and stores it; the next
    validation of that business sends that key and its refs; a top-up
    still sends the platform's (D7/D8).
-10. Backfill: existing businesses without a key get one, once (D7).
+10. Backfill: existing businesses without a key get one, once (D7); a
+    business born while the issuer is down validates under the platform's
+    key until then.
+11. `unapplied` with WispHub: class `over`, effective treatment `flag`, the
+    row reads "resolver con el cliente" — never "queda a favor" (D2).
+12. Suspended business: the link answers 409 `BUSINESS_SUSPENDED`; a
+    `validating` row is skipped by the sweep with its schedule intact, and
+    validates on reactivation; the Consta key is untouched (D9).
 
 ## Definition of Done
 
 - [ ] Migration (additive) for the three business columns; the two
       platform keys born in code.
-- [ ] Scenarios 1–10 automated, citing their stories.
-- [ ] `CONSTA_ADMIN_TOKEN` synced by both deploys (warning when unset:
-      businesses are born without a key and validate under the platform's
-      until the backfill runs).
+- [ ] Scenarios 1–12 automated, citing their stories.
+- [ ] `CONSTA_ISSUER_TOKEN` set as a Consta Worker secret and an api one,
+      synced by both deploys (warning when unset: businesses are born
+      without a key and validate under the platform's until the backfill
+      runs); validation D5's amendment shipped in the same PR.
+- [ ] The IA's route rule written and TD-017 opened for the inherited
+      Spanish paths.
 - [ ] `charge-feed.spec.md` bannered as superseded; SPEC.md glossary
       **Cobro** = `payment_request`, **Pago** unchanged; nav renamed;
       TASKS.md phase 4 boxes ticked.

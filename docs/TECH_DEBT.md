@@ -109,3 +109,9 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Why it exists: a CEP has no measured upper bound on publication (`docs/integrations/apicep.md`, 2026-08-19 — two transfers with the money already delivered, 30 samples through T+62 min, no CEP). A transfer made live in front of an audience does not reach a green screen even with a healthy Banxico, so this is not an outage fallback.
 - What it deliberately is **not**: a failure that becomes a success. The rejected design was "if the validation fails, mark it confirmed", which would fire on every real customer whose CEP is merely late — the exact case D17 exists to protect. The trigger is configuration decided in advance, never a provider that said no. A test asserts a contradicted CEP is still `invalid` on this path.
 - Paid by: deleting `demo.ts`, its `DEMO_LINK_TOKENS` var in both wrangler blocks, the branch in `runValidation` and the TD-015 test block — in the PR that follows the demo. Nothing else depends on it.
+
+## TD-017 — Three admin routes are in Spanish
+- Status: open · Origin: PR #135 review; the IA's route rule (2026-09-01)
+- `/nuevo-negocio`, `/invitaciones/$invitationId` and `/operador` were added in phases 2–3 while the rest of the router (`/settings`, `/links`, `/login`) was English. The IA now states the rule: paths are identifiers, English; labels es-MX. `/operador` is also written into pivot D19 and the IA's domain table.
+- Not paid now on purpose: renaming a route that an invitation email already carries breaks links in inboxes; the operator path is in the pivot's domain table. Each needs a redirect from the old path for a while, which is its own small change.
+- Paid by: renaming to `/new-business`, `/invitations/$invitationId`, `/operator` with a redirect from the old path kept for 90 days, in the PR that next touches each screen; pivot D19 and the IA table updated in the same PR.

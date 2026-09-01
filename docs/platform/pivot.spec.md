@@ -309,7 +309,10 @@ stories.
   **internal programmatic issuance door** — an explicit amendment to
   validation's US-V05 ("keys by hand"), scheduled for the phase 4 child
   spec: programmatic issuance is for the first-party consumer only;
-  third-party keys stay manual. The key boundary keeps trust-layer D2's
+  third-party keys stay manual. *(Executed 2026-09-01:
+  reconciliation/payments-and-classes D7 — an issue-only token, the key in
+  the business row; the owner chose to execute now rather than defer to
+  US-V15's activation.)* The key boundary keeps trust-layer D2's
   isolation honest — payer histories separate per business at the key,
   not by prefix discipline in SaaS code. Money has **one book**: the
   prepaid debit lives only in `credit_entries` (US-L03, D5); Consta's

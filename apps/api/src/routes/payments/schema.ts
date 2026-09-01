@@ -17,7 +17,9 @@ export const feedCharge = z.object({
   /* 'spei' = direct payment (direct-payment D6); one channel today */
   channel: z.enum(["spei"]),
   reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]),
-  totalCents: z.number().int(),
+  /* What arrived (partial-payment D9) — named for what it is since the
+     phase-4 rename (payments-and-classes D6) */
+  receivedCents: z.number().int(),
   invoiceCents: z.number().int(),
   carriedBalanceCents: z.number().int(),
   serviceFeeCents: z.number().int(),
@@ -33,7 +35,9 @@ export const feedCharge = z.object({
 });
 
 export const feedResponse = z.object({
-  charges: z.array(feedCharge),
+  /* The rename in one PR (payments-and-classes D6): the `charges` key
+     retired the moment the Cobros section existed */
+  payments: z.array(feedCharge),
   nextCursor: z.number().int().nullable(),
   /* The day starts in the ISP's timezone, so it is always present.
      `startedAtMs` is that boundary — the server says which day it counted

@@ -145,6 +145,12 @@ export async function getLinkStatus(c: Ctx, token: string) {
          ISP has not configured it, and the page hides the row */
       ...(business.speiBeneficiaryName ? { speiBeneficiaryName: business.speiBeneficiaryName } : {}),
       reference: link.customerUsuario,
+      /* cobros-live D8 (US-R04): oldest first, from the list already
+         fetched — zero extra calls */
+      cobros: pending.invoices
+        .filter((f) => f.usuario === link.customerUsuario)
+        .sort((a, b) => (a.invoiceDate ?? "").localeCompare(b.invoiceDate ?? "") || a.invoiceId - b.invoiceId)
+        .map((f) => ({ externalId: f.invoiceId, amountCents: f.totalCents, invoiceDate: f.invoiceDate })),
     };
     return c.json({ success: true, data });
   } catch (e) {

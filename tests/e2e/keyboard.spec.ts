@@ -100,7 +100,8 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
     await snapshotRestingStyles(page);
     await expectTabOrder(page, [
       /^Saldo:/ /* the credit chip (prepaid-credit D7) sits under the business name, before the spine */,
-      /^Cobros$/,
+      /^Pagos$/,
+      /^Cobros$/ /* the live section (cobros-live), after the rename (payments-and-classes D6) */,
       /^Links$/,
       /^Configuración$/,
       /Cerrar sesión/,

@@ -130,7 +130,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       folio: "DV-FMT01",
       channel: "spei" as const,
       reconnectionStatus: "reconnected" as const,
-      totalCents: 41400,
+      receivedCents: 41400,
       invoiceCents: 39900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
@@ -144,7 +144,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
     server.use(
       handlers.session(() => ok({ ...businessActor, timeFormat: "24h" })),
       handlers.feed(() =>
-        ok(feedResponse.parse({ charges: [charge], nextCursor: null, today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) } })),
+        ok(feedResponse.parse({ payments: [charge], nextCursor: null, today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) } })),
       ),
     );
     renderApp("/");

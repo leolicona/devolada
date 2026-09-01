@@ -43,13 +43,13 @@ export const businessActor = {
 const at = Date.UTC(2026, 7, 14, 20, 30);
 
 export const feed = {
-  charges: [
+  payments: [
     {
       id: "ch-1",
       folio: "DV-FEED01",
       channel: "spei",
       reconnectionStatus: "failed",
-      totalCents: 41400,
+      receivedCents: 41400,
       invoiceCents: 39900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
@@ -65,7 +65,7 @@ export const feed = {
       folio: "DV-FEED02",
       channel: "spei",
       reconnectionStatus: "reconnected",
-      totalCents: 51400,
+      receivedCents: 51400,
       invoiceCents: 49900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
@@ -81,9 +81,25 @@ export const feed = {
   today: { count: 2, totalCents: 92800, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 };
 
+export const cobros = {
+  cobros: [
+    {
+      externalId: 42,
+      customerUsuario: "greyes@wifiplus",
+      customerName: "Janely Guadalupe Reyes",
+      amountCents: 49900,
+      invoiceDate: "2026-08-01",
+      dueDate: "2026-08-11",
+    },
+  ],
+  complete: true,
+  readAt: at,
+};
+
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
   await apiRoute(page, "**/payments/feed*", feed);
+  await apiRoute(page, "**/payment-requests", cobros);
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

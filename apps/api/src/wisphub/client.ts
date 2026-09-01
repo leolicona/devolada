@@ -74,7 +74,16 @@ export function queryParamFor(q: string): "telefono" | "usuario" | "nombre" {
   return "nombre";
 }
 
-export type PendingInvoice = { invoiceId: number; usuario: string; totalCents: number };
+export type PendingInvoice = {
+  invoiceId: number;
+  usuario: string;
+  /* From the row's `cliente` serializer; null when WispHub omits it */
+  customerName: string | null;
+  totalCents: number;
+  /* YYYY-MM-DD, or null when the row lacks the field (cobros-live) */
+  invoiceDate: string | null;
+  dueDate: string | null;
+};
 export type PendingInvoices = { invoices: PendingInvoice[]; complete: boolean };
 
 type WispHubListItem = {
@@ -238,19 +247,29 @@ export class WispHub {
         next: string | null;
         results: {
           id_factura: number;
-          cliente: { usuario: string | null };
+          cliente: { usuario: string | null; nombre?: string | null };
           /* D8: the amount this customer actually owes for the period —
              prorations, discounts and any reconnection charge included.
              It rides in the same row we already fetch (D9). */
           total: number | null;
+          /* The dates the list filters by (integrations/wisphub.md,
+             2026-09-01). Optional on purpose: a row without them still
+             is a debt, and the Cobros section degrades to no date. */
+          fecha_emision?: string | null;
+          fecha_vencimiento?: string | null;
         }[];
       } = await this.get(path);
       for (const f of data.results) {
         if (f.cliente?.usuario) {
+          /* WispHub may stamp a datetime; the day is all Cobros needs */
+          const day = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
           invoices.push({
             invoiceId: f.id_factura,
             usuario: f.cliente.usuario,
+            customerName: f.cliente.nombre ?? null,
             totalCents: f.total == null ? 0 : amountToCents(f.total),
+            invoiceDate: day(f.fecha_emision),
+            dueDate: day(f.fecha_vencimiento),
           });
         }
       }

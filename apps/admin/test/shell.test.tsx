@@ -19,11 +19,11 @@ describe("US-S04: login lands on the dashboard shell", () => {
     await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
     await userEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
-    expect(await screen.findByRole("heading", { name: "Cobros" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
     for (const label of ["Links", "Configuración"]) {
       expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/payments");
   });
 });
 

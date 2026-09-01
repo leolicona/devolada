@@ -87,7 +87,7 @@ describe("US-B02: one login, isolated workspaces", () => {
     const created = await post("demo@devolada.app", "/businesses", MINIMUM);
     const b = (await created.json()).data;
     let feed = await (await get("demo@devolada.app", "/payments/feed")).json();
-    expect(feed.data.charges).toHaveLength(0);
+    expect(feed.data.payments).toHaveLength(0);
 
     /* Back to A through the plugin's switch (envelope-exempt, better-auth D6) */
     const { headers } = await asUser("demo@devolada.app");
@@ -102,7 +102,7 @@ describe("US-B02: one login, isolated workspaces", () => {
     );
     expect(sw.status).toBe(200);
     feed = await (await get("demo@devolada.app", "/payments/feed")).json();
-    expect(feed.data.charges.map((c: { folio: string }) => c.folio)).toEqual(["DV-AAAA01"]);
+    expect(feed.data.payments.map((c: { folio: string }) => c.folio)).toEqual(["DV-AAAA01"]);
 
     const me = await (await get("demo@devolada.app", "/auth/me")).json();
     expect(me.data.id).toBe(a.id);

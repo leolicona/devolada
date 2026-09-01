@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
+  HandCoins,
   KeyRound,
   LogOut,
   Settings,
@@ -18,8 +19,11 @@ import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 import { CreditBanner, CreditChip } from "../credit/CreditChip";
 
+/* payments-and-classes D6: the feed is Pagos the moment Cobros exists —
+   never two words for one thing, never one word for two (IA). */
 const sections = [
-  { to: "/", label: "Cobros", icon: Banknote, exact: true },
+  { to: "/payments", label: "Pagos", icon: Banknote, exact: false },
+  { to: "/payment-requests", label: "Cobros", icon: HandCoins, exact: false },
   /* "Links", not "Enlaces SPEI": the glossary's word for this is
      "Link de pago" (SPEC.md), so "Enlace" was a synonym for a concept
      already named — and the two words wrapped onto a second line in the

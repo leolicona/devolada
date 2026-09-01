@@ -9,13 +9,13 @@ import { expectNoViolations } from "./a11y";
 /* docs/polish/accessibility.spec.md — the admin, screen by screen. */
 
 const feed = feedResponse.parse({
-  charges: [
+  payments: [
     {
       id: "ch-1",
       folio: "DV-FEED01",
       channel: "spei",
       reconnectionStatus: "failed",
-      totalCents: 41400,
+      receivedCents: 41400,
       invoiceCents: 39900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
@@ -61,7 +61,7 @@ describe("US-P04: the harness reports what it should", () => {
 });
 
 describe("US-P04: the admin passes axe on every section", () => {
-  it("Cobros, with an expandable failed charge", async () => {
+  it("Pagos, with an expandable failed payment", async () => {
     server.use(handlers.session(() => ok(businessActor)), handlers.feed(() => ok(feed)));
     renderApp("/");
     await screen.findByText("Janely");

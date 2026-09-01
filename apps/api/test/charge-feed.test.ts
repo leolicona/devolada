@@ -44,12 +44,12 @@ describe("US-A01: the ISP sees its charges newest first", () => {
     const res = await (await app()).request("/payments/feed", asBusiness, env);
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(data.charges).toHaveLength(4);
-    expect(data.charges[0]).toMatchObject({
+    expect(data.payments).toHaveLength(4);
+    expect(data.payments[0]).toMatchObject({
       customerName: "Cliente 4",
       storeName: null,
       reconnectionStatus: "reconnected",
-      totalCents: 41400,
+      receivedCents: 41400,
     });
     expect(data.nextCursor).toBeNull();
   });
@@ -59,8 +59,8 @@ describe("US-A01: the ISP sees its charges newest first", () => {
 
     const failed = await (await app()).request("/payments/feed?status=failed", asBusiness, env);
     const failedData = (await failed.json()).data;
-    expect(failedData.charges).toHaveLength(1);
-    expect(failedData.charges[0].reconnectionStatus).toBe("failed");
+    expect(failedData.payments).toHaveLength(1);
+    expect(failedData.payments[0].reconnectionStatus).toBe("failed");
   });
 });
 
@@ -124,12 +124,12 @@ describe("D6: tenant isolation is tested, not assumed", () => {
       { headers: { Cookie: await sessionCookieHeader("otro@business.mx") } },
       env,
     );
-    expect((await otherBusiness.json()).data.charges).toHaveLength(0);
+    expect((await otherBusiness.json()).data.payments).toHaveLength(0);
   });
 });
 
 describe("BUG-012: a partial row carries what was asked, so the feed can name the gap", () => {
-  it("US-D10 / D15: invoiceCents is the ask, totalCents what arrived, status withheld", async () => {
+  it("US-D10 / D15: invoiceCents is the ask, receivedCents what arrived, status withheld", async () => {
     const business = await seedBusiness();
     await seedConfirmedPayment(business, {
       folio: "DV-PART01",
@@ -144,14 +144,14 @@ describe("BUG-012: a partial row carries what was asked, so the feed can name th
 
     const res = await (await app()).request("/payments/feed", asBusiness, env);
     const { data } = await res.json();
-    expect(data.charges).toHaveLength(1);
+    expect(data.payments).toHaveLength(1);
     /* The twin used to write invoiceCents = what arrived, and the gap
        vanished; the lifecycle's own numbers keep it: 49900 asked, 30000 in */
-    expect(data.charges[0]).toMatchObject({
+    expect(data.payments[0]).toMatchObject({
       folio: "DV-PART01",
       invoiceCents: 49900,
       carriedBalanceCents: 0,
-      totalCents: 30000,
+      receivedCents: 30000,
       reconnectionStatus: "withheld",
     });
   });
@@ -173,14 +173,14 @@ describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => 
 
     const res = await (await app()).request("/payments/feed", asBusiness, env);
     const { data } = await res.json();
-    expect(data.charges).toHaveLength(5);
-    expect(data.charges[0]).toMatchObject({
+    expect(data.payments).toHaveLength(5);
+    expect(data.payments[0]).toMatchObject({
       folio: "DV-SPEI01",
       channel: "spei",
       storeName: null,
     });
     /* every row is a direct payment now (business-and-memberships D6) */
-    expect(data.charges[1]).toMatchObject({
+    expect(data.payments[1]).toMatchObject({
       channel: "spei",
       storeName: null,
     });

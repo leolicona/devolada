@@ -110,7 +110,7 @@ describe("US-B02: one login, several businesses", () => {
           ],
         }),
       ),
-      handlers.feed(() => ok({ charges: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
       handlers.setActive((body) => {
         activated.push(body);
         return baOk();
@@ -158,7 +158,7 @@ describe("US-B02: one login, several businesses", () => {
   it("one business: a plain label, no switcher", async () => {
     server.use(
       handlers.session(() => ok(asRole("owner"))),
-      handlers.feed(() => ok({ charges: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
     );
     renderApp("/");
     expect((await screen.findAllByText("ISP Demo")).length).toBeGreaterThan(0);
@@ -249,12 +249,12 @@ describe("D8: the invitation link", () => {
         return baOk();
       }),
       handlers.session(() => ok(asRole("viewer"))),
-      handlers.feed(() => ok({ charges: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
     );
     const router = renderApp("/invitaciones/inv-1");
-    await screen.findByRole("heading", { name: "Cobros" });
+    await screen.findByRole("heading", { name: "Pagos" });
     expect(accepted).toEqual([{ invitationId: "inv-1" }]);
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/payments");
   });
 
   it("without a session it asks to sign in first", async () => {

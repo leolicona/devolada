@@ -2,11 +2,13 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Navigate,
   Outlet,
 } from "@tanstack/react-router";
 import { Shell } from "./features/shell/Shell";
 import { LoginPage, RecoverPage, SignupPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
+import { CobrosScreen } from "./features/cobros/CobrosScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
 import { SettingsScreen } from "./features/settings/SettingsScreen";
 import { NewBusinessScreen } from "./features/onboarding/NewBusinessScreen";
@@ -30,10 +32,23 @@ const invitationRoute = createRoute({
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "app", component: Shell });
 
+/* payments-and-classes D6: the feed lives at /payments (routes are
+   identifiers, English — the IA's rule); "/" still lands there. */
 const feedRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/",
+  path: "/payments",
   component: FeedScreen,
+});
+const indexRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/",
+  component: () => <Navigate to="/payments" />,
+});
+/* cobros-live (US-R01): the live section */
+const cobrosRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/payment-requests",
+  component: CobrosScreen,
 });
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -59,7 +74,7 @@ const routeTree = rootRoute.addChildren([
   recoverRoute,
   newBusinessRoute,
   invitationRoute,
-  appRoute.addChildren([feedRoute, linksRoute, settingsRoute, operatorRoute]),
+  appRoute.addChildren([indexRoute, feedRoute, cobrosRoute, linksRoute, settingsRoute, operatorRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

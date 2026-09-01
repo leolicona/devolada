@@ -51,21 +51,26 @@ Child specs: [cobros-live.spec.md](../../docs/reconciliation/cobros-live.spec.md
 open does not already pay), cached 30 s at the api and 2 min in the
 client's query memory; the webhook spike ran — no push surface exists.
 
-- [ ] `payment_requests` mirrored from WispHub; refresh at link-open, before
-      verdict, periodic sweep (pivot D4)
+- [x] Cobros section, live (US-R01, cobros-live D2–D7): `GET
+      /payment-requests` through the 30 s display cache; grouped by
+      customer, search, Vencidas filter, 50 rows per local page, 2-min
+      query memory, freshness + Actualizar; connect/empty/error states.
+      Link page lists its own Cobros (US-R04). Feed renamed to **Pagos**
+      (`/payments`, response key `payments`, `receivedCents`) —
+      payments-and-classes D6, done here so the two words never coexist.
 - [ ] Reconciliation policy on the business (tolerance, surplus) + class
       computation (exacto/corto/excedente) stored on the payment
 - [ ] Pagos list: filters (estado/fecha/cliente), class badges, proof quick
       view, action-outcome row (US-R03)
-- [ ] Cobros section (read-only mirror, freshness label)
-- [ ] Link page lists open Cobros (US-R04) — the one pago-page change
+- [x] Cobros section — folded into the live box above (no mirror exists)
+- [x] Link page lists open Cobros (US-R04) — the one pago-page change
 - [ ] One Consta key per business, issued at business creation (D20)
 - [ ] Send `customerRef`/`paymentRef` on every validation **from the moment
       the per-business key exists, not before** (US-V15's cheap half;
       trust-layer D2 chains live in `(apiKeyId, customerRef)`, so refs sent
       under the platform key would bind history to the wrong tenant and the
       key switch would lose it — history cannot be backfilled)
-- [ ] Nav rename: feed "Cobros" → "Pagos" when both sections exist
+- [x] Nav rename: feed "Cobros" → "Pagos" when both sections exist — done with the Cobros section, above
 
 ## Phase 5 — Integrations hub
 

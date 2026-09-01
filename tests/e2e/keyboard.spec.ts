@@ -86,26 +86,24 @@ async function expectTabOrder(page: Page, expected: RegExp[]): Promise<void> {
   }
 }
 
-test.describe("US-P04: the admin's confirm flow is walkable by keyboard (TD-010)", () => {
+test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test("Entregas: sections, session, then the pending card's two actions", async ({ page }) => {
+  test("Links: sections, session, then the search — the flow's first decision", async ({ page }) => {
     await stubAdminApi(page);
-    await page.goto(`${ADMIN}/cash-drops`);
-    await expect(page.getByRole("button", { name: /confirmar entrega/i })).toBeVisible();
+    await page.goto(`${ADMIN}/links`);
+    await expect(page.getByPlaceholder(/buscar por nombre/i)).toBeVisible();
 
-    /* Sidebar first (the dashboard's spine), then the card's decisive
-       pair — confirm before dispute, matching their visual order. */
+    /* Sidebar first (the dashboard's spine), then the screen's one control
+       before any result exists: the search. (The store-era walk — Entregas
+       and its pending card — retired with the network, 2026-08-31.) */
     await snapshotRestingStyles(page);
     await expectTabOrder(page, [
       /^Cobros$/,
-      /^Tiendas$/,
-      /^Entregas/ /* carries the pending-count badge ("Entregas1") */,
-      /^Links$/ /* US-D07 added it between Entregas and Configuración */,
+      /^Links$/,
       /^Configuración$/,
       /Cerrar sesión/,
-      /Confirmar entrega/,
-      /Marcar en disputa/,
+      /Buscar por nombre/,
     ]);
   });
 });

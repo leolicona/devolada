@@ -8,19 +8,19 @@ import { renderApp } from "./render";
 /* docs/polish/list-states.spec.md scenarios 1–2. */
 
 const emptyFeed = feedResponse.parse({
-  charges: [],
+  payments: [],
   nextCursor: null,
   today: { count: 0, totalCents: 0, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 });
 
 const oneCharge = feedResponse.parse({
-  charges: [
+  payments: [
     {
       id: "ch-1",
       folio: "DV-FEED01",
       channel: "spei",
       reconnectionStatus: "reconnected",
-      totalCents: 41400,
+      receivedCents: 41400,
       invoiceCents: 39900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
@@ -44,9 +44,9 @@ describe("US-P01: a failed list says so instead of claiming it is empty", () => 
     );
     renderApp("/");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/no pudimos cargar los cobros/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no pudimos cargar los pagos/i);
     /* The lie this spec exists to remove */
-    expect(screen.queryByText(/sin cobros por aquí/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sin pagos por aquí/i)).not.toBeInTheDocument();
   });
 
   it("keeps the empty sentence when the list really is empty", async () => {
@@ -56,7 +56,7 @@ describe("US-P01: a failed list says so instead of claiming it is empty", () => 
     );
     renderApp("/");
 
-    expect(await screen.findByText(/sin cobros por aquí/i)).toBeInTheDocument();
+    expect(await screen.findByText(/sin pagos por aquí/i)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
@@ -82,7 +82,7 @@ describe("US-P01: retrying loads the data without leaving the screen", () => {
     /* The failed-charges strip is also role="alert", so name the message */
     expect(screen.queryByText(/no pudimos cargar/i)).not.toBeInTheDocument();
     /* D2: a retry is a refetch, not a navigation */
-    expect(router.state.location.pathname).toBe("/");
+    expect(router.state.location.pathname).toBe("/payments");
   });
 
 });

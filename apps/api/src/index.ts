@@ -10,6 +10,7 @@ import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
 import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
 import { paymentsRoute } from "./routes/payments";
+import { paymentRequestsRoute } from "./routes/payment-requests";
 import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
 
@@ -37,6 +38,7 @@ app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 
 app.route("/auth", auth);
 app.route("/payments", paymentsRoute);
+app.route("/payment-requests", paymentRequestsRoute);
 app.route("/settings", settingsRoute);
 app.route("/businesses", businessesRoute);
 app.route("/credit", creditRoute);

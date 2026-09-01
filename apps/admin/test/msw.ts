@@ -42,6 +42,9 @@ export const handlers = {
     http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/feed", ({ request }) => r(new URL(request.url))),
+  /* cobros-live (US-R01) */
+  paymentRequests: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/payment-requests", () => r()),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),

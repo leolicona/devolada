@@ -30,6 +30,7 @@
   },
   "exports": {
     "./payments-schema": "./src/routes/payments/schema.ts",
+    "./payment-requests-schema": "./src/routes/payment-requests/schema.ts",
     "./businesses-schema": "./src/routes/businesses/schema.ts",
     "./role-matrix": "./src/auth/role-matrix.ts",
     "./clabe": "./src/direct-payments/clabe.ts",

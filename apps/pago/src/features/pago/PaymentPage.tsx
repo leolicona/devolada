@@ -1193,6 +1193,23 @@ export function PaymentPage({ token }: { token: string }) {
             text="Copiar monto exacto"
             value={(data.totalCents! / 100).toFixed(2)}
           />
+          {/* cobros-live D8 (US-R04): with several invoices, name them —
+              information, never a picker; one invoice is already the
+              breakdown's own line */}
+          {data.cobros && data.cobros.length > 1 && (
+            <ul className="mt-2 border-t border-line-soft pt-2 text-sm text-ink-soft" aria-label="Facturas que componen tu adeudo">
+              {data.cobros.map((f) => (
+                <li key={f.externalId} className="flex justify-between gap-4 py-0.5">
+                  <span>
+                    {f.invoiceDate
+                      ? `Factura del ${new Date(`${f.invoiceDate}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "long" })}`
+                      : "Factura pendiente"}
+                  </span>
+                  <Amount cents={f.amountCents} />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="border-y border-line-soft">

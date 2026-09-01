@@ -76,15 +76,14 @@ export async function listPaymentFeed(
   return c.json({
     success: true,
     data: {
-      /* `charges` stays the key until charge-feed.spec.md's phase-4 revision */
-      charges: page.map(({ charge }) => ({
+      /* payments-and-classes D6: the feed answers `payments` */
+      payments: page.map(({ charge }) => ({
         id: charge.id,
         folio: charge.folio ?? "",
         channel: charge.channel,
         reconnectionStatus: charge.reconnectionStatus ?? "queued",
-        /* `totalCents` stays the response's name for what arrived until
-           the phase-4 revision of charge-feed.spec.md */
-        totalCents: charge.receivedCents ?? charge.amountCents,
+        /* What arrived, named for what it is (payments-and-classes D6) */
+        receivedCents: charge.receivedCents ?? charge.amountCents,
         invoiceCents: charge.invoiceCents,
         carriedBalanceCents: charge.carriedBalanceCents,
         serviceFeeCents: charge.serviceFeeCents,

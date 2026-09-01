@@ -12,7 +12,7 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   folio: "DV-FEED01",
   channel: "spei" as const,
   reconnectionStatus: "reconnected" as const,
-  totalCents: 41400,
+  receivedCents: 41400,
   invoiceCents: 39900,
   carriedBalanceCents: 0,
   serviceFeeCents: 1500,
@@ -26,10 +26,10 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
 });
 
 function feedOf(
-  charges: unknown[],
+  rows: unknown[],
   today = { count: 2, totalCents: 82800, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 ) {
-  return feedResponse.parse({ charges, nextCursor: null, today });
+  return feedResponse.parse({ payments: rows, nextCursor: null, today });
 }
 
 describe("US-A01: the feed shows rows and expands into detail", () => {
@@ -89,7 +89,7 @@ describe("D3: failed charges surface on top", () => {
     );
     renderApp("/");
 
-    expect(await screen.findByText(/cobro fallido necesita/i)).toBeInTheDocument();
+    expect(await screen.findByText(/pago fallido necesita/i)).toBeInTheDocument();
   });
 });
 
@@ -114,7 +114,7 @@ describe("D5: the status chips re-query the feed", () => {
 });
 
 /* docs/direct-payment/partial-payment.spec.md scenario 14 (US-D10, D15):
-   `totalCents` is what arrived, the other fields are what was asked, and
+   `receivedCents` is what arrived, the other fields are what was asked, and
    the detail has to name the difference — the row header and a derived
    breakdown total disagreed on the same card with nothing in between. */
 describe("US-D10: a short payment explains itself in the feed", () => {
@@ -125,7 +125,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
     channel: "spei" as const,
     storeName: null,
     reconnectionStatus: "withheld" as const,
-    totalCents: 30000,
+    receivedCents: 30000,
     invoiceCents: 49900,
     reconnectedAt: null,
   });

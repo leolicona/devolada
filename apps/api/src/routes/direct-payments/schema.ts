@@ -25,6 +25,17 @@ export const linkStatusResponse = z.object({
   speiBeneficiaryName: z.string().optional(),
   /* Goes in the transfer's concepto so the ISP can recognise the payer */
   reference: z.string().optional(),
+  /* cobros-live D8 (US-R04): the invoices that make the total, oldest
+     first. Information, never a picker — the payment stays whole (D21). */
+  cobros: z
+    .array(
+      z.object({
+        externalId: z.number().int(),
+        amountCents: z.number().int(),
+        invoiceDate: z.string().nullable(),
+      }),
+    )
+    .optional(),
 });
 
 /* POST /direct-payments/links/:token/pay (US-D02). Exactly one proof

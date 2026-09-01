@@ -146,9 +146,11 @@ the date exists).
       no push surface in the API or the panel; the CHR lab was not
       needed; the `facturas` filter vocabulary landed in
       integrations/wisphub.md).
-- [ ] No migration — a test asserts the api serves the section without a
-      `payment_requests` table.
-- [ ] Scenarios 1–10 automated, citing their stories.
+- [x] No migration — `payment-requests.test.ts` runs against a schema
+      with no `payment_requests` table.
+- [x] Scenarios 1, 4–10 automated citing their stories (api +
+      `cobros.test.tsx`); 2–3 are the client cache's own behavior — the
+      2-minute `staleTime` is asserted by reading, in `CobrosScreen.tsx`.
 - [ ] The section observed on deployed dev against the pilot's real
       tenant (a cash payment registered in WispHub disappears from
       Cobros on the next refetch).

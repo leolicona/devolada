@@ -64,10 +64,10 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
      payer's page exactly: below the debt no fee is covered (D3), so the
      ISP and the payer quote the same figure. */
   const askCents = charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
-  const shortCents = askCents - charge.totalCents;
+  const shortCents = askCents - charge.receivedCents;
   const missingCents = Math.max(
     0,
-    charge.invoiceCents + charge.carriedBalanceCents - charge.totalCents,
+    charge.invoiceCents + charge.carriedBalanceCents - charge.receivedCents,
   );
   return (
     <li>
@@ -94,7 +94,7 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
             </span>
           </span>
           <Amount
-            cents={charge.totalCents}
+            cents={charge.receivedCents}
             className="shrink-0 text-right text-sm font-semibold sm:order-last sm:w-20"
           />
           <span className="col-span-2 sm:contents">
@@ -128,7 +128,7 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
                   <div className="flex justify-between gap-4 font-semibold">
                     <dt>Recibido</dt>
                     <dd>
-                      <Amount cents={charge.totalCents} />
+                      <Amount cents={charge.receivedCents} />
                     </dd>
                   </div>
                   {missingCents > 0 && (
@@ -199,20 +199,20 @@ export function FeedScreen() {
     refetchInterval: POLL_MS,
   });
 
-  const charges = feed.data?.pages.flatMap((p) => p.charges) ?? [];
+  const rows = feed.data?.pages.flatMap((p) => p.payments) ?? [];
   /* D1/D5: a failed first load is an error, a failed page keeps its rows */
   const failedFirstLoad = feed.isError && !feed.data;
   const today = feed.data?.pages[0]?.today ?? null;
-  const failedCount = failed.data?.charges.length ?? 0;
+  const failedCount = failed.data?.payments.length ?? 0;
 
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold">Cobros</h1>
+        <h1 className="text-xl font-semibold">Pagos</h1>
         {today && (
           <p className="text-sm text-muted-foreground">
             Hoy: <span className="font-semibold text-foreground">{formatMoney(today.totalCents)}</span> ·{" "}
-            {today.count} {today.count === 1 ? "cobro" : "cobros"}
+            {today.count} {today.count === 1 ? "pago" : "pagos"}
           </p>
         )}
       </div>
@@ -221,7 +221,7 @@ export function FeedScreen() {
         <Alert variant="warning" className="mt-4 flex items-center justify-between gap-4">
           <span className="flex items-center gap-2">
             <TriangleAlert className="size-4 shrink-0" aria-hidden />
-            {failedCount} {failedCount === 1 ? "cobro fallido necesita" : "cobros fallidos necesitan"} tu atención.
+            {failedCount} {failedCount === 1 ? "pago fallido necesita" : "pagos fallidos necesitan"} tu atención.
           </span>
           <Button variant="outline" onClick={() => setStatus("failed")}>
             Verlos
@@ -244,7 +244,7 @@ export function FeedScreen() {
 
       {failedFirstLoad && (
         <ListError
-          what="los cobros"
+          what="los pagos"
           onRetry={() => void feed.refetch()}
           retrying={feed.isRefetching}
           className="mt-4"
@@ -253,19 +253,19 @@ export function FeedScreen() {
 
       {feed.isPending && !feed.isError && <FeedSkeleton />}
 
-      {charges.length === 0 && !feed.isPending && !feed.isError && (
+      {rows.length === 0 && !feed.isPending && !feed.isError && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Sin cobros por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar.
+          Sin pagos por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar.
         </p>
       )}
 
       {/* design-review D9: the live region is the list, not the page —
           charge-feed asked for the feed to announce, and wrapping <main>
           re-read the heading, the alert and the chips on every filter. */}
-      {charges.length > 0 && (
+      {rows.length > 0 && (
         <Card className="mt-4">
           <ul className="divide-y divide-line-soft" aria-live="polite">
-            {charges.map((charge) => (
+            {rows.map((charge) => (
               <ChargeRow key={charge.id} charge={charge} />
             ))}
           </ul>
@@ -274,7 +274,7 @@ export function FeedScreen() {
 
       {feed.isError && feed.data && (
         <ListError
-          what="más cobros"
+          what="más pagos"
           onRetry={() => void feed.fetchNextPage()}
           retrying={feed.isFetchingNextPage}
           className="mt-4"

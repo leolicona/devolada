@@ -8,7 +8,7 @@ import { renderApp } from "./render";
 /* docs/platform/prepaid-credit.spec.md UI (US-B04, US-B05) and
    docs/platform/operator-panel.spec.md scenario 9 (US-L02). */
 
-const feed = { charges: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } };
+const feed = { payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } };
 const settings = settingsResponse.parse({
   serviceFeeCents: 1500,
   timezone: "America/Mexico_City",
@@ -141,8 +141,8 @@ describe("US-L02 scenario 9: the operator panel is the operator's alone", () => 
   it("hidden and redirected for a non-operator", async () => {
     server.use(handlers.session(() => withCredit("ok", 10000)), handlers.feed(() => ok(feed)));
     const router = renderApp("/operador");
-    await screen.findByRole("heading", { name: "Cobros" });
-    expect(router.state.location.pathname).toBe("/");
+    await screen.findByRole("heading", { name: "Pagos" });
+    expect(router.state.location.pathname).toBe("/payments");
     expect(screen.queryByRole("link", { name: "Operador" })).not.toBeInTheDocument();
   });
 

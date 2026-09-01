@@ -119,6 +119,16 @@ Format:
 - Regression test: none in code — the defect lives in the deploy, not the app (the app's own behaviour with and without the secret is already covered under US-D15). The deploy log's warning is the standing check.
 
 
+## BUG-012 — The admin feed never showed a real partial payment as partial
+- Status: **fixed** (2026-09-01, by the payments merge — business-and-memberships D6)
+- Detected: 2026-09-01 · found in review of the merge PR (#129), reading what the retired `charges` twin used to write; the dev pilot is the affected surface (it is where the pilot ISP operates)
+- Affected spec: docs/direct-payment/partial-payment.spec.md (D15), docs/admin/charge-feed.spec.md
+- Symptom: a short transfer landed `partial` and the payer's page said "Faltan $150", but the ISP's feed row wore no "Pago parcial" label and its detail showed no "Faltan" line — the row looked like a full payment of the amount received.
+- Root cause: the feed derived `missingCents = invoiceCents + carriedBalanceCents − totalCents` from the `charges` twin, and the twin was written with `invoiceCents = ispRegisteredCents` — what **arrived** (below the debt no fee is covered, so `ispRegisteredCents = received`) — with `carriedBalanceCents = 0`. The gap was always zero on real rows; D15's tests passed on hand-built fixtures whose `invoiceCents` was the ask.
+- **The lesson**: a derived number is only as true as the column it derives from, and a column reused across two records with two meanings ("what was asked" on the lifecycle, "what was registered" on the twin) lies to whoever reads the wrong one. Fixtures that hand-write both numbers cannot catch it — only a row born through the real path can.
+- Fix: one row (the merge). `invoiceCents`/`carriedBalanceCents` are the lifecycle's own — the ask — and the registered amount got its own column, `registeredCents`.
+- Regression test: `apps/api/test/charge-feed.test.ts` — "BUG-012: a partial row carries what was asked, so the feed can name the gap".
+
 ## BUG-011 — "Ver los datos para transferir" resurfaced the receipt's stale draft
 - Status: **fixed** (2026-08-30)
 - Detected: 2026-08-30 · live on dev, on a phone, rehearsing the partial flow with a real receipt

@@ -14,10 +14,8 @@ export const feedQuery = z.object({
 export const feedCharge = z.object({
   id: z.string(),
   folio: z.string(),
-  /* 'spei' = direct payment, no store involved (direct-payment D6);
-     'store' survives as a historical value until the phase-2 rename
-     merges charges into payments (pivot D14). */
-  channel: z.enum(["store", "spei"]),
+  /* 'spei' = direct payment (direct-payment D6); one channel today */
+  channel: z.enum(["spei"]),
   reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]),
   totalCents: z.number().int(),
   invoiceCents: z.number().int(),

@@ -39,7 +39,7 @@ export const handlers = {
   resetPassword: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/charges/feed", ({ request }) => r(new URL(request.url))),
+    http.get("/payments/feed", ({ request }) => r(new URL(request.url))),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),

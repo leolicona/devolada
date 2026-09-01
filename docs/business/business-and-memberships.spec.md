@@ -1,5 +1,5 @@
 ---
-status: in development # foundation PR landed; payments merge (D6) is its own PR
+status: in development # foundation + payments merge landed; frontend PR pending
 stories: [US-B01, US-B02, US-B03]
 domain: business
 updated: 2026-08-31 # spike run the same day, findings below
@@ -194,7 +194,7 @@ PR #124); its IA decisions are inherited, not re-decided.
 | `POST /auth/organization/set-active` (plugin) | member | workspace switch; envelope-exempt like the rest of Better Auth's surface (better-auth D6) |
 | `GET/PATCH /settings` | per D3 matrix | 403 `FORBIDDEN_FOR_ROLE` on area violations |
 | `POST /businesses/members` / `DELETE …/:id` | owner/admin per D3 | invitations via plugin + Resend |
-| existing `/charges/feed` → `/payments/feed` | member (any role) | route renamed with the table; old path answers 404 (no clients but ours) |
+| existing `/charges/feed` → `/payments/feed` | member (any role) | **done** — renamed with the table; old path answers 404. The response keeps its `charges` key and `totalCents` alias until charge-feed.spec.md's phase-4 revision |
 
 ## UI Contract
 
@@ -295,8 +295,9 @@ untouched with the plugin loaded.
       `businessId` swept (D9). Cobro/Pago swap with the payments merge.
 - [x] charge-feed.spec.md annotated; TASKS.md phase 2 boxes ticked.
 - [x] The role matrix asserted at the API layer for every area of D3.
-- [ ] **Payments merge (D6)** — its own PR: `payments` absorbs the
-      charges twin, `lastError` split, `reconciliationClass` born
-      nullable; scenario 14.
+- [x] **Payments merge (D6)** — migration 0019: `payments` absorbs the
+      charges twin (copy pattern, twin data joined in), `lastError` split,
+      `reconciliationClass` born nullable; the queue and the feed read
+      `payments`; scenario 14 automated (reconnection-queue test).
 - [ ] **Frontend PR**: wizard (D5), switcher (US-B02), Usuarios
       (US-B03), role-hidden rendering; signup then births the user only.

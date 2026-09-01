@@ -13,9 +13,9 @@ Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
       green 2026-08-31 (spec's Spike section)
 - [x] D14 migrations, half 1: `isps` → `businesses` with the D7 backfill;
       store-era tables dropped (migration 0018)
-- [ ] D14 migrations, half 2: `charges` + `direct_payments` → `payments`
-      (spec D6) — its own PR
-- [x] Glossary swap in SPEC.md: Negocio + roles (Cobro/Pago wait for half 2)
+- [x] D14 migrations, half 2: `charges` + `direct_payments` → `payments`
+      (spec D6, migration 0019)
+- [x] Glossary swap in SPEC.md: Negocio, roles, Pago (Cobro arrives with phase 4)
 - [x] Better Auth organizations: memberships, roles enforced in the
       middleware by area (API); role-hidden UI in the shell — frontend PR
 - [x] Create-business + switch (API: `POST /businesses`, plugin set-active);

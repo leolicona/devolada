@@ -11,6 +11,8 @@ debt: []
 > **2026-08-31, retirement PR**: the store channel retired; `channel = 'store'` and `storeName` survive as historical row shapes until the phase-2 rename merges charges into payments (pivot D14). The feed itself is unchanged.
 >
 > **Phase 2 foundation PR**: the feed keys on `businessId` (D6 tenant isolation, unchanged in spirit), needs the `payments: read` area (any role), and `storeName` is always `null` — the `storeId` filter is gone. The payments merge (business-and-memberships D6) revises the shape next.
+>
+> **Payments merge PR**: the route is `GET /payments/feed` and reads `payments` (status `confirmed`/`partial`); `channel` is `spei` only; `totalCents` = what arrived (`receivedCents`), `lastError` = the reconnection error. The response keeps the `charges` key until this spec's phase-4 revision (filters, classes, proof view). **And a meaning change, for the better**: `invoiceCents`/`carriedBalanceCents` now come from the payment lifecycle — what was **asked** — also for `partial` rows. The twin used to write `invoiceCents = ispRegisteredCents` (= what arrived, below the debt), so a real short payment computed `missingCents = 0` and never earned "Pago parcial" or "Faltan" (BUG-012); partial-payment D15 holds on real rows from this PR on.
 
 The Cobros section: the ISP watches money come in, in near real time, with the reconnection status of every charge. Reference: Stripe Dashboard.
 

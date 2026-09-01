@@ -6,7 +6,7 @@ import { settingsRoute } from "./routes/settings";
 import { businessesRoute } from "./routes/businesses";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
-import { charges } from "./routes/charges";
+import { paymentsRoute } from "./routes/payments";
 import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
 
@@ -33,7 +33,7 @@ app.use("*", (c, next) => {
 app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 
 app.route("/auth", auth);
-app.route("/charges", charges);
+app.route("/payments", paymentsRoute);
 app.route("/settings", settingsRoute);
 app.route("/businesses", businessesRoute);
 app.route("/direct-payments", directPaymentsRoute);

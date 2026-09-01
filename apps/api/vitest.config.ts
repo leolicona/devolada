@@ -29,6 +29,11 @@ export default defineWorkersConfig(async () => {
                  origin. (Consta's base is passed per-test, not from the
                  environment, so it needs no pin.) */
               WISPHUB_BASE_URL: "https://api.wisphub.net/api",
+              /* Same rule for the email provider: .dev.vars carries a real
+                 key on a developer's machine, and without this pin every
+                 seeded signup's OTP reached Resend for real (measured
+                 2026-09-01: 429s in the test output). Empty = log only. */
+              RESEND_API_KEY: "",
             },
           },
         },

@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { charges, directPayments, businesses, paymentLinks, proofRejections } from "../../db/schema";
+import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
@@ -62,11 +62,11 @@ async function attemptsInLastHour(
 ): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)` })
-    .from(directPayments)
+    .from(payments)
     .where(
       and(
-        eq(directPayments.paymentLinkId, linkId),
-        gte(directPayments.createdAt, new Date(now.getTime() - 3600 * 1000)),
+        eq(payments.paymentLinkId, linkId),
+        gte(payments.createdAt, new Date(now.getTime() - 3600 * 1000)),
       ),
     );
   return Number(row?.n ?? 0);
@@ -182,11 +182,11 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   if (body.supersedes) {
     const [prior] = await db
       .select()
-      .from(directPayments)
+      .from(payments)
       .where(
         and(
-          eq(directPayments.id, body.supersedes),
-          eq(directPayments.paymentLinkId, link.id),
+          eq(payments.id, body.supersedes),
+          eq(payments.paymentLinkId, link.id),
         ),
       );
     if (!prior || prior.status !== "validating") {
@@ -281,9 +281,9 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      does not care that the two rows belong to the same payer. */
   if (superseded) {
     await db
-      .update(directPayments)
+      .update(payments)
       .set({ status: "superseded", nextValidationAt: null })
-      .where(eq(directPayments.id, superseded.id));
+      .where(eq(payments.id, superseded.id));
   }
 
   /* claimed-amount D1/D3: the payer's own number wins — a human who
@@ -328,15 +328,15 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const restorePrior = async () => {
     if (superseded) {
       await db
-        .update(directPayments)
+        .update(payments)
         .set({ status: "validating", nextValidationAt: superseded.nextValidationAt })
-        .where(eq(directPayments.id, superseded.id));
+        .where(eq(payments.id, superseded.id));
     }
   };
 
   let payment;
   try {
-    [payment] = await db.insert(directPayments).values(rowValues).returning();
+    [payment] = await db.insert(payments).values(rowValues).returning();
   } catch (e) {
     /* D8: the partial unique index is what makes one transfer pay
        once — racing concurrent submissions included */
@@ -350,12 +350,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     const [own] = collidingKey
       ? await db
           .select()
-          .from(directPayments)
+          .from(payments)
           .where(
             and(
-              eq(directPayments.paymentLinkId, link.id),
-              eq(directPayments.trackingKey, collidingKey),
-              eq(directPayments.status, "validating"),
+              eq(payments.paymentLinkId, link.id),
+              eq(payments.trackingKey, collidingKey),
+              eq(payments.status, "validating"),
             ),
           )
       : [undefined];
@@ -367,13 +367,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
          never counts. Recorded before answering; the 409 is unchanged. */
       if (collidingKey) {
         const [owner] = await db
-          .select({ id: directPayments.id })
-          .from(directPayments)
+          .select({ id: payments.id })
+          .from(payments)
           .where(
             and(
-              eq(directPayments.businessId, link.businessId),
-              eq(directPayments.trackingKey, collidingKey),
-              sql`${directPayments.status} NOT IN ('invalid', 'expired', 'superseded')`,
+              eq(payments.businessId, link.businessId),
+              eq(payments.trackingKey, collidingKey),
+              sql`${payments.status} NOT IN ('invalid', 'expired', 'superseded')`,
             ),
           );
         await db.insert(proofRejections).values({
@@ -412,21 +412,21 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     /* The same clave with different data is the payer correcting the
        owning row: supersede it and take its place, chain intact (D8). */
     await db
-      .update(directPayments)
+      .update(payments)
       .set({ status: "superseded", nextValidationAt: null })
-      .where(eq(directPayments.id, own.id));
+      .where(eq(payments.id, own.id));
     try {
       [payment] = await db
-        .insert(directPayments)
+        .insert(payments)
         .values({ ...rowValues, supersedesId: own.id })
         .returning();
     } catch (e2) {
       if (!isUniqueViolation(e2)) throw e2;
       /* A second owner in the same instant: give both claims back */
       await db
-        .update(directPayments)
+        .update(payments)
         .set({ status: "validating", nextValidationAt: own.nextValidationAt })
-        .where(eq(directPayments.id, own.id));
+        .where(eq(payments.id, own.id));
       await restorePrior();
       return c.json({ success: false, error: { code: "TRANSFER_ALREADY_USED" } }, 409);
     }
@@ -579,14 +579,14 @@ export async function serveProof(c: Ctx, linkId: string, file: string) {
 /* GET /direct-payments/:id/status (US-D03, US-D04) */
 export async function getDirectPaymentStatus(c: Ctx, id: string) {
   const db = drizzle(c.env.DB);
-  const [payment] = await db.select().from(directPayments).where(eq(directPayments.id, id));
+  const [payment] = await db.select().from(payments).where(eq(payments.id, id));
   if (!payment) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
-  let charge = null;
-  if (payment.chargeId) {
-    [charge] = await db.select().from(charges).where(eq(charges.id, payment.chargeId));
-  }
+  /* business-and-memberships D6: the reconnection lives on the row */
+  const charge = payment.reconnectionStatus
+    ? { reconnectionStatus: payment.reconnectionStatus, folio: payment.folio ?? "" }
+    : null;
   /* provisional-release D7: the expired page offers exactly one manual
      retry per clave — self-selection: the payer who really paid claims
      it (six more hours published the late CEP), the fabricator has no
@@ -594,14 +594,14 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
   let retryAvailable = false;
   if (payment.status === "expired" && payment.trackingKey) {
     const spent = await db
-      .select({ id: directPayments.id })
-      .from(directPayments)
+      .select({ id: payments.id })
+      .from(payments)
       .where(
         and(
-          eq(directPayments.paymentLinkId, payment.paymentLinkId),
-          eq(directPayments.trackingKey, payment.trackingKey),
-          eq(directPayments.status, "expired"),
-          sql`${directPayments.id} != ${payment.id}`,
+          eq(payments.paymentLinkId, payment.paymentLinkId),
+          eq(payments.trackingKey, payment.trackingKey),
+          eq(payments.status, "expired"),
+          sql`${payments.id} != ${payment.id}`,
         ),
       );
     retryAvailable = spent.length === 0;

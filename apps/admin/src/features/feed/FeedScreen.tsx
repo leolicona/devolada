@@ -11,7 +11,7 @@ import {
   StatusBadge,
   formatMoney,
 } from "@devolada/ui";
-import type { FeedCharge, FeedResponse } from "@devolada/api/charges-schema";
+import type { FeedCharge, FeedResponse } from "@devolada/api/payments-schema";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,7 +41,7 @@ function feedPath(opts: { cursor?: number; status?: string }): string {
   if (opts.cursor) params.set("cursor", String(opts.cursor));
   if (opts.status && opts.status !== ALL) params.set("status", opts.status);
   const qs = params.toString();
-  return `/charges/feed${qs ? `?${qs}` : ""}`;
+  return `/payments/feed${qs ? `?${qs}` : ""}`;
 }
 
 /* The queue writes a code; the ISP reads a sentence
@@ -88,7 +88,8 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
                 reconnected under a lenient threshold wears a green
                 "Reconectado" and would otherwise pass for a full payment */}
             <span className="block text-sm text-muted-foreground">
-              {charge.channel === "spei" ? "Pago directo · SPEI" : charge.storeName}
+              {/* one channel today (business-and-memberships D6); the row shape keeps storeName until phase 4 */}
+              Pago directo · SPEI
               {missingCents > 0 && " · Pago parcial"}
             </span>
           </span>

@@ -45,7 +45,7 @@ export const feed = {
     {
       id: "ch-1",
       folio: "DV-FEED01",
-      channel: "store",
+      channel: "spei",
       reconnectionStatus: "failed",
       totalCents: 41400,
       invoiceCents: 39900,
@@ -61,7 +61,7 @@ export const feed = {
     {
       id: "ch-2",
       folio: "DV-FEED02",
-      channel: "store",
+      channel: "spei",
       reconnectionStatus: "reconnected",
       totalCents: 51400,
       invoiceCents: 49900,
@@ -81,7 +81,7 @@ export const feed = {
 
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
-  await apiRoute(page, "**/charges/feed*", feed);
+  await apiRoute(page, "**/payments/feed*", feed);
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

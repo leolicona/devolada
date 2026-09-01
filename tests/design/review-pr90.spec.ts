@@ -114,7 +114,7 @@ const adminSettings = {
 
 async function stubAdmin(page: Page) {
   await json(page, (u) => u.pathname.endsWith("/auth/me"), businessActor);
-  await json(page, (u) => u.pathname.includes("/charges/feed"), {
+  await json(page, (u) => u.pathname.includes("/payments/feed"), {
     charges: [],
     nextCursor: null,
     today: { count: 0, totalCents: 0, startedAtMs: Date.UTC(2026, 7, 26, 6) },

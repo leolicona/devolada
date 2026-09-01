@@ -2,7 +2,7 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { charges, directPayments, paymentLinks, proofRejections } from "../src/db/schema";
+import { payments, paymentLinks, proofRejections } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
@@ -11,6 +11,12 @@ import { historyVouches } from "../src/direct-payments/provisional";
 import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness } from "./helpers";
+
+/* business-and-memberships D6: a payment that confirmed carries its folio
+   on the same row — "the charge" of the old two-table world. */
+async function confirmedRows(db: ReturnType<typeof drizzle>) {
+  return (await db.select().from(payments)).filter((p) => p.folio !== null);
+}
 
 /* docs/direct-payment/direct-payment.spec.md scenarios 1–12, 16–24
    (US-D01–US-D04). Consta and WispHub are fetch-mocked respecting
@@ -377,7 +383,7 @@ describe("US-D02: submitting proof", () => {
       name: SPEI_CONFIG.speiBeneficiaryName,
     });
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.proofMode).toBe("transfer");
   });
 
@@ -405,7 +411,7 @@ describe("US-D02: submitting proof", () => {
       `/direct-payments/proofs/${upload.proofId}`,
     );
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.proofMode).toBe("receipt");
     expect(row.proofKey).toBe(upload.proofId);
   });
@@ -460,7 +466,7 @@ describe("US-D02: submitting proof", () => {
     const { business, link } = await seedLinkedBusiness();
     const db = drizzle(env.DB);
     for (let i = 0; i < 5; i++) {
-      await db.insert(directPayments).values({
+      await db.insert(payments).values({
         paymentLinkId: link.id,
         businessId: business.id,
         amountCents: 51400,
@@ -504,7 +510,7 @@ describe("US-D02: submitting proof", () => {
     for (let i = 0; i < UPLOAD_HOURLY_BUDGET; i++) {
       expect((await upload()).status).toBe(200);
     }
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(0);
 
     const overBudget = await upload();
     expect(overBudget.status).toBe(429);
@@ -545,7 +551,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
       expect(res.status).toBe(400);
     }
 
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(0);
   });
 
   it("US-D02: the exact spelling apiCEP accepts does get through", async () => {
@@ -558,7 +564,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
       transfer: { ...TRANSFER.transfer, senderBank: "BBVA MEXICO" },
     });
     expect(res.status).toBe(201);
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.senderBank).toBe("BBVA MEXICO");
   });
 
@@ -580,7 +586,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
       expect(res.status).toBe(400);
     }
 
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(0);
   });
 
   it("BUG-006: a ten-character key is accepted — the bound is a range, not Nu's 28", async () => {
@@ -614,13 +620,13 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     expect(data.error).toBeNull();
 
     const db = drizzle(env.DB);
-    const [payment] = await db.select().from(directPayments);
+    const [payment] = await db.select().from(payments);
     expect(payment.status).toBe("confirmed");
-    expect(payment.chargeId).not.toBeNull();
+    expect(payment.folio).not.toBeNull();
 
-    const [charge] = await db.select().from(charges);
+    const [charge] = await confirmedRows(db);
     expect(charge.channel).toBe("spei");
-    expect(charge.totalCents).toBe(51400);
+    expect(charge.receivedCents).toBe(51400);
     expect(charge.reconnectionStatus).toBe("reconnected");
   });
 
@@ -636,14 +642,14 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     const { data } = await res.json();
     expect(data.status).toBe("confirmed");
     const db = drizzle(env.DB);
-    let [charge] = await db.select().from(charges);
+    let [charge] = await confirmedRows(db);
     expect(charge.reconnectionStatus).toBe("queued");
     expect(charge.nextAttemptAt).not.toBeNull();
 
     /* the sweep re-verifies: payment already registered, service now up */
     mockCustomerLookup([wisphubCustomer("Activo")], 1);
     await sweepReconnections(testEnv, new Date(Date.now() + 5 * 60 * 1000));
-    [charge] = await db.select().from(charges);
+    [charge] = await confirmedRows(db);
     expect(charge.reconnectionStatus).toBe("reconnected");
   });
 
@@ -678,9 +684,9 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     const { data } = await res.json();
     expect(data.status).toBe("confirmed");
 
-    const [charge] = await drizzle(env.DB).select().from(charges);
-    expect(charge.invoiceCents).toBe(99800);
-    expect(charge.totalCents).toBe(101300);
+    const [charge] = await confirmedRows(drizzle(env.DB));
+    expect(charge.registeredCents).toBe(99800);
+    expect(charge.receivedCents).toBe(101300);
 
     /* both months settled: the page now says there is nothing to pay */
     mockCustomerLookup([wisphubCustomer("Activo")], 1);
@@ -702,7 +708,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     const { data } = await res.json();
     expect(data.status).toBe("validating");
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.status).toBe("validating");
     expect(row.constaStatus).toBe("pending");
     expect(row.validationAttempts).toBe(1);
@@ -714,7 +720,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -739,9 +745,9 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
 
     const report = await sweepDirectPayments(testEnv, now);
     expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
-    expect(row.chargeId).not.toBeNull();
+    expect(row.folio).not.toBeNull();
 
     /* US-D03: the page polls the status and sees the green moment */
     const status = await (await app()).request(`/direct-payments/${payment.id}/status`, {}, testEnv);
@@ -756,7 +762,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -777,7 +783,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     mockConsta({ status: "pending", cep: undefined });
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.expired).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("expired");
     expect(row.nextValidationAt).toBeNull();
   });
@@ -799,12 +805,12 @@ describe("D17: a not-found is not a refusal", () => {
     expect(data.error).toBe("TRANSFER_NOT_FOUND");
 
     const db = drizzle(env.DB);
-    const [row] = await db.select().from(directPayments);
+    const [row] = await db.select().from(payments);
     expect(row.status).toBe("validating");
     expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
     /* The point of the fix: another attempt is booked, not skipped */
     expect(row.nextValidationAt).not.toBeNull();
-    expect(await db.select().from(charges)).toHaveLength(0);
+    expect(await confirmedRows(db)).toHaveLength(0);
   });
 
   it("scenario 37: the CEP that appears late is caught by the very next sweep", async () => {
@@ -812,7 +818,7 @@ describe("D17: a not-found is not a refusal", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -838,7 +844,7 @@ describe("D17: a not-found is not a refusal", () => {
 
     const report = await sweepDirectPayments(testEnv, now);
     expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
     expect(row.lastError).toBeNull();
   });
@@ -851,7 +857,7 @@ describe("D17: a not-found is not a refusal", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -872,7 +878,7 @@ describe("D17: a not-found is not a refusal", () => {
     mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.stillValidating).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");
     expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
     expect(row.nextValidationAt?.getTime()).toBe(
@@ -900,9 +906,9 @@ describe("D17: a not-found is not a refusal", () => {
     expect(data.error).toBe("TRANSFER_CONTRADICTED");
 
     const db = drizzle(env.DB);
-    const [row] = await db.select().from(directPayments);
+    const [row] = await db.select().from(payments);
     expect(row.nextValidationAt).toBeNull();
-    expect(await db.select().from(charges)).toHaveLength(0);
+    expect(await confirmedRows(db)).toHaveLength(0);
   });
 
   it("scenario 40: an `invalid` with no reason at all is read as not_found, not as a refusal", async () => {
@@ -918,7 +924,7 @@ describe("D17: a not-found is not a refusal", () => {
     const { data } = await res.json();
     expect(data.status).toBe("validating");
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.nextValidationAt).not.toBeNull();
   });
 });
@@ -926,7 +932,7 @@ describe("D17: a not-found is not a refusal", () => {
 /* docs/direct-payment/validation-status-ux.spec.md (US-D12): the late
    slot (D4/D5) and the own-attempt carve-out across supersede (D8). */
 describe("US-D12: the late slot and the own-attempt carve-out", () => {
-  type Seed = Partial<typeof directPayments.$inferInsert>;
+  type Seed = Partial<typeof payments.$inferInsert>;
   const BASE_ROW = {
     amountCents: 51400,
     invoiceCents: 49900,
@@ -943,7 +949,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
   ) {
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -971,7 +977,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
     let report = await sweepDirectPayments(testEnv, now);
     expect(report.expired).toBe(1);
-    let [row] = await db.select().from(directPayments).where(eq(directPayments.id, first.id));
+    let [row] = await db.select().from(payments).where(eq(payments.id, first.id));
     expect(row.status).toBe("expired");
     expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
 
@@ -987,7 +993,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     /* half two: the CEP the bank released overnight is found at T+12h
        and confirms like any other valid — the slot exists for exactly
        this payment. Same link: the expired row released its claim. */
-    await db.delete(directPayments).where(eq(directPayments.id, first.id));
+    await db.delete(payments).where(eq(payments.id, first.id));
     const second = await insertPayment(link, business, now, {
       constaStatus: "invalid",
       lastError: "TRANSFER_NOT_FOUND",
@@ -1000,7 +1006,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     mockReconnection("Activo");
     report = await sweepDirectPayments(testEnv, now);
     expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
-    [row] = await db.select().from(directPayments).where(eq(directPayments.id, second.id));
+    [row] = await db.select().from(payments).where(eq(payments.id, second.id));
     expect(row.status).toBe("confirmed");
   });
 
@@ -1026,7 +1032,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     );
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.expired).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("expired");
     expect(row.lastError).toBe("CONSTA_UNAVAILABLE");
   });
@@ -1039,7 +1045,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [prior] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1057,7 +1063,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       })
       .returning();
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1079,7 +1085,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     mockReconnection("Activo");
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.confirmed).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
     expect(row.lastError).toBeNull();
   });
@@ -1090,7 +1096,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const db = drizzle(env.DB);
-    await db.insert(directPayments).values({
+    await db.insert(payments).values({
       paymentLinkId: link.id,
       businessId: business.id,
       amountCents: 51400,
@@ -1106,7 +1112,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       nextValidationAt: null,
     });
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1125,7 +1131,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     mockReconnection("Activo");
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.confirmed).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
   });
 
@@ -1136,7 +1142,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [prior] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1153,7 +1159,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       })
       .returning();
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1172,10 +1178,10 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     mockConsta({ alreadyValidated: true });
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.invalid).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("invalid");
     expect(row.lastError).toBe("TRANSFER_ALREADY_USED");
-    expect(await db.select().from(charges)).toHaveLength(0);
+    expect(await confirmedRows(db)).toHaveLength(0);
   });
 });
 
@@ -1190,7 +1196,7 @@ describe("D8: one transfer pays once", () => {
     const { data } = await res.json();
     expect(data.status).toBe("invalid");
     expect(data.error).toBe("TRANSFER_ALREADY_USED");
-    expect(await drizzle(env.DB).select().from(charges)).toHaveLength(0);
+    expect(await confirmedRows(drizzle(env.DB))).toHaveLength(0);
   });
 
   it("scenario 18: resubmitting your own live transfer attaches to it (US-D12, D9)", async () => {
@@ -1212,7 +1218,7 @@ describe("D8: one transfer pays once", () => {
     const { data } = await second.json();
     expect(data.directPaymentId).toBe(firstId);
     expect(data.status).toBe("validating");
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(1);
   });
 
   it("scenario 18b: another customer's live clave still refuses at the index (US-D12, D9)", async () => {
@@ -1238,7 +1244,7 @@ describe("D8: one transfer pays once", () => {
     expect(second.status).toBe(409);
     const body = await second.json();
     expect(body.error.code).toBe("TRANSFER_ALREADY_USED");
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(1);
   });
 
   it("scenario 18d (US-D12 scenario 15): the same clave with different data supersedes the owning row", async () => {
@@ -1261,7 +1267,7 @@ describe("D8: one transfer pays once", () => {
       transfer: { ...TRANSFER.transfer, date: "2026-08-18" },
     });
     expect(corrected.status).toBe(201);
-    const rows = await drizzle(env.DB).select().from(directPayments);
+    const rows = await drizzle(env.DB).select().from(payments);
     expect(rows).toHaveLength(2);
     const old = rows.find((r) => r.id === firstId)!;
     expect(old.status).toBe("superseded");
@@ -1310,7 +1316,7 @@ describe("D8: one transfer pays once", () => {
     });
     expect(collided.status).toBe(409);
     const db = drizzle(env.DB);
-    const [prior] = await db.select().from(directPayments).where(eq(directPayments.id, firstId));
+    const [prior] = await db.select().from(payments).where(eq(payments.id, firstId));
     expect(prior.status).toBe("validating");
     expect(prior.nextValidationAt).not.toBeNull();
   });
@@ -1318,7 +1324,7 @@ describe("D8: one transfer pays once", () => {
   it("scenario 18c: a terminal owner on the payer's own link still refuses (US-D12, D9)", async () => {
     const { business, link } = await seedLinkedBusiness();
     await drizzle(env.DB)
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1340,7 +1346,7 @@ describe("D8: one transfer pays once", () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe("TRANSFER_ALREADY_USED");
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(1);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(1);
   });
 
   it("scenario 19: a re-validation of the same row ignores the replay flag", async () => {
@@ -1348,7 +1354,7 @@ describe("D8: one transfer pays once", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1373,7 +1379,7 @@ describe("D8: one transfer pays once", () => {
     mockReconnection("Activo");
 
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
   });
 
@@ -1399,7 +1405,7 @@ describe("D8: one transfer pays once", () => {
     let row;
     for (let i = 0; i < 60 && !row; i++) {
       await new Promise((r) => setTimeout(r, 10));
-      [row] = await drizzle(env.DB).select().from(directPayments);
+      [row] = await drizzle(env.DB).select().from(payments);
     }
     expect(row, "the payment row should exist while the provider is still thinking").toBeDefined();
     expect(row!.paymentLinkId).toBe(link.id);
@@ -1420,7 +1426,7 @@ describe("D8: one transfer pays once", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1448,7 +1454,7 @@ describe("D8: one transfer pays once", () => {
     mockReconnection("Activo");
 
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
     expect(row.lastError).toBeNull();
   });
@@ -1464,7 +1470,7 @@ describe("D8: one transfer pays once", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.status).toBe("validating");
     expect(row.constaStatus).toBeNull();
     /* The counter is the marker: written before the call, it is what
@@ -1503,8 +1509,8 @@ describe("D11: valid is necessary, not sufficient", () => {
     expect(sent.accion).toBe(0);
     expect(sent.totalCobrado).toBe(1);
 
-    const [charge] = await drizzle(env.DB).select().from(charges);
-    expect(charge.totalCents).toBe(100);
+    const [charge] = await confirmedRows(drizzle(env.DB));
+    expect(charge.receivedCents).toBe(100);
     expect(charge.reconnectionStatus).toBe("withheld");
   });
 
@@ -1528,7 +1534,7 @@ describe("D14: a validated transfer with nothing left to pay", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -1553,10 +1559,10 @@ describe("D14: a validated transfer with nothing left to pay", () => {
 
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.unapplied).toBe(1);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("unapplied");
-    expect(row.chargeId).toBeNull();
-    expect(await db.select().from(charges)).toHaveLength(0);
+    expect(row.folio).toBeNull();
+    expect(await confirmedRows(db)).toHaveLength(0);
   });
 });
 
@@ -1636,7 +1642,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
     expect(String(captured.body?.receiptUrl)).toContain("sig=");
 
     /* Reading is not paying: no `direct_payments` row exists yet */
-    expect(await drizzle(env.DB).select().from(directPayments)).toHaveLength(0);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(0);
   });
 
   it("scenario 47: a field the gate refused arrives empty, never as a confirmable guess", async () => {
@@ -1688,7 +1694,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
     expect(captured.body?.transfer).toBeDefined();
     expect(captured.body?.receiptUrl).toBeUndefined();
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.proofMode).toBe("transfer");
     /* The image stays attached: it is the evidence the ISP will want */
     expect(row.proofKey).toBe(`${link.id}/proof-1`);
@@ -1729,7 +1735,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     const { data } = await res.json();
     expect(data.directPaymentId).toBe(first);
 
-    const rows = await db.select().from(directPayments);
+    const rows = await db.select().from(payments);
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe("validating");
     /* the schedule and the attempt count survive untouched */
@@ -1751,7 +1757,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     });
     expect(res.status).toBe(201);
 
-    const rows = await db.select().from(directPayments).orderBy(directPayments.createdAt);
+    const rows = await db.select().from(payments).orderBy(payments.createdAt);
     expect(rows).toHaveLength(2);
     const old = rows.find((r) => r.id === first)!;
     const fresh = rows.find((r) => r.id !== first)!;
@@ -1770,9 +1776,9 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     const db = drizzle(env.DB);
     const first = await silentAttempt(READ);
     await db
-      .update(directPayments)
+      .update(payments)
       .set({ status: "superseded", nextValidationAt: new Date(Date.now() - 1000) })
-      .where(eq(directPayments.id, first));
+      .where(eq(payments.id, first));
 
     /* No consta interceptor: the sweep must not touch it */
     const report = await sweepDirectPayments(testEnv, new Date());
@@ -1796,7 +1802,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     mockConsta();
 
     await payTransfer();
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.status).toBe("confirmed");
     /* Recorded and acted on by nothing: people pay for relatives, so a
        mismatch can only ever be a signal for the ISP (D18) */
@@ -1821,7 +1827,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     const sent = captured.body as { transfer: { amountCents: number } };
     expect(sent.transfer.amountCents).toBe(30000);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.claimedAmountCents).toBe(30000);
   });
 
@@ -1840,7 +1846,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     /* It never decides what is charged: that is still computed here from
        a fresh WispHub read, so omitting the field cannot buy a cheaper
        payment — it only forfeits the instant answer. */
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.amountCents).toBe(51400);
   });
 
@@ -1852,16 +1858,16 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     const [otherLink] = await db
       .insert(paymentLinks)
       .values({
-        businessId: (await db.select().from(directPayments))[0].businessId,
+        businessId: (await db.select().from(payments))[0].businessId,
         token: "tok9999zzzzzzzz9",
         wisphubCustomerId: "7",
         customerUsuario: "otro@wifiplus",
       })
       .returning();
     await db
-      .update(directPayments)
+      .update(payments)
       .set({ paymentLinkId: otherLink.id })
-      .where(eq(directPayments.id, first));
+      .where(eq(payments.id, first));
 
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer: { ...READ, trackingKey: "HSBC712057" },
@@ -1902,16 +1908,16 @@ describe("TD-015: a named link can be confirmed without Banxico (US-D03)", () =>
     expect(data.status).toBe("confirmed");
 
     const db = drizzle(env.DB);
-    const [payment] = await db.select().from(directPayments);
+    const [payment] = await db.select().from(payments);
     expect(payment.status).toBe("confirmed");
     expect(payment.constaValidationId?.startsWith("demo-")).toBe(true);
     /* The row says what it is, to anybody who reads it later */
     expect(payment.cepSenderName).toBe("PAGO SIMULADO (DEMO)");
 
     /* Everything downstream is real: charge, folio, reconnection */
-    const [charge] = await db.select().from(charges);
+    const [charge] = await confirmedRows(db);
     expect(charge.channel).toBe("spei");
-    expect(charge.totalCents).toBe(51400);
+    expect(charge.receivedCents).toBe(51400);
     expect(charge.reconnectionStatus).toBe("reconnected");
   });
 
@@ -1992,15 +1998,15 @@ describe("US-D10: a transfer that falls short", () => {
     expect(sent.accion).toBe(0);
     expect(sent.totalCobrado).toBe(300);
 
-    const [charge] = await drizzle(env.DB).select().from(charges);
-    expect(charge.totalCents).toBe(30000);
+    const [charge] = await confirmedRows(drizzle(env.DB));
+    expect(charge.receivedCents).toBe(30000);
     /* D14: the whole fee accrues even though the payer covered none of
        it. The money reached the ISP's bank, so the ISP owes it onward —
        the commission is never forgiven. */
     expect(charge.serviceFeeCents).toBe(1500);
     expect(charge.reconnectionStatus).toBe("withheld");
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.receivedCents).toBe(30000);
   });
 
@@ -2017,7 +2023,7 @@ describe("US-D10: a transfer that falls short", () => {
     const { data } = await res.json();
     expect(data.status).toBe("partial");
     expect(sent.accion).toBe(1);
-    const [charge] = await drizzle(env.DB).select().from(charges);
+    const [charge] = await confirmedRows(drizzle(env.DB));
     expect(charge.reconnectionStatus).toBe("reconnected");
   });
 
@@ -2049,11 +2055,11 @@ describe("US-D10: a transfer that falls short", () => {
     expect(sent.accion).toBe(1);
     expect(sent.totalCobrado).toBe(499);
 
-    const [charge] = await drizzle(env.DB).select().from(charges);
+    const [charge] = await confirmedRows(drizzle(env.DB));
     /* The payer covered the mensualidad and none of our fee. The ISP is
        made whole in WispHub, the customer is reconnected, and Devolada
        still accrues its 15.00 against the ISP (D14). */
-    expect(charge.invoiceCents).toBe(49900);
+    expect(charge.registeredCents).toBe(49900);
     expect(charge.serviceFeeCents).toBe(1500);
   });
 
@@ -2117,11 +2123,11 @@ describe("US-D10 / US-L01: the commission is never forgiven", () => {
 
     await payTransfer("tok2345abcdefgh2", TRANSFER);
 
-    const [charge] = await drizzle(env.DB).select().from(charges);
+    const [charge] = await confirmedRows(drizzle(env.DB));
     /* 200.00 arrived and every peso of it went to the ISP's debt; the
        15.00 accrues anyway, because the ISP is the one who received the
        money and owes it onward. */
-    expect(charge.invoiceCents).toBe(20000);
+    expect(charge.registeredCents).toBe(20000);
     expect(charge.serviceFeeCents).toBe(1500);
     /* `settlement` D1 derives the platform's share from exactly this
        column, and a spei charge carries no store commission (D6). */
@@ -2148,7 +2154,7 @@ describe("US-D13: the amount the payer really sent", () => {
 
     const res = await payTransfer("tok2345abcdefgh2", TYPED);
     expect(res.status).toBe(201);
-    const [payment] = await drizzle(env.DB).select().from(directPayments);
+    const [payment] = await drizzle(env.DB).select().from(payments);
     expect(payment.claimedAmountCents).toBe(40000);
     const sent = captured.body as { transfer: { amountCents: number } };
     expect(sent.transfer.amountCents).toBe(40000);
@@ -2178,7 +2184,7 @@ describe("US-D13: the amount the payer really sent", () => {
       supersedes: firstId,
     });
     expect(edited.status).toBe(201);
-    const rows = await drizzle(env.DB).select().from(directPayments);
+    const rows = await drizzle(env.DB).select().from(payments);
     expect(rows).toHaveLength(2);
     expect(rows.find((r) => r.id === firstId)?.status).toBe("superseded");
     expect(rows.find((r) => r.id !== firstId)?.claimedAmountCents).toBe(35000);
@@ -2212,8 +2218,8 @@ describe("US-D13: the amount the payer really sent", () => {
       transfer: { ...TYPED.transfer, amountCents: 99900 },
     });
     expect((await res.json()).data.status).toBe("confirmed");
-    const [charge] = await drizzle(env.DB).select().from(charges);
-    expect(charge.totalCents).toBe(51400);
+    const [charge] = await confirmedRows(drizzle(env.DB));
+    expect(charge.receivedCents).toBe(51400);
   });
 
   it("scenario 7: no beneficiary name — validation runs, the request omits it, the link hides it", async () => {
@@ -2263,7 +2269,7 @@ describe("US-D14: the classifier at minute two", () => {
     const now = new Date();
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -2304,7 +2310,7 @@ describe("US-D14: the classifier at minute two", () => {
     expect(String(sent.receiptUrl)).toContain("proof");
     expect(sent.transfer).toBeUndefined();
 
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
     /* reading-check D7: the index ends up holding the truth */
     expect(row.trackingKey).toBe("NU3AREALQKRNKJHK00000000X8P");
@@ -2326,7 +2332,7 @@ describe("US-D14: the classifier at minute two", () => {
     });
 
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");
     expect(row.readingCheck).toBe("agreed");
     expect(row.disputedFields).toBeNull();
@@ -2349,7 +2355,7 @@ describe("US-D14: the classifier at minute two", () => {
     });
 
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.readingCheck).toBe("disputed");
     const data = await statusOf(payment.id);
     expect(data.readingCheck).toBe("disputed");
@@ -2361,7 +2367,7 @@ describe("US-D14: the classifier at minute two", () => {
     mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
 
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     /* Internally recorded so the cross never repeats (D5)… */
     expect(row.readingCheck).toBe("blind");
     /* …and invisible to the page, which keeps today's behaviour */
@@ -2386,7 +2392,7 @@ describe("US-D14: the classifier at minute two", () => {
     });
 
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.readingCheck).toBe("agreed");
   });
 
@@ -2398,7 +2404,7 @@ describe("US-D14: the classifier at minute two", () => {
     const sent = captured.body as Record<string, unknown>;
     expect(sent.transfer).toBeDefined();
     expect(sent.providerOcr).toBeUndefined();
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.readingCheck).toBeNull();
   });
 
@@ -2452,7 +2458,7 @@ describe("US-D15: the provisional release", () => {
     expect(promise.body!.accion).toBe(1);
     expect(String(promise.body!.fecha_limite)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.status).toBe("validating");
     expect(row.provisionalReleaseAt).not.toBeNull();
     expect(row.releaseEvidence).toBe("pending");
@@ -2469,7 +2475,7 @@ describe("US-D15: the provisional release", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.provisionalReleaseAt).toBeNull();
     expect(row.releaseEvidence).toBeNull();
   });
@@ -2484,7 +2490,7 @@ describe("US-D15: the provisional release", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.status).toBe("validating");
     expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
     expect(row.releaseEvidence).toBe("human");
@@ -2495,7 +2501,7 @@ describe("US-D15: the provisional release", () => {
     const { link } = await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     /* the prior released ride that expired and was never resolved */
     await drizzle(env.DB)
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: link.businessId,
@@ -2519,8 +2525,8 @@ describe("US-D15: the provisional release", () => {
 
     const rows = await drizzle(env.DB)
       .select()
-      .from(directPayments)
-      .where(eq(directPayments.trackingKey, "TRACK001XYZ"));
+      .from(payments)
+      .where(eq(payments.trackingKey, "TRACK001XYZ"));
     expect(rows[0].status).toBe("validating");
     expect(rows[0].provisionalReleaseAt).toBeNull();
   });
@@ -2537,7 +2543,7 @@ describe("US-D15: the provisional release", () => {
     });
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.provisionalReleaseAt).toBeNull();
   });
 
@@ -2545,7 +2551,7 @@ describe("US-D15: the provisional release", () => {
     const { link } = await seedLinkedBusiness();
     /* the released ride that expired — Banxico was just late */
     const [ride] = await drizzle(env.DB)
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: link.businessId,
@@ -2580,8 +2586,8 @@ describe("US-D15: the provisional release", () => {
        `expired`, so the D5 revocation lifts with it */
     const [old] = await drizzle(env.DB)
       .select()
-      .from(directPayments)
-      .where(eq(directPayments.id, ride.id));
+      .from(payments)
+      .where(eq(payments.id, ride.id));
     expect(old.status).toBe("superseded");
   });
 
@@ -2598,7 +2604,7 @@ describe("US-D15: the provisional release", () => {
       })
       .returning();
     await drizzle(env.DB)
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: otherLink.id,
         businessId: business.id,
@@ -2632,8 +2638,8 @@ describe("US-D15: the provisional release", () => {
 
     const rows = await drizzle(env.DB)
       .select()
-      .from(directPayments)
-      .where(eq(directPayments.trackingKey, "CLEANKEY99"));
+      .from(payments)
+      .where(eq(payments.trackingKey, "CLEANKEY99"));
     expect(rows[0].status).toBe("validating");
     expect(rows[0].provisionalReleaseAt).toBeNull();
   });
@@ -2652,7 +2658,7 @@ describe("US-D15: the history refs travel always (D4)", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(captured.body!.paymentRef).toBe(row.id);
 
     const ref = String(captured.body!.customerRef);
@@ -2693,7 +2699,7 @@ describe("US-D15 D12: the shadow", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.provisionalReleaseAt).not.toBeNull();
     /* the block bought nothing: the evidence is the verdict's own */
     expect(row.releaseEvidence).toBe("pending");
@@ -2710,7 +2716,7 @@ describe("US-D15 D12: the shadow", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     /* same decision as with the block: released, on the same evidence */
     expect(row.provisionalReleaseAt).not.toBeNull();
     expect(row.releaseEvidence).toBe("pending");
@@ -2726,7 +2732,7 @@ describe("US-D15 D12: the shadow", () => {
     const res = await payTransfer();
     expect(res.status).toBe(201);
 
-    const [row] = await drizzle(env.DB).select().from(directPayments);
+    const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.provisionalReleaseAt).toBeNull();
     expect(row.releaseEvidence).toBeNull();
     expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST_BLOCK);
@@ -2742,7 +2748,7 @@ describe("US-D15 D12: the shadow", () => {
       sample: { ...TRUST_BLOCK.sample, chains: 13, effectiveN: 10.4 },
     };
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -2768,7 +2774,7 @@ describe("US-D15 D12: the shadow", () => {
     mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
     await sweepDirectPayments(testEnv, now);
 
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(JSON.parse(row.trustSnapshot!)).toEqual(decisionTime);
   });
 
@@ -2843,7 +2849,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
     const suggested = new Date(createdAt.getTime() + min(26));
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -2868,7 +2874,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
       retryAfter: suggested.toISOString(),
     });
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");
     expect(row.lastError).toBe("TRANSFER_NOT_FOUND");
     /* +8 and +20 are skipped: the next attempt is exactly the suggestion */
@@ -2882,7 +2888,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
     const suggested = new Date(createdAt.getTime() + min(26));
     const db = drizzle(env.DB);
     const [payment] = await db
-      .insert(directPayments)
+      .insert(payments)
       .values({
         paymentLinkId: link.id,
         businessId: business.id,
@@ -2902,7 +2908,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
 
     mockConsta({ status: "pending", cep: undefined, retryAfter: suggested.toISOString() });
     await sweepDirectPayments(testEnv, now);
-    const [row] = await db.select().from(directPayments).where(eq(directPayments.id, payment.id));
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");
     expect(row.nextValidationAt!.getTime()).toBe(suggested.getTime());
   });

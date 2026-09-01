@@ -1,12 +1,12 @@
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { charges, businesses } from "../db/schema";
+import { payments, businesses } from "../db/schema";
 import { WispHub } from "../wisphub/client";
 import { attemptReconnection } from "../wisphub/reconnection";
 
-/* The reconnection queue (reconnection-queue spec). The charge row is the
-   queue (D2): one cron sweep per minute claims what is due, attempts it,
+/* The reconnection queue (reconnection-queue spec). The payment row is the
+   queue (D2; business-and-memberships D6 merged the charge twin into it): one cron sweep per minute claims what is due, attempts it,
    and writes the next date back. No extra service holds state the admin
    feed cannot read. */
 
@@ -55,26 +55,26 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
 
   const due = await db
     .select()
-    .from(charges)
+    .from(payments)
     .where(
       and(
-        eq(charges.reconnectionStatus, "queued"),
-        isNotNull(charges.nextAttemptAt),
-        lte(charges.nextAttemptAt, now),
+        eq(payments.reconnectionStatus, "queued"),
+        isNotNull(payments.nextAttemptAt),
+        lte(payments.nextAttemptAt, now),
       ),
     )
-    .orderBy(charges.nextAttemptAt)
+    .orderBy(payments.nextAttemptAt)
     .limit(BATCH);
   if (!due.length) return report;
 
   /* D4: lease first. An overlapping sweep skips these, and if this one
      dies mid-attempt they come back in two minutes instead of never. */
   await db
-    .update(charges)
+    .update(payments)
     .set({ nextAttemptAt: new Date(now.getTime() + minutes(LEASE_MINUTES)) })
     .where(
       inArray(
-        charges.id,
+        payments.id,
         due.map((c) => c.id),
       ),
     );
@@ -90,12 +90,12 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     if (!apiKey) {
       /* Same shape as a rejected key: nothing to retry until Configuración */
       await db
-        .update(charges)
+        .update(payments)
         .set({
-          lastError: "WISPHUB_NOT_CONFIGURED",
+          reconnectionError: "WISPHUB_NOT_CONFIGURED",
           nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)),
         })
-        .where(eq(charges.id, charge.id));
+        .where(eq(payments.id, charge.id));
       report.stillQueued++;
       continue;
     }
@@ -107,14 +107,13 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
          auto-activate PATCH. Charges from before 0006 have no stored
          usuario — the old identifier keeps their (broken) behavior. */
       {
-        usuario: charge.customerUsuario ?? charge.wisphubCustomerId,
-        wisphubId: charge.wisphubCustomerId,
+        usuario: charge.customerUsuario ?? charge.wisphubCustomerId ?? "",
+        wisphubId: charge.wisphubCustomerId ?? "",
       },
-      /* What this charge settles for the ISP (debt-truth D7): the
-         invoice total plus whatever the customer was carrying. Stored at
-         record time, so a retry days later registers the same number the
-         shopkeeper collected — not a debt that moved meanwhile. */
-      charge.invoiceCents + charge.carriedBalanceCents,
+      /* What this payment registers against the debt (partial-payment
+         D9), stored at confirmation so a retry days later registers the
+         same number — not a debt that moved meanwhile. */
+      charge.registeredCents ?? 0,
       now,
       {
         invoiceId: charge.wisphubInvoiceId,
@@ -129,7 +128,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
 
     if (result.status === "reconnected") {
       await db
-        .update(charges)
+        .update(payments)
         .set({
           reconnectionStatus: "reconnected",
           reconnectedAt: now,
@@ -137,9 +136,9 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
           wisphubInvoiceId: result.invoiceId,
           paymentRegisteredAt,
           nextAttemptAt: null,
-          lastError: null,
+          reconnectionError: null,
         })
-        .where(eq(charges.id, charge.id));
+        .where(eq(payments.id, charge.id));
       report.reconnected++;
       continue;
     }
@@ -147,14 +146,14 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     /* D5: a rejected key waits without spending an attempt */
     if (result.error === "WISPHUB_AUTH_FAILED") {
       await db
-        .update(charges)
+        .update(payments)
         .set({
           wisphubInvoiceId: result.invoiceId,
           paymentRegisteredAt,
-          lastError: result.error,
+          reconnectionError: result.error,
           nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)),
         })
-        .where(eq(charges.id, charge.id));
+        .where(eq(payments.id, charge.id));
       report.stillQueued++;
       continue;
     }
@@ -162,17 +161,17 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     const attempts = charge.reconnectionAttempts + 1;
     const wait = BACKOFF_MINUTES[attempts - 1];
     await db
-      .update(charges)
+      .update(payments)
       .set({
         reconnectionAttempts: attempts,
         wisphubInvoiceId: result.invoiceId,
         paymentRegisteredAt,
-        lastError: result.error,
+        reconnectionError: result.error,
         ...(wait === undefined
           ? { reconnectionStatus: "failed" as const, nextAttemptAt: null }
           : { nextAttemptAt: new Date(now.getTime() + minutes(wait)) }),
       })
-      .where(eq(charges.id, charge.id));
+      .where(eq(payments.id, charge.id));
     if (wait === undefined) report.failed++;
     else report.stillQueued++;
   }
@@ -180,12 +179,12 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
   return report;
 }
 
-/* Kept for the dev sweep endpoint: how many charges are waiting. */
+/* Kept for the dev sweep endpoint: how many payments are waiting. */
 export async function queuedCount(env: Bindings): Promise<number> {
   const db = drizzle(env.DB);
   const [row] = await db
     .select({ n: sql<number>`count(*)` })
-    .from(charges)
-    .where(eq(charges.reconnectionStatus, "queued"));
+    .from(payments)
+    .where(eq(payments.reconnectionStatus, "queued"));
   return Number(row?.n ?? 0);
 }

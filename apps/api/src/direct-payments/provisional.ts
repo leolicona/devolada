@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { directPayments, businesses, paymentLinks, proofRejections } from "../db/schema";
+import { payments, businesses, paymentLinks, proofRejections } from "../db/schema";
 import { WispHub } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { sendProvisionalExpiry } from "../email/sender";
@@ -19,7 +19,7 @@ import { settle } from "./partial";
    not seen confirmed. */
 
 type DB = DrizzleD1Database;
-type DirectPayment = typeof directPayments.$inferSelect;
+type DirectPayment = typeof payments.$inferSelect;
 type PaymentLink = typeof paymentLinks.$inferSelect;
 type Isp = typeof businesses.$inferSelect;
 
@@ -85,18 +85,18 @@ export async function isRevoked(db: DB, payment: DirectPayment, now: Date): Prom
 
   const siblings = await db
     .select({
-      status: directPayments.status,
-      lastError: directPayments.lastError,
-      provisionalReleaseAt: directPayments.provisionalReleaseAt,
-      createdAt: directPayments.createdAt,
+      status: payments.status,
+      lastError: payments.lastError,
+      provisionalReleaseAt: payments.provisionalReleaseAt,
+      createdAt: payments.createdAt,
     })
-    .from(directPayments)
+    .from(payments)
     .where(
       and(
-        eq(directPayments.paymentLinkId, payment.paymentLinkId),
-        ne(directPayments.id, payment.id),
-        ne(directPayments.status, "superseded"),
-        gte(directPayments.createdAt, incidentSince),
+        eq(payments.paymentLinkId, payment.paymentLinkId),
+        ne(payments.id, payment.id),
+        ne(payments.status, "superseded"),
+        gte(payments.createdAt, incidentSince),
       ),
     );
 
@@ -129,9 +129,9 @@ export async function isRevoked(db: DB, payment: DirectPayment, now: Date): Prom
   const ownerIds = rejections.map((r) => r.ownerPaymentId).filter((x): x is string => x != null);
   if (!ownerIds.length) return false;
   const owners = await db
-    .select({ linkId: directPayments.paymentLinkId })
-    .from(directPayments)
-    .where(inArray(directPayments.id, ownerIds));
+    .select({ linkId: payments.paymentLinkId })
+    .from(payments)
+    .where(inArray(payments.id, ownerIds));
   return owners.some((o) => o.linkId !== payment.paymentLinkId);
 }
 
@@ -155,7 +155,7 @@ export async function maybeProvisionalRelease(
   payment: DirectPayment,
   evidence: ReleaseEvidence | null,
   now: Date,
-): Promise<Partial<typeof directPayments.$inferInsert>> {
+): Promise<Partial<typeof payments.$inferInsert>> {
   if (!evidence) return {};
   if (!business.provisionalReleaseEnabled) return {};
   if (payment.provisionalReleaseAt) return {};

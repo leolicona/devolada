@@ -2,7 +2,7 @@
 status: in development
 stories: [US-B01, US-B02, US-B03]
 domain: business
-updated: 2026-08-31
+updated: 2026-08-31 # spike run the same day, findings below
 debt: []
 ---
 
@@ -53,7 +53,9 @@ PR #124); its IA decisions are inherited, not re-decided.
 
   ¹ *This spec's own refinement, not inherited from pivot D11*: an admin
   may grant only the roles below their own, so the owner stays the only
-  source of admins. The viewer never receives the API key tail or the
+  source of admins. **Enforced by our route, not by the plugin** — the
+  spike measured that the plugin lets an admin invite an admin; it only
+  checks `invitation: ["create"]`. The viewer never receives the API key tail or the
   full CLABE (masked to last 4 in their responses). Enforcement is one permission map consulted
   by the middleware per area — never per button. es-MX labels: **Dueño /
   Administrador / Operador / Lector**. `platform_operator` (US-L02) is NOT
@@ -66,7 +68,10 @@ PR #124); its IA decisions are inherited, not re-decided.
   loses its `isp` shape: the middleware resolves the active organization,
   loads the business row, and the role from the membership. **Exactly one
   membership → it is activated on sign-in without asking** (the pilot
-  user, and most users forever; the IA's plain-label switcher). Several
+  user, and most users forever; the IA's plain-label switcher) — the
+  plugin does not do this by itself (spike 3): a
+  `databaseHooks.session.create.before` hook sets `activeOrganizationId`
+  when the user has exactly one membership. Several
   memberships and none active → the API answers `NO_ACTIVE_BUSINESS` and
   the client offers the switcher; no memberships at all → the client
   offers "Crear negocio". Suspension has two levels: `business.status =
@@ -142,15 +147,18 @@ PR #124); its IA decisions are inherited, not re-decided.
   now; a column that says the same thing twice would drift). SQLite allows
   no other order. Idempotent, so a prod tenant table with zero rows is a
   no-op. **The invitation table**: Better Auth names its own `invitation`
-  (singular) and ours was `invitations` — probably no collision, and the
-  spike (DoD 1) confirms it before the migration is written.
+  (singular) and ours was `invitations` — **no collision, measured**
+  (spike 1: both tables coexisted in one D1). The old one is dropped
+  anyway.
 
 - **D8 — Member invitations ride the plugin, wearing our email flow.** The
   owner (any role) and admin (operator/viewer only) invite by email; the
   invitation email goes through the existing Resend adapter with es-MX
   copy; accepting lands in the inviter's business with the assigned role.
   An invited email that already has an account just gains a membership —
-  one login, N businesses (US-B02). **Rejected**: join-by-email-domain
+  one login, N businesses (US-B02). Measured (spike 5): `createInvitation`
+  calls our `sendInvitationEmail` hook with email, role and organization;
+  `acceptInvitation` by the invitee's session adds the member row. **Rejected**: join-by-email-domain
   (dangerous magic for money software).
 
 - **D9 — The glossary swap and the `ispId` sweep ride the implementation
@@ -234,12 +242,46 @@ PR #124); its IA decisions are inherited, not re-decided.
 14. A `partial` payment keeps its two errors apart: a validation error and
     a later reconnection error land in different columns (D6's split).
 
+## Spike (gate, run 2026-08-31 — all green)
+
+`better-auth@1.6.29`'s `organization` plugin on workerd + real D1 via
+`vitest-pool-workers` (our test infra), `test/spike-organizations.test.ts`,
+5 tests, ~800 ms. Throwaway: it builds its own auth instance and its own
+tables, and **the implementation PR deletes it** (its `ALTER TABLE
+session` collides with the real migration). Findings:
+
+1. **Tables**: `organization`, `member`, `invitation` (singular) plus
+   `session.active_organization_id`. No collision with our `invitations`.
+   `creatorRole: "owner"` makes the creator's member row `owner`.
+2. **Custom roles work through `createAccessControl` + `hasPermission`**,
+   with one rule the guides do not stress: **our statements must spread
+   `defaultStatements`** (`better-auth/plugins/organization/access`) and
+   the owner/admin roles must carry `organization`/`member`/`invitation`
+   permissions — the plugin's own endpoints check them, and a custom `ac`
+   without them refused even the owner ("You are not allowed to invite
+   users to this organization"). Our area resources (`payments`,
+   `settings`, `clabe`, `credit`, `integrations`, `members`, `business`)
+   ride alongside.
+3. **One membership does not activate itself on sign-in** —
+   `activeOrganizationId` stays null. The `databaseHooks.session.create.
+   before` hook sets it when the user has exactly one membership; measured
+   on the same DB with and without the hook.
+4. **The switch**: `setActiveOrganization` moves the session;
+   `listOrganizations` lists the user's; a non-member activating a
+   foreign org is refused.
+5. **Invitations**: `createInvitation` → our `sendInvitationEmail` hook →
+   `acceptInvitation` by the invitee (existing account) → member row.
+   **The plugin lets an admin invite an admin**: D3's granting rule is
+   ours to enforce, in the route, before the plugin call.
+
+Two doors confirmed for the backfill and the seed: `addMember` is the
+server-side door (no email), and `signUpEmail`/`signInEmail` keep working
+untouched with the plugin loaded.
+
 ## Definition of Done
 
-- [ ] **Spike first** (the better-auth precedent): organizations plugin
-      contract verified in dev — table names (the invitation collision,
-      D7), custom roles via access control, `activeOrganizationId`
-      behavior on sign-in with N memberships. Findings recorded here.
+- [x] **Spike first** (the better-auth precedent): organizations plugin
+      contract verified — see **Spike** above (2026-08-31).
 - [ ] Migrations run clean on a fresh local D1 and on deployed dev;
       the pilot tenant signs in afterwards as owner of its backfilled
       business with its links intact (D7) — checked on the deployed app,

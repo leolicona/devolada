@@ -8,9 +8,9 @@ tested. Phase 1 (extraction) executed 2026-08-31 (PR #123).
 
 Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
 
-- [ ] Design cycle (this folder) reviewed by the owner
-- [ ] Child spec written and registered (decisions: Better Auth organizations
-      mapping, role matrix, onboarding contract, rename plan)
+- [x] Design cycle (this folder) reviewed by the owner (PR #124)
+- [x] Child spec written and registered (PR #125); organizations spike
+      green 2026-08-31 (spec's Spike section)
 - [ ] D14 migrations: `isps` → `businesses`; `charges` + `direct_payments`
       → `payments`; drop orphaned store tables (`stores`, `cash_drops`,
       `ledger_entries`, `customer_contacts`, `invitations`)

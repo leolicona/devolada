@@ -9,11 +9,11 @@
   "env": {
     "dev": {
       "name": "devolada-admin-dev",
-      "routes": [{ "pattern": "admin.dev.devoladapago.com", "custom_domain": true }]
+      "routes": [{ "pattern": "app.dev.devoladapago.com", "custom_domain": true }]
     },
     "prod": {
       "name": "devolada-admin",
-      "routes": [{ "pattern": "admin.devoladapago.com", "custom_domain": true }]
+      "routes": [{ "pattern": "app.devoladapago.com", "custom_domain": true }]
     }
   }
 }

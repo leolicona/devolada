@@ -268,7 +268,7 @@ stories.
   two independent products sharing one brand — is resolved by exactly one
   product keeping the name, and the SaaS is that product. Three reasons:
   **brand follows the domain** (the permanent payment links, the most
-  expensive promise to break, live at `pago.devoladapago.com` and never
+  expensive promise to break, live at `link.devoladapago.com` and never
   move); **the brand equity already built lives on this side** (the
   domain, the live email sender, the pilot links sitting in WhatsApp
   chats — all direct-payment channel); and **the network is the cheap
@@ -288,7 +288,7 @@ stories.
 
   | Surface | Address | Note |
   |---|---|---|
-  | Payer links | `pago.devoladapago.com` | live today; never moves while the promise stands |
+  | Payer links | `link.devoladapago.com` | never moves while the promise stands. Was `pago.` until 2026-09-01: renamed (with `admin.` → `app.`) while the account rebuild (CICD.md D7) had every database empty — the only links ever sent (the 2026-08-20 demo, to the owner's own test customers) were rows of the old dev database and were already gone, so no working link was broken. Last cheap moment; the next rename breaks links pasted in WhatsApp |
   | Business dashboard | `app.devoladapago.com` | replaces the store-era `admin.` |
   | SaaS API (BFF) | `api.devoladapago.com` | |
   | Engine API door (developers) | `consta.devoladapago.com` | as already decided in SPEC.md |

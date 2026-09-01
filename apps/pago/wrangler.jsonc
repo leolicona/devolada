@@ -11,11 +11,11 @@
   "env": {
     "dev": {
       "name": "devolada-pago-dev",
-      "routes": [{ "pattern": "pago.dev.devoladapago.com", "custom_domain": true }]
+      "routes": [{ "pattern": "link.dev.devoladapago.com", "custom_domain": true }]
     },
     "prod": {
       "name": "devolada-pago",
-      "routes": [{ "pattern": "pago.devoladapago.com", "custom_domain": true }]
+      "routes": [{ "pattern": "link.devoladapago.com", "custom_domain": true }]
     }
   }
 }

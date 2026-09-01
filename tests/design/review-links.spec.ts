@@ -18,7 +18,7 @@ const results = [
     usuario: "greyes",
     name: "Janely Reyes",
     phone: "5551234567",
-    url: "https://pago.dev.devoladapago.com/p/tok-greyes",
+    url: "https://link.dev.devoladapago.com/p/tok-greyes",
     waLink: "https://wa.me/525551234567?text=hola",
   },
   {
@@ -26,7 +26,7 @@ const results = [
     usuario: "mreyesf",
     name: "Mario Reyes Flores",
     phone: null,
-    url: "https://pago.dev.devoladapago.com/p/tok-mreyesf",
+    url: "https://link.dev.devoladapago.com/p/tok-mreyesf",
     waLink: "https://wa.me/?text=hola",
   },
   {
@@ -34,7 +34,7 @@ const results = [
     usuario: "reyna01",
     name: "Reyna Domínguez",
     phone: "5559876543",
-    url: "https://pago.dev.devoladapago.com/p/tok-reyna01",
+    url: "https://link.dev.devoladapago.com/p/tok-reyna01",
     waLink: "https://wa.me/525559876543?text=hola",
   },
 ];

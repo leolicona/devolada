@@ -30,7 +30,7 @@
         {
           "binding": "DB",
           "database_name": "devolada-consta-db-dev",
-          "database_id": "1b9b09d6-79a2-4e53-ac18-7dd182ffded5",
+          "database_id": "71e60c4f-3bbc-4d04-bfed-72d1a02353eb",
           "migrations_dir": "migrations"
         }
       ],

@@ -83,7 +83,7 @@ Stories of the adjacent product (see "Adjacent product" below). Its users are
 - **US-V02** — As an integrator, I validate a transfer from a receipt image URL and get the same verdict shape.
 - **US-V03** — As an integrator, a transfer whose CEP is not generated yet reads as "pending" — never as a false "invalid" — so I can retry later.
 - **US-V04** — As an integrator, a CEP that was already validated before comes flagged, so one proof of payment cannot be reused twice.
-- **US-V05** — As the operator, I issue and revoke API keys by hand, and every validation is logged under its key so the fixed fee per transaction can be derived later.
+- **US-V05** — As the operator, I issue and revoke API keys by hand, and every validation is logged under its key so the fixed fee per transaction can be derived later. *(Amended 2026-09-01, pivot D20: the first-party consumer issues — never revokes — through `CONSTA_ISSUER_TOKEN`; validation D5.)*
 - **US-V06** — As an integrator, when a validation cannot be completed I am told whether waiting can ever help and when to try again, so a permanent failure never becomes a long silence for my customer.
 - **US-V07** — As an integrator, a request that cannot possibly validate — a bank name outside the provider's vocabulary, a malformed tracking key — is refused instantly with the accepted values, instead of costing a call and coming back "invalid".
 - **US-V08** — As the operator, every call records what the provider charged, how long it took and how much quota is left, so the channel's cost and health are visible before it breaks.
@@ -125,7 +125,7 @@ Pivot stories (platform/pivot.spec.md); "business" is the paying tenant, was "IS
 ### Reconciliation (R)
 Pivot stories (platform/pivot.spec.md); Cobro = what is expected, Pago = what arrived.
 
-- **US-R01** — As a business with WispHub, my customers' debts appear as Cobros mirrored from WispHub — refreshed when the link opens, before a verdict applies, and periodically — so a debt paid elsewhere is never charged again. *(reserved 2026-08-31, pivot D4; carries US-C06/C08 forward)*
+- **US-R01** — As a business with WispHub, my customers' debts appear as Cobros mirrored from WispHub — refreshed when the link opens, before a verdict applies, and periodically — so a debt paid elsewhere is never charged again. *(reserved 2026-08-31, pivot D4; carries US-C06/C08 forward); 2026-09-01: "periodically" = on demand with a lease plus a daily close, never a fixed tick — cobros-mirror D2)*
 - **US-R02** — As a business, every confirmed Pago is classified against its Cobro — exact, short or over — by my own reconciliation policy (tolerance in cents, treatment of surplus), and the class travels with the payment everywhere. *(reserved 2026-08-31, pivot D8)*
 - **US-R03** — As a business, I browse my Pagos filtered by status, date and customer, and one tap shows the transfer evidence behind any of them. *(reserved 2026-08-31, pivot)*
 - **US-R04** — As an end customer, my permanent link lists my open Cobros and the exact amount to transfer; when I owe nothing, it says so. *(reserved 2026-08-31, pivot D3)*
@@ -272,6 +272,8 @@ Owner's decisions:
 | [business/business-and-memberships.spec.md](business/business-and-memberships.spec.md) | business | US-B01, US-B02, US-B03 | current |
 | [platform/prepaid-credit.spec.md](platform/prepaid-credit.spec.md) | platform | US-B04, US-B05, US-B06, US-L03 | current |
 | [platform/operator-panel.spec.md](platform/operator-panel.spec.md) | platform | US-L02 | current |
+| [reconciliation/cobros-mirror.spec.md](reconciliation/cobros-mirror.spec.md) | reconciliation | US-R01, US-R04 | in development |
+| [reconciliation/payments-and-classes.spec.md](reconciliation/payments-and-classes.spec.md) | reconciliation | US-R02, US-R03 | in development |
 
 ## Cross-cutting layers
 

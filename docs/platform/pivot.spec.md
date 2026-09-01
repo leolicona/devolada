@@ -88,7 +88,7 @@ stories.
   integration exists, the truth stays in WispHub — this preserves US-C06/
   US-C08 ("never charge a debt that no longer exists"). The mirror refreshes
   at three moments: when the link opens, immediately before a validation
-  verdict is applied, and on a periodic sweep that feeds the dashboard list.
+  verdict is applied, and on a periodic sweep that feeds the dashboard list. *(2026-09-01, cobros-mirror D2: the "periodic sweep" became on-demand refreshes with a lease plus a daily close — never a fixed tick — after the cost analysis in the phase-4 interview.)*
   Rows carry `source = 'wisphub'` plus the external ids. A future manual
   Cobro carries `source = 'manual'` and is its own truth. **Rejected**:
   import-once-then-own (a cash payment registered directly in WispHub would
@@ -309,7 +309,10 @@ stories.
   **internal programmatic issuance door** — an explicit amendment to
   validation's US-V05 ("keys by hand"), scheduled for the phase 4 child
   spec: programmatic issuance is for the first-party consumer only;
-  third-party keys stay manual. The key boundary keeps trust-layer D2's
+  third-party keys stay manual. *(Executed 2026-09-01:
+  reconciliation/payments-and-classes D7 — an issue-only token, the key in
+  the business row; the owner chose to execute now rather than defer to
+  US-V15's activation.)* The key boundary keeps trust-layer D2's
   isolation honest — payer histories separate per business at the key,
   not by prefix discipline in SaaS code. Money has **one book**: the
   prepaid debit lives only in `credit_entries` (US-L03, D5); Consta's

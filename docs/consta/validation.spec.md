@@ -45,7 +45,14 @@ spike.
   revokes them through `/admin/keys`, guarded by a `CONSTA_ADMIN_TOKEN`
   worker secret — no self-serve signup, no dashboard in v1 (owner decision
   2026-08-17: customers are the owner's apps and known third parties). A
-  revoked key 401s immediately.
+  revoked key 401s immediately. **Amended 2026-09-01 (pivot D20, executed
+  in reconciliation/payments-and-classes D7)**: a second secret,
+  `CONSTA_ISSUER_TOKEN`, opens **`POST /admin/keys` only** — the
+  first-party consumer (Devolada's api) mints one key per business when
+  the business is born, and can revoke nothing; `DELETE /admin/keys/:id`
+  keeps answering to `CONSTA_ADMIN_TOKEN` alone. Third-party keys stay by
+  hand. Scenario 6 gains: the issuer token issues, and gets 401 on
+  revoke.
 - **D6 — The validations log is append-only; billing is derived.** Every call
   that reaches the provider writes one `validations` row (key, mode, verdict,
   tracking data, timestamps) and no row is ever updated or deleted — the

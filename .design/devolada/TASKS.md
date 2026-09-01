@@ -25,7 +25,7 @@ Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
 
 ## Phase 3 — Prepaid credit & operator panel
 
-Child specs: credit (US-B04–B06, US-L03) · operator panel (US-L02).
+Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md) (US-B04–B06, US-L03) · [operator-panel.spec.md](../../docs/platform/operator-panel.spec.md) (US-L02) — written 2026-09-01 after the phase-3 interview.
 
 - [ ] `credit_entries` (append-only house rule) + balance derivation
 - [ ] Welcome bonus on business creation (platform default)

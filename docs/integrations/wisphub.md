@@ -157,6 +157,26 @@ Every row of `GET /facturas/` carries `total`, `sub_total`, `descuento`,
 proration in prose (*"Total dias a pagar: 31"*). `saldo` likewise rides in the
 customer list serializer. Reading either costs **no extra call**.
 
+### Invoice list filters, and no push surface (measured 2026-09-01)
+
+`OPTIONS /facturas/` documents the list's query parameters: `estado` —
+**1 Pendiente · 2 Pagada · 3 Cancelada · 4 Revisión · 5 Transferida**;
+`tipo_fecha` — `fecha_emision | fecha_vencimiento | fecha_pago`; `desde` /
+`hasta` (`YYYY-MM-DD`) — **both default to the current month**, so a read
+without `desde` silently drops older arrears (the client passes a 180-day
+window); plus `forma_pago`, `zona`, `cajero` by id. "Paid since X" is
+therefore one bounded call (`estado=2&tipo_fecha=fecha_pago&desde=X`)
+— the Cobros mirror's daily close leans on it (reconciliation/cobros-mirror
+D3).
+
+**There are no webhooks or outgoing notifications.** Swept the same day
+(cobros-mirror D4): `GET /api/` is not routed (nginx 403 HTML); `OPTIONS`
+on `clientes`, `facturas`, `zonas`, `staff`, `formas-de-pago` answer 200
+with no callback in any docstring; `pagos`, `routers`, `eventos`,
+`integraciones`, `notificaciones`, `webhook`, `webhooks` answer the panel's
+404 page; the panel's settings offer nothing either. Anything this adapter
+learns from WispHub, it learns by asking.
+
 ### The payment promise is the give-service-without-money primitive (measured 2026-08-27)
 
 `POST /promesa-pago/ { id_factura, fecha_limite, accion }` → 201 with the

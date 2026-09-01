@@ -59,6 +59,25 @@ Its companion is [payments-and-classes.spec.md](payments-and-classes.spec.md).
   whose id no longer appears. Incremental where a person is waiting,
   complete where nobody is.
 
+  **Amended 2026-09-01 (from the D4 sweep): closures can be asked for,
+  not diffed.** `OPTIONS /facturas/` documents filters the contract did
+  not record: `estado` **1 Pendiente · 2 Pagada · 3 Cancelada · 4
+  Revisión · 5 Transferida**, and `tipo_fecha` = `fecha_emision |
+  fecha_vencimiento | fecha_pago` with `desde`/`hasta`. The daily close
+  therefore asks two bounded questions — *paid since the last close*
+  (`estado=2&tipo_fecha=fecha_pago&desde=…`) and *cancelled since the
+  last close* (`estado=3`) — and closes those Cobros as `paid`/`gone`
+  instead of paging every pending invoice and diffing; the full pending
+  read stays as the net for what those two miss (a deleted invoice has no
+  state to ask for). The on-demand refresh may ask the same two questions
+  after its incremental page, so it stops being blind to closures.
+  **Gotcha**: `desde`/`hasta` **default to the current month** — every
+  read must pass `desde` or it silently drops older arrears (the client's
+  180-day window in `wisphub/client.ts` already does). **Open for the
+  owner**: how `4 Revisión` and `5 Transferida` map onto `open | paid |
+  gone` — the safe reading until decided is Revisión = still `open`,
+  Transferida = not yet `paid` (a transfer WispHub has not confirmed).
+
 - **D4 — The webhook spike is the gate, and it decides the fifth
   trigger.** WispHub's verified contract (integrations/wisphub.md) shows
   no webhooks, and `OPTIONS` is its real documentation. Before the sweep
@@ -70,6 +89,21 @@ Its companion is [payments-and-classes.spec.md](payments-and-classes.spec.md).
   relaunch are in the owner's notes — its VPN link has to be re-run for
   the day's tenant first). A push source becomes trigger 5 and the daily
   close stays as the net. Findings land here whatever they are.
+
+  **Executed 2026-09-01 — there is no push surface; trigger 5 does not
+  exist.** Thirteen calls against the day's demo tenant, no writes:
+
+  | Probe | Answer |
+  |---|---|
+  | `GET /api/` (a DRF resource map) | 403 HTML from nginx — the root is not routed |
+  | `OPTIONS` on `clientes`, `facturas`, `zonas`, `staff`, `formas-de-pago` | 200 JSON; no docstring names a callback, a notification or a URL |
+  | `OPTIONS` on `pagos`, `routers`, `eventos`, `integraciones`, `notificaciones`, `webhook`, `webhooks` | 404 — the panel's HTML page (its Google Tag Manager `event` is the only "event" on the wire) |
+  | The panel (Mi Empresa → Configuración / Integraciones / API / Notificaciones), checked by the owner | nothing |
+
+  So the CHR lab and a public receiver were never needed: there is no
+  event to observe. The four triggers of D2 are the whole model and the
+  daily close is the net. The same sweep yielded the `facturas` filter
+  vocabulary that amends D3.
 
 - **D5 — A mirror admits being one.** Every Cobro carries `refreshedAt`;
   the section shows freshness per list and per row. A Cobro whose invoice
@@ -160,8 +194,9 @@ writes inside the existing link-open and verdict paths, never new reads.
 
 ## Definition of Done
 
-- [ ] **Spike first (D4)**: the webhook probe run and recorded here,
-      with the CHR lab relinked if events needed a router.
+- [x] **Spike first (D4)**: the webhook probe run and recorded here
+      (2026-09-01: no push surface in the API or the panel; the CHR lab
+      was not needed).
 - [ ] Migration for `payment_requests` and the two business columns
       (additive).
 - [ ] Scenarios 1–10 automated, citing their stories.

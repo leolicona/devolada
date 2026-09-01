@@ -12,6 +12,7 @@ import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
 import { UsersCard } from "./UsersCard";
+import { CreditCard } from "../credit/CreditCard";
 import type { Bank } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -534,6 +535,7 @@ export function SettingsScreen() {
   const canSettings = roleCan(role, "settings", "update");
   const canClabe = roleCan(role, "clabe", "update");
   const canMembers = roleCan(role, "members", "invite_below_admin");
+  const canCredit = roleCan(role, "credit", "manage");
 
   return (
     <main className="max-w-3xl px-4 pt-4 lg:px-8 lg:pt-8">
@@ -558,6 +560,7 @@ export function SettingsScreen() {
           {canSettings && <SpeiCard settings={data} canEditClabe={canClabe} />}
           {canSettings && <ReconnectionCard settings={data} />}
           {canSettings && <DisplayCard settings={data} />}
+          {canCredit && <CreditCard />}
           {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}
           <PasskeyCard />
         </div>

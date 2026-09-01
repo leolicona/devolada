@@ -18,6 +18,10 @@ export type BusinessActor = {
   orgId: string;
   userId: string;
   businesses: { id: string; orgId: string; name: string; role: "owner" | "admin" | "operator" | "viewer" }[];
+  /* operator-panel D2 */
+  platformOperator: boolean;
+  /* prepaid-credit D7: the chip's step, computed by /auth/me alone */
+  credit: { balanceCents: number; step: "ok" | "low" | "empty" | "paused" };
 };
 
 /* Shell spec D3: the guard accepts only business actors — the only kind

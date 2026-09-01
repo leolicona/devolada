@@ -32,6 +32,8 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | The paying tenant | **Negocio** | `business` (table `businesses`; `businessId` everywhere) | "empresa", "ISP" (an ISP is one kind of business) |
 | The transfer that arrived and reconciled | **Pago** | `payment` (table `payments`; absorbed the store-era `charge`) | "cobro" (that is the expected side — `payment_request`/Cobro arrives with phase 4) |
 | Who may do what inside a business | **Dueño / Administrador / Operador / Lector** | `role` (`owner/admin/operator/viewer`) | "usuario" as a role name |
+| Prepaid validation credit | **Saldo** | `credit_balance` (derived: SUM of `credit_entries`) | "monedero" |
+| Adding credit | **Recarga** | `top_up` | "depósito" |
 | Fee paid by the end customer | **Cargo por servicio** | `service_fee` | — |
 | Period's billed charge (invoice total) | **Cargo del periodo** | `invoice` / `invoice_cents` | "mensualidad" (the invoice can bill more than the plan — debt-truth D16) |
 | MikroTik reactivation | **Reconexión** | `reconnection` (`queued/reconnected/failed`) | — |
@@ -268,8 +270,8 @@ Owner's decisions:
 | [direct-payment/provisional-release.spec.md](direct-payment/provisional-release.spec.md) | direct-payment | US-D15 | proposed |
 | [platform/pivot.spec.md](platform/pivot.spec.md) | platform | US-B01–B06, US-R01–R04, US-I01–I03, US-L02, US-L03 | in development (phase 1 executed) |
 | [business/business-and-memberships.spec.md](business/business-and-memberships.spec.md) | business | US-B01, US-B02, US-B03 | current |
-| [platform/prepaid-credit.spec.md](platform/prepaid-credit.spec.md) | platform | US-B04, US-B05, US-B06, US-L03 | in development |
-| [platform/operator-panel.spec.md](platform/operator-panel.spec.md) | platform | US-L02 | in development |
+| [platform/prepaid-credit.spec.md](platform/prepaid-credit.spec.md) | platform | US-B04, US-B05, US-B06, US-L03 | current |
+| [platform/operator-panel.spec.md](platform/operator-panel.spec.md) | platform | US-L02 | current |
 
 ## Cross-cutting layers
 

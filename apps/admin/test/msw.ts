@@ -14,7 +14,9 @@ export const businessActor = {
   role: "owner",
   orgId: "org_business-1",
   userId: "user-1",
-  businesses: [{ id: "business-1", name: "ISP Demo", role: "owner" }],
+  businesses: [{ id: "business-1", orgId: "org_business-1", name: "ISP Demo", role: "owner" }],
+  platformOperator: false,
+  credit: { balanceCents: 10000, step: "ok" },
 } as const;
 
 export const ok = (data: unknown, status = 200) =>
@@ -61,6 +63,21 @@ export const handlers = {
     http.post("/auth/organization/set-active", async ({ request }) => r(await request.json())),
   acceptInvitation: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/organization/accept-invitation", async ({ request }) => r(await request.json())),
+  /* prepaid-credit / operator-panel */
+  credit: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/credit", () => r()),
+  creditEntries: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/credit/entries", () => r()),
+  topUps: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/credit/top-ups", () => r()),
+  submitTopUp: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/credit/top-ups", async ({ request }) => r(await request.json())),
+  platformSettings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/platform/settings", () => r()),
+  setPlatformSetting: (r: (key: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/settings/:key", async ({ params, request }) => r(String(params.key), await request.json())),
+  platformBusinesses: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/businesses", ({ request }) => r(new URL(request.url))),
+  platformBusiness: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/businesses/:id", ({ params }) => r(String(params.id))),
+  adjustment: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/businesses/:id/adjustments", async ({ params, request }) => r(String(params.id), await request.json())),
 };
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };

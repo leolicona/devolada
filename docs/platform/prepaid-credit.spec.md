@@ -1,5 +1,5 @@
 ---
-status: in development
+status: current # phase 3 complete: API, top-ups/pause, UI
 stories: [US-B04, US-B05, US-B06, US-L03]
 domain: platform
 updated: 2026-09-01

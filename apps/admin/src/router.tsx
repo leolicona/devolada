@@ -11,6 +11,7 @@ import { LinksScreen } from "./features/links/LinksScreen";
 import { SettingsScreen } from "./features/settings/SettingsScreen";
 import { NewBusinessScreen } from "./features/onboarding/NewBusinessScreen";
 import { AcceptInvitationScreen } from "./features/invitations/AcceptInvitationScreen";
+import { OperatorScreen } from "./features/operator/OperatorScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -45,6 +46,12 @@ const linksRoute = createRoute({
   path: "/links",
   component: LinksScreen,
 });
+/* operator-panel D3: a route in the admin, hidden unless you are the operator */
+const operatorRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/operador",
+  component: OperatorScreen,
+});
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -52,7 +59,7 @@ const routeTree = rootRoute.addChildren([
   recoverRoute,
   newBusinessRoute,
   invitationRoute,
-  appRoute.addChildren([feedRoute, linksRoute, settingsRoute]),
+  appRoute.addChildren([feedRoute, linksRoute, settingsRoute, operatorRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

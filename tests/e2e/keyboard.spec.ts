@@ -99,6 +99,7 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
        and its pending card — retired with the network, 2026-08-31.) */
     await snapshotRestingStyles(page);
     await expectTabOrder(page, [
+      /^Saldo:/ /* the credit chip (prepaid-credit D7) sits under the business name, before the spine */,
       /^Cobros$/,
       /^Links$/,
       /^Configuración$/,

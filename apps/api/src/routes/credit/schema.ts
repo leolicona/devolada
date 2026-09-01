@@ -60,3 +60,4 @@ export const topUpsResponse = z.object({ topUps: z.array(topUpItem) });
 
 export type TopUpRequest = z.infer<typeof topUpRequest>;
 export type TopUpItem = z.infer<typeof topUpItem>;
+export type TopUpsResponse = z.infer<typeof topUpsResponse>;

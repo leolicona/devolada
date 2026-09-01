@@ -7,6 +7,7 @@ import {
   KeyRound,
   LogOut,
   Settings,
+  ShieldCheck,
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { logout, useSession } from "../auth/session";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
+import { CreditBanner, CreditChip } from "../credit/CreditChip";
 
 const sections = [
   { to: "/", label: "Cobros", icon: Banknote, exact: true },
@@ -114,10 +116,24 @@ export function Shell() {
       {/* Sidebar (desktop) */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card p-4 lg:flex">
         <p className="px-3 text-lg font-semibold tracking-tight">Devolada</p>
-        <div className="mb-6 mt-2 px-3">
+        <div className="mt-2 px-3">
           <BusinessSwitcher actor={actor} />
         </div>
+        <div className="mb-6 mt-3 px-3">
+          <CreditChip credit={actor.credit} />
+        </div>
         <SectionLinks variant="sidebar" />
+        {/* operator-panel D3: outside the five sections, only for the operator */}
+        {actor.platformOperator && (
+          <Link
+            to="/operador"
+            className="mt-2 flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            activeProps={{ className: "bg-accent-soft text-link", "aria-current": "page" }}
+          >
+            <ShieldCheck className="size-4" aria-hidden />
+            Operador
+          </Link>
+        )}
         <div className="border-t border-border pt-3">
           <p className="truncate px-3 text-sm text-muted-foreground">{actor.email}</p>
           <Button variant="ghost" size="default" className="mt-1 w-full justify-start" onClick={() => void onLogout()}>
@@ -133,9 +149,11 @@ export function Shell() {
             the Stripe dashboard the brief points at caps its content too. */}
         <div className="mx-auto w-full max-w-7xl">
         {/* The switcher rides the top on phones; the sidebar holds it on desktop */}
-        <header className="border-b border-border bg-card px-4 py-2 lg:hidden">
+        <header className="space-y-2 border-b border-border bg-card px-4 py-2 lg:hidden">
           <BusinessSwitcher actor={actor} />
+          <CreditChip credit={actor.credit} />
         </header>
+        <CreditBanner credit={actor.credit} />
         {/* D5: unverified ISPs see a persistent banner; the código is
             typed right here (better-auth.spec.md D4) */}
         {!actor.emailVerified && <VerifyEmailBanner email={actor.email} />}

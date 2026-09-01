@@ -9,6 +9,8 @@ debt: [TD-001]
 # Spec: ISP settings
 
 > **2026-08-31, retirement PR**: D4 (commission ≤ fee, the split card) and the settlement card retired with the store network. `serviceFeeCents` survives as the fallback the SPEI fee inherits when unset (direct-payment D3).
+>
+> **Phase 2 (business-and-memberships D3)**: cards render by area — owner/admin see the business cards, the CLABE field is the owner's alone (an admin reads it as text), **Usuarios** (members, invite with the roles the caller may grant, remove) shows for owner/admin, and the passkey card is every role's. Viewers get a masked CLABE and no key tail from the API.
 
 The Configuración section: the WispHub API key that makes reconnection possible, the money split between the end customer, the store and the platform, and the display settings that decide what "today" and "2:30 p.m." mean. These are the owner's ISP-level configuration notes, finally given a home.
 

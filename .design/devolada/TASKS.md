@@ -17,13 +17,11 @@ Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
       (spec D6, migration 0019)
 - [x] Glossary swap in SPEC.md: Negocio, roles, Pago (Cobro arrives with phase 4)
 - [x] Better Auth organizations: memberships, roles enforced in the
-      middleware by area (API); role-hidden UI in the shell — frontend PR
-- [x] Create-business + switch (API: `POST /businesses`, plugin set-active);
-      switcher UI — frontend PR
-- [ ] Onboarding wizard UI (US-B01) — frontend PR (`POST /businesses`
-      already takes the D5 minimum)
-- [x] Members API (invite with D3's granting rule, list, remove);
-      Usuarios page — frontend PR
+      middleware by area (API) and hidden by area in the admin
+- [x] Create-business + switch (API + switcher/chooser UI, US-B02)
+- [x] Onboarding wizard UI (US-B01): name → CLABE (bank from prefix) →
+      first link; signup births the user only
+- [x] Usuarios page + invitation link page (US-B03, D8)
 
 ## Phase 3 — Prepaid credit & operator panel
 

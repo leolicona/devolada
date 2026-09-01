@@ -47,6 +47,22 @@ export const handlers = {
     http.post("/settings/wisphub/test", async ({ request }) => r(await request.json())),
   linksSearch: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/direct-payments/links/search", ({ request }) => r(new URL(request.url))),
+  /* business-and-memberships (US-B01–B03) */
+  getSession: (r: () => Response) => http.get("/auth/get-session", () => r()),
+  createBusiness: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/businesses", async ({ request }) => r(await request.json())),
+  members: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/businesses/members", () => r()),
+  invite: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/businesses/members", async ({ request }) => r(await request.json())),
+  removeMember: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.delete("/businesses/members/:id", ({ params }) => r(String(params.id))),
+  orgList: (r: () => Response) => http.get("/auth/organization/list", () => r()),
+  setActive: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/organization/set-active", async ({ request }) => r(await request.json())),
+  acceptInvitation: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/organization/accept-invitation", async ({ request }) => r(await request.json())),
 };
+
+export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };
 
 export const server = setupServer();

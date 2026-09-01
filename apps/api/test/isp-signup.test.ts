@@ -19,19 +19,20 @@ async function signup() {
 }
 
 describe("US-S04: ISP signup verifies the email with a code", () => {
-  it("signup returns 201 with a session, an auth twin owned by the user, and a code", async () => {
+  it("signup returns 201 with a session and a code — and no business yet (D5)", async () => {
     const res = await signup();
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.data).toMatchObject({ type: "business", emailVerified: false });
+    expect(body.data).toMatchObject({ type: "user", emailVerified: false });
     expect(sessionOf(res)).toContain("session_token=");
 
+    /* business-and-memberships D5: the business is born at wizard
+       completion, never at signup — /auth/me says so until then */
     const db = drizzle(env.DB);
-    const [business] = await db.select().from(businesses).where(eq(businesses.email, EMAIL));
-    expect(business.orgId).toBeTruthy();
-    /* business-and-memberships D1: the creator is the owner of the twin */
-    const [membership] = await db.select().from(member).where(eq(member.organizationId, business.orgId));
-    expect(membership.role).toBe("owner");
+    expect(await db.select().from(businesses)).toHaveLength(0);
+    const me = await (await app()).request("/auth/me", { headers: { Cookie: sessionOf(res) } }, env);
+    expect(me.status).toBe(403);
+    expect((await me.json()).error.code).toBe("NO_BUSINESS");
 
     /* The verification code went out through our hook (spec D9) and is
        redeemable — the test mailbox is the verification table */
@@ -54,8 +55,25 @@ describe("US-S04: ISP signup verifies the email with a code", () => {
     const [u] = await db.select().from(userTable).where(eq(userTable.email, EMAIL));
     expect(u.emailVerified).toBe(true);
 
+    /* business-and-memberships scenario 1, end to end: the wizard's one
+       call births the business, and the actor carries the verified flag */
+    const born = await (await app()).request(
+      "/businesses",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({
+          name: "WifiPlus",
+          speiClabe: "646180157000000004",
+          speiBank: "STP",
+          speiBeneficiaryName: "WifiPlus SA de CV",
+        }),
+      },
+      env,
+    );
+    expect(born.status).toBe(201);
     const me = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
-    expect((await me.json()).data).toMatchObject({ emailVerified: true });
+    expect((await me.json()).data).toMatchObject({ emailVerified: true, role: "owner", name: "WifiPlus" });
   });
 
   it("a wrong code fails and the flag stays down (scenario 8)", async () => {

@@ -122,9 +122,10 @@ export function SignupPage() {
   const submit = useSubmit(
     () => signup(name, email, password),
     () => {
-      /* The shell's banner asks for the código that just went out */
-      void queryClient.invalidateQueries({ queryKey: ["session"] });
-      void navigate({ to: "/" });
+      /* business-and-memberships D5: the account exists, the business is
+         born in the wizard; its banner asks for the código that went out */
+      queryClient.clear();
+      void navigate({ to: "/nuevo-negocio" });
     },
     "No pudimos crear la cuenta. Revisa los datos.",
   );
@@ -140,7 +141,7 @@ export function SignupPage() {
         noValidate
       >
         <div>
-          <Label htmlFor="name">Nombre del ISP</Label>
+          <Label htmlFor="name">Tu nombre</Label>
           <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>

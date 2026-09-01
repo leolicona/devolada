@@ -57,52 +57,23 @@ auth.post("/business/signup", zValidator("json", signupInput), async (c) => {
   const db = drizzle(c.env.DB);
 
   /* Signup necessarily reveals existence (rule inherited from the old
-     spec's D4). BOTH tables: a user row, or an businesses row — including
-     pre-migration rows with no user linked. Checking only `user` once
-     created an orphan (user inserted, businesses UNIQUE(email) blew up), and
-     an orphan signs in but /auth/me finds no actor. */
+     spec's D4). The user table is the only identity now. */
   const [existing] = await db.select().from(userTable).where(eq(userTable.email, email));
   if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
-  const [taken] = await db.select().from(businesses).where(eq(businesses.email, email));
-  if (taken) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
 
+  /* business-and-memberships D5: signup births the USER only. The
+     business is persisted at wizard completion (`POST /businesses`),
+     never here — an abandoned wizard creates nothing. The verification
+     code goes out through the OTP hook, best-effort by construction. */
   const ba = makeAuth(c.env);
   const { headers, response } = await ba.api.signUpEmail({
     body: { name, email, password },
     returnHeaders: true,
   });
 
-  /* Interim shape until the wizard lands (business-and-memberships D5,
-     phase-2 frontend PR): signup still births the business, now with its
-     auth twin — the organization the plugin creates, the creator as owner
-     (spike 1) — and the business row pointing at it. Any failure after
-     the user exists removes everything: a user that signs in but resolves
-     to no actor is worse than a failed signup. */
-  const sessionHeaders = cookieHeadersFrom(headers);
-  let business;
-  let orgId: string | null = null;
-  try {
-    const org = await ba.api.createOrganization({
-      headers: sessionHeaders,
-      body: { name, slug: `negocio-${crypto.randomUUID().slice(0, 8)}` },
-    });
-    if (!org) throw new Error("organization not created");
-    orgId = org.id;
-    [business] = await db.insert(businesses).values({ name, email, orgId }).returning();
-    await ba.api.setActiveOrganization({ headers: sessionHeaders, body: { organizationId: orgId } });
-  } catch (e) {
-    if (orgId) {
-      await ba.api
-        .deleteOrganization({ headers: sessionHeaders, body: { organizationId: orgId } })
-        .catch(() => undefined);
-    }
-    await removeUser(db, response.user.id);
-    throw e;
-  }
-
   forwardCookies(headers, c);
   return c.json(
-    { success: true, data: { type: "business", id: business.id, name: business.name, emailVerified: false } },
+    { success: true, data: { type: "user", id: response.user.id, name, emailVerified: false } },
     201,
   );
 });

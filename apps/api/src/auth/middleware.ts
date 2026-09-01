@@ -56,6 +56,7 @@ export async function findActor(
     wisphubConfigured: Boolean(business.wisphubApiKey),
     businesses: memberships.map((m) => ({
       id: m.businessId,
+      orgId: m.orgId,
       name: m.businessName,
       role: isRole(m.role) ? m.role : "viewer",
     })),

@@ -41,3 +41,11 @@ export async function baPost(path: string, body?: unknown): Promise<void> {
     throw new ApiError(code, res.status);
   }
 }
+
+/* Better Auth GET endpoints (get-session, organization/list): raw JSON,
+   no envelope; a session-less get-session answers `null`. */
+export async function baGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { credentials: "include" });
+  if (!res.ok) throw new ApiError("UNKNOWN_ERROR", res.status);
+  return (await res.json()) as T;
+}

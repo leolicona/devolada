@@ -166,11 +166,12 @@ customer list serializer. Reading either costs **no extra call**.
 without `desde` silently drops older arrears (the client passes a 180-day
 window); plus `forma_pago`, `zona`, `cajero` by id. "Paid since X" is
 therefore one bounded call (`estado=2&tipo_fecha=fecha_pago&desde=X`)
-— the Cobros mirror's daily close leans on it (reconciliation/cobros-mirror
-D3).
+— recorded for the mirror's daily close, which the live model then retired
+(reconciliation/cobros-live D2); the filters and the `desde` gotcha stay
+true for any reader of this list.
 
 **There are no webhooks or outgoing notifications.** Swept the same day
-(cobros-mirror D4): `GET /api/` is not routed (nginx 403 HTML); `OPTIONS`
+(cobros-live's spike, run under its mirror-era D4): `GET /api/` is not routed (nginx 403 HTML); `OPTIONS`
 on `clientes`, `facturas`, `zonas`, `staff`, `formas-de-pago` answer 200
 with no callback in any docstring; `pagos`, `routers`, `eventos`,
 `integraciones`, `notificaciones`, `webhook`, `webhooks` answer the panel's

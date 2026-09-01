@@ -88,7 +88,7 @@ stories.
   integration exists, the truth stays in WispHub — this preserves US-C06/
   US-C08 ("never charge a debt that no longer exists"). The mirror refreshes
   at three moments: when the link opens, immediately before a validation
-  verdict is applied, and on a periodic sweep that feeds the dashboard list. *(2026-09-01, cobros-mirror D2: the "periodic sweep" became on-demand refreshes with a lease plus a daily close — never a fixed tick — after the cost analysis in the phase-4 interview.)*
+  verdict is applied, and on a periodic sweep that feeds the dashboard list. *(2026-09-01, cobros-live D2: the dashboard list is now a **live read**, not a mirror — the mirror model, tried first the same day, bought nothing a link open does not already pay for; "before a verdict applies" stands as the debt-truth read it always was. The `payment_requests` table arrives with the manual Cobro, as a source.)*
   Rows carry `source = 'wisphub'` plus the external ids. A future manual
   Cobro carries `source = 'manual'` and is its own truth. **Rejected**:
   import-once-then-own (a cash payment registered directly in WispHub would

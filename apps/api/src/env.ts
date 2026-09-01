@@ -64,7 +64,7 @@ export type Actor = {
   timeFormat: "12h" | "24h";
   wisphubConfigured: boolean;
   /* Every business this user belongs to — the switcher's list (US-B02) */
-  businesses: { id: string; name: string; role: Role }[];
+  businesses: { id: string; orgId: string; name: string; role: Role }[];
 };
 
 export type Variables = {

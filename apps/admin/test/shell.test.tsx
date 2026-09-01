@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { HttpResponse } from "msw";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { baOk, fail as failResponse, handlers, businessActor, ok, server } from "./msw";
+import { baOk, businessActor, fail as failResponse, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/admin/shell.spec.md scenarios 2–6. */
@@ -27,12 +28,15 @@ describe("US-S04: login lands on the dashboard shell", () => {
 });
 
 describe("US-S04: signup shows the verify banner with a código input", () => {
-  it("lands signed-in with the banner; the código confirms and can be re-sent", async () => {
+  it("lands on the wizard with the banner; the código confirms and can be re-sent", async () => {
     let resent = false;
     let verified = false;
     server.use(
-      handlers.signup(() => ok({ type: "business", id: "business-1", name: "Nuevo", emailVerified: false }, 201)),
-      handlers.session(() => ok({ ...businessActor, emailVerified: false })),
+      /* business-and-memberships D5: signup births the user only; the
+         wizard (with the banner) is where the business is born */
+      handlers.signup(() => ok({ type: "user", id: "user-1", name: "Nuevo", emailVerified: false }, 201)),
+      handlers.session(() => failResponse("NO_BUSINESS", 403)),
+      handlers.getSession(() => HttpResponse.json({ user: { ...sessionUser, emailVerified: false } })),
       handlers.sendCode(() => {
         resent = true;
         return baOk();
@@ -44,11 +48,12 @@ describe("US-S04: signup shows the verify banner with a código input", () => {
     );
     renderApp("/signup");
 
-    await userEvent.type(await screen.findByLabelText("Nombre del ISP"), "ISP Nuevo");
+    await userEvent.type(await screen.findByLabelText("Tu nombre"), "Leo");
     await userEvent.type(screen.getByLabelText("Correo"), "nuevo@business.mx");
     await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
     await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
 
+    expect(await screen.findByRole("heading", { name: /crea tu negocio/i })).toBeInTheDocument();
     expect(await screen.findByText(/confirma tu correo/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /reenviar código/i }));
     expect(resent).toBe(true);

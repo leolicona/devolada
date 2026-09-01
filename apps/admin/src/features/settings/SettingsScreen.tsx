@@ -9,6 +9,9 @@ import type {
 } from "@devolada/api/settings-schema";
 import { PasskeyCard } from "../auth/PasskeyCard";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
+import { roleCan, type Role } from "@devolada/api/role-matrix";
+import { useSession } from "../auth/session";
+import { UsersCard } from "./UsersCard";
 import type { Bank } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,7 +192,7 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
 /* Pago directo por SPEI (direct-payment spec, US-D05). D4: the account
    is the ISP's own — the money never touches Devolada. D3: the SPEI fee
    is separate; empty falls back to the store fee. */
-function SpeiCard({ settings }: { settings: SettingsResponse }) {
+function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canEditClabe: boolean }) {
   const save = useSaveSettings();
   const [clabe, setClabe] = useState(settings.spei.clabe ?? "");
   /* D16: the picker's own type — the API takes a name from the vocabulary
@@ -207,7 +210,7 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
   /* claimed-amount D5: the beneficiary name is recommended, not required —
      empty is a valid configuration, and the API takes ≥3 chars or null */
   const beneficiaryValid = beneficiary.trim() === "" || beneficiary.trim().length >= 3;
-  const valid = clabeValid && bank.trim().length >= 2 && beneficiaryValid && feeValid;
+  const valid = (canEditClabe ? clabeValid : true) && bank.trim().length >= 2 && beneficiaryValid && feeValid;
 
   return (
     <SectionCard title="Pago directo por SPEI">
@@ -220,17 +223,26 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Label htmlFor="spei-clabe">CLABE</Label>
-          <Input
-            id="spei-clabe"
-            className="mt-1 font-mono"
-            inputMode="numeric"
-            maxLength={18}
-            value={clabe}
-            onChange={(e) => setClabe(e.target.value)}
-            placeholder="18 dígitos"
-            autoComplete="off"
-          />
-          {clabe.trim() !== "" && !clabeValid && (
+          {canEditClabe ? (
+            <Input
+              id="spei-clabe"
+              className="mt-1 font-mono"
+              inputMode="numeric"
+              maxLength={18}
+              value={clabe}
+              onChange={(e) => setClabe(e.target.value)}
+              placeholder="18 dígitos"
+              autoComplete="off"
+            />
+          ) : (
+            /* business-and-memberships D3: the CLABE is the owner's area.
+               An admin sees it (it is their business's account) and
+               changes everything around it — the field is not offered. */
+            <p id="spei-clabe" className="mt-1 font-mono text-sm">
+              {settings.spei.clabe ?? "Sin configurar"}
+            </p>
+          )}
+          {canEditClabe && clabe.trim() !== "" && !clabeValid && (
             <p className="mt-1 text-sm font-medium text-error">La CLABE debe tener 18 dígitos.</p>
           )}
           <p className="mt-1 text-sm text-ink-soft">
@@ -307,7 +319,7 @@ function SpeiCard({ settings }: { settings: SettingsResponse }) {
         disabled={!valid || save.isPending}
         onClick={() =>
           save.mutate({
-            speiClabe: clabe.trim(),
+            ...(canEditClabe ? { speiClabe: clabe.trim() } : {}),
             speiBank: bank === "" ? null : bank,
             /* D5: empty clears — the API takes ≥3 chars or null */
             speiBeneficiaryName: beneficiary.trim() === "" ? null : beneficiary.trim(),
@@ -514,6 +526,14 @@ export function SettingsScreen() {
     queryKey: ["settings"],
     queryFn: () => api<SettingsResponse>("/settings"),
   });
+  /* business-and-memberships D3: cards render by area — a role that
+     cannot use a section does not see it (the brief's law: hide, never
+     disable). The passkey is the user's own and shows for every role. */
+  const { data: actor } = useSession();
+  const role: Role = actor?.role ?? "viewer";
+  const canSettings = roleCan(role, "settings", "update");
+  const canClabe = roleCan(role, "clabe", "update");
+  const canMembers = roleCan(role, "members", "invite_below_admin");
 
   return (
     <main className="max-w-3xl px-4 pt-4 lg:px-8 lg:pt-8">
@@ -533,11 +553,12 @@ export function SettingsScreen() {
 
       {data && (
         <div className="mt-4 space-y-4 pb-8">
-          <WispHubCard settings={data} />
-          <MoneyCard settings={data} />
-          <SpeiCard settings={data} />
-          <ReconnectionCard settings={data} />
-          <DisplayCard settings={data} />
+          {canSettings && <WispHubCard settings={data} />}
+          {canSettings && <MoneyCard settings={data} />}
+          {canSettings && <SpeiCard settings={data} canEditClabe={canClabe} />}
+          {canSettings && <ReconnectionCard settings={data} />}
+          {canSettings && <DisplayCard settings={data} />}
+          {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}
           <PasskeyCard />
         </div>
       )}

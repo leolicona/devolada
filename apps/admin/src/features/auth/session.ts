@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError, baPost } from "@/lib/api";
+import { api, ApiError, baGet, baPost } from "@/lib/api";
+import type { CreateBusinessRequest } from "@devolada/api/businesses-schema";
 
 export type BusinessActor = {
   type: "business";
@@ -16,7 +17,7 @@ export type BusinessActor = {
   role: "owner" | "admin" | "operator" | "viewer";
   orgId: string;
   userId: string;
-  businesses: { id: string; name: string; role: "owner" | "admin" | "operator" | "viewer" }[];
+  businesses: { id: string; orgId: string; name: string; role: "owner" | "admin" | "operator" | "viewer" }[];
 };
 
 /* Shell spec D3: the guard accepts only business actors — the only kind
@@ -55,6 +56,33 @@ export const signup = (name: string, email: string, password: string) =>
   api("/auth/business/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
 
 export const logout = () => baPost("/auth/sign-out");
+
+/* The user behind the session, business or not — the wizard and the
+   invitation page need it before any membership exists (US-B01/B02). */
+export type SessionUser = { id: string; name: string; email: string; emailVerified: boolean };
+export function useUser() {
+  return useQuery<SessionUser | null, ApiError>({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const s = await baGet<{ user: SessionUser } | null>("/auth/get-session");
+      return s?.user ?? null;
+    },
+    retry: false,
+  });
+}
+
+/* business-and-memberships: the wizard's one call (D5), the switch and
+   the invitation flow ride the organizations plugin (D1, envelope-exempt). */
+export const createBusiness = (body: CreateBusinessRequest) =>
+  api<BusinessActor>("/businesses", { method: "POST", body: JSON.stringify(body) });
+
+export const setActiveBusiness = (organizationId: string) =>
+  baPost("/auth/organization/set-active", { organizationId });
+
+export const listOrganizations = () => baGet<{ id: string; name: string }[]>("/auth/organization/list");
+
+export const acceptInvitation = (invitationId: string) =>
+  baPost("/auth/organization/accept-invitation", { invitationId });
 
 export const sendVerificationCode = (email: string) =>
   baPost("/auth/email-otp/send-verification-otp", { email, type: "email-verification" });

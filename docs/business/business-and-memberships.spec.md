@@ -1,5 +1,5 @@
 ---
-status: in development # foundation + payments merge landed; frontend PR pending
+status: current # phase 2 complete: foundation, payments merge and frontend landed
 stories: [US-B01, US-B02, US-B03]
 domain: business
 updated: 2026-08-31 # spike run the same day, findings below
@@ -284,13 +284,14 @@ untouched with the plugin loaded.
       contract verified — see **Spike** above (2026-08-31).
 - [x] Migration 0018 (rename + D7 backfill in three steps + store-era
       drops) runs clean on a fresh local D1 and under the whole suite.
-- [ ] Deployed dev: the pilot tenant signs in afterwards as owner of its
-      backfilled business with its links intact (D7) — checked on the
-      deployed app, not only by scenario 13.
-- [x] Scenarios 2–11 automated (`test/business-memberships.test.ts`;
-      12 in sessions.test.ts). Scenario 1 (wizard) and the UI half of
-      2–11 wait for the frontend PR; 13's membership half is the deployed
-      check above; 14 rides the payments merge.
+- [x] Deployed dev (2026-09-01, owner): the pilot tenant signed in
+      straight into its dashboard as owner, bank data intact, links
+      resolving — the D7 backfill held on real rows.
+- [x] Scenarios 1–14 automated: API half in
+      `apps/api/test/business-memberships.test.ts` (2–11; 1 end to end in
+      isp-signup; 12 in sessions; 14 in reconnection-queue), UI half in
+      `apps/admin/test/memberships.test.tsx` (1, 4–9); 13 is the deployed
+      check above.
 - [x] Glossary: Negocio and the roles adopted in SPEC.md; `ispId` →
       `businessId` swept (D9). Cobro/Pago swap with the payments merge.
 - [x] charge-feed.spec.md annotated; TASKS.md phase 2 boxes ticked.
@@ -299,5 +300,8 @@ untouched with the plugin loaded.
       charges twin (copy pattern, twin data joined in), `lastError` split,
       `reconciliationClass` born nullable; the queue and the feed read
       `payments`; scenario 14 automated (reconnection-queue test).
-- [ ] **Frontend PR**: wizard (D5), switcher (US-B02), Usuarios
-      (US-B03), role-hidden rendering; signup then births the user only.
+- [x] **Frontend PR**: wizard (D5, bank pre-selected from the CLABE
+      prefix — `direct-payments/clabe.ts`), switcher + chooser (US-B02),
+      Usuarios + the invitation page (US-B03, D8), role-hidden rendering
+      (settings by area, CLABE as text for admins, no share for viewers);
+      signup births the user only.

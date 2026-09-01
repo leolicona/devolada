@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
 import type { LinksSearchResponse } from "@devolada/api/direct-payments-schema";
+import { roleCan } from "@devolada/api/role-matrix";
+import { useSession } from "../auth/session";
 
 /* US-D07: ISP searches WispHub customers and shares permanent SPEI payment links via WhatsApp. */
 
 export function LinksScreen() {
+  const { data: actor } = useSession();
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   /* design-review: the clipboard call can reject, and either way the
@@ -148,6 +152,9 @@ export function LinksScreen() {
                     </span>
                   </div>
                 
+                  {/* business-and-memberships D3: sharing is `payments: operate`;
+                      a viewer sees the customer and nothing to press */}
+                  {canOperate && (
                   <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
                     <Button
                       variant="outline"
@@ -184,6 +191,7 @@ export function LinksScreen() {
                       Compartir
                     </Button>
                   </div>
+                  )}
                 </li>
               ))}
             </ul>

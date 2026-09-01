@@ -29,6 +29,11 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
   if (!org) throw new Error("organization not created");
 
   const db = drizzle(c.env.DB);
+  const [sameEmail] = await db
+    .select({ id: businesses.id })
+    .from(businesses)
+    .where(eq(businesses.email, session.user.email));
+  const emailTaken = Boolean(sameEmail);
   let business;
   try {
     [business] = await db
@@ -36,9 +41,9 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
       .values({
         orgId: org.id,
         name: body.name,
-        /* businesses.email is UNIQUE and a display copy: one user may own
-           several businesses, so the copy carries the org id to stay unique */
-        email: `${org.id}+${session.user.email}`,
+        /* businesses.email is UNIQUE and a display copy: the user's own
+           email for their first business, org-prefixed for the next ones */
+        email: emailTaken ? `${org.id}+${session.user.email}` : session.user.email,
         speiClabe: body.speiClabe,
         speiBank: body.speiBank,
         speiBeneficiaryName: body.speiBeneficiaryName ?? null,

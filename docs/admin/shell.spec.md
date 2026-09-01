@@ -9,6 +9,8 @@ debt: []
 # Spec: Admin dashboard shell
 
 > **2026-08-31, retirement PR**: the Tiendas and Entregas sections (and the pending-drops badge) retired with the store network; the nav is Cobros · Links · Configuración. The ≤5-section law (FRONTEND.md) stands.
+>
+> **Phase 2 (business-and-memberships)**: the shell gained the business switcher (sidebar on desktop, a `<header>` strip on phones — a plain label with one business), and three session outcomes the guard routes: `NO_BUSINESS` → the onboarding wizard, `NO_ACTIVE_BUSINESS` / `MEMBERSHIP_REVOKED` → the chooser. Roles hide by area (brief law).
 
 `apps/admin` is born: the ISP's dashboard shell with the four-section sidebar, and the full access flow — login, signup, email verification, password recovery. This closes the UI half of `auth/isp-signup.spec.md` (its endpoints have waited since Phase 1).
 

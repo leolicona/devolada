@@ -9,6 +9,8 @@ import { LoginPage, RecoverPage, SignupPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
 import { SettingsScreen } from "./features/settings/SettingsScreen";
+import { NewBusinessScreen } from "./features/onboarding/NewBusinessScreen";
+import { AcceptInvitationScreen } from "./features/invitations/AcceptInvitationScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -17,6 +19,13 @@ const rootRoute = createRootRoute({ component: () => <Outlet /> });
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
 const signupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/signup", component: SignupPage });
 const recoverRoute = createRoute({ getParentRoute: () => rootRoute, path: "/recover", component: RecoverPage });
+/* Outside the shell: both exist before (or without) an active business */
+const newBusinessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/nuevo-negocio", component: NewBusinessScreen });
+const invitationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invitaciones/$invitationId",
+  component: AcceptInvitationScreen,
+});
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "app", component: Shell });
 
@@ -41,6 +50,8 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   signupRoute,
   recoverRoute,
+  newBusinessRoute,
+  invitationRoute,
   appRoute.addChildren([feedRoute, linksRoute, settingsRoute]),
 ]);
 

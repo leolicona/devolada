@@ -9,6 +9,7 @@ import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
 import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
+import { backfillConstaKeys } from "./consta/issuer";
 import { paymentsRoute } from "./routes/payments";
 import { paymentRequestsRoute } from "./routes/payment-requests";
 import { directPaymentsRoute } from "./routes/direct-payments";
@@ -88,6 +89,14 @@ export default {
     ctx.waitUntil(
       sweepTopUps(env).then((report) => {
         if (report.claimed) console.log("top-up sweep:", JSON.stringify(report));
+      }),
+    );
+    /* payments-and-classes D7: the backfill — any business without its
+       own Consta key gets one. A no-op SELECT almost every minute; the
+       sweep only speaks when it minted something. */
+    ctx.waitUntil(
+      backfillConstaKeys(env).then((issued) => {
+        if (issued) console.log("consta key backfill:", issued);
       }),
     );
   },

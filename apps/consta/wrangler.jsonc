@@ -19,7 +19,8 @@
     "EXTRACTION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct"
   },
   /* Secrets per env, set by CI after deploy (same TD-011 dance as the api):
-     APICEP_TOKEN (provider), CONSTA_ADMIN_TOKEN (key issuance).
+     APICEP_TOKEN (provider), CONSTA_ADMIN_TOKEN (key issuance),
+     CONSTA_ISSUER_TOKEN (issue-only door for the SaaS, payments-and-classes D7).
      Prod env block deliberately absent — it arrives with the first external
      consumer (validation spec D8). */
   "env": {

@@ -63,5 +63,6 @@ declare module "cloudflare:test" {
     TEST_MIGRATIONS: import("@cloudflare/vitest-pool-workers/config").D1Migration[];
     APICEP_TOKEN: string;
     CONSTA_ADMIN_TOKEN: string;
+    CONSTA_ISSUER_TOKEN: string;
   }
 }

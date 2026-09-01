@@ -1,0 +1,1 @@
+ALTER TABLE `businesses` ADD `consta_api_key` text;

@@ -514,7 +514,14 @@ export function PaymentPage({ token }: { token: string }) {
   if (link.isError) {
     return (
       <Card className="p-6">
-        {link.error.status === 404 ? (
+        {link.error.code === "BUSINESS_SUSPENDED" ? (
+          /* payments-and-classes D9: honest and final for now — nothing
+             to retry from this side. */
+          <Alert layout="icon">
+            <TriangleAlert aria-hidden />
+            Este negocio no puede recibir pagos por ahora. Contacta a tu proveedor.
+          </Alert>
+        ) : link.error.status === 404 ? (
           <Alert layout="icon">
             <TriangleAlert aria-hidden />
             Este link de pago no existe. Pide a tu proveedor de internet el link correcto.

@@ -235,13 +235,22 @@ interview (2026-09-01). Its companion is
       two platform keys born in code (`consta_api_key` rides the D7 PR,
       which owns the rest of this list's key work).
 - [x] Scenarios 1–7 and 11 automated, citing their stories (classes PR);
-      scenarios 8 was the #140 rename; 9, 10 and 12 ride the D7–D9 PR.
-      Scenario 7's sweep half leans on the reconnection-queue suite
-      (TD-009's invoice guard is tested there).
-- [ ] `CONSTA_ISSUER_TOKEN` set as a Consta Worker secret and an api one,
-      synced by both deploys (warning when unset: businesses are born
-      without a key and validate under the platform's until the backfill
-      runs); validation D5's amendment shipped in the same PR.
+      scenario 8 was the #140 rename; 9, 10 and 12 in the keys PR
+      (`consta-keys.test.ts` + the issuer-door tests in Consta's
+      `admin-keys.test.ts`). Scenario 7's sweep half leans on the
+      reconnection-queue suite (TD-009's invoice guard is tested there).
+      Scenario 9's top-up half is the top-up suite's platform-key path,
+      unchanged by this PR.
+- [x] `CONSTA_ISSUER_TOKEN` synced by both deploys (Consta dev + api
+      dev/prod; Consta has no prod env yet) with a warning when unset:
+      businesses are born without a key and validate under the platform's
+      until the backfill runs. Validation D5's amendment (the issue-only
+      door) shipped with it. **Owner sets the secret in the GitHub
+      environments.**
+- [x] Migration 0024 (`consta_api_key`, additive); issuance at birth,
+      the every-minute backfill sweep, refs under the business's key
+      (D8 — they already rode every validation), and the D9 suspension
+      cut (link 409, sweeps skip, queued release skips, key kept).
 - [x] The IA's route rule written and TD-017 opened for the inherited
       Spanish paths (PR #135).
 - [x] `charge-feed.spec.md` bannered as superseded; SPEC.md glossary

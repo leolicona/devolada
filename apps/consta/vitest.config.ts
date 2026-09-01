@@ -17,6 +17,7 @@ export default defineWorkersConfig(async () => {
               /* Test-only values; real ones are worker secrets set by CI */
               APICEP_TOKEN: "test-apicep-token",
               CONSTA_ADMIN_TOKEN: "test-admin-token",
+              CONSTA_ISSUER_TOKEN: "test-issuer-token",
               /* Pinned, not defaulted: `wrangler.configPath` above also
                  loads .dev.vars, so a developer running the local apiCEP
                  sandbox (APICEP_BASE_URL=http://localhost:8789) would send

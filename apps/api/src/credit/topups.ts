@@ -68,6 +68,9 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
 
   let verdict;
   try {
+    /* prepaid-credit D6 / payments-and-classes D7: a top-up is the
+       platform's own transaction, so it ALWAYS travels under the
+       platform's key — never the business's. */
     verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
   } catch (e) {
     const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
@@ -185,6 +188,9 @@ export async function releaseQueuedForCredit(env: Bindings, now: Date = new Date
   for (const [businessId, ids] of byBusiness) {
     const [business] = await db.select().from(businesses).where(eq(businesses.id, businessId));
     if (!business) continue;
+    /* payments-and-classes D9: suspension freezes the queue exactly as
+       the credit pause does — queued rows included. */
+    if (business.status === "suspended") continue;
     const { step } = await creditSummary(db, business);
     if (step === "paused") continue;
     for (const [i, id] of ids.entries()) {

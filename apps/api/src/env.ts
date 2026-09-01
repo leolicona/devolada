@@ -34,6 +34,11 @@ export type Bindings = {
      the WispHub usuario before it travels to Consta as `customerRef`.
      Unset → no refs travel; validation is never blocked by it. */
   CUSTOMER_REF_SECRET?: string;
+  /* payments-and-classes D7 (pivot D20): opens ONLY POST /admin/keys on
+     Consta — the api mints one key per business at birth and the
+     backfill sweep fills the gaps. Unset → businesses are born without
+     their own key and validate under CONSTA_API_KEY until it lands. */
+  CONSTA_ISSUER_TOKEN?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
   /* operator-panel D2: comma-separated emails of the platform operators.

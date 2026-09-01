@@ -86,7 +86,9 @@ interview (2026-09-01). Its consumer is
 - **D7 — The businesses table is the operator's map.** `GET
   /platform/businesses?q` lists every business with its derived balance,
   step, effective fee, owner email and creation date, searchable by name
-  or email; a row opens the adjustment and override forms and the
+  or by **an owner's email through the memberships** (never the signup
+  copy on the business row, which stops being the owner after a transfer
+  — business-and-memberships D11; PR #132 review); a row opens the adjustment and override forms and the
   business's entry history. Read-only otherwise: the operator does not
   impersonate a business (no switch into it, no editing its CLABE).
 

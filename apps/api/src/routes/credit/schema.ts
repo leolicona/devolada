@@ -13,7 +13,7 @@ export const creditResponse = z.object({
 
 export const creditEntry = z.object({
   id: z.string(),
-  kind: z.enum(["welcome_bonus", "top_up", "validation_fee", "adjustment"]),
+  kind: z.enum(["welcome_bonus", "top_up", "validation_fee", "fee_reversal", "adjustment"]),
   cents: z.number().int(),
   reason: z.string().nullable(),
   createdAt: z.number().int(),

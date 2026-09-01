@@ -14,6 +14,7 @@ import {
 } from "../db/schema";
 import { makeAuth } from "../auth/better";
 import { requireSession } from "../auth/middleware";
+import { creditSummary } from "../credit";
 
 /* Auth routes (better-auth.spec.md D6): our thin envelope routes first,
    then everything else under /auth/* falls through to the Better Auth
@@ -78,8 +79,18 @@ auth.post("/business/signup", zValidator("json", signupInput), async (c) => {
   );
 });
 
-auth.get("/me", requireSession, (c) => {
-  return c.json({ success: true, data: c.get("actor") });
+/* prepaid-credit D7: the chip reads its step from the session query —
+   computed here, once per /auth/me, never in the middleware (a SUM and
+   three settings reads on every request was the wrong price). */
+auth.get("/me", requireSession, async (c) => {
+  const actor = c.get("actor");
+  const db = drizzle(c.env.DB);
+  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
+  const credit = await creditSummary(db, business);
+  return c.json({
+    success: true,
+    data: { ...actor, credit: { balanceCents: credit.balanceCents, step: credit.step } },
+  });
 });
 
 /* Everything else — sign-in/email, email-otp/*,

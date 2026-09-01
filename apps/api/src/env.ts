@@ -68,10 +68,9 @@ export type Actor = {
   wisphubConfigured: boolean;
   /* Every business this user belongs to — the switcher's list (US-B02) */
   businesses: { id: string; orgId: string; name: string; role: Role }[];
-  /* operator-panel D2: derived from the secret, per request */
+  /* operator-panel D2: derived from the secret, per request (a string
+     compare — no query) */
   platformOperator: boolean;
-  /* prepaid-credit D7: the chip renders from the session (settings D7 pattern) */
-  credit: { balanceCents: number; step: "ok" | "low" | "empty" | "paused" };
 };
 
 export type Variables = {

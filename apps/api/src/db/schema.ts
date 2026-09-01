@@ -374,7 +374,12 @@ export const creditEntries = sqliteTable(
     businessId: text("business_id")
       .notNull()
       .references(() => businesses.id),
-    kind: text("kind", { enum: ["welcome_bonus", "top_up", "validation_fee", "adjustment"] }).notNull(),
+    /* `fee_reversal` (D2 amendment): the system giving a contradicted
+       row's fee back when the same link's fresh submission confirms —
+       keyed on the reversed row's payment_id, idempotent like the fee */
+    kind: text("kind", {
+      enum: ["welcome_bonus", "top_up", "validation_fee", "fee_reversal", "adjustment"],
+    }).notNull(),
     /* Signed: credits positive, the fee negative */
     cents: integer("cents").notNull(),
     /* validation_fee: the payment that earned it — unique, so a retried
@@ -393,6 +398,9 @@ export const creditEntries = sqliteTable(
     uniqueIndex("credit_entries_fee_payment_idx")
       .on(t.paymentId)
       .where(sql`kind = 'validation_fee'`),
+    uniqueIndex("credit_entries_reversal_payment_idx")
+      .on(t.paymentId)
+      .where(sql`kind = 'fee_reversal'`),
     uniqueIndex("credit_entries_bonus_user_idx")
       .on(t.grantedToUserId)
       .where(sql`kind = 'welcome_bonus'`),

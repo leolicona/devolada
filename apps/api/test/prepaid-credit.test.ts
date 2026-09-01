@@ -2,13 +2,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { businesses, creditEntries, platformSettings, user as userTable } from "../src/db/schema";
+import { businesses, creditEntries, paymentLinks, platformSettings, user as userTable } from "../src/db/schema";
 import { debitValidationFee, grantWelcomeBonus, stepFor } from "../src/credit";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
 /* docs/platform/prepaid-credit.spec.md scenarios 1–7, 13–14 (US-B04,
-   US-L03) and docs/platform/operator-panel.spec.md scenarios 1–8
+   US-L03; 4 and 15 for the D2 amendment) and docs/platform/operator-panel.spec.md scenarios 1–8
    (US-L02). Top-ups and the pause (prepaid-credit D6, D8, D9) land with
    their own PR. */
 
@@ -99,6 +99,54 @@ describe("US-L03: the fee keys on the terminal verdict, once per payment", () =>
     await debitValidationFee(opEnv(), db, pb2);
     const rowsB = await db.select().from(creditEntries).where(eq(creditEntries.businessId, b.id));
     expect(rowsB.map((r) => r.cents).sort()).toEqual([-700, -500].sort());
+  });
+});
+
+describe("US-L03 / D2 amendment: one transfer pays once", () => {
+  it("scenario 4: an edge rejection reaches no provider and books no fee", async () => {
+    const business = await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP" });
+    const db = drizzle(env.DB);
+    const [link] = await db
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokedge1234567890", wisphubCustomerId: "6", customerUsuario: "greyes@wifiplus" })
+      .returning();
+    const res = await (await app()).request(
+      `/direct-payments/links/${link.token}/pay`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transfer: { trackingKey: "TRACK001XYZ", senderBank: "Banco Inventado", date: "2026-09-01" } }),
+      },
+      testEnv(),
+    );
+    expect(res.status).toBe(400);
+    expect(await db.select().from(creditEntries)).toHaveLength(0);
+  });
+
+  it("scenario 15: a contradicted row's fee comes back when the same link's fresh submission confirms — once", async () => {
+    const business = await seedBusiness();
+    const db = drizzle(env.DB);
+    /* The payer's typo: a contradicted verdict, charged (D2) */
+    const wrong = await seedConfirmedPayment(business, { status: "invalid", folio: null, customerUsuario: "greyes@wifiplus" });
+    expect(await debitValidationFee(opEnv(), db, wrong)).toBe(true);
+    /* The correction: a fresh row on the same link, confirmed and charged */
+    const right = await seedConfirmedPayment(business, { status: "confirmed", customerUsuario: "greyes@wifiplus", folio: "DV-RIGHT1" });
+    expect(right.paymentLinkId).toBe(wrong.paymentLinkId);
+    expect(await debitValidationFee(opEnv(), db, right)).toBe(true);
+
+    const rows = await db.select().from(creditEntries).where(eq(creditEntries.businessId, business.id));
+    expect(rows.map((r) => [r.kind, r.cents]).sort()).toEqual(
+      [["fee_reversal", 500], ["validation_fee", -500], ["validation_fee", -500]].sort(),
+    );
+    const reversal = rows.find((r) => r.kind === "fee_reversal")!;
+    expect(reversal.paymentId).toBe(wrong.id);
+    expect(reversal.reason).toContain(right.id);
+    /* Net: one fee for one transfer */
+    expect(rows.reduce((n, r) => n + r.cents, 0)).toBe(-500);
+
+    /* Idempotent: the same confirmation booked again reverses nothing twice */
+    expect(await debitValidationFee(opEnv(), db, right)).toBe(false);
+    expect(await db.select().from(creditEntries).where(eq(creditEntries.businessId, business.id))).toHaveLength(3);
   });
 });
 

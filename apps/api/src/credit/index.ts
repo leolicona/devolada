@@ -1,7 +1,7 @@
-import { and, desc, eq, lt, sum } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, ne, sum } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { businesses, creditEntries, member, user as userTable } from "../db/schema";
+import { businesses, creditEntries, member, payments, user as userTable } from "../db/schema";
 import { sendCreditCrossing } from "../email/sender";
 import { getNumberSetting } from "../platform/settings";
 
@@ -87,7 +87,7 @@ async function notifyCrossings(
 export async function debitValidationFee(
   env: Bindings,
   db: DB,
-  payment: { id: string; businessId: string; status: string },
+  payment: { id: string; businessId: string; status: string; paymentLinkId: string },
 ): Promise<boolean> {
   if (!FEE_STATUSES.has(payment.status)) return false;
   const [business] = await db.select().from(businesses).where(eq(businesses.id, payment.businessId));
@@ -106,7 +106,43 @@ export async function debitValidationFee(
     throw e;
   }
   await notifyCrossings(env, db, business, before, before - feeCents);
+  if (payment.status !== "invalid") await reverseContradictedFees(db, payment);
   return true;
+}
+
+/* D2 amendment (owner, 2026-09-01): one transfer pays once. When a fresh
+   submission on the same link confirms a valid CEP, every earlier row of
+   that link that ended `invalid` (contradicted) and was charged gets its
+   fee back — a `fee_reversal` keyed on the reversed row, so the unique
+   index makes it idempotent and a second confirmation reverses nothing
+   twice. The payer's typo is not the business's cost. */
+async function reverseContradictedFees(db: DB, payment: { id: string; paymentLinkId: string }) {
+  const contradicted = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(
+      and(eq(payments.paymentLinkId, payment.paymentLinkId), eq(payments.status, "invalid"), ne(payments.id, payment.id)),
+    );
+  if (contradicted.length === 0) return;
+  const ids = contradicted.map((r) => r.id);
+  const entries = await db
+    .select()
+    .from(creditEntries)
+    .where(and(inArray(creditEntries.paymentId, ids), inArray(creditEntries.kind, ["validation_fee", "fee_reversal"])));
+  const reversed = new Set(entries.filter((e) => e.kind === "fee_reversal").map((e) => e.paymentId));
+  for (const fee of entries.filter((e) => e.kind === "validation_fee" && !reversed.has(e.paymentId))) {
+    try {
+      await db.insert(creditEntries).values({
+        businessId: fee.businessId,
+        kind: "fee_reversal",
+        cents: -fee.cents,
+        paymentId: fee.paymentId,
+        reason: `contradicho corregido: ${payment.id}`,
+      });
+    } catch (e) {
+      if (!String(e).includes("UNIQUE")) throw e;
+    }
+  }
 }
 
 /* D5: once per user, for their first business */

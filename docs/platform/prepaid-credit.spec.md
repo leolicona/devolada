@@ -54,12 +54,30 @@ the numbers are edited — is [operator-panel.spec.md](operator-panel.spec.md).
   platform, which sets the fee to absorb it; two open items below keep the
   question alive. **Rejected**: valid CEPs only (the earlier draft) — a
   `contradicted` is work done and truth delivered.
+  **Amended 2026-09-01 (PR #132 review, owner decision) — one transfer
+  pays once.** `payments`' unique index excludes `invalid`, so the payer
+  who corrects a typo submits a **fresh** row (validation-status-ux D7/D9;
+  a terminal row is never superseded), and when it confirms the fee is
+  booked again: one transfer, two verdicts, two fees — the cost-by-the-
+  payer's-error this decision rejected. So when a fresh row on the same
+  link reaches a **valid** CEP, every earlier row of that link that ended
+  `invalid` and was charged gets its fee back as a **`fee_reversal`** —
+  its own kind, not an `adjustment` (which is the operator's, with an
+  author): keyed on the reversed row's `payment_id` with the same partial
+  unique index as the fee, so it is idempotent by construction, and read
+  in the history as "Cobro revertido", never as prose. Reason carries the
+  confirming payment's id; the author is the system (null). Accepted edge:
+  a payer who first fabricates a receipt and then sends a real transfer
+  earns the reversal too — the business pays once, the platform paid the
+  provider twice; cheap, and consistent with "the cost of the provider's
+  'we don't know' stays with the platform".
 
 - **D3 — Balance = SUM, never stored; entries are append-only.**
   `credit_entries` is the house's append-only table (ARCHITECTURE.md): one
   row per event, `cents` signed, balance derived with `SUM` per business.
   Kinds: `welcome_bonus` (+), `top_up` (+), `validation_fee` (−),
-  `adjustment` (±, operator-panel D5). Corrections are new rows.
+  `fee_reversal` (+, the system's, D2 amendment), `adjustment` (±,
+  operator-panel D5). Corrections are new rows.
   **Rejected**: a `balance_cents` column (it drifts; the old ledger's
   lesson).
 
@@ -148,9 +166,9 @@ the numbers are edited — is [operator-panel.spec.md](operator-panel.spec.md).
 ## Schema
 
 - `credit_entries` (append-only): `id`, `business_id`, `kind`
-  (`welcome_bonus | top_up | validation_fee | adjustment`), `cents`
-  (signed), `payment_id` (nullable, **unique** where kind =
-  `validation_fee`), `top_up_id` (nullable), `granted_to_user_id`
+  (`welcome_bonus | top_up | validation_fee | fee_reversal | adjustment`),
+  `cents` (signed), `payment_id` (nullable, **unique** where kind =
+  `validation_fee`, and again where kind = `fee_reversal`), `top_up_id` (nullable), `granted_to_user_id`
   (bonus), `reason` + `author_user_id` (adjustment, operator-panel D5),
   `created_at`. Index `(business_id, created_at)`.
 - `top_ups`: `id`, `business_id`, `submitted_by_user_id`, `claimed_cents`,
@@ -176,7 +194,7 @@ the numbers are edited — is [operator-panel.spec.md](operator-panel.spec.md).
 | `GET /credit/entries?cursor` | any member | append-only history, newest first; kinds labeled |
 | `POST /credit/top-ups` | owner (`credit: manage`) | proof via the same shapes as `POST /direct-payments/links/:token/pay` (receipt upload or manual data); 201 with the top-up row; 400 below `topup_min_cents` unless a CEP already says otherwise |
 | `GET /credit/top-ups/:id` | owner | status for the page's calm wait |
-| `/auth/me` | — | gains `credit: { step }` so the shell chip renders without a second request (settings D7 pattern) |
+| `/auth/me` | — | gains `credit: { balanceCents, step }`, computed in that handler alone — never in the session middleware (a SUM and three settings reads on every request was the wrong price; PR #132 review) |
 
 Debit and pause live in `direct-payments/validation.ts`'s verdict
 transitions (D2, D8) and in the sweep (D8's release); the shell never
@@ -233,6 +251,10 @@ computes money.
     render (D3 matrix); the chip still shows the step.
 14. `GET /credit/entries` lists every kind with sign and label; the sum
     of the page equals `balanceCents`.
+15. A contradicted row is charged; the same link's fresh submission
+    confirms → one `fee_reversal` keyed on the contradicted row, net one
+    fee for the transfer; booking the confirmation again reverses nothing
+    twice (D2 amendment).
 
 ## Open items
 
@@ -254,9 +276,9 @@ computes money.
 - [x] `credit_entries`, `top_ups`, `fee_override_cents` migrated
       (0020, additive only — no rebuild, so rule 12's seeded proof is not
       owed); `queued_for_credit` is an enum value with no SQL.
-- [x] Scenarios 1–7, 13–14 automated (`test/prepaid-credit.test.ts`); the
-      debit idempotency proven by rows. Scenarios 8–12 (top-ups, the pause)
-      land with their PR.
+- [x] Scenarios 1–7, 13–15 automated (`test/prepaid-credit.test.ts`); the
+      debit and reversal idempotency proven by rows. Scenarios 8–12
+      (top-ups, the pause) land with their PR.
 - [ ] The two emails send through Resend on deployed dev, once per
       crossing, to every owner.
 - [ ] A real top-up on deployed dev with the owner's transfer to the

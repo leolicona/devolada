@@ -1,8 +1,8 @@
 import type { Context } from "hono";
-import { desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses } from "../../db/schema";
+import { businesses, member, user as userTable } from "../../db/schema";
 import {
   adjustCredit,
   balanceCents,
@@ -57,10 +57,30 @@ async function toRow(db: ReturnType<typeof drizzle>, b: typeof businesses.$infer
 export async function listPlatformBusinesses(c: Ctx, q: string | undefined) {
   const db = drizzle(c.env.DB);
   const needle = q?.trim() ? `%${q.trim()}%` : null;
+  /* "By owner email" means the owners of record — the memberships — not
+     the signup copy on the business row, which stops being the owner
+     after a transfer (business-and-memberships D11). */
+  let ownedIds: string[] = [];
+  if (needle) {
+    const owned = await db
+      .select({ orgId: member.organizationId })
+      .from(member)
+      .innerJoin(userTable, eq(userTable.id, member.userId))
+      .where(and(eq(member.role, "owner"), like(userTable.email, needle)));
+    const orgIds = owned.map((o) => o.orgId);
+    if (orgIds.length) {
+      const byOrg = await db.select({ id: businesses.id }).from(businesses).where(inArray(businesses.orgId, orgIds));
+      ownedIds = byOrg.map((b) => b.id);
+    }
+  }
   const rows = await db
     .select()
     .from(businesses)
-    .where(needle ? or(like(businesses.name, needle), like(businesses.email, needle)) : undefined)
+    .where(
+      needle
+        ? or(like(businesses.name, needle), ...(ownedIds.length ? [inArray(businesses.id, ownedIds)] : []))
+        : undefined,
+    )
     .orderBy(desc(businesses.createdAt))
     .limit(100);
   const capCents = await getNumberSetting(db, "negative_cap_cents");

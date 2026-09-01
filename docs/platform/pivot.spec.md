@@ -361,9 +361,10 @@ store-side auth artifacts.
    surfaces precedes this child spec — `.design/devolada/` left with the
    network (D15). No brand rename rides this phase: the SaaS keeps
    Devolada (D19).
-3. **Prepaid credit** — credit entries, warnings, negative cap, top-up via
-   validated SPEI, welcome bonus (child spec, US-B04–B06, US-L03) +
-   `/operador` panel (child spec, US-L02).
+3. **Prepaid credit** — ✅ 2026-09-01: credit entries, warnings, negative
+   cap, top-up via validated SPEI, welcome bonus (prepaid-credit.spec.md,
+   US-B04–B06, US-L03) + `/operador` panel (operator-panel.spec.md,
+   US-L02).
 4. **Cobros mirror & reconciliation surfaces** — payment_requests from
    WispHub, class computation, payments list + filters + proof view, link
    page lists Cobros (child specs, US-R01–R04). Includes Consta's

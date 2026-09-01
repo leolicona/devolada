@@ -1,5 +1,5 @@
 ---
-status: in development
+status: current # phase 3 complete
 stories: [US-L02]
 domain: platform
 updated: 2026-09-01
@@ -158,8 +158,9 @@ to show the route at all.
 - [x] `PLATFORM_OPERATOR_EMAILS` documented in CICD.md and synced by both
       deploy workflows (warning when unset: the panel is closed to everyone).
 - [ ] Set on deployed dev (owner's GitHub environment secret).
-- [x] Scenarios 1–8 automated (`test/prepaid-credit.test.ts`); 9 is the
-      admin's, with the panel UI.
+- [x] Scenarios 1–8 automated (`test/prepaid-credit.test.ts`); 9 in the
+      admin (`test/credit.test.tsx`): hidden and redirected for a
+      non-operator, rules saved as cents, adjustments with a reason.
 - [ ] The operator sets the real `topup_clabe` on deployed dev and
       prepaid-credit's real top-up (its DoD) runs against it.
 - [ ] pivot.spec.md D13's list matched against D1's table (D13 said

@@ -36,9 +36,10 @@ Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md
 - [x] Top-up via platform-validated SPEI (US-B05): both doors, the
       platform's key against the platform's account, the CEP's amount
       credited, its own sweep
-- [ ] Saldo chip in the shell + Saldo y recargas page (US-B04)
-- [x] `platform_settings` table (append-only) + `/platform/*` API and the
-      operator secret (US-L02); the `/operador` panel UI — frontend PR
+- [x] Saldo chip in the shell (label + icon per step), the two banners,
+      Saldo y recargas with both doors (US-B04/B05)
+- [x] `platform_settings` + `/platform/*` API + the operator secret +
+      the `/operador` panel (Reglas / Negocios) (US-L02)
 
 ## Phase 4 — Cobros mirror & reconciliation
 

@@ -30,7 +30,9 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | Concept | UI copy (es-MX) | Code (English) | Never |
 |---------|-----------------|----------------|-------|
 | The paying tenant | **Negocio** | `business` (table `businesses`; `businessId` everywhere) | "empresa", "ISP" (an ISP is one kind of business) |
-| The transfer that arrived and reconciled | **Pago** | `payment` (table `payments`; absorbed the store-era `charge`) | "cobro" (that is the expected side — `payment_request`/Cobro arrives with phase 4) |
+| The transfer that arrived and reconciled | **Pago** | `payment` (table `payments`; absorbed the store-era `charge`) | "cobro" (that is the expected side, below) |
+| What a customer owes, read live from WispHub | **Cobro** | `payment_request` (route `/payment-requests`; **no table** — read live, cobros-live D2/D6) | "cargo" (reserved for fees); a stored copy (nothing mirrors it) |
+| The verdict against the ask | **Exacto / Pago parcial / Sobrante** | `reconciliation_class` (`exact/short/over`, payments-and-classes D1/D3) | reusing the lifecycle words (`partial` is a status, `short` a class) |
 | Who may do what inside a business | **Dueño / Administrador / Operador / Lector** | `role` (`owner/admin/operator/viewer`) | "usuario" as a role name |
 | Prepaid validation credit | **Saldo** | `credit_balance` (derived: SUM of `credit_entries`) | "monedero" |
 | Adding credit | **Recarga** | `top_up` | "depósito" |

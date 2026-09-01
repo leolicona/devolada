@@ -15,7 +15,7 @@ import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
-import { demoVerdict, isDemoLink } from "./demo";
+import { classifyPayment } from "./classes";
 import {
   historyVouches,
   maybeProvisionalRelease,
@@ -299,21 +299,12 @@ export async function runValidation(
     .where(eq(payments.id, payment.id));
 
   let verdict;
-  if (isDemoLink(env, link)) {
-    /* TD-015: a named link in a dev environment, decided before the fact
-       and never by a failure — see `demo.ts`. Everything after this line
-       is the real thing: the fresh WispHub read, the charge, the folio,
-       the reconnection. Only Banxico is simulated. */
-    console.warn(`TD-015 demo verdict for direct payment ${payment.id} — no provider call`);
-    verdict = demoVerdict(payment, business, now);
-  } else {
-    try {
-      verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
-    } catch (e) {
-      const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
-      console.error("consta validation failed:", code);
-      return retryLater(code);
-    }
+  try {
+    verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
+  } catch (e) {
+    const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
+    console.error("consta validation failed:", code);
+    return retryLater(code);
   }
 
   const base = {
@@ -543,6 +534,13 @@ export async function runValidation(
       return update({
         ...base,
         status: "unapplied",
+        /* payments-and-classes D3: money arrived against a debt of zero —
+           `over` by definition, a class and never a credit (D2 keeps its
+           treatment at `flag`). What the CEP said arrived and who sent it
+           land on the row too, so the proof view has its facts. */
+        reconciliationClass: "over",
+        receivedCents: cep?.amountCents ?? payment.amountCents,
+        cepSenderName: cep?.senderName ?? null,
         nextValidationAt: null,
         lastError: null,
       });
@@ -597,6 +595,15 @@ export async function runValidation(
     ...base,
     receivedCents,
     status: settlement.status,
+    /* payments-and-classes D1/D3: the class, computed once at the verdict
+       against the fresh ask — the debt read seconds ago plus the service
+       fee, the same total the payer's page quoted. A later policy change
+       never rewrites it (scenario 1). */
+    reconciliationClass: classifyPayment({
+      receivedCents,
+      askedCents: ispDebtCents + payment.serviceFeeCents,
+      toleranceCents: business.toleranceCents,
+    }),
     confirmedAt: now,
     /* D18: who Banxico says sent the money. Recorded and acted on by
        nothing — a name unrelated to the subscriber is the only signal

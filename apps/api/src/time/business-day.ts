@@ -61,6 +61,16 @@ export function businessMonthKey(timezone: string, instant: Date): string {
   return `${read(list, "year")}-${month}`;
 }
 
+/* Midnight of an arbitrary calendar date on the business's wall clock
+   (payments-and-classes D4: the feed's date range filters in the
+   business's timezone). Same two-pass offset dance as below. */
+export function startOfIsoDateMs(timezone: string, isoDate: string): number {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const midnightAsUtc = Date.UTC(y, m - 1, d);
+  const guess = midnightAsUtc - offsetMsAt(timezone, new Date(midnightAsUtc));
+  return midnightAsUtc - offsetMsAt(timezone, new Date(guess));
+}
+
 export function startOfBusinessDayMs(timezone: string, now: Date = new Date()): number {
   const list = formatterFor(timezone).formatToParts(now);
   const midnightAsUtc = Date.UTC(read(list, "year"), read(list, "month") - 1, read(list, "day"));

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, TriangleAlert } from "lucide-react";
 import {
   Alert,
@@ -10,36 +10,51 @@ import {
   Skeleton,
   StatusBadge,
   formatMoney,
+  type Status,
 } from "@devolada/ui";
-import type { FeedCharge, FeedResponse } from "@devolada/api/payments-schema";
+import type { FeedCharge, FeedResponse, ProofResponse, RetryResponse } from "@devolada/api/payments-schema";
+import { roleCan } from "@devolada/api/role-matrix";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { formatTime } from "@/lib/datetime";
-import { useDisplaySettings } from "../auth/session";
+import { useDisplaySettings, useSession } from "../auth/session";
 
-/* The live charge feed (US-A01). Polling every 5s — "live" without
-   sockets (spec D1). The ISP's timezone owns "today" (settings D5).
-   Built on the shadcn catalog: Tabs, Collapsible, Skeleton (D7). */
+/* Pagos (US-A01, payments-and-classes D4/D5). Polling every 5s — "live"
+   without sockets (charge-feed D1). The ISP's timezone owns "today" and
+   the date filters (settings D5). Every row carries its reconciliation
+   class next to the action outcome; the proof opens in place. */
 
 const POLL_MS = 5000;
 const ALL = "all";
 
+/* D4: chips are the questions an ISP actually asks — the queue's states
+   (D5 keeps the action outcome its own dimension) plus the class chip
+   "Pago parcial" (= `short`). The API's full lifecycle filter exists
+   underneath; the UI grows into it. */
 const statusFilters = [
   { value: ALL, label: "Todos" },
   { value: "queued", label: "En cola" },
   { value: "failed", label: "Fallidos" },
-  /* partial-payment D15: money that arrived without buying a
-     reconnection is what an ISP audits — it gets its own chip. */
   { value: "withheld", label: "Sin reactivar" },
   { value: "reconnected", label: "Reconectados" },
+  { value: "short", label: "Pago parcial" },
 ] as const;
 
-function feedPath(opts: { cursor?: number; status?: string }): string {
+type Filters = { chip: string; q: string; from: string; to: string };
+
+function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
   const params = new URLSearchParams();
   if (opts.cursor) params.set("cursor", String(opts.cursor));
-  if (opts.status && opts.status !== ALL) params.set("status", opts.status);
+  if (opts.chip === "short") params.set("class", "short");
+  else if (opts.chip && opts.chip !== ALL) params.set("reconnection", opts.chip);
+  if (opts.q?.trim()) params.set("q", opts.q.trim());
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
   const qs = params.toString();
   return `/payments/feed${qs ? `?${qs}` : ""}`;
 }
@@ -54,21 +69,132 @@ const reasons: Record<string, string> = {
 };
 const reasonFor = (code: string) => reasons[code] ?? "WispHub no respondió. Lo seguimos intentando.";
 
-/* D4 + D7: detail expands in place with a Collapsible row */
-function ChargeRow({ charge }: { charge: FeedCharge }) {
-  const { timeFormat, timezone } = useDisplaySettings();
-  const at = (ms: number) => formatTime(ms, timeFormat, timezone);
-  /* partial-payment D15: `totalCents` is what arrived (D9); the other
-     three fields are what was asked. A short payment is the difference,
-     derived here — no wire field carries it. `missingCents` matches the
-     payer's page exactly: below the debt no fee is covered (D3), so the
-     ISP and the payer quote the same figure. */
-  const askCents = charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
-  const shortCents = askCents - charge.receivedCents;
-  const missingCents = Math.max(
-    0,
-    charge.invoiceCents + charge.carriedBalanceCents - charge.receivedCents,
+/* A row with no action outcome wears its lifecycle instead — an
+   `unapplied` payment never met the router (D3). */
+const lifecycleBadge: Partial<Record<FeedCharge["status"], Status>> = {
+  validating: "validating",
+  queued_for_credit: "validating",
+  invalid: "paymentInvalid",
+  expired: "paymentExpired",
+  superseded: "paymentExpired",
+  unapplied: "unapplied",
+};
+
+const classBadge: Record<NonNullable<FeedCharge["reconciliationClass"]>, Status> = {
+  exact: "classExact",
+  short: "classShort",
+  over: "classOver",
+};
+
+/* D4: the proof is the whole truth — the CEP as Banxico answered it and
+   the payer's capture — read for every role. */
+function ProofDialog({ charge }: { charge: FeedCharge }) {
+  const [open, setOpen] = useState(false);
+  const proof = useQuery<ProofResponse, ApiError>({
+    queryKey: ["payment-proof", charge.id],
+    queryFn: () => api<ProofResponse>(`/payments/${charge.id}/proof`),
+    enabled: open,
+  });
+  const line = (label: string, value: ReactNode) => (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-ink-soft">{label}</dt>
+      <dd className="text-right">{value ?? "—"}</dd>
+    </div>
   );
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">Ver comprobante</Button>
+      </DialogTrigger>
+      <DialogContent aria-describedby={undefined}>
+        <DialogTitle>Comprobante · {charge.customerName}</DialogTitle>
+        {proof.isPending && <Skeleton className="h-24 w-full" />}
+        {proof.error && (
+          <Alert variant="destructive">
+            No pudimos cargar el comprobante.{" "}
+            <button type="button" className="underline" onClick={() => void proof.refetch()}>
+              Reintentar
+            </button>
+          </Alert>
+        )}
+        {proof.data && (
+          <div className="space-y-4">
+            {proof.data.cep ? (
+              <dl className="grid gap-2 text-sm">
+                {line(
+                  "Clave de rastreo",
+                  proof.data.cep.trackingKey ? (
+                    <span className="font-mono">{proof.data.cep.trackingKey}</span>
+                  ) : (
+                    "—"
+                  ),
+                )}
+                {line("Monto", <Amount cents={proof.data.cep.amountCents} />)}
+                {line("Fecha", proof.data.cep.date)}
+                {line("Banco emisor", proof.data.cep.senderBank)}
+                {line("Ordenante", proof.data.cep.senderName)}
+                {line("Beneficiario", proof.data.cep.beneficiaryName)}
+              </dl>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Banxico aún no confirma esta transferencia; el CEP aparecerá aquí cuando responda.
+              </p>
+            )}
+            {proof.data.imageUrl ? (
+              <figure className="space-y-2">
+                <img
+                  src={proof.data.imageUrl}
+                  alt="Comprobante enviado por el cliente"
+                  className="max-h-96 w-full rounded-md border border-border object-contain"
+                />
+                <a
+                  className="text-sm underline"
+                  href={proof.data.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Abrir en otra pestaña
+                </a>
+              </figure>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {proof.data.proofMode === "transfer"
+                  ? "El cliente capturó los datos a mano; no envió imagen."
+                  : "Sin imagen guardada."}
+              </p>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* D4 + D7: detail expands in place with a Collapsible row */
+function ChargeRow({
+  charge,
+  treatment,
+  canOperate,
+}: {
+  charge: FeedCharge;
+  treatment: "flag" | "credit";
+  canOperate: boolean;
+}) {
+  const { timeFormat, timezone } = useDisplaySettings();
+  const queryClient = useQueryClient();
+  const at = (ms: number) => formatTime(ms, timeFormat, timezone);
+
+  /* D5: one click buys exactly one fresh attempt; the sweep does the rest */
+  const retry = useMutation<RetryResponse, ApiError>({
+    mutationFn: () =>
+      api<RetryResponse>(`/payments/${charge.id}/retry-reconnection`, { method: "POST" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }),
+  });
+
+  const shortCents = charge.askedCents - charge.receivedCents;
+  const badge: Status =
+    charge.reconnectionStatus ?? lifecycleBadge[charge.status] ?? "validating";
+  const showsMoney = ["confirmed", "partial", "unapplied"].includes(charge.status);
   return (
     <li>
       <Collapsible>
@@ -82,23 +208,20 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
           <span className="col-start-2 min-w-0 sm:flex-1">
             {/* design-review D1: identity wraps, it never truncates */}
             <span className="block text-sm font-medium">{charge.customerName}</span>
-            {/* US-D06: a direct payment has no store — the channel is
-                named instead, so both kinds stay distinguishable */}
-            {/* D15: the label, not only the badge — a partial that
-                reconnected under a lenient threshold wears a green
-                "Reconectado" and would otherwise pass for a full payment */}
-            <span className="block text-sm text-muted-foreground">
-              {/* one channel today (business-and-memberships D6); the row shape keeps storeName until phase 4 */}
-              Pago directo · SPEI
-              {missingCents > 0 && " · Pago parcial"}
-            </span>
+            <span className="block text-sm text-muted-foreground">Pago directo · SPEI</span>
           </span>
           <Amount
             cents={charge.receivedCents}
             className="shrink-0 text-right text-sm font-semibold sm:order-last sm:w-20"
           />
-          <span className="col-span-2 sm:contents">
-            <StatusBadge status={charge.reconnectionStatus} />
+          <span className="col-span-2 flex flex-wrap gap-2 sm:contents">
+            <StatusBadge status={badge} />
+            {/* D4: the class next to the action outcome — a lenient
+                threshold can reconnect a short payment, and the class is
+                what keeps saying money is missing */}
+            {charge.reconciliationClass && (
+              <StatusBadge status={classBadge[charge.reconciliationClass]} />
+            )}
           </span>
           <ChevronDown
             className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform duration-150 group-data-[state=open]:rotate-180"
@@ -106,7 +229,7 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="grid gap-6 border-t border-line-soft bg-muted/50 p-4 pl-20 sm:grid-cols-2">
+          <div className="grid gap-6 border-t border-line-soft bg-muted/50 p-4 sm:grid-cols-2 sm:pl-20">
             <div>
               <AmountBreakdown
                 /* D15: with "Recibido" below, the derived sum needs its
@@ -123,7 +246,7 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
                   { label: "Cargo por servicio", cents: charge.serviceFeeCents },
                 ]}
               />
-              {shortCents > 0 && (
+              {(shortCents > 0 || charge.surplusCents > 0) && (
                 <dl className="mt-2 space-y-2 text-base">
                   <div className="flex justify-between gap-4 font-semibold">
                     <dt>Recibido</dt>
@@ -131,29 +254,58 @@ function ChargeRow({ charge }: { charge: FeedCharge }) {
                       <Amount cents={charge.receivedCents} />
                     </dd>
                   </div>
-                  {missingCents > 0 && (
+                  {charge.missingCents > 0 && (
                     <div className="flex justify-between gap-4">
                       <dt className="text-muted-foreground">Faltan</dt>
                       <dd>
-                        <Amount cents={missingCents} />
+                        <Amount cents={charge.missingCents} />
                       </dd>
                     </div>
                   )}
                 </dl>
               )}
-              <p className="mt-3 font-mono text-sm text-muted-foreground">Folio {charge.folio}</p>
+              {/* partial-payment D15's voice, now for `over` too (D2):
+                  what the surplus means depends on where the money went —
+                  and for `unapplied` nothing absorbed it, so it is always
+                  the business's to resolve. */
+              charge.surplusCents > 0 && (
+                <p className="mt-2 text-sm font-medium">
+                  Sobrante <Amount cents={charge.surplusCents} /> —{" "}
+                  {charge.status === "unapplied"
+                    ? "resolver con el cliente."
+                    : treatment === "credit"
+                      ? "queda a favor del cliente."
+                      : "devolver al cliente."}
+                </p>
+              )}
+              <p className="mt-3 font-mono text-sm text-muted-foreground">
+                Folio {charge.folio || "—"}
+              </p>
             </div>
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
               <p className="mt-1">Intentos de reconexión: {charge.attempts}</p>
-              {charge.lastError && (
-                <p className="mt-1 text-error">{reasonFor(charge.lastError)}</p>
-              )}
+              {charge.lastError && <p className="mt-1 text-error">{reasonFor(charge.lastError)}</p>}
               {charge.reconnectedAt && (
-                <p className="mt-1 text-success">
-                  Reconectado a las {at(charge.reconnectedAt)}
+                <p className="mt-1 text-success">Reconectado a las {at(charge.reconnectedAt)}</p>
+              )}
+              {retry.error && (
+                <p className="mt-1 text-error">
+                  {retry.error.code === "NOT_RETRYABLE"
+                    ? "Esta reconexión ya no está fallida."
+                    : "No pudimos reintentar. Intenta de nuevo."}
                 </p>
               )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {showsMoney && <ProofDialog charge={charge} />}
+                {/* D5: promised to operators by the role matrix since
+                    phase 2; kept until now only by waiting */}
+                {canOperate && charge.reconnectionStatus === "failed" && (
+                  <Button disabled={retry.isPending} onClick={() => retry.mutate()}>
+                    {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </CollapsibleContent>
@@ -182,11 +334,24 @@ function FeedSkeleton() {
 
 export function FeedScreen() {
   const [status, setStatus] = useState<string>(ALL);
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const { data: actor } = useSession();
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
 
+  /* The search travels debounced: a keystroke is not a query */
+  useEffect(() => {
+    const t = setTimeout(() => setQ(qInput), 300);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  const filters: Filters = { chip: status, q, from, to };
   const feed = useInfiniteQuery<FeedResponse, ApiError>({
-    queryKey: ["feed", status],
+    queryKey: ["feed", status, q, from, to],
     queryFn: ({ pageParam }) =>
-      api<FeedResponse>(feedPath({ cursor: pageParam as number | undefined, status })),
+      api<FeedResponse>(feedPath({ ...filters, cursor: pageParam as number | undefined })),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: POLL_MS,
@@ -195,7 +360,7 @@ export function FeedScreen() {
   /* D3: failures beyond page one still surface */
   const failed = useQuery<FeedResponse, ApiError>({
     queryKey: ["feed", "failed-strip"],
-    queryFn: () => api<FeedResponse>(feedPath({ status: "failed" })),
+    queryFn: () => api<FeedResponse>(feedPath({ chip: "failed" })),
     refetchInterval: POLL_MS,
   });
 
@@ -203,6 +368,7 @@ export function FeedScreen() {
   /* D1/D5: a failed first load is an error, a failed page keeps its rows */
   const failedFirstLoad = feed.isError && !feed.data;
   const today = feed.data?.pages[0]?.today ?? null;
+  const treatment = feed.data?.pages[0]?.effectiveOverTreatment ?? "flag";
   const failedCount = failed.data?.payments.length ?? 0;
 
   return (
@@ -228,6 +394,41 @@ export function FeedScreen() {
           </Button>
         </Alert>
       )}
+
+      {/* D4: customer search and the date range, in the business's zone */}
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-48 flex-1">
+          <Label htmlFor="feed-q">Cliente</Label>
+          <Input
+            id="feed-q"
+            type="search"
+            className="mt-1"
+            placeholder="Nombre o usuario"
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="feed-from">Desde</Label>
+          <Input
+            id="feed-from"
+            type="date"
+            className="mt-1"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="feed-to">Hasta</Label>
+          <Input
+            id="feed-to"
+            type="date"
+            className="mt-1"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
+        </div>
+      </div>
 
       {/* D7: status filters are shadcn Tabs. D8 (US-P04): the list lives
           inside TabsContent — a tab that advertises aria-controls without
@@ -266,7 +467,7 @@ export function FeedScreen() {
         <Card className="mt-4">
           <ul className="divide-y divide-line-soft" aria-live="polite">
             {rows.map((charge) => (
-              <ChargeRow key={charge.id} charge={charge} />
+              <ChargeRow key={charge.id} charge={charge} treatment={treatment} canOperate={canOperate} />
             ))}
           </ul>
         </Card>

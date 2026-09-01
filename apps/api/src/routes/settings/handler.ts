@@ -6,6 +6,7 @@ import { businesses } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import type { SettingsPatchRequest, SettingsResponse, WispHubTestResponse } from "./schema";
 import { speiBankIsKnown } from "../../direct-payments/validation";
+import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { roleCan } from "../../auth/roles";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -53,6 +54,13 @@ function toSettings(business: typeof businesses.$inferSelect): SettingsResponse 
       thresholdPercent: business.reconnectionThresholdPercent,
       floorCents: business.reconnectionFloorCents,
       provisionalReleaseEnabled: business.provisionalReleaseEnabled,
+    },
+    /* payments-and-classes D1/D2: the policy and what it effectively
+       means today — `credit` when the integration absorbs surplus. */
+    reconciliationPolicy: {
+      toleranceCents: business.toleranceCents,
+      overTreatment: business.overTreatment,
+      effectiveOverTreatment: effectiveOverTreatment(business),
     },
   };
 }
@@ -122,6 +130,8 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
       ...(body.provisionalReleaseEnabled !== undefined
         ? { provisionalReleaseEnabled: body.provisionalReleaseEnabled }
         : {}),
+      ...(body.toleranceCents !== undefined ? { toleranceCents: body.toleranceCents } : {}),
+      ...(body.overTreatment !== undefined ? { overTreatment: body.overTreatment } : {}),
     })
     .where(eq(businesses.id, business.id));
 

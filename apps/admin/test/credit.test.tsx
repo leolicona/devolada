@@ -16,6 +16,7 @@ const settings = settingsResponse.parse({
   wisphub: { configured: true, keyTail: "1234" },
   spei: { clabe: "646180157000000004", bank: "STP", beneficiaryName: null, serviceFeeCents: null, effectiveServiceFeeCents: 1500, bankUnknown: false, configured: true },
   reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
+  reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
 });
 const credit = (over: Record<string, unknown> = {}) => ({
   balanceCents: 10000,

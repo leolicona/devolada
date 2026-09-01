@@ -63,7 +63,15 @@ interview (2026-09-01). Its companion is
 
 - **D4 — Pagos lists with filters and shows its proof.** Filters: status
   (all the lifecycle's, including `queued_for_credit`), date range in the
-  business's timezone (settings D5), and customer (usuario or name). The
+  business's timezone (settings D5), and customer (usuario or name).
+  *Implementation (2026-09-01)*: `status` names the lifecycle; the action
+  outcome keeps its own `reconnection` filter (D5's dimension) and the
+  class its `class` filter — three questions, three parameters, never one
+  parameter meaning two things. `from`/`to` travel as calendar dates
+  (`YYYY-MM-DD`), inclusive, and the server owns the midnight boundary in
+  the business's zone. **The default view answers money that arrived**
+  (`confirmed`, `partial`, `unapplied` — scenario 11 needs the last one
+  visible); the rest of the lifecycle is reached through the filter. The
   class is a `StatusBadge` variant next to the reconnection status — icon
   + text, never color alone. **"Ver comprobante"** opens the proof: the
   CEP as Banxico answered it (clave, amount, date, sender bank, sender
@@ -223,17 +231,21 @@ interview (2026-09-01). Its companion is
 
 ## Definition of Done
 
-- [ ] Migration (additive) for the three business columns; the two
-      platform keys born in code.
-- [ ] Scenarios 1–12 automated, citing their stories.
+- [x] Migration (additive) for `tolerance_cents` + `over_treatment`; the
+      two platform keys born in code (`consta_api_key` rides the D7 PR,
+      which owns the rest of this list's key work).
+- [x] Scenarios 1–7 and 11 automated, citing their stories (classes PR);
+      scenarios 8 was the #140 rename; 9, 10 and 12 ride the D7–D9 PR.
+      Scenario 7's sweep half leans on the reconnection-queue suite
+      (TD-009's invoice guard is tested there).
 - [ ] `CONSTA_ISSUER_TOKEN` set as a Consta Worker secret and an api one,
       synced by both deploys (warning when unset: businesses are born
       without a key and validate under the platform's until the backfill
       runs); validation D5's amendment shipped in the same PR.
-- [ ] The IA's route rule written and TD-017 opened for the inherited
-      Spanish paths.
-- [ ] `charge-feed.spec.md` bannered as superseded; SPEC.md glossary
-      **Cobro** = `payment_request`, **Pago** unchanged; nav renamed;
-      TASKS.md phase 4 boxes ticked.
+- [x] The IA's route rule written and TD-017 opened for the inherited
+      Spanish paths (PR #135).
+- [x] `charge-feed.spec.md` bannered as superseded; SPEC.md glossary
+      **Cobro** = `payment_request` (+ the class row), **Pago** unchanged;
+      nav renamed (#140); TASKS.md phase 4 boxes ticked.
 - [ ] The pilot on deployed dev: one real short payment reads `short`
       with the right missing pesos in Pagos, and its proof opens.

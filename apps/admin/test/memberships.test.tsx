@@ -26,6 +26,7 @@ const settings = (over: Record<string, unknown> = {}) =>
       configured: true,
     },
     reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
+  reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
     ...over,
   });
 

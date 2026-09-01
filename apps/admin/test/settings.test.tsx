@@ -24,6 +24,7 @@ const settings = (over: Record<string, unknown> = {}) =>
       configured: false,
     },
     reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
+  reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
     ...over,
   });
 
@@ -129,11 +130,16 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       id: "ch-1",
       folio: "DV-FMT01",
       channel: "spei" as const,
+      status: "confirmed" as const,
       reconnectionStatus: "reconnected" as const,
+      reconciliationClass: "exact" as const,
       receivedCents: 41400,
       invoiceCents: 39900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
+      askedCents: 41400,
+      missingCents: 0,
+      surplusCents: 0,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
       createdAt: at,
@@ -144,7 +150,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
     server.use(
       handlers.session(() => ok({ ...businessActor, timeFormat: "24h" })),
       handlers.feed(() =>
-        ok(feedResponse.parse({ payments: [charge], nextCursor: null, today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) } })),
+        ok(feedResponse.parse({ payments: [charge], nextCursor: null, effectiveOverTreatment: "flag", today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) } })),
       ),
     );
     renderApp("/");
@@ -254,5 +260,47 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
 
     expect(screen.getByText(/entre 0 y 100/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /guardar reconexión/i })).toBeDisabled();
+  });
+});
+/* docs/reconciliation/payments-and-classes.spec.md D1/D2 (US-R02). */
+describe("US-R02: the reconciliation policy is the business's", () => {
+  it("saves the tolerance and the surplus treatment", async () => {
+    const patches: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() => ok(settings())),
+      handlers.patchSettings((body) => {
+        patches.push(body);
+        return ok(settings());
+      }),
+    );
+    renderApp("/settings");
+
+    const tolerance = await screen.findByLabelText("Tolerancia");
+    await userEvent.clear(tolerance);
+    await userEvent.type(tolerance, "1.00");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar política" }));
+
+    expect(patches).toEqual([{ toleranceCents: 100, overTreatment: "flag" }]);
+  });
+
+  it("D2: names the effective treatment when the integration overrides it", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() =>
+        ok(
+          settings({
+            reconciliationPolicy: {
+              toleranceCents: 0,
+              overTreatment: "flag",
+              effectiveOverTreatment: "credit",
+            },
+          }),
+        ),
+      ),
+    );
+    renderApp("/settings");
+
+    expect(await screen.findByText(/tratamiento efectivo/)).toBeInTheDocument();
   });
 });

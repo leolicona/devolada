@@ -42,6 +42,9 @@ export type Bindings = {
   DEMO_LINK_TOKENS?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
+  /* operator-panel D2: comma-separated emails of the platform operators.
+     Never grantable from a screen; changing it is a deploy. */
+  PLATFORM_OPERATOR_EMAILS?: string;
 };
 
 export type Role = "owner" | "admin" | "operator" | "viewer";
@@ -65,6 +68,10 @@ export type Actor = {
   wisphubConfigured: boolean;
   /* Every business this user belongs to — the switcher's list (US-B02) */
   businesses: { id: string; orgId: string; name: string; role: Role }[];
+  /* operator-panel D2: derived from the secret, per request */
+  platformOperator: boolean;
+  /* prepaid-credit D7: the chip renders from the session (settings D7 pattern) */
+  credit: { balanceCents: number; step: "ok" | "low" | "empty" | "paused" };
 };
 
 export type Variables = {

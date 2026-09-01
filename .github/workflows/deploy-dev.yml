@@ -72,6 +72,7 @@ jobs:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CONSTA_API_KEY: ${{ secrets.CONSTA_API_KEY }}
           CUSTOMER_REF_SECRET: ${{ secrets.CUSTOMER_REF_SECRET }}
+          PLATFORM_OPERATOR_EMAILS: ${{ secrets.PLATFORM_OPERATOR_EMAILS }}
         run: |
           if [ -z "$RESEND_API_KEY" ]; then
             echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
@@ -93,6 +94,14 @@ jobs:
           # exactly that way on dev, BUG-010.
           # It must stay STABLE: rotating it re-pseudonymises every
           # payer, orphaning all history written under the old value.
+          # operator-panel D2: who may open /operador and write the
+          # platform's rules. Unset means nobody can — the platform still
+          # runs on its birth values (operator-panel D1).
+          if [ -z "$PLATFORM_OPERATOR_EMAILS" ]; then
+            echo "::warning::No PLATFORM_OPERATOR_EMAILS in the dev environment — the operator panel is closed to everyone (operator-panel D2)."
+          else
+            printf '%s' "$PLATFORM_OPERATOR_EMAILS" | pnpm exec wrangler secret put PLATFORM_OPERATOR_EMAILS --env dev
+          fi
           if [ -z "$CUSTOMER_REF_SECRET" ]; then
             echo "::warning::No CUSTOMER_REF_SECRET in the dev environment — payer history is NOT accumulating in Consta (provisional-release D4, BUG-010)."
           else

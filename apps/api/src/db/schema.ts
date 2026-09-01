@@ -6,7 +6,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import { organization } from "./auth-schema";
+import { organization, user } from "./auth-schema";
 
 /* Better Auth's tables live in auth-schema.ts; re-exported here so
    drizzle-kit sees a single schema. */
@@ -80,6 +80,9 @@ export const businesses = sqliteTable("businesses", {
   provisionalReleaseEnabled: integer("provisional_release_enabled", { mode: "boolean" })
     .notNull()
     .default(false),
+  /* prepaid-credit D4: a negotiated fee, written only from the operator
+     panel; null → the global `validation_fee_cents` current at each debit */
+  feeOverrideCents: integer("fee_override_cents"),
   createdAt: createdAt(),
 });
 
@@ -163,6 +166,9 @@ export const payments = sqliteTable(
         "expired",
         "unapplied",
         "superseded",
+        /* prepaid-credit D8: submitted while the business is paused — no
+           provider call until a top-up lifts the balance above the cap */
+        "queued_for_credit",
       ],
     })
       .notNull()
@@ -293,4 +299,102 @@ export const proofRejections = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("proof_rejections_link_idx").on(t.paymentLinkId, t.createdAt)],
+);
+
+/* ---- Phase 3: the platform's book (prepaid-credit spec, operator-panel spec) ---- */
+
+/* operator-panel D1: append-only rows, one key per row, the current
+   value is the latest row. Types and birth values live in
+   src/platform/settings.ts, never here. */
+export const platformSettings = sqliteTable(
+  "platform_settings",
+  {
+    id: id(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("platform_settings_key_created_idx").on(t.key, t.createdAt)],
+);
+
+/* prepaid-credit D6: a top-up is the platform's own transaction —
+   the business pays, the platform receives — with the payment lifecycle's
+   proof columns and none of its debt columns. */
+export const topUps = sqliteTable(
+  "top_ups",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    submittedByUserId: text("submitted_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    claimedCents: integer("claimed_cents").notNull(),
+    /* The CEP's amount, set when valid (claimed-amount D1's principle) */
+    creditedCents: integer("credited_cents"),
+    status: text("status", {
+      enum: ["validating", "credited", "invalid", "expired", "superseded"],
+    })
+      .notNull()
+      .default("validating"),
+    proofMode: text("proof_mode", { enum: ["receipt", "transfer"] }).notNull(),
+    trackingKey: text("tracking_key"),
+    senderBank: text("sender_bank"),
+    transferDate: text("transfer_date"),
+    proofKey: text("proof_key"),
+    readingCheck: text("reading_check", { enum: ["agreed", "disputed", "blind"] }),
+    constaValidationId: text("consta_validation_id"),
+    constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
+    validationAttempts: integer("validation_attempts").notNull().default(0),
+    nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
+    confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("top_ups_business_created_idx").on(t.businessId, t.createdAt),
+    index("top_ups_due_idx").on(t.status, t.nextValidationAt),
+    /* One transfer credits once (direct-payment D8's rule) */
+    uniqueIndex("top_ups_tracking_idx")
+      .on(t.trackingKey)
+      .where(sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired', 'superseded')`),
+  ],
+);
+
+/* prepaid-credit D3: the house's append-only money table. Balance =
+   SUM(cents) per business, never stored. Corrections are new rows. */
+export const creditEntries = sqliteTable(
+  "credit_entries",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    kind: text("kind", { enum: ["welcome_bonus", "top_up", "validation_fee", "adjustment"] }).notNull(),
+    /* Signed: credits positive, the fee negative */
+    cents: integer("cents").notNull(),
+    /* validation_fee: the payment that earned it — unique, so a retried
+       sweep can never charge twice (D2) */
+    paymentId: text("payment_id").references(() => payments.id),
+    topUpId: text("top_up_id").references(() => topUps.id),
+    /* welcome_bonus: the user it was granted to — once per user (D5) */
+    grantedToUserId: text("granted_to_user_id").references(() => user.id),
+    /* adjustment (operator-panel D5): why, and who */
+    reason: text("reason"),
+    authorUserId: text("author_user_id").references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("credit_entries_business_created_idx").on(t.businessId, t.createdAt),
+    uniqueIndex("credit_entries_fee_payment_idx")
+      .on(t.paymentId)
+      .where(sql`kind = 'validation_fee'`),
+    uniqueIndex("credit_entries_bonus_user_idx")
+      .on(t.grantedToUserId)
+      .where(sql`kind = 'welcome_bonus'`),
+  ],
 );

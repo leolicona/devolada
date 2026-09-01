@@ -251,11 +251,12 @@ computes money.
 
 ## Definition of Done
 
-- [ ] `credit_entries`, `top_ups`, `fee_override_cents`,
-      `queued_for_credit` migrated with the copy pattern where a rebuild is
-      needed (TESTING rule 12), proven on seeded data.
-- [ ] Scenarios 1–14 automated, citing their stories; the debit
-      idempotency (2, 3) proven by rows.
+- [x] `credit_entries`, `top_ups`, `fee_override_cents` migrated
+      (0020, additive only — no rebuild, so rule 12's seeded proof is not
+      owed); `queued_for_credit` is an enum value with no SQL.
+- [x] Scenarios 1–7, 13–14 automated (`test/prepaid-credit.test.ts`); the
+      debit idempotency proven by rows. Scenarios 8–12 (top-ups, the pause)
+      land with their PR.
 - [ ] The two emails send through Resend on deployed dev, once per
       crossing, to every owner.
 - [ ] A real top-up on deployed dev with the owner's transfer to the

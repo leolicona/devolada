@@ -90,6 +90,37 @@ export async function sendMemberInvitation(
   if (!res.ok) throw new Error(`resend failed: ${res.status}`);
 }
 
+/* prepaid-credit D7: two emails that change what an owner would do today —
+   the balance reached zero, or the business entered the pause. Once per
+   crossing, never one per validation. es-MX product copy. */
+export async function sendCreditCrossing(
+  env: Bindings,
+  to: string[],
+  kind: "empty" | "paused",
+  businessName: string,
+): Promise<void> {
+  if (to.length === 0) return;
+  const url = `${env.ADMIN_BASE_URL}/settings`;
+  const subject =
+    kind === "empty"
+      ? `${businessName}: tu saldo llegó a cero — Devolada`
+      : `${businessName}: validación en pausa — Devolada`;
+  const body =
+    kind === "empty"
+      ? `<p>El saldo de <strong>${businessName}</strong> llegó a cero. Los pagos de tus clientes se siguen validando por unos días más; recarga para no llegar a la pausa.</p><p><a href="${url}">Recargar saldo</a></p>`
+      : `<p><strong>${businessName}</strong> entró en pausa: los comprobantes nuevos de tus clientes quedan guardados sin validarse hasta que recargues.</p><p><a href="${url}">Recargar saldo</a></p>`;
+  if (!env.RESEND_API_KEY) {
+    console.log(`[saldo:${kind}] ${to.join(", ")} → ${subject}`);
+    return;
+  }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: env.EMAIL_FROM ?? "Devolada <onboarding@resend.dev>", to, subject, html: body }),
+  });
+  if (!res.ok) throw new Error(`resend failed: ${res.status}`);
+}
+
 /* provisional-release D8 (US-D15): the one exception the ISP signed up
    to know about — a provisionally released payment that expired with the
    debt still pending. The promise lapses on its own; the ISP's bank app

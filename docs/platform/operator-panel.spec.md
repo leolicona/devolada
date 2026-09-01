@@ -151,11 +151,13 @@ to show the route at all.
 
 ## Definition of Done
 
-- [ ] `platform_settings` migrated; the seed writes nothing (birth values
-      live in code — D1).
-- [ ] `PLATFORM_OPERATOR_EMAILS` documented in CICD.md's secrets list and
-      set on deployed dev.
-- [ ] Scenarios 1–9 automated, citing US-L02.
+- [x] `platform_settings` migrated (0020); the seed writes nothing (birth
+      values live in code — D1).
+- [x] `PLATFORM_OPERATOR_EMAILS` documented in CICD.md and synced by both
+      deploy workflows (warning when unset: the panel is closed to everyone).
+- [ ] Set on deployed dev (owner's GitHub environment secret).
+- [x] Scenarios 1–8 automated (`test/prepaid-credit.test.ts`); 9 is the
+      admin's, with the panel UI.
 - [ ] The operator sets the real `topup_clabe` on deployed dev and
       prepaid-credit's real top-up (its DoD) runs against it.
 - [ ] pivot.spec.md D13's list matched against D1's table (D13 said

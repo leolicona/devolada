@@ -4,6 +4,8 @@ import type { Bindings, Variables } from "./env";
 import { auth } from "./routes/auth";
 import { settingsRoute } from "./routes/settings";
 import { businessesRoute } from "./routes/businesses";
+import { creditRoute } from "./routes/credit";
+import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
 import { paymentsRoute } from "./routes/payments";
@@ -36,6 +38,8 @@ app.route("/auth", auth);
 app.route("/payments", paymentsRoute);
 app.route("/settings", settingsRoute);
 app.route("/businesses", businessesRoute);
+app.route("/credit", creditRoute);
+app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
 
 /* Seed routes exist in development only */

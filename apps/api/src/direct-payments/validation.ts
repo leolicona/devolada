@@ -299,8 +299,13 @@ export async function runValidation(
     .where(eq(payments.id, payment.id));
 
   let verdict;
+  /* payments-and-classes D7/D8: the business's own key when it exists —
+     so the refs above accumulate history in the right tenant's chains
+     (trust-layer D2 keys them by (apiKeyId, customerRef)) — and the
+     platform's until the backfill lands one. */
+  const constaKey = business.constaApiKey ?? env.CONSTA_API_KEY;
   try {
-    verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
+    verdict = await new Consta(env.CONSTA_BASE_URL, constaKey).validate(request);
   } catch (e) {
     const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
     console.error("consta validation failed:", code);
@@ -651,18 +656,26 @@ export async function sweepDirectPayments(
     unapplied: 0,
   };
 
-  const due = await db
-    .select()
+  /* payments-and-classes D9: a suspended business validates nothing —
+     its due rows are not even claimed, so their schedule freezes where
+     it was (exactly as the credit pause does) and resumes the minute the
+     business is reactivated. Nothing is expired for having been
+     suspended; the resumed attempt is a real one. */
+  const dueJoined = await db
+    .select({ payment: payments })
     .from(payments)
+    .innerJoin(businesses, eq(businesses.id, payments.businessId))
     .where(
       and(
         eq(payments.status, "validating"),
         isNotNull(payments.nextValidationAt),
         lte(payments.nextValidationAt, now),
+        eq(businesses.status, "active"),
       ),
     )
     .orderBy(payments.nextValidationAt)
     .limit(BATCH);
+  const due = dueJoined.map((r) => r.payment);
   if (!due.length) return report;
 
   await db

@@ -8,6 +8,7 @@ import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, ROLE_RANK } from "../../auth/roles";
 import { grantWelcomeBonus } from "../../credit";
 import { getNumberSetting, getSetting } from "../../platform/settings";
+import { issueConstaKey } from "../../consta/issuer";
 import type { CreateBusinessRequest, InviteMemberRequest, MembersResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -63,6 +64,20 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
   } catch (e) {
     await auth.api.deleteOrganization({ headers, body: { organizationId: org.id } });
     throw e;
+  }
+
+  /* payments-and-classes D7 (pivot D20): the business is born with its
+     own Consta key, so the evidence the trust shadow accumulates lands
+     in the right chain from day one (D8). An issuer that is down does
+     NOT block the birth — the key is plumbing: the row stays null, the
+     platform's key covers validations, and the backfill sweep fills it. */
+  try {
+    const constaApiKey = await issueConstaKey(c.env, `${business.name} · ${business.id}`);
+    if (constaApiKey) {
+      await db.update(businesses).set({ constaApiKey }).where(eq(businesses.id, business.id));
+    }
+  } catch (e) {
+    console.warn(`consta key issuance failed for ${business.id} — backfill will retry:`, e);
   }
 
   /* prepaid-credit D5: once per user, their first business */

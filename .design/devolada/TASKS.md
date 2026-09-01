@@ -64,8 +64,8 @@ client's query memory; the webhook spike ran — no push surface exists.
       view, action-outcome row (US-R03)
 - [x] Cobros section — folded into the live box above (no mirror exists)
 - [x] Link page lists open Cobros (US-R04) — the one pago-page change
-- [ ] One Consta key per business, issued at business creation (D20)
-- [ ] Send `customerRef`/`paymentRef` on every validation **from the moment
+- [x] One Consta key per business, issued at business creation (D20)
+- [x] Send `customerRef`/`paymentRef` on every validation **from the moment
       the per-business key exists, not before** (US-V15's cheap half;
       trust-layer D2 chains live in `(apiKeyId, customerRef)`, so refs sent
       under the platform key would bind history to the wrong tenant and the

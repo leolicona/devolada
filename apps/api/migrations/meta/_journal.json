@@ -169,6 +169,13 @@
       "when": 1788290756393,
       "tag": "0023_equal_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1788292412784,
+      "tag": "0024_opposite_dazzler",
+      "breakpoints": true
     }
   ]
 }

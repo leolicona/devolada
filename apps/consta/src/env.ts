@@ -11,6 +11,10 @@ export type Bindings = {
   APICEP_DEADLINE_MS?: string;
   /* Guards /admin/keys (validation spec D5). Unset → the routes 404. */
   CONSTA_ADMIN_TOKEN?: string;
+  /* D5 amendment (payments-and-classes D7): opens ONLY POST /admin/keys.
+     The SaaS mints keys for its businesses and nothing else — a
+     compromised issuer must never become the admin of every tenant. */
+  CONSTA_ISSUER_TOKEN?: string;
   /* The receipt reader (proof-extraction D1, D5). Unset binding → the image
      route degrades to the provider's OCR rather than failing: a door that
      still works beats a door that 500s. */

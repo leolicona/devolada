@@ -93,6 +93,12 @@ export const businesses = sqliteTable("businesses", {
   overTreatment: text("over_treatment", { enum: ["flag", "credit"] })
     .notNull()
     .default("flag"),
+  /* payments-and-classes D7 (pivot D20): the business's own Consta key,
+     issued at birth through the issue-only door and stored in the row
+     like the WispHub key — same trust as the other tenant credential.
+     Null = issuer was down at birth; the backfill sweep fills it and the
+     platform's key covers the gap. */
+  constaApiKey: text("consta_api_key"),
   createdAt: createdAt(),
 });
 

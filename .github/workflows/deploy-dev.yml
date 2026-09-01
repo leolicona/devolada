@@ -71,6 +71,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CONSTA_API_KEY: ${{ secrets.CONSTA_API_KEY }}
+          CONSTA_ISSUER_TOKEN: ${{ secrets.CONSTA_ISSUER_TOKEN }}
           CUSTOMER_REF_SECRET: ${{ secrets.CUSTOMER_REF_SECRET }}
           PLATFORM_OPERATOR_EMAILS: ${{ secrets.PLATFORM_OPERATOR_EMAILS }}
         run: |
@@ -85,6 +86,15 @@ jobs:
             echo "::warning::No CONSTA_API_KEY in the dev environment — the SPEI channel stays unavailable."
           else
             printf '%s' "$CONSTA_API_KEY" | pnpm exec wrangler secret put CONSTA_API_KEY --env dev
+          fi
+          # payments-and-classes D7: the issue-only door of Consta's
+          # /admin/keys. Unset is not broken — businesses are born without
+          # their own key and validate under the platform's until the
+          # backfill sweep can mint one.
+          if [ -z "$CONSTA_ISSUER_TOKEN" ]; then
+            echo "::warning::No CONSTA_ISSUER_TOKEN in the dev environment — businesses get no per-business Consta key (payments-and-classes D7)."
+          else
+            printf '%s' "$CONSTA_ISSUER_TOKEN" | pnpm exec wrangler secret put CONSTA_ISSUER_TOKEN --env dev
           fi
           # provisional-release D4: the HMAC key that pseudonymises the
           # WispHub usuario into `customerRef`. Unset is not a broken
@@ -142,6 +152,7 @@ jobs:
         env:
           APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
           CONSTA_ADMIN_TOKEN: ${{ secrets.CONSTA_ADMIN_TOKEN }}
+          CONSTA_ISSUER_TOKEN: ${{ secrets.CONSTA_ISSUER_TOKEN }}
         run: |
           if [ -z "$APICEP_TOKEN" ]; then
             echo "::warning::No APICEP_TOKEN in the dev environment — Consta /validate will answer PROVIDER_ERROR until it lands."
@@ -152,6 +163,13 @@ jobs:
             echo "::warning::No CONSTA_ADMIN_TOKEN in the dev environment — /admin/keys stays hidden."
           else
             printf '%s' "$CONSTA_ADMIN_TOKEN" | pnpm exec wrangler secret put CONSTA_ADMIN_TOKEN --env dev
+          fi
+          # payments-and-classes D7: the same token on BOTH Workers — the
+          # api presents it, Consta's POST /admin/keys accepts it.
+          if [ -z "$CONSTA_ISSUER_TOKEN" ]; then
+            echo "::warning::No CONSTA_ISSUER_TOKEN in the dev environment — the issue-only door stays closed (payments-and-classes D7)."
+          else
+            printf '%s' "$CONSTA_ISSUER_TOKEN" | pnpm exec wrangler secret put CONSTA_ISSUER_TOKEN --env dev
           fi
       # A secret that exists is not a secret that works. On 2026-08-18 this
       # step ran green while planting a token apiCEP answered 401 to, and the

@@ -95,6 +95,12 @@ export async function getLinkStatus(c: Ctx, token: string) {
   const { link, business } = ctx;
   const now = new Date();
 
+  /* payments-and-classes D9: a suspended business validates nothing —
+     the page says so instead of collecting transfers into limbo. */
+  if (business.status === "suspended") {
+    return c.json({ success: false, error: { code: "BUSINESS_SUSPENDED" } }, 409);
+  }
+
   if (!speiAvailable(c.env, business)) {
     /* D4: the GET already knows — the page degrades into the store
        network instead of showing a CLABE nothing can validate */
@@ -164,6 +170,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   if ("error" in ctx) return ctx.error;
   const { db, link, business } = ctx;
   const now = new Date();
+
+  /* payments-and-classes D9: same refusal as the GET — the POST is the
+     one that would spend credit and start a validation. */
+  if (business.status === "suspended") {
+    return c.json({ success: false, error: { code: "BUSINESS_SUSPENDED" } }, 409);
+  }
 
   if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
@@ -516,7 +528,7 @@ export async function uploadProof(c: Ctx, token: string) {
 export async function readProof(c: Ctx, token: string, proofId: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
-  const { db, link } = ctx;
+  const { db, link, business } = ctx;
   const now = new Date();
 
   if (!proofBelongsToLink(proofId, link.id)) {
@@ -537,7 +549,9 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
     return c.json({ success: false, error: { code: "CONSTA_UNAVAILABLE" } }, 503);
   }
 
-  const consta = new Consta(c.env.CONSTA_BASE_URL, c.env.CONSTA_API_KEY);
+  /* payments-and-classes D7: the reading is this business's paid call
+     too — Consta's per-key log stays honest cost telemetry. */
+  const consta = new Consta(c.env.CONSTA_BASE_URL, business.constaApiKey ?? c.env.CONSTA_API_KEY);
   let reading;
   try {
     reading = await consta.extract(await signedProofUrl(c.env, proofId, now));

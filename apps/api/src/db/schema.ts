@@ -83,6 +83,16 @@ export const businesses = sqliteTable("businesses", {
   /* prepaid-credit D4: a negotiated fee, written only from the operator
      panel; null → the global `validation_fee_cents` current at each debit */
   feeOverrideCents: integer("fee_override_cents"),
+  /* Reconciliation policy (payments-and-classes D1). Tolerance in cents
+     around the ask that still reads `exact` — birth default 0, because
+     SPEI is exact to the cent and a $1 difference is a real short
+     payment. `over_treatment` says what a surplus means to this
+     business; an integration that absorbs surplus overrides it to
+     `credit` at read time (D2), never in this column. */
+  toleranceCents: integer("tolerance_cents").notNull().default(0),
+  overTreatment: text("over_treatment", { enum: ["flag", "credit"] })
+    .notNull()
+    .default("flag"),
   createdAt: createdAt(),
 });
 

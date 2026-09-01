@@ -4,7 +4,10 @@ import {
   ArrowDownToLine,
   Check,
   CheckCircle2,
+  CircleMinus,
+  CirclePlus,
   Clock3,
+  Equal,
   Hourglass,
   Mail,
   PauseCircle,
@@ -53,7 +56,14 @@ export type Status =
   | "paymentInvalid"
   | "paymentPartial"
   | "paymentExpired"
-  | "unapplied";
+  | "unapplied"
+  /* reconciliation class (payments-and-classes D1/D3): the verdict
+     against the ask, distinct from the lifecycle status — a lenient
+     threshold can reconnect a `short` payment, and the class is what
+     keeps saying money is missing. */
+  | "classExact"
+  | "classShort"
+  | "classOver";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -86,6 +96,9 @@ const statuses: Record<
   paymentPartial: { tone: "warning", icon: PauseCircle, label: "Pago incompleto" },
   paymentExpired: { tone: "warning", icon: TimerOff, label: "Verificación expirada" },
   unapplied: { tone: "warning", icon: AlertTriangle, label: "Pago sin adeudo" },
+  classExact: { tone: "success", icon: Equal, label: "Exacto" },
+  classShort: { tone: "warning", icon: CircleMinus, label: "Pago parcial" },
+  classOver: { tone: "info", icon: CirclePlus, label: "Sobrante" },
 };
 
 const sizes = {

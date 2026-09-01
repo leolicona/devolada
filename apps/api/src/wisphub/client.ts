@@ -20,6 +20,14 @@ export const OPERATION_BUDGET_MS = 12_000;
 
 export type WispHubLimits = { callMs: number; operationMs: number };
 
+/* What this integration does with money on its own (payments-and-classes
+   D2). WispHub keeps a running account (`saldo`), so an overpayment
+   registered against an invoice becomes the customer's credit by itself
+   (partial-payment D10, measured) — the adapter states the fact once and
+   the effective surplus treatment derives from it, never re-decided per
+   screen. */
+export const WISPHUB_CAPABILITIES = { absorbsOverpayment: true } as const;
+
 export class WispHubError extends Error {
   constructor(
     public code: "WISPHUB_UNAVAILABLE" | "WISPHUB_AUTH_FAILED",

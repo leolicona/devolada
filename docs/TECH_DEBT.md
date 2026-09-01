@@ -104,7 +104,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Paid by: measuring the hit rate on dev with the pilot ISP (log the miss count per ISP for a day). If misses dominate, move both caches behind `caches.default` with the same keys and the same freshness rule — display reads the cache, guards never do.
 
 ## TD-015 — A simulated validation verdict for demos
-- Status: open · Origin: the 2026-08-20 demo · **must be deleted after it**
+- Status: **paid** (2026-09-01, `feat/payment-classes` — the first code PR after the demo to touch `validation.ts`: `demo.ts` deleted, `DEMO_LINK_TOKENS` gone from both wrangler blocks and `env.ts`, the `runValidation` branch and the test block removed) · Origin: the 2026-08-20 demo
 - `apps/api/src/direct-payments/demo.ts` returns a synthetic `valid` Consta verdict for payment links named in `DEMO_LINK_TOKENS`, when `ENVIRONMENT === "dev"`. Everything downstream stays real: the fresh WispHub read, the charge, the folio, the reconnection. Only the Banxico lookup is simulated.
 - Why it exists: a CEP has no measured upper bound on publication (`docs/integrations/apicep.md`, 2026-08-19 — two transfers with the money already delivered, 30 samples through T+62 min, no CEP). A transfer made live in front of an audience does not reach a green screen even with a healthy Banxico, so this is not an outage fallback.
 - What it deliberately is **not**: a failure that becomes a success. The rejected design was "if the validation fails, mark it confirmed", which would fire on every real customer whose CEP is merely late — the exact case D17 exists to protect. The trigger is configuration decided in advance, never a provider that said no. A test asserts a contradicted CEP is still `invalid` on this path.

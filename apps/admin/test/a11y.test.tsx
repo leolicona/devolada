@@ -14,11 +14,16 @@ const feed = feedResponse.parse({
       id: "ch-1",
       folio: "DV-FEED01",
       channel: "spei",
+      status: "confirmed",
       reconnectionStatus: "failed",
+      reconciliationClass: "exact",
       receivedCents: 41400,
       invoiceCents: 39900,
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
+      askedCents: 41400,
+      missingCents: 0,
+      surplusCents: 0,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
       createdAt: Date.UTC(2026, 7, 14, 20, 30),
@@ -28,6 +33,7 @@ const feed = feedResponse.parse({
     },
   ],
   nextCursor: null,
+  effectiveOverTreatment: "flag",
   today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 });
 
@@ -46,6 +52,7 @@ const settings = settingsResponse.parse({
     configured: false,
   },
   reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
+  reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
 });
 
 describe("US-P04: the harness reports what it should", () => {

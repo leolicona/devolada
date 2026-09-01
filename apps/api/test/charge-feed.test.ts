@@ -54,10 +54,12 @@ describe("US-A01: the ISP sees its charges newest first", () => {
     expect(data.nextCursor).toBeNull();
   });
 
-  it("filters by status", async () => {
+  it("filters by reconnection outcome", async () => {
     await seedFeed();
 
-    const failed = await (await app()).request("/payments/feed?status=failed", asBusiness, env);
+    /* payments-and-classes D5: the action outcome keeps its own filter;
+       `status` now names the payment lifecycle (D4). */
+    const failed = await (await app()).request("/payments/feed?reconnection=failed", asBusiness, env);
     const failedData = (await failed.json()).data;
     expect(failedData.payments).toHaveLength(1);
     expect(failedData.payments[0].reconnectionStatus).toBe("failed");

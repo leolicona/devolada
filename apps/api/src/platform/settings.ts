@@ -27,6 +27,11 @@ export const SETTINGS = {
     values: ["America/Mexico_City", "America/Hermosillo", "America/Tijuana"],
   },
   default_fee_payer: { type: "enum", birth: "isp", values: ["customer", "isp"] },
+  /* payments-and-classes D1: what a newborn business starts with. $0 and
+     `flag` are the honest SPEI defaults; the operator may loosen them
+     platform-wide, each business may override its own in Configuración. */
+  default_tolerance_cents: { type: "cents", birth: 0, min: 0, max: 10000 },
+  default_over_treatment: { type: "enum", birth: "flag", values: ["flag", "credit"] },
 } as const satisfies Record<string, Def>;
 
 export type SettingKey = keyof typeof SETTINGS;

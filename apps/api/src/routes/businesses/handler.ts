@@ -7,6 +7,7 @@ import { makeAuth } from "../../auth/better";
 import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, ROLE_RANK } from "../../auth/roles";
 import { grantWelcomeBonus } from "../../credit";
+import { getNumberSetting, getSetting } from "../../platform/settings";
 import type { CreateBusinessRequest, InviteMemberRequest, MembersResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -35,6 +36,13 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
     .from(businesses)
     .where(eq(businesses.email, session.user.email));
   const emailTaken = Boolean(sameEmail);
+  /* payments-and-classes D1: the newborn's reconciliation policy comes
+     from the platform defaults of the moment, then belongs to the
+     business (Configuración edits its own copy, never the default). */
+  const [defaultTolerance, defaultOver] = await Promise.all([
+    getNumberSetting(db, "default_tolerance_cents"),
+    getSetting(db, "default_over_treatment"),
+  ]);
   let business;
   try {
     [business] = await db
@@ -48,6 +56,8 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
         speiClabe: body.speiClabe,
         speiBank: body.speiBank,
         speiBeneficiaryName: body.speiBeneficiaryName ?? null,
+        toleranceCents: defaultTolerance,
+        overTreatment: defaultOver === "credit" ? ("credit" as const) : ("flag" as const),
       })
       .returning();
   } catch (e) {

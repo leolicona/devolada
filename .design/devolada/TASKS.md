@@ -58,9 +58,9 @@ client's query memory; the webhook spike ran — no push surface exists.
       Link page lists its own Cobros (US-R04). Feed renamed to **Pagos**
       (`/payments`, response key `payments`, `receivedCents`) —
       payments-and-classes D6, done here so the two words never coexist.
-- [ ] Reconciliation policy on the business (tolerance, surplus) + class
+- [x] Reconciliation policy on the business (tolerance, surplus) + class
       computation (exacto/corto/excedente) stored on the payment
-- [ ] Pagos list: filters (estado/fecha/cliente), class badges, proof quick
+- [x] Pagos list: filters (estado/fecha/cliente), class badges, proof quick
       view, action-outcome row (US-R03)
 - [x] Cobros section — folded into the live box above (no mirror exists)
 - [x] Link page lists open Cobros (US-R04) — the one pago-page change

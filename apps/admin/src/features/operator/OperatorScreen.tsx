@@ -32,9 +32,15 @@ const KEY_LABELS: Record<string, string> = {
   topup_bank: "Banco de la CLABE",
   topup_beneficiary: "Beneficiario de la CLABE",
   default_timezone: "Zona horaria por defecto",
+  default_tolerance_cents: "Tolerancia de conciliación por defecto",
+  default_over_treatment: "Sobrante por defecto",
   default_fee_payer: "Quién paga el cargo por defecto",
 };
 const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  default_over_treatment: [
+    { value: "flag", label: "Se marca para devolver" },
+    { value: "credit", label: "Queda a favor del cliente" },
+  ],
   default_timezone: [
     { value: "America/Mexico_City", label: "Centro (Ciudad de México)" },
     { value: "America/Hermosillo", label: "Pacífico (Sonora)" },

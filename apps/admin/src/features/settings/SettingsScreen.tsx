@@ -455,6 +455,83 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
+/* Política de conciliación (payments-and-classes D1/D2, US-R02): the
+   tolerance that still reads "exacto" and what a surplus means. When the
+   integration absorbs surplus on its own, the effective treatment is
+   shown, never hidden. */
+function PolicyCard({ settings }: { settings: SettingsResponse }) {
+  const save = useSaveSettings();
+  const [tolerance, setTolerance] = useState(pesos(settings.reconciliationPolicy.toleranceCents));
+  const [treatment, setTreatment] = useState<"flag" | "credit">(
+    settings.reconciliationPolicy.overTreatment,
+  );
+  const tolCents = parseMoney(tolerance);
+  const valid = tolCents !== null && tolCents <= 10000;
+  const overridden =
+    settings.reconciliationPolicy.effectiveOverTreatment !==
+    settings.reconciliationPolicy.overTreatment;
+
+  return (
+    <SectionCard title="Política de conciliación">
+      <p className="text-sm text-muted-foreground">
+        Cada pago confirmado se clasifica contra lo que se pidió: exacto, pago parcial o sobrante.
+        La clase se calcula al confirmar y no cambia después.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="policy-tolerance">Tolerancia</Label>
+          <Input
+            id="policy-tolerance"
+            prefix="$"
+            inputMode="decimal"
+            className="mt-1"
+            value={tolerance}
+            onChange={(e) => setTolerance(e.target.value)}
+          />
+          <p className="mt-1 text-sm text-ink-soft">
+            Diferencia que todavía cuenta como pago exacto. $0.00 es lo honesto en SPEI: la
+            transferencia llega exacta al centavo.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="policy-over">Qué significa un sobrante</Label>
+          <Select value={treatment} onValueChange={(v) => setTreatment(v as "flag" | "credit")}>
+            <SelectTrigger id="policy-over" className="mt-1" aria-label="Qué significa un sobrante">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="flag">Devolver al cliente</SelectItem>
+              <SelectItem value="credit">Queda a favor del cliente</SelectItem>
+            </SelectContent>
+          </Select>
+          {overridden && (
+            <p className="mt-1 text-sm text-ink-soft">
+              Tu integración con WispHub abona el sobrante al cliente por sí sola, así que hoy el
+              tratamiento efectivo es «queda a favor del cliente».
+            </p>
+          )}
+        </div>
+      </div>
+      {!valid && (
+        <p className="text-sm font-medium text-error">
+          La tolerancia debe ser un monto entre $0.00 y $100.00.
+        </p>
+      )}
+      <Button
+        disabled={!valid || save.isPending}
+        onClick={() => save.mutate({ toleranceCents: tolCents!, overTreatment: treatment })}
+      >
+        {save.isPending ? "Guardando…" : "Guardar política"}
+      </Button>
+      {save.isSuccess && !save.isPending && (
+        <p role="status" className="text-sm font-medium text-success">
+          Guardado.
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
 /* D5/D6: where the day starts, and how a time reads */
 function DisplayCard({ settings }: { settings: SettingsResponse }) {
   const save = useSaveSettings();
@@ -559,6 +636,7 @@ export function SettingsScreen() {
           {canSettings && <MoneyCard settings={data} />}
           {canSettings && <SpeiCard settings={data} canEditClabe={canClabe} />}
           {canSettings && <ReconnectionCard settings={data} />}
+          {canSettings && <PolicyCard settings={data} />}
           {canSettings && <DisplayCard settings={data} />}
           {canCredit && <CreditCard />}
           {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}

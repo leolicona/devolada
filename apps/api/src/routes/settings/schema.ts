@@ -60,6 +60,14 @@ export const settingsResponse = z.object({
     /* provisional-release D10 (US-D15): the one switch, no dials */
     provisionalReleaseEnabled: z.boolean(),
   }),
+  /* payments-and-classes D1/D2: the business's own reconciliation
+     policy. `effectiveOverTreatment` is read-only — `credit` when the
+     integration absorbs surplus on its own, whatever the policy says. */
+  reconciliationPolicy: z.object({
+    toleranceCents: z.number().int().min(0).max(10000),
+    overTreatment: z.enum(["flag", "credit"]),
+    effectiveOverTreatment: z.enum(["flag", "credit"]),
+  }),
 });
 
 export const settingsPatchRequest = z
@@ -79,6 +87,9 @@ export const settingsPatchRequest = z
        of the same dial, never a separate switch that could disagree. */
     reconnectionThresholdPercent: z.number().int().min(0).max(100),
     reconnectionFloorCents: z.number().int().nonnegative(),
+    /* payments-and-classes D1 */
+    toleranceCents: z.number().int().min(0).max(10000),
+    overTreatment: z.enum(["flag", "credit"]),
     /* provisional-release D10: on = evidence buys the promise while
        Banxico confirms; the fixed rule lives in the spec */
     provisionalReleaseEnabled: z.boolean(),

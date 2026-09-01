@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { charges, directPayments, isps, paymentLinks, proofRejections } from "../../db/schema";
+import { charges, directPayments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
@@ -51,8 +51,8 @@ async function resolveLink(c: Ctx, token: string) {
   if (!link) {
     return { error: c.json({ success: false, error: { code: "NOT_FOUND" } }, 404) };
   }
-  const [isp] = await db.select().from(isps).where(eq(isps.id, link.ispId));
-  return { db, link, isp };
+  const [business] = await db.select().from(businesses).where(eq(businesses.id, link.businessId));
+  return { db, link, business };
 }
 
 async function attemptsInLastHour(
@@ -91,24 +91,24 @@ function publicError(lastError: string | null) {
 export async function getLinkStatus(c: Ctx, token: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
-  const { link, isp } = ctx;
+  const { link, business } = ctx;
   const now = new Date();
 
-  if (!speiAvailable(c.env, isp)) {
+  if (!speiAvailable(c.env, business)) {
     /* D4: the GET already knows — the page degrades into the store
        network instead of showing a CLABE nothing can validate */
-    const data: LinkStatusResponse = { ispName: isp.name, status: "unavailable" };
+    const data: LinkStatusResponse = { ispName: business.name, status: "unavailable" };
     return c.json({ success: true, data });
   }
 
   try {
-    const wisphub = new WispHub(isp.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
+    const wisphub = new WispHub(business.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
     /* provider-latency D2: independent reads, one wait. D3: the page
        renders here; the submission below re-reads fresh before any
        amount is committed, so a 30s-old list cannot decide money. */
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      pendingInvoicesForDisplay(isp.id, wisphub, now),
+      pendingInvoicesForDisplay(business.id, wisphub, now),
     ]);
     /* debt-truth D7: invoices plus the carried balance. A payer whose
        invoice closed on a short payment owes a remainder that the
@@ -118,7 +118,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
 
     if (debt.totalCents === 0 || !customer) {
       const data: LinkStatusResponse = {
-        ispName: isp.name,
+        ispName: business.name,
         customerName,
         status: "no_debt",
       };
@@ -129,20 +129,20 @@ export async function getLinkStatus(c: Ctx, token: string) {
        applies a payment to the customer and not to one invoice. Asking
        for one invoice's total would ask for a number that reconnects
        nobody. */
-    const serviceFeeCents = speiFeeCents(isp);
+    const serviceFeeCents = speiFeeCents(business);
     const data: LinkStatusResponse = {
-      ispName: isp.name,
+      ispName: business.name,
       customerName,
       status: "debt",
       invoiceCents: debt.invoiceCents,
       carriedBalanceCents: debt.carriedBalanceCents,
       serviceFeeCents,
       totalCents: debt.totalCents + serviceFeeCents,
-      speiClabe: isp.speiClabe!,
-      speiBank: isp.speiBank!,
+      speiClabe: business.speiClabe!,
+      speiBank: business.speiBank!,
       /* claimed-amount D5: recommended, not required — omitted when the
          ISP has not configured it, and the page hides the row */
-      ...(isp.speiBeneficiaryName ? { speiBeneficiaryName: isp.speiBeneficiaryName } : {}),
+      ...(business.speiBeneficiaryName ? { speiBeneficiaryName: business.speiBeneficiaryName } : {}),
       reference: link.customerUsuario,
     };
     return c.json({ success: true, data });
@@ -155,13 +155,13 @@ export async function getLinkStatus(c: Ctx, token: string) {
 export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
-  const { db, link, isp } = ctx;
+  const { db, link, business } = ctx;
   const now = new Date();
 
   if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
-  if (!speiAvailable(c.env, isp)) {
+  if (!speiAvailable(c.env, business)) {
     return c.json({ success: false, error: { code: "SPEI_NOT_CONFIGURED" } }, 409);
   }
   if (body.proofId) {
@@ -232,7 +232,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   let customer;
   let pending;
   try {
-    const wisphub = new WispHub(isp.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
+    const wisphub = new WispHub(business.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
     /* provider-latency D2 together, D3 **fresh**: this read decides the
        amount the CEP must match (D11/D15), so it never takes the cache. */
     [customer, pending] = await Promise.all([
@@ -253,7 +253,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
   }
 
-  const serviceFeeCents = speiFeeCents(isp);
+  const serviceFeeCents = speiFeeCents(business);
   /* Same rule as the store path: only D4's truncation fallback falls back
      to the plan's price. A zero invoice line beside a carried balance is
      a real number, not a missing one. */
@@ -293,7 +293,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const claimedCents = body.transfer?.amountCents ?? body.receiptAmountCents ?? null;
   const rowValues = {
     paymentLinkId: link.id,
-    ispId: isp.id,
+    businessId: business.id,
     amountCents,
     invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
     carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
@@ -371,13 +371,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           .from(directPayments)
           .where(
             and(
-              eq(directPayments.ispId, link.ispId),
+              eq(directPayments.businessId, link.businessId),
               eq(directPayments.trackingKey, collidingKey),
               sql`${directPayments.status} NOT IN ('invalid', 'expired', 'superseded')`,
             ),
           );
         await db.insert(proofRejections).values({
-          ispId: link.ispId,
+          businessId: link.businessId,
           paymentLinkId: link.id,
           ownerPaymentId: owner?.id ?? null,
           trackingKey: collidingKey,
@@ -434,7 +434,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
 
   /* Inline attempt, then the sweep takes over (D7) — the same split as
      charge recording and reconnection */
-  const row = await runValidation(c.env, db, payment, link, isp, now);
+  const row = await runValidation(c.env, db, payment, link, business, now);
   return c.json(
     {
       success: true,
@@ -679,23 +679,23 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
    creating them by hand. */
 export async function listLinks(c: Ctx, cursor?: string) {
   const actor = c.get("actor");
-  if (actor.type !== "isp") {
+  if (actor.type !== "business") {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
   }
   const db = drizzle(c.env.DB);
-  const [isp] = await db.select().from(isps).where(eq(isps.id, actor.id));
-  if (!isp?.wisphubApiKey) {
+  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
+  if (!business?.wisphubApiKey) {
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
   }
 
   try {
-    const customers = await new WispHub(isp.wisphubApiKey, c.env.WISPHUB_BASE_URL).listCustomers();
+    const customers = await new WispHub(business.wisphubApiKey, c.env.WISPHUB_BASE_URL).listCustomers();
     if (customers.length) {
       await db
         .insert(paymentLinks)
         .values(
           customers.map((customer) => ({
-            ispId: isp.id,
+            businessId: business.id,
             token: makeLinkToken(),
             wisphubCustomerId: String(customer.wisphubId),
             customerUsuario: customer.usuario,
@@ -705,7 +705,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
            its token (the link is permanent while its usuario exists) and
            only the numeric id, a cache WispHub may recycle, refreshes. */
         .onConflictDoUpdate({
-          target: [paymentLinks.ispId, paymentLinks.customerUsuario],
+          target: [paymentLinks.businessId, paymentLinks.customerUsuario],
           set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
         });
     }
@@ -719,7 +719,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
     .from(paymentLinks)
     .where(
       and(
-        eq(paymentLinks.ispId, isp.id),
+        eq(paymentLinks.businessId, business.id),
         ...(cursor ? [gt(paymentLinks.customerUsuario, cursor)] : []),
       ),
     )
@@ -750,18 +750,18 @@ const shareText = (url: string) =>
    Searches WispHub and ensures links exist for the results. */
 export async function searchLinks(c: Ctx, q: string) {
   const actor = c.get("actor");
-  if (actor.type !== "isp") {
+  if (actor.type !== "business") {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
   }
   const db = drizzle(c.env.DB);
-  const [isp] = await db.select().from(isps).where(eq(isps.id, actor.id));
-  if (!isp?.wisphubApiKey) {
+  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
+  if (!business?.wisphubApiKey) {
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
   }
 
   let customers;
   try {
-    customers = await new WispHub(isp.wisphubApiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
+    customers = await new WispHub(business.wisphubApiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
   } catch (e) {
     return wisphubFailure(c, e);
   }
@@ -775,7 +775,7 @@ export async function searchLinks(c: Ctx, q: string) {
       .insert(paymentLinks)
       .values(
         customers.map((customer) => ({
-          ispId: isp.id,
+          businessId: business.id,
           token: makeLinkToken(),
           wisphubCustomerId: String(customer.wisphubId),
           customerUsuario: customer.usuario,
@@ -784,7 +784,7 @@ export async function searchLinks(c: Ctx, q: string) {
       /* D5: same rule as the batch generator above — the usuario keeps
          its token, the recycled numeric id only refreshes the cache. */
       .onConflictDoUpdate({
-        target: [paymentLinks.ispId, paymentLinks.customerUsuario],
+        target: [paymentLinks.businessId, paymentLinks.customerUsuario],
         set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
       });
   }
@@ -798,7 +798,7 @@ export async function searchLinks(c: Ctx, q: string) {
     links = await db
       .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
       .from(paymentLinks)
-      .where(and(eq(paymentLinks.ispId, isp.id), inArray(paymentLinks.customerUsuario, usuarios)));
+      .where(and(eq(paymentLinks.businessId, business.id), inArray(paymentLinks.customerUsuario, usuarios)));
   }
 
   const linkMap = new Map(links.map((l) => [l.customerUsuario, l.token]));

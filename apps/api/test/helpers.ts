@@ -2,12 +2,14 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import {
-  isps,
+  businesses,
+  member,
+  organization,
   session as sessionTable,
-  stores,
   user as userTable,
   verification,
 } from "../src/db/schema";
+import type { Role } from "../src/auth/roles";
 import { makeAuth } from "../src/auth/better";
 import type { Bindings } from "../src/env";
 
@@ -53,7 +55,7 @@ export function sessionCookieHeader(identity: string): Promise<string> {
   return signedSessionCookie(tokenFor(identity));
 }
 
-async function seedSession(userId: string, identity: string) {
+export async function seedSession(userId: string, identity: string, activeOrganizationId?: string) {
   await drizzle(env.DB)
     .insert(sessionTable)
     .values({
@@ -63,21 +65,17 @@ async function seedSession(userId: string, identity: string) {
       expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
       createdAt: new Date(),
       updatedAt: new Date(),
+      activeOrganizationId: activeOrganizationId ?? null,
     });
 }
 
 async function seedAuthUser(
   name: string,
   email: string,
-  opts: { username?: string; emailVerified?: boolean } = {},
+  opts: { emailVerified?: boolean } = {},
 ) {
   const { response } = await auth().api.signUpEmail({
-    body: {
-      name,
-      email,
-      password: PASSWORD,
-      ...(opts.username ? { username: opts.username } : {}),
-    },
+    body: { name, email, password: PASSWORD },
     returnHeaders: true,
   });
   if (opts.emailVerified !== false) {
@@ -89,44 +87,43 @@ async function seedAuthUser(
   return response.user.id;
 }
 
-export async function seedIsp(
-  overrides: Partial<typeof isps.$inferInsert> & { emailVerified?: boolean } = {},
+/* A business with its auth twin and one owner (business-and-memberships
+   D1/D2): organization + member rows through the server-side door, the
+   same shape the D7 backfill and the dev seed write. The session row is
+   seeded pointing at the organization, like the sign-in hook would. */
+export async function seedBusiness(
+  overrides: Partial<typeof businesses.$inferInsert> & { emailVerified?: boolean } = {},
 ) {
-  const { emailVerified, ...ispOverrides } = overrides;
-  const email = ispOverrides.email ?? "demo@devolada.app";
+  const { emailVerified, ...businessOverrides } = overrides;
+  const email = businessOverrides.email ?? "demo@devolada.app";
   const userId = await seedAuthUser("ISP Demo", email, { emailVerified });
-  await seedSession(userId, email);
   const db = drizzle(env.DB);
-  const [isp] = await db
-    .insert(isps)
-    .values({ name: "ISP Demo", email, userId, ...ispOverrides })
+  const orgId = `org_${crypto.randomUUID()}`;
+  const now = new Date();
+  await db.insert(organization).values({ id: orgId, name: "ISP Demo", slug: `negocio-${orgId.slice(4, 12)}`, createdAt: now });
+  await db.insert(member).values({ id: crypto.randomUUID(), organizationId: orgId, userId, role: "owner", createdAt: now });
+  await seedSession(userId, email, orgId);
+  const [business] = await db
+    .insert(businesses)
+    .values({ name: "ISP Demo", email, orgId, ...businessOverrides })
     .returning();
-  return isp;
+  return business;
 }
 
-export async function seedStore(
-  ispId: string,
-  overrides: Partial<typeof stores.$inferInsert> = {},
-) {
+/* A second person inside an existing business, with the given role and a
+   session of their own (`sessionCookieHeader(email)`). */
+export async function seedMember(business: { orgId: string }, email: string, role: Role) {
+  const userId = await seedAuthUser(email.split("@")[0], email);
   const db = drizzle(env.DB);
-  /* Store rows survive only as historical fixtures for the feed's
-     leftJoin (the store network retired to devolada-red): no auth user,
-     no session — nobody logs in as a store any more. */
-  const phone = overrides.phone ?? "5512345678";
-  const status = overrides.status ?? "active";
-  const [store] = await db
-    .insert(stores)
-    .values({
-      ispId,
-      name: "Abarrotes La Esquina",
-      contactName: "Don Chuy",
-      phone,
-      userId: null,
-      status,
-      ...overrides,
-    })
-    .returning();
-  return store;
+  await db.insert(member).values({
+    id: crypto.randomUUID(),
+    organizationId: business.orgId,
+    userId,
+    role,
+    createdAt: new Date(),
+  });
+  await seedSession(userId, email, business.orgId);
+  return userId;
 }
 
 export function cookiesOf(res: Response): string[] {

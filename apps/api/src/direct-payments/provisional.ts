@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { directPayments, isps, paymentLinks, proofRejections } from "../db/schema";
+import { directPayments, businesses, paymentLinks, proofRejections } from "../db/schema";
 import { WispHub } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { sendProvisionalExpiry } from "../email/sender";
@@ -21,7 +21,7 @@ import { settle } from "./partial";
 type DB = DrizzleD1Database;
 type DirectPayment = typeof directPayments.$inferSelect;
 type PaymentLink = typeof paymentLinks.$inferSelect;
-type Isp = typeof isps.$inferSelect;
+type Isp = typeof businesses.$inferSelect;
 
 const DAY_MS = 24 * 3600 * 1000;
 /* The D7 validation schedule dies 6 h after creation */
@@ -150,21 +150,21 @@ export function promiseDeadline(createdAt: Date): string {
 export async function maybeProvisionalRelease(
   env: Bindings,
   db: DB,
-  isp: Isp,
+  business: Isp,
   link: PaymentLink,
   payment: DirectPayment,
   evidence: ReleaseEvidence | null,
   now: Date,
 ): Promise<Partial<typeof directPayments.$inferInsert>> {
   if (!evidence) return {};
-  if (!isp.provisionalReleaseEnabled) return {};
+  if (!business.provisionalReleaseEnabled) return {};
   if (payment.provisionalReleaseAt) return {};
-  if (!isp.wisphubApiKey) return {};
+  if (!business.wisphubApiKey) return {};
 
   try {
     if (await isRevoked(db, payment, now)) return {};
 
-    const wisphub = new WispHub(isp.wisphubApiKey, env.WISPHUB_BASE_URL);
+    const wisphub = new WispHub(business.wisphubApiKey, env.WISPHUB_BASE_URL);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
       wisphub.pendingInvoices(now),
@@ -181,8 +181,8 @@ export async function maybeProvisionalRelease(
       receivedCents: claimed,
       ispDebtCents: debt.totalCents || (customer?.planPriceCents ?? payment.invoiceCents),
       serviceFeeCents: payment.serviceFeeCents,
-      thresholdPercent: isp.reconnectionThresholdPercent,
-      floorCents: isp.reconnectionFloorCents,
+      thresholdPercent: business.reconnectionThresholdPercent,
+      floorCents: business.reconnectionFloorCents,
     }).reconnect;
     if (!ok) return {};
 
@@ -209,20 +209,20 @@ export async function maybeProvisionalRelease(
    never showed. Best-effort: an email must never break the sweep. */
 export async function notifyProvisionalExpiry(
   env: Bindings,
-  isp: Isp,
+  business: Isp,
   link: PaymentLink,
   now: Date,
 ): Promise<void> {
   try {
-    if (!isp.wisphubApiKey) return;
-    const wisphub = new WispHub(isp.wisphubApiKey, env.WISPHUB_BASE_URL);
+    if (!business.wisphubApiKey) return;
+    const wisphub = new WispHub(business.wisphubApiKey, env.WISPHUB_BASE_URL);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
       wisphub.pendingInvoices(now),
     ]);
     const debt = customer ? debtOf(customer, pending) : NO_DEBT;
     if (debt.totalCents === 0) return;
-    await sendProvisionalExpiry(env, isp.email, {
+    await sendProvisionalExpiry(env, business.email, {
       name: customer?.name ?? link.customerUsuario,
       usuario: link.customerUsuario,
     });

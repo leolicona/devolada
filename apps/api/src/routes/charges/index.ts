@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
-import { requireSession } from "../../auth/middleware";
+import { requireArea, requireSession } from "../../auth/middleware";
 import { feedQuery } from "./schema";
 import { listChargeFeed } from "./handler";
 
@@ -10,6 +10,6 @@ import { listChargeFeed } from "./handler";
    retired to devolada-red; the ISP feed is what remains. */
 export const charges = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-charges.get("/feed", requireSession, zValidator("query", feedQuery), (c) => {
+charges.get("/feed", requireSession, requireArea("payments", "read"), zValidator("query", feedQuery), (c) => {
   return listChargeFeed(c, c.req.valid("query"));
 });

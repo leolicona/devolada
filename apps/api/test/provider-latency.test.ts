@@ -88,14 +88,14 @@ describe("US-P06: the pending list is cached for display only (D3)", () => {
     const at = (ms: number) => new Date(Date.parse("2026-08-18T12:00:00Z") + ms);
 
     mockPendingInvoices();
-    const first = await pendingInvoicesForDisplay("isp-1", provider, at(0));
-    const second = await pendingInvoicesForDisplay("isp-1", provider, at(29_000));
+    const first = await pendingInvoicesForDisplay("business-1", provider, at(0));
+    const second = await pendingInvoicesForDisplay("business-1", provider, at(29_000));
     expect(second).toEqual(first);
 
     /* Past 30s the entry is gone, so this second interceptor is the
        proof the provider was asked again. */
     mockPendingInvoices([]);
-    const third = await pendingInvoicesForDisplay("isp-1", provider, at(31_000));
+    const third = await pendingInvoicesForDisplay("business-1", provider, at(31_000));
     expect(third.invoices).toHaveLength(0);
   });
 
@@ -105,8 +105,8 @@ describe("US-P06: the pending list is cached for display only (D3)", () => {
 
     mockPendingInvoices();
     mockPendingInvoices([]);
-    const mine = await pendingInvoicesForDisplay("isp-1", provider, now);
-    const theirs = await pendingInvoicesForDisplay("isp-2", provider, now);
+    const mine = await pendingInvoicesForDisplay("business-1", provider, now);
+    const theirs = await pendingInvoicesForDisplay("business-2", provider, now);
 
     /* Both interceptors consumed: one tenant's debt never answers for
        another's, however close together they ask. */
@@ -119,13 +119,13 @@ describe("US-P06: the pending list is cached for display only (D3)", () => {
     const now = new Date("2026-08-18T12:00:00Z");
 
     wh().intercept({ method: "GET", path: facturas }).replyWithError(stalled());
-    await expect(pendingInvoicesForDisplay("isp-1", provider, now)).rejects.toMatchObject({
+    await expect(pendingInvoicesForDisplay("business-1", provider, now)).rejects.toMatchObject({
       code: "WISPHUB_UNAVAILABLE",
     });
 
     /* A remembered failure would be a 30-second outage of our own making */
     mockPendingInvoices();
-    const retried = await pendingInvoicesForDisplay("isp-1", provider, now);
+    const retried = await pendingInvoicesForDisplay("business-1", provider, now);
     expect(retried.invoices).toHaveLength(1);
   });
 
@@ -142,9 +142,9 @@ describe("US-P06: the cash payment method is cached (D5)", () => {
       .intercept({ method: "GET", path: formasDePago })
       .reply(...json({ results: [{ id: 9, nombre: "Efectivo" }] }));
 
-    expect(await cashPaymentMethodId("isp-1", provider, now)).toBe(7);
-    expect(await cashPaymentMethodId("isp-1", provider, now)).toBe(7);
-    expect(await cashPaymentMethodId("isp-2", provider, now)).toBe(9);
+    expect(await cashPaymentMethodId("business-1", provider, now)).toBe(7);
+    expect(await cashPaymentMethodId("business-1", provider, now)).toBe(7);
+    expect(await cashPaymentMethodId("business-2", provider, now)).toBe(9);
   });
 });
 

@@ -3,7 +3,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/charges-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
-import { handlers, ispActor, ok, server } from "./msw";
+import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/admin/settings.spec.md scenarios 5–7. */
@@ -31,7 +31,7 @@ describe("US-D13: the beneficiary name is recommended, never required", () => {
   it("scenario 7: SPEI saves with clabe and bank alone, sending null for the name", async () => {
     const patches: unknown[] = [];
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       /* The bank is already picked; only the CLABE is typed here */
       handlers.settings(() =>
         ok(
@@ -72,7 +72,7 @@ describe("US-A04: the service fee is saved", () => {
   it("saves the fee that the SPEI channel falls back to", async () => {
     const patches: unknown[] = [];
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
       handlers.patchSettings((body) => {
         patches.push(body);
@@ -95,7 +95,7 @@ describe("US-A04: the key is tested before it is saved", () => {
     const patches: unknown[] = [];
     let tested: unknown = null;
     server.use(
-      handlers.session(() => ok({ ...ispActor, wisphubConfigured: false })),
+      handlers.session(() => ok({ ...businessActor, wisphubConfigured: false })),
       handlers.settings(() => ok(settings({ wisphub: { configured: false, keyTail: null } }))),
       handlers.patchSettings((body) => {
         patches.push(body);
@@ -142,7 +142,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       lastError: null,
     };
     server.use(
-      handlers.session(() => ok({ ...ispActor, timeFormat: "24h" })),
+      handlers.session(() => ok({ ...businessActor, timeFormat: "24h" })),
       handlers.feed(() =>
         ok(feedResponse.parse({ charges: [charge], nextCursor: null, today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) } })),
       ),
@@ -160,7 +160,7 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
   it("explains the current values in one sentence and saves both numbers", async () => {
     const patches: unknown[] = [];
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
       handlers.patchSettings((body) => {
         patches.push(body);
@@ -207,7 +207,7 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
   it("US-D15 D10: the protection switch rides the same save, off by default", async () => {
     const patches: unknown[] = [];
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
       handlers.patchSettings((body) => {
         patches.push(body);
@@ -243,7 +243,7 @@ describe("US-D10: the reconnection dial is set from Configuración", () => {
 
   it("blocks a percentage above 100 before it reaches the API", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
     );
     renderApp("/settings");

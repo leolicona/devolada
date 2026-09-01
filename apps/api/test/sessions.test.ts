@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { isps } from "../src/db/schema";
+import { businesses } from "../src/db/schema";
 import {
   app,
   cookiesOf,
   json,
-  seedIsp,
+  seedBusiness,
   sessionCookieHeader,
   sessionOf,
   PASSWORD,
@@ -20,7 +20,7 @@ import {
 
 describe("US-S04: the ISP logs in with credentials", () => {
   it("valid admin login (email) returns 200 and resolves the ISP actor", async () => {
-    await seedIsp();
+    await seedBusiness();
 
     const res = await (await app()).request(
       "/auth/sign-in/email",
@@ -34,21 +34,21 @@ describe("US-S04: the ISP logs in with credentials", () => {
       { headers: { Cookie: sessionOf(res) } },
       env,
     );
-    expect((await me.json()).data).toMatchObject({ type: "isp", emailVerified: true });
+    expect((await me.json()).data).toMatchObject({ type: "business", emailVerified: true });
   });
 
   it("the ISP actor from /auth/me includes emailVerified", async () => {
-    await seedIsp({ emailVerified: false });
+    await seedBusiness({ emailVerified: false });
     const res = await (await app()).request(
       "/auth/me",
       { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
       env,
     );
-    expect((await res.json()).data).toMatchObject({ type: "isp", emailVerified: false });
+    expect((await res.json()).data).toMatchObject({ type: "business", emailVerified: false });
   });
 
   it("wrong password returns 401 with no session cookie", async () => {
-    await seedIsp();
+    await seedBusiness();
 
     const res = await (await app()).request(
       "/auth/sign-in/email",
@@ -71,7 +71,7 @@ describe("US-S04: the ISP logs in with credentials", () => {
 
 describe("US-S02: the session survives without visible expiry", () => {
   it("the same cookie works across requests", async () => {
-    await seedIsp();
+    await seedBusiness();
     const cookie = await sessionCookieHeader("demo@devolada.app");
 
     for (let i = 0; i < 2; i++) {
@@ -87,7 +87,7 @@ describe("US-S02: the session survives without visible expiry", () => {
   });
 
   it("a tampered session cookie returns 401", async () => {
-    await seedIsp();
+    await seedBusiness();
     const cookie = await sessionCookieHeader("demo@devolada.app");
     /* Flip a character inside the signed value */
     const tampered = cookie.slice(0, -4) + (cookie.endsWith("A") ? "B" : "A") + cookie.slice(-3);
@@ -99,10 +99,10 @@ describe("US-S02: the session survives without visible expiry", () => {
 
 describe("US-S02/sessions rule 2: suspension revokes access immediately", () => {
   it("a suspended ISP with a live session gets 403 and the session row dies", async () => {
-    const isp = await seedIsp();
+    const business = await seedBusiness();
     const db = drizzle(env.DB);
     const cookie = await sessionCookieHeader("demo@devolada.app");
-    await db.update(isps).set({ status: "suspended" }).where(eq(isps.id, isp.id));
+    await db.update(businesses).set({ status: "suspended" }).where(eq(businesses.id, business.id));
 
     const res = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
     expect(res.status).toBe(403);
@@ -115,7 +115,7 @@ describe("US-S02/sessions rule 2: suspension revokes access immediately", () => 
   });
 
   it("sign-out kills the session", async () => {
-    await seedIsp();
+    await seedBusiness();
     const cookie = await sessionCookieHeader("demo@devolada.app");
 
     const out = await (await app()).request(

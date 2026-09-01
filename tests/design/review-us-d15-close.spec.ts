@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
-import { ispActor } from "../e2e/stubs";
+import { businessActor } from "../e2e/stubs";
 
 /* Closing captures for the US-D15 review cycle: the states the previous
    pass (review-pr104-105.spec.ts) did not photograph — the neutral
@@ -80,7 +80,7 @@ const adminSettings = (enabled: boolean) => ({
 });
 
 async function stubAdmin(page: Page, enabled: boolean) {
-  await json(page, (u) => u.pathname.endsWith("/auth/me"), ispActor);
+  await json(page, (u) => u.pathname.endsWith("/auth/me"), businessActor);
   await json(page, (u) => u.pathname.includes("/charges/feed"), { charges: [] });
   await json(page, (u) => u.pathname.endsWith("/settings"), adminSettings(enabled));
   await json(page, (u) => u.pathname.endsWith("/settlement"), { months: [] });

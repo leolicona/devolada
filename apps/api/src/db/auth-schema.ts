@@ -1,7 +1,7 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /* Better Auth's tables (better-auth.spec.md D10): user, session, account,
-   verification, plus the passkey plugin's table. Keys must match Better
+   verification, plus the passkey and organization plugins' tables. Keys must match Better
    Auth model names; column props are what the drizzle adapter reads.
    Cross-checked against the spike's schema, which passed end to end. */
 
@@ -13,9 +13,6 @@ export const user = sqliteTable("user", {
   image: text("image"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-  /* username plugin: the store's phone lives here for login (spec D3) */
-  username: text("username").unique(),
-  displayUsername: text("display_username"),
 });
 
 export const session = sqliteTable("session", {
@@ -29,6 +26,10 @@ export const session = sqliteTable("session", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id),
+  /* organization plugin (business-and-memberships D1/D4): the active
+     workspace. Set by the switch, or by the sign-in hook when the user
+     has exactly one membership. */
+  activeOrganizationId: text("active_organization_id"),
 });
 
 export const account = sqliteTable("account", {
@@ -72,4 +73,44 @@ export const passkey = sqliteTable("passkey", {
   transports: text("transports"),
   createdAt: integer("created_at", { mode: "timestamp" }),
   aaguid: text("aaguid"),
+});
+
+/* organization plugin (business-and-memberships spec, spike 2026-08-31):
+   one organization per business — its auth twin — with memberships that
+   carry our roles (owner/admin/operator/viewer) and the plugin's own
+   invitations. Keys equal the plugin's model names. */
+export const organization = sqliteTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  metadata: text("metadata"),
+});
+
+export const member = sqliteTable("member", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("member"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const invitation = sqliteTable("invitation", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role"),
+  status: text("status").notNull().default("pending"),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  inviterId: text("inviter_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
 });

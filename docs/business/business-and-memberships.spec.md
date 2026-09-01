@@ -1,5 +1,5 @@
 ---
-status: in development
+status: in development # foundation PR landed; payments merge (D6) is its own PR
 stories: [US-B01, US-B02, US-B03]
 domain: business
 updated: 2026-08-31 # spike run the same day, findings below
@@ -282,14 +282,21 @@ untouched with the plugin loaded.
 
 - [x] **Spike first** (the better-auth precedent): organizations plugin
       contract verified — see **Spike** above (2026-08-31).
-- [ ] Migrations run clean on a fresh local D1 and on deployed dev;
-      the pilot tenant signs in afterwards as owner of its backfilled
-      business with its links intact (D7) — checked on the deployed app,
-      not only by scenario 13.
-- [ ] Scenarios 1–14 automated, citing their stories.
-- [ ] Glossary swap in SPEC.md + `ispId` sweep (D9) in the same PR as the
-      rename, spec-lint green.
-- [ ] charge-feed.spec.md annotated with the route/table rename; pivot
-      spec's phase 2 boxes ticked in TASKS.md.
-- [ ] The role matrix asserted at the API layer for every area of D3 —
-      the UI's hiding is the second defense, never the only one.
+- [x] Migration 0018 (rename + D7 backfill in three steps + store-era
+      drops) runs clean on a fresh local D1 and under the whole suite.
+- [ ] Deployed dev: the pilot tenant signs in afterwards as owner of its
+      backfilled business with its links intact (D7) — checked on the
+      deployed app, not only by scenario 13.
+- [x] Scenarios 2–11 automated (`test/business-memberships.test.ts`;
+      12 in sessions.test.ts). Scenario 1 (wizard) and the UI half of
+      2–11 wait for the frontend PR; 13's membership half is the deployed
+      check above; 14 rides the payments merge.
+- [x] Glossary: Negocio and the roles adopted in SPEC.md; `ispId` →
+      `businessId` swept (D9). Cobro/Pago swap with the payments merge.
+- [x] charge-feed.spec.md annotated; TASKS.md phase 2 boxes ticked.
+- [x] The role matrix asserted at the API layer for every area of D3.
+- [ ] **Payments merge (D6)** — its own PR: `payments` absorbs the
+      charges twin, `lastError` split, `reconciliationClass` born
+      nullable; scenario 14.
+- [ ] **Frontend PR**: wizard (D5), switcher (US-B02), Usuarios
+      (US-B03), role-hidden rendering; signup then births the user only.

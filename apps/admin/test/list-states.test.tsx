@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/charges-schema";
-import { fail, handlers, ispActor, ok, server } from "./msw";
+import { fail, handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/polish/list-states.spec.md scenarios 1–2. */
@@ -39,7 +39,7 @@ const oneCharge = feedResponse.parse({
 describe("US-P01: a failed list says so instead of claiming it is empty", () => {
   it("shows the error and never the empty sentence", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed(() => fail("INTERNAL_SERVER_ERROR", 500)),
     );
     renderApp("/");
@@ -51,7 +51,7 @@ describe("US-P01: a failed list says so instead of claiming it is empty", () => 
 
   it("keeps the empty sentence when the list really is empty", async () => {
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed(() => ok(emptyFeed)),
     );
     renderApp("/");
@@ -65,7 +65,7 @@ describe("US-P01: retrying loads the data without leaving the screen", () => {
   it("refetches on tap and shows the rows", async () => {
     let failNext = true;
     server.use(
-      handlers.session(() => ok(ispActor)),
+      handlers.session(() => ok(businessActor)),
       handlers.feed(() => {
         if (failNext) {
           failNext = false;

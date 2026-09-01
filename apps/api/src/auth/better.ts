@@ -1,11 +1,14 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
+import { organization } from "better-auth/plugins/organization";
+import { eq } from "drizzle-orm";
 import { passkey } from "@better-auth/passkey";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import * as authSchema from "../db/auth-schema";
-import { sendAuthCode } from "../email/sender";
+import { sendAuthCode, sendMemberInvitation } from "../email/sender";
+import { ac, pluginRoles } from "./roles";
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 const ONE_DAY = 60 * 60 * 24;
@@ -27,11 +30,12 @@ export function makeAuth(env: Bindings) {
     .filter(Boolean)
     .filter((o) => !o.startsWith("*"));
 
+  const db = drizzle(env.DB);
   return betterAuth({
     baseURL: env.API_BASE_URL ?? "http://localhost:8787",
     basePath: "/auth",
     secret: env.BETTER_AUTH_SECRET ?? "devolada-dev-only-insecure-secret",
-    database: drizzleAdapter(drizzle(env.DB), { provider: "sqlite", schema: authSchema }),
+    database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
     trustedOrigins: exactOrigins,
     emailAndPassword: { enabled: true },
     /* 30-day sliding window in both apps (spec D5). The cookie session
@@ -47,7 +51,44 @@ export function makeAuth(env: Bindings) {
        Chrome's third-party cookie blocking killed the SameSite=None
        setup in real browsers — measured 2026-08-15, login looped back
        to login while curl worked. */
+    /* business-and-memberships D4 (spike 3): one membership does not
+       activate itself on sign-in; this hook does it, so the common user
+       never meets a one-item switcher. */
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session) => {
+            const rows = await db
+              .select({ organizationId: authSchema.member.organizationId })
+              .from(authSchema.member)
+              .where(eq(authSchema.member.userId, session.userId));
+            return rows.length === 1
+              ? { data: { ...session, activeOrganizationId: rows[0].organizationId } }
+              : { data: session };
+          },
+        },
+      },
+    },
     plugins: [
+      /* One organization per business — its auth twin (spec D1/D2).
+         Roles derive from the matrix in roles.ts (spike finding 2). */
+      organization({
+        ac,
+        roles: pluginRoles,
+        creatorRole: "owner",
+        async sendInvitationEmail(data) {
+          try {
+            await sendMemberInvitation(env, data.email, {
+              businessName: data.organization.name,
+              role: data.role,
+              inviterName: data.inviter.user.name,
+              invitationId: data.id,
+            });
+          } catch (e) {
+            console.error("member invitation email failed", e);
+          }
+        },
+      }),
       emailOTP({
         sendVerificationOnSignUp: true,
         async sendVerificationOTP({ email, otp, type }) {

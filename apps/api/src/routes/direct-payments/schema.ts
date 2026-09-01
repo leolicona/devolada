@@ -159,7 +159,7 @@ export const payResponse = z.object({
   /* `partial` included: the inline attempt can finish the validation, and
      a short transfer's verdict travels back on the POST itself — the
      status endpoint is not the only door it comes through (US-D10 D6). */
-  status: z.enum(["validating", "confirmed", "partial", "invalid", "unapplied"]),
+  status: z.enum(["validating", "confirmed", "partial", "invalid", "unapplied", "queued_for_credit"]),
   error: publicPaymentError.nullable(),
 });
 
@@ -173,6 +173,8 @@ export const directPaymentStatusResponse = z.object({
     "expired",
     "unapplied",
     "superseded",
+    /* prepaid-credit D8/D9: waiting for the business to top up */
+    "queued_for_credit",
   ]),
   /* partial-payment D7: the page speaks in pesos, never in percentages,
      so the three numbers it needs arrive computed. Present once a

@@ -30,10 +30,12 @@ Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md
 - [x] `credit_entries` (append-only house rule) + balance derivation
 - [x] Welcome bonus on business creation — per user, first business (D5)
 - [x] Fee debit on the terminal verdict, once per payment (US-L03, D2)
-- [ ] Warnings at 20% and 0; negative cap; paused state + queued proofs
-      (US-B06 — pago-page copy carries D6's voice)
-- [ ] Top-up via platform-validated SPEI (US-B05): reference per business,
-      proof flow reusing the pago machinery
+- [x] Steps, negative cap, the pause: queued proofs without a provider
+      call, release in arrival order, the pago page's calm state in D9's
+      voice (US-B06)
+- [x] Top-up via platform-validated SPEI (US-B05): both doors, the
+      platform's key against the platform's account, the CEP's amount
+      credited, its own sweep
 - [ ] Saldo chip in the shell + Saldo y recargas page (US-B04)
 - [x] `platform_settings` table (append-only) + `/platform/*` API and the
       operator secret (US-L02); the `/operador` panel UI — frontend PR

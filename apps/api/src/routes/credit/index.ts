@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import type { Bindings, Variables } from "../../env";
-import { requireSession } from "../../auth/middleware";
+import { requireArea, requireSession } from "../../auth/middleware";
+import { zValidator } from "@hono/zod-validator";
+import { topUpRequest } from "./schema";
+import { getTopUp, listTopUps, submitTopUp, uploadTopUpProof } from "./handler";
 import { businesses } from "../../db/schema";
 import { creditSummary, listEntries } from "../../credit";
 import { getSetting } from "../../platform/settings";
@@ -36,3 +39,17 @@ creditRoute.get("/entries", requireSession, async (c) => {
   const data = await listEntries(db, c.get("actor").id, cursor ? Number(cursor) : undefined);
   return c.json({ success: true, data });
 });
+
+/* prepaid-credit D6 (US-B05): the owner's area (D3 matrix, `credit: manage`) */
+creditRoute.post("/top-ups/proof", requireSession, requireArea("credit", "manage"), (c) => uploadTopUpProof(c));
+creditRoute.post(
+  "/top-ups",
+  requireSession,
+  requireArea("credit", "manage"),
+  zValidator("json", topUpRequest, (result, c) => {
+    if (!result.success) return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
+  }),
+  (c) => submitTopUp(c, c.req.valid("json")),
+);
+creditRoute.get("/top-ups", requireSession, (c) => listTopUps(c));
+creditRoute.get("/top-ups/:id", requireSession, (c) => getTopUp(c, c.req.param("id")));

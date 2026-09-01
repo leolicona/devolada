@@ -6,6 +6,7 @@ import { businesses, member, organization, user as userTable } from "../db/schem
 import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
 import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
+import { releaseQueuedForCredit, sweepTopUps } from "../credit/topups";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
    Seeds a demo ISP to verify login with curl. */
@@ -26,8 +27,10 @@ dev.post("/reconnect-sweep", async (c) => {
 
 /* Same escape hatch for the direct-payment re-validations (D7) */
 dev.post("/direct-payment-sweep", async (c) => {
+  const released = await releaseQueuedForCredit(c.env);
   const report = await sweepDirectPayments(c.env);
-  return c.json({ success: true, data: { ...report, validating: await validatingCount(c.env) } });
+  const topUps = await sweepTopUps(c.env);
+  return c.json({ success: true, data: { ...report, released, topUps, validating: await validatingCount(c.env) } });
 });
 
 dev.post("/seed", async (c) => {

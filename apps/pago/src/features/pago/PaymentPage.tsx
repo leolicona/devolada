@@ -352,6 +352,9 @@ export function PaymentPage({ token }: { token: string }) {
       if (!s) return POLL_MS;
       const open =
         s.status === "validating" ||
+        /* prepaid-credit D8: the queue moves when the business tops up;
+           the page keeps watching so the payer never has to reload */
+        s.status === "queued_for_credit" ||
         (s.status === "confirmed" && s.reconnectionStatus !== "reconnected") ||
         /* A partial that met the threshold can still have its reconnection
            in the queue (WispHub down). `withheld` is terminal; `queued` is
@@ -899,6 +902,16 @@ export function PaymentPage({ token }: { token: string }) {
               Ver los datos para transferir
             </Button>
           </>
+        )}
+
+        {status.status === "queued_for_credit" && (
+          /* prepaid-credit D9: the business's fault, never the payer's —
+             no "error", no hidden CLABE, no countdown. Calm, like D12's
+             family; the poll above brings the payer back on its own. */
+          <Alert variant="warning" layout="icon">
+            Este negocio pausó la validación de pagos. Tu comprobante quedó guardado y se revisará
+            en cuanto la reactiven. No tienes que hacer nada más.
+          </Alert>
         )}
 
         {status.status === "invalid" && (

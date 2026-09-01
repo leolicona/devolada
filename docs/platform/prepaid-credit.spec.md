@@ -270,6 +270,11 @@ computes money.
    item 1's data; a fee of 0 is the current decision.
 3. **Statement export** (the accountant's job) — the CSV one-liner in
    SPEC.md's backlog covers credit entries too.
+4. **The reading step on the top-up's receipt door.** Payers get D18's
+   free reading + confirmation before a credit is spent; the top-up's
+   receipt door sends the image straight to the provider. The owner sits
+   at a desktop with their bank app open, so the manual door is the
+   primary; add the reading when a real top-up misreads.
 
 ## Definition of Done
 
@@ -277,8 +282,14 @@ computes money.
       (0020, additive only — no rebuild, so rule 12's seeded proof is not
       owed); `queued_for_credit` is an enum value with no SQL.
 - [x] Scenarios 1–7, 13–15 automated (`test/prepaid-credit.test.ts`); the
-      debit and reversal idempotency proven by rows. Scenarios 8–12
-      (top-ups, the pause) land with their PR.
+      debit and reversal idempotency proven by rows.
+- [x] Scenarios 8–12 automated (`test/topups-pause.test.ts`): the queue
+      under the cap with no provider call, in-flight work continuing, the
+      release in arrival order, the top-up crediting the CEP's amount, the
+      minimum, the reused key; plus a pending top-up credited by the sweep.
+      The receipt door uploads to the platform's bucket and lets the
+      provider read the image (direct-payment D2's original door) — the
+      D18 reading step for top-ups is open item 4.
 - [ ] The two emails send through Resend on deployed dev, once per
       crossing, to every owner.
 - [ ] A real top-up on deployed dev with the owner's transfer to the

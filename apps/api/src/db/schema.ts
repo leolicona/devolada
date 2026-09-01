@@ -398,6 +398,9 @@ export const creditEntries = sqliteTable(
     uniqueIndex("credit_entries_fee_payment_idx")
       .on(t.paymentId)
       .where(sql`kind = 'validation_fee'`),
+    uniqueIndex("credit_entries_topup_idx")
+      .on(t.topUpId)
+      .where(sql`kind = 'top_up'`),
     uniqueIndex("credit_entries_reversal_payment_idx")
       .on(t.paymentId)
       .where(sql`kind = 'fee_reversal'`),

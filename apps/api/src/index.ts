@@ -8,6 +8,7 @@ import { creditRoute } from "./routes/credit";
 import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
+import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
 import { paymentsRoute } from "./routes/payments";
 import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
@@ -70,9 +71,21 @@ export default {
         if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
       }),
     );
+    /* prepaid-credit D8: the release runs before the direct sweep, so a
+       business that just topped up sees its queue move this same minute */
     ctx.waitUntil(
-      sweepDirectPayments(env).then((report) => {
-        if (report.claimed) console.log("direct-payment sweep:", JSON.stringify(report));
+      releaseQueuedForCredit(env)
+        .then((released) => {
+          if (released) console.log("queued-for-credit release:", released);
+        })
+        .then(() => sweepDirectPayments(env))
+        .then((report) => {
+          if (report.claimed) console.log("direct-payment sweep:", JSON.stringify(report));
+        }),
+    );
+    ctx.waitUntil(
+      sweepTopUps(env).then((report) => {
+        if (report.claimed) console.log("top-up sweep:", JSON.stringify(report));
       }),
     );
   },

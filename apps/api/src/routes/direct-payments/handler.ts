@@ -3,6 +3,7 @@ import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
+import { creditSummary } from "../../credit";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
@@ -164,6 +165,9 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   if (!speiAvailable(c.env, business)) {
     return c.json({ success: false, error: { code: "SPEI_NOT_CONFIGURED" } }, 409);
   }
+  /* prepaid-credit D8: below the cap, what is new waits without spending
+     — no provider call, no extraction. The payer did nothing wrong (D9). */
+  const paused = (await creditSummary(db, business)).step === "paused";
   if (body.proofId) {
     /* No cross-link references: proofs are token-bound (D12) — and the
        object must actually exist before a paid provider call is spent */
@@ -318,7 +322,8 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
 
        No race with the inline attempt: the first slot is +2 min and
        a validation answers in ~15 s. */
-    nextValidationAt: nextValidationSlot(now, now),
+    nextValidationAt: paused ? null : nextValidationSlot(now, now),
+    ...(paused ? { status: "queued_for_credit" as const } : {}),
   };
 
   /* On any refusal after this point the prior's claim must come back:
@@ -433,15 +438,16 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   }
 
   /* Inline attempt, then the sweep takes over (D7) — the same split as
-     charge recording and reconnection */
-  const row = await runValidation(c.env, db, payment, link, business, now);
+     charge recording and reconnection. A queued row waits for the
+     release (D8): nothing runs, nothing is spent. */
+  const row = paused ? payment : await runValidation(c.env, db, payment, link, business, now);
   return c.json(
     {
       success: true,
       data: {
         directPaymentId: row.id,
         /* `expired` cannot happen inline (the schedule starts now) */
-        status: row.status as "validating" | "confirmed" | "partial" | "invalid" | "unapplied",
+        status: row.status as "validating" | "confirmed" | "partial" | "invalid" | "unapplied" | "queued_for_credit",
         error: publicError(row.lastError),
       },
     },

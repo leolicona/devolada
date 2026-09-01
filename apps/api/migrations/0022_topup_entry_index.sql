@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `credit_entries_topup_idx` ON `credit_entries` (`top_up_id`) WHERE kind = 'top_up';

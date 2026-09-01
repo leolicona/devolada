@@ -196,7 +196,7 @@ stories.
 - **D13 — `platform_settings` is a table with an operator panel, and every
   change keeps its author.** What lives there: validation fee, welcome
   bonus, negative cap, inheritable defaults (tolerance, timezone, fee
-  payer), the pending-CEP retry schedule, the platform's top-up CLABE.
+  payer), the pending-CEP retry schedule, the platform's top-up CLABE. *(2026-09-01, operator-panel D1: the retry schedule is NOT a key — learned-retry governs it from Consta; the rest stands.)*
   Edited from a minimal `/operador` panel behind a `platform_operator`
   role; each change appends a row with date and author (append-only, the
   house rule). **Rejected**: constants + env vars (changing the fee is a

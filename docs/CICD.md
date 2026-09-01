@@ -39,7 +39,7 @@ Rules for two worktrees to coexist:
 
 Custom domains live under `devoladapago.com` (`api.` / `admin.` / `pago.` / `consta.`, and `.dev.` variants — pivot D19 is the map). The store PWA and its `punto.*` domains left with `devolada-red` (2026-08-31).
 
-Frontends inject `VITE_API_URL` at build time. Secrets (AUTH_JWT_SECRET, RESEND_API_KEY, Cloudflare token) live in GitHub Environments, never in the repo — and reach the Worker through the sync step in D5. `AUTH_JWT_SECRET` is optional on dev and **required on prod**: the deploy fails without it rather than shipping an API that skips signature checks (TD-001).
+Frontends inject `VITE_API_URL` at build time. Secrets (BETTER_AUTH_SECRET, RESEND_API_KEY, CUSTOMER_REF_SECRET, `PLATFORM_OPERATOR_EMAILS` — the comma-separated operators of the platform, operator-panel D2 —, Cloudflare token) live in GitHub Environments, never in the repo — and reach the Worker through the sync step in D5. `AUTH_JWT_SECRET` is optional on dev and **required on prod**: the deploy fails without it rather than shipping an API that skips signature checks (TD-001).
 
 Until the `devolada.app` zone exists in Cloudflare, deploys go to `*.workers.dev`; the real URLs are configured as repo variables (`DEV_API_URL`, `PROD_API_URL`) feeding the smoke tests. The domains in the table are the destination, not the current state.
 

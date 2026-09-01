@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `credit_entries_reversal_payment_idx` ON `credit_entries` (`payment_id`) WHERE kind = 'fee_reversal';

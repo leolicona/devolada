@@ -6,6 +6,7 @@ import { businesses, member, user as userTable } from "../../db/schema";
 import { makeAuth } from "../../auth/better";
 import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, ROLE_RANK } from "../../auth/roles";
+import { grantWelcomeBonus } from "../../credit";
 import type { CreateBusinessRequest, InviteMemberRequest, MembersResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -54,6 +55,8 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
     throw e;
   }
 
+  /* prepaid-credit D5: once per user, their first business */
+  await grantWelcomeBonus(db, business, session.user.id);
   await auth.api.setActiveOrganization({ headers, body: { organizationId: org.id } });
   const actor = await findActor(c.env, session.user, org.id);
   return c.json({ success: true, data: actor }, 201);

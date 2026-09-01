@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { payments, businesses, paymentLinks } from "../db/schema";
+import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
 import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
 import { customerRefFor } from "../consta/refs";
@@ -161,6 +162,9 @@ export async function runValidation(
       .set(values)
       .where(eq(payments.id, payment.id))
       .returning();
+    /* prepaid-credit D2: the fee keys on the terminal verdict, once per
+       payment — idempotent in the book, so every path may call it */
+    await debitValidationFee(env, db, row);
     return row;
   };
 

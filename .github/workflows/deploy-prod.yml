@@ -68,6 +68,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           CUSTOMER_REF_SECRET: ${{ secrets.CUSTOMER_REF_SECRET }}
+          PLATFORM_OPERATOR_EMAILS: ${{ secrets.PLATFORM_OPERATOR_EMAILS }}
         run: |
           if [ -z "$BETTER_AUTH_SECRET" ]; then
             echo "::error::BETTER_AUTH_SECRET is not set in the production environment."
@@ -85,6 +86,14 @@ jobs:
           # unset means no payer history is collected — silent, and the
           # lost month cannot be recovered later. Must stay STABLE:
           # rotating it orphans every ref written under the old value.
+          # operator-panel D2: who may open /operador and write the
+          # platform's rules. Unset means nobody can — the platform still
+          # runs on its birth values (operator-panel D1).
+          if [ -z "$PLATFORM_OPERATOR_EMAILS" ]; then
+            echo "::warning::No PLATFORM_OPERATOR_EMAILS in the prod environment — the operator panel is closed to everyone (operator-panel D2)."
+          else
+            printf '%s' "$PLATFORM_OPERATOR_EMAILS" | pnpm exec wrangler secret put PLATFORM_OPERATOR_EMAILS --env prod
+          fi
           if [ -z "$CUSTOMER_REF_SECRET" ]; then
             echo "::warning::No CUSTOMER_REF_SECRET in the production environment — payer history is NOT accumulating in Consta (provisional-release D4, BUG-010)."
           else

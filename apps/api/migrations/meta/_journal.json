@@ -141,6 +141,20 @@
       "when": 1788225042208,
       "tag": "0019_payments_merge",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1788233828867,
+      "tag": "0020_phase3_credit",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1788237522443,
+      "tag": "0021_fee_reversal_index",
+      "breakpoints": true
     }
   ]
 }

@@ -27,15 +27,16 @@ Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
 
 Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md) (US-B04–B06, US-L03) · [operator-panel.spec.md](../../docs/platform/operator-panel.spec.md) (US-L02) — written 2026-09-01 after the phase-3 interview.
 
-- [ ] `credit_entries` (append-only house rule) + balance derivation
-- [ ] Welcome bonus on business creation (platform default)
-- [ ] Fee debit per confirmed validation, never per attempt (US-L03)
+- [x] `credit_entries` (append-only house rule) + balance derivation
+- [x] Welcome bonus on business creation — per user, first business (D5)
+- [x] Fee debit on the terminal verdict, once per payment (US-L03, D2)
 - [ ] Warnings at 20% and 0; negative cap; paused state + queued proofs
       (US-B06 — pago-page copy carries D6's voice)
 - [ ] Top-up via platform-validated SPEI (US-B05): reference per business,
       proof flow reusing the pago machinery
 - [ ] Saldo chip in the shell + Saldo y recargas page (US-B04)
-- [ ] `platform_settings` table (append-only) + `/operador` panel (US-L02)
+- [x] `platform_settings` table (append-only) + `/platform/*` API and the
+      operator secret (US-L02); the `/operador` panel UI — frontend PR
 
 ## Phase 4 — Cobros mirror & reconciliation
 

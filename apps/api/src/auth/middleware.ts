@@ -5,6 +5,7 @@ import type { Actor, Bindings, Variables } from "../env";
 import { businesses, member, session as sessionTable } from "../db/schema";
 import { makeAuth } from "./better";
 import { isRole, roleCan, type Action, type Area, type Role } from "./roles";
+import { isPlatformOperator } from "../platform/settings";
 
 /* Resolves the Better Auth user to our actor (business-and-memberships
    D4): the memberships name the businesses, the session's active
@@ -60,8 +61,19 @@ export async function findActor(
       name: m.businessName,
       role: isRole(m.role) ? m.role : "viewer",
     })),
+    platformOperator: isPlatformOperator(env, user.email),
   };
 }
+
+/* operator-panel D2/D3: the platform's hands. Composes after requireSession. */
+export const requirePlatformOperator = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
+  async (c, next) => {
+    if (!c.get("actor").platformOperator) {
+      return c.json({ success: false, error: { code: "NOT_PLATFORM_OPERATOR" } }, 403);
+    }
+    await next();
+  },
+);
 
 /* Session required (better-auth.spec.md D5): Better Auth resolves the
    session cookie; the business's status is checked in the DB on every

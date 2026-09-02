@@ -191,8 +191,8 @@ export function Shell() {
         <div className="mt-2 px-3">
           <BusinessSwitcher actor={actor} />
         </div>
-        <div className="mb-6 mt-3 px-3">
-          <CreditChip credit={actor.credit} />
+        <div className="mb-6 mt-3 flex flex-col gap-2 px-3">
+          <CreditChip credit={actor.credit} className="flex w-full" />
           {actor.observing && <ObservationChip />}
         </div>
         <SectionLinks variant="sidebar" />
@@ -221,11 +221,17 @@ export function Shell() {
             name and its amount ended up a screen apart on a wide monitor —
             the Stripe dashboard the brief points at caps its content too. */}
         <div className="mx-auto w-full max-w-7xl">
-        {/* The switcher rides the top on phones; the sidebar holds it on desktop */}
-        <header className="space-y-2 border-b border-border bg-card px-4 py-2 lg:hidden">
-          <BusinessSwitcher actor={actor} />
-          <CreditChip credit={actor.credit} />
-          {actor.observing && <ObservationChip />}
+        {/* The switcher rides the top on phones; the sidebar holds it on desktop.
+            shell header (2026-09-02): one 48px row — name left, saldo right.
+            Three stacked rows (name, role, chip) took a quarter of a phone
+            before the page title; the role went to the sidebar and to
+            Configuración, the chip lost its idle word (CreditChip). */}
+        <header className="flex h-12 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:hidden">
+          <BusinessSwitcher actor={actor} variant="bar" />
+          <div className="flex shrink-0 items-center gap-2">
+            {actor.observing && <ObservationChip compact />}
+            <CreditChip credit={actor.credit} />
+          </div>
         </header>
         <CreditBanner credit={actor.credit} />
         {/* business-and-memberships D5 (2026-09-02): born without a CLABE;

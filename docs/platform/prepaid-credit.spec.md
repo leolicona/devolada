@@ -202,7 +202,9 @@ computes money.
 
 ## UI Contract
 
-- **Chip** (shell header, IA): amount; step label + icon per D7; tapping
+- **Chip** (shell header, IA): icon + amount in the normal step, no word;
+  step label + icon per D7 from "Saldo bajo" on (the label appearing is the
+  non-color signal; the aria-label names the step in every state); tapping
   opens Configuración → Saldo y recargas. Owner and admin see it; operator
   and viewer see it too (a paused business is everyone's problem to know).
 - **Saldo y recargas** (Configuración, owner only — D3 matrix): balance

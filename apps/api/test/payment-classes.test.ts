@@ -2,7 +2,7 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { businesses, paymentLinks, payments } from "../src/db/schema";
+import { businesses, integrations, paymentLinks, payments } from "../src/db/schema";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
@@ -281,7 +281,7 @@ describe("US-R02 scenarios 2 and 11: unapplied is over by definition, and always
     expect(data.payments[0]).toMatchObject({
       status: "unapplied",
       reconciliationClass: "over",
-      reconnectionStatus: null,
+      actionOutcome: null,
       surplusCents: 51400,
       /* design-review 2026-09-01: the identity read at the verdict rides
          the row — a name, not the usuario, for money the ISP must
@@ -303,9 +303,9 @@ describe("US-R02 scenario 3: the effective treatment", () => {
     });
 
     await drizzle(env.DB)
-      .update(businesses)
-      .set({ wisphubApiKey: null })
-      .where(eq(businesses.id, business.id));
+      .update(integrations)
+      .set({ apiKey: null })
+      .where(eq(integrations.businessId, business.id));
     const bare = await (await app()).request("/settings", asBusiness, env);
     expect((await bare.json()).data.reconciliationPolicy.effectiveOverTreatment).toBe("flag");
   });
@@ -344,7 +344,7 @@ describe("US-R02 scenarios 4 and 5: the class rides the feed row, and the filter
       customerName: "Janely",
       reconciliationClass: "short",
       receivedCents: 30000,
-      reconnectionStatus: "withheld",
+      actionOutcome: "withheld",
       createdAt: day("2026-08-20"),
     });
     await seedConfirmedPayment(business, {
@@ -367,7 +367,7 @@ describe("US-R02 scenarios 4 and 5: the class rides the feed row, and the filter
     await seedConfirmedPayment(business, {
       folio: null,
       status: "invalid",
-      reconnectionStatus: null,
+      actionOutcome: null,
       confirmedAt: null,
       receivedCents: null,
       trackingKey: "TRACKBAD01",
@@ -474,34 +474,34 @@ describe("US-R03 scenario 7: a failed reconnection can be retried by an operator
   it("a failed row goes back to queued with next attempt now; a second retry is 409", async () => {
     const business = await seedBusiness();
     const payment = await seedConfirmedPayment(business, {
-      reconnectionStatus: "failed",
-      reconnectionAttempts: 6,
-      reconnectionError: "WISPHUB_UNAVAILABLE",
+      actionOutcome: "failed",
+      actionAttempts: 6,
+      actionError: "WISPHUB_UNAVAILABLE",
     });
     await seedMember(business, "operador@wifiplus.mx", "operator");
     const asOperator = { headers: { Cookie: await sessionCookieHeader("operador@wifiplus.mx") } };
 
     const before = Date.now();
     const res = await (await app()).request(
-      `/payments/${payment.id}/retry-reconnection`,
+      `/payments/${payment.id}/retry-action`,
       { method: "POST", ...asOperator },
       env,
     );
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(data.reconnectionStatus).toBe("queued");
+    expect(data.actionOutcome).toBe("queued");
     expect(data.nextAttemptAt).toBeGreaterThanOrEqual(before);
 
     /* D5: the payment and the credit are untouched */
     const [row] = await drizzle(env.DB).select().from(payments);
     expect(row).toMatchObject({
-      reconnectionStatus: "queued",
-      reconnectionAttempts: 6,
+      actionOutcome: "queued",
+      actionAttempts: 6,
       registeredCents: payment.registeredCents,
     });
 
     const again = await (await app()).request(
-      `/payments/${payment.id}/retry-reconnection`,
+      `/payments/${payment.id}/retry-action`,
       { method: "POST", ...asOperator },
       env,
     );
@@ -511,11 +511,11 @@ describe("US-R03 scenario 7: a failed reconnection can be retried by an operator
 
   it("a viewer cannot retry", async () => {
     const business = await seedBusiness();
-    const payment = await seedConfirmedPayment(business, { reconnectionStatus: "failed" });
+    const payment = await seedConfirmedPayment(business, { actionOutcome: "failed" });
     await seedMember(business, "lector@wifiplus.mx", "viewer");
     const asViewer = { headers: { Cookie: await sessionCookieHeader("lector@wifiplus.mx") } };
     const res = await (await app()).request(
-      `/payments/${payment.id}/retry-reconnection`,
+      `/payments/${payment.id}/retry-action`,
       { method: "POST", ...asViewer },
       env,
     );

@@ -16,11 +16,11 @@ async function seedFeed() {
   const business = await seedBusiness();
   const db = drizzle(env.DB);
   const base = Date.now() - 60_000;
-  const rows: [number, "queued" | "reconnected" | "failed"][] = [
-    [1, "reconnected"],
+  const rows: [number, "queued" | "done" | "failed"][] = [
+    [1, "done"],
     [2, "failed"],
     [3, "queued"],
-    [4, "reconnected"],
+    [4, "done"],
   ];
   for (const [i, status] of rows) {
     await seedConfirmedPayment(business, {
@@ -30,7 +30,7 @@ async function seedFeed() {
       serviceFeeCents: 1500,
       receivedCents: 41400,
       registeredCents: 39900,
-      reconnectionStatus: status,
+      actionOutcome: status,
       createdAt: new Date(base + i * 1000),
     });
   }
@@ -48,7 +48,7 @@ describe("US-A01: the ISP sees its charges newest first", () => {
     expect(data.payments[0]).toMatchObject({
       customerName: "Cliente 4",
       storeName: null,
-      reconnectionStatus: "reconnected",
+      actionOutcome: "done",
       receivedCents: 41400,
     });
     expect(data.nextCursor).toBeNull();
@@ -59,10 +59,10 @@ describe("US-A01: the ISP sees its charges newest first", () => {
 
     /* payments-and-classes D5: the action outcome keeps its own filter;
        `status` now names the payment lifecycle (D4). */
-    const failed = await (await app()).request("/payments/feed?reconnection=failed", asBusiness, env);
+    const failed = await (await app()).request("/payments/feed?action=failed", asBusiness, env);
     const failedData = (await failed.json()).data;
     expect(failedData.payments).toHaveLength(1);
-    expect(failedData.payments[0].reconnectionStatus).toBe("failed");
+    expect(failedData.payments[0].actionOutcome).toBe("failed");
   });
 });
 
@@ -141,7 +141,7 @@ describe("BUG-012: a partial row carries what was asked, so the feed can name th
       serviceFeeCents: 1500,
       receivedCents: 30000,
       registeredCents: 30000,
-      reconnectionStatus: "withheld",
+      actionOutcome: "withheld",
     });
 
     const res = await (await app()).request("/payments/feed", asBusiness, env);
@@ -154,7 +154,7 @@ describe("BUG-012: a partial row carries what was asked, so the feed can name th
       invoiceCents: 49900,
       carriedBalanceCents: 0,
       receivedCents: 30000,
-      reconnectionStatus: "withheld",
+      actionOutcome: "withheld",
     });
   });
 });
@@ -169,7 +169,7 @@ describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => 
       invoiceCents: 49900,
       serviceFeeCents: 1500,
       receivedCents: 51400,
-      reconnectionStatus: "reconnected",
+      actionOutcome: "done",
       createdAt: new Date(),
     });
 

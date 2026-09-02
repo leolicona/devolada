@@ -1,8 +1,7 @@
 import type { Context } from "hono";
-import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses } from "../../db/schema";
+import { integrationOf } from "../../integrations/store";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
 import type { PaymentRequestsResponse } from "./schema";
@@ -19,16 +18,16 @@ export async function listPaymentRequests(c: Ctx) {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
   }
   const db = drizzle(c.env.DB);
-  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
-  if (!business?.wisphubApiKey) {
+  const integration = await integrationOf(db, actor.id);
+  if (!integration?.apiKey) {
     /* D9: without an integration there are no Cobros to read */
     return c.json({ success: false, error: { code: "NOT_CONFIGURED" } }, 409);
   }
 
   const now = new Date();
   try {
-    const wisphub = new WispHub(business.wisphubApiKey, c.env.WISPHUB_BASE_URL);
-    const pending = await pendingInvoicesForDisplay(business.id, wisphub, now);
+    const wisphub = new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL);
+    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now);
     const data: PaymentRequestsResponse = {
       cobros: pending.invoices.map((f) => ({
         externalId: f.invoiceId,

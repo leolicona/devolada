@@ -193,7 +193,8 @@ export const directPaymentStatusResponse = z.object({
   receivedCents: z.number().int().optional(),
   debtCents: z.number().int().optional(),
   missingCents: z.number().int().optional(),
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
+  /* integrations-hub D7: the generic outcome travels here too */
+  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),
   /* validation-status-ux D5: ms epoch of the next automatic attempt, so

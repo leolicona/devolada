@@ -38,7 +38,6 @@ export const businesses = sqliteTable("businesses", {
   name: text("name").notNull(),
   /* Display/business copy of the contact email; auth never reads it */
   email: text("email").notNull().unique(),
-  wisphubApiKey: text("wisphub_api_key"),
   /* Fee the end customer pays; the SPEI fee falls back to it (direct-payment D3) */
   serviceFeeCents: integer("service_fee_cents").notNull().default(1500),
   /* Display settings (settings spec D5, D6). Mexico spans three zones, so
@@ -61,25 +60,9 @@ export const businesses = sqliteTable("businesses", {
   speiBeneficiaryName: text("spei_beneficiary_name"),
   /* null → falls back to serviceFeeCents (D3) */
   speiServiceFeeCents: integer("spei_service_fee_cents"),
-  /* Partial payments (partial-payment spec D2, D4). One control, not two:
-     100 means only a full payment reconnects — the default and the
-     owner's policy — and 0 means any payment does. A threshold and a
-     separate "action" switch could contradict each other; the extremes
-     already say "never" and "always".
-     The floor rides along because a percentage alone lets a token
-     payment reconnect a large arrears balance (D4). Both must hold. */
-  reconnectionThresholdPercent: integer("reconnection_threshold_percent")
-    .notNull()
-    .default(100),
-  reconnectionFloorCents: integer("reconnection_floor_cents").notNull().default(0),
-  /* provisional-release D10 (US-D15): one switch, no dials. On, a payment
-     with per-transaction evidence buys a WispHub payment promise while
-     Banxico confirms — reconnecting the suspended, protecting the current
-     from the cut. The rule behind it is fixed and lives in the spec;
-     the threshold and floor above apply to it unchanged. */
-  provisionalReleaseEnabled: integer("provisional_release_enabled", { mode: "boolean" })
-    .notNull()
-    .default(false),
+  /* The WispHub key, the reconnection threshold+floor and the
+     provisional switch moved to `integrations` (integrations-hub D2):
+     they are integration config, not business identity. */
   /* prepaid-credit D4: a negotiated fee, written only from the operator
      panel; null → the global `validation_fee_cents` current at each debit */
   feeOverrideCents: integer("fee_override_cents"),
@@ -255,20 +238,30 @@ export const payments = sqliteTable(
     /* What is registered against the WispHub debt (partial-payment D5/D9:
        what arrived, applied) — the number every retry registers again */
     registeredCents: integer("registered_cents"),
-    /* The reconnection queue rides the payment row (reconnection-queue
-       spec D2). `withheld` = deliberately not restored (partial D13). */
-    reconnectionStatus: text("reconnection_status", {
-      enum: ["queued", "reconnected", "failed", "withheld"],
+    /* The action queue rides the payment row (reconnection-queue spec
+       D2; vocabulary generalized by integrations-hub D7). `done` = the
+       mapped action completed (WispHub v1: reconnected, or registered
+       under `register_only`); `withheld` = deliberately not restored
+       (partial D13); `observation` = the gate held the action back and
+       the business executes by hand (integrations-hub D4/D5). */
+    actionOutcome: text("action_outcome", {
+      enum: ["queued", "done", "withheld", "failed", "observation"],
     }),
-    reconnectionAttempts: integer("reconnection_attempts").notNull().default(0),
-    reconnectedAt: integer("reconnected_at", { mode: "timestamp_ms" }),
+    actionAttempts: integer("action_attempts").notNull().default(0),
+    actionDoneAt: integer("action_done_at", { mode: "timestamp_ms" }),
     wisphubInvoiceId: integer("wisphub_invoice_id"),
     nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
     paymentRegisteredAt: integer("payment_registered_at", { mode: "timestamp_ms" }),
     /* D6's split: `lastError` above is the validation error; this one is
-       the reconnection's. One name for two failures was only tolerable
-       across two tables. */
-    reconnectionError: text("reconnection_error"),
+       the action's. One name for two failures was only tolerable across
+       two tables. */
+    actionError: text("action_error"),
+    /* integrations-hub D5: what the mapping WOULD have executed, written
+       at a verdict the observation gate held back — the action plus the
+       threshold's answer ("register_and_reconnect:reconnect" /
+       "register_and_reconnect:withhold" / "register_only"). Null on
+       every row that really dispatched. */
+    observedAction: text("observed_action"),
     /* Born nullable with no semantics (D6): phase 4's child spec defines
        exacto / corto / excedente; reserved now so the busiest table
        migrates once. */
@@ -278,7 +271,7 @@ export const payments = sqliteTable(
   (t) => [
     index("payments_link_idx").on(t.paymentLinkId),
     index("payments_due_idx").on(t.status, t.nextValidationAt),
-    index("payments_reconnection_due_idx").on(t.reconnectionStatus, t.nextAttemptAt),
+    index("payments_action_due_idx").on(t.actionOutcome, t.nextAttemptAt),
     index("payments_business_created_idx").on(t.businessId, t.createdAt),
     /* D8: one transfer pays once — the database, not the provider,
        refuses the second submission, racing ones included */
@@ -290,6 +283,87 @@ export const payments = sqliteTable(
            block the customer it really belongs to for six hours. */
         sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired', 'superseded')`,
       ),
+  ],
+);
+
+/* The integration: one per business (pivot D10), the single house of
+   everything that lets the oracle act (integrations-hub D2). No row —
+   or a row with no key — is "not connected", exactly the old empty
+   `wisphub_api_key`. The key is stored like the business's other tenant
+   credentials (payments-and-classes D7 settled the posture). */
+export const integrations = sqliteTable(
+  "integrations",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    provider: text("provider", { enum: ["wisphub"] })
+      .notNull()
+      .default("wisphub"),
+    /* Nullable: a row can be born from a dials-only save; the channel
+       stays "unavailable" until the key lands (D2). */
+    apiKey: text("api_key"),
+    /* integrations-hub D3: two actions, no "nothing" — money that
+       arrived and goes unregistered makes the ISP's books lie. */
+    exactAction: text("exact_action", { enum: ["register_and_reconnect", "register_only"] })
+      .notNull()
+      .default("register_and_reconnect"),
+    shortAction: text("short_action", { enum: ["register_and_reconnect", "register_only"] })
+      .notNull()
+      .default("register_and_reconnect"),
+    overAction: text("over_action", { enum: ["register_and_reconnect", "register_only"] })
+      .notNull()
+      .default("register_and_reconnect"),
+    /* partial-payment D2/D4, moved house: both must hold, and they only
+       mean anything under `register_and_reconnect` on the short row. */
+    thresholdPercent: integer("threshold_percent").notNull().default(100),
+    floorCents: integer("floor_cents").notNull().default(0),
+    /* provisional-release D10 as amended (integrations-hub D8): the
+       pre-verdict switch lives here now. */
+    provisionalReleaseEnabled: integer("provisional_release_enabled", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /* integrations-hub D4: the master switch. False = observation —
+       zero writes to WispHub. New rows are born observing; the phase-5
+       migration backfilled existing businesses with true. */
+    actionsEnabled: integer("actions_enabled", { mode: "boolean" }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("integrations_business_idx").on(t.businessId)],
+);
+
+/* The dispatch ledger (integrations-hub D6): one row per action really
+   dispatched, carrying the reconciliation class (pivot Open item 5 —
+   never just "validated"). The retry schedule stays on the payment row;
+   this table is the ledger the queue writes through, and D17's webhooks
+   arrive later as its second reader. A gated verdict writes NO row —
+   the payment's `observation` outcome is that record. */
+export const integrationEvents = sqliteTable(
+  "integration_events",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integrations.id),
+    paymentId: text("payment_id")
+      .notNull()
+      .references(() => payments.id),
+    class: text("class", { enum: ["exact", "short", "over"] }).notNull(),
+    action: text("action", { enum: ["register_and_reconnect", "register_only"] }).notNull(),
+    status: text("status", { enum: ["dispatched", "acked", "failed"] })
+      .notNull()
+      .default("dispatched"),
+    error: text("error"),
+    createdAt: createdAt(),
+    ackedAt: integer("acked_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("integration_events_business_idx").on(t.businessId, t.createdAt),
+    index("integration_events_payment_idx").on(t.paymentId),
   ],
 );
 

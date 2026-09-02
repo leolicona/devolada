@@ -81,8 +81,8 @@ async function seedQueuedCharge(over: Partial<typeof payments.$inferInsert> = {}
     wisphubCustomerId: "6",
     customerUsuario: "greyes@wifiplus",
     registeredCents: 49900,
-    reconnectionStatus: "queued",
-    reconnectionAttempts: 1,
+    actionOutcome: "queued",
+    actionAttempts: 1,
     nextAttemptAt: new Date(Date.now() - MINUTE),
     ...over,
   });
@@ -112,9 +112,9 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
 
     const row = await reload(db, charge.id);
     expect(row.wisphubInvoiceId).toBe(12);
-    expect(row.reconnectionStatus).toBe("reconnected");
+    expect(row.actionOutcome).toBe("done");
     expect(row.nextAttemptAt).toBeNull();
-    expect(row.reconnectedAt).not.toBeNull();
+    expect(row.actionDoneAt).not.toBeNull();
   });
 
   it("creates one when there is none, and the retry only verifies (D8)", async () => {
@@ -129,7 +129,7 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
     await sweepReconnections(env);
     const afterFirst = await reload(db, charge.id);
     expect(afterFirst.wisphubInvoiceId).toBe(55);
-    expect(afterFirst.reconnectionStatus).toBe("queued");
+    expect(afterFirst.actionOutcome).toBe("queued");
     /* The payment landed: that progress survives the failed convert */
     expect(afterFirst.paymentRegisteredAt).not.toBeNull();
 
@@ -144,7 +144,7 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
     mockVerify("Activo");
 
     await sweepReconnections(env);
-    expect((await reload(db, charge.id)).reconnectionStatus).toBe("reconnected");
+    expect((await reload(db, charge.id)).actionOutcome).toBe("done");
   });
 
   it("WispHub's 422 on an already-paid invoice counts as landed (D8)", async () => {
@@ -162,7 +162,7 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
 
     await sweepReconnections(env);
     const row = await reload(db, charge.id);
-    expect(row.reconnectionStatus).toBe("reconnected");
+    expect(row.actionOutcome).toBe("done");
     expect(row.paymentRegisteredAt).not.toBeNull();
   });
 });
@@ -183,8 +183,8 @@ describe("US-C04: the backoff walks and then gives up", () => {
       await sweepReconnections(env);
       const row = await reload(db, charge.id);
 
-      expect(row.reconnectionAttempts).toBe(i + 2);
-      expect(row.reconnectionStatus).toBe("queued");
+      expect(row.actionAttempts).toBe(i + 2);
+      expect(row.actionOutcome).toBe("queued");
       /* The next date is the backoff step for the attempts made so far */
       const waited = (row.nextAttemptAt!.getTime() - before) / MINUTE;
       expect(Math.round(waited)).toBe(wait);
@@ -200,8 +200,8 @@ describe("US-C04: the backoff walks and then gives up", () => {
     const report = await sweepReconnections(env);
 
     const dead = await reload(db, charge.id);
-    expect(dead.reconnectionAttempts).toBe(MAX_ATTEMPTS);
-    expect(dead.reconnectionStatus).toBe("failed");
+    expect(dead.actionAttempts).toBe(MAX_ATTEMPTS);
+    expect(dead.actionOutcome).toBe("failed");
     expect(dead.nextAttemptAt).toBeNull();
     expect(report.failed).toBe(1);
   });
@@ -221,9 +221,9 @@ describe("US-C04: a rejected key is not the store's fault", () => {
 
     await sweepReconnections(env);
     const paused = await reload(db, charge.id);
-    expect(paused.reconnectionAttempts).toBe(1); /* unchanged */
-    expect(paused.reconnectionError).toBe("WISPHUB_AUTH_FAILED");
-    expect(paused.reconnectionStatus).toBe("queued");
+    expect(paused.actionAttempts).toBe(1); /* unchanged */
+    expect(paused.actionError).toBe("WISPHUB_AUTH_FAILED");
+    expect(paused.actionOutcome).toBe("queued");
     expect(Math.round((paused.nextAttemptAt!.getTime() - Date.now()) / MINUTE)).toBe(30);
 
     /* An outage is what the backoff is for: it counts */
@@ -238,8 +238,8 @@ describe("US-C04: a rejected key is not the store's fault", () => {
 
     await sweepReconnections(env);
     const counted = await reload(db, charge.id);
-    expect(counted.reconnectionAttempts).toBe(2);
-    expect(counted.reconnectionError).toBe("WISPHUB_UNAVAILABLE");
+    expect(counted.actionAttempts).toBe(2);
+    expect(counted.actionError).toBe("WISPHUB_UNAVAILABLE");
     /* D6's split, proven: two failures, two columns */
     expect(counted.lastError).toBe("PROVIDER_LATE");
   });
@@ -253,7 +253,7 @@ describe("US-C03: the sweep only touches what is due", () => {
     /* A reconnected charge and a future-dated one: neither is due */
     await seedConfirmedPayment(business, {
       folio: "DV-DONE01",
-      reconnectionStatus: "reconnected",
+      actionOutcome: "done",
       nextAttemptAt: new Date(Date.now() - MINUTE),
     });
 

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { businesses, member, organization, user as userTable } from "../db/schema";
+import { upsertIntegration } from "../integrations/store";
 import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
 import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
@@ -55,14 +56,6 @@ dev.post("/seed", async (c) => {
   const userId = demoUser ? demoUser.id : await seedUser("ISP Demo", DEMO.ispEmail);
 
   let [business] = await db.select().from(businesses).where(eq(businesses.email, DEMO.ispEmail));
-  /* Idempotent, but the WispHub key must refresh: the demo business may
-     have been seeded before the key existed in the environment */
-  if (business && !business.wisphubApiKey && c.env.WISPHUB_API_KEY) {
-    await db
-      .update(businesses)
-      .set({ wisphubApiKey: c.env.WISPHUB_API_KEY })
-      .where(eq(businesses.id, business.id));
-  }
   if (!business) {
     /* The server-side door (spike): organization + owner membership as
        rows, no plugin session needed — same shape the D7 backfill wrote */
@@ -82,9 +75,18 @@ dev.post("/seed", async (c) => {
         name: "ISP Demo",
         email: DEMO.ispEmail,
         orgId,
-        wisphubApiKey: c.env.WISPHUB_API_KEY ?? null,
       })
       .returning();
+  }
+  /* Idempotent, and the key refreshes: the demo business may have been
+     seeded before the key existed in the environment. Actions enabled —
+     the demo tenant is the backfill posture, not a new customer's ramp
+     (integrations-hub D2/D4). */
+  if (c.env.WISPHUB_API_KEY) {
+    await upsertIntegration(db, business.id, {
+      apiKey: c.env.WISPHUB_API_KEY,
+      actionsEnabled: true,
+    });
   }
 
   return c.json({

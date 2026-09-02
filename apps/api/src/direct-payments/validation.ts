@@ -16,6 +16,7 @@ import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
 import { signedProofUrl } from "./proofs";
 import { classifyPayment } from "./classes";
+import { integrationsFor, type Integration } from "../integrations/store";
 import {
   historyVouches,
   maybeProvisionalRelease,
@@ -66,14 +67,19 @@ export function speiBankIsKnown(business: Isp): boolean {
    Measured live on dev 2026-08-19 — an ISP held `Klar` where the list says
    `KLAR`, so every payment to it failed the moment D16 shipped, and failed
    *retryably*, which is the six-hour silence rather than an honest refusal. */
-export function speiAvailable(env: Bindings, business: Isp): boolean {
+export function speiAvailable(
+  env: Bindings,
+  business: Isp,
+  /* integrations-hub D2: the key lives on the integration row now */
+  integration: Pick<Integration, "apiKey"> | null,
+): boolean {
   /* claimed-amount D5: the beneficiary name is recommended, never
      required — apiCEP asks only for clabe + bank, and the gates that
      demanded the name were all ours. */
   return Boolean(
     business.speiClabe &&
       speiBankIsKnown(business) &&
-      business.wisphubApiKey &&
+      integration?.apiKey &&
       env.CONSTA_BASE_URL &&
       env.CONSTA_API_KEY,
   );
@@ -152,6 +158,9 @@ export async function runValidation(
   payment: DirectPayment,
   link: PaymentLink,
   business: Isp,
+  /* integrations-hub D2: key, threshold, floor and the provisional
+     switch read from here; null = not connected */
+  integration: Integration | null,
   now: Date,
 ): Promise<DirectPayment> {
   const update = async (
@@ -189,7 +198,7 @@ export async function runValidation(
        one exception the ISP signed up to hear about — after a fresh debt
        check, and never blocking the sweep. */
     if (!slot && row.provisionalReleaseAt != null) {
-      await notifyProvisionalExpiry(env, business, link, now);
+      await notifyProvisionalExpiry(env, business, integration, link, now);
     }
     return row;
   };
@@ -352,6 +361,7 @@ export async function runValidation(
         env,
         db,
         business,
+        integration,
         link,
         payment,
         releaseEvidenceFor(payment, "not_found", classification) ??
@@ -386,6 +396,7 @@ export async function runValidation(
       env,
       db,
       business,
+      integration,
       link,
       payment,
       releaseEvidenceFor(payment, "pending"),
@@ -402,7 +413,7 @@ export async function runValidation(
         : { ...base, ...release, ...shadow, status: "expired", nextValidationAt: null, lastError: null },
     );
     if (!slot && row.provisionalReleaseAt != null) {
-      await notifyProvisionalExpiry(env, business, link, now);
+      await notifyProvisionalExpiry(env, business, integration, link, now);
     }
     return row;
   }
@@ -509,8 +520,8 @@ export async function runValidation(
 
   /* D14: between submission and confirmation the debt can be settled
      elsewhere. Re-check before touching WispHub's money. */
-  if (!business.wisphubApiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base);
-  const wisphub = new WispHub(business.wisphubApiKey, env.WISPHUB_BASE_URL);
+  if (!integration?.apiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base);
+  const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
   let customer;
   let pending;
   try {
@@ -570,8 +581,8 @@ export async function runValidation(
     receivedCents,
     ispDebtCents,
     serviceFeeCents: payment.serviceFeeCents,
-    thresholdPercent: business.reconnectionThresholdPercent,
-    floorCents: business.reconnectionFloorCents,
+    thresholdPercent: integration.thresholdPercent,
+    floorCents: integration.floorCents,
   });
 
   /* business-and-memberships D6: the payment row IS the confirmed record
@@ -627,14 +638,16 @@ export async function runValidation(
     cepSenderName: cep?.senderName ?? null,
     nextValidationAt: null,
     lastError: null,
-    /* The queue's first attempt, on the same row (reconnection-queue D2) */
-    reconnectionStatus: attempt.status,
-    reconnectionAttempts: schedule.attempts,
+    /* The queue's first attempt, on the same row (reconnection-queue D2).
+       The adapter speaks its own vocabulary ("reconnected"); the row
+       speaks the generic one (integrations-hub D7). */
+    actionOutcome: attempt.status === "reconnected" ? ("done" as const) : attempt.status,
+    actionAttempts: schedule.attempts,
     wisphubInvoiceId: attempt.invoiceId,
     paymentRegisteredAt: attempt.paymentRegistered ? now : null,
     nextAttemptAt: schedule.nextAttemptAt,
-    reconnectionError: attempt.error,
-    ...(attempt.status === "reconnected" ? { reconnectedAt: now } : {}),
+    actionError: attempt.error,
+    ...(attempt.status === "reconnected" ? { actionDoneAt: now } : {}),
   });
 }
 
@@ -704,18 +717,17 @@ export async function sweepDirectPayments(
       inArray(paymentLinks.id, [...new Set(due.map((p) => p.paymentLinkId))]),
     );
   const linkById = new Map(linkRows.map((l) => [l.id, l]));
-  const ispRows = await db
-    .select()
-    .from(businesses)
-    .where(inArray(businesses.id, [...new Set(due.map((p) => p.businessId))]));
+  const businessIds = [...new Set(due.map((p) => p.businessId))];
+  const ispRows = await db.select().from(businesses).where(inArray(businesses.id, businessIds));
   const ispById = new Map(ispRows.map((i) => [i.id, i]));
+  const integrationByBusiness = await integrationsFor(db, businessIds);
 
   for (const payment of due) {
     const link = linkById.get(payment.paymentLinkId);
     const business = ispById.get(payment.businessId);
     if (!link || !business) continue; /* unreachable: FKs guarantee both */
     try {
-      const row = await runValidation(env, db, payment, link, business, now);
+      const row = await runValidation(env, db, payment, link, business, integrationByBusiness.get(payment.businessId) ?? null, now);
       if (row.status === "confirmed") report.confirmed++;
       else if (row.status === "invalid") report.invalid++;
       else if (row.status === "expired") report.expired++;

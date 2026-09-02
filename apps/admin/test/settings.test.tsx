@@ -131,7 +131,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       folio: "DV-FMT01",
       channel: "spei" as const,
       status: "confirmed" as const,
-      reconnectionStatus: "reconnected" as const,
+      actionOutcome: "done" as const,
       reconciliationClass: "exact" as const,
       receivedCents: 41400,
       invoiceCents: 39900,
@@ -143,9 +143,9 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
       createdAt: at,
-      reconnectedAt: at,
-      attempts: 1,
-      lastError: null,
+      actionDoneAt: at,
+      actionAttempts: 1,
+      actionError: null,
     };
     server.use(
       handlers.session(() => ok({ ...businessActor, timeFormat: "24h" })),

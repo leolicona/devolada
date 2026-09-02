@@ -41,7 +41,7 @@ const statusFilters = [
   { value: "queued", label: "En cola" },
   { value: "failed", label: "Fallidos" },
   { value: "withheld", label: "Sin reactivar" },
-  { value: "reconnected", label: "Reconectados" },
+  { value: "done", label: "Reconectados" },
   { value: "short", label: "Pago parcial" },
 ] as const;
 
@@ -51,7 +51,7 @@ function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
   const params = new URLSearchParams();
   if (opts.cursor) params.set("cursor", String(opts.cursor));
   if (opts.chip === "short") params.set("class", "short");
-  else if (opts.chip && opts.chip !== ALL) params.set("reconnection", opts.chip);
+  else if (opts.chip && opts.chip !== ALL) params.set("action", opts.chip);
   if (opts.q?.trim()) params.set("q", opts.q.trim());
   if (opts.from) params.set("from", opts.from);
   if (opts.to) params.set("to", opts.to);
@@ -197,13 +197,18 @@ function ChargeRow({
   /* D5: one click buys exactly one fresh attempt; the sweep does the rest */
   const retry = useMutation<RetryResponse, ApiError>({
     mutationFn: () =>
-      api<RetryResponse>(`/payments/${charge.id}/retry-reconnection`, { method: "POST" }),
+      api<RetryResponse>(`/payments/${charge.id}/retry-action`, { method: "POST" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }),
   });
 
   const shortCents = charge.askedCents - charge.receivedCents;
+  /* integrations-hub D7: the row speaks the generic vocabulary; the
+     badge keeps the action-specific es-MX word — WispHub v1's only
+     completed action is a reconnection, so `done` wears "Reconectado". */
   const badge: Status =
-    charge.reconnectionStatus ?? lifecycleBadge[charge.status] ?? "validating";
+    charge.actionOutcome === "done"
+      ? "reconnected"
+      : (charge.actionOutcome ?? lifecycleBadge[charge.status] ?? "validating");
   const showsMoney = ["confirmed", "partial", "unapplied"].includes(charge.status);
   return (
     <li>
@@ -294,10 +299,10 @@ function ChargeRow({
             </div>
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
-              <p className="mt-1">Intentos de reconexión: {charge.attempts}</p>
-              {charge.lastError && <p className="mt-1 text-error">{reasonFor(charge.lastError)}</p>}
-              {charge.reconnectedAt && (
-                <p className="mt-1 text-success">Reconectado a las {at(charge.reconnectedAt)}</p>
+              <p className="mt-1">Intentos de reconexión: {charge.actionAttempts}</p>
+              {charge.actionError && <p className="mt-1 text-error">{reasonFor(charge.actionError)}</p>}
+              {charge.actionDoneAt && (
+                <p className="mt-1 text-success">Reconectado a las {at(charge.actionDoneAt)}</p>
               )}
               {retry.error && (
                 <p className="mt-1 text-error">
@@ -310,7 +315,7 @@ function ChargeRow({
                 {showsMoney && <ProofDialog charge={charge} />}
                 {/* D5: promised to operators by the role matrix since
                     phase 2; kept until now only by waiting */}
-                {canOperate && charge.reconnectionStatus === "failed" && (
+                {canOperate && charge.actionOutcome === "failed" && (
                   <Button disabled={retry.isPending} onClick={() => retry.mutate()}>
                     {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
                   </Button>

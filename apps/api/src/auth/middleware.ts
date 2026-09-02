@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Actor, Bindings, Variables } from "../env";
-import { businesses, member, session as sessionTable } from "../db/schema";
+import { businesses, member, session as sessionTable, integrations } from "../db/schema";
 import { makeAuth } from "./better";
 import { isRole, roleCan, type Action, type Area, type Role } from "./roles";
 import { isPlatformOperator } from "../platform/settings";
@@ -41,7 +41,12 @@ export async function findActor(
   }
   const role: Role = isRole(active.role) ? active.role : "viewer";
 
-  const [business] = await db.select().from(businesses).where(eq(businesses.id, active.businessId));
+  const [joined] = await db
+    .select({ business: businesses, integration: integrations })
+    .from(businesses)
+    .leftJoin(integrations, eq(integrations.businessId, businesses.id))
+    .where(eq(businesses.id, active.businessId));
+  const business = joined.business;
   return {
     type: "business",
     id: business.id,
@@ -54,7 +59,9 @@ export async function findActor(
     role,
     timezone: business.timezone,
     timeFormat: business.timeFormat,
-    wisphubConfigured: Boolean(business.wisphubApiKey),
+    /* integrations-hub D2: "configured" means the integration row holds
+       a key */
+    wisphubConfigured: Boolean(joined.integration?.apiKey),
     businesses: memberships.map((m) => ({
       id: m.businessId,
       orgId: m.orgId,

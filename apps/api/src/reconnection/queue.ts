@@ -1,7 +1,8 @@
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { payments, businesses } from "../db/schema";
+import { payments } from "../db/schema";
+import { integrationsFor } from "../integrations/store";
 import { WispHub } from "../wisphub/client";
 import { attemptReconnection } from "../wisphub/reconnection";
 
@@ -58,7 +59,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     .from(payments)
     .where(
       and(
-        eq(payments.reconnectionStatus, "queued"),
+        eq(payments.actionOutcome, "queued"),
         isNotNull(payments.nextAttemptAt),
         lte(payments.nextAttemptAt, now),
       ),
@@ -80,19 +81,19 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     );
   report.claimed = due.length;
 
-  /* One key per ISP, not per charge */
+  /* One key per ISP, not per charge — from the integration row
+     (integrations-hub D2) */
   const ispIds = [...new Set(due.map((c) => c.businessId))];
-  const ispRows = await db.select().from(businesses).where(inArray(businesses.id, ispIds));
-  const keyByBusiness = new Map(ispRows.map((i) => [i.id, i.wisphubApiKey]));
+  const integrationByBusiness = await integrationsFor(db, ispIds);
 
   for (const charge of due) {
-    const apiKey = keyByBusiness.get(charge.businessId);
+    const apiKey = integrationByBusiness.get(charge.businessId)?.apiKey;
     if (!apiKey) {
       /* Same shape as a rejected key: nothing to retry until Configuración */
       await db
         .update(payments)
         .set({
-          reconnectionError: "WISPHUB_NOT_CONFIGURED",
+          actionError: "WISPHUB_NOT_CONFIGURED",
           nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)),
         })
         .where(eq(payments.id, charge.id));
@@ -130,13 +131,14 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
       await db
         .update(payments)
         .set({
-          reconnectionStatus: "reconnected",
-          reconnectedAt: now,
-          reconnectionAttempts: charge.reconnectionAttempts + 1,
+          /* adapter says "reconnected"; the row says the generic word */
+          actionOutcome: "done",
+          actionDoneAt: now,
+          actionAttempts: charge.actionAttempts + 1,
           wisphubInvoiceId: result.invoiceId,
           paymentRegisteredAt,
           nextAttemptAt: null,
-          reconnectionError: null,
+          actionError: null,
         })
         .where(eq(payments.id, charge.id));
       report.reconnected++;
@@ -150,7 +152,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
         .set({
           wisphubInvoiceId: result.invoiceId,
           paymentRegisteredAt,
-          reconnectionError: result.error,
+          actionError: result.error,
           nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)),
         })
         .where(eq(payments.id, charge.id));
@@ -158,17 +160,17 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
       continue;
     }
 
-    const attempts = charge.reconnectionAttempts + 1;
+    const attempts = charge.actionAttempts + 1;
     const wait = BACKOFF_MINUTES[attempts - 1];
     await db
       .update(payments)
       .set({
-        reconnectionAttempts: attempts,
+        actionAttempts: attempts,
         wisphubInvoiceId: result.invoiceId,
         paymentRegisteredAt,
-        reconnectionError: result.error,
+        actionError: result.error,
         ...(wait === undefined
-          ? { reconnectionStatus: "failed" as const, nextAttemptAt: null }
+          ? { actionOutcome: "failed" as const, nextAttemptAt: null }
           : { nextAttemptAt: new Date(now.getTime() + minutes(wait)) }),
       })
       .where(eq(payments.id, charge.id));
@@ -185,6 +187,6 @@ export async function queuedCount(env: Bindings): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)` })
     .from(payments)
-    .where(eq(payments.reconnectionStatus, "queued"));
+    .where(eq(payments.actionOutcome, "queued"));
   return Number(row?.n ?? 0);
 }

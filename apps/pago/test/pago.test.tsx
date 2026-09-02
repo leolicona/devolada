@@ -118,7 +118,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
               ? { status: "validating", validationAttempts: 1, error: null }
               : {
                   status: "confirmed",
-                  reconnectionStatus: "reconnected",
+                  actionOutcome: "done",
                   folio: "DV-SPEI01",
                   validationAttempts: 2,
                   error: null,
@@ -198,7 +198,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
         ok(
           directPaymentStatusResponse.parse({
             status: "confirmed",
-            reconnectionStatus: "queued",
+            actionOutcome: "queued",
             folio: "DV-SPEI02",
             validationAttempts: 1,
             error: null,
@@ -262,7 +262,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
         ok(
           directPaymentStatusResponse.parse({
             status: "confirmed",
-            reconnectionStatus: "reconnected",
+            actionOutcome: "done",
             folio: "DV-SPEI03",
             validationAttempts: 1,
             error: null,
@@ -762,7 +762,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
             receivedCents: 100,
             debtCents: 49900,
             missingCents: 49800,
-            reconnectionStatus: "withheld",
+            actionOutcome: "withheld",
             folio: "DV-SPEI04",
             validationAttempts: 1,
             error: null,
@@ -922,7 +922,7 @@ describe("US-D10: the partial state", () => {
     receivedCents: 30000,
     debtCents: 49900,
     missingCents: 19900,
-    reconnectionStatus: "withheld",
+    actionOutcome: "withheld",
     folio: "DV-SPEI05",
   };
 
@@ -950,8 +950,8 @@ describe("US-D10: the partial state", () => {
        page must not say "cuando llegue el resto" — and it must keep
        watching, or "en unos minutos" never becomes "ya está activo". */
     await shortManualPayment([
-      { ...withheld, reconnectionStatus: "queued" },
-      { ...withheld, reconnectionStatus: "reconnected" },
+      { ...withheld, actionOutcome: "queued" },
+      { ...withheld, actionOutcome: "done" },
     ]);
 
     expect(
@@ -1129,7 +1129,7 @@ describe("US-D01: the page is two steps and remembers the moment", () => {
         ok(
           directPaymentStatusResponse.parse({
             status: "confirmed",
-            reconnectionStatus: "reconnected",
+            actionOutcome: "done",
             folio: "DV-SPEI09",
             validationAttempts: 1,
             error: null,

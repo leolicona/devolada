@@ -133,6 +133,41 @@ Had it failed, this spec would not exist.
   address); no wrangler environment defines it. **Known gap**: our own
   `POST /auth/business/signup` is a Hono route, outside the limiter — it
   calls Better Auth server-side, which skips the check (open item 6).
+- **D13 — Verification gates one act: inviting (owner, 2026-09-02).**
+  Rule 2's old gate left with the stores and the banner kept promising
+  "para operar". Now the only door that reads `emailVerified` is
+  `POST /businesses/members` (and the resend), answering 403
+  `EMAIL_NOT_VERIFIED`: inviting is the one act that uses your identity
+  toward someone else. The banner says so ("Confirma tu correo para
+  invitar a tu equipo"), lives in the shell only — it left the wizard,
+  where it sat as an indented box under "Tu negocio está listo" — and
+  Usuarios shows a notice instead of the invite form while unverified.
+  The signup route sends the código itself (`sendVerificationOTP`)
+  instead of the plugin's sign-up hook, so a user born through an
+  invitation (D14) gets none. **Rejected**: gating the CLABE (the owner
+  entering their own account is not an attack on anyone); no gate at
+  all (then the code is theatre and the field should go).
+- **D14 — The invitation page decides for the invitee (owner,
+  2026-09-02).** "Entra o crea tu cuenta" asked the invitee a question
+  only the system could answer. Now `/invitaciones/:id` reads
+  `GET /businesses/invitations/:id/preview` — session-less, the random id
+  is the key — and shows ONE form with the invited address fixed: no
+  account for it → name + new password →
+  `POST /businesses/invitations/:id/accept-new` creates the user **born
+  verified** (the link arrived in that inbox), accepts, activates the
+  business and signs in; an account exists → the password alone signs in,
+  accepts and activates; signed in with the invited address → accepts on
+  sight; signed in with another → says so and offers to switch. Expired
+  and gone invitations are named for what they are. The email is never
+  typed — typing another only ever produced "otro correo". This is what
+  the store-era invitation did (retired D8) before the organization plugin
+  made it two doors.
+- **D15 — Our own routes have a tope (owner, 2026-09-02).** D11's known
+  gap closed: Better Auth's limiter never sees a Hono route, so
+  `auth/rate-limit.ts` reuses the `rateLimit` table with a `hono:` key
+  prefix — same off switch (`AUTH_RATE_LIMIT`), same headers.
+  `business/signup` 5 per 60 s, `invitations/:id/preview` 30 per 60 s,
+  `invitations/:id/accept-new` 5 per 60 s.
 - **D12 — Login and signup remember where you were going.** The shell's
   guard sends a session-less visit to `/login?next=<path>`; the
   invitation page sends its two doors (`Entrar`, `Crear cuenta`) to
@@ -155,6 +190,9 @@ Ours (envelope, Zod at the edge):
 |-------|-------|---------|----------|
 | `POST /auth/business/signup` | `{name: ≥2, email, password: ≥8}` | 201 `{type:"user", id, name, emailVerified:false}` + session; code email best-effort. Births the user only — the business is born in the wizard (business-and-memberships D5) | 409 `EMAIL_TAKEN` · 400 |
 | `GET /auth/me` | session | business actor envelope (business-and-memberships D4) | 401 / 403 `ACCOUNT_SUSPENDED` · `NO_BUSINESS` · `NO_ACTIVE_BUSINESS` · `MEMBERSHIP_REVOKED` |
+| `GET /businesses/invitations/:id/preview` | none (D14) | `{status: pending\|expired\|gone, businessName, role, email, hasAccount}` | 429 (D15) |
+| `POST /businesses/invitations/:id/accept-new` | none (D14) | `{name: ≥2, password: ≥8}` → 201 actor + session; the user is born verified | 404 `INVITATION_NOT_FOUND` · 409 `EMAIL_TAKEN` · 400 · 429 |
+| `GET /support` | none | `{whatsapp, email}` from `platform_settings` (operator-panel D1) — the suspended screen's channel | — |
 
 `POST /auth/isp/signup` and `POST /auth/store/accept-invitation` are gone:
 the first renamed with the pivot (2026-08-31), the second left with the
@@ -172,11 +210,9 @@ The rate limiter in front of all of them is D11's.
 ## Business rules
 
 1. One Better Auth user per actor; `userId` unique in `isps` and `stores`.
-2. Typing the correct code flips Better Auth's own `emailVerified`. The
-   gate it used to hold ("cannot register stores") left with the store
-   network on 2026-08-31: today no endpoint reads the flag, and the
-   banner's "para operar" promises a gate that does not exist (open
-   item 1).
+2. Typing the correct code flips Better Auth's own `emailVerified`, and
+   the flag gates exactly one act: inviting members (D13). A user born
+   through an invitation is verified at birth (D14).
 3. Store daily login is phone + password (US-S01 unchanged); the email is
    for registration proof and recovery only.
 4. Status is checked in the DB on every authenticated request (US-S03).
@@ -255,9 +291,15 @@ then `/auth/me`), never by listing names.
 11. A session-less visit to `/links` → `/login?next=/links`; login lands
     on `/links`. `?next=https://evil.example` is dropped and login lands
     on the feed (D12)
-12. An invitee without an account taps "Crear cuenta", signs up, and is
-    back on the invitation, accepted — never in the wizard (D12);
-    signed in with another email, the page says so and offers to switch
+12. Signed in with another email than the invited one, the invitation
+    page says so and offers to switch (D14)
+13. An unverified owner inviting → 403 `EMAIL_NOT_VERIFIED`; settings and
+    the feed still answer 200 (D13). The signup still stores a código.
+14. The invitation page: preview names business, role and email; a new
+    user is born verified without a código and lands inside as the
+    invited role; an address with an account gets the password form; an
+    expired invitation answers `expired` and refuses `accept-new` (D14)
+15. The sixth signup from one address in a minute → 429 (D15)
 
 ## Definition of Done
 
@@ -290,6 +332,12 @@ then `/auth/me`), never by listing names.
       `feat/store-email` draft discarded in favour of D3 (PR #31)
 - [x] `integrations/agnostic-auth.md` closed with a pointer here (kept as
       history of why we left)
+- [x] Identity round, spec PR (2026-09-02): D13–D15 built and tested
+      (`apps/api/test/identity-round.test.ts`, scenarios 13–15;
+      `apps/admin/test/memberships.test.tsx` for the invitation page,
+      `identity-round.test.tsx` for the gate); the six open items below
+      resolved into decisions here and in business-and-memberships
+      (D5, D8, D11, D12) and operator-panel (D1: the support channel)
 - [x] Identity round (2026-09-02): D11 armed and counting in D1
       (`apps/api/test/rate-limit.test.ts`, scenario 10); D12 in the shell,
       the invitation page and both access pages (`apps/admin/test/shell.test.tsx`,
@@ -298,37 +346,14 @@ then `/auth/me`), never by listing names.
       table above says what the code exposes (it listed `/auth/isp/signup`
       and a store route for a month after both died)
 
-## Open items (identity round, 2026-09-02 — each needs one line from the owner)
+## Open items — resolved 2026-09-02
 
-1. **What email verification gates now.** Rule 2's gate left with the
-   stores; the banner still says "para operar". Proposed: inviting
-   members is the gate (the one act that uses your identity toward
-   others); the banner says so and stops showing in the wizard.
-2. **Member invitations: TTL and lifecycle.** The plugin's default is 48 h
-   (`invitationExpiresIn` unset in `better.ts`); the retired D8 chose 7
-   days because the invitee opens the mail "later", and that reason did
-   not retire. No pending list, resend or cancel exists: the owner sees
-   "Invitación enviada" once and nothing after.
-3. **Role change.** Only remove + re-invite today; the business spec is
-   silent. The plugin ships `updateMemberRole`.
-4. **Who may list the team.** `GET /businesses/members` carries
-   `requireSession` only: a viewer reads every member's email. The role
-   matrix has no read action for the `members` area, so this is a
-   decision, not a breach.
-5. **The suspended screen's channel.** "Escríbenos para revisarla" names
-   no address; sessions.spec.md asked for contact info.
-6. **The signup route and the limiter** (D11's known gap).
-
-## Spike (gate, run 2026-08-15 — all green)
-
-`better-auth@1.6.29` + `@better-auth/passkey@1.6.29` on workerd + real D1
-via `vitest-pool-workers` (our existing test infra), 4 tests, 312ms:
-session row + working cookie · email OTP through our hook · phone-as-username
-+ password · passkey challenge with correct `rpID`. Findings that shape this
-spec: the passkey plugin is its own package (guides showing
-`better-auth/plugins/passkey` are stale); an official `phone-number`
-plugin (SMS OTP) exists for when TD-003 is paid. One spike finding did
-**not** survive contact with wrangler: "no `nodejs_compat` needed" was
-true only under vitest-pool-workers, which resolves node builtins itself
-— wrangler's bundling needs the flag (`No such module "node:crypto"`
-otherwise), so `wrangler.jsonc` carries it.
+The six questions the identity round left for the owner, and where each
+answer lives now: (1) what verification gates → D13; (2) invitation TTL
+and lifecycle → business-and-memberships D8 (48 h, the owner rejected 7
+days: the invitee is staff with a resend at hand); (3) role change →
+business D12; (4) who lists the team → business D11; (5) the suspended
+screen's channel → operator-panel D1 (`support_whatsapp`,
+`support_email`, read through `GET /support`); (6) the signup route and
+the limiter → D15. A seventh, raised by the owner in the same review:
+registration is not onboarding → business D5.

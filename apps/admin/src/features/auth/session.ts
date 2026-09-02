@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, ApiError, baGet, baPost } from "@/lib/api";
-import type { CreateBusinessRequest } from "@devolada/api/businesses-schema";
+import { api, ApiError, baGet, baPost, baPostJson } from "@/lib/api";
+import type { AcceptInvitationNewRequest, CreateBusinessRequest } from "@devolada/api/businesses-schema";
 
 export type BusinessActor = {
   type: "business";
@@ -13,6 +13,8 @@ export type BusinessActor = {
   timezone: string;
   timeFormat: "12h" | "24h";
   wisphubConfigured: boolean;
+  /* business-and-memberships D5 (2026-09-02): born without a CLABE */
+  speiConfigured: boolean;
   /* integrations-hub D4: connected with actions off — the shell chip */
   observing: boolean;
   /* business-and-memberships D4: the membership's role and the switcher's list */
@@ -87,8 +89,27 @@ export const setActiveBusiness = (organizationId: string) =>
 
 export const listOrganizations = () => baGet<{ id: string; name: string }[]>("/auth/organization/list");
 
-export const acceptInvitation = (invitationId: string) =>
-  baPost("/auth/organization/accept-invitation", { invitationId });
+/* Answers the organization joined, so the page can activate it: a person
+   with a business of their own would otherwise land back in it. */
+export const acceptInvitation = async (invitationId: string) => {
+  const res = await baPostJson<{ invitation: { organizationId: string } }>(
+    "/auth/organization/accept-invitation",
+    { invitationId },
+  );
+  return { organizationId: res.invitation.organizationId };
+};
+
+/* better-auth D14: the session-less door for an invitee without an account */
+export const acceptInvitationAsNewUser = (invitationId: string, body: AcceptInvitationNewRequest) =>
+  api<BusinessActor>(`/businesses/invitations/${invitationId}/accept-new`, { method: "POST", body: JSON.stringify(body) });
+
+/* business-and-memberships D8/D12 */
+export const resendInvitation = (invitationId: string) =>
+  api(`/businesses/invitations/${invitationId}/resend`, { method: "POST" });
+export const cancelInvitation = (invitationId: string) =>
+  api(`/businesses/invitations/${invitationId}`, { method: "DELETE" });
+export const updateMemberRole = (memberId: string, role: string) =>
+  api(`/businesses/members/${memberId}`, { method: "PATCH", body: JSON.stringify({ role }) });
 
 export const sendVerificationCode = (email: string) =>
   baPost("/auth/email-otp/send-verification-otp", { email, type: "email-verification" });

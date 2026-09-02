@@ -11,6 +11,7 @@ export const businessActor = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphubConfigured: true,
+  speiConfigured: true,
   role: "owner",
   orgId: "org_business-1",
   userId: "user-1",
@@ -69,6 +70,17 @@ export const handlers = {
   /* business-and-memberships (US-B01–B03) */
   getSession: (r: () => Response) => http.get("/auth/get-session", () => r()),
   logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),
+  invitationPreview: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/businesses/invitations/:id/preview", ({ params }) => r(String(params.id))),
+  acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => r(String(params.id), await request.json())),
+  resendInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/businesses/invitations/:id/resend", ({ params }) => r(String(params.id))),
+  cancelInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.delete("/businesses/invitations/:id", ({ params }) => r(String(params.id))),
+  updateMemberRole: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/businesses/members/:id", async ({ params, request }) => r(String(params.id), await request.json())),
+  support: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/support", () => r()),
   createBusiness: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses", async ({ request }) => r(await request.json())),
   members: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/businesses/members", () => r()),

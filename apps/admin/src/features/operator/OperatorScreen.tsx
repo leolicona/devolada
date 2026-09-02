@@ -35,6 +35,8 @@ const KEY_LABELS: Record<string, string> = {
   default_tolerance_cents: "Tolerancia de conciliación por defecto",
   default_over_treatment: "Sobrante por defecto",
   default_fee_payer: "Quién paga el cargo por defecto",
+  support_whatsapp: "WhatsApp de soporte (con lada, solo dígitos)",
+  support_email: "Correo de soporte",
 };
 const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
   default_over_treatment: [

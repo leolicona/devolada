@@ -10,7 +10,9 @@ export const AREAS = {
   clabe: ["update"],
   credit: ["manage"],
   integrations: ["manage"],
-  members: ["invite_below_admin", "invite_any"],
+  /* `read` (identity round D11 of the business spec): every member sees
+     who is on the team; the email rides only for those who may invite */
+  members: ["read", "invite_below_admin", "invite_any"],
   business: ["delete"],
 } as const;
 
@@ -33,17 +35,17 @@ export const MATRIX: Record<Role, Grant> = {
     clabe: ["update"],
     credit: ["manage"],
     integrations: ["manage"],
-    members: ["invite_below_admin", "invite_any"],
+    members: ["read", "invite_below_admin", "invite_any"],
     business: ["delete"],
   },
   admin: {
     payments: ["read", "operate"],
     settings: ["update"],
     integrations: ["manage"],
-    members: ["invite_below_admin"],
+    members: ["read", "invite_below_admin"],
   },
-  operator: { payments: ["read", "operate"] },
-  viewer: { payments: ["read"] },
+  operator: { payments: ["read", "operate"], members: ["read"] },
+  viewer: { payments: ["read"], members: ["read"] },
 };
 
 export function roleCan<A extends Area>(role: Role, area: A, action: Action<A>): boolean {

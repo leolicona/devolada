@@ -2,7 +2,7 @@
 status: current # phase 2 complete: foundation, payments merge and frontend landed
 stories: [US-B01, US-B02, US-B03]
 domain: business
-updated: 2026-08-31 # spike run the same day, findings below
+updated: 2026-09-02 # identity round: D5 rewritten, D8 amended, D11–D12 added
 debt: []
 ---
 
@@ -48,7 +48,8 @@ PR #124); its IA decisions are inherited, not re-decided.
   | Change the CLABE | ✓ | — | — | — |
   | Saldo y recargas (phase 3) | ✓ | — | — | — |
   | Integraciones (phase 5) | ✓ | ✓ | — | — |
-  | Usuarios: invite/remove | ✓ | ✓ (operator/viewer only)¹ | — | — |
+  | Usuarios: read names and roles (D11) | ✓ | ✓ | ✓ | ✓ |
+  | Usuarios: invite/remove/change role · see emails and pending invitations (D8, D11, D12) | ✓ | ✓ (operator/viewer only)¹ | — | — |
   | Delete business · transfer ownership | ✓ | — | — | — |
 
   ¹ *This spec's own refinement, not inherited from pivot D11*: an admin
@@ -79,26 +80,30 @@ PR #124); its IA decisions are inherited, not re-decided.
   revoked, as today); a removed membership → the workspace disappears from
   the switcher and its requests answer 403 `MEMBERSHIP_REVOKED`.
 
-- **D5 — Onboarding collects exactly the pivot's minimum, and the bank is
-  picked, never typed.** Wizard: (1) business name → (2) CLABE (18 digits)
-  + bank + beneficiary name → (3) done, with "Comparte un link de pago" as
-  the first action. **The business is persisted at completion, in one
-  `POST /businesses` carrying the step 1–2 fields — never at step 1**: an
-  abandoned wizard creates nothing and the next sign-in restarts it (the
-  contract below already had this shape; this sentence makes it a rule).
-  The "channel unavailable" state (direct-payment D3/D4) survives only for
-  legacy rows — a business born through this wizard always has a CLABE. The bank is **pre-selected from the provider
-  vocabulary** (`BANKS`, settings schema) by the CLABE's 3-digit bank
-  prefix and correctable only by picking from that catalog — a typed name
-  outside it poisons every future validation with the faceless `invalid`
-  (direct-payment D16, BUG-007). Every other setting starts from platform
-  defaults; **until `platform_settings` lands (phase 3) those defaults are
-  the code constants that exist today** — recorded here so phase 3 knows
-  where to look. The welcome-bonus announcement in step 3 appears when
-  phase 3 ships it; until then step 3 goes straight to the link.
-  **Rejected**: free-typed bank (BUG-007 again); requiring the WispHub key
-  in the wizard (a business must reach its dashboard before its
-  integration — the pivot's whole point).
+- **D5 — Registration is not onboarding: the business is born with its
+  name alone, and how it gets paid is configured afterwards (owner,
+  2026-09-02; supersedes the 2026-08-31 wording).** Wizard: one screen —
+  the business name — then "Tu negocio está listo" with the one missing
+  step named: "Configurar mi CLABE" (Configuración, `#spei`) or "Ir a
+  Pagos". `POST /businesses` takes the name; a CLABE may ride along, and
+  when it does the bank rides with it (both or neither, refined by Zod —
+  a CLABE without its bank poisons every validation, direct-payment D16,
+  BUG-007). Until the CLABE lands: the actor carries
+  `speiConfigured: false`, the shell shows a banner ("Falta la CLABE del
+  negocio…", with the button for whoever may change the CLABE), Links
+  and Cobros show the customers but not the share buttons, and the pago
+  page keeps answering `SPEI_NOT_CONFIGURED` — nothing moves money
+  toward an unconfigured account. The bank in Configuración is still
+  **pre-selected from the provider vocabulary** by the CLABE's 3-digit
+  prefix and correctable only from that catalog. Every other setting
+  starts from platform defaults (operator-panel D1). **Evaluated
+  alternatives** (2026-09-02): (B) a shell without a business — the whole
+  shell assumes an active business, too costly for the pilot; (C) an
+  "Activar cobros" step triggered by the first share — the polished form
+  of this decision, possible later; the old wording, name + CLABE in one
+  wizard — the owner wanted the platform account and the money setup as
+  two moments. **Rejected** (unchanged): free-typed bank (BUG-007
+  again); requiring the WispHub key in the wizard.
 
 - **D6 — One `payments` table: the lifecycle absorbs its twin.** Pivot D14
   executed with its real shape. Today a direct payment is TWO rows: the
@@ -159,11 +164,37 @@ PR #124); its IA decisions are inherited, not re-decided.
   one login, N businesses (US-B02). Measured (spike 5): `createInvitation`
   calls our `sendInvitationEmail` hook with email, role and organization;
   `acceptInvitation` by the invitee's session adds the member row. **Rejected**: join-by-email-domain
-  (dangerous magic for money software). An invitee without an account is
-  sent to sign up and brought back to the invitation by `next`
-  (better-auth.spec.md D12, 2026-09-02) — before that they were told to
-  reopen the link and could found a business of their own instead.
+  (dangerous magic for money software). **Amended 2026-09-02 (owner)**:
+  an invitation lives **48 hours**, written explicitly
+  (`invitationExpiresIn` in `better.ts`; the plugin's default is the same
+  number and a guarantee that lives in a default is not ours) — the owner
+  rejected 7 days: the invitee is the business's own staff, invited by
+  email by their boss, with a resend one tap away. Usuarios lists the
+  **pending invitations** (email, role, "Vence en N horas" / "Vencida")
+  with **Reenviar** (`POST /businesses/invitations/:id/resend`: a fresh
+  48 h and a fresh email; an expired row births a new id and the old one
+  is retired) and **Cancelar** (`DELETE /businesses/invitations/:id`),
+  under the same rank rule as inviting. A second invitation to a pending
+  address refreshes it instead of failing. The invitee's side — one form
+  that decides for them, the account born verified — is better-auth
+  D14; `next` is no longer needed there.
 
+- **D11 — Every member reads the team; the email is the inviter's tool
+  (owner, 2026-09-02).** `GET /businesses/members` carried `requireSession`
+  alone and answered every member's email to a viewer. The matrix gains
+  `members: read` for all four roles and the route guards on it; the
+  response carries `email: null` and an empty `pending` list for roles
+  that may not invite. Names and roles are the team's; addresses are what
+  an inviter needs to resend and recognise. **Rejected**: hiding the team
+  from viewers (people work together and should know who is on the
+  account); full emails for everyone (a directory nobody asked for).
+- **D12 — The role is changed, not re-invited (owner, 2026-09-02).**
+  `PATCH /businesses/members/:id` `{role}` through the plugin's
+  `updateMemberRole`, under the rank rule that already governs invite and
+  remove: the target sits below me today, the new role is one I may
+  grant, the owner is nobody's to change, and neither am I. In Usuarios
+  the role of a member I could have invited is a picker; everyone else's
+  is a label.
 - **D9 — The glossary swap and the `ispId` sweep ride the implementation
   PR.** SPEC.md's glossary adopts the pivot table (Negocio/Cobro/Pago);
   `ispId` → `businessId` on every surviving table and identifier; the
@@ -192,25 +223,34 @@ PR #124); its IA decisions are inherited, not re-decided.
 
 | Route | Actor | Notes |
 |---|---|---|
-| `POST /businesses` | any signed-in user | creates business + org twin, caller becomes owner; body = onboarding step 1–2 fields |
+| `POST /businesses` | any signed-in user | creates business + org twin, caller becomes owner; body = `{name}` (+ optional CLABE with its bank, D5) |
 | `GET /auth/me` | member | actor now carries `{ business, role, businesses: [{id, name}] }` for the switcher |
 | `POST /auth/organization/set-active` (plugin) | member | workspace switch; envelope-exempt like the rest of Better Auth's surface (better-auth D6) |
 | `GET/PATCH /settings` | per D3 matrix | 403 `FORBIDDEN_FOR_ROLE` on area violations |
-| `POST /businesses/members` / `DELETE …/:id` | owner/admin per D3 | invitations via plugin + Resend |
+| `GET /businesses/members` | any member (D11) | `{members[{…, email\|null}], grantable, pending[]}` — emails and pending only for inviters |
+| `POST /businesses/members` / `PATCH …/:id` / `DELETE …/:id` | owner/admin per D3 | invite (403 `EMAIL_NOT_VERIFIED` unverified, better-auth D13) · change role (D12) · remove |
+| `POST /businesses/invitations/:id/resend` / `DELETE …/:id` | owner/admin per D3, rank rule | D8's lifecycle |
+| `GET /businesses/invitations/:id/preview` / `POST …/accept-new` | none | better-auth D14 |
 | existing `/charges/feed` → `/payments/feed` | member (any role) | **done** — renamed with the table; old path answers 404. The response keeps its `charges` key and `totalCents` alias until charge-feed.spec.md's phase-4 revision |
 
 ## UI Contract
 
-- **Wizard** (US-B01): three steps, one decision per screen; the bank field
-  is a picker seeded by the CLABE prefix (D5); errors in plain es-MX; the
-  final screen's single primary action is sharing the first link.
+- **Wizard** (US-B01, D5 as of 2026-09-02): one screen, the name; the
+  done screen names the missing step ("Configurar mi CLABE") and offers
+  Pagos; a "Cerrar sesión" door under the card (design review
+  "identidad"). The CLABE form lives in Configuración with the bank
+  picker seeded by the prefix. The shell wears the CLABE banner until it
+  lands; share buttons wait with it.
 - **Switcher** (US-B02): header, per the IA — plain label with one
   business; menu + "Crear negocio" with many; switching swaps the query
   cache entirely (no cross-business bleed, tested).
 - **Usuarios** (US-B03): members list with role labels (Dueño /
-  Administrador / Operador / Lector), invite form, remove with confirm
-  dialog. Role-hidden rendering everywhere: a control the role cannot use
-  does not render (brief law) — asserted in component tests per role.
+  Administrador / Operador / Lector) — a picker for members I could have
+  invited (D12); emails only for inviters (D11); pending invitations with
+  Reenviar / Cancelar (D8); invite form, or the verification notice while
+  unverified (better-auth D13); remove with confirm dialog. Role-hidden
+  rendering everywhere: a control the role cannot use does not render
+  (brief law) — asserted in component tests per role.
 - States per the IA: loading / error-with-retry / true-empty / role-hidden.
 
 ## Scenarios
@@ -219,9 +259,9 @@ PR #124); its IA decisions are inherited, not re-decided.
    seeded customer answers — the US-B01 happy path, end to end.
 2. CLABE prefix pre-selects the bank; the bank field accepts only catalog
    values (a forged request with a free-text bank → 400, citing D16).
-3. Abandoned wizard (leaving at step 1 or 2) creates nothing; the next
-   sign-in restarts it. A forged `POST /businesses` without a CLABE → 400
-   (D5: the minimum is the minimum).
+3. *(rewritten 2026-09-02, D5)* The name alone births the business with
+   `speiConfigured: false`; an abandoned form creates nothing and the
+   next sign-in restarts it. A CLABE without its bank → 400.
 4. One user, two businesses: switch swaps feed contents entirely; no row of
    business A renders under business B (US-B02, the isolation test).
 5. No active business selected → `NO_ACTIVE_BUSINESS`, client shows switcher.
@@ -244,6 +284,19 @@ PR #124); its IA decisions are inherited, not re-decided.
     (D7), and its existing payment links still resolve.
 14. A `partial` payment keeps its two errors apart: a validation error and
     a later reconnection error land in different columns (D6's split).
+15. A viewer lists the team: names and roles, `email: null`, no pending
+    list, no grantable roles; the owner sees emails and the pending
+    invitation (D11).
+16. A fresh invitation expires in 48 h; aged, it lists as "Vencida";
+    resend refreshes it to a fresh 48 h and one row per address; cancel
+    empties the list; an admin may not resend or cancel an admin's
+    invitation (D8).
+17. The owner promotes an operator to admin; an admin may not; nobody
+    changes the owner or themselves (D12).
+18. Born without a CLABE: the shell's banner points the owner at
+    Configuración, a viewer sees the sentence without the button; Links
+    lists the customers with no share button; the wizard's done screen
+    offers "Configurar mi CLABE" (D5).
 
 ## Spike (gate, run 2026-08-31 — all green)
 
@@ -303,6 +356,14 @@ untouched with the plugin loaded.
       charges twin (copy pattern, twin data joined in), `lastError` split,
       `reconciliationClass` born nullable; the queue and the feed read
       `payments`; scenario 14 automated (reconnection-queue test).
+- [x] **Identity round, spec PR (2026-09-02)**: D5 rewritten (name-only
+      wizard, the CLABE banner, the share gate), D8 amended (48 h,
+      pending list, resend, cancel), D11 and D12 — API in
+      `apps/api/test/identity-round.test.ts` (scenarios 15–17, 3 rewritten
+      in business-memberships), UI in `apps/admin/test/identity-round.test.tsx`
+      and `memberships.test.tsx` (scenario 18, the wizard, the invitation
+      page). The journey end to end against the real API:
+      `tests/passkey/identity-journey.spec.ts`.
 - [x] **Frontend PR**: wizard (D5, bank pre-selected from the CLABE
       prefix — `direct-payments/clabe.ts`), switcher + chooser (US-B02),
       Usuarios + the invitation page (US-B03, D8), role-hidden rendering

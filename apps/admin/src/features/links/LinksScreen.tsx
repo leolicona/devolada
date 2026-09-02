@@ -110,7 +110,10 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
 
 export function LinksScreen() {
   const { data: actor } = useSession();
-  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
+  /* D5 (2026-09-02): a link nobody can pay is not shared — until the
+     CLABE lands, the roster reads and the buttons wait */
+  const speiConfigured = actor?.speiConfigured ?? true;
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && speiConfigured;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(PAGE);
@@ -177,6 +180,12 @@ export function LinksScreen() {
           />
         </label>
       </div>
+
+      {actor && !speiConfigured && (
+        <Alert variant="warning" className="mt-6">
+          Configura la CLABE del negocio en Configuración para compartir links de pago.
+        </Alert>
+      )}
 
       {isConfigError && (
         <Alert variant="destructive" layout="icon" className="mt-6">

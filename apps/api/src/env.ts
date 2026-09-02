@@ -69,6 +69,9 @@ export type Actor = {
   timezone: string;
   timeFormat: "12h" | "24h";
   wisphubConfigured: boolean;
+  /* business-and-memberships D5 (2026-09-02): a business is born without
+     a CLABE; the shell's banner and the share buttons read this */
+  speiConfigured: boolean;
   /* integrations-hub D4: connected with actions off — the shell chip.
      Every role sees it: a paused hand is context everyone reading Pagos
      needs. */

@@ -6,6 +6,7 @@ import { businesses, member, session as sessionTable, integrations } from "../db
 import { makeAuth } from "./better";
 import { isRole, roleCan, type Action, type Area, type Role } from "./roles";
 import { isPlatformOperator } from "../platform/settings";
+import { speiBankIsKnown } from "../direct-payments/validation";
 
 /* Resolves the Better Auth user to our actor (business-and-memberships
    D4): the memberships name the businesses, the session's active
@@ -62,6 +63,7 @@ export async function findActor(
     /* integrations-hub D2: "configured" means the integration row holds
        a key */
     wisphubConfigured: Boolean(joined.integration?.apiKey),
+    speiConfigured: Boolean(business.speiClabe) && speiBankIsKnown(business),
     observing: Boolean(joined.integration?.apiKey) && !joined.integration?.actionsEnabled,
     businesses: memberships.map((m) => ({
       id: m.businessId,

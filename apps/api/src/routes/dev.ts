@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { businesses, member, organization, user as userTable } from "../db/schema";
+import { businesses, invitation, member, organization, user as userTable, verification } from "../db/schema";
 import { upsertIntegration } from "../integrations/store";
 import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
@@ -32,6 +32,24 @@ dev.post("/direct-payment-sweep", async (c) => {
   const report = await sweepDirectPayments(c.env);
   const topUps = await sweepTopUps(c.env);
   return c.json({ success: true, data: { ...report, released, topUps, validating: await validatingCount(c.env) } });
+});
+
+/* The journey e2e (tests/passkey/identity-journey.spec.ts) reads what
+   the emails would carry: the last código for an address, and the last
+   invitation id sent to one. Dev only, like everything here. */
+dev.get("/last-code", async (c) => {
+  const email = c.req.query("email") ?? "";
+  const rows = await drizzle(c.env.DB).select().from(verification);
+  const row = rows.filter((r) => r.identifier.includes(email)).at(-1);
+  const code = row ? /\d{6}/.exec(row.value)?.[0] : undefined;
+  return c.json({ success: true, data: { code: code ?? null } });
+});
+
+dev.get("/last-invitation", async (c) => {
+  const email = c.req.query("email") ?? "";
+  const rows = await drizzle(c.env.DB).select().from(invitation).where(eq(invitation.email, email));
+  const row = rows.at(-1);
+  return c.json({ success: true, data: { id: row?.id ?? null } });
 });
 
 dev.post("/seed", async (c) => {

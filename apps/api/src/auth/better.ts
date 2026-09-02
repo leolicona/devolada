@@ -12,6 +12,10 @@ import { ac, pluginRoles } from "./roles";
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 const ONE_DAY = 60 * 60 * 24;
+/* business-and-memberships D8 (owner, 2026-09-02): 48 hours, written —
+   the plugin's default happens to be the same number, and a guarantee
+   that lives in a default is not ours (D11's lesson). */
+const INVITATION_TTL = 60 * 60 * 48;
 
 /* Better Auth instance (better-auth.spec.md). Per-request construction is
    the Workers pattern: the D1 binding only exists inside a request. */
@@ -97,6 +101,7 @@ export function makeAuth(env: Bindings) {
         ac,
         roles: pluginRoles,
         creatorRole: "owner",
+        invitationExpiresIn: INVITATION_TTL,
         async sendInvitationEmail(data) {
           try {
             await sendMemberInvitation(env, data.email, {
@@ -111,7 +116,10 @@ export function makeAuth(env: Bindings) {
         },
       }),
       emailOTP({
-        sendVerificationOnSignUp: true,
+        /* The business signup route sends the code itself (D13): a user
+           born through an invitation (D14) is verified by the invitation
+           and must not receive a code for nothing. */
+        sendVerificationOnSignUp: false,
         async sendVerificationOTP({ email, otp, type }) {
           /* Never throw: onboarding and recovery must not depend on the
              email provider (spec D8; same law as the old sender). */

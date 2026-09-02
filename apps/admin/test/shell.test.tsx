@@ -27,24 +27,12 @@ describe("US-S04: login lands on the dashboard shell", () => {
   });
 });
 
-describe("US-S04: signup shows the verify banner with a código input", () => {
-  it("lands on the wizard with the banner; the código confirms and can be re-sent", async () => {
-    let resent = false;
-    let verified = false;
+describe("US-S04: signup lands on the wizard; the verify banner lives in the shell (D13)", () => {
+  it("after signup the wizard shows no banner — nothing there needs a verified email", async () => {
     server.use(
-      /* business-and-memberships D5: signup births the user only; the
-         wizard (with the banner) is where the business is born */
       handlers.signup(() => ok({ type: "user", id: "user-1", name: "Nuevo", emailVerified: false }, 201)),
       handlers.session(() => failResponse("NO_BUSINESS", 403)),
       handlers.getSession(() => HttpResponse.json({ user: { ...sessionUser, emailVerified: false } })),
-      handlers.sendCode(() => {
-        resent = true;
-        return baOk();
-      }),
-      handlers.verifyEmail(() => {
-        verified = true;
-        return baOk();
-      }),
     );
     renderApp("/signup");
 
@@ -54,7 +42,27 @@ describe("US-S04: signup shows the verify banner with a código input", () => {
     await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
 
     expect(await screen.findByRole("heading", { name: /crea tu negocio/i })).toBeInTheDocument();
-    expect(await screen.findByText(/confirma tu correo/i)).toBeInTheDocument();
+    expect(screen.queryByText(/confirma tu correo/i)).not.toBeInTheDocument();
+  });
+
+  it("the shell's banner names what verification gates, confirms the código and re-sends it", async () => {
+    let resent = false;
+    let verified = false;
+    server.use(
+      handlers.session(() => ok({ ...businessActor, emailVerified: false })),
+      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+      handlers.sendCode(() => {
+        resent = true;
+        return baOk();
+      }),
+      handlers.verifyEmail(() => {
+        verified = true;
+        return baOk();
+      }),
+    );
+    renderApp("/payments");
+
+    expect(await screen.findByText(/confirma tu correo para invitar a tu equipo/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /reenviar código/i }));
     expect(resent).toBe(true);
 

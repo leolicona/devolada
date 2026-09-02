@@ -1,12 +1,15 @@
 import { Alert } from "@devolada/ui";
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Outlet, useNavigate, useRouter } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
   HandCoins,
   KeyRound,
+  Landmark,
   LogOut,
+  Mail,
+  MessageCircle,
   Plug,
   Settings,
   ShieldCheck,
@@ -16,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { roleCan } from "@devolada/api/role-matrix";
 import { logout, useSession } from "../auth/session";
+import { api } from "@/lib/api";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
 import { SignOutLink } from "../auth/SignOutLink";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
@@ -40,7 +44,14 @@ const baseSections = [
 const integrationsSection = { to: "/integrations", label: "Integraciones", icon: Plug, exact: false } as const;
 const settingsSection = { to: "/settings", label: "Configuración", icon: Settings, exact: false } as const;
 
+/* operator-panel D1 (identity round): the channel is a platform setting,
+   read without a session — the suspended one was just revoked. */
 function SuspendedScreen() {
+  const support = useQuery<{ whatsapp: string | null; email: string | null }>({
+    queryKey: ["support"],
+    queryFn: () => api("/support"),
+    retry: false,
+  });
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-background px-8 text-center">
       <span className="flex size-16 items-center justify-center rounded-full border border-error-line bg-error-soft">
@@ -50,7 +61,26 @@ function SuspendedScreen() {
       <p className="max-w-sm text-base text-muted-foreground">
         Tu cuenta está suspendida. Escríbenos para revisarla.
       </p>
-      {/* The contact channel is open item 5 of better-auth.spec.md */}
+      {support.data && (support.data.whatsapp || support.data.email) && (
+        <div className="flex flex-wrap justify-center gap-2">
+          {support.data.whatsapp && (
+            <a href={`https://wa.me/${support.data.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex">
+              <Button variant="outline">
+                <MessageCircle className="size-4" aria-hidden />
+                WhatsApp
+              </Button>
+            </a>
+          )}
+          {support.data.email && (
+            <a href={`mailto:${support.data.email}`} className="inline-flex">
+              <Button variant="outline">
+                <Mail className="size-4" aria-hidden />
+                {support.data.email}
+              </Button>
+            </a>
+          )}
+        </div>
+      )}
       <SignOutLink />
     </main>
   );
@@ -203,6 +233,21 @@ export function Shell() {
         {/* D5: unverified ISPs see a persistent banner; the código is
             typed right here (better-auth.spec.md D4) */}
         {!actor.emailVerified && <VerifyEmailBanner email={actor.email} className="m-4 lg:mx-8 lg:mt-6" />}
+        {/* business-and-memberships D5 (2026-09-02): born without a CLABE;
+            the banner is the wizard's missing step, the owner's to close */}
+        {!actor.speiConfigured && (
+          <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
+            <span className="flex items-center gap-2">
+              <Landmark className="size-4 shrink-0" aria-hidden />
+              Falta la CLABE del negocio. Sin ella tus clientes no pueden pagarte por transferencia.
+            </span>
+            {roleCan(actor.role, "clabe", "update") && (
+              <Link to="/settings" hash="spei" className="block">
+                <Button variant="outline">Configurar</Button>
+              </Link>
+            )}
+          </Alert>
+        )}
         {/* Settings D8: a banner, not a wall — the admin still works
             without a key, but nothing reconnects until it is there.
             The key moved to Integraciones with the hub (BUG-013). */}

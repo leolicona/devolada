@@ -184,7 +184,8 @@ const filters = [
 export function CobrosScreen() {
   const { timezone } = useDisplaySettings();
   const { data: actor } = useSession();
-  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
+  /* D5 (2026-09-02): no CLABE, nothing to share */
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && (actor?.speiConfigured ?? true);
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState(1);

@@ -42,6 +42,28 @@ export async function baPost(path: string, body?: unknown): Promise<void> {
   }
 }
 
+/* Same door, when the answer matters (accept-invitation names the
+   organization the person just joined). */
+export async function baPostJson<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    let code = "UNKNOWN_ERROR";
+    try {
+      const json = (await res.json()) as { code?: string; message?: string };
+      code = json.code ?? json.message ?? code;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(code, res.status);
+  }
+  return (await res.json()) as T;
+}
+
 /* Better Auth GET endpoints (get-session, organization/list): raw JSON,
    no envelope; a session-less get-session answers `null`. */
 export async function baGet<T>(path: string): Promise<T> {

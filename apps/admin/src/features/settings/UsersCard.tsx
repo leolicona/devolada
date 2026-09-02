@@ -91,9 +91,14 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
                       {m.name}
                       {m.userId === selfUserId && <span className="ml-2 text-sm font-normal text-ink-soft">(tú)</span>}
                     </p>
-                    <p className="truncate text-sm text-ink-soft">{m.email}</p>
+                    <p className="truncate text-sm text-ink-soft">
+                      {m.email}
+                      {/* Below sm the role rides this line: three columns
+                          squeezed the email to "ana@wifiplus…" at 375px */}
+                      <span className="sm:hidden"> · {ROLE_LABELS[m.role]}</span>
+                    </p>
                   </div>
-                  <span className="shrink-0 text-sm">{ROLE_LABELS[m.role]}</span>
+                  <span className="hidden shrink-0 text-sm sm:inline">{ROLE_LABELS[m.role]}</span>
                   {removable && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

@@ -86,7 +86,10 @@ describe("US-S06: recovery asks for a código and never leaks existence", () => 
     await userEvent.type(await screen.findByLabelText("Correo"), "nadie@business.mx");
     await userEvent.click(screen.getByRole("button", { name: /enviar código/i }));
 
-    expect(await screen.findByText(/si existe una cuenta/i)).toBeInTheDocument();
+    /* The confirmation names the address it went to, and both steps
+       keep a way back (design review "identidad", should fix 2) */
+    expect(await screen.findByText(/si existe una cuenta con nadie@business\.mx/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /volver a iniciar sesión/i })).toHaveAttribute("href", "/login");
     /* The resend confirms, like the verify banner's does */
     await userEvent.click(screen.getByRole("button", { name: /reenviar código/i }));
     expect(await screen.findByRole("button", { name: /código reenviado/i })).toBeInTheDocument();
@@ -202,5 +205,26 @@ describe("US-S04: signup names each problem before the request leaves", () => {
 
     expect(await screen.findByRole("heading", { name: /crea tu negocio/i })).toBeInTheDocument();
     expect(requests).toBe(1);
+  });
+});
+
+describe("sessions rule 2 (UI): the suspended screen has a door out", () => {
+  it("offers Cerrar sesión and lands on login (design review identidad, must fix 1)", async () => {
+    let loggedOut = false;
+    server.use(
+      handlers.session(() => failResponse("ACCOUNT_SUSPENDED", 403)),
+      handlers.logout(() => {
+        loggedOut = true;
+        return baOk();
+      }),
+    );
+    const router = renderApp("/payments");
+
+    expect(await screen.findByRole("heading", { name: "Cuenta suspendida" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /cerrar sesión/i }));
+
+    expect(await screen.findByLabelText("Correo")).toBeInTheDocument();
+    expect(loggedOut).toBe(true);
+    expect(router.state.location.pathname).toBe("/login");
   });
 });

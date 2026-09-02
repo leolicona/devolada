@@ -1,7 +1,7 @@
 import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { businesses } from "../src/db/schema";
+import { businesses, integrations } from "../src/db/schema";
 import { app, seedBusiness, sessionCookieHeader } from "./helpers";
 
 /* docs/admin/settings.spec.md scenarios 1–3. */
@@ -113,8 +113,8 @@ describe("US-A04: saving the fee, the zone and the format", () => {
     expect(data.wisphubTest).toEqual({ ok: false, code: "WISPHUB_AUTH_FAILED" });
 
     const db = drizzle(env.DB);
-    const [business] = await db.select().from(businesses);
-    expect(business.wisphubApiKey).toBe("bad-key-000000");
+    const [row] = await db.select().from(integrations);
+    expect(row.apiKey).toBe("bad-key-000000");
   });
 });
 
@@ -134,10 +134,9 @@ describe("US-A04: the connection test speaks for WispHub", () => {
       sampleCustomerCount: 1,
     });
 
-    /* D2: testing is not saving */
+    /* D2: testing is not saving — no integration row is even born */
     const db = drizzle(env.DB);
-    const [business] = await db.select().from(businesses);
-    expect(business.wisphubApiKey).toBeNull();
+    expect(await db.select().from(integrations)).toHaveLength(0);
 
     /* An outage is not a bad key (D3) */
     mockWispHub({ status: 500 });
@@ -250,9 +249,10 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
       provisionalReleaseEnabled: false,
     });
 
-    const [business] = await drizzle(env.DB).select().from(businesses);
-    expect(business.reconnectionThresholdPercent).toBe(70);
-    expect(business.reconnectionFloorCents).toBe(20000);
+    /* integrations-hub D2: the dials live on the integration row */
+    const [row] = await drizzle(env.DB).select().from(integrations);
+    expect(row.thresholdPercent).toBe(70);
+    expect(row.floorCents).toBe(20000);
   });
 
   it("US-D15 D10: the provisional-release switch saves, and off is the default", async () => {
@@ -266,8 +266,8 @@ describe("US-D10: the ISP sets the reconnection threshold and floor", () => {
     expect(saved.status).toBe(200);
     expect((await saved.json()).data.reconnection.provisionalReleaseEnabled).toBe(true);
 
-    const [business] = await drizzle(env.DB).select().from(businesses);
-    expect(business.provisionalReleaseEnabled).toBe(true);
+    const [row] = await drizzle(env.DB).select().from(integrations);
+    expect(row.provisionalReleaseEnabled).toBe(true);
   });
 
   it("refuses a percentage outside 0–100 and a negative floor", async () => {

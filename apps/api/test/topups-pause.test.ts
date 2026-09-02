@@ -133,7 +133,7 @@ describe("US-B06: the pause — what is new waits without spending", () => {
       senderBank: "NUBANK",
       transferDate: "2026-09-01",
       nextValidationAt: new Date(Date.now() - 60_000),
-      reconnectionStatus: null,
+      actionOutcome: null,
     });
     mockConsta({ status: "pending" });
     const report = await sweepDirectPayments(testEnv());

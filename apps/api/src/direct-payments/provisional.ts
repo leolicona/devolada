@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
+import type { Integration } from "../integrations/store";
 import { payments, businesses, paymentLinks, proofRejections } from "../db/schema";
 import { WispHub } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
@@ -151,20 +152,23 @@ export async function maybeProvisionalRelease(
   env: Bindings,
   db: DB,
   business: Isp,
+  /* integrations-hub D8: the switch, the key and the thresholds live on
+     the integration row now */
+  integration: Integration | null,
   link: PaymentLink,
   payment: DirectPayment,
   evidence: ReleaseEvidence | null,
   now: Date,
 ): Promise<Partial<typeof payments.$inferInsert>> {
   if (!evidence) return {};
-  if (!business.provisionalReleaseEnabled) return {};
+  if (!integration?.provisionalReleaseEnabled) return {};
   if (payment.provisionalReleaseAt) return {};
-  if (!business.wisphubApiKey) return {};
+  if (!integration.apiKey) return {};
 
   try {
     if (await isRevoked(db, payment, now)) return {};
 
-    const wisphub = new WispHub(business.wisphubApiKey, env.WISPHUB_BASE_URL);
+    const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
       wisphub.pendingInvoices(now),
@@ -181,8 +185,8 @@ export async function maybeProvisionalRelease(
       receivedCents: claimed,
       ispDebtCents: debt.totalCents || (customer?.planPriceCents ?? payment.invoiceCents),
       serviceFeeCents: payment.serviceFeeCents,
-      thresholdPercent: business.reconnectionThresholdPercent,
-      floorCents: business.reconnectionFloorCents,
+      thresholdPercent: integration.thresholdPercent,
+      floorCents: integration.floorCents,
     }).reconnect;
     if (!ok) return {};
 
@@ -210,12 +214,13 @@ export async function maybeProvisionalRelease(
 export async function notifyProvisionalExpiry(
   env: Bindings,
   business: Isp,
+  integration: Integration | null,
   link: PaymentLink,
   now: Date,
 ): Promise<void> {
   try {
-    if (!business.wisphubApiKey) return;
-    const wisphub = new WispHub(business.wisphubApiKey, env.WISPHUB_BASE_URL);
+    if (!integration?.apiKey) return;
+    const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
       wisphub.pendingInvoices(now),

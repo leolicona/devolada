@@ -24,21 +24,14 @@ export function classifyPayment(input: {
   return diff < 0 ? "short" : "over";
 }
 
-type Policy = Pick<typeof businesses.$inferSelect, "wisphubApiKey" | "overTreatment">;
+type Policy = Pick<typeof businesses.$inferSelect, "overTreatment">;
+type Connected = { apiKey: string | null } | null;
 
 /* D2: an integration that absorbs surplus turns `flag` into `credit` —
    not a loosening of the business's rule but a fact about where the
-   money already went. A business with no integration keeps its policy. */
-export function effectiveOverTreatment(business: Policy): OverTreatment {
-  if (business.wisphubApiKey && WISPHUB_CAPABILITIES.absorbsOverpayment) return "credit";
+   money already went. A business with no integration keeps its policy.
+   (The key moved to the integration row — integrations-hub D2.) */
+export function effectiveOverTreatment(business: Policy, integration: Connected): OverTreatment {
+  if (integration?.apiKey && WISPHUB_CAPABILITIES.absorbsOverpayment) return "credit";
   return business.overTreatment;
-}
-
-/* D2's carve-out (PR #135 review): an `unapplied` payment is precisely
-   the one NOT registered in WispHub (direct-payment D14), so no credit
-   exists for it to have gone to — its treatment is always `flag`,
-   "resolver con el cliente", integration or not. */
-export function treatmentFor(business: Policy, status: string): OverTreatment {
-  if (status === "unapplied") return "flag";
-  return effectiveOverTreatment(business);
 }

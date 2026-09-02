@@ -355,12 +355,12 @@ export function PaymentPage({ token }: { token: string }) {
         /* prepaid-credit D8: the queue moves when the business tops up;
            the page keeps watching so the payer never has to reload */
         s.status === "queued_for_credit" ||
-        (s.status === "confirmed" && s.reconnectionStatus !== "reconnected") ||
+        (s.status === "confirmed" && s.actionOutcome !== "done") ||
         /* A partial that met the threshold can still have its reconnection
            in the queue (WispHub down). `withheld` is terminal; `queued` is
            a promise the page has to keep watching, or "en unos minutos"
            never turns into "ya está activo". */
-        (s.status === "partial" && s.reconnectionStatus === "queued");
+        (s.status === "partial" && s.actionOutcome === "queued");
       return open ? POLL_MS : false;
     },
   });
@@ -843,7 +843,7 @@ export function PaymentPage({ token }: { token: string }) {
           <>
             <StatusBadge status="paymentConfirmed" size="md" />
             <p className="text-sm text-ink-soft">
-              {"reconnectionStatus" in status && status.reconnectionStatus === "reconnected"
+              {"actionOutcome" in status && status.actionOutcome === "done"
                 ? "Tu pago fue registrado. Tu servicio ya está activo."
                 : "Tu pago fue registrado. Tu servicio se reactivará en unos minutos."}
             </p>
@@ -868,9 +868,9 @@ export function PaymentPage({ token }: { token: string }) {
                   {/* Three different facts, three sentences: reconnected
                       is done, queued needs no more money (the threshold
                       was met), and only withheld waits for the rest. */}
-                  {status.reconnectionStatus === "reconnected"
+                  {status.actionOutcome === "done"
                     ? "Tu servicio ya está activo."
-                    : status.reconnectionStatus === "queued"
+                    : status.actionOutcome === "queued"
                       ? "Tu servicio se reactivará en unos minutos."
                       : "Tu servicio se reactivará cuando llegue el resto."}
                 </>

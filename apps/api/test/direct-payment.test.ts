@@ -627,7 +627,7 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     const [charge] = await confirmedRows(db);
     expect(charge.channel).toBe("spei");
     expect(charge.receivedCents).toBe(51400);
-    expect(charge.reconnectionStatus).toBe("reconnected");
+    expect(charge.actionOutcome).toBe("done");
   });
 
   it("scenario 12: a queued spei charge rides the reconnection sweep", async () => {
@@ -643,14 +643,14 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     expect(data.status).toBe("confirmed");
     const db = drizzle(env.DB);
     let [charge] = await confirmedRows(db);
-    expect(charge.reconnectionStatus).toBe("queued");
+    expect(charge.actionOutcome).toBe("queued");
     expect(charge.nextAttemptAt).not.toBeNull();
 
     /* the sweep re-verifies: payment already registered, service now up */
     mockCustomerLookup([wisphubCustomer("Activo")], 1);
     await sweepReconnections(testEnv, new Date(Date.now() + 5 * 60 * 1000));
     [charge] = await confirmedRows(db);
-    expect(charge.reconnectionStatus).toBe("reconnected");
+    expect(charge.actionOutcome).toBe("done");
   });
 
   it("scenario 24: two months due → one debt, one payment, nothing left (D21)", async () => {
@@ -753,7 +753,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     const status = await (await app()).request(`/direct-payments/${payment.id}/status`, {}, testEnv);
     const { data } = await status.json();
     expect(data.status).toBe("confirmed");
-    expect(data.reconnectionStatus).toBe("reconnected");
+    expect(data.actionOutcome).toBe("done");
     expect(data.folio).toMatch(/^DV-[0-9A-Z]{6}$/);
   });
 
@@ -1511,7 +1511,7 @@ describe("D11: valid is necessary, not sufficient", () => {
 
     const [charge] = await confirmedRows(drizzle(env.DB));
     expect(charge.receivedCents).toBe(100);
-    expect(charge.reconnectionStatus).toBe("withheld");
+    expect(charge.actionOutcome).toBe("withheld");
   });
 
   it("scenario 17: a CEP older than 30 days → STALE_TRANSFER", async () => {
@@ -1920,7 +1920,7 @@ describe("US-D10: a transfer that falls short", () => {
        it. The money reached the ISP's bank, so the ISP owes it onward —
        the commission is never forgiven. */
     expect(charge.serviceFeeCents).toBe(1500);
-    expect(charge.reconnectionStatus).toBe("withheld");
+    expect(charge.actionOutcome).toBe("withheld");
 
     const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.receivedCents).toBe(30000);
@@ -1940,7 +1940,7 @@ describe("US-D10: a transfer that falls short", () => {
     expect(data.status).toBe("partial");
     expect(sent.accion).toBe(1);
     const [charge] = await confirmedRows(drizzle(env.DB));
-    expect(charge.reconnectionStatus).toBe("reconnected");
+    expect(charge.actionOutcome).toBe("done");
   });
 
   it("scenario 3: over the percentage but under the floor → still withheld", async () => {

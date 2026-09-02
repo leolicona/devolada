@@ -12,7 +12,7 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   folio: "DV-FEED01",
   channel: "spei" as const,
   status: "confirmed" as const,
-  reconnectionStatus: "reconnected" as const,
+  actionOutcome: "done" as const,
   reconciliationClass: "exact" as const,
   receivedCents: 41400,
   invoiceCents: 39900,
@@ -24,9 +24,9 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   customerName: "Janely",
   storeName: null,
   createdAt: Date.now(),
-  reconnectedAt: Date.now(),
-  attempts: 1,
-  lastError: null,
+  actionDoneAt: Date.now(),
+  actionAttempts: 1,
+  actionError: null,
   ...over,
 });
 
@@ -43,7 +43,7 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
-        ok(feedOf(url.searchParams.get("reconnection") === "failed" ? [] : [charge()])),
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()])),
       ),
     );
     renderApp("/");
@@ -66,7 +66,7 @@ describe("US-A01: the feed shows rows and expands into detail", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
-        ok(feedOf(url.searchParams.get("reconnection") === "failed" ? [] : [charge()])),
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()])),
       ),
     );
     renderApp("/");
@@ -86,8 +86,8 @@ describe("D3: failed charges surface on top", () => {
       handlers.feed((url) =>
         ok(
           feedOf(
-            url.searchParams.get("reconnection") === "failed"
-              ? [charge({ id: "ch-9", reconnectionStatus: "failed", reconnectedAt: null })]
+            url.searchParams.get("action") === "failed"
+              ? [charge({ id: "ch-9", actionOutcome: "failed", actionDoneAt: null })]
               : [charge()],
           ),
         ),
@@ -105,7 +105,7 @@ describe("D5: the status chips re-query the feed", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) => {
-        seen.push(url.searchParams.get("reconnection"));
+        seen.push(url.searchParams.get("action"));
         return ok(feedOf([charge()]));
       }),
     );
@@ -131,21 +131,21 @@ describe("US-D10: a short payment explains itself in the feed", () => {
     channel: "spei" as const,
     storeName: null,
     status: "partial" as const,
-    reconnectionStatus: "withheld" as const,
+    actionOutcome: "withheld" as const,
     reconciliationClass: "short" as const,
     receivedCents: 30000,
     invoiceCents: 49900,
     askedCents: 51400,
     missingCents: 19900,
     surplusCents: 0,
-    reconnectedAt: null,
+    actionDoneAt: null,
   });
 
   it("scenario 14: the detail shows the ask, the received amount and the missing figure", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
-        ok(feedOf(url.searchParams.get("reconnection") === "failed" ? [] : [partial])),
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [partial])),
       ),
     );
     renderApp("/");
@@ -172,7 +172,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
-        ok(feedOf(url.searchParams.get("reconnection") === "failed" ? [] : [charge()])),
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()])),
       ),
     );
     renderApp("/");
@@ -192,7 +192,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) => {
-        seen.push(url.searchParams.get("reconnection"));
+        seen.push(url.searchParams.get("action"));
         return ok(feedOf([partial]));
       }),
     );
@@ -212,19 +212,19 @@ describe("US-R02: the class and the surplus explain themselves", () => {
       id: "ch-u1",
       folio: "",
       status: "unapplied" as const,
-      reconnectionStatus: null,
+      actionOutcome: null,
       reconciliationClass: "over" as const,
       receivedCents: 51400,
       surplusCents: 51400,
-      reconnectedAt: null,
-      attempts: 0,
+      actionDoneAt: null,
+      actionAttempts: 0,
     });
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
         ok(
           feedOf(
-            url.searchParams.get("reconnection") === "failed" ? [] : [unapplied],
+            url.searchParams.get("action") === "failed" ? [] : [unapplied],
             undefined,
             /* the integration absorbs surplus — and still, unapplied money
                was never registered, so "queda a favor" would be the lie
@@ -255,7 +255,7 @@ describe("US-R02: the class and the surplus explain themselves", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
-        ok(feedOf(url.searchParams.get("reconnection") === "failed" ? [] : [over], undefined, "credit")),
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [over], undefined, "credit")),
       ),
     );
     renderApp("/");
@@ -271,7 +271,7 @@ describe("US-R03: the proof and the retry live on the row", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed((url) =>
-        ok(feedOf(url.searchParams.get("reconnection") === "failed" ? [] : [charge()])),
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()])),
       ),
       handlers.paymentProof((id) =>
         id === "ch-1"
@@ -312,11 +312,11 @@ describe("US-R03: the proof and the retry live on the row", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed(() =>
-        ok(feedOf([charge({ reconnectionStatus: "failed" as const, reconnectedAt: null })])),
+        ok(feedOf([charge({ actionOutcome: "failed" as const, actionDoneAt: null })])),
       ),
       handlers.retryReconnection((id) => {
         retried.push(id);
-        return ok({ reconnectionStatus: "queued", nextAttemptAt: Date.now() });
+        return ok({ actionOutcome: "queued", nextAttemptAt: Date.now() });
       }),
     );
     renderApp("/");

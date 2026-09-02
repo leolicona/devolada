@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
+  Eye,
   ArrowDownToLine,
   Check,
   CheckCircle2,
@@ -63,7 +64,10 @@ export type Status =
      keeps saying money is missing. */
   | "classExact"
   | "classShort"
-  | "classOver";
+  | "classOver"
+  /* integrations-hub D4/D7: the gate held the action back; the business
+     executes by hand while the ramp measures the oracle. */
+  | "observation";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -99,6 +103,7 @@ const statuses: Record<
   classExact: { tone: "success", icon: Equal, label: "Exacto" },
   classShort: { tone: "warning", icon: CircleMinus, label: "Pago parcial" },
   classOver: { tone: "info", icon: CirclePlus, label: "Sobrante" },
+  observation: { tone: "info", icon: Eye, label: "Observación" },
 };
 
 const sizes = {

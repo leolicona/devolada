@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { businesses, paymentLinks, payments } from "../../db/schema";
 import { startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
+import { integrationOf } from "../../integrations/store";
 import { signedProofUrl } from "../../direct-payments/proofs";
 import type { ProofResponse } from "./schema";
 
@@ -42,7 +43,7 @@ export async function listPaymentFeed(
   q: {
     cursor?: number;
     status?: (typeof payments.$inferSelect)["status"];
-    reconnection?: "queued" | "reconnected" | "failed" | "withheld";
+    action?: "queued" | "done" | "withheld" | "failed" | "observation";
     class?: "exact" | "short" | "over";
     q?: string;
     from?: string;
@@ -56,6 +57,7 @@ export async function listPaymentFeed(
 
   /* D2: what a surplus means today, said once per response */
   const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
+  const integration = await integrationOf(db, actor.id);
 
   const filters = [
     eq(payments.businessId, actor.id),
@@ -65,7 +67,7 @@ export async function listPaymentFeed(
       ? eq(payments.status, q.status)
       : inArray(payments.status, ["confirmed", "partial", "unapplied"]),
     ...(q.cursor ? [lt(payments.createdAt, new Date(q.cursor))] : []),
-    ...(q.reconnection ? [eq(payments.reconnectionStatus, q.reconnection)] : []),
+    ...(q.action ? [eq(payments.actionOutcome, q.action)] : []),
     ...(q.class ? [eq(payments.reconciliationClass, q.class)] : []),
     /* D4: calendar dates on the BUSINESS's wall clock (settings D5) */
     ...(q.from
@@ -131,7 +133,7 @@ export async function listPaymentFeed(
           folio: charge.folio ?? "",
           channel: charge.channel,
           status: charge.status,
-          reconnectionStatus: charge.reconnectionStatus,
+          actionOutcome: charge.actionOutcome,
           reconciliationClass: charge.reconciliationClass,
           receivedCents,
           invoiceCents: charge.invoiceCents,
@@ -153,13 +155,13 @@ export async function listPaymentFeed(
           customerName: charge.customerName ?? linkUsuario,
           storeName: null,
           createdAt: charge.createdAt.getTime(),
-          reconnectedAt: charge.reconnectedAt?.getTime() ?? null,
-          attempts: charge.reconnectionAttempts,
-          lastError: charge.reconnectionError,
+          actionDoneAt: charge.actionDoneAt?.getTime() ?? null,
+          actionAttempts: charge.actionAttempts,
+          actionError: charge.actionError,
         };
       }),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,
-      effectiveOverTreatment: effectiveOverTreatment(business),
+      effectiveOverTreatment: effectiveOverTreatment(business, integration),
       today: { count: today.count, totalCents: today.total, startedAtMs: today.startedAtMs },
     },
   });
@@ -210,7 +212,7 @@ export async function getPaymentProof(c: Ctx, id: string) {
    credit. The sweep does the rest with the idempotency it already has
    (TD-009's invoice guard); the attempt counter is spent, so one click
    buys exactly one fresh attempt. */
-export async function retryReconnection(c: Ctx, id: string) {
+export async function retryAction(c: Ctx, id: string) {
   const ctx = businessGuard(c);
   if ("error" in ctx) return ctx.error;
   const { actor, db } = ctx;
@@ -222,19 +224,19 @@ export async function retryReconnection(c: Ctx, id: string) {
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
-  if (row.reconnectionStatus !== "failed") {
+  if (row.actionOutcome !== "failed") {
     return c.json({ success: false, error: { code: "NOT_RETRYABLE" } }, 409);
   }
   const now = new Date();
   const [updated] = await db
     .update(payments)
-    .set({ reconnectionStatus: "queued", nextAttemptAt: now })
+    .set({ actionOutcome: "queued", nextAttemptAt: now })
     .where(eq(payments.id, row.id))
     .returning();
   return c.json({
     success: true,
     data: {
-      reconnectionStatus: updated.reconnectionStatus ?? "queued",
+      actionOutcome: updated.actionOutcome ?? "queued",
       nextAttemptAt: updated.nextAttemptAt?.getTime() ?? null,
     },
   });

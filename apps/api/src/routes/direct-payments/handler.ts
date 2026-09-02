@@ -25,6 +25,7 @@ import {
 } from "../../direct-payments/proofs";
 import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
+import { integrationOf } from "../../integrations/store";
 import { Consta, ConstaError } from "../../consta/client";
 import type { DirectPayment } from "../../direct-payments/validation";
 import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
@@ -53,7 +54,9 @@ async function resolveLink(c: Ctx, token: string) {
     return { error: c.json({ success: false, error: { code: "NOT_FOUND" } }, 404) };
   }
   const [business] = await db.select().from(businesses).where(eq(businesses.id, link.businessId));
-  return { db, link, business };
+  /* integrations-hub D2: the key and the dials live on this row now */
+  const integration = await integrationOf(db, link.businessId);
+  return { db, link, business, integration };
 }
 
 async function attemptsInLastHour(
@@ -92,7 +95,7 @@ function publicError(lastError: string | null) {
 export async function getLinkStatus(c: Ctx, token: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
-  const { link, business } = ctx;
+  const { link, business, integration } = ctx;
   const now = new Date();
 
   /* payments-and-classes D9: a suspended business validates nothing —
@@ -101,7 +104,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
     return c.json({ success: false, error: { code: "BUSINESS_SUSPENDED" } }, 409);
   }
 
-  if (!speiAvailable(c.env, business)) {
+  if (!speiAvailable(c.env, business, integration)) {
     /* D4: the GET already knows — the page degrades into the store
        network instead of showing a CLABE nothing can validate */
     const data: LinkStatusResponse = { ispName: business.name, status: "unavailable" };
@@ -109,7 +112,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
   }
 
   try {
-    const wisphub = new WispHub(business.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
+    const wisphub = new WispHub(integration!.apiKey!, c.env.WISPHUB_BASE_URL);
     /* provider-latency D2: independent reads, one wait. D3: the page
        renders here; the submission below re-reads fresh before any
        amount is committed, so a 30s-old list cannot decide money. */
@@ -168,7 +171,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
 export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
-  const { db, link, business } = ctx;
+  const { db, link, business, integration } = ctx;
   const now = new Date();
 
   /* payments-and-classes D9: same refusal as the GET — the POST is the
@@ -180,7 +183,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
-  if (!speiAvailable(c.env, business)) {
+  if (!speiAvailable(c.env, business, integration)) {
     return c.json({ success: false, error: { code: "SPEI_NOT_CONFIGURED" } }, 409);
   }
   /* prepaid-credit D8: below the cap, what is new waits without spending
@@ -254,7 +257,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   let customer;
   let pending;
   try {
-    const wisphub = new WispHub(business.wisphubApiKey!, c.env.WISPHUB_BASE_URL);
+    const wisphub = new WispHub(integration!.apiKey!, c.env.WISPHUB_BASE_URL);
     /* provider-latency D2 together, D3 **fresh**: this read decides the
        amount the CEP must match (D11/D15), so it never takes the cache. */
     [customer, pending] = await Promise.all([
@@ -458,7 +461,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   /* Inline attempt, then the sweep takes over (D7) — the same split as
      charge recording and reconnection. A queued row waits for the
      release (D8): nothing runs, nothing is spent. */
-  const row = paused ? payment : await runValidation(c.env, db, payment, link, business, now);
+  const row = paused ? payment : await runValidation(c.env, db, payment, link, business, integration, now);
   return c.json(
     {
       success: true,
@@ -610,8 +613,8 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
   /* business-and-memberships D6: the reconnection lives on the row */
-  const charge = payment.reconnectionStatus
-    ? { reconnectionStatus: payment.reconnectionStatus, folio: payment.folio ?? "" }
+  const charge = payment.actionOutcome
+    ? { actionOutcome: payment.actionOutcome, folio: payment.folio ?? "" }
     : null;
   /* provisional-release D7: the expired page offers exactly one manual
      retry per clave — self-selection: the payer who really paid claims
@@ -638,7 +641,7 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
       status: payment.status,
       ...(payment.status === "expired" ? { retryAvailable } : {}),
       ...(charge
-        ? { reconnectionStatus: charge.reconnectionStatus, folio: charge.folio }
+        ? { actionOutcome: charge.actionOutcome, folio: charge.folio }
         : {}),
       /* D7: what arrived, what was owed and what is missing — in money,
          computed here so the page never does arithmetic about a policy
@@ -709,19 +712,19 @@ export async function listLinks(c: Ctx, cursor?: string) {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
   }
   const db = drizzle(c.env.DB);
-  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
-  if (!business?.wisphubApiKey) {
+  const integration = await integrationOf(db, actor.id);
+  if (!integration?.apiKey) {
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
   }
 
   try {
-    const customers = await new WispHub(business.wisphubApiKey, c.env.WISPHUB_BASE_URL).listCustomers();
+    const customers = await new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL).listCustomers();
     if (customers.length) {
       await db
         .insert(paymentLinks)
         .values(
           customers.map((customer) => ({
-            businessId: business.id,
+            businessId: actor.id,
             token: makeLinkToken(),
             wisphubCustomerId: String(customer.wisphubId),
             customerUsuario: customer.usuario,
@@ -745,7 +748,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
     .from(paymentLinks)
     .where(
       and(
-        eq(paymentLinks.businessId, business.id),
+        eq(paymentLinks.businessId, actor.id),
         ...(cursor ? [gt(paymentLinks.customerUsuario, cursor)] : []),
       ),
     )
@@ -780,14 +783,14 @@ export async function searchLinks(c: Ctx, q: string) {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
   }
   const db = drizzle(c.env.DB);
-  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
-  if (!business?.wisphubApiKey) {
+  const integration = await integrationOf(db, actor.id);
+  if (!integration?.apiKey) {
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
   }
 
   let customers;
   try {
-    customers = await new WispHub(business.wisphubApiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
+    customers = await new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
   } catch (e) {
     return wisphubFailure(c, e);
   }
@@ -801,7 +804,7 @@ export async function searchLinks(c: Ctx, q: string) {
       .insert(paymentLinks)
       .values(
         customers.map((customer) => ({
-          businessId: business.id,
+          businessId: actor.id,
           token: makeLinkToken(),
           wisphubCustomerId: String(customer.wisphubId),
           customerUsuario: customer.usuario,
@@ -824,7 +827,7 @@ export async function searchLinks(c: Ctx, q: string) {
     links = await db
       .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
       .from(paymentLinks)
-      .where(and(eq(paymentLinks.businessId, business.id), inArray(paymentLinks.customerUsuario, usuarios)));
+      .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, usuarios)));
   }
 
   const linkMap = new Map(links.map((l) => [l.customerUsuario, l.token]));

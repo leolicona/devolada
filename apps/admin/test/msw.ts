@@ -49,7 +49,7 @@ export const handlers = {
   paymentProof: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/:id/proof", ({ params }) => r(String(params.id))),
   retryReconnection: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/payments/:id/retry-reconnection", ({ params }) => r(String(params.id))),
+    http.post("/payments/:id/retry-action", ({ params }) => r(String(params.id))),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),

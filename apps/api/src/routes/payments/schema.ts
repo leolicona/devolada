@@ -24,9 +24,10 @@ export const feedQuery = z.object({
   /* Lifecycle filter (D4). Without it the feed answers money that
      arrived: confirmed, partial and unapplied. */
   status: z.enum(PAYMENT_STATUSES).optional(),
-  /* The action outcome keeps its own filter (D5): the failed strip and
-     the queue chips ask about the router, not about the money. */
-  reconnection: z.enum(["queued", "reconnected", "failed", "withheld"]).optional(),
+  /* The action outcome keeps its own filter (payments-and-classes D5;
+     vocabulary and name per integrations-hub D7): the failed strip and
+     the queue chips ask about the action, not about the money. */
+  action: z.enum(["queued", "done", "withheld", "failed", "observation"]).optional(),
   /* D1's vocabulary as a filter — the "Pago parcial" chip is `short` */
   class: z.enum(RECONCILIATION_CLASSES).optional(),
   /* Customer search: usuario or name, contains-match (D4) */
@@ -45,9 +46,11 @@ export const feedCharge = z.object({
   /* The payment lifecycle status (D4). The feed's default answers money
      that arrived; the filter reaches everything else. */
   status: z.enum(PAYMENT_STATUSES),
-  /* Null when the router was never involved (unapplied, or not yet
-     confirmed): the action outcome exists only after a confirmation. */
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]).nullable(),
+  /* Null when no action was ever decided (unapplied, or not yet
+     confirmed). Generic vocabulary since integrations-hub D7: `done` is
+     the mapped action completed — the es-MX label stays action-specific
+     ("Reconectado" under register_and_reconnect). */
+  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]).nullable(),
   /* D3: computed once at the verdict against the fresh ask; null until
      then and forever on invalid/expired (no money, no class). */
   reconciliationClass: z.enum(RECONCILIATION_CLASSES).nullable(),
@@ -68,11 +71,11 @@ export const feedCharge = z.object({
   /* null for channel = 'spei': no store handled this money */
   storeName: z.string().nullable(),
   createdAt: z.number().int(),
-  reconnectedAt: z.number().int().nullable(),
-  attempts: z.number().int(),
+  actionDoneAt: z.number().int().nullable(),
+  actionAttempts: z.number().int(),
   /* Why the last attempt did not work, for the ISP's detail view
      (reconnection-queue spec UI contract) */
-  lastError: z.string().nullable(),
+  actionError: z.string().nullable(),
 });
 
 export const feedResponse = z.object({
@@ -118,9 +121,10 @@ export const proofResponse = z.object({
   imageUrl: z.string().nullable(),
 });
 
-/* payments-and-classes D5 */
+/* payments-and-classes D5 (route renamed to retry-action by
+   integrations-hub D7) */
 export const retryResponse = z.object({
-  reconnectionStatus: z.enum(["queued", "reconnected", "failed", "withheld"]),
+  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]),
   nextAttemptAt: z.number().int().nullable(),
 });
 

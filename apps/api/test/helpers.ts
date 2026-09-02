@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
 import {
-  businesses,
+  businesses, integrations,
   member,
   organization,
   paymentLinks,
@@ -94,9 +94,28 @@ async function seedAuthUser(
    same shape the D7 backfill and the dev seed write. The session row is
    seeded pointing at the organization, like the sign-in hook would. */
 export async function seedBusiness(
-  overrides: Partial<typeof businesses.$inferInsert> & { emailVerified?: boolean } = {},
+  overrides: Partial<typeof businesses.$inferInsert> & {
+    emailVerified?: boolean;
+    /* Integration config rides the same call (integrations-hub D2): the
+       helper writes these to the integration row, so the suites keep
+       their one-line seeds. Actions enabled by default — tests describe
+       the backfilled pilot unless they say otherwise. */
+    wisphubApiKey?: string | null;
+    reconnectionThresholdPercent?: number;
+    reconnectionFloorCents?: number;
+    provisionalReleaseEnabled?: boolean;
+    actionsEnabled?: boolean;
+  } = {},
 ) {
-  const { emailVerified, ...businessOverrides } = overrides;
+  const {
+    emailVerified,
+    wisphubApiKey,
+    reconnectionThresholdPercent,
+    reconnectionFloorCents,
+    provisionalReleaseEnabled,
+    actionsEnabled,
+    ...businessOverrides
+  } = overrides;
   const email = businessOverrides.email ?? "demo@devolada.app";
   const userId = await seedAuthUser("ISP Demo", email, { emailVerified });
   const db = drizzle(env.DB);
@@ -109,6 +128,22 @@ export async function seedBusiness(
     .insert(businesses)
     .values({ name: "ISP Demo", email, orgId, ...businessOverrides })
     .returning();
+  if (
+    wisphubApiKey !== undefined ||
+    reconnectionThresholdPercent !== undefined ||
+    reconnectionFloorCents !== undefined ||
+    provisionalReleaseEnabled !== undefined ||
+    actionsEnabled !== undefined
+  ) {
+    await db.insert(integrations).values({
+      businessId: business.id,
+      apiKey: wisphubApiKey ?? null,
+      thresholdPercent: reconnectionThresholdPercent ?? 100,
+      floorCents: reconnectionFloorCents ?? 0,
+      provisionalReleaseEnabled: provisionalReleaseEnabled ?? false,
+      actionsEnabled: actionsEnabled ?? true,
+    });
+  }
   return business;
 }
 
@@ -170,7 +205,7 @@ export async function seedConfirmedPayment(
       wisphubCustomerId: "6",
       customerUsuario: "greyes@wifiplus",
       customerName: "Janely",
-      reconnectionStatus: "reconnected",
+      actionOutcome: "done",
       ...over,
     })
     .returning();

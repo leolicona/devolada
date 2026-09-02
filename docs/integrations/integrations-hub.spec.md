@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: in development
 stories: [US-I01, US-I02, US-I03]
 domain: integrations
 updated: 2026-09-01
@@ -148,7 +148,10 @@ per business (D10); no outgoing webhooks in v1 (D17).
   `reconnection_attempts` → `action_attempts`, `reconnection_error` →
   `action_error`; the wire renames with it (`actionOutcome`,
   `actionDoneAt`, `actionAttempts`, `actionError`) and the retry route
-  becomes `POST /payments/:id/retry-action`. One rename, now, while
+  becomes `POST /payments/:id/retry-action`; the feed's outcome filter
+  travels as `action=` and the row's `attempts`/`lastError` ride along
+  as `actionAttempts`/`actionError` — one vocabulary end to end, no
+  stragglers. One rename, now, while
   renames are still cheap — the same logic as D20's "no second
   migration between the pilot and the trust layer". The es-MX label
   stays **action-specific**, adapter-aware: `done` under
@@ -278,9 +281,12 @@ per business (D10); no outgoing webhooks in v1 (D17).
 
 ## Definition of Done
 
-- [ ] Migrations: `integrations` (+ backfill from `businesses`, then
-      column retirement), `integration_events`, the `payments` renames
-      with `reconnected → done` mapped.
+- [x] Migrations (foundation PR): `integrations` (+ backfill from
+      `businesses` with actions enabled, then column retirement),
+      `integration_events` (born, unwritten until the dispatch PR), the
+      `payments` renames with `reconnected → done` mapped, and
+      `observed_action`. Configuración serves as a FAÇADE over the
+      integration row until the UI PR moves its cards (D9).
 - [ ] Scenarios 1–12 automated, citing their stories.
 - [ ] provisional-release D10 amendment note landed (same PR as this
       spec); pivot Open item 1 marked executed.

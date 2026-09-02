@@ -73,7 +73,13 @@ interview (2026-09-01). Its companion is
   (`YYYY-MM-DD`), inclusive, and the server owns the midnight boundary in
   the business's zone. **The default view answers money that arrived**
   (`confirmed`, `partial`, `unapplied` — scenario 11 needs the last one
-  visible); the rest of the lifecycle is reached through the filter. The
+  visible); the rest of the lifecycle is reached through the filter.
+  *Amended 2026-09-02 (pilot-UX round, owner decision)*: `validating`
+  joins the default too — the owner staring at "¿ya me pagó?" during
+  the verification window was blind exactly when they look hardest. The
+  row wears "Verificando pago", the folio reads "—", the identity comes
+  from the link, and a "Verificando" chip isolates them; today's totals
+  still count only `confirmed` + `partial`. The
   class is a `StatusBadge` variant next to the reconnection status — icon
   + text, never color alone. **"Ver comprobante"** opens the proof: the
   CEP as Banxico answered it (clave, amount, date, sender bank, sender

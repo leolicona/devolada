@@ -63,9 +63,37 @@ describe("US-R01: the section reads WispHub live", () => {
       amountCents: 49900,
       invoiceDate: "2026-08-01",
       dueDate: "2026-08-11",
+      linkUrl: null,
+      waLink: null,
     });
     expect(data.complete).toBe(true);
     expect(data.readAt).toEqual(expect.any(Number));
+  });
+
+  it("pilot-UX round: a debtor with a stored link carries it on the row; without one, nulls hide the buttons", async () => {
+    const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    await drizzle(env.DB).insert(paymentLinks).values({
+      businessId: business.id,
+      token: "tokrowlink123456",
+      wisphubCustomerId: "6",
+      customerUsuario: "greyes@wifiplus",
+    });
+    mockFacturas([
+      invoiceRow(),
+      invoiceRow({ id_factura: 77, cliente: { usuario: "aflores@wifiplus", nombre: "Abraham" } }),
+    ]);
+
+    const res = await (await app()).request("/payment-requests", await asBusiness(), env);
+    const { data } = await res.json();
+    const janely = data.cobros.find((c: { customerUsuario: string }) => c.customerUsuario === "greyes@wifiplus");
+    const abraham = data.cobros.find((c: { customerUsuario: string }) => c.customerUsuario === "aflores@wifiplus");
+    expect(janely.linkUrl).toMatch(/\/p\/tokrowlink123456$/);
+    /* no phone on the invoice row: the wa.me link opens the picker with
+       the message ready, never a stranger's chat */
+    expect(janely.waLink).toContain("wa.me/?text=");
+    expect(janely.waLink).toContain(encodeURIComponent(janely.linkUrl));
+    expect(abraham.linkUrl).toBeNull();
+    expect(abraham.waLink).toBeNull();
   });
 
   it("scenario 4: two reads inside 30 seconds cost one provider call (the display cache)", async () => {

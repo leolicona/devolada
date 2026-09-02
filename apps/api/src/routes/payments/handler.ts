@@ -71,11 +71,13 @@ export async function listPaymentFeed(
 
   const filters = [
     eq(payments.businessId, actor.id),
-    /* D4: the whole lifecycle is filterable; the default answers money
-       that arrived — confirmed, partial and (scenario 11) unapplied. */
+    /* D4, amended by the pilot-UX round: the default answers money that
+       arrived PLUS money in flight — the owner staring at "¿ya me
+       pagó?" must see the payment being verified without touching a
+       filter. Today's totals still count only confirmed + partial. */
     q.status
       ? eq(payments.status, q.status)
-      : inArray(payments.status, ["confirmed", "partial", "unapplied"]),
+      : inArray(payments.status, ["validating", "confirmed", "partial", "unapplied"]),
     ...(q.cursor ? [lt(payments.createdAt, new Date(q.cursor))] : []),
     ...(q.action ? [eq(payments.actionOutcome, q.action)] : []),
     ...(q.class ? [eq(payments.reconciliationClass, q.class)] : []),

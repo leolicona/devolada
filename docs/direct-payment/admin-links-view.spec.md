@@ -7,6 +7,25 @@ updated: 2026-08-30
 
 # Spec: Admin Payment Links View
 
+> **Amended 2026-09-02 (pilot-UX round, owner decision).** The search
+> died; the page is the ROSTER. Three measured pains: WispHub's own
+> filters are exact-match and D1 guessed ONE parameter from the text's
+> shape (typing `greyes` — a usuario without `@` — searched `nombre=`
+> and found nothing); the screen started blank and forgot everything on
+> navigation; and the input triggered phone password managers (a field
+> near the word "usuario"). Now `GET /direct-payments/links/roster`
+> ships the whole tenant (full-shape `listCustomersFull`, ≤10 pages of
+> 100 — `complete` says if the cap was hit, revisit the cap when a
+> tenant does), 30-second display cache + 2-minute query memory
+> (cobros-live D3's pattern), lazy link creation unchanged (D5 holds:
+> tested against recycled ids), and the browser searches by CONTAINS
+> over name, usuario and phone at once, 50 per local page.
+> `/links/search` and `queryParamFor`'s role in this page are retired;
+> the input carries `name` + `autoComplete="off"`. Mass distribution:
+> a CSV export (usuario → URL) is the SPEC backlog's bridge; real bulk
+> send waits for WABA.
+
+
 Allows ISP administrators to search their WispHub customers and share permanent SPEI payment links via WhatsApp directly from the Devolada Pagos admin dashboard.
 
 ## Decisions

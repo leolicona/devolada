@@ -1,4 +1,4 @@
-import type { PendingInvoices, WispHub } from "./client";
+import type { PendingInvoices, WispHub, WispHubCustomer } from "./client";
 
 /* Provider caches (provider-latency spec D3, D4, D5).
 
@@ -22,6 +22,8 @@ const PAYMENT_METHOD_TTL_MS = 10 * 60_000;
 type Entry<T> = { value: T; expiresAt: number };
 
 const pendingByBusiness = new Map<string, Entry<PendingInvoices>>();
+type Roster = { customers: WispHubCustomer[]; complete: boolean };
+const rosterByBusiness = new Map<string, Entry<Roster>>();
 const paymentMethodByBusiness = new Map<string, Entry<number>>();
 
 function read<T>(store: Map<string, Entry<T>>, key: string, now: Date): T | null {
@@ -49,6 +51,20 @@ export async function pendingInvoicesForDisplay(
      become 30 seconds of remembered failure (scenario 10). */
   const fresh = await wisphub.pendingInvoices(now);
   pendingByBusiness.set(businessId, { value: fresh, expiresAt: now.getTime() + PENDING_TTL_MS });
+  return fresh;
+}
+
+/* The tenant roster for the Links page — display only, same TTL and
+   the same rule as the pending list above: money paths never read it. */
+export async function rosterForDisplay(
+  businessId: string,
+  wisphub: WispHub,
+  now: Date,
+): Promise<Roster> {
+  const hit = read(rosterByBusiness, businessId, now);
+  if (hit) return hit;
+  const fresh = await wisphub.listCustomersFull();
+  rosterByBusiness.set(businessId, { value: fresh, expiresAt: now.getTime() + PENDING_TTL_MS });
   return fresh;
 }
 
@@ -81,4 +97,5 @@ export async function cashPaymentMethodId(
 export function resetProviderCaches(): void {
   pendingByBusiness.clear();
   paymentMethodByBusiness.clear();
+  rosterByBusiness.clear();
 }

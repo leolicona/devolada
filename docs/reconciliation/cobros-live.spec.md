@@ -140,6 +140,19 @@ the date exists).
 10. An invoice in `Revisión` is absent, matching what the link would
     charge (D5).
 
+### Amendment — 2026-09-02, pilot-UX round
+
+Each cobro row now carries the debtor's permanent link: `linkUrl` and a
+phone-less `waLink` (WhatsApp opens its own picker with the message
+ready — the invoice row carries no phone, and a wrong chat is worse
+than one extra tap). **Stored links only**: the invoice list has no
+numeric id to lazy-create with, so a missing link (roster never
+visited) is `null` and the UI hides the buttons; the Links roster
+creates every link on first view. In the section, the actions live in
+the customer's expansion, once per person, gated `payments: operate`
+like the Links page — "veo quién me debe → le mando su link" in one
+expansion.
+
 ## Definition of Done
 
 - [x] **Spike first**: the webhook probe run and recorded (2026-09-01:

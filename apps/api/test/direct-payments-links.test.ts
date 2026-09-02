@@ -2,9 +2,11 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { paymentLinks } from "../src/db/schema";
+import { resetProviderCaches } from "../src/wisphub/cache";
 import { app, seedBusiness, sessionCookieHeader } from "./helpers";
 
-/* docs/direct-payment/admin-links-view.spec.md (US-D07) */
+/* docs/direct-payment/admin-links-view.spec.md (US-D07), amended by the
+   pilot-UX round: the roster replaced the parameter-guessing search. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
 
@@ -30,7 +32,7 @@ const customer = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function mockSearch(results: unknown[]) {
+function mockList(results: unknown[]) {
   fetchMock
     .get(WISPHUB_ORIGIN)
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/") })
@@ -38,13 +40,13 @@ function mockSearch(results: unknown[]) {
 }
 
 const asBusiness = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
-const search = async (q = "janely") =>
-  (await app()).request(`/direct-payments/links/search?q=${q}`, asBusiness, env);
+const search = async () =>
+  (await app()).request(`/direct-payments/links/roster`, asBusiness, env);
 
-describe("US-D07: the ISP finds a customer and gets their link", () => {
-  it("returns the joined result and creates the link lazily", async () => {
+describe("US-D07: the roster hands every customer their link", () => {
+  it("returns the joined rows, creates links lazily, and says when it read", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer()]);
+    mockList([customer()]);
 
     const res = await search();
     expect(res.status).toBe(200);
@@ -58,25 +60,32 @@ describe("US-D07: the ISP finds a customer and gets their link", () => {
     });
     expect(data.results[0].url).toMatch(/\/p\/[a-z0-9]+$/);
     expect(data.results[0].url).not.toContain("undefined");
+    expect(data.complete).toBe(true);
+    expect(data.readAt).toBeGreaterThan(0);
 
     expect(await drizzle(env.DB).select().from(paymentLinks)).toHaveLength(1);
   });
 
-  it("a second search reuses the same permanent token (D1)", async () => {
+  it("a second read reuses the same permanent token (D1) — and the 30s cache, one provider call", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer()]);
+    mockList([customer()]);
     const firstUrl = (await (await search()).json()).data.results[0].url;
 
-    mockSearch([customer()]);
+    /* no second interceptor: within the window the cache answers */
     expect((await (await search()).json()).data.results[0].url).toBe(firstUrl);
     expect(await drizzle(env.DB).select().from(paymentLinks)).toHaveLength(1);
+
+    /* past the cache, still the same token */
+    resetProviderCaches();
+    mockList([customer()]);
+    expect((await (await search()).json()).data.results[0].url).toBe(firstUrl);
   });
 
   /* The route sits under the public /links/:token prefix: if the
      registration order ever changed, an anonymous caller would reach it. */
   it("requires an ISP session and is not shadowed by the public token route", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    const res = await (await app()).request("/direct-payments/links/search?q=janely", {}, env);
+    const res = await (await app()).request("/direct-payments/links/roster", {}, env);
     expect(res.status).toBe(401);
   });
 
@@ -94,7 +103,7 @@ describe("US-D07: the ISP finds a customer and gets their link", () => {
 describe("US-D07: the WhatsApp link carries the country code", () => {
   it("puts 52 in front of a plain 10-digit phone", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer()]);
+    mockList([customer()]);
 
     const { data } = await (await search()).json();
     const wa = new URL(data.results[0].waLink);
@@ -104,7 +113,7 @@ describe("US-D07: the WhatsApp link carries the country code", () => {
 
   it("accepts the shapes an ISP actually types", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([
+    mockList([
       customer({ id_servicio: 6, usuario: "a@x", telefono: "+52 55 1234 5678" }),
       customer({ id_servicio: 7, usuario: "b@x", telefono: "5215512345678" }),
     ]);
@@ -117,7 +126,7 @@ describe("US-D07: the WhatsApp link carries the country code", () => {
 
   it("an unreadable phone opens the contact picker instead of a stranger", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer({ telefono: "55 1234 5678 ext 3" })]);
+    mockList([customer({ telefono: "55 1234 5678 ext 3" })]);
 
     const { data } = await (await search()).json();
     /* no number in the path: WhatsApp asks the ISP to pick the contact */
@@ -127,7 +136,7 @@ describe("US-D07: the WhatsApp link carries the country code", () => {
 
   it("a customer with no phone still gets a shareable message", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer({ telefono: "" })]);
+    mockList([customer({ telefono: "" })]);
 
     const { data } = await (await search()).json();
     expect(data.results[0].phone).toBeNull();
@@ -142,12 +151,14 @@ describe("US-D07 D5: the usuario is the identity, the numeric id is a cache", ()
   it("a new usuario on a recycled id gets a new token; the old link keeps its own", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     /* yesterday's tenant: id 13 belongs to 0011 */
-    mockSearch([customer({ id_servicio: 13, usuario: "0011@wifiplus", nombre: "Leo Licona" })]);
-    const oldUrl = (await (await search("0011@wifiplus")).json()).data.results[0].url;
+    mockList([customer({ id_servicio: 13, usuario: "0011@wifiplus", nombre: "Leo Licona" })]);
+    const oldUrl = (await (await search()).json()).data.results[0].url;
 
-    /* reseeded tenant: id 13 now belongs to Esteban, a different person */
-    mockSearch([customer({ id_servicio: 13, usuario: "esteban@wifiplus", nombre: "Esteban" })]);
-    const { data } = await (await search("esteban@wifiplus")).json();
+    /* reseeded tenant: id 13 now belongs to Esteban, a different person.
+       Past the display cache — a reseed does not happen inside 30s. */
+    resetProviderCaches();
+    mockList([customer({ id_servicio: 13, usuario: "esteban@wifiplus", nombre: "Esteban" })]);
+    const { data } = await (await search()).json();
     expect(data.results[0].usuario).toBe("esteban@wifiplus");
     /* the stranger's token is never handed over */
     expect(data.results[0].url).not.toBe(oldUrl);
@@ -161,10 +172,11 @@ describe("US-D07 D5: the usuario is the identity, the numeric id is a cache", ()
 
   it("a re-seen usuario keeps its token while its numeric id refreshes", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer({ id_servicio: 6, usuario: "greyes@wifiplus" })]);
+    mockList([customer({ id_servicio: 6, usuario: "greyes@wifiplus" })]);
     const firstUrl = (await (await search()).json()).data.results[0].url;
 
-    mockSearch([customer({ id_servicio: 99, usuario: "greyes@wifiplus" })]);
+    resetProviderCaches();
+    mockList([customer({ id_servicio: 99, usuario: "greyes@wifiplus" })]);
     expect((await (await search()).json()).data.results[0].url).toBe(firstUrl);
 
     const rows = await drizzle(env.DB).select().from(paymentLinks);
@@ -174,7 +186,7 @@ describe("US-D07 D5: the usuario is the identity, the numeric id is a cache", ()
 
   it("a customer without usuario gets no link and no empty row (the review's open item)", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([
+    mockList([
       customer({ id_servicio: 20, usuario: null }),
       customer({ id_servicio: 7, usuario: "mcolunga@wifiplus" }),
     ]);
@@ -190,11 +202,11 @@ describe("US-D07 D5: the usuario is the identity, the numeric id is a cache", ()
 
   it("the batch generator follows the same rule on a recycled id", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockSearch([customer({ id_servicio: 13, usuario: "0011@wifiplus" })]);
-    await search("0011@wifiplus");
+    mockList([customer({ id_servicio: 13, usuario: "0011@wifiplus" })]);
+    await search();
 
     /* GET /links lists through the same lazy batch insert */
-    mockSearch([customer({ id_servicio: 13, usuario: "esteban@wifiplus" })]);
+    mockList([customer({ id_servicio: 13, usuario: "esteban@wifiplus" })]);
     const res = await (await app()).request("/direct-payments/links", asBusiness, env);
     expect(res.status).toBe(200);
     const { data } = await res.json();

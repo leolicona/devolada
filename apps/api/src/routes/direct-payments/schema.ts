@@ -258,12 +258,9 @@ export const linksListResponse = z.object({
   nextCursor: z.string().nullable(),
 });
 
-/* GET /direct-payments/links/search — ISP session (US-D07) */
-export const linksSearchQuery = z.object({
-  q: z.string().trim().min(2),
-});
-
-export const linksSearchResponse = z.object({
+/* GET /direct-payments/links/roster — ISP session (US-D07, pilot-UX
+   round: the whole tenant, searched client-side by contains) */
+export const linksRosterResponse = z.object({
   results: z.array(
     z.object({
       wisphubId: z.number(),
@@ -278,6 +275,9 @@ export const linksSearchResponse = z.object({
       waLink: z.string(),
     }),
   ),
+  /* cobros-live's honesty flag, same meaning: the page cap was hit */
+  complete: z.boolean(),
+  readAt: z.number().int(),
 });
 
 export type LinkStatusResponse = z.infer<typeof linkStatusResponse>;
@@ -287,5 +287,5 @@ export type DirectPaymentStatusResponse = z.infer<typeof directPaymentStatusResp
 export type ProofUploadResponse = z.infer<typeof proofUploadResponse>;
 export type ProofReading = z.infer<typeof proofReadingResponse>;
 export type LinksListResponse = z.infer<typeof linksListResponse>;
-export type LinksSearchResponse = z.infer<typeof linksSearchResponse>;
+export type LinksRosterResponse = z.infer<typeof linksRosterResponse>;
 export type PublicPaymentError = z.infer<typeof publicPaymentError>;

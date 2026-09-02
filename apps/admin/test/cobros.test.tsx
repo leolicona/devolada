@@ -22,6 +22,8 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
         amountCents: 49900,
         invoiceDate: day(-40),
         dueDate: day(-10),
+        linkUrl: null,
+        waLink: null,
       },
       {
         externalId: 57,
@@ -30,6 +32,8 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
         amountCents: 30000,
         invoiceDate: day(-9),
         dueDate: day(+5),
+        linkUrl: null,
+        waLink: null,
       },
       /* Abraham's single invoice is not due yet */
       {
@@ -39,6 +43,8 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
         amountCents: 19900,
         invoiceDate: day(-3),
         dueDate: day(+12),
+        linkUrl: null,
+        waLink: null,
       },
     ],
     complete: true,
@@ -109,5 +115,51 @@ describe("US-R01: who owes what, grouped by customer, oldest debt first", () => 
   it("nobody owes → the honest empty state", async () => {
     arrange(() => ok(paymentRequestsResponse.parse({ cobros: [], complete: true, readAt: Date.now() })));
     expect(await screen.findByText(/nadie te debe hoy/i)).toBeInTheDocument();
+  });
+});
+/* pilot-UX round: the debtor's link lives one expansion away. */
+describe("pilot-UX: Copiar link y WhatsApp por deudor", () => {
+  const withLink = (over: Record<string, unknown> = {}) =>
+    paymentRequestsResponse.parse({
+      cobros: [
+        {
+          externalId: 42,
+          customerUsuario: "greyes@wifiplus",
+          customerName: "Janely",
+          amountCents: 49900,
+          invoiceDate: day(-5),
+          dueDate: day(5),
+          linkUrl: "https://link.dev.devoladapago.com/p/tokrowlink",
+          waLink: "https://wa.me/?text=hola",
+        },
+      ],
+      complete: true,
+      readAt: Date.now(),
+      ...over,
+    });
+
+  it("an operator sees both actions in the expansion and copy answers", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: () => Promise.resolve() },
+      configurable: true,
+    });
+    arrange(() => ok(withLink()));
+
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /copiar link/i }));
+    expect(await screen.findByText("Copiado")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /whatsapp/i })).toBeInTheDocument();
+  });
+
+  it("a viewer reads the debt and sees no buttons", async () => {
+    server.use(
+      handlers.session(() => ok({ ...businessActor, role: "viewer" })),
+      handlers.paymentRequests(() => ok(withLink())),
+    );
+    renderApp("/payment-requests");
+
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    expect(await screen.findByLabelText(/facturas de janely/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copiar link/i })).not.toBeInTheDocument();
   });
 });

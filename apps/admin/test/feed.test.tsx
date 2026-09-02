@@ -428,3 +428,43 @@ describe("US-I03: the observed row teaches, and Ejecutar ahora dispatches", () =
     expect(within(row).queryByText("Reconectado")).not.toBeInTheDocument();
   });
 });
+/* pilot-UX round: money in flight is visible by default. */
+describe("pilot-UX: Verificando en Pagos", () => {
+  const inFlight = charge({
+    id: "ch-v1",
+    folio: "",
+    status: "validating" as const,
+    actionOutcome: null,
+    reconciliationClass: null,
+    actionDoneAt: null,
+    actionAttempts: 0,
+  });
+
+  it("a validating row rides the default list wearing 'Verificando pago'", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [inFlight])),
+      ),
+    );
+    renderApp("/");
+    const row = await screen.findByRole("button", { name: /janely/i });
+    expect(within(row).getByText("Verificando pago")).toBeInTheDocument();
+  });
+
+  it("the 'Verificando' chip requests status=validating", async () => {
+    const seen: (string | null)[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => {
+        seen.push(url.searchParams.get("status"));
+        return ok(feedOf([inFlight]));
+      }),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+    await userEvent.click(screen.getByRole("tab", { name: "Verificando" }));
+    await screen.findByRole("button", { name: /janely/i });
+    expect(seen).toContain("validating");
+  });
+});

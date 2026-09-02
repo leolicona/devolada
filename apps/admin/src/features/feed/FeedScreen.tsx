@@ -38,6 +38,9 @@ const ALL = "all";
    underneath; the UI grows into it. */
 const statusFilters = [
   { value: ALL, label: "Todos" },
+  /* pilot-UX round: money in flight is now in the default view too;
+     this chip isolates it — status filter, not an action one */
+  { value: "validating", label: "Verificando" },
   { value: "queued", label: "En cola" },
   { value: "failed", label: "Fallidos" },
   { value: "withheld", label: "Sin reactivar" },
@@ -51,6 +54,7 @@ function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
   const params = new URLSearchParams();
   if (opts.cursor) params.set("cursor", String(opts.cursor));
   if (opts.chip === "short") params.set("class", "short");
+  else if (opts.chip === "validating") params.set("status", "validating");
   else if (opts.chip && opts.chip !== ALL) params.set("action", opts.chip);
   if (opts.q?.trim()) params.set("q", opts.q.trim());
   if (opts.from) params.set("from", opts.from);

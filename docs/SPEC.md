@@ -251,7 +251,7 @@ Owner's decisions:
 | Spec | Domain | Stories | Status |
 |------|--------|---------|--------|
 | [auth/sessions.spec.md](auth/sessions.spec.md) | auth | US-S01, US-S02, US-S03 | current |
-| [auth/better-auth.spec.md](auth/better-auth.spec.md) | auth | US-S01, US-S02, US-S04, US-S05, US-S06, US-S07 | in development |
+| [auth/better-auth.spec.md](auth/better-auth.spec.md) | auth | US-S01, US-S02, US-S04, US-S05, US-S06, US-S07 | current |
 | [auth/isp-signup.spec.md](auth/isp-signup.spec.md) | auth | US-S04, US-S06 | in development |
 | [charges/reconnection-queue.spec.md](charges/reconnection-queue.spec.md) | charges | US-C03, US-C04 (retired) | in force (spei channel rides it) |
 | [charges/debt-truth.spec.md](charges/debt-truth.spec.md) | charges | US-C06, US-C08 (retired) | decisions in force (direct channel) |

@@ -66,8 +66,8 @@ function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
 /* The queue writes a code; the ISP reads a sentence
    (reconnection-queue spec UI contract). */
 const reasons: Record<string, string> = {
-  WISPHUB_AUTH_FAILED: "WispHub rechazó la llave. Revísala en Configuración.",
-  WISPHUB_NOT_CONFIGURED: "Falta la llave de WispHub en Configuración.",
+  WISPHUB_AUTH_FAILED: "WispHub rechazó la llave. Revísala en Integraciones.",
+  WISPHUB_NOT_CONFIGURED: "Falta la llave de WispHub en Integraciones.",
   WISPHUB_UNAVAILABLE: "WispHub no respondió. Lo seguimos intentando.",
   NOT_ACTIVE_YET: "El pago quedó registrado; el servicio aún no se activa.",
 };

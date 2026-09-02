@@ -67,7 +67,10 @@ export function NewBusinessScreen() {
         speiBank: bank as Bank,
         speiBeneficiaryName: beneficiary.trim() || null,
       });
-      queryClient.clear();
+      /* Only the session is stale (it said NO_BUSINESS); the user query
+         stays, or this screen falls into "Cargando…" between the two
+         steps (identity round, 2026-09-02). */
+      queryClient.removeQueries({ queryKey: ["session"] });
       setStep(3);
     } catch (e) {
       setError(

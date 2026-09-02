@@ -119,6 +119,26 @@ Format:
 - Regression test: none in code — the defect lives in the deploy, not the app (the app's own behaviour with and without the secret is already covered under US-D15). The deploy log's warning is the standing check.
 
 
+## BUG-014 — Better Auth's rate limiter was never really on
+- Status: **fixed** (2026-09-02, identity round — better-auth.spec.md D11)
+- Detected: 2026-09-02 · spec-vs-code audit of the identity subsystem; every deployed environment is affected (the limiter guards login, codes and invitations)
+- Affected spec: docs/auth/better-auth.spec.md (contract: "stays on")
+- Symptom: nothing visible — which is the symptom. Unlimited sign-in attempts, code guesses and invitation acceptances from one address.
+- Root cause: the spec promised the built-in limiter and nobody configured it. Better Auth's default is `enabled: NODE_ENV === "production"` — a variable no deploy of ours sets — with counters in the isolate's memory, which on Workers is reborn every few minutes and never shared. Even "on", it would have forgotten. And its IP header list is `x-forwarded-for` alone; with no resolvable address every visitor shares one bucket.
+- **The lesson**: "the library does it by default" is a claim about the library's runtime, not ours. A guarantee that lives in a default has to be pinned in config and proven by a test that trips it — the same lesson as TD-001's secret, one layer up.
+- Fix: explicit `rateLimit` (`enabled` unless `AUTH_RATE_LIMIT=off`, `storage: "database"`, our rules for the code checks and the invitation door), `cf-connecting-ip` first, the `rate_limit` table (migration 0026). The test suite alone pins the off switch.
+- Regression test: `apps/api/test/rate-limit.test.ts` — "a fourth sign-in within ten seconds answers 429, and the count lives in rate_limit".
+
+## BUG-013 — "Falta tu llave de WispHub" sent the owner to a page where the key no longer lives
+- Status: **fixed** (2026-09-02, identity round)
+- Detected: 2026-09-02 · spec-vs-code audit; live on dev since the integrations hub moved the key (PR of integrations-hub D1/D2)
+- Affected spec: docs/admin/shell.spec.md (the banner), docs/admin/charge-feed.spec.md (the failure sentences), docs/integrations/integrations-hub.spec.md (D1: the key lives at `/integrations/wisphub`)
+- Symptom: the shell's banner button "Configurar" opened Configuración, where there is no WispHub key anymore; two feed sentences ("Revísala en Configuración", "Falta la llave de WispHub en Configuración") pointed the same way. The owner who followed the product's own instruction found nothing.
+- Root cause: the hub moved the key and its screen; the two surfaces that named the old place were not in the hub's DoD, and no test asserted where the banner's link went.
+- **The lesson**: when a thing moves, grep for the sentence that names where it was — copy is a pointer too.
+- Fix: the button goes to `/integrations/wisphub`; the feed sentences say Integraciones.
+- Regression test: `apps/admin/test/shell.test.tsx` — "BUG-013: the banner's button goes to /integrations/wisphub, not to Configuración".
+
 ## BUG-012 — The admin feed never showed a real partial payment as partial
 - Status: **fixed** (2026-09-01, by the payments merge — business-and-memberships D6)
 - Detected: 2026-09-01 · found in review of the merge PR (#129), reading what the retired `charges` twin used to write; the dev pilot is the affected surface (it is where the pilot ISP operates)

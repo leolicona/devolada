@@ -34,6 +34,10 @@ export default defineWorkersConfig(async () => {
                  seeded signup's OTP reached Resend for real (measured
                  2026-09-01: 429s in the test output). Empty = log only. */
               RESEND_API_KEY: "",
+              /* better-auth.spec.md D11: the suite signs in hundreds of
+                 times from one address; the limiter's own test hands the
+                 app an env without this pin. */
+              AUTH_RATE_LIMIT: "off",
             },
           },
         },

@@ -21,8 +21,26 @@ const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
 /* /verify and /reset died with the links (better-auth.spec.md D4):
    codes are typed where they are asked, never clicked. */
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
-const signupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/signup", component: SignupPage });
+/* The guard remembers where you were going (better-auth.spec.md D12):
+   `next` is a same-app path or nothing — never a host, or the login
+   page becomes an open redirect one query string away. */
+export const nextSearch = (s: Record<string, unknown>): { next?: string } => ({
+  /* An explicit undefined: the router merges the validated object over
+     the raw search, so a bare `{}` would keep the rejected value alive. */
+  next: typeof s.next === "string" && /^\/(?!\/)/.test(s.next) ? s.next : undefined,
+});
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: LoginPage,
+  validateSearch: nextSearch,
+});
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/signup",
+  component: SignupPage,
+  validateSearch: nextSearch,
+});
 const recoverRoute = createRoute({ getParentRoute: () => rootRoute, path: "/recover", component: RecoverPage });
 /* Outside the shell: both exist before (or without) an active business */
 const newBusinessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/nuevo-negocio", component: NewBusinessScreen });

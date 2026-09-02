@@ -68,6 +68,7 @@ export const handlers = {
     http.get("/direct-payments/links/roster", () => r()),
   /* business-and-memberships (US-B01–B03) */
   getSession: (r: () => Response) => http.get("/auth/get-session", () => r()),
+  logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),
   createBusiness: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses", async ({ request }) => r(await request.json())),
   members: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/businesses/members", () => r()),

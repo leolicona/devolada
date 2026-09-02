@@ -38,6 +38,27 @@ export function makeAuth(env: Bindings) {
     database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
     trustedOrigins: exactOrigins,
     emailAndPassword: { enabled: true },
+    /* D11: the limiter is explicit, never inherited. Better Auth turns it
+       on only under NODE_ENV=production and keeps counters in memory — on
+       Workers that is an isolate that forgets every few minutes, and a
+       deploy whose NODE_ENV nobody set. Counters live in D1 (the
+       `rateLimit` table); the address comes from Cloudflare's own header
+       first — the default list has only x-forwarded-for, and with no
+       address every visitor shares one bucket. Better Auth's built-in
+       rules stay (sign-in 3/10s, code requests 3/60s); ours cover the
+       code checks and the invitation door, which have no built-in rule. */
+    rateLimit: {
+      enabled: env.AUTH_RATE_LIMIT !== "off",
+      storage: "database",
+      customRules: {
+        "/email-otp/verify-email": { window: 60, max: 5 },
+        "/email-otp/reset-password": { window: 60, max: 5 },
+        "/organization/accept-invitation": { window: 60, max: 10 },
+      },
+    },
+    advanced: {
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] },
+    },
     /* 30-day sliding window in both apps (spec D5). The cookie session
        cache stays off: the middleware's per-request DB check IS the
        suspension guarantee (US-S03), so caching would only delay it. */

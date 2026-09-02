@@ -380,7 +380,8 @@ store-side auth artifacts.
 Recorded from the PR #122 review (2026-08-31) so no child spec answers
 them by accident:
 
-1. **provisional-release D10 amendment (phase 5).** D18 moves the vote of
+1. *(Executed 2026-09-01: integrations-hub.spec.md D8 amends it as
+   specified below.)* **provisional-release D10 amendment (phase 5).** D18 moves the vote of
    confidence to the integration; provisional-release D10 still says
    "Settings". The phase 5 child spec amends it formally: the toggle
    lives on the integrations page as its own **pre-verdict** switch —

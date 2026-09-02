@@ -63,7 +63,9 @@ export function IntegrationsScreen() {
           </Card>
 
           {/* D17's backlog, visible and honest: no door yet */}
-          <Card className="flex items-center gap-4 p-6 opacity-60">
+          {/* muted tokens do the dimming — stacking opacity on top put
+              this text at the app's contrast floor (design review fase 5) */}
+          <Card className="flex items-center gap-4 p-6">
             <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
               <Plug className="size-6 text-muted-foreground" aria-hidden />
             </span>

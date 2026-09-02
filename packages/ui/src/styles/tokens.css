@@ -61,8 +61,11 @@
   --color-status-error-border: #f0bcbc;
 
   --color-status-info: #44403c;            /* informational: neutral, not blue */
-  --color-status-info-bg: #f1efea;
-  --color-status-info-border: #e0ddd5;
+  /* one step deeper than the well (#f1efea): an info surface sitting ON
+     a well — the observation chip beside the Saldo chip — must not
+     vanish into it (design review fase 5) */
+  --color-status-info-bg: #e9e5dd;
+  --color-status-info-border: #d3cec3;
 
   --color-surface-overlay: rgb(28 25 23 / 0.45);
 
@@ -192,8 +195,8 @@
   --color-status-error-border: rgb(239 111 111 / 0.35);
 
   --color-status-info: #a9a39b;
-  --color-status-info-bg: #2a2622;
-  --color-status-info-border: #3a352f;
+  --color-status-info-bg: #332e28; /* one step off the dark well, like light */
+  --color-status-info-border: #46403a;
 
   --color-surface-overlay: rgb(0 0 0 / 0.6);
 
@@ -242,8 +245,8 @@
     --color-status-error-border: rgb(239 111 111 / 0.35);
 
     --color-status-info: #a9a39b;
-    --color-status-info-bg: #2a2622;
-    --color-status-info-border: #3a352f;
+    --color-status-info-bg: #332e28; /* one step off the dark well, like light */
+    --color-status-info-border: #46403a;
 
     --color-surface-overlay: rgb(0 0 0 / 0.6);
 

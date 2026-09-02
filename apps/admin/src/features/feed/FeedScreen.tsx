@@ -493,6 +493,7 @@ export function FeedScreen() {
             <Input
               id="feed-from"
               type="date"
+              lang="es-MX"
               className="mt-1"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -503,6 +504,7 @@ export function FeedScreen() {
             <Input
               id="feed-to"
               type="date"
+              lang="es-MX"
               className="mt-1"
               value={to}
               onChange={(e) => setTo(e.target.value)}

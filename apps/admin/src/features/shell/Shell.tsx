@@ -84,7 +84,11 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             className={
               sidebar
                 ? "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                : "flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"
+                : /* min-w-0 so a long label (Integraciones) shrinks inside
+                     its cell instead of colliding with its neighbour
+                     (design review fase 5); 11px buys the five labels
+                     their one line at 360-375px */
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium text-muted-foreground"
             }
             activeProps={{
               className: sidebar ? "bg-accent-soft text-link" : "text-link font-semibold",
@@ -94,7 +98,7 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             <span className={sidebar ? "contents" : "relative"}>
               <Icon className={sidebar ? "size-4" : "size-5"} aria-hidden />
             </span>
-            {label}
+            <span className={sidebar ? undefined : "max-w-full truncate"}>{label}</span>
           </Link>
         ))}
       </div>

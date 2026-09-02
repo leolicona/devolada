@@ -112,6 +112,11 @@ export function AcceptInvitationScreen() {
       <AccessLayout title={title} description={roleLabel ? `Como ${roleLabel}.` : undefined}>
         <Alert variant="warning">Esta invitación venció. Las invitaciones duran 48 horas.</Alert>
         <p className="mt-4 text-sm text-muted-foreground">Pide una nueva a quien te invitó.</p>
+        <p className="mt-4 text-center text-sm">
+          <Link to="/login" className="text-link hover:underline">
+            Ir a iniciar sesión
+          </Link>
+        </p>
       </AccessLayout>
     );
   }
@@ -125,6 +130,11 @@ export function AcceptInvitationScreen() {
           <Button size="lg" variant="outline" className="w-full" onClick={() => void switchAccount()}>
             Entrar con el correo invitado
           </Button>
+          <p className="text-center text-sm">
+            <Link to="/login" className="text-link hover:underline">
+              Ir a iniciar sesión
+            </Link>
+          </p>
         </div>
       </AccessLayout>
     );
@@ -172,11 +182,12 @@ export function AcceptInvitationScreen() {
           }
         }}
       >
-        <div>
-          <Label htmlFor="invited-email">Correo</Label>
-          {/* The invitation's address, never typed (D14) */}
-          <Input id="invited-email" type="email" value={inv.email ?? ""} readOnly aria-readonly="true" />
-        </div>
+        {/* The invitation's address, never typed (D14) — shown as text, not
+            as a field that looks editable (design review identidad-2) */}
+        <p className="text-sm">
+          <span className="text-muted-foreground">Correo:</span>{" "}
+          <span className="font-medium">{inv.email}</span>
+        </p>
         {!inv.hasAccount && (
           <div>
             <Label htmlFor="name">Tu nombre</Label>

@@ -129,7 +129,9 @@ describe("US-B01 / D5: a business born without a CLABE wears a banner and shares
     );
     renderApp("/links");
     expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
-    expect(screen.getByText(/configura la clabe del negocio en configuración/i)).toBeInTheDocument();
+    /* One voice per screen: the shell's banner says it, the page does not repeat it */
+    expect(screen.getByText(/falta la clabe del negocio/i)).toBeInTheDocument();
+    expect(screen.queryByText(/configura la clabe del negocio en configuración/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
   });
 });

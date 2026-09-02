@@ -77,7 +77,8 @@ describe("US-S04: the código is the door — signup lands on the code screen, t
 
     await userEvent.type(screen.getByLabelText("Código"), "000000");
     await userEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
-    expect(await screen.findByText(/el código no es válido o ya venció/i)).toBeInTheDocument();
+    /* The screen with the resend at hand says "Reenvíalo" (design review identidad-2) */
+    expect(await screen.findByText(/ya venció\. reenvíalo e intenta otra vez/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /usar otro correo/i })).toHaveAttribute("href", "/signup");
   });
 

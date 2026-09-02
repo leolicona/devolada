@@ -102,8 +102,11 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
               const changeable =
                 mayInvite && m.userId !== selfUserId && m.role !== "owner" && ROLE_RANK[m.role] < ROLE_RANK[role];
               return (
-                <li key={m.id} className="flex items-center gap-3 py-3">
-                  <div className="min-w-0 flex-1">
+                <li key={m.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
+                  {/* design review identidad-2 (must fix): the row keeps a
+                      person on it at 375px — name and email on their own
+                      line, the picker and Quitar on the next */}
+                  <div className="min-w-0 sm:flex-1">
                     <p className="truncate text-sm font-medium">
                       {m.name}
                       {m.userId === selfUserId && <span className="ml-2 text-sm font-normal text-ink-soft">(tú)</span>}
@@ -117,43 +120,43 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
                     </p>
                   </div>
                   {changeable ? (
-                    <Select
-                      value={m.role}
-                      onValueChange={(v) => changeRole.mutate({ memberId: m.id, role: v as Role })}
-                      disabled={changeRole.isPending}
-                    >
-                      <SelectTrigger className="w-40 shrink-0" aria-label={`Rol de ${m.name}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {grantable.map((r) => (
-                          <SelectItem key={r} value={r}>
-                            {ROLE_LABELS[r]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={m.role}
+                        onValueChange={(v) => changeRole.mutate({ memberId: m.id, role: v as Role })}
+                        disabled={changeRole.isPending}
+                      >
+                        <SelectTrigger className="w-full sm:w-40" aria-label={`Rol de ${m.name}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {grantable.map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {ROLE_LABELS[r]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" className="shrink-0">
+                            Quitar
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogTitle>¿Quitar a {m.name}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Dejará de ver este negocio de inmediato. Puedes invitarle de nuevo después.
+                          </AlertDialogDescription>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => remove.mutate(m.id)}>Quitar</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   ) : (
                     <span className={`shrink-0 text-sm ${m.email ? "hidden sm:inline" : "hidden"}`}>{ROLE_LABELS[m.role]}</span>
-                  )}
-                  {changeable && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" className="shrink-0">
-                          Quitar
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogTitle>¿Quitar a {m.name}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Dejará de ver este negocio de inmediato. Puedes invitarle de nuevo después.
-                        </AlertDialogDescription>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => remove.mutate(m.id)}>Quitar</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
                   )}
                 </li>
               );
@@ -170,30 +173,32 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
               <h3 className="text-sm font-semibold">Invitaciones pendientes</h3>
               <ul className="mt-2 divide-y divide-line-soft" aria-label="Invitaciones pendientes">
                 {pending.map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-                    <div className="min-w-0 flex-1">
+                  <li key={p.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="min-w-0 sm:flex-1">
                       <p className="truncate text-sm font-medium">{p.email}</p>
                       <p className="text-sm text-ink-soft">
                         {ROLE_LABELS[p.role]} ·{" "}
                         {p.expired ? <span className="font-medium text-error">Vencida</span> : expiresIn(p.expiresAt)}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="shrink-0"
-                      disabled={resend.isPending}
-                      onClick={() => resend.mutate(p.id)}
-                    >
-                      Reenviar
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="shrink-0"
-                      disabled={cancel.isPending}
-                      onClick={() => cancel.mutate(p.id)}
-                    >
-                      Cancelar
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        className="shrink-0"
+                        disabled={resend.isPending}
+                        onClick={() => resend.mutate(p.id)}
+                      >
+                        Reenviar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="shrink-0"
+                        disabled={cancel.isPending}
+                        onClick={() => cancel.mutate(p.id)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>

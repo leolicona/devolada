@@ -15,6 +15,10 @@ const buttonVariants = cva(
         outline: "border border-border bg-card text-foreground hover:bg-muted",
         ghost: "text-muted-foreground hover:bg-muted hover:text-foreground disabled:bg-transparent",
         destructive: "bg-destructive text-destructive-foreground hover:opacity-90",
+        /* The text-link button: "Reenviar código", "Cerrar sesión" and
+           their kin, once six hand-rolled <button>s (design review
+           identidad-2). Inline, no box, the link colour. */
+        link: "text-link hover:underline disabled:bg-transparent disabled:text-ink-faint",
       },
       size: {
         default: "h-10 px-5 text-sm",
@@ -22,6 +26,8 @@ const buttonVariants = cva(
         icon: "h-10 w-10",
       },
     },
+    /* A link has no box: the size's height and padding leave with it */
+    compoundVariants: [{ variant: "link", class: "h-auto rounded-none p-0 text-sm" }],
     defaultVariants: { variant: "default", size: "default" },
   },
 );

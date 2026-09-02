@@ -229,9 +229,12 @@ export function Shell() {
         </header>
         <CreditBanner credit={actor.credit} />
         {/* business-and-memberships D5 (2026-09-02): born without a CLABE;
-            the banner is the wizard's missing step, the owner's to close */}
+            the banner is the wizard's missing step, the owner's to close.
+            Both banners stack under sm: a sentence in a 130px column next
+            to a wide button pushed Pagos below the fold on a phone (design
+            review identidad-2). */}
         {!actor.speiConfigured && (
-          <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
+          <Alert variant="warning" className="m-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:mx-8 lg:mt-6">
             <span className="flex items-center gap-2">
               <Landmark className="size-4 shrink-0" aria-hidden />
               Falta la CLABE del negocio. Sin ella tus clientes no pueden pagarte por transferencia.
@@ -248,7 +251,7 @@ export function Shell() {
             there. integrations-hub D10: the shell names no provider — an
             ISP is one kind of business — and points at the catalog. */}
         {!actor.integrationConfigured && (
-          <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
+          <Alert variant="warning" className="m-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:mx-8 lg:mt-6">
             <span className="flex items-center gap-2">
               <Plug className="size-4 shrink-0" aria-hidden />
               Conecta el sistema con el que cobras. Sin una integración no hay Cobros que validar.

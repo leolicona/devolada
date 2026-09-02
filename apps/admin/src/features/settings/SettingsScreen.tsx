@@ -8,6 +8,7 @@ import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
 import { UsersCard } from "./UsersCard";
+import { bankForClabe } from "@devolada/api/clabe";
 import { CreditCard } from "../credit/CreditCard";
 import type { Bank } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
@@ -122,6 +123,14 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
   /* D16: the picker's own type — the API takes a name from the vocabulary
      or nothing, and "" is what "not configured yet" looks like here. */
   const [bank, setBank] = useState<Bank | "">((settings.spei.bank as Bank | null) ?? "");
+  /* D5 (2026-09-02): the CLABE form moved here from the wizard, and so did
+     the prefix pick — the bank is seeded from the 3-digit prefix until the
+     owner picks one by hand (direct-payment D16, BUG-007) */
+  const [bankTouched, setBankTouched] = useState(false);
+  function onClabeChange(value: string) {
+    setClabe(value);
+    if (!bankTouched) setBank(bankForClabe(value) ?? "");
+  }
   const [beneficiary, setBeneficiary] = useState(settings.spei.beneficiaryName ?? "");
   const [fee, setFee] = useState(
     settings.spei.serviceFeeCents === null ? "" : pesos(settings.spei.serviceFeeCents),
@@ -154,7 +163,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
               inputMode="numeric"
               maxLength={18}
               value={clabe}
-              onChange={(e) => setClabe(e.target.value)}
+              onChange={(e) => onClabeChange(e.target.value)}
               placeholder="18 dígitos"
               autoComplete="off"
             />
@@ -194,7 +203,13 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
               them, and silently: apiCEP answers `invalid`, never an error.
               Typed free-hand this said "STP, BBVA, Banorte…", and two of
               those three are not names it accepts. */}
-          <Select value={bank} onValueChange={(v) => setBank(v as Bank)}>
+          <Select
+            value={bank}
+            onValueChange={(v) => {
+              setBankTouched(true);
+              setBank(v as Bank);
+            }}
+          >
             <SelectTrigger id="spei-bank" className="mt-1" aria-label="Banco">
               <SelectValue placeholder="Elige tu banco" />
             </SelectTrigger>
@@ -460,7 +475,7 @@ export function SettingsScreen() {
           {canSettings && <PolicyCard settings={data} />}
           {canSettings && <DisplayCard settings={data} />}
           {canCredit && <CreditCard />}
-          {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}
+          {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} emailVerified={actor.emailVerified} />}
           <PasskeyCard />
         </div>
       )}

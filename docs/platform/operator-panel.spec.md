@@ -34,10 +34,15 @@ interview (2026-09-01). Its consumer is
   | `topup_beneficiary` | text | — | 3–120 chars |
   | `default_timezone` | allow-list | `America/Mexico_City` | settings D5's list |
   | `default_fee_payer` | enum | `isp` (business absorbs) | `customer \| isp` (direct-payment D19) |
+  | `support_whatsapp` | phone (digits with country code) | — | 10–15 digits; non-digits stripped *(identity round, 2026-09-02)* |
+  | `support_email` | text | — | 5–120 chars *(identity round, 2026-09-02)* |
 
   A key with no row answers its birth value from code — so the platform
   works before the panel is ever opened, and a missing `topup_clabe`
-  means "top-ups unavailable", said out loud in Saldo y recargas.
+  means "top-ups unavailable", said out loud in Saldo y recargas. The two
+  support keys are read without a session through `GET /support`: the
+  suspended screen (sessions rule 2) is the one place the product asks
+  the person to write to us, and it had no address to give.
   **The retry schedule is not a key**: learned-retry (US-V16) governs the
   middle from Consta and D7's skeleton is a measured constant.
   **Rejected**: a generic key/value editor (a typo in a fee key charges

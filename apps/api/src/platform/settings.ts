@@ -9,7 +9,7 @@ import { BANKS } from "../direct-payments/banks";
 
 type Def =
   | { type: "cents" | "int"; birth: number; min: number; max: number }
-  | { type: "clabe" | "bank"; birth: null }
+  | { type: "clabe" | "bank" | "phone"; birth: null }
   | { type: "text"; birth: null; min: number; max: number }
   | { type: "enum"; birth: string; values: readonly string[] };
 
@@ -32,6 +32,11 @@ export const SETTINGS = {
      platform-wide, each business may override its own in Configuración. */
   default_tolerance_cents: { type: "cents", birth: 0, min: 0, max: 10000 },
   default_over_treatment: { type: "enum", birth: "flag", values: ["flag", "credit"] },
+  /* operator-panel D1 (identity round, 2026-09-02): where a suspended
+     business writes to. Unset = the screen shows no channel, and says
+     so to nobody — set them before the first suspension. */
+  support_whatsapp: { type: "phone", birth: null },
+  support_email: { type: "text", birth: null, min: 5, max: 120 },
 } as const satisfies Record<string, Def>;
 
 export type SettingKey = keyof typeof SETTINGS;
@@ -65,6 +70,11 @@ export function validateSetting(
       return typeof raw === "string" && (BANKS as readonly string[]).includes(raw)
         ? { ok: true, value: raw }
         : { ok: false };
+    case "phone": {
+      /* Digits only, country code included (wa.me wants it that way) */
+      const v = typeof raw === "string" ? raw.replace(/\D/g, "") : "";
+      return v.length >= 10 && v.length <= 15 ? { ok: true, value: v } : { ok: false };
+    }
     case "text": {
       const v = typeof raw === "string" ? raw.trim() : "";
       return v.length >= def.min && v.length <= def.max ? { ok: true, value: v } : { ok: false };

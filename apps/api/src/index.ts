@@ -15,6 +15,7 @@ import { paymentRequestsRoute } from "./routes/payment-requests";
 import { integrationsRoute } from "./routes/integrations";
 import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
+import { supportRoute } from "./routes/support";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -47,6 +48,7 @@ app.route("/businesses", businessesRoute);
 app.route("/credit", creditRoute);
 app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
+app.route("/support", supportRoute);
 
 /* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {

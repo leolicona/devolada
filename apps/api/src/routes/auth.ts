@@ -14,6 +14,7 @@ import {
 } from "../db/schema";
 import { makeAuth } from "../auth/better";
 import { requireSession } from "../auth/middleware";
+import { rateLimitRoute } from "../auth/rate-limit";
 import { creditSummary } from "../credit";
 
 /* Auth routes (better-auth.spec.md D6): our thin envelope routes first,
@@ -53,7 +54,10 @@ const signupInput = z.object({
   password: z.string().min(8),
 });
 
-auth.post("/business/signup", zValidator("json", signupInput), async (c) => {
+/* D15: our own door, our own tope — Better Auth's limiter never sees a
+   Hono route. Five accounts a minute per address is plenty for a person
+   and nothing for a script. */
+auth.post("/business/signup", rateLimitRoute("business-signup", { window: 60, max: 5 }), zValidator("json", signupInput), async (c) => {
   const { name, email, password } = c.req.valid("json");
   const db = drizzle(c.env.DB);
 
@@ -71,6 +75,15 @@ auth.post("/business/signup", zValidator("json", signupInput), async (c) => {
     body: { name, email, password },
     returnHeaders: true,
   });
+
+  /* The código goes out from here, not from the sign-up hook (D13/D14):
+     best-effort by construction — the OTP hook never throws, and neither
+     may this. */
+  try {
+    await ba.api.sendVerificationOTP({ body: { email, type: "email-verification" } });
+  } catch (e) {
+    console.error("signup verification code failed", e);
+  }
 
   forwardCookies(headers, c);
   return c.json(

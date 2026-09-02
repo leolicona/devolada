@@ -32,6 +32,7 @@ export const businessActor = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   wisphubConfigured: true,
+  speiConfigured: true,
   role: "owner",
   orgId: "org_business-1",
   userId: "user-1",

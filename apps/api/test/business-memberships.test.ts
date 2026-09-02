@@ -53,12 +53,15 @@ describe("US-B01: a business is born with the minimum, in one call", () => {
     expect(res.status).toBe(400);
   });
 
-  it("scenario 3: a forged request without a CLABE creates nothing (the minimum is the minimum)", async () => {
+  it("scenario 3 (rewritten 2026-09-02, D5): the name alone births the business, without a channel; a CLABE without its bank is refused", async () => {
     await seedBusiness();
-    const { speiClabe: _omit, ...withoutClabe } = MINIMUM;
-    const res = await post("demo@devolada.app", "/businesses", withoutClabe);
-    expect(res.status).toBe(400);
-    expect(await drizzle(env.DB).select().from(businesses)).toHaveLength(1);
+    const res = await post("demo@devolada.app", "/businesses", { name: MINIMUM.name });
+    expect(res.status).toBe(201);
+    expect((await res.json()).data).toMatchObject({ type: "business", role: "owner", speiConfigured: false });
+    expect(await drizzle(env.DB).select().from(businesses)).toHaveLength(2);
+
+    const { speiBank: _omit, ...clabeAlone } = MINIMUM;
+    expect((await post("demo@devolada.app", "/businesses", clabeAlone)).status).toBe(400);
   });
 
   it("creates the business with its auth twin, the caller as owner, and makes it active", async () => {

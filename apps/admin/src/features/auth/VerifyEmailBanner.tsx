@@ -9,7 +9,7 @@ import { sendVerificationCode, verifyEmailCode } from "./session";
 
 /* Verification banner (better-auth.spec.md UI contract): the código is
    typed right here, where it was asked — never a link (D4). Verification
-   gates store registration, not the session. */
+   gates inviting members (D13), never the session. */
 export function VerifyEmailBanner({ email, className }: { email: string; className?: string }) {
   const queryClient = useQueryClient();
   const [code, setCode] = useState("");
@@ -37,7 +37,7 @@ export function VerifyEmailBanner({ email, className }: { email: string; classNa
     <Alert variant="warning" className={`space-y-3 ${className ?? ""}`}>
       <span className="flex items-center gap-2">
         <MailWarning className="size-4 shrink-0" aria-hidden />
-        Confirma tu correo para operar: escribe el código que enviamos a {email}.
+        Confirma tu correo para invitar a tu equipo: escribe el código que enviamos a {email}.
       </span>
       <form onSubmit={confirm} className="flex flex-wrap items-end gap-3" noValidate>
         <div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HttpResponse } from "msw";
+import { http, HttpResponse } from "msw";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { settingsResponse } from "@devolada/api/settings-schema";
@@ -44,46 +44,31 @@ const members = {
   grantable: ["owner", "admin", "operator", "viewer"],
 };
 
-describe("US-B01: the wizard births the business in one call, with the bank picked from the CLABE", () => {
-  it("scenario 1 (UI): name → CLABE pre-selects the bank → one POST → share a link", async () => {
+describe("US-B01: the wizard births the business with its name alone (D5, 2026-09-02)", () => {
+  it("scenario 1 (UI): name → one POST → the CLABE waits in Configuración", async () => {
     const posted: unknown[] = [];
     server.use(
       handlers.getSession(() => HttpResponse.json({ user: sessionUser })),
       handlers.createBusiness((body) => {
         posted.push(body);
-        return ok({ ...asRole("owner"), name: "WifiPlus Norte" }, 201);
+        return ok({ ...asRole("owner"), name: "WifiPlus Norte", speiConfigured: false }, 201);
       }),
     );
     renderApp("/nuevo-negocio");
 
     await userEvent.type(await screen.findByLabelText("Nombre del negocio"), "WifiPlus Norte");
-    await userEvent.click(screen.getByRole("button", { name: /continuar/i }));
-
-    /* 646 = STP: the picker is seeded from the prefix, never typed (D16) */
-    await userEvent.type(await screen.findByLabelText("CLABE"), "646180157000000004");
-    expect(screen.getByRole("combobox", { name: "Banco" })).toHaveTextContent("STP");
-
-    await userEvent.type(screen.getByLabelText(/nombre del beneficiario/i), "WifiPlus SA de CV");
     await userEvent.click(screen.getByRole("button", { name: /crear negocio/i }));
 
-    expect(await screen.findByRole("button", { name: /comparte un link de pago/i })).toBeInTheDocument();
-    expect(posted).toEqual([
-      {
-        name: "WifiPlus Norte",
-        speiClabe: "646180157000000004",
-        speiBank: "STP",
-        speiBeneficiaryName: "WifiPlus SA de CV",
-      },
-    ]);
+    expect(await screen.findByRole("heading", { name: /tu negocio está listo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /configurar mi clabe/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText("CLABE")).not.toBeInTheDocument();
+    expect(posted).toEqual([{ name: "WifiPlus Norte" }]);
   });
 
-  it("the CLABE gate holds: no bank, no button", async () => {
+  it("the name gate holds: under two letters, no button", async () => {
     server.use(handlers.getSession(() => HttpResponse.json({ user: sessionUser })));
     renderApp("/nuevo-negocio");
-    await userEvent.type(await screen.findByLabelText("Nombre del negocio"), "WifiPlus");
-    await userEvent.click(screen.getByRole("button", { name: /continuar/i }));
-    /* An unknown prefix pre-selects nothing; 18 digits alone do not unlock */
-    await userEvent.type(await screen.findByLabelText("CLABE"), "999180157000000004");
+    await userEvent.type(await screen.findByLabelText("Nombre del negocio"), "W");
     expect(screen.getByRole("button", { name: /crear negocio/i })).toBeDisabled();
   });
 
@@ -241,69 +226,107 @@ describe("US-B03: roles hide, never tease", () => {
   });
 });
 
-describe("D8: the invitation link", () => {
-  it("an invitee with a session accepts and lands in the business", async () => {
+const previewOf = (over: Record<string, unknown> = {}) => ({
+  status: "pending",
+  businessName: "WifiPlus",
+  role: "operator",
+  email: "ana@wifiplus.mx",
+  hasAccount: false,
+  ...over,
+});
+const emptyFeed = () => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } });
+
+describe("D8 + better-auth D14: the invitation page decides for the invitee", () => {
+  it("signed in with the invited address: accepts, activates the business and lands inside", async () => {
     const accepted: unknown[] = [];
+    const activated: unknown[] = [];
     server.use(
       handlers.getSession(() => HttpResponse.json({ user: sessionUser })),
-      handlers.acceptInvitation((body) => {
-        accepted.push(body);
-        return baOk();
+      handlers.invitationPreview(() => ok(previewOf({ email: sessionUser.email, hasAccount: true }))),
+      http.post("/auth/organization/accept-invitation", async ({ request }) => {
+        accepted.push(await request.json());
+        return HttpResponse.json({ invitation: { organizationId: "org_wifiplus" } });
+      }),
+      http.post("/auth/organization/set-active", async ({ request }) => {
+        activated.push(await request.json());
+        return HttpResponse.json({});
       }),
       handlers.session(() => ok(asRole("viewer"))),
-      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+      handlers.feed(emptyFeed),
     );
     const router = renderApp("/invitaciones/inv-1");
     await screen.findByRole("heading", { name: "Pagos" });
     expect(accepted).toEqual([{ invitationId: "inv-1" }]);
+    expect(activated).toEqual([{ organizationId: "org_wifiplus" }]);
     expect(router.state.location.pathname).toBe("/payments");
   });
 
-  it("without a session it asks to sign in first — and both doors lead back here (D12)", async () => {
-    server.use(handlers.getSession(() => HttpResponse.json(null)));
-    renderApp("/invitaciones/inv-1");
-    expect(await screen.findByRole("heading", { name: /te invitaron a un negocio/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^entrar$/i })).toBeInTheDocument();
-    for (const name of [/^entrar$/i, /crear cuenta/i]) {
-      const link = screen.getByRole("button", { name }).closest("a");
-      expect(link).toHaveAttribute("href", expect.stringContaining("next=%2Finvitaciones%2Finv-1"));
-    }
+  it("no account for the invited address: one form — fixed email, name, new password — creates and enters", async () => {
+    const born: unknown[] = [];
+    let signedIn = false;
+    server.use(
+      handlers.getSession(() => HttpResponse.json(signedIn ? { user: { ...sessionUser, email: "ana@wifiplus.mx" } } : null)),
+      handlers.invitationPreview(() => ok(previewOf())),
+      handlers.acceptInvitationNew((id, body) => {
+        born.push([id, body]);
+        signedIn = true;
+        return ok(asRole("operator"), 201);
+      }),
+      handlers.session(() => (signedIn ? ok(asRole("operator")) : fail("AUTHENTICATION_ERROR", 401))),
+      handlers.feed(emptyFeed),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+
+    expect(await screen.findByRole("heading", { name: /te invitaron a wifiplus/i })).toBeInTheDocument();
+    expect(screen.getByText(/como operador\. crea tu contraseña/i)).toBeInTheDocument();
+    const email = screen.getByLabelText("Correo");
+    expect(email).toHaveValue("ana@wifiplus.mx");
+    expect(email).toHaveAttribute("readonly");
+    expect(screen.queryByRole("button", { name: /^entrar$/i })).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Tu nombre"), "Ana Torres");
+    await userEvent.type(screen.getByLabelText(/crea tu contraseña/i), "devolada123");
+    await userEvent.click(screen.getByRole("button", { name: /crear cuenta y entrar/i }));
+
+    await screen.findByRole("heading", { name: "Pagos" });
+    expect(born).toEqual([["inv-1", { name: "Ana Torres", password: "devolada123" }]]);
+    expect(router.state.location.pathname).toBe("/payments");
   });
 
-  it("an invitee without an account creates it and is brought back to accept — never to the wizard (D12)", async () => {
+  it("the invited address has an account: the password alone signs in and accepts", async () => {
     let signedIn = false;
     const accepted: unknown[] = [];
     server.use(
-      handlers.getSession(() => HttpResponse.json(signedIn ? { user: sessionUser } : null)),
-      handlers.signup(() => {
+      handlers.getSession(() => HttpResponse.json(signedIn ? { user: { ...sessionUser, email: "ana@wifiplus.mx" } } : null)),
+      handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
+      handlers.login(() => {
         signedIn = true;
-        return ok({ type: "user", id: "user-1", name: "Ana", emailVerified: false }, 201);
-      }),
-      handlers.acceptInvitation((body) => {
-        accepted.push(body);
         return baOk();
       }),
-      handlers.session(() => ok(asRole("viewer"))),
-      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+      http.post("/auth/organization/accept-invitation", async ({ request }) => {
+        accepted.push(await request.json());
+        return HttpResponse.json({ invitation: { organizationId: "org_wifiplus" } });
+      }),
+      http.post("/auth/organization/set-active", () => HttpResponse.json({})),
+      handlers.session(() => (signedIn ? ok(asRole("operator")) : fail("AUTHENTICATION_ERROR", 401))),
+      handlers.feed(emptyFeed),
     );
-    const router = renderApp("/invitaciones/inv-1");
+    renderApp("/invitaciones/inv-1");
 
-    await userEvent.click(await screen.findByRole("button", { name: /crear cuenta/i }));
-    await userEvent.type(await screen.findByLabelText("Tu nombre"), "Ana");
-    await userEvent.type(screen.getByLabelText("Correo"), "ana@wifiplus.mx");
+    expect(await screen.findByText(/como operador\. entra con tu contraseña/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tu nombre")).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
-    await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     await screen.findByRole("heading", { name: "Pagos" });
     expect(accepted).toEqual([{ invitationId: "inv-1" }]);
-    expect(router.state.location.pathname).toBe("/payments");
   });
 
   it("signed in with another email: the screen says so and offers to switch", async () => {
     let loggedOut = false;
     server.use(
       handlers.getSession(() => HttpResponse.json(loggedOut ? null : { user: sessionUser })),
-      handlers.acceptInvitation(() => baFail("YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION", 403)),
+      handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
       handlers.logout(() => {
         loggedOut = true;
         return baOk();
@@ -321,12 +344,16 @@ describe("D8: the invitation link", () => {
     expect(router.state.location.search).toEqual({ next: "/invitaciones/inv-1" });
   });
 
-  it("an unknown or spent invitation keeps the generic copy", async () => {
+  it("expired and gone invitations are named for what they are", async () => {
     server.use(
-      handlers.getSession(() => HttpResponse.json({ user: sessionUser })),
-      handlers.acceptInvitation(() => baFail("INVITATION_NOT_FOUND", 400)),
+      handlers.getSession(() => HttpResponse.json(null)),
+      handlers.invitationPreview((id) => ok(id === "old" ? previewOf({ status: "expired" }) : previewOf({ status: "gone", businessName: null, role: null, email: null }))),
     );
-    renderApp("/invitaciones/inv-1");
-    expect(await screen.findByText(/no es válida o ya venció/i)).toBeInTheDocument();
+    renderApp("/invitaciones/old");
+    expect(await screen.findByText(/esta invitación venció/i)).toBeInTheDocument();
+    expect(screen.getByText(/48 horas/i)).toBeInTheDocument();
+
+    renderApp("/invitaciones/nope");
+    expect(await screen.findByRole("heading", { name: /ya no existe/i })).toBeInTheDocument();
   });
 });

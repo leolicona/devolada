@@ -217,11 +217,11 @@ const shots: Shot[] = [
     ready: (page) => expect(page.getByText("Red Norte Internet")).toBeVisible({ timeout: 15_000 }),
   },
   {
-    slug: "verify-banner",
-    path: "/payments",
+    /* better-auth D16: the código screen between the account and its session */
+    slug: "verify-email",
+    path: "/verify-email?email=leo%40wifiplus.mx",
     widths: [1280, 375],
-    arrange: (page) => ok(page, "**/auth/me", { ...businessActor, emailVerified: false }),
-    ready: (page) => expect(page.getByText(/confirma tu correo/i)).toBeVisible({ timeout: 15_000 }),
+    ready: heading("Confirma tu correo"),
   },
   {
     slug: "team",

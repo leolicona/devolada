@@ -61,8 +61,9 @@ export async function findActor(
     timezone: business.timezone,
     timeFormat: business.timeFormat,
     /* integrations-hub D2: "configured" means the integration row holds
-       a key */
-    wisphubConfigured: Boolean(joined.integration?.apiKey),
+       a key. D10: the shell reads it as "has an integration", never as
+       "has WispHub" — an ISP is one kind of business. */
+    integrationConfigured: Boolean(joined.integration?.apiKey),
     speiConfigured: Boolean(business.speiClabe) && speiBankIsKnown(business),
     observing: Boolean(joined.integration?.apiKey) && !joined.integration?.actionsEnabled,
     businesses: memberships.map((m) => ({
@@ -95,6 +96,15 @@ export const requireSession = createMiddleware<{ Bindings: Bindings; Variables: 
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) {
       return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+    }
+
+    /* better-auth D16: an unverified user has no session, whatever the
+       cookie says — a row from before the gate, or one seeded by hand,
+       is revoked here and the person goes back through the código. */
+    if (!session.user.emailVerified) {
+      const db = drizzle(c.env.DB);
+      await db.delete(sessionTable).where(eq(sessionTable.id, session.session.id));
+      return c.json({ success: false, error: { code: "EMAIL_NOT_VERIFIED" } }, 403);
     }
 
     const active = (session.session as { activeOrganizationId?: string | null })

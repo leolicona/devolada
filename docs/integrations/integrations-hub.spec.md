@@ -181,6 +181,22 @@ per business (D10); no outgoing webhooks in v1 (D17).
   (its own bank account — money, not integration), the reconciliation
   policy, display, Saldo y recargas, Usuarios, passkey.
 
+- **D10 — The shell's banner names no provider (owner, 2026-09-02).**
+  "Falta tu llave de WispHub. Sin ella no podemos reconectar a los
+  clientes" assumed the ISP on every business; the pivot says an ISP is
+  one kind of business and integrations are chosen. The actor's flag is
+  `integrationConfigured` (was `wisphubConfigured`; settings D7), read as
+  "has an integration with a key", whatever the provider; the banner says
+  "Conecta el sistema con el que cobras. Sin una integración no hay
+  Cobros que validar" and its button, "Ver integraciones", opens the
+  catalog (D1) — not a provider's detail. Provider words stay where the
+  provider is: the WispHub detail and the per-payment reasons
+  (`WISPHUB_*`), which only ever fire for a WispHub row. **Said in the
+  open**: pivot D2 still ships one source of Cobros, so a business of
+  another trade can register, add its CLABE and find nothing to collect;
+  the banner is right about the fact and now right about the words.
+  Whether manual Cobros move up is a pivot decision, not this one.
+
 ## Schema
 
 - `integrations`: id, `business_id` (unique, FK), `provider`
@@ -296,6 +312,9 @@ per business (D10); no outgoing webhooks in v1 (D17).
       charge-feed suite since the rename).
 - [ ] provisional-release D10 amendment note landed (same PR as this
       spec); pivot Open item 1 marked executed.
+- [x] D10 (2026-09-02): the shell banner provider-agnostic, pointing at
+      the catalog; `integrationConfigured` on the actor
+      (`apps/admin/test/shell.test.tsx`)
 - [x] Glossary: Modo observación row (#143) and the Ejecutar ahora row
       (hub-UI PR).
 - [x] Light + dark, contrast-lint (e2e page: the WispHub detail), axe

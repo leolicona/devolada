@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
   HandCoins,
-  KeyRound,
   Landmark,
   LogOut,
   Mail,
@@ -20,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { roleCan } from "@devolada/api/role-matrix";
 import { logout, useSession } from "../auth/session";
 import { api } from "@/lib/api";
-import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
 import { SignOutLink } from "../auth/SignOutLink";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
@@ -230,9 +228,6 @@ export function Shell() {
           {actor.observing && <ObservationChip />}
         </header>
         <CreditBanner credit={actor.credit} />
-        {/* D5: unverified ISPs see a persistent banner; the código is
-            typed right here (better-auth.spec.md D4) */}
-        {!actor.emailVerified && <VerifyEmailBanner email={actor.email} className="m-4 lg:mx-8 lg:mt-6" />}
         {/* business-and-memberships D5 (2026-09-02): born without a CLABE;
             the banner is the wizard's missing step, the owner's to close */}
         {!actor.speiConfigured && (
@@ -249,16 +244,17 @@ export function Shell() {
           </Alert>
         )}
         {/* Settings D8: a banner, not a wall — the admin still works
-            without a key, but nothing reconnects until it is there.
-            The key moved to Integraciones with the hub (BUG-013). */}
-        {!actor.wisphubConfigured && (
+            without an integration, but nothing is collected until one is
+            there. integrations-hub D10: the shell names no provider — an
+            ISP is one kind of business — and points at the catalog. */}
+        {!actor.integrationConfigured && (
           <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
             <span className="flex items-center gap-2">
-              <KeyRound className="size-4 shrink-0" aria-hidden />
-              Falta tu llave de WispHub. Sin ella no podemos reconectar a los clientes.
+              <Plug className="size-4 shrink-0" aria-hidden />
+              Conecta el sistema con el que cobras. Sin una integración no hay Cobros que validar.
             </span>
-            <Link to="/integrations/wisphub" className="block">
-              <Button variant="outline">Configurar</Button>
+            <Link to="/integrations" className="block">
+              <Button variant="outline">Ver integraciones</Button>
             </Link>
           </Alert>
         )}

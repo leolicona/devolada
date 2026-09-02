@@ -134,6 +134,7 @@ Had it failed, this spec would not exist.
   `POST /auth/business/signup` is a Hono route, outside the limiter — it
   calls Better Auth server-side, which skips the check (open item 6).
 - **D13 — Verification gates one act: inviting (owner, 2026-09-02).**
+  *Superseded the same day by D16: the gate moved to the session.*
   Rule 2's old gate left with the stores and the banner kept promising
   "para operar". Now the only door that reads `emailVerified` is
   `POST /businesses/members` (and the resend), answering 403
@@ -168,6 +169,31 @@ Had it failed, this spec would not exist.
   prefix — same off switch (`AUTH_RATE_LIMIT`), same headers.
   `business/signup` 5 per 60 s, `invitations/:id/preview` 30 per 60 s,
   `invitations/:id/accept-new` 5 per 60 s.
+- **D16 — Verification gates the session (owner, 2026-09-02; supersedes
+  D13).** The account the person is creating will hold a CLABE and be
+  recovered through its email: a mistyped address made a business nobody
+  could reach and nobody could recover. So the código is the door, not a
+  banner: `POST /auth/business/signup` births the user **without a
+  session**; Better Auth's `requireEmailVerification` makes `sign-in/email`
+  answer 403 `EMAIL_NOT_VERIFIED` until the flag is up; and
+  `email-otp/verify-email` — `autoSignInAfterVerification`, pinned
+  against 1.6.29's dist — creates the session itself. The middleware is
+  the belt: a session whose user is unverified (a row from before the
+  gate, or seeded by hand) is revoked with the same code. Three
+  consequences, all built: (1) an **unverified account is not a taken
+  email** — a fresh signup with the same address replaces it, password
+  and pending código included, so a typo never locks its owner out; a
+  verified account stays taken for good. (2) Login with the right
+  password and an unproven address sends a fresh código and lands on the
+  code screen; the code screen offers "Reenviar" and "Usar otro correo".
+  (3) D13's machinery leaves: the shell banner, the Usuarios notice and
+  the invite-side check are gone — nobody unverified holds a session, so
+  every door is the same door. The invitee of D14 is untouched: born
+  verified, signed in by the accept route right after the flag.
+  **Rejected**: keeping D13's partial gate (it needed three pieces of UI
+  to say what one screen says, and still let a wrong address hold a
+  CLABE); a hard wall when the código email fails (the screen offers the
+  resend — the provider's outage is a wait, not a lockout).
 - **D12 — Login and signup remember where you were going.** The shell's
   guard sends a session-less visit to `/login?next=<path>`; the
   invitation page sends its two doors (`Entrar`, `Crear cuenta`) to
@@ -188,8 +214,8 @@ Ours (envelope, Zod at the edge):
 
 | Route | Input | Success | Failures |
 |-------|-------|---------|----------|
-| `POST /auth/business/signup` | `{name: ≥2, email, password: ≥8}` | 201 `{type:"user", id, name, emailVerified:false}` + session; code email best-effort. Births the user only — the business is born in the wizard (business-and-memberships D5) | 409 `EMAIL_TAKEN` · 400 |
-| `GET /auth/me` | session | business actor envelope (business-and-memberships D4) | 401 / 403 `ACCOUNT_SUSPENDED` · `NO_BUSINESS` · `NO_ACTIVE_BUSINESS` · `MEMBERSHIP_REVOKED` |
+| `POST /auth/business/signup` | `{name: ≥2, email, password: ≥8}` | 201 `{type:"user", id, name, emailVerified:false}`, **no session** (D16: `verify-email` opens it); code email best-effort. Births the user only — the business is born in the wizard (business-and-memberships D5). An unverified account with the same email is replaced | 409 `EMAIL_TAKEN` (verified accounts only) · 400 · 429 (D15) |
+| `GET /auth/me` | session | business actor envelope (business-and-memberships D4) | 401 / 403 `EMAIL_NOT_VERIFIED` (D16, session revoked) · `ACCOUNT_SUSPENDED` · `NO_BUSINESS` · `NO_ACTIVE_BUSINESS` · `MEMBERSHIP_REVOKED` |
 | `GET /businesses/invitations/:id/preview` | none (D14) | `{status: pending\|expired\|gone, businessName, role, email, hasAccount}` | 429 (D15) |
 | `POST /businesses/invitations/:id/accept-new` | none (D14) | `{name: ≥2, password: ≥8}` → 201 actor + session; the user is born verified | 404 `INVITATION_NOT_FOUND` · 409 `EMAIL_TAKEN` · 400 · 429 |
 | `GET /support` | none | `{whatsapp, email}` from `platform_settings` (operator-panel D1) — the suspended screen's channel | — |
@@ -202,7 +228,8 @@ store network. Member invitations ride the organization plugin
 Better Auth's (exempt from the envelope, via its client — endpoint names
 pinned against `better-auth@1.6.29`'s dist, not its guide): `sign-in/email`,
 `email-otp/send-verification-otp` + `email-otp/verify-email` (registration
-proof), `email-otp/request-password-reset` + `email-otp/reset-password`
+proof — and the session's birth, D16; `sign-in/email` answers 403
+`EMAIL_NOT_VERIFIED` before it), `email-otp/request-password-reset` + `email-otp/reset-password`
 (recovery), `passkey/*` (enrol + sign-in), `sign-out`, `get-session`,
 `organization/*` (list, set-active, accept-invitation — business spec).
 The rate limiter in front of all of them is D11's.
@@ -210,9 +237,10 @@ The rate limiter in front of all of them is D11's.
 ## Business rules
 
 1. One Better Auth user per actor; `userId` unique in `isps` and `stores`.
-2. Typing the correct code flips Better Auth's own `emailVerified`, and
-   the flag gates exactly one act: inviting members (D13). A user born
-   through an invitation is verified at birth (D14).
+2. Typing the correct code flips Better Auth's own `emailVerified` and
+   opens the session; without the flag there is no session at all —
+   sign-in refuses, the middleware revokes (D16). A user born through an
+   invitation is verified at birth (D14).
 3. Store daily login is phone + password (US-S01 unchanged); the email is
    for registration proof and recovery only.
 4. Status is checked in the DB on every authenticated request (US-S03).
@@ -235,10 +263,19 @@ then `/auth/me`), never by listing names.
 ## UI Contract
 
 - **Admin**: `/login` (email + password + passkey button), `/signup`
-  unchanged in shape; the "Confirma tu correo" banner gains a **code input**
-  instead of pointing at an emailed link. `/recover` asks for the email,
-  then code + new password on one screen. Passkey enrolment offer after
-  login.
+  unchanged in shape; `/recover` asks for the email, then code + new
+  password on one screen. Passkey enrolment offer after login. *(The
+  "Confirma tu correo" banner of the first cut left with D16.)*
+- **Admin, `/verify-email` (D16)**: the código screen — title "Confirma tu
+  correo", the address named ("Escribe el código de 6 dígitos que
+  enviamos a …", from `?email=`; typed when the URL has none), a six-digit
+  input, "Confirmar" (waits for six digits), "Reenviar código" that
+  confirms ("Código reenviado"), "Usar otro correo" (→ `/signup`: the
+  unverified account is replaced) and "Volver a iniciar sesión". Signup
+  lands here; login with an unverified address lands here after sending a
+  fresh código; the código lands on the wizard (no business yet) or on
+  `next`. A wrong código: "El código no es válido o ya venció. Reenvíalo e
+  intenta otra vez."
 - **Admin, identity round (2026-09-02)**: `/login` and `/signup` honour
   `next` (D12). Signup names each problem under its field before the
   request leaves (name ≥ 2, email shape, password ≥ 8 — the API's own
@@ -266,8 +303,9 @@ then `/auth/me`), never by listing names.
 
 ## Scenarios
 
-1. ISP signup → 201 + session; the code arrives through our hook; typing it
-   flips `emailVerified`; `isps.userId` linked (US-S04)
+1. ISP signup → 201 and **no session**; the code arrives through our hook;
+   sign-in before it → 403 `EMAIL_NOT_VERIFIED`; typing it flips
+   `emailVerified` and opens the session; the wizard follows (US-S04, D16)
 2. Taken email on signup → 409 `EMAIL_TAKEN`
 3. Store accepts invitation with email + password → active, linked, signed
    in **even when the code email fails** (D8); the code verifies after
@@ -293,13 +331,19 @@ then `/auth/me`), never by listing names.
     on the feed (D12)
 12. Signed in with another email than the invited one, the invitation
     page says so and offers to switch (D14)
-13. An unverified owner inviting → 403 `EMAIL_NOT_VERIFIED`; settings and
-    the feed still answer 200 (D13). The signup still stores a código.
+13. *(rewritten with D16)* An unverified user's cookie opens nothing: the
+    first request answers 403 `EMAIL_NOT_VERIFIED` and revokes the row,
+    the next answers 401. The signup still stores a código.
 14. The invitation page: preview names business, role and email; a new
     user is born verified without a código and lands inside as the
     invited role; an address with an account gets the password form; an
     expired invitation answers `expired` and refuses `accept-new` (D14)
 15. The sixth signup from one address in a minute → 429 (D15)
+16. A mistyped, unverified address signs up again → 201, one user row,
+    the new password and a fresh código (the old one dead); a verified
+    address → 409 `EMAIL_TAKEN`. Login with the right password and an
+    unverified address → a fresh código goes out and the code screen takes
+    over; a wrong código is named and the button waits for six digits (D16)
 
 ## Definition of Done
 
@@ -346,10 +390,20 @@ then `/auth/me`), never by listing names.
       table above says what the code exposes (it listed `/auth/isp/signup`
       and a store route for a month after both died)
 
+- [x] D16 (2026-09-02, the same day's second look): the gate moved from
+      inviting to the session — `requireEmailVerification` +
+      `autoSignInAfterVerification`, the middleware belt, the replacing
+      signup, `/verify-email` (`apps/api/test/isp-signup.test.ts`
+      scenarios 1, 8, 16; `sessions.test.ts` and `identity-round.test.ts`
+      scenario 13; `apps/admin/test/shell.test.tsx` for the code screen);
+      D13's banner, notice and invite-side check removed; the journey e2e
+      walks the código first
+
 ## Open items — resolved 2026-09-02
 
 The six questions the identity round left for the owner, and where each
-answer lives now: (1) what verification gates → D13; (2) invitation TTL
+answer lives now: (1) what verification gates → D13, superseded by D16 the
+same day (the session); (2) invitation TTL
 and lifecycle → business-and-memberships D8 (48 h, the owner rejected 7
 days: the invitee is staff with a resend at hand); (3) role change →
 business D12; (4) who lists the team → business D11; (5) the suspended

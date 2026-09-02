@@ -9,8 +9,8 @@ import { app, json, seedBusiness, seedMember, sessionCookieHeader, PASSWORD } fr
 /* The identity round's spec PR (2026-09-02): business-and-memberships
    D5 (born without a CLABE), D8 (48 h, pending list, resend, cancel),
    D11 (every member reads the team), D12 (role change); better-auth
-   D13 (verification gates inviting), D14 (the invitation page decides),
-   D15 (our routes' limiter). US-B01, US-B03, US-S04. */
+   D14 (the invitation page decides), D15 (our routes' limiter), D16
+   (verification gates the session). US-B01, US-B03, US-S04. */
 
 const asUser = async (email: string) => ({ headers: { Cookie: await sessionCookieHeader(email) } });
 const call = async (email: string | null, method: string, path: string, body?: unknown, bindings: unknown = env) => {
@@ -93,14 +93,13 @@ describe("US-B03 / D8: invitations live 48 hours, listed, resent and cancelled b
   });
 });
 
-describe("US-S04 / D13: inviting is the one act that needs a verified email", () => {
-  it("an unverified owner gets EMAIL_NOT_VERIFIED; everything else still works", async () => {
+describe("US-S04 / D16: verification gates the session, so every door is the same door", () => {
+  it("an unverified owner's cookie opens nothing — 403 EMAIL_NOT_VERIFIED, then the row is gone", async () => {
     await seedBusiness({ emailVerified: false });
-    const res = await call("demo@devolada.app", "POST", "/businesses/members", { email: "ana@wifiplus.mx", role: "viewer" });
+    const res = await call("demo@devolada.app", "GET", "/businesses/members");
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("EMAIL_NOT_VERIFIED");
-    expect((await call("demo@devolada.app", "GET", "/businesses/members")).status).toBe(200);
-    expect((await call("demo@devolada.app", "GET", "/settings")).status).toBe(200);
+    expect((await call("demo@devolada.app", "GET", "/settings")).status).toBe(401);
   });
 });
 
@@ -192,7 +191,7 @@ describe("US-S04 / D15: our own doors have a tope too", () => {
     expect(sixth.headers.get("x-retry-after")).toBeTruthy();
   });
 
-  it("the signup still sends its código (D13 moved the send out of the hook)", async () => {
+  it("the signup still sends its código (D16: the route sends it, not the hook)", async () => {
     const res = await (await app()).request(
       "/auth/business/signup",
       json({ name: "Cuenta", email: "nuevo@wifiplus.mx", password: PASSWORD }),

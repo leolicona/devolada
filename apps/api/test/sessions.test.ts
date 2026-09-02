@@ -37,14 +37,14 @@ describe("US-S04: the ISP logs in with credentials", () => {
     expect((await me.json()).data).toMatchObject({ type: "business", emailVerified: true });
   });
 
-  it("the ISP actor from /auth/me includes emailVerified", async () => {
+  it("an unverified user holds no session: the row is revoked and the answer is 403 EMAIL_NOT_VERIFIED (better-auth D16)", async () => {
     await seedBusiness({ emailVerified: false });
-    const res = await (await app()).request(
-      "/auth/me",
-      { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
-      env,
-    );
-    expect((await res.json()).data).toMatchObject({ type: "business", emailVerified: false });
+    const cookie = await sessionCookieHeader("demo@devolada.app");
+    const res = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("EMAIL_NOT_VERIFIED");
+    const again = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
+    expect(again.status).toBe(401);
   });
 
   it("wrong password returns 401 with no session cookie", async () => {

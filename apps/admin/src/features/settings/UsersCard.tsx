@@ -38,7 +38,7 @@ function expiresIn(expiresAt: number): string {
   return `Vence en ${days} días`;
 }
 
-export function UsersCard({ role, selfUserId, emailVerified }: { role: Role; selfUserId: string; emailVerified: boolean }) {
+export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string }) {
   const queryClient = useQueryClient();
   const members = useQuery<MembersResponse, ApiError>({
     queryKey: ["members"],
@@ -210,12 +210,7 @@ export function UsersCard({ role, selfUserId, emailVerified }: { role: Role; sel
             </div>
           )}
 
-          {mayInvite && !emailVerified && (
-            <Alert variant="warning" className="mt-4">
-              Confirma tu correo para invitar a tu equipo. El código está en el aviso de arriba.
-            </Alert>
-          )}
-          {mayInvite && emailVerified && (
+          {mayInvite && (
             <form
               className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end"
               noValidate

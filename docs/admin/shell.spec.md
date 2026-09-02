@@ -20,7 +20,7 @@ debt: []
 - **D2 — Desktop-first shell, bottom menu on mobile.** Sidebar with Cobros · Tiendas · Entregas · Configuración and the account at the foot; under `lg` it collapses to a 4-icon bottom bar. Confirming a cash drop from a phone must stay comfortable (IA rule).
 - **D3 — The guard accepts only ISP actors.** A store session on the admin gets sent to the admin login. Suspended ISP → the same suspended treatment as the PWA.
 - **D4 — The verify page redeems on load.** `/verify?token=` calls the API immediately — the user's job was clicking the link. Success shows a short confirmation and continues into the dashboard.
-- **D5 — Unverified ISPs see a persistent banner.** "Confirma tu correo" with a re-send action, until `emailVerified` is true. The actor now carries `emailVerified` so the shell knows.
+- **D5 — Unverified ISPs see a persistent banner.** "Confirma tu correo" with a re-send action, until `emailVerified` is true. The actor now carries `emailVerified` so the shell knows. *(Retired 2026-09-02: verification gates the session itself and the código screen replaces the banner — better-auth D16.)*
 
 ## Contract (consumes, does not add)
 
@@ -28,7 +28,7 @@ Endpoints from `auth/sessions.spec.md` and `auth/isp-signup.spec.md`. One additi
 
 ## UI Contract
 
-- `/login` (email + password, generic errors) · `/signup` (name, email, password → lands signed-in with the verify banner) · `/verify?token=` (auto-redeem, D4) · `/recover` (always the same confirmation — no existence leak) · `/reset?token=` (new password twice).
+- `/login` (email + password, generic errors) · `/signup` (name, email, password → lands on `/verify-email`; the código opens the session, better-auth D16) · `/verify?token=` (auto-redeem, D4) · `/recover` (always the same confirmation — no existence leak) · `/reset?token=` (new password twice).
 - Shell: four sections as honest placeholders; account block with the ISP email and "Cerrar sesión".
 - Copy in plain es-MX. Light + dark from the tokens.
 
@@ -36,7 +36,7 @@ Endpoints from `auth/sessions.spec.md` and `auth/isp-signup.spec.md`. One additi
 
 1. API: `/auth/me` for an ISP includes `emailVerified` (D5)
 2. UI: login lands on the dashboard shell with the four sections (US-S04)
-3. UI: signup lands signed-in and shows the verify banner; the banner offers re-send (US-S04, D5)
+3. UI: signup lands on the código screen, which offers re-send; the código signs in (US-S04; D5 retired by better-auth D16)
 4. UI: `/verify?token=` redeems on load and confirms (D4)
 5. UI: recover shows the same confirmation for any email (US-S06)
 6. UI: a session-less visit to a section redirects to `/login` (D3)

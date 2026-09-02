@@ -148,14 +148,10 @@ export async function listMembers(c: Ctx) {
 }
 
 /* D3's footnote, enforced here and not by the plugin (spike 5): a granter
-   hands out only roles below their own. D13 (better-auth.spec.md): the
-   one act that uses your identity toward someone else needs a verified
-   email. */
+   hands out only roles below their own. The inviter's email is verified
+   by construction — nobody unverified holds a session (better-auth D16). */
 export async function inviteMember(c: Ctx, body: InviteMemberRequest) {
   const actor = c.get("actor");
-  if (!actor.emailVerified) {
-    return c.json({ success: false, error: { code: "EMAIL_NOT_VERIFIED" } }, 403);
-  }
   if (!grantableRoles(actor.role).includes(body.role)) {
     return c.json({ success: false, error: { code: "FORBIDDEN_FOR_ROLE" } }, 403);
   }
@@ -187,9 +183,6 @@ async function ownedInvitation(c: Ctx, invitationId: string) {
 /* D8: resend = a fresh 48 hours and a fresh email, same id */
 export async function resendInvitation(c: Ctx, invitationId: string) {
   const actor = c.get("actor");
-  if (!actor.emailVerified) {
-    return c.json({ success: false, error: { code: "EMAIL_NOT_VERIFIED" } }, 403);
-  }
   const found = await ownedInvitation(c, invitationId);
   if ("error" in found) {
     return c.json(
@@ -332,18 +325,24 @@ export async function acceptInvitationAsNewUser(c: Ctx, invitationId: string, bo
   if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
 
   const auth = makeAuth(c.env);
-  const { headers, response } = await auth.api.signUpEmail({
+  const { user } = await auth.api.signUpEmail({
     body: { name: body.name, email: row.email, password: body.password },
+  });
+  await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, user.id));
+
+  /* better-auth D16: signUpEmail births no session any more; the sign-in
+     right after the flag is what opens one — the invitee is verified by
+     the invitation, so the gate lets them through. */
+  const { headers } = await auth.api.signInEmail({
+    body: { email: row.email, password: body.password },
     returnHeaders: true,
   });
-  await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, response.user.id));
-
   const asNewUser = cookieHeadersFrom(headers);
   await auth.api.acceptInvitation({ headers: asNewUser, body: { invitationId } });
   await auth.api.setActiveOrganization({ headers: asNewUser, body: { organizationId: row.organizationId } });
 
   const cookies = (headers as Headers & { getSetCookie(): string[] }).getSetCookie();
   for (const cookie of cookies) c.header("set-cookie", cookie, { append: true });
-  const actor = await findActor(c.env, { ...response.user, emailVerified: true }, row.organizationId);
+  const actor = await findActor(c.env, { ...user, emailVerified: true }, row.organizationId);
   return c.json({ success: true, data: actor }, 201);
 }

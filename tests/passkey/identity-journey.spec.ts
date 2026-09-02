@@ -1,12 +1,13 @@
 import { expect, test, type Browser } from "@playwright/test";
 
 /* The identity journey, end to end against the real API (wrangler + D1,
-   same harness as the passkey ceremony): signup → the one-step wizard →
-   the CLABE in Configuración → the código → an invitation → the invitee
-   creates a password on the invitation page and lands inside → the
-   owner changes the role, then removes the member → the member's next
-   request is named a revoked membership. business-and-memberships D5,
-   D8, D11, D12; better-auth D13, D14 (US-B01, US-B03, US-S04). */
+   same harness as the passkey ceremony): signup → the código opens the
+   session → the one-step wizard → the CLABE in Configuración → an
+   invitation → the invitee creates a password on the invitation page and
+   lands inside → the owner changes the role, then removes the member →
+   the member's next request is named a revoked membership.
+   business-and-memberships D5, D8, D11, D12; better-auth D14, D16
+   (US-B01, US-B03, US-S04). */
 
 const API = "http://localhost:8794";
 const ADMIN = "http://localhost:5174";
@@ -20,7 +21,7 @@ async function devRead<T>(browser: Browser, path: string): Promise<T> {
   return json.data;
 }
 
-test("US-B01/US-B03: signup, name the business, add the CLABE, verify, invite, accept with a password, change role, remove", async ({ browser }) => {
+test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, accept with a password, change role, remove", async ({ browser }) => {
   const stamp = Date.now().toString(36);
   const owner = `owner-${stamp}@journey.invalid`;
   const invitee = `ana-${stamp}@journey.invalid`;
@@ -34,8 +35,15 @@ test("US-B01/US-B03: signup, name the business, add the CLABE, verify, invite, a
   await ownerPage.getByLabel("Contraseña").fill(PASSWORD);
   await ownerPage.getByRole("button", { name: /crear cuenta/i }).click();
 
+  /* The código is the door (better-auth D16): nothing of the app before it */
+  await expect(ownerPage.getByRole("heading", { name: /confirma tu correo/i })).toBeVisible();
+  await expect(ownerPage.getByText(new RegExp(`enviamos a ${owner}`, "i"))).toBeVisible();
+  const { code } = await devRead<{ code: string }>(browser, `/dev/last-code?email=${encodeURIComponent(owner)}`);
+  expect(code).toMatch(/^\d{6}$/);
+  await ownerPage.getByLabel("Código").fill(code);
+  await ownerPage.getByRole("button", { name: /^confirmar$/i }).click();
+
   await expect(ownerPage.getByRole("heading", { name: /crea tu negocio/i })).toBeVisible();
-  await expect(ownerPage.getByText(/confirma tu correo/i)).toHaveCount(0);
   await ownerPage.getByLabel("Nombre del negocio").fill(`WifiPlus ${stamp}`);
   await ownerPage.getByRole("button", { name: /crear negocio/i }).click();
   await expect(ownerPage.getByRole("heading", { name: /tu negocio está listo/i })).toBeVisible();
@@ -51,16 +59,9 @@ test("US-B01/US-B03: signup, name the business, add the CLABE, verify, invite, a
   await expect(ownerPage.getByRole("heading", { name: "Configuración" })).toBeVisible();
   await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toHaveCount(0);
 
-  /* Verification gates inviting: the notice where the form would be, then the código */
+  /* Invite (verified by construction — the session exists), and the
+     pending list shows the clock */
   const users = ownerPage.getByRole("region", { name: "Usuarios" }).or(ownerPage.locator("#usuarios"));
-  await expect(users.getByText(/confirma tu correo para invitar/i)).toBeVisible();
-  const { code } = await devRead<{ code: string }>(browser, `/dev/last-code?email=${encodeURIComponent(owner)}`);
-  expect(code).toMatch(/^\d{6}$/);
-  await ownerPage.getByLabel("Código").fill(code);
-  await ownerPage.getByRole("button", { name: /^confirmar$/i }).click();
-  await expect(ownerPage.getByText(/confirma tu correo/i)).toHaveCount(0);
-
-  /* Invite, and the pending list shows the clock */
   await users.getByLabel(/invitar por correo/i).fill(invitee);
   await users.getByRole("combobox", { name: "Rol" }).click();
   await ownerPage.getByRole("option", { name: "Operador" }).click();
@@ -81,8 +82,8 @@ test("US-B01/US-B03: signup, name the business, add the CLABE, verify, invite, a
   await inviteePage.getByRole("button", { name: /crear cuenta y entrar/i }).click();
   await expect(inviteePage.getByRole("heading", { name: "Pagos" })).toBeVisible();
   await expect(inviteePage.getByText("Operador").first()).toBeVisible();
-  /* Born verified: no banner for the invitee */
-  await expect(inviteePage.getByText(/confirma tu correo/i)).toHaveCount(0);
+  /* Born verified: no código screen for the invitee */
+  await expect(inviteePage.getByRole("heading", { name: /confirma tu correo/i })).toHaveCount(0);
 
   /* The owner changes the role without re-inviting, then removes */
   await ownerPage.reload();

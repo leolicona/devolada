@@ -228,7 +228,7 @@ PR #124); its IA decisions are inherited, not re-decided.
 | `POST /auth/organization/set-active` (plugin) | member | workspace switch; envelope-exempt like the rest of Better Auth's surface (better-auth D6) |
 | `GET/PATCH /settings` | per D3 matrix | 403 `FORBIDDEN_FOR_ROLE` on area violations |
 | `GET /businesses/members` | any member (D11) | `{members[{…, email\|null}], grantable, pending[]}` — emails and pending only for inviters |
-| `POST /businesses/members` / `PATCH …/:id` / `DELETE …/:id` | owner/admin per D3 | invite (403 `EMAIL_NOT_VERIFIED` unverified, better-auth D13) · change role (D12) · remove |
+| `POST /businesses/members` / `PATCH …/:id` / `DELETE …/:id` | owner/admin per D3 | invite (the inviter is verified by construction, better-auth D16) · change role (D12) · remove |
 | `POST /businesses/invitations/:id/resend` / `DELETE …/:id` | owner/admin per D3, rank rule | D8's lifecycle |
 | `GET /businesses/invitations/:id/preview` / `POST …/accept-new` | none | better-auth D14 |
 | existing `/charges/feed` → `/payments/feed` | member (any role) | **done** — renamed with the table; old path answers 404. The response keeps its `charges` key and `totalCents` alias until charge-feed.spec.md's phase-4 revision |
@@ -247,8 +247,9 @@ PR #124); its IA decisions are inherited, not re-decided.
 - **Usuarios** (US-B03): members list with role labels (Dueño /
   Administrador / Operador / Lector) — a picker for members I could have
   invited (D12); emails only for inviters (D11); pending invitations with
-  Reenviar / Cancelar (D8); invite form, or the verification notice while
-  unverified (better-auth D13); remove with confirm dialog. Role-hidden
+  Reenviar / Cancelar (D8); invite form (no verification notice: nobody
+  unverified holds a session, better-auth D16); remove with confirm
+  dialog. Role-hidden
   rendering everywhere: a control the role cannot use does not render
   (brief law) — asserted in component tests per role.
 - States per the IA: loading / error-with-retry / true-empty / role-hidden.
@@ -364,6 +365,9 @@ untouched with the plugin loaded.
       and `memberships.test.tsx` (scenario 18, the wizard, the invitation
       page). The journey end to end against the real API:
       `tests/passkey/identity-journey.spec.ts`.
+- [x] better-auth D16 (2026-09-02): the Usuarios verification notice and
+      the invite-side `EMAIL_NOT_VERIFIED` removed; the journey e2e types
+      the código before the wizard.
 - [x] **Frontend PR**: wizard (D5, bank pre-selected from the CLABE
       prefix — `direct-payments/clabe.ts`), switcher + chooser (US-B02),
       Usuarios + the invitation page (US-B03, D8), role-hidden rendering

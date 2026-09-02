@@ -31,7 +31,7 @@ export const businessActor = {
   status: "active",
   timezone: "America/Mexico_City",
   timeFormat: "12h",
-  wisphubConfigured: true,
+  integrationConfigured: true,
   speiConfigured: true,
   role: "owner",
   orgId: "org_business-1",

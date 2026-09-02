@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HttpResponse } from "msw";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { baOk, businessActor, fail as failResponse, handlers, ok, server, sessionUser } from "./msw";
+import { baFail, baOk, businessActor, fail as failResponse, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/admin/shell.spec.md scenarios 2–6. */
@@ -27,48 +27,78 @@ describe("US-S04: login lands on the dashboard shell", () => {
   });
 });
 
-describe("US-S04: signup lands on the wizard; the verify banner lives in the shell (D13)", () => {
-  it("after signup the wizard shows no banner — nothing there needs a verified email", async () => {
+describe("US-S04: the código is the door — signup lands on the code screen, the code opens the session (D16)", () => {
+  it("after signup: the code screen names the address; the código signs in and the wizard follows", async () => {
+    let verified: unknown = null;
     server.use(
       handlers.signup(() => ok({ type: "user", id: "user-1", name: "Nuevo", emailVerified: false }, 201)),
+      handlers.verifyEmail(async ({ request }) => {
+        verified = await request.json();
+        return baOk();
+      }),
       handlers.session(() => failResponse("NO_BUSINESS", 403)),
-      handlers.getSession(() => HttpResponse.json({ user: { ...sessionUser, emailVerified: false } })),
+      handlers.getSession(() => HttpResponse.json({ user: sessionUser })),
     );
-    renderApp("/signup");
+    const router = renderApp("/signup");
 
     await userEvent.type(await screen.findByLabelText("Tu nombre"), "Leo");
     await userEvent.type(screen.getByLabelText("Correo"), "nuevo@business.mx");
     await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
     await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
 
+    expect(await screen.findByRole("heading", { name: /confirma tu correo/i })).toBeInTheDocument();
+    expect(screen.getByText(/enviamos a nuevo@business\.mx/i)).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/verify-email");
+    /* Nothing of the app renders before the código: no wizard, no shell */
+    expect(screen.queryByRole("heading", { name: /crea tu negocio/i })).not.toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Código"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+    expect(verified).toEqual({ email: "nuevo@business.mx", otp: "123456" });
     expect(await screen.findByRole("heading", { name: /crea tu negocio/i })).toBeInTheDocument();
-    expect(screen.queryByText(/confirma tu correo/i)).not.toBeInTheDocument();
   });
 
-  it("the shell's banner names what verification gates, confirms the código and re-sends it", async () => {
+  it("the code screen re-sends and confirms it; a wrong código is named and the button waits for six digits", async () => {
     let resent = false;
-    let verified = false;
     server.use(
-      handlers.session(() => ok({ ...businessActor, emailVerified: false })),
-      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
       handlers.sendCode(() => {
         resent = true;
         return baOk();
       }),
-      handlers.verifyEmail(() => {
-        verified = true;
+      handlers.verifyEmail(() => baFail("INVALID_OTP", 400)),
+    );
+    renderApp("/verify-email?email=leo%40wifiplus.mx");
+
+    expect(await screen.findByRole("heading", { name: /confirma tu correo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^confirmar$/i })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /reenviar código/i }));
+    expect(resent).toBe(true);
+    expect(screen.getByRole("button", { name: /código reenviado/i })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Código"), "000000");
+    await userEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
+    expect(await screen.findByText(/el código no es válido o ya venció/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /usar otro correo/i })).toHaveAttribute("href", "/signup");
+  });
+
+  it("login with the right password and an unverified address: a fresh código goes out and the code screen takes over", async () => {
+    let sentTo: unknown = null;
+    server.use(
+      handlers.login(() => baFail("EMAIL_NOT_VERIFIED", 403)),
+      handlers.sendCode(async ({ request }) => {
+        sentTo = await request.json();
         return baOk();
       }),
     );
-    renderApp("/payments");
+    const router = renderApp("/login");
 
-    expect(await screen.findByText(/confirma tu correo para invitar a tu equipo/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /reenviar código/i }));
-    expect(resent).toBe(true);
+    await userEvent.type(await screen.findByLabelText("Correo"), "leo@wifiplus.mx");
+    await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
+    await userEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
-    await userEvent.type(screen.getByLabelText("Código"), "123456");
-    await userEvent.click(screen.getByRole("button", { name: /^confirmar$/i }));
-    expect(verified).toBe(true);
+    expect(await screen.findByRole("heading", { name: /confirma tu correo/i })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/verify-email");
+    expect(sentTo).toEqual({ email: "leo@wifiplus.mx", type: "email-verification" });
   });
 });
 
@@ -166,16 +196,17 @@ describe("D3: the guard sends session-less visits to login", () => {
   });
 });
 
-describe("BUG-013: the WispHub key banner points where the key lives", () => {
-  it("the banner's button goes to /integrations/wisphub, not to Configuración", async () => {
+describe("integrations-hub D10: the shell's banner names no provider and points at the catalog", () => {
+  it("without an integration the banner asks to connect a system; the button goes to /integrations", async () => {
     server.use(
-      handlers.session(() => ok({ ...businessActor, wisphubConfigured: false })),
+      handlers.session(() => ok({ ...businessActor, integrationConfigured: false })),
       handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
     );
     renderApp("/payments");
 
-    expect(await screen.findByText(/falta tu llave de wisphub/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/integrations/wisphub");
+    expect(await screen.findByText(/conecta el sistema con el que cobras/i)).toBeInTheDocument();
+    expect(screen.queryByText(/wisphub/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ver integraciones/i })).toHaveAttribute("href", "/integrations");
   });
 });
 
@@ -187,8 +218,6 @@ describe("US-S04: signup names each problem before the request leaves", () => {
         requests += 1;
         return ok({ type: "user", id: "user-1", name: "Leo", emailVerified: false }, 201);
       }),
-      handlers.session(() => failResponse("NO_BUSINESS", 403)),
-      handlers.getSession(() => HttpResponse.json({ user: { ...sessionUser, emailVerified: false } })),
     );
     renderApp("/signup");
 
@@ -211,7 +240,7 @@ describe("US-S04: signup names each problem before the request leaves", () => {
     await userEvent.type(screen.getByLabelText("Contraseña"), "-pero-larga");
     await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
 
-    expect(await screen.findByRole("heading", { name: /crea tu negocio/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /confirma tu correo/i })).toBeInTheDocument();
     expect(requests).toBe(1);
   });
 });

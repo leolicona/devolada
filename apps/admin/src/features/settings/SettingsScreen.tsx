@@ -475,7 +475,7 @@ export function SettingsScreen() {
           {canSettings && <PolicyCard settings={data} />}
           {canSettings && <DisplayCard settings={data} />}
           {canCredit && <CreditCard />}
-          {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} emailVerified={actor.emailVerified} />}
+          {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}
           <PasskeyCard />
         </div>
       )}

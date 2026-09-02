@@ -38,6 +38,7 @@ export const businessActor = {
   businesses: [{ id: "business-1", orgId: "org_business-1", name: "ISP Demo", role: "owner" }],
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },
+  observing: false,
 };
 
 const at = Date.UTC(2026, 7, 14, 20, 30);
@@ -59,6 +60,7 @@ export const feed = {
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       observedAction: null,
+      dispatchedAction: null,
       customerName: "Janely Guadalupe Reyes",
       storeName: "Abarrotes La Esquina",
       createdAt: at,
@@ -81,6 +83,7 @@ export const feed = {
       carriedBalanceCents: 0,
       serviceFeeCents: 1500,
       observedAction: null,
+      dispatchedAction: null,
       customerName: "Abraham Flores",
       storeName: "Miscelánea Lupita",
       createdAt: at - 3_600_000,
@@ -109,10 +112,28 @@ export const cobros = {
   readAt: at,
 };
 
+export const integrationsHub = {
+  wisphub: {
+    provider: "wisphub",
+    configured: true,
+    keyTail: "1234",
+    actionsEnabled: false,
+    mapping: {
+      exact: "register_and_reconnect",
+      short: "register_and_reconnect",
+      over: "register_and_reconnect",
+    },
+    thresholdPercent: 100,
+    floorCents: 0,
+    provisionalReleaseEnabled: false,
+  },
+};
+
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
   await apiRoute(page, "**/payments/feed*", feed);
   await apiRoute(page, "**/payment-requests", cobros);
+  await apiRoute(page, "**/integrations", integrationsHub);
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

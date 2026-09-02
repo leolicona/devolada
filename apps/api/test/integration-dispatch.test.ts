@@ -202,6 +202,13 @@ describe("US-I02 scenario 3: the mapping decides in the real path", () => {
     expect(captured.accion).toBe(1);
     const [event] = await db().select().from(integrationEvents);
     expect(event).toMatchObject({ class: "exact", action: "register_and_reconnect", status: "acked" });
+
+    /* D7: the feed names `done` by the ledger's action */
+    const feed = await (await app()).request("/payments/feed", asBusiness, env);
+    expect((await feed.json()).data.payments[0]).toMatchObject({
+      actionOutcome: "done",
+      dispatchedAction: "register_and_reconnect",
+    });
   });
 });
 

@@ -13,6 +13,8 @@ export type BusinessActor = {
   timezone: string;
   timeFormat: "12h" | "24h";
   wisphubConfigured: boolean;
+  /* integrations-hub D4: connected with actions off — the shell chip */
+  observing: boolean;
   /* business-and-memberships D4: the membership's role and the switcher's list */
   role: "owner" | "admin" | "operator" | "viewer";
   orgId: string;

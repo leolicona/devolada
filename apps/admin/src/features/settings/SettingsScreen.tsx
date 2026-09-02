@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
 import { Amount, Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
-import type {
-  SettingsPatchRequest,
-  SettingsResponse,
-  WispHubTestResponse,
-} from "@devolada/api/settings-schema";
+import type { SettingsPatchRequest, SettingsResponse } from "@devolada/api/settings-schema";
 import { PasskeyCard } from "../auth/PasskeyCard";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
@@ -71,103 +67,6 @@ function SectionIndex({ entries }: { entries: { href: string; label: string }[] 
         ))}
       </ul>
     </nav>
-  );
-}
-
-/* D1/D2/D3: the key is write-only, tested before it is saved, and a
-   failed test never blocks the save — it only tells the ISP. */
-function WispHubCard({ settings }: { settings: SettingsResponse }) {
-  const save = useSaveSettings();
-  const [key, setKey] = useState("");
-
-  const test = useMutation<WispHubTestResponse, ApiError, string | undefined>({
-    mutationFn: (apiKey) =>
-      api<WispHubTestResponse>("/settings/wisphub/test", {
-        method: "POST",
-        body: JSON.stringify(apiKey ? { apiKey } : {}),
-      }),
-  });
-
-  const result = test.data;
-  const savedTest = save.data?.wisphubTest;
-
-  return (
-    <SectionCard title="Conexión con WispHub" id="wisphub">
-      <p className="text-sm text-muted-foreground">
-        {settings.wisphub.configured ? (
-          <>
-            Llave guardada:{" "}
-            <span className="font-mono text-foreground">••••{settings.wisphub.keyTail}</span>
-          </>
-        ) : (
-          "Sin configurar. Sin la llave no podemos reconectar a los clientes."
-        )}
-      </p>
-
-      <div>
-        <Label htmlFor="wisphub-key">Nueva llave (API Key)</Label>
-        <Input
-          id="wisphub-key"
-          className="mt-1 font-mono"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="01q9K2Rf.M02bG…"
-          autoComplete="off"
-        />
-        <p className="mt-1 text-sm text-ink-soft">
-          La llave nunca se muestra completa después de guardarla.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          disabled={test.isPending}
-          onClick={() => test.mutate(key.trim() || undefined)}
-        >
-          <KeyRound className="size-4" aria-hidden />
-          {test.isPending ? "Probando…" : "Probar conexión"}
-        </Button>
-        <Button
-          disabled={save.isPending || key.trim().length < 8}
-          onClick={() => save.mutate({ wisphubApiKey: key.trim() })}
-        >
-          {save.isPending ? "Guardando…" : "Guardar llave"}
-        </Button>
-      </div>
-
-      {result && (
-        <p
-          role="status"
-          className={`flex items-start gap-2 text-sm font-medium ${result.ok ? "text-success" : "text-error"}`}
-        >
-          {result.ok ? (
-            <>
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
-              Conexión correcta. WispHub respondió con {result.sampleCustomerCount} cliente(s) de
-              prueba.
-            </>
-          ) : (
-            <>
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-              {result.code === "WISPHUB_AUTH_FAILED"
-                ? "WispHub rechazó esta llave. Revísala en tu panel."
-                : result.code === "WISPHUB_NOT_CONFIGURED"
-                  ? "Escribe una llave para probarla."
-                  : "No pudimos hablar con WispHub ahora. Puede ser una falla temporal."}
-            </>
-          )}
-        </p>
-      )}
-
-      {savedTest && !result && (
-        <p role="status" className="text-sm font-medium text-muted-foreground">
-          {savedTest.ok
-            ? "Llave guardada y probada."
-            : "Llave guardada, pero la prueba falló. Puedes volver a probarla."}
-        </p>
-      )}
-    </SectionCard>
   );
 }
 
@@ -363,122 +262,6 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
   );
 }
 
-/* Reconexión con pago incompleto (partial-payment D2/D4, US-D10): one
-   percentage and one floor, both must hold. Like the money card, the
-   screen computes what the numbers mean instead of describing them —
-   this is the arithmetic D3 says the owner has to look at before
-   choosing (the founding case, $499 of $649, is 77%). */
-function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
-  const save = useSaveSettings();
-  const [percent, setPercent] = useState(String(settings.reconnection.thresholdPercent));
-  const [floor, setFloor] = useState(pesos(settings.reconnection.floorCents));
-  const [provisional, setProvisional] = useState(settings.reconnection.provisionalReleaseEnabled);
-
-  const pct = /^\d{1,3}$/.test(percent.trim()) ? Number.parseInt(percent.trim(), 10) : null;
-  const floorCents = parseMoney(floor);
-  const valid = pct !== null && pct <= 100 && floorCents !== null;
-
-  /* The one-line explanation the spec asks for, computed from the values
-     on screen so it is never out of date. */
-  const meaning =
-    !valid
-      ? null
-      : pct === 0 && floorCents === 0
-        ? "Cualquier pago reactiva el servicio."
-        : `El servicio regresa cuando el pago cubre ${
-            pct === 100 ? "todo el adeudo" : `al menos el ${pct}% del adeudo`
-          }${floorCents > 0 ? ` y no es menor a ${formatMoney(floorCents)}` : ""}.`;
-
-  return (
-    <SectionCard title="Reconexión con pago incompleto" id="reconexion">
-      <p className="text-sm text-muted-foreground">
-        Cuando una transferencia no cubre todo el adeudo, estos límites deciden si el servicio se
-        reactiva. El pago se registra siempre.
-      </p>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="reconnection-percent">Porcentaje mínimo del adeudo</Label>
-          <Input
-            id="reconnection-percent"
-            inputMode="numeric"
-            className="mt-1"
-            value={percent}
-            onChange={(e) => setPercent(e.target.value)}
-          />
-          <p className="mt-1 text-sm text-ink-soft">
-            100 significa solo con el pago completo; 0 reactiva con cualquier pago.
-          </p>
-        </div>
-        <div>
-          <Label htmlFor="reconnection-floor">Mínimo en pesos</Label>
-          <Input
-            id="reconnection-floor"
-            prefix="$"
-            inputMode="decimal"
-            className="mt-1"
-            value={floor}
-            onChange={(e) => setFloor(e.target.value)}
-          />
-          <p className="mt-1 text-sm text-ink-soft">
-            Evita que un pago simbólico reactive un adeudo grande. $0.00 lo desactiva.
-          </p>
-        </div>
-      </div>
-
-      <p className="rounded-md border border-border bg-muted px-4 py-3 text-sm">
-        {meaning ? (
-          <span>
-            {meaning}{" "}
-            <span className="text-ink-soft">El cargo por servicio no cuenta para este cálculo.</span>
-          </span>
-        ) : (
-          <span className="font-medium text-error">
-            El porcentaje debe ser un número entero entre 0 y 100, y el mínimo un monto válido.
-          </span>
-        )}
-      </p>
-
-      {/* provisional-release D10 (US-D15): one switch, no dials. The rule
-          is fixed and reasoned in the spec; the threshold and floor above
-          apply to it unchanged, so the ISP keeps ONE reconnection policy. */}
-      <div className="flex items-start justify-between gap-4 rounded-md border border-border px-4 py-3">
-        <div>
-          <Label htmlFor="provisional-release">Proteger el servicio mientras Banxico confirma</Label>
-          <p className="mt-1 text-sm text-ink-soft">
-            Cuando el comprobante trae evidencia de buena fe, el cliente suspendido se reconecta
-            provisionalmente y el cliente al corriente no se corta mientras se valida su
-            transferencia. Si Banxico no la confirma, el corte vuelve a aplicar y ese cliente
-            pierde esta vía rápida por 90 días.
-          </p>
-        </div>
-        {/* The accessible name comes from the Label above via htmlFor —
-            an aria-label here would override that association instead of
-            adding to it */}
-        <Switch id="provisional-release" checked={provisional} onCheckedChange={setProvisional} />
-      </div>
-
-      <Button
-        disabled={!valid || save.isPending}
-        onClick={() =>
-          save.mutate({
-            reconnectionThresholdPercent: pct!,
-            reconnectionFloorCents: floorCents!,
-            provisionalReleaseEnabled: provisional,
-          })
-        }
-      >
-        {save.isPending ? "Guardando…" : "Guardar reconexión"}
-      </Button>
-      {save.isSuccess && !save.isPending && (
-        <p role="status" className="text-sm font-medium text-success">
-          Guardado.
-        </p>
-      )}
-    </SectionCard>
-  );
-}
-
 /* Política de conciliación (payments-and-classes D1/D2, US-R02): the
    tolerance that still reads "exacto" and what a surplus means. When the
    integration absorbs surplus on its own, the effective treatment is
@@ -646,10 +429,8 @@ export function SettingsScreen() {
           entries={[
             ...(canSettings
               ? [
-                  { href: "#wisphub", label: "WispHub" },
                   { href: "#cargo", label: "Cargo por servicio" },
                   { href: "#spei", label: "Pago directo" },
-                  { href: "#reconexion", label: "Reconexión" },
                   { href: "#politica", label: "Política de conciliación" },
                   { href: "#zona", label: "Zona y hora" },
                 ]
@@ -674,10 +455,8 @@ export function SettingsScreen() {
 
       {data && (
         <div className="mt-4 space-y-4 pb-8">
-          {canSettings && <WispHubCard settings={data} />}
           {canSettings && <MoneyCard settings={data} />}
           {canSettings && <SpeiCard settings={data} canEditClabe={canClabe} />}
-          {canSettings && <ReconnectionCard settings={data} />}
           {canSettings && <PolicyCard settings={data} />}
           {canSettings && <DisplayCard settings={data} />}
           {canCredit && <CreditCard />}

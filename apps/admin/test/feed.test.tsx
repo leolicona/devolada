@@ -22,6 +22,7 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   missingCents: 0,
   surplusCents: 0,
   observedAction: null,
+  dispatchedAction: null,
   customerName: "Janely",
   storeName: null,
   createdAt: Date.now(),
@@ -349,5 +350,81 @@ describe("the date filters fold behind 'Fechas'", () => {
     await userEvent.type(screen.getByLabelText("Desde"), "2026-08-01");
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+});
+/* docs/integrations/integrations-hub.spec.md — the hub's face in Pagos. */
+describe("US-I03: the observed row teaches, and Ejecutar ahora dispatches", () => {
+  const observed = charge({
+    id: "ch-obs1",
+    status: "confirmed" as const,
+    actionOutcome: "observation" as const,
+    observedAction: "register_and_reconnect:reconnect",
+    actionDoneAt: null,
+    actionAttempts: 0,
+  });
+
+  it("scenario 4 (UI): badge Observación, the hypothesis line, and the button posts execute-action", async () => {
+    const executed: string[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [observed])),
+      ),
+      handlers.executeAction((id) => {
+        executed.push(id);
+        return ok({ actionOutcome: "done", nextAttemptAt: null });
+      }),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    expect(within(row).getByText("Observación")).toBeInTheDocument();
+
+    await userEvent.click(row);
+    expect(await screen.findByText("Se habría reconectado.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ejecutar ahora" }));
+    await screen.findByRole("button", { name: /janely/i });
+    expect(executed).toEqual(["ch-obs1"]);
+  });
+
+  it("scenario 6: a withheld row offers no Ejecutar ahora — the threshold is the law", async () => {
+    const withheld = charge({
+      id: "ch-w1",
+      status: "partial" as const,
+      actionOutcome: "withheld" as const,
+      reconciliationClass: "short" as const,
+      actionDoneAt: null,
+    });
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [withheld])),
+      ),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    await userEvent.click(row);
+    expect(await screen.findByText(/intentos de reconexión/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ejecutar ahora" })).not.toBeInTheDocument();
+  });
+
+  it("D7: done under register_only wears Registrado, never Reconectado", async () => {
+    const registered = charge({
+      id: "ch-r1",
+      actionOutcome: "done" as const,
+      dispatchedAction: "register_only" as const,
+    });
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [registered])),
+      ),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    expect(within(row).getByText("Registrado")).toBeInTheDocument();
+    expect(within(row).queryByText("Reconectado")).not.toBeInTheDocument();
   });
 });

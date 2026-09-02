@@ -7,21 +7,24 @@ import {
   HandCoins,
   KeyRound,
   LogOut,
+  Plug,
   Settings,
   ShieldCheck,
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { roleCan } from "@devolada/api/role-matrix";
 import { logout, useSession } from "../auth/session";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 import { CreditBanner, CreditChip } from "../credit/CreditChip";
+import { ObservationChip } from "../integrations/ObservationChip";
 
 /* payments-and-classes D6: the feed is Pagos the moment Cobros exists —
    never two words for one thing, never one word for two (IA). */
-const sections = [
+const baseSections = [
   { to: "/payments", label: "Pagos", icon: Banknote, exact: false },
   { to: "/payment-requests", label: "Cobros", icon: HandCoins, exact: false },
   /* "Links", not "Enlaces SPEI": the glossary's word for this is
@@ -29,8 +32,12 @@ const sections = [
      already named — and the two words wrapped onto a second line in the
      bottom bar at 360px while every neighbour stayed on one. */
   { to: "/links", label: "Links", icon: LinkIcon, exact: false },
-  { to: "/settings", label: "Configuración", icon: Settings, exact: false },
 ] as const;
+
+/* integrations-hub D1: the fifth and last section, owner/admin only —
+   the law: hide, never disable. Operators read outcomes in Pagos. */
+const integrationsSection = { to: "/integrations", label: "Integraciones", icon: Plug, exact: false } as const;
+const settingsSection = { to: "/settings", label: "Configuración", icon: Settings, exact: false } as const;
 
 function SuspendedScreen() {
   return (
@@ -49,6 +56,12 @@ function SuspendedScreen() {
 /* The links, in both shapes. */
 function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
   const sidebar = variant === "sidebar";
+  const { data: actor } = useSession();
+  const sections = [
+    ...baseSections,
+    ...(roleCan(actor?.role ?? "viewer", "integrations", "manage") ? [integrationsSection] : []),
+    settingsSection,
+  ];
 
   return (
     <nav
@@ -125,6 +138,7 @@ export function Shell() {
         </div>
         <div className="mb-6 mt-3 px-3">
           <CreditChip credit={actor.credit} />
+          {actor.observing && <ObservationChip />}
         </div>
         <SectionLinks variant="sidebar" />
         {/* operator-panel D3: outside the five sections, only for the operator */}
@@ -156,6 +170,7 @@ export function Shell() {
         <header className="space-y-2 border-b border-border bg-card px-4 py-2 lg:hidden">
           <BusinessSwitcher actor={actor} />
           <CreditChip credit={actor.credit} />
+          {actor.observing && <ObservationChip />}
         </header>
         <CreditBanner credit={actor.credit} />
         {/* D5: unverified ISPs see a persistent banner; the código is

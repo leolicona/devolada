@@ -163,7 +163,9 @@ describe("US-B03: roles reach exactly their areas", () => {
     expect(res.status).toBe(200);
     const { data } = await res.json();
     expect(data.spei.clabe).toBe("••••0004");
-    expect(data.wisphub.keyTail).toBeNull();
+    /* the key tail left Configuración for the hub (integrations-hub D9),
+       whose whole route a viewer cannot even open */
+    expect(data.wisphub).toBeUndefined();
 
     expect((await patch("contador@wifiplus.mx", "/settings", { timeFormat: "24h" })).status).toBe(403);
     expect((await post("contador@wifiplus.mx", "/businesses/members", { email: "x@y.mx", role: "viewer" })).status).toBe(403);

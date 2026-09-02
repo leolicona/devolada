@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, count, desc, eq, gte, inArray, like, lt, lte, or, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, paymentLinks, payments } from "../../db/schema";
+import { businesses, integrationEvents, paymentLinks, payments } from "../../db/schema";
 import { startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { integrationOf } from "../../integrations/store";
@@ -111,6 +111,25 @@ export async function listPaymentFeed(
     .limit(PAGE + 1);
   const page = rows.slice(0, PAGE);
 
+  /* integrations-hub D7: `done` wears its action's word ("Reconectado" /
+     "Registrado"), and the row's truth is the LAST dispatch decision in
+     the ledger — never the mapping of today, which may have moved. */
+  const pageIds = page.map((r) => r.charge.id);
+  const eventRows = pageIds.length
+    ? await db
+        .select({
+          paymentId: integrationEvents.paymentId,
+          action: integrationEvents.action,
+          createdAt: integrationEvents.createdAt,
+        })
+        .from(integrationEvents)
+        .where(inArray(integrationEvents.paymentId, pageIds))
+    : [];
+  const lastAction = new Map<string, "register_and_reconnect" | "register_only">();
+  for (const e of eventRows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
+    lastAction.set(e.paymentId, e.action);
+  }
+
   /* Settings D5: the ISP's timezone decides where its day starts.
      "Today" keeps counting the money that landed: confirmed + partial. */
   const todayStartMs = startOfBusinessDayMs(actor.timezone);
@@ -163,6 +182,7 @@ export async function listPaymentFeed(
               ? receivedCents
               : Math.max(0, receivedCents - askedCents),
           observedAction: charge.observedAction,
+          dispatchedAction: lastAction.get(charge.id) ?? null,
           customerName: charge.customerName ?? linkUsuario,
           storeName: null,
           createdAt: charge.createdAt.getTime(),

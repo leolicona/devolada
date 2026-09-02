@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
+  ClipboardCheck,
   Eye,
   ArrowDownToLine,
   Check,
@@ -67,7 +68,10 @@ export type Status =
   | "classOver"
   /* integrations-hub D4/D7: the gate held the action back; the business
      executes by hand while the ramp measures the oracle. */
-  | "observation";
+  | "observation"
+  /* integrations-hub D7: `done` under register_only — the router was
+     deliberately never asked, so "Reconectado" would be a lie. */
+  | "registered";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -104,6 +108,7 @@ const statuses: Record<
   classShort: { tone: "warning", icon: CircleMinus, label: "Pago parcial" },
   classOver: { tone: "info", icon: CirclePlus, label: "Sobrante" },
   observation: { tone: "info", icon: Eye, label: "Observación" },
+  registered: { tone: "success", icon: ClipboardCheck, label: "Registrado" },
 };
 
 const sizes = {

@@ -40,6 +40,10 @@ export const handlers = {
     http.post("/auth/email-otp/verify-email", ({ request }) => r({ request })),
   sendCode: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
     http.post("/auth/email-otp/send-verification-otp", ({ request }) => r({ request })),
+  /* better-auth D18: the passkey list and its "Quitar" */
+  passkeyList: (r: () => Response) => http.get("/auth/passkey/list-user-passkeys", () => r()),
+  passkeyDelete: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
+    http.post("/auth/passkey/delete-passkey", async ({ request }) => r(await request.json())),
   requestReset: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/email-otp/request-password-reset", () => r()),
   resetPassword: (r: () => ReturnType<typeof baOk | typeof baFail>) =>

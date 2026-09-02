@@ -194,6 +194,26 @@ Had it failed, this spec would not exist.
   to say what one screen says, and still let a wrong address hold a
   CLABE); a hard wall when the código email fails (the screen offers the
   resend — the provider's outage is a wait, not a lockout).
+- **D17 — A new password closes every door the old one opened (owner,
+  2026-09-02).** `revokeSessionsOnPasswordReset: true`: the reset-by-código
+  deletes the user's sessions, so a stolen or forgotten session does not
+  outlive the reset by up to 30 days. The person who reset is signed in
+  again by the recovery page itself (scenario 7). **Rejected**: Better
+  Auth's default (keep them) — recovery is the moment the person says the
+  old credential is compromised.
+- **D18 — Passkeys are listed and removable, and the copy tells the
+  synced truth (owner, 2026-09-02).** The Configuración card lists every
+  credential of the user (`passkey/list-user-passkeys`: name or "Llave de
+  acceso", the enrolment date, "sincronizada con tu llavero" when
+  `backedUp`) with a "Quitar" each (`passkey/delete-passkey`), and says
+  "Ningún dispositivo…" when empty; enrolling refreshes the list, so the
+  card knows what it has. The copy adds: "Si tu llavero de iCloud o de
+  Google sincroniza tus llaves, también servirá en tus otros
+  dispositivos" — "este dispositivo" alone was a half-truth for synced
+  passkeys. List and delete go through plain fetches (`lib/api.ts`), the
+  Better Auth client stays for the WebAuthn ceremonies only. **Rejected**:
+  renaming (`update-passkey`) — nothing asked for it yet; the enrolment
+  offer is still never forced (D7).
 - **D12 — Login and signup remember where you were going.** The shell's
   guard sends a session-less visit to `/login?next=<path>`; the
   invitation page sends its two doors (`Entrar`, `Crear cuenta`) to
@@ -276,6 +296,10 @@ then `/auth/me`), never by listing names.
   fresh código; the código lands on the wizard (no business yet) or on
   `next`. A wrong código: "El código no es válido o ya venció. Reenvíalo e
   intenta otra vez."
+- **Admin, session round (2026-09-02)**: Configuración ends with a
+  **Sesión** card for every role at every width — the email and "Cerrar
+  sesión" (BUG-016; the desktop sidebar keeps its button); the passkey
+  card lists and removes credentials (D18).
 - **Admin, identity round (2026-09-02)**: `/login` and `/signup` honour
   `next` (D12). Signup names each problem under its field before the
   request leaves (name ≥ 2, email shape, password ≥ 8 — the API's own
@@ -344,6 +368,16 @@ then `/auth/me`), never by listing names.
     address → 409 `EMAIL_TAKEN`. Login with the right password and an
     unverified address → a fresh código goes out and the code screen takes
     over; a wrong código is named and the button waits for six digits (D16)
+17. A session row two days old, on its next request → 200, the row's
+    `expiresAt` moves 30 days out **and** the response re-issues the
+    cookie with `Max-Age=2592000`; a row under a day → no cookie (BUG-015,
+    D5's promise made true)
+18. Reset the password by código → the session that was alive before it
+    answers 401 (D17)
+19. The passkey card lists two credentials (one synced), "Quitar" deletes
+    one and the list refreshes; with none it says so and still offers to
+    enrol (D18). Configuración's Sesión card signs a viewer out and lands
+    on login (BUG-016)
 
 ## Definition of Done
 
@@ -398,6 +432,12 @@ then `/auth/me`), never by listing names.
       scenario 13; `apps/admin/test/shell.test.tsx` for the code screen);
       D13's banner, notice and invite-side check removed; the journey e2e
       walks the código first
+
+- [x] Session round (2026-09-02): BUG-015 (the cookie slides:
+      `sessions.test.ts` scenario 17), D17 (`sessions.test.ts` scenario
+      18), D18 and BUG-016 (`apps/admin/test/session-round.test.tsx`
+      scenario 19; `tests/passkey/passkey.spec.ts` sees the listed
+      credential and signs out from the Sesión card)
 
 ## Open items — resolved 2026-09-02
 

@@ -42,6 +42,8 @@ The Configuración section: the WispHub API key that makes reconnection possible
 - Saving is per card, each with its own state; a saved card says so.
 - **Reconexión con pago incompleto** (added 2026-08-25, `partial-payment` D2/D4): the threshold percentage and the floor in pesos, with the meaning of the current values computed in one live sentence — the default (100 / $0) reads "El servicio regresa cuando el pago cubre todo el adeudo."
 - The shell shows the missing-integration banner while `integrationConfigured` is false (D8; copy and target per integrations-hub D10).
+- **Entrar con huella o rostro** (US-S07): the user's own card, every role — the credentials listed with "Quitar", the enrolment button (better-auth D18).
+- **Sesión** (added 2026-09-02, BUG-016): the last card, every role, every width — the email and "Cerrar sesión". The phone's only door out of the shell.
 - Plain es-MX. Amounts through `formatMoney`/`parseMoney`, never floats.
 
 ## Scenarios
@@ -53,11 +55,13 @@ The Configuración section: the WispHub API key that makes reconnection possible
 5. UI: the settings screen saves the split and shows the platform share while typing (US-A04, D4)
 6. UI: testing a typed key reports the result without saving it (D2)
 7. UI: the admin renders times in the configured format (D6)
+8. UI: a viewer signs out from the Sesión card and lands on login (BUG-016); the passkey card lists and removes credentials (better-auth D18)
 
 ## Definition of Done
 
 - [x] Scenarios 1–4 automated in the API layer (`test/settings.test.ts` 5 tests, `test/charge-feed.test.ts`, `test/business-day.test.ts` 3 tests)
 - [x] Scenarios 5–7 automated with Testing Library + MSW (`apps/admin/test/settings.test.tsx`, 4 tests)
+- [x] Scenario 8 automated (`apps/admin/test/session-round.test.tsx`, 2026-09-02)
 - [x] Real check (2026-08-16, owner, deployed dev): the renewed WispHub key was
       saved through the settings screen (live validation) and charges from the
       PWA went through against it — the full save-then-charge loop the box asks

@@ -93,9 +93,20 @@ export const requirePlatformOperator = createMiddleware<{ Bindings: Bindings; Va
 export const requireSession = createMiddleware<{ Bindings: Bindings; Variables: Variables }>(
   async (c, next) => {
     const auth = makeAuth(c.env);
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    /* BUG-015: the 30-day window slides in the DB row AND in the browser.
+       Better Auth re-issues the cookie when it refreshes the row (once a
+       day of use), on the headers of its own response — which this
+       server-side call used to drop, so the cookie kept login day's
+       Max-Age and every session died 30 days after login. */
+    const { headers: refreshed, response: session } = await auth.api.getSession({
+      headers: c.req.raw.headers,
+      returnHeaders: true,
+    });
     if (!session) {
       return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+    }
+    for (const cookie of (refreshed as Headers & { getSetCookie(): string[] }).getSetCookie()) {
+      c.header("set-cookie", cookie, { append: true });
     }
 
     /* better-auth D16: an unverified user has no session, whatever the

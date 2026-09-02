@@ -68,7 +68,8 @@ export type Actor = {
   role: Role;
   timezone: string;
   timeFormat: "12h" | "24h";
-  wisphubConfigured: boolean;
+  /* integrations-hub D10: any provider — the shell never names one */
+  integrationConfigured: boolean;
   /* business-and-memberships D5 (2026-09-02): a business is born without
      a CLABE; the shell's banner and the share buttons read this */
   speiConfigured: boolean;

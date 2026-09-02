@@ -54,7 +54,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-S01** — *Retired 2026-08-31 → `devolada-red` (store login by phone).*
 - **US-S02** — As a signed-in user, I never see "session expired" during normal operation: tokens renew on their own.
 - **US-S03** — *Retired 2026-08-31 → `devolada-red` (store suspension). The mechanism — DB status check on every request — stays law for ISPs (sessions spec, ARCHITECTURE.md).*
-- **US-S04** — As an ISP, I sign up with email + password and verify my email with a code (Resend) before operating. *(link → code 2026-08-15, better-auth.spec.md D4)*
+- **US-S04** — As an ISP, I sign up with email + password and verify my email with a code (Resend) before operating. *(link → code 2026-08-15, better-auth.spec.md D4; "before operating" is literal again since 2026-09-02: the código opens the session, D16)*
 - **US-S05** — *Retired 2026-08-31 → `devolada-red` (store invitations; better-auth D8).*
 - **US-S06** — As any user, my email is my master recovery key: a code sent to it restores my access. As a store, the ISP can also re-send my invitation. *(rewritten 2026-08-15; was ISP-only and link-based)*
 - **US-S07** — As any user, I can enable my device's fingerprint or face (passkey) and sign in with one touch, no email or password involved.

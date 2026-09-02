@@ -72,6 +72,11 @@ dev.post("/seed", async (c) => {
 
   let [demoUser] = await db.select().from(userTable).where(eq(userTable.email, DEMO.ispEmail));
   const userId = demoUser ? demoUser.id : await seedUser("ISP Demo", DEMO.ispEmail);
+  /* An adopted orphan is demo data too: verified, or the gate (better-auth
+     D16) would send the demo password to the código screen. */
+  if (demoUser && !demoUser.emailVerified) {
+    await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, demoUser.id));
+  }
 
   let [business] = await db.select().from(businesses).where(eq(businesses.email, DEMO.ispEmail));
   if (!business) {

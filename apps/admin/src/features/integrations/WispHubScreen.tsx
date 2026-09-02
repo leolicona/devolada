@@ -31,7 +31,7 @@ function useSaveIntegration() {
       api<IntegrationsResponse>("/integrations/wisphub", { method: "PATCH", body: JSON.stringify(body) }),
     onSuccess: (data) => {
       queryClient.setQueryData(["integrations"], data);
-      /* the chip and wisphubConfigured ride the session */
+      /* the chip and integrationConfigured ride the session */
       void queryClient.invalidateQueries({ queryKey: ["session"] });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
     },

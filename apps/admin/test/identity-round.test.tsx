@@ -7,8 +7,9 @@ import { renderApp } from "./render";
 
 /* The identity round's spec PR (2026-09-02), UI half: business D5 (the
    CLABE banner and the share gate), D8 (pending invitations, resend,
-   cancel), D12 (role change), better-auth D13 (verification gates
-   inviting), operator-panel D1 (the support channel). US-B01, US-B03. */
+   cancel), D12 (role change), operator-panel D1 (the support channel).
+   better-auth D16 (the código opens the session) lives in shell.test.tsx.
+   US-B01, US-B03. */
 
 const emptyFeed = () => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } });
 const settings = settingsResponse.parse({
@@ -95,22 +96,6 @@ describe("US-B03 / D12: the role is a picker for the members I could have invite
     await userEvent.click(within(users).getByRole("combobox", { name: /rol de ana/i }));
     await userEvent.click(await screen.findByRole("option", { name: "Administrador" }));
     expect(patched).toEqual([["m-op", { role: "admin" }]]);
-  });
-});
-
-describe("US-S04 / D13: verification gates inviting, and only inviting", () => {
-  it("an unverified owner sees the notice where the invite form would be, and the banner above names the gate", async () => {
-    server.use(
-      handlers.session(() => ok({ ...businessActor, emailVerified: false })),
-      handlers.settings(() => ok(settings)),
-      handlers.members(() => ok({ ...team, pending: [] })),
-    );
-    renderApp("/settings");
-    const users = await usersSection();
-    expect(within(users).getByText(/confirma tu correo para invitar a tu equipo/i)).toBeInTheDocument();
-    expect(within(users).queryByLabelText(/invitar por correo/i)).not.toBeInTheDocument();
-    /* The CLABE form is still the owner's: nothing else is gated */
-    expect(screen.getByLabelText("CLABE")).toBeInTheDocument();
   });
 });
 

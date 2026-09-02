@@ -6,7 +6,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { Shell } from "./features/shell/Shell";
-import { LoginPage, RecoverPage, SignupPage } from "./features/auth/pages";
+import { LoginPage, RecoverPage, SignupPage, VerifyEmailPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { CobrosScreen } from "./features/cobros/CobrosScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
@@ -28,6 +28,18 @@ export const nextSearch = (s: Record<string, unknown>): { next?: string } => ({
   /* An explicit undefined: the router merges the validated object over
      the raw search, so a bare `{}` would keep the rejected value alive. */
   next: typeof s.next === "string" && /^\/(?!\/)/.test(s.next) ? s.next : undefined,
+});
+/* better-auth D16: the código screen knows the address it is for; a
+   visit without one asks for it. */
+export const verifySearch = (s: Record<string, unknown>): { next?: string; email?: string } => ({
+  ...nextSearch(s),
+  email: typeof s.email === "string" && s.email.includes("@") ? s.email : undefined,
+});
+const verifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/verify-email",
+  component: VerifyEmailPage,
+  validateSearch: verifySearch,
 });
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -103,6 +115,7 @@ const operatorRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   signupRoute,
+  verifyEmailRoute,
   recoverRoute,
   newBusinessRoute,
   invitationRoute,

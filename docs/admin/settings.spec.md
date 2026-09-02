@@ -22,7 +22,7 @@ The Configuración section: the WispHub API key that makes reconnection possible
 - **D4 — The store's commission can never exceed the service fee.** `PATCH` → 400 `COMMISSION_EXCEEDS_FEE`. The platform's share is the difference and is shown live while typing, never stored: one number derived from two, so it cannot drift (same rule as the ledger balance).
 - **D5 — The ISP timezone owns "today", and it supersedes charge-feed D2.** The server computes the start of the business day from `isps.timezone`, reports it back as `today.startedAtMs`, and the feed's `todayStartMs` parameter is gone. Reporting the boundary is not decoration: it is how a client (or a test) can tell which day was counted instead of assuming. Mexico spans three zones (UTC-6 centre, UTC-7 Sonora, UTC-8 Baja California), and an ISP in Hermosillo checking totals from Mexico City must still see its own day. **Rejected**: keeping the browser as the source, which made the same charge count on different days depending on where the laptop was.
 - **D6 — Time format is a display setting the API never applies.** `timeFormat` (`12h` | `24h`) travels in the session actor and every rendered time in the admin passes through one helper. The API always speaks in epoch ms; formatting belongs to the surface that has a reader.
-- **D7 — The settings ride the session.** `/auth/me` carries `timezone`, `timeFormat` and `wisphubConfigured` for an ISP actor, so no screen needs a second request before it can render a time — and the shell knows to show the "missing API key" banner.
+- **D7 — The settings ride the session.** `/auth/me` carries `timezone`, `timeFormat` and `wisphubConfigured` for an ISP actor, so no screen needs a second request before it can render a time — and the shell knows to show the "missing API key" banner. *(2026-09-02: the flag is `integrationConfigured` and the banner names no provider — integrations-hub D10.)*
 - **D8 — Missing key = a banner, not a wall.** The admin stays usable without a key (registering stores and reading the ledger do not need WispHub); the banner is persistent and links here, and charges already fail with a clear `WISPHUB_NOT_CONFIGURED`. **Rejected**: the "first login demands the key" gate from the build plan, which would block an ISP from doing the setup work it can do while it waits for its key.
 
 ## Contract (ISP session only)
@@ -41,7 +41,7 @@ The Configuración section: the WispHub API key that makes reconnection possible
 - `/settings`, three cards: **Conexión con WispHub** (masked key `••••1234` or "Sin configurar", field for a new key, "Probar conexión", plain result), **Cobro y comisiones** (service fee and store commission in pesos, with the platform share computed live below), **Zona horaria y hora** (timezone `Select` with the three Mexican zones named in plain es-MX, and a 12h/24h `Select` showing a live example).
 - Saving is per card, each with its own state; a saved card says so.
 - **Reconexión con pago incompleto** (added 2026-08-25, `partial-payment` D2/D4): the threshold percentage and the floor in pesos, with the meaning of the current values computed in one live sentence — the default (100 / $0) reads "El servicio regresa cuando el pago cubre todo el adeudo."
-- The shell shows the missing-key banner while `wisphubConfigured` is false (D8).
+- The shell shows the missing-integration banner while `integrationConfigured` is false (D8; copy and target per integrations-hub D10).
 - Plain es-MX. Amounts through `formatMoney`/`parseMoney`, never floats.
 
 ## Scenarios

@@ -41,7 +41,13 @@ export function makeAuth(env: Bindings) {
     secret: env.BETTER_AUTH_SECRET ?? "devolada-dev-only-insecure-secret",
     database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
     trustedOrigins: exactOrigins,
-    emailAndPassword: { enabled: true },
+    /* D16 (owner, 2026-09-02): verification gates the session. Signup
+       births the user without a session; sign-in of an unverified email
+       answers 403 EMAIL_NOT_VERIFIED; `email-otp/verify-email` is the
+       door — it creates the session itself (pinned against 1.6.29's
+       dist). */
+    emailAndPassword: { enabled: true, requireEmailVerification: true },
+    emailVerification: { autoSignInAfterVerification: true },
     /* D11: the limiter is explicit, never inherited. Better Auth turns it
        on only under NODE_ENV=production and keeps counters in memory — on
        Workers that is an isolate that forgets every few minutes, and a
@@ -116,7 +122,7 @@ export function makeAuth(env: Bindings) {
         },
       }),
       emailOTP({
-        /* The business signup route sends the code itself (D13): a user
+        /* The business signup route sends the code itself (D16): a user
            born through an invitation (D14) is verified by the invitation
            and must not receive a code for nothing. */
         sendVerificationOnSignUp: false,

@@ -26,7 +26,8 @@ the fase-5 and pilot-UX rounds). Earlier reviews: `DESIGN_REVIEW.md`
 | `wizard-{1,2,3}-{1280,375}`, `-dark` | 2 + dark | The wizard's three steps with the verify banner (unverified user) |
 | `invitation-signed-out-{1280,375}`, `invitation-wrong-email-{1280,375}`, `invitation-invalid-1280` | 2 + dark | The invitation page in its three states |
 | `suspended-{1280,375}`, `choose-business-{1280,375}`, `revoked-1280` | 2 + dark | The session screens outside the shell |
-| `verify-banner-{1280,375}` | 2 + dark | The verify banner in the shell, on Pagos |
+| `verify-banner-{1280,375}` | 2 + dark | The verify banner in the shell, on Pagos *(retired the same day — see the addendum)* |
+| `verify-email-{1280,375}`, `-dark` | 2 + dark | The código screen (better-auth D16), which replaced the banner |
 | `team-{1280,375}`, `team-1280-dark` | 2 + dark | Configuración with three members and the invite form |
 
 > Stub artifacts, not product: the wizard's step 3 stub returns the demo
@@ -142,3 +143,18 @@ the one they meant to reach.
 - **Dark holds on every card**: the teal primary, the well inputs and the
   warning banner keep their hierarchy (`review-identity-login-1280-dark.png`,
   `review-identity-wizard-1-1280-dark.png`, `review-identity-team-1280-dark.png`).
+
+## Addendum — 2026-09-02, the same day's second look
+
+The owner's second look landed two decisions after this review shipped:
+
+- **The código is the door** (better-auth D16). The verify banner and the
+  Usuarios notice this review polished are gone; signup lands on
+  `/verify-email` (`review-identity-verify-email-{1280,375}.png`), one
+  card in the access layout: the address named, six digits, Confirmar,
+  Reenviar, "Usar otro correo" and a way back to login. Finding 2 above
+  (the banner inside the wizard) and finding 5 (two shapes for one act)
+  are resolved by removal.
+- **The shell's banner names no provider** (integrations-hub D10):
+  "Conecta el sistema con el que cobras…" with "Ver integraciones" to the
+  catalog, instead of "Falta tu llave de WispHub".

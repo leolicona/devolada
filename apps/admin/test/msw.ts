@@ -10,7 +10,7 @@ export const businessActor = {
   status: "active",
   timezone: "America/Mexico_City",
   timeFormat: "12h",
-  wisphubConfigured: true,
+  integrationConfigured: true,
   speiConfigured: true,
   role: "owner",
   orgId: "org_business-1",
@@ -36,8 +36,10 @@ export const handlers = {
   session: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/auth/me", () => r()),
   login: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/sign-in/email", () => r()),
   signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/business/signup", () => r()),
-  verifyEmail: (r: () => ReturnType<typeof baOk | typeof baFail>) => http.post("/auth/email-otp/verify-email", () => r()),
-  sendCode: (r: () => ReturnType<typeof baOk | typeof baFail>) => http.post("/auth/email-otp/send-verification-otp", () => r()),
+  verifyEmail: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
+    http.post("/auth/email-otp/verify-email", ({ request }) => r({ request })),
+  sendCode: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
+    http.post("/auth/email-otp/send-verification-otp", ({ request }) => r({ request })),
   requestReset: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/email-otp/request-password-reset", () => r()),
   resetPassword: (r: () => ReturnType<typeof baOk | typeof baFail>) =>

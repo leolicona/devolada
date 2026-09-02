@@ -9,13 +9,17 @@ import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { authClient, passkeysSupported } from "@/lib/auth-client";
 import { AccessLayout } from "./AccessLayout";
-import { login, requestPasswordReset, resetPasswordWithCode, signup } from "./session";
+import { login, requestPasswordReset, resetPasswordWithCode, sendVerificationCode, signup, verifyEmailCode } from "./session";
 
 /* Access pages (better-auth.spec.md UI contract). Controlled forms,
    plain es-MX copy, generic errors that never leak account existence.
    Codes, never links (D4): recovery types a código, it never clicks.
    D12: `next` (validated by the route) is where login and signup go
    afterwards — the page the guard bounced, or an invitation. */
+
+/* An action that took the person somewhere else on its own returns
+   HANDLED, and the usual landing is skipped. */
+export const HANDLED = Symbol("handled");
 
 function useSubmit(action: () => Promise<unknown>, onDone: () => void, fallback: string) {
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +32,7 @@ function useSubmit(action: () => Promise<unknown>, onDone: () => void, fallback:
       setBusy(true);
       setError(null);
       try {
-        await action();
-        onDone();
+        if ((await action()) !== HANDLED) onDone();
       } catch (e) {
         setError(
           e instanceof ApiError && e.code === "EMAIL_TAKEN"
@@ -79,7 +82,24 @@ export function LoginPage() {
     void queryClient.invalidateQueries({ queryKey: ["session"] });
     void navigate({ to: next ? asRoute(next) : "/" });
   };
-  const submit = useSubmit(() => login(email, password), goOn, "Correo o contraseña incorrectos");
+  const submit = useSubmit(
+    async () => {
+      try {
+        await login(email, password);
+      } catch (e) {
+        /* better-auth D16: the password is right, the address is not yet
+           proven — a fresh código goes out and the code screen takes over */
+        if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED") {
+          void sendVerificationCode(email).catch(() => {});
+          void navigate({ to: "/verify-email", search: { email, next } });
+          return HANDLED;
+        }
+        throw e;
+      }
+    },
+    goOn,
+    "Correo o contraseña incorrectos",
+  );
 
   return (
     <AccessLayout title="Iniciar sesión" description="Cobra por transferencia con validación automática.">
@@ -149,11 +169,11 @@ export function SignupPage() {
   const submit = useSubmit(
     () => signup(name, email, password),
     () => {
-      /* business-and-memberships D5: the account exists, the business is
-         born in the wizard; its banner asks for the código that went out.
-         D12: an invitee goes back to the invitation instead. */
+      /* better-auth D16: the account exists and holds no session yet —
+         the código screen opens it, then the wizard (business D5) or,
+         for an invitee, the invitation (D12). */
       queryClient.clear();
-      void navigate({ to: next ? asRoute(next) : "/nuevo-negocio" });
+      void navigate({ to: "/verify-email", search: { email, next } });
     },
     "No pudimos crear la cuenta. Intenta de nuevo.",
   );
@@ -226,6 +246,96 @@ export function SignupPage() {
             Ya tengo cuenta
           </Link>
         </p>
+      </form>
+    </AccessLayout>
+  );
+}
+
+/* The código screen (better-auth.spec.md D16): the one door between an
+   account and its session. The address arrives in the URL from signup or
+   login; typed only when someone lands here without it. Codes are typed,
+   never clicked (D4). */
+export function VerifyEmailPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { email: given, next } = useSearch({ from: "/verify-email" });
+  const [email, setEmail] = useState(given ?? "");
+  const [code, setCode] = useState("");
+  const [resent, setResent] = useState(false);
+  const address = email.trim();
+
+  const confirm = useSubmit(
+    () => verifyEmailCode(address, code),
+    () => {
+      /* The session was born with the código: the shell takes it from
+         here — the wizard when no business exists yet */
+      queryClient.clear();
+      void navigate({ to: next ? asRoute(next) : "/" });
+    },
+    "El código no es válido o ya venció. Reenvíalo e intenta otra vez.",
+  );
+
+  return (
+    <AccessLayout
+      title="Confirma tu correo"
+      description={
+        given
+          ? `Escribe el código de 6 dígitos que enviamos a ${given}.`
+          : "Escribe tu correo y el código de 6 dígitos que te enviamos."
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (code.length === 6 && EMAIL_SHAPE.test(address)) void confirm.run();
+        }}
+        className="space-y-4"
+        noValidate
+      >
+        {!given && (
+          <div>
+            <Label htmlFor="email">Correo</Label>
+            <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+        )}
+        <div>
+          <Label htmlFor="code">Código</Label>
+          <Input
+            id="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+        {confirm.error && <Alert variant="destructive">{confirm.error}</Alert>}
+        <Button type="submit" size="lg" className="w-full" disabled={confirm.busy || code.length < 6}>
+          {confirm.busy ? "Confirmando…" : "Confirmar"}
+        </Button>
+        <p className="text-center text-sm">
+          <button
+            type="button"
+            className="text-link hover:underline"
+            disabled={!EMAIL_SHAPE.test(address)}
+            onClick={() => {
+              setResent(true);
+              void sendVerificationCode(address).catch(() => {});
+            }}
+          >
+            {resent ? "Código reenviado" : "Reenviar código"}
+          </button>
+        </p>
+        <div className="flex justify-between text-sm">
+          {/* A mistyped address is fixed by signing up again: the unverified
+              account is replaced, never "taken" (D16) */}
+          <Link to="/signup" search={{ next }} className="text-link hover:underline">
+            Usar otro correo
+          </Link>
+          <Link to="/login" search={{ next }} className="text-link hover:underline">
+            Volver a iniciar sesión
+          </Link>
+        </div>
       </form>
     </AccessLayout>
   );

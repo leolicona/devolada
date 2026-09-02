@@ -12,7 +12,8 @@ export type BusinessActor = {
   /* Settings D7: the display settings ride the session */
   timezone: string;
   timeFormat: "12h" | "24h";
-  wisphubConfigured: boolean;
+  /* integrations-hub D10: any provider — the shell names none */
+  integrationConfigured: boolean;
   /* business-and-memberships D5 (2026-09-02): born without a CLABE */
   speiConfigured: boolean;
   /* integrations-hub D4: connected with actions off — the shell chip */

@@ -1,16 +1,15 @@
 import { Hono } from "hono";
-import type { Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { APIError } from "better-auth";
 import type { Bindings, Variables } from "../env";
 import {
   account as accountTable,
   businesses,
   session as sessionTable,
   user as userTable,
+  verification,
 } from "../db/schema";
 import { makeAuth } from "../auth/better";
 import { requireSession } from "../auth/middleware";
@@ -23,29 +22,13 @@ import { creditSummary } from "../credit";
 
 export const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-/* Deletes a Better Auth user and its dependents — the cleanup path when
-   linking the actor row fails after the user was created. */
+/* Deletes a Better Auth user and its dependents — once the cleanup path
+   when linking the actor row failed; now D16's replacement of an
+   unverified account by a fresh signup. */
 async function removeUser(db: ReturnType<typeof drizzle>, userId: string) {
   await db.delete(sessionTable).where(eq(sessionTable.userId, userId));
   await db.delete(accountTable).where(eq(accountTable.userId, userId));
   await db.delete(userTable).where(eq(userTable.id, userId));
-}
-
-/* The cookies Better Auth just set, as a request header — for calling
-   its own API on behalf of the user it just created. */
-function cookieHeadersFrom(from: Headers): Headers {
-  const cookies = (from as Headers & { getSetCookie(): string[] }).getSetCookie();
-  return new Headers({ Cookie: cookies.map((c) => c.split(";")[0]).join("; ") });
-}
-
-/* Better Auth sets its session cookie on its own response; our envelope
-   responses have to carry it over. */
-function forwardCookies(from: Headers, c: Context) {
-  /* getSetCookie exists in workerd; the lib types lag behind */
-  const cookies = (from as Headers & { getSetCookie(): string[] }).getSetCookie();
-  for (const cookie of cookies) {
-    c.header("set-cookie", cookie, { append: true });
-  }
 }
 
 const signupInput = z.object({
@@ -62,30 +45,39 @@ auth.post("/business/signup", rateLimitRoute("business-signup", { window: 60, ma
   const db = drizzle(c.env.DB);
 
   /* Signup necessarily reveals existence (rule inherited from the old
-     spec's D4). The user table is the only identity now. */
+     spec's D4). The user table is the only identity now. D16: an
+     unverified account is a half-typed address, not a taken one — the
+     new signup replaces it (password included), so a mistyped email can
+     never lock its owner out. A verified account is taken for good. */
   const [existing] = await db.select().from(userTable).where(eq(userTable.email, email));
-  if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
+  if (existing) {
+    if (existing.emailVerified) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
+    await removeUser(db, existing.id);
+    /* The old código dies with the old account: the plugin reads the
+       first live row for an identifier, so a second one would make the
+       fresh código fail. Identifier shape pinned against 1.6.29's dist. */
+    await db.delete(verification).where(eq(verification.identifier, `email-verification-otp-${email.toLowerCase()}`));
+  }
 
   /* business-and-memberships D5: signup births the USER only. The
      business is persisted at wizard completion (`POST /businesses`),
-     never here — an abandoned wizard creates nothing. The verification
-     code goes out through the OTP hook, best-effort by construction. */
+     never here — an abandoned wizard creates nothing. D16: no session
+     either — `email-otp/verify-email` opens it once the código is typed. */
   const ba = makeAuth(c.env);
-  const { headers, response } = await ba.api.signUpEmail({
+  const { response } = await ba.api.signUpEmail({
     body: { name, email, password },
     returnHeaders: true,
   });
 
-  /* The código goes out from here, not from the sign-up hook (D13/D14):
+  /* The código goes out from here, not from the sign-up hook (D14/D16):
      best-effort by construction — the OTP hook never throws, and neither
-     may this. */
+     may this. If it fails, the verify screen's "Reenviar" is the retry. */
   try {
     await ba.api.sendVerificationOTP({ body: { email, type: "email-verification" } });
   } catch (e) {
     console.error("signup verification code failed", e);
   }
 
-  forwardCookies(headers, c);
   return c.json(
     { success: true, data: { type: "user", id: response.user.id, name, emailVerified: false } },
     201,

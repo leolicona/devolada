@@ -14,7 +14,10 @@ export function AccessLayout({
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
-        <p className="mb-6 text-center text-2xl font-semibold tracking-tight">Devolada Admin</p>
+        {/* design-review 2026-09-01 (must fix): the wordmark is "Devolada" —
+            "Admin" was an identifier leaking into es-MX copy, and the shell's
+            own sidebar never said it. */}
+        <p className="mb-6 text-center text-2xl font-semibold tracking-tight">Devolada</p>
         <Card>
           <CardHeader>
             <CardTitle>{title}</CardTitle>

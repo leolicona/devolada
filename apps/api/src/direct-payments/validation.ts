@@ -542,10 +542,18 @@ export async function runValidation(
         /* payments-and-classes D3: money arrived against a debt of zero —
            `over` by definition, a class and never a credit (D2 keeps its
            treatment at `flag`). What the CEP said arrived and who sent it
-           land on the row too, so the proof view has its facts. */
+           land on the row too, so the proof view has its facts — and the
+           customer identity just read rides along (design-review
+           2026-09-01): the feed showed the usuario where every other row
+           shows a name, for money the ISP must resolve with that person. */
         reconciliationClass: "over",
         receivedCents: cep?.amountCents ?? payment.amountCents,
         cepSenderName: cep?.senderName ?? null,
+        wisphubCustomerId: link.wisphubCustomerId,
+        customerUsuario: link.customerUsuario,
+        customerName: customer?.name ?? link.customerUsuario,
+        customerZone: customer?.zone ?? null,
+        customerPhone: customer?.phone ?? null,
         nextValidationAt: null,
         lastError: null,
       });

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, TriangleAlert } from "lucide-react";
+import { CalendarDays, ChevronDown, TriangleAlert } from "lucide-react";
 import {
   Alert,
   Amount,
@@ -86,6 +86,16 @@ const classBadge: Record<NonNullable<FeedCharge["reconciliationClass"]>, Status>
   over: "classOver",
 };
 
+/* design-review 2026-09-01 (should fix): the CEP date read as raw ISO
+   while every neighbour formats es-MX. Noon anchors the Date so no
+   timezone can slide the calendar day. */
+const fmtCepDate = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
 /* D4: the proof is the whole truth — the CEP as Banxico answered it and
    the payer's capture — read for every role. */
 function ProofDialog({ charge }: { charge: FeedCharge }) {
@@ -130,7 +140,7 @@ function ProofDialog({ charge }: { charge: FeedCharge }) {
                   ),
                 )}
                 {line("Monto", <Amount cents={proof.data.cep.amountCents} />)}
-                {line("Fecha", proof.data.cep.date)}
+                {line("Fecha", proof.data.cep.date ? fmtCepDate(proof.data.cep.date) : null)}
                 {line("Banco emisor", proof.data.cep.senderBank)}
                 {line("Ordenante", proof.data.cep.senderName)}
                 {line("Beneficiario", proof.data.cep.beneficiaryName)}
@@ -338,6 +348,12 @@ export function FeedScreen() {
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  /* design-review 2026-09-01 (should fix): on a phone the header stacked
+     alert + search + dates + three lines of chips before the first row.
+     The dates fold behind "Fechas" below sm — and stay open once one is
+     set, so an active filter is never invisible. */
+  const [datesOpen, setDatesOpen] = useState(false);
+  const showDates = datesOpen || from !== "" || to !== "";
   const { data: actor } = useSession();
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
 
@@ -395,7 +411,11 @@ export function FeedScreen() {
         </Alert>
       )}
 
-      {/* D4: customer search and the date range, in the business's zone */}
+      {/* D4: customer search and the date range, in the business's zone.
+          The date pickers are the platform's own control on purpose — the
+          browser owns their display language (page `lang` does not move
+          Chromium); confirming they read dd/mm on a Mexican device rides
+          the scheduled dev observation (spec DoD). */}
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="min-w-48 flex-1">
           <Label htmlFor="feed-q">Cliente</Label>
@@ -408,25 +428,38 @@ export function FeedScreen() {
             onChange={(e) => setQInput(e.target.value)}
           />
         </div>
-        <div>
-          <Label htmlFor="feed-from">Desde</Label>
-          <Input
-            id="feed-from"
-            type="date"
-            className="mt-1"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </div>
-        <div>
-          <Label htmlFor="feed-to">Hasta</Label>
-          <Input
-            id="feed-to"
-            type="date"
-            className="mt-1"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
+        <Button
+          type="button"
+          variant="outline"
+          className="sm:hidden"
+          aria-expanded={showDates}
+          aria-controls="feed-dates"
+          onClick={() => setDatesOpen((v) => !v)}
+        >
+          <CalendarDays className="size-4" aria-hidden />
+          Fechas
+        </Button>
+        <div id="feed-dates" className={`${showDates ? "flex" : "hidden"} w-full items-end gap-3 sm:flex sm:w-auto`}>
+          <div className="flex-1 sm:flex-none">
+            <Label htmlFor="feed-from">Desde</Label>
+            <Input
+              id="feed-from"
+              type="date"
+              className="mt-1"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 sm:flex-none">
+            <Label htmlFor="feed-to">Hasta</Label>
+            <Input
+              id="feed-to"
+              type="date"
+              className="mt-1"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -434,7 +467,12 @@ export function FeedScreen() {
           inside TabsContent — a tab that advertises aria-controls without
           a panel points a screen reader at nothing. */}
       <Tabs value={status} onValueChange={setStatus} className="mt-4">
-        <TabsList aria-label="Filtrar por estado">
+        {/* design-review 2026-09-01 (should fix): one scrollable line on a
+            phone instead of three wrapped ones; desktop keeps the wrap */}
+        <TabsList
+          aria-label="Filtrar por estado"
+          className="max-w-full flex-nowrap overflow-x-auto pb-1 sm:flex-wrap sm:overflow-x-visible sm:pb-0"
+        >
           {statusFilters.map((f) => (
             <TabsTrigger key={f.value} value={f.value}>
               {f.label}

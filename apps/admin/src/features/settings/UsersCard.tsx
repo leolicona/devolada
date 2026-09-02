@@ -59,7 +59,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6" aria-labelledby="users-title">
+    <section id="usuarios" className="scroll-mt-24 rounded-lg border border-border bg-card p-6" aria-labelledby="users-title">
       <h2 id="users-title" className="text-base font-semibold">
         Usuarios
       </h2>

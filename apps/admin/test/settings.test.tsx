@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
@@ -302,5 +302,22 @@ describe("US-R02: the reconciliation policy is the business's", () => {
     renderApp("/settings");
 
     expect(await screen.findByText(/tratamiento efectivo/)).toBeInTheDocument();
+  });
+});
+/* design-review 2026-09-01 (could improve): the in-page section index. */
+describe("Configuración carries an in-page index", () => {
+  it("links every section the role can use, as anchors", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() => ok(settings())),
+    );
+    renderApp("/settings");
+
+    const nav = await screen.findByRole("navigation", { name: "Secciones de configuración" });
+    const { getByRole } = within(nav);
+    for (const label of ["WispHub", "Pago directo", "Política de conciliación", "Saldo y recargas", "Usuarios"]) {
+      expect(getByRole("link", { name: label })).toBeInTheDocument();
+    }
+    expect(getByRole("link", { name: "Política de conciliación" })).toHaveAttribute("href", "#politica");
   });
 });

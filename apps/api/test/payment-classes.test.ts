@@ -283,7 +283,10 @@ describe("US-R02 scenarios 2 and 11: unapplied is over by definition, and always
       reconciliationClass: "over",
       reconnectionStatus: null,
       surplusCents: 51400,
-      customerName: "greyes@wifiplus",
+      /* design-review 2026-09-01: the identity read at the verdict rides
+         the row — a name, not the usuario, for money the ISP must
+         resolve with that person */
+      customerName: "Janely",
     });
   });
 });

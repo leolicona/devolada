@@ -300,6 +300,9 @@ describe("US-R03: the proof and the retry live on the row", () => {
     expect(await screen.findByText("TRACK001XYZ")).toBeInTheDocument();
     expect(screen.getByText("JANELY REYES")).toBeInTheDocument();
     expect(screen.getByText("NUBANK")).toBeInTheDocument();
+    /* design-review 2026-09-01: es-MX, never raw ISO */
+    expect(screen.getByText("1 de septiembre de 2026")).toBeInTheDocument();
+    expect(screen.queryByText("2026-09-01")).not.toBeInTheDocument();
     /* the manual door sent no image, and the dialog says so */
     expect(screen.getByText(/no envió imagen/)).toBeInTheDocument();
   });
@@ -324,5 +327,26 @@ describe("US-R03: the proof and the retry live on the row", () => {
 
     await screen.findByRole("button", { name: /janely/i });
     expect(retried).toEqual(["ch-1"]);
+  });
+});
+/* design-review 2026-09-01 (should fix): the mobile header's height. */
+describe("the date filters fold behind 'Fechas'", () => {
+  it("the toggle opens the fields and reports its state", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed(() => ok(feedOf([charge()]))),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+
+    const toggle = screen.getByRole("button", { name: "Fechas" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    /* an active filter keeps the fields visible even after closing */
+    await userEvent.type(screen.getByLabelText("Desde"), "2026-08-01");
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 });

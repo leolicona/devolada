@@ -159,7 +159,10 @@ PR #124); its IA decisions are inherited, not re-decided.
   one login, N businesses (US-B02). Measured (spike 5): `createInvitation`
   calls our `sendInvitationEmail` hook with email, role and organization;
   `acceptInvitation` by the invitee's session adds the member row. **Rejected**: join-by-email-domain
-  (dangerous magic for money software).
+  (dangerous magic for money software). An invitee without an account is
+  sent to sign up and brought back to the invitation by `next`
+  (better-auth.spec.md D12, 2026-09-02) — before that they were told to
+  reopen the link and could found a business of their own instead.
 
 - **D9 — The glossary swap and the `ispId` sweep ride the implementation
   PR.** SPEC.md's glossary adopts the pivot table (Negocio/Cobro/Pago);

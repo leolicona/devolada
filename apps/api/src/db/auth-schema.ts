@@ -100,6 +100,17 @@ export const member = sqliteTable("member", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
+/* Better Auth's rate-limit counters (better-auth.spec.md D11). The
+   default store is the isolate's memory, which on Workers is reborn
+   every few minutes and never shared between isolates — a limiter that
+   forgets. Rows live here instead; Better Auth prunes the stale ones. */
+export const rateLimit = sqliteTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request").notNull(),
+});
+
 export const invitation = sqliteTable("invitation", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")

@@ -3,7 +3,7 @@ import { HttpResponse } from "msw";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { settingsResponse } from "@devolada/api/settings-schema";
-import { baOk, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
+import { baFail, baOk, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/business/business-and-memberships.spec.md — the UI half of
@@ -259,10 +259,74 @@ describe("D8: the invitation link", () => {
     expect(router.state.location.pathname).toBe("/payments");
   });
 
-  it("without a session it asks to sign in first", async () => {
+  it("without a session it asks to sign in first — and both doors lead back here (D12)", async () => {
     server.use(handlers.getSession(() => HttpResponse.json(null)));
     renderApp("/invitaciones/inv-1");
     expect(await screen.findByRole("heading", { name: /te invitaron a un negocio/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^entrar$/i })).toBeInTheDocument();
+    for (const name of [/^entrar$/i, /crear cuenta/i]) {
+      const link = screen.getByRole("button", { name }).closest("a");
+      expect(link).toHaveAttribute("href", expect.stringContaining("next=%2Finvitaciones%2Finv-1"));
+    }
+  });
+
+  it("an invitee without an account creates it and is brought back to accept — never to the wizard (D12)", async () => {
+    let signedIn = false;
+    const accepted: unknown[] = [];
+    server.use(
+      handlers.getSession(() => HttpResponse.json(signedIn ? { user: sessionUser } : null)),
+      handlers.signup(() => {
+        signedIn = true;
+        return ok({ type: "user", id: "user-1", name: "Ana", emailVerified: false }, 201);
+      }),
+      handlers.acceptInvitation((body) => {
+        accepted.push(body);
+        return baOk();
+      }),
+      handlers.session(() => ok(asRole("viewer"))),
+      handlers.feed(() => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+
+    await userEvent.click(await screen.findByRole("button", { name: /crear cuenta/i }));
+    await userEvent.type(await screen.findByLabelText("Tu nombre"), "Ana");
+    await userEvent.type(screen.getByLabelText("Correo"), "ana@wifiplus.mx");
+    await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
+    await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
+
+    await screen.findByRole("heading", { name: "Pagos" });
+    expect(accepted).toEqual([{ invitationId: "inv-1" }]);
+    expect(router.state.location.pathname).toBe("/payments");
+  });
+
+  it("signed in with another email: the screen says so and offers to switch", async () => {
+    let loggedOut = false;
+    server.use(
+      handlers.getSession(() => HttpResponse.json(loggedOut ? null : { user: sessionUser })),
+      handlers.acceptInvitation(() => baFail("YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION", 403)),
+      handlers.logout(() => {
+        loggedOut = true;
+        return baOk();
+      }),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+
+    expect(await screen.findByText(/fue enviada a otro correo/i)).toBeInTheDocument();
+    expect(screen.getByText(/entraste como demo@devolada\.app/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /entrar con el correo invitado/i }));
+
+    expect(await screen.findByLabelText("Correo")).toBeInTheDocument();
+    expect(loggedOut).toBe(true);
+    expect(router.state.location.pathname).toBe("/login");
+    expect(router.state.location.search).toEqual({ next: "/invitaciones/inv-1" });
+  });
+
+  it("an unknown or spent invitation keeps the generic copy", async () => {
+    server.use(
+      handlers.getSession(() => HttpResponse.json({ user: sessionUser })),
+      handlers.acceptInvitation(() => baFail("INVITATION_NOT_FOUND", 400)),
+    );
+    renderApp("/invitaciones/inv-1");
+    expect(await screen.findByText(/no es válida o ya venció/i)).toBeInTheDocument();
   });
 });

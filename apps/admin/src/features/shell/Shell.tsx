@@ -1,6 +1,6 @@
 import { Alert } from "@devolada/ui";
-import { Link, Navigate, Outlet } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
+import { Link, Navigate, Outlet, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Banknote,
@@ -106,11 +106,31 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
   );
 }
 
+/* The session errors the shell answers with a screen of their own
+   (business-and-memberships D4, sessions rule 2); every other one is a
+   bounce to login. */
+const HANDLED_CODES = ["ACCOUNT_SUSPENDED", "NO_BUSINESS", "NO_ACTIVE_BUSINESS", "MEMBERSHIP_REVOKED"];
+
 /* Desktop-first shell (spec D2): sidebar ≥ lg, bottom bar below. */
 export function Shell() {
   const { data: actor, isPending, error } = useSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  /* better-auth.spec.md D12: login brings you back here, not to "/".
+     Imperative on purpose, and read off the router without subscribing:
+     `<Navigate>` re-navigates on every render, so a shell that re-rendered
+     on location changes (useLocation) kept re-navigating during its own
+     transition — measured as a heap-out-of-memory in the suite. */
+  const bounced =
+    !isPending && (Boolean(error) || !actor) && !(error && HANDLED_CODES.includes(error.code));
+  const bouncedOnce = useRef(false);
+  useEffect(() => {
+    if (!bounced || bouncedOnce.current) return;
+    bouncedOnce.current = true;
+    const { pathname } = router.state.location;
+    void navigate({ to: "/login", search: pathname === "/" ? {} : { next: pathname } });
+  }, [bounced, navigate, router]);
 
   if (isPending) {
     return (
@@ -124,7 +144,7 @@ export function Shell() {
   if (error?.code === "NO_BUSINESS") return <Navigate to="/nuevo-negocio" />;
   if (error?.code === "NO_ACTIVE_BUSINESS") return <ChooseBusinessScreen reason="choose" />;
   if (error?.code === "MEMBERSHIP_REVOKED") return <ChooseBusinessScreen reason="revoked" />;
-  if (error || !actor) return <Navigate to="/login" />;
+  if (error || !actor) return null; /* the effect above is on its way to /login */
 
   async function onLogout() {
     await logout().catch(() => {});
@@ -181,14 +201,15 @@ export function Shell() {
             typed right here (better-auth.spec.md D4) */}
         {!actor.emailVerified && <VerifyEmailBanner email={actor.email} />}
         {/* Settings D8: a banner, not a wall — the admin still works
-            without a key, but nothing reconnects until it is there */}
+            without a key, but nothing reconnects until it is there.
+            The key moved to Integraciones with the hub (BUG-013). */}
         {!actor.wisphubConfigured && (
           <Alert variant="warning" className="m-4 flex items-center justify-between gap-4 lg:mx-8 lg:mt-6">
             <span className="flex items-center gap-2">
               <KeyRound className="size-4 shrink-0" aria-hidden />
               Falta tu llave de WispHub. Sin ella no podemos reconectar a los clientes.
             </span>
-            <Link to="/settings" className="block">
+            <Link to="/integrations/wisphub" className="block">
               <Button variant="outline">Configurar</Button>
             </Link>
           </Alert>

@@ -1,8 +1,8 @@
 ---
-status: in-development
+status: current
 stories: [US-S01, US-S02, US-S04, US-S05, US-S06, US-S07]
 domain: auth
-updated: 2026-08-15
+updated: 2026-09-02
 debt: [TD-003]
 ---
 
@@ -114,6 +114,38 @@ Had it failed, this spec would not exist.
   produces the drizzle tables (`user`, `session`, `account`, `verification`,
   `passkey`), cross-checked against the spike's hand-written schema. One
   migration; dev D1 is reseeded, nothing is migrated.
+- **D11 — The rate limiter is explicit, counts in D1, and is on unless
+  told otherwise (identity round, 2026-09-02).** The contract below used
+  to say the built-in limiter "stays on"; nothing configured it, and the
+  default it inherited was two lies on Workers: enabled only under
+  `NODE_ENV=production` (which no deploy sets) and counters in the
+  isolate's memory (reborn every few minutes, never shared). Now
+  `rateLimit.enabled` is `AUTH_RATE_LIMIT !== "off"`, storage is the
+  `rateLimit` table (migration 0026, pruned by Better Auth), and the
+  address is read from `cf-connecting-ip` first — the default header list
+  is `x-forwarded-for` alone, and a request with no resolvable address
+  shares one bucket with every other visitor. Rules: Better Auth's own
+  (sign-in 3 per 10 s, code requests 3 per 60 s) plus ours for the doors
+  that had none — `email-otp/verify-email` and `email-otp/reset-password`
+  5 per 60 s (the six digits already die after 3 wrong tries per code),
+  `organization/accept-invitation` 10 per 60 s. `AUTH_RATE_LIMIT=off`
+  exists for the API test suite only (hundreds of sign-ins from one
+  address); no wrangler environment defines it. **Known gap**: our own
+  `POST /auth/business/signup` is a Hono route, outside the limiter — it
+  calls Better Auth server-side, which skips the check (open item 6).
+- **D12 — Login and signup remember where you were going.** The shell's
+  guard sends a session-less visit to `/login?next=<path>`; the
+  invitation page sends its two doors (`Entrar`, `Crear cuenta`) to
+  `next=/invitaciones/:id`. `next` is validated by the route: a same-app
+  path or nothing — never a host, or the login page is an open redirect
+  one query string away. After login or signup the person lands on
+  `next`, else on `/` (login) or the wizard (signup). This closed two
+  findings at once: the operator bounced from `/links` who landed on the
+  feed, and the invitee without an account who was told "después vuelve
+  a abrir el link" and could create a business of their own instead of
+  accepting. The bounce is imperative and fires once: `<Navigate>`
+  re-navigates on every render, and a search object that never settles
+  looped the shell into a heap-out-of-memory in the suite.
 
 ## Contract
 
@@ -121,27 +153,30 @@ Ours (envelope, Zod at the edge):
 
 | Route | Input | Success | Failures |
 |-------|-------|---------|----------|
-| `POST /auth/isp/signup` | `{name: ≥2, email, password: ≥8}` | 201 `{type:"isp", …}` + session; code email best-effort | 409 `EMAIL_TAKEN` · 400 |
-| `POST /auth/store/accept-invitation` | `{token, email, password: ≥8}` | 200 actor + session; code email best-effort (D8) | 400 `INVALID_TOKEN` · 409 `EMAIL_TAKEN` · 400 |
-| `GET /auth/me` | session | actor envelope | 401 / 403 as today |
+| `POST /auth/business/signup` | `{name: ≥2, email, password: ≥8}` | 201 `{type:"user", id, name, emailVerified:false}` + session; code email best-effort. Births the user only — the business is born in the wizard (business-and-memberships D5) | 409 `EMAIL_TAKEN` · 400 |
+| `GET /auth/me` | session | business actor envelope (business-and-memberships D4) | 401 / 403 `ACCOUNT_SUSPENDED` · `NO_BUSINESS` · `NO_ACTIVE_BUSINESS` · `MEMBERSHIP_REVOKED` |
+
+`POST /auth/isp/signup` and `POST /auth/store/accept-invitation` are gone:
+the first renamed with the pivot (2026-08-31), the second left with the
+store network. Member invitations ride the organization plugin
+(business-and-memberships D8).
 
 Better Auth's (exempt from the envelope, via its client — endpoint names
-pinned against `better-auth@1.6.29`'s dist, not its guide): `sign-in/email`
-(ISP), `sign-in/username` (store: phone as username),
+pinned against `better-auth@1.6.29`'s dist, not its guide): `sign-in/email`,
 `email-otp/send-verification-otp` + `email-otp/verify-email` (registration
-proof, both roles), `email-otp/request-password-reset` +
-`email-otp/reset-password` (recovery, both roles), `passkey/*` (enrol +
-sign-in), `sign-out`, `get-session`. Better Auth's built-in rate limiter
-stays **on**: it guards `send-verification-otp` against mail-bombing and
-the 6-digit code against brute force.
+proof), `email-otp/request-password-reset` + `email-otp/reset-password`
+(recovery), `passkey/*` (enrol + sign-in), `sign-out`, `get-session`,
+`organization/*` (list, set-active, accept-invitation — business spec).
+The rate limiter in front of all of them is D11's.
 
 ## Business rules
 
 1. One Better Auth user per actor; `userId` unique in `isps` and `stores`.
-2. Typing the correct code flips Better Auth's own `emailVerified`; an
-   unverified ISP signs in but cannot register stores — the old gate holds,
-   now reading the Better Auth user. An unverified store operates normally
-   but cannot self-recover (D8).
+2. Typing the correct code flips Better Auth's own `emailVerified`. The
+   gate it used to hold ("cannot register stores") left with the store
+   network on 2026-08-31: today no endpoint reads the flag, and the
+   banner's "para operar" promises a gate that does not exist (open
+   item 1).
 3. Store daily login is phone + password (US-S01 unchanged); the email is
    for registration proof and recovery only.
 4. Status is checked in the DB on every authenticated request (US-S03).
@@ -168,6 +203,19 @@ then `/auth/me`), never by listing names.
   instead of pointing at an emailed link. `/recover` asks for the email,
   then code + new password on one screen. Passkey enrolment offer after
   login.
+- **Admin, identity round (2026-09-02)**: `/login` and `/signup` honour
+  `next` (D12). Signup names each problem under its field before the
+  request leaves (name ≥ 2, email shape, password ≥ 8 — the API's own
+  Zod rules), with `aria-invalid` and a hint under the password; the
+  server's 400 is no longer the first word about a short password.
+  `/recover` **restores access**: the new password signs the person in
+  and lands on the feed — the login page is not visited again; its
+  "Reenviar código" confirms ("Código reenviado"), as the banner's does.
+  `/invitaciones/:id` names the one failure the person can fix — signed
+  in with another email than the invited one
+  (`YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION`) — with the email they
+  used and a button to switch accounts that comes back to the invitation;
+  every other failure keeps the generic "no es válida o ya venció".
 - **Tienda**: login unchanged (phone + password + passkey button).
   `/invitation/$token` adds an email field with plain es-MX copy on why it
   is asked ("para recuperar tu acceso si olvidas tu contraseña"), then an
@@ -201,6 +249,15 @@ then `/auth/me`), never by listing names.
    cause in the server log (TD-012's lesson)
 9. Passkey: enrolment stores a credential; sign-in with it creates a
    session (US-S07; Playwright virtual authenticator)
+10. A fourth sign-in from one address within ten seconds → 429 with
+    `X-Retry-After`, and the count is a row in `rateLimit`; the sixth
+    `verify-email` in a minute → 429 (D11)
+11. A session-less visit to `/links` → `/login?next=/links`; login lands
+    on `/links`. `?next=https://evil.example` is dropped and login lands
+    on the feed (D12)
+12. An invitee without an account taps "Crear cuenta", signs up, and is
+    back on the invitation, accepted — never in the wizard (D12);
+    signed in with another email, the page says so and offers to switch
 
 ## Definition of Done
 
@@ -233,6 +290,34 @@ then `/auth/me`), never by listing names.
       `feat/store-email` draft discarded in favour of D3 (PR #31)
 - [x] `integrations/agnostic-auth.md` closed with a pointer here (kept as
       history of why we left)
+- [x] Identity round (2026-09-02): D11 armed and counting in D1
+      (`apps/api/test/rate-limit.test.ts`, scenario 10); D12 in the shell,
+      the invitation page and both access pages (`apps/admin/test/shell.test.tsx`,
+      `memberships.test.tsx`, scenarios 11–12); recovery restores access
+      (scenario 7 as written); signup validates in place; the contract
+      table above says what the code exposes (it listed `/auth/isp/signup`
+      and a store route for a month after both died)
+
+## Open items (identity round, 2026-09-02 — each needs one line from the owner)
+
+1. **What email verification gates now.** Rule 2's gate left with the
+   stores; the banner still says "para operar". Proposed: inviting
+   members is the gate (the one act that uses your identity toward
+   others); the banner says so and stops showing in the wizard.
+2. **Member invitations: TTL and lifecycle.** The plugin's default is 48 h
+   (`invitationExpiresIn` unset in `better.ts`); the retired D8 chose 7
+   days because the invitee opens the mail "later", and that reason did
+   not retire. No pending list, resend or cancel exists: the owner sees
+   "Invitación enviada" once and nothing after.
+3. **Role change.** Only remove + re-invite today; the business spec is
+   silent. The plugin ships `updateMemberRole`.
+4. **Who may list the team.** `GET /businesses/members` carries
+   `requireSession` only: a viewer reads every member's email. The role
+   matrix has no read action for the `members` area, so this is a
+   decision, not a breach.
+5. **The suspended screen's channel.** "Escríbenos para revisarla" names
+   no address; sessions.spec.md asked for contact info.
+6. **The signup route and the limiter** (D11's known gap).
 
 ## Spike (gate, run 2026-08-15 — all green)
 

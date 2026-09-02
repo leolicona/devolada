@@ -57,16 +57,24 @@ export function sessionCookieHeader(identity: string): Promise<string> {
   return signedSessionCookie(tokenFor(identity));
 }
 
-export async function seedSession(userId: string, identity: string, activeOrganizationId?: string) {
+export async function seedSession(
+  userId: string,
+  identity: string,
+  activeOrganizationId?: string,
+  /* A row born `ageDays` ago, as the sign-in of that day would have
+     written it (BUG-015: the refresh only fires after a day of use) */
+  opts: { ageDays?: number } = {},
+) {
+  const born = Date.now() - (opts.ageDays ?? 0) * 24 * 3600 * 1000;
   await drizzle(env.DB)
     .insert(sessionTable)
     .values({
       id: crypto.randomUUID(),
       token: tokenFor(identity),
       userId,
-      expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      expiresAt: new Date(born + 30 * 24 * 3600 * 1000),
+      createdAt: new Date(born),
+      updatedAt: new Date(born),
       activeOrganizationId: activeOrganizationId ?? null,
     });
 }

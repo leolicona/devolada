@@ -46,7 +46,14 @@ export function makeAuth(env: Bindings) {
        answers 403 EMAIL_NOT_VERIFIED; `email-otp/verify-email` is the
        door — it creates the session itself (pinned against 1.6.29's
        dist). */
-    emailAndPassword: { enabled: true, requireEmailVerification: true },
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: true,
+      /* D17: a new password closes every door the old one opened. Better
+         Auth's default keeps them open (a stolen session outlived the
+         reset by up to 30 days). */
+      revokeSessionsOnPasswordReset: true,
+    },
     emailVerification: { autoSignInAfterVerification: true },
     /* D11: the limiter is explicit, never inherited. Better Auth turns it
        on only under NODE_ENV=production and keeps counters in memory — on

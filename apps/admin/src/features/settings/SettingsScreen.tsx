@@ -8,6 +8,7 @@ import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
 import { UsersCard } from "./UsersCard";
+import { SessionCard } from "./SessionCard";
 import { bankForClabe } from "@devolada/api/clabe";
 import { CreditCard } from "../credit/CreditCard";
 import type { Bank } from "@devolada/api/settings-schema";
@@ -452,6 +453,7 @@ export function SettingsScreen() {
               : []),
             ...(canCredit ? [{ href: "#saldo", label: "Saldo y recargas" }] : []),
             ...(canMembers ? [{ href: "#usuarios", label: "Usuarios" }] : []),
+            { href: "#sesion", label: "Sesión" },
           ]}
         />
       )}
@@ -477,6 +479,7 @@ export function SettingsScreen() {
           {canCredit && <CreditCard />}
           {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}
           <PasskeyCard />
+          {actor && <SessionCard email={actor.email} />}
         </div>
       )}
     </main>

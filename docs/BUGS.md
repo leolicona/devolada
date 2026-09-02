@@ -119,6 +119,26 @@ Format:
 - Regression test: none in code — the defect lives in the deploy, not the app (the app's own behaviour with and without the secret is already covered under US-D15). The deploy log's warning is the standing check.
 
 
+## BUG-016 — On a phone there was no way to sign out
+- Status: **fixed** (2026-09-02, session round)
+- Detected: 2026-09-02 · owner's question ("no existe un modo de cerrar sesión, correcto?"); dev pilot affected on every phone and tablet
+- Affected spec: docs/admin/shell.spec.md (the sidebar's sign-out), docs/admin/settings.spec.md (UI contract), the brief ("the admin follows the ISP to a phone")
+- Symptom: the only "Cerrar sesión" inside the shell lived in the desktop sidebar, hidden under `lg`. The mobile header held the switcher and the credit chip; the bottom bar, the sections. A person on a phone could not sign out except by clearing cookies — on a shared device, the next person inherited the session.
+- Root cause: the sidebar was designed first and its footer carried the account; the mobile layout replaced the sidebar with a bar and nobody carried the footer over. The design review of 2026-09-02 added a door to the screens *outside* the shell and missed the shell's own phone layout.
+- **The lesson**: a control that lives in a container hidden by a breakpoint needs a home in what replaces it — audit every `hidden … lg:flex` for what it hides.
+- Fix: a **Sesión** card at the end of Configuración, for every role, at every width: the email and "Cerrar sesión". The sidebar keeps its button.
+- Regression test: `apps/admin/test/session-round.test.tsx` — "BUG-016: a viewer signs out from the Sesión card and lands on login".
+
+## BUG-015 — The 30-day sliding session slid in the database, never in the browser
+- Status: **fixed** (2026-09-02, session round)
+- Detected: 2026-09-02 · owner asked how long a session lasts; reading Better Auth 1.6.29's `get-session` against our middleware. Every deployed environment affected.
+- Affected spec: docs/auth/better-auth.spec.md (D5: "30-day sliding in both apps")
+- Symptom: nothing visible for a month — then every active user is signed out 30 days after login, whatever they did in between, and the session row stays alive and orphaned in D1 until it expires on its own.
+- Root cause: Better Auth refreshes the row after a day of use (`updateAge`) and re-issues the cookie with a fresh `Max-Age` **on the headers of its own response**. The middleware called `auth.api.getSession` server-side and read only the body, so the `Set-Cookie` never reached the browser; the cookie kept login day's 30-day `Max-Age`. The admin only touched Better Auth's own `get-session` endpoint in the wizard and the invitation page.
+- **The lesson**: a server-side call into an auth library is a request without a browser — anything the library says through headers has to be carried over by hand, and a promise about time ("sliding") needs a test that ages a row.
+- Fix: `getSession({ returnHeaders: true })` in `requireSession`; its `Set-Cookie` is appended to our response. A fresh row (under a day) still sets nothing — no cookie churn per request.
+- Regression test: `apps/api/test/sessions.test.ts` — "BUG-015: after a day of use the window slides in the row AND in the browser's cookie".
+
 ## BUG-014 — Better Auth's rate limiter was never really on
 - Status: **fixed** (2026-09-02, identity round — better-auth.spec.md D11)
 - Detected: 2026-09-02 · spec-vs-code audit of the identity subsystem; every deployed environment is affected (the limiter guards login, codes and invitations)

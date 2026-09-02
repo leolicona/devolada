@@ -34,9 +34,14 @@ test("US-S07: enrol a passkey, sign out, sign in with one touch", async ({ page 
   await page.goto(`${ADMIN}/settings`);
   await page.getByRole("button", { name: /activar en este dispositivo/i }).click();
   await expect(page.getByText(/ya puede entrar con huella o rostro/i)).toBeVisible();
+  /* D18: the credential is listed, with its Quitar */
+  const devices = page.getByRole("list", { name: /dispositivos con acceso/i });
+  await expect(devices.getByRole("listitem")).toHaveCount(1);
+  await expect(devices.getByRole("button", { name: /quitar/i })).toBeVisible();
 
-  /* Sign out, then back in with the passkey alone */
-  await page.getByRole("button", { name: /cerrar sesión/i }).click();
+  /* Sign out from the Sesión card (BUG-016: the door that exists at
+     every width), then back in with the passkey alone */
+  await page.getByRole("button", { name: /cerrar sesión/i }).last().click();
   await expect(page.getByLabel("Correo")).toBeVisible();
 
   await page.getByRole("button", { name: /entrar con huella o rostro/i }).click();

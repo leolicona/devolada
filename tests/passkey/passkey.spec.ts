@@ -28,7 +28,7 @@ test("US-S07: enrol a passkey, sign out, sign in with one touch", async ({ page 
   await page.getByLabel("Correo").fill("demo@devolada.app");
   await page.getByLabel("Contraseña").fill("devolada123");
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Cobros" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pagos" })).toBeVisible();
 
   /* Enrol on this "device" */
   await page.goto(`${ADMIN}/settings`);
@@ -40,5 +40,5 @@ test("US-S07: enrol a passkey, sign out, sign in with one touch", async ({ page 
   await expect(page.getByLabel("Correo")).toBeVisible();
 
   await page.getByRole("button", { name: /entrar con huella o rostro/i }).click();
-  await expect(page.getByRole("heading", { name: "Cobros" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pagos" })).toBeVisible();
 });

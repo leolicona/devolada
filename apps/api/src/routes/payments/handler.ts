@@ -6,6 +6,16 @@ import { businesses, paymentLinks, payments } from "../../db/schema";
 import { startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { integrationOf } from "../../integrations/store";
+import {
+  outcomeOf,
+  parseHypothesis,
+  recordDispatch,
+  settleDispatch,
+} from "../../integrations/dispatch";
+import { WispHub } from "../../wisphub/client";
+import { attemptReconnection } from "../../wisphub/reconnection";
+import { invalidatePendingInvoices } from "../../wisphub/cache";
+import { firstAttemptSchedule } from "../../reconnection/queue";
 import { signedProofUrl } from "../../direct-payments/proofs";
 import type { ProofResponse } from "./schema";
 
@@ -152,6 +162,7 @@ export async function listPaymentFeed(
             charge.status === "unapplied"
               ? receivedCents
               : Math.max(0, receivedCents - askedCents),
+          observedAction: charge.observedAction,
           customerName: charge.customerName ?? linkUsuario,
           storeName: null,
           createdAt: charge.createdAt.getTime(),
@@ -212,6 +223,80 @@ export async function getPaymentProof(c: Ctx, id: string) {
    credit. The sweep does the rest with the idempotency it already has
    (TD-009's invoice guard); the attempt counter is spent, so one click
    buys exactly one fresh attempt. */
+/* integrations-hub D5: "Ejecutar ahora" — dispatch exactly what the
+   gate recorded, one row, one human look. The registered amount and the
+   invoice are the verdict's own (TD-009's guard); the outcome leaves
+   `observation` through the real queue. Only observation rows qualify:
+   a `withheld` row's threshold is the owner's law (no bypass). */
+export async function executeAction(c: Ctx, id: string) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const { actor, db } = ctx;
+
+  const [row] = await db
+    .select()
+    .from(payments)
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+  if (!row) {
+    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  }
+  if (row.actionOutcome !== "observation") {
+    return c.json({ success: false, error: { code: "NOT_OBSERVED" } }, 409);
+  }
+  const integration = await integrationOf(db, actor.id);
+  if (!integration?.apiKey) {
+    return c.json({ success: false, error: { code: "NOT_CONFIGURED" } }, 409);
+  }
+
+  const now = new Date();
+  const { action, reconnect } = parseHypothesis(
+    row.observedAction ?? "register_and_reconnect:reconnect",
+  );
+  await recordDispatch(db, {
+    businessId: actor.id,
+    integrationId: integration.id,
+    paymentId: row.id,
+    class: row.reconciliationClass ?? "exact",
+    action,
+  });
+  const attempt = await attemptReconnection(
+    new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL),
+    actor.id,
+    { usuario: row.customerUsuario ?? "", wisphubId: row.wisphubCustomerId ?? "" },
+    row.registeredCents ?? 0,
+    now,
+    { invoiceId: row.wisphubInvoiceId, paymentRegistered: row.paymentRegisteredAt !== null },
+    reconnect,
+  );
+  const schedule = firstAttemptSchedule(attempt, now);
+  const outcome = outcomeOf(attempt.status, action);
+  if (outcome !== "queued") {
+    await settleDispatch(db, row.id, "acked", null, now);
+  }
+  const [updated] = await db
+    .update(payments)
+    .set({
+      actionOutcome: outcome,
+      actionAttempts: schedule.attempts,
+      wisphubInvoiceId: attempt.invoiceId,
+      paymentRegisteredAt: attempt.paymentRegistered ? (row.paymentRegisteredAt ?? now) : null,
+      nextAttemptAt: schedule.nextAttemptAt,
+      actionError: attempt.error,
+      ...(outcome === "done" ? { actionDoneAt: now } : {}),
+    })
+    .where(eq(payments.id, row.id))
+    .returning();
+  /* the registration just changed what WispHub owes this tenant's screen */
+  invalidatePendingInvoices(actor.id);
+  return c.json({
+    success: true,
+    data: {
+      actionOutcome: updated.actionOutcome ?? "queued",
+      nextAttemptAt: updated.nextAttemptAt?.getTime() ?? null,
+    },
+  });
+}
+
 export async function retryAction(c: Ctx, id: string) {
   const ctx = businessGuard(c);
   if ("error" in ctx) return ctx.error;
@@ -228,6 +313,18 @@ export async function retryAction(c: Ctx, id: string) {
     return c.json({ success: false, error: { code: "NOT_RETRYABLE" } }, 409);
   }
   const now = new Date();
+  /* integrations-hub D6: the operator's retry is a NEW dispatch
+     decision — its own ledger row, acked by the sweep's terminal. */
+  const integration = await integrationOf(db, actor.id);
+  if (integration) {
+    await recordDispatch(db, {
+      businessId: actor.id,
+      integrationId: integration.id,
+      paymentId: row.id,
+      class: row.reconciliationClass ?? "exact",
+      action: "register_and_reconnect",
+    });
+  }
   const [updated] = await db
     .update(payments)
     .set({ actionOutcome: "queued", nextAttemptAt: now })

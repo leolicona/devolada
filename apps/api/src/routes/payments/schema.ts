@@ -67,6 +67,11 @@ export const feedCharge = z.object({
   missingCents: z.number().int(),
   /* For `unapplied` the whole payment is surplus: the debt was zero */
   surplusCents: z.number().int(),
+  /* integrations-hub D5: the gated verdict's hypothesis — what the
+     mapping would have executed ("register_and_reconnect:reconnect" /
+     ":withhold" / "register_only"); null on rows that really
+     dispatched. */
+  observedAction: z.string().nullable(),
   customerName: z.string(),
   /* null for channel = 'spei': no store handled this money */
   storeName: z.string().nullable(),
@@ -121,8 +126,8 @@ export const proofResponse = z.object({
   imageUrl: z.string().nullable(),
 });
 
-/* payments-and-classes D5 (route renamed to retry-action by
-   integrations-hub D7) */
+/* payments-and-classes D5 (retry) and integrations-hub D5 (execute):
+   both answer the row's new outcome */
 export const retryResponse = z.object({
   actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]),
   nextAttemptAt: z.number().int().nullable(),

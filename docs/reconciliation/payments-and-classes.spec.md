@@ -57,7 +57,9 @@ interview (2026-09-01). Its companion is
   nullable, business-and-memberships D6) is written on `confirmed`,
   `partial` and `unapplied` (`unapplied` = `over` by definition: money
   arrived against a debt of zero — a class, not a credit; D2 keeps its
-  treatment at `flag`); a short payment is `short` even when the
+  treatment at `flag`; since the design-review pass 2026-09-01 the row also
+  keeps `receivedCents`, the CEP sender and the customer identity read at
+  the verdict, so the feed and the proof name the person to resolve with); a short payment is `short` even when the
   integration's threshold reconnects it (phase 5 owns the action; the
   class is the fact). Never on `invalid`/`expired` (no money).
 
@@ -257,4 +259,7 @@ interview (2026-09-01). Its companion is
       **Cobro** = `payment_request` (+ the class row), **Pago** unchanged;
       nav renamed (#140); TASKS.md phase 4 boxes ticked.
 - [ ] The pilot on deployed dev: one real short payment reads `short`
-      with the right missing pesos in Pagos, and its proof opens.
+      with the right missing pesos in Pagos, and its proof opens. Same
+      pass: confirm the Desde/Hasta native date pickers read `dd/mm` on a
+      Mexican device (the browser owns their language; page `lang` does
+      not move Chromium — design-review 2026-09-01).

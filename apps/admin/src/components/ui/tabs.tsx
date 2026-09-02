@@ -19,7 +19,10 @@ export function TabsTrigger({ className, ...props }: ComponentPropsWithoutRef<ty
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        "h-9 rounded-full border border-border px-4 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground",
+        /* design-review 2026-09-01: a trigger never shrinks nor wraps its
+           label — in a nowrap scrolling list (Pagos on a phone) a squeezed
+           chip broke "En cola" into two lines inside its own pill. */
+        "h-9 shrink-0 whitespace-nowrap rounded-full border border-border px-4 text-sm font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground",
         "data-[state=active]:border-transparent data-[state=active]:bg-accent-soft data-[state=active]:text-link",
         className,
       )}

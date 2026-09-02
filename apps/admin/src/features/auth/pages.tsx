@@ -43,6 +43,8 @@ function useSubmit(action: () => Promise<unknown>, onDone: () => void, fallback:
   };
 }
 
+/* design-review 2026-09-01 (must fix): the login subtitle pitched the
+   store network that left to devolada-red; it now speaks the pivot. */
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -58,7 +60,7 @@ export function LoginPage() {
   );
 
   return (
-    <AccessLayout title="Iniciar sesión" description="Administra tu red de puntos de cobro.">
+    <AccessLayout title="Iniciar sesión" description="Cobra por transferencia con validación automática.">
       <form
         onSubmit={(e) => {
           e.preventDefault();

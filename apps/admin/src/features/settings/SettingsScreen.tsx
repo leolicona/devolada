@@ -41,12 +41,36 @@ function useSaveSettings() {
   });
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <Card className="p-6">
-      <h2 className="text-base font-semibold">{title}</h2>
+    <Card className="p-6" id={id}>
+      {/* scroll-mt keeps the heading visible under the mobile header when
+          the index below jumps here */}
+      <h2 className="scroll-mt-24 text-base font-semibold">{title}</h2>
       <div className="mt-4 space-y-4">{children}</div>
     </Card>
+  );
+}
+
+/* design-review 2026-09-01 (could improve): Configuración is a long single
+   column — an in-page index beats scrolling ~3,000px to reach Usuarios.
+   Anchors, not tabs: the page stays one document, the URL stays shareable
+   (the Saldo chip already deep-links #saldo). Entries follow the same
+   role gates as the cards — roles hide, never tease. */
+function SectionIndex({ entries }: { entries: { href: string; label: string }[] }) {
+  if (entries.length < 3) return null;
+  return (
+    <nav aria-label="Secciones de configuración" className="mt-3">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {entries.map((e) => (
+          <li key={e.href}>
+            <a href={e.href} className="text-link hover:underline">
+              {e.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -68,7 +92,7 @@ function WispHubCard({ settings }: { settings: SettingsResponse }) {
   const savedTest = save.data?.wisphubTest;
 
   return (
-    <SectionCard title="Conexión con WispHub">
+    <SectionCard title="Conexión con WispHub" id="wisphub">
       <p className="text-sm text-muted-foreground">
         {settings.wisphub.configured ? (
           <>
@@ -157,7 +181,7 @@ function MoneyCard({ settings }: { settings: SettingsResponse }) {
   const valid = feeCents !== null;
 
   return (
-    <SectionCard title="Cargo por servicio">
+    <SectionCard title="Cargo por servicio" id="cargo">
       <div>
         <Label htmlFor="service-fee">Cargo por servicio</Label>
         {/* design-review D8: money fields carry the sign */}
@@ -214,7 +238,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
   const valid = (canEditClabe ? clabeValid : true) && bank.trim().length >= 2 && beneficiaryValid && feeValid;
 
   return (
-    <SectionCard title="Pago directo por SPEI">
+    <SectionCard title="Pago directo por SPEI" id="spei">
       <p className="text-sm text-muted-foreground">
         {settings.spei.configured
           ? "Tus clientes con banco pueden pagar por transferencia desde su link de pago."
@@ -366,7 +390,7 @@ function ReconnectionCard({ settings }: { settings: SettingsResponse }) {
           }${floorCents > 0 ? ` y no es menor a ${formatMoney(floorCents)}` : ""}.`;
 
   return (
-    <SectionCard title="Reconexión con pago incompleto">
+    <SectionCard title="Reconexión con pago incompleto" id="reconexion">
       <p className="text-sm text-muted-foreground">
         Cuando una transferencia no cubre todo el adeudo, estos límites deciden si el servicio se
         reactiva. El pago se registra siempre.
@@ -472,7 +496,7 @@ function PolicyCard({ settings }: { settings: SettingsResponse }) {
     settings.reconciliationPolicy.overTreatment;
 
   return (
-    <SectionCard title="Política de conciliación">
+    <SectionCard title="Política de conciliación" id="politica">
       <p className="text-sm text-muted-foreground">
         Cada pago confirmado se clasifica contra lo que se pidió: exacto, pago parcial o sobrante.
         La clase se calcula al confirmar y no cambia después.
@@ -546,7 +570,7 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
   const changed = timezone !== settings.timezone || timeFormat !== settings.timeFormat;
 
   return (
-    <SectionCard title="Zona horaria y hora">
+    <SectionCard title="Zona horaria y hora" id="zona">
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="timezone">Zona horaria</Label>
@@ -617,6 +641,24 @@ export function SettingsScreen() {
   return (
     <main className="max-w-3xl px-4 pt-4 lg:px-8 lg:pt-8">
       <h1 className="text-xl font-semibold">Configuración</h1>
+      {data && (
+        <SectionIndex
+          entries={[
+            ...(canSettings
+              ? [
+                  { href: "#wisphub", label: "WispHub" },
+                  { href: "#cargo", label: "Cargo por servicio" },
+                  { href: "#spei", label: "Pago directo" },
+                  { href: "#reconexion", label: "Reconexión" },
+                  { href: "#politica", label: "Política de conciliación" },
+                  { href: "#zona", label: "Zona y hora" },
+                ]
+              : []),
+            ...(canCredit ? [{ href: "#saldo", label: "Saldo y recargas" }] : []),
+            ...(canMembers ? [{ href: "#usuarios", label: "Usuarios" }] : []),
+          ]}
+        />
+      )}
 
       {isPending && (
         <div className="mt-4 space-y-4">

@@ -275,9 +275,14 @@ function BusinessesTab() {
                       {step.label}
                     </span>
                     <Amount cents={b.balanceCents} className="w-24 text-right text-sm font-semibold" />
-                    <span className="w-20 text-right text-sm text-ink-soft">
-                      <Amount cents={b.feeCents} />
-                      {b.feeOverrideCents !== null && " *"}
+                    {/* design-review 2026-09-01 (should fix): the override
+                        was a bare asterisk — a riddle three months later.
+                        The effective fee shows, worded. */}
+                    <span className="w-24 text-right text-sm text-ink-soft">
+                      <Amount cents={b.feeOverrideCents ?? b.feeCents} />
+                      {b.feeOverrideCents !== null && (
+                        <span className="block text-xs">negociada</span>
+                      )}
                     </span>
                   </button>
                 </li>

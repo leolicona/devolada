@@ -76,7 +76,7 @@ test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, a
   await inviteePage.goto(`${ADMIN}/invitaciones/${id}`);
   await expect(inviteePage.getByRole("heading", { name: new RegExp(`te invitaron a wifiplus ${stamp}`, "i") })).toBeVisible();
   await expect(inviteePage.getByText(/como operador\. crea tu contraseña/i)).toBeVisible();
-  await expect(inviteePage.getByLabel("Correo")).toHaveValue(invitee);
+  await expect(inviteePage.getByText(invitee)).toBeVisible();
   await inviteePage.getByLabel("Tu nombre").fill("Ana Journey");
   await inviteePage.getByLabel(/crea tu contraseña/i).fill(PASSWORD);
   await inviteePage.getByRole("button", { name: /crear cuenta y entrar/i }).click();

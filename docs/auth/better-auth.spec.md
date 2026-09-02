@@ -300,6 +300,13 @@ then `/auth/me`), never by listing names.
   **Sesión** card for every role at every width — the email and "Cerrar
   sesión" (BUG-016; the desktop sidebar keeps its button); the passkey
   card lists and removes credentials (D18).
+- **Admin, design review identidad-2 (2026-09-02)**: on `/invitaciones/:id`
+  the invited address is **text** ("Correo: ana@…"), never a field that
+  looks editable; the expired and wrong-email states end with "Ir a
+  iniciar sesión" like every other access card; on `/verify-email` a wrong
+  código says "Reenvíalo e intenta otra vez" (the resend is right there),
+  the other código screens keep "Pide uno nuevo". The text-link buttons
+  ("Reenviar código", "Cerrar sesión") are `Button variant="link"`.
 - **Admin, identity round (2026-09-02)**: `/login` and `/signup` honour
   `next` (D12). Signup names each problem under its field before the
   request leaves (name ≥ 2, email shape, password ≥ 8 — the API's own

@@ -279,9 +279,9 @@ describe("D8 + better-auth D14: the invitation page decides for the invitee", ()
 
     expect(await screen.findByRole("heading", { name: /te invitaron a wifiplus/i })).toBeInTheDocument();
     expect(screen.getByText(/como operador\. crea tu contraseña/i)).toBeInTheDocument();
-    const email = screen.getByLabelText("Correo");
-    expect(email).toHaveValue("ana@wifiplus.mx");
-    expect(email).toHaveAttribute("readonly");
+    /* The address is text, never a field (design review identidad-2) */
+    expect(screen.getByText("ana@wifiplus.mx")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Correo")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^entrar$/i })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Tu nombre"), "Ana Torres");
@@ -351,6 +351,8 @@ describe("D8 + better-auth D14: the invitation page decides for the invitee", ()
     );
     renderApp("/invitaciones/old");
     expect(await screen.findByText(/esta invitación venció/i)).toBeInTheDocument();
+    /* Every dead end has a door (design review identidad-2) */
+    expect(screen.getByRole("link", { name: /ir a iniciar sesión/i })).toHaveAttribute("href", "/login");
     expect(screen.getByText(/48 horas/i)).toBeInTheDocument();
 
     renderApp("/invitaciones/nope");

@@ -181,11 +181,8 @@ export function LinksScreen() {
         </label>
       </div>
 
-      {actor && !speiConfigured && (
-        <Alert variant="warning" className="mt-6">
-          Configura la CLABE del negocio en Configuración para compartir links de pago.
-        </Alert>
-      )}
+      {/* No page notice for the missing CLABE: the shell's banner already
+          says it one screen above (design review identidad-2, should fix 2) */}
 
       {isConfigError && (
         <Alert variant="destructive" layout="icon" className="mt-6">

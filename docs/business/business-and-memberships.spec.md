@@ -92,7 +92,9 @@ PR #124); its IA decisions are inherited, not re-decided.
   `speiConfigured: false`, the shell shows a banner ("Falta la CLABE del
   negocio…", with the button for whoever may change the CLABE), Links
   and Cobros show the customers but not the share buttons, and the pago
-  page keeps answering `SPEI_NOT_CONFIGURED` — nothing moves money
+  page keeps answering `SPEI_NOT_CONFIGURED` (the shell banner is the one
+  voice for the missing CLABE — Links no longer repeats it on the page,
+  design review identidad-2) — nothing moves money
   toward an unconfigured account. The bank in Configuración is still
   **pre-selected from the provider vocabulary** by the CLABE's 3-digit
   prefix and correctable only from that catalog. Every other setting
@@ -249,7 +251,9 @@ PR #124); its IA decisions are inherited, not re-decided.
   invited (D12); emails only for inviters (D11); pending invitations with
   Reenviar / Cancelar (D8); invite form (no verification notice: nobody
   unverified holds a session, better-auth D16); remove with confirm
-  dialog. Role-hidden
+  dialog. Under `sm` every row stacks — the person on one line, the
+  picker and Quitar on the next (design review identidad-2: at 375px the
+  one-line row left the name as "A…"). Role-hidden
   rendering everywhere: a control the role cannot use does not render
   (brief law) — asserted in component tests per role.
 - States per the IA: loading / error-with-retry / true-empty / role-hidden.

@@ -21,7 +21,15 @@ import { login, requestPasswordReset, resetPasswordWithCode, sendVerificationCod
    HANDLED, and the usual landing is skipped. */
 export const HANDLED = Symbol("handled");
 
-function useSubmit(action: () => Promise<unknown>, onDone: () => void, fallback: string) {
+function useSubmit(
+  action: () => Promise<unknown>,
+  onDone: () => void,
+  fallback: string,
+  /* What a wrong or dead código says on this page — the screen with the
+     resend at hand says "Reenvíalo", the others "Pide uno nuevo" (design
+     review identidad-2, should fix 3) */
+  codeCopy = "El código no es válido o ya venció. Pide uno nuevo.",
+) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return {
@@ -38,7 +46,7 @@ function useSubmit(action: () => Promise<unknown>, onDone: () => void, fallback:
           e instanceof ApiError && e.code === "EMAIL_TAKEN"
             ? "Ya existe una cuenta con ese correo."
             : e instanceof ApiError && /OTP|CODE/i.test(e.code)
-              ? "El código no es válido o ya venció. Pide uno nuevo."
+              ? codeCopy
               : fallback,
         );
       } finally {
@@ -272,6 +280,7 @@ export function VerifyEmailPage() {
       queryClient.clear();
       void navigate({ to: next ? asRoute(next) : "/" });
     },
+    "No pudimos confirmar el código. Intenta de nuevo.",
     "El código no es válido o ya venció. Reenvíalo e intenta otra vez.",
   );
 
@@ -314,9 +323,8 @@ export function VerifyEmailPage() {
           {confirm.busy ? "Confirmando…" : "Confirmar"}
         </Button>
         <p className="text-center text-sm">
-          <button
-            type="button"
-            className="text-link hover:underline"
+          <Button
+            variant="link"
             disabled={!EMAIL_SHAPE.test(address)}
             onClick={() => {
               setResent(true);
@@ -324,7 +332,7 @@ export function VerifyEmailPage() {
             }}
           >
             {resent ? "Código reenviado" : "Reenviar código"}
-          </button>
+          </Button>
         </p>
         <div className="flex justify-between text-sm">
           {/* A mistyped address is fixed by signing up again: the unverified
@@ -445,9 +453,8 @@ export function RecoverPage() {
           <p className="text-center text-sm">
             {/* The same confirmation the verify banner gives: a resend that
                 says nothing looks like a button that did nothing. */}
-            <button
-              type="button"
-              className="text-link hover:underline"
+            <Button
+              variant="link"
               disabled={ask.busy}
               onClick={() => {
                 setResent(true);
@@ -455,7 +462,7 @@ export function RecoverPage() {
               }}
             >
               {resent ? "Código reenviado" : "Reenviar código"}
-            </button>
+            </Button>
           </p>
           {backToLogin}
         </form>

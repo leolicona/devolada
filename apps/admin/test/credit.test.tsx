@@ -49,7 +49,10 @@ describe("US-B04: the chip and the banners — label and icon per step, never co
     renderApp("/");
     const chips = await screen.findAllByRole("link", { name: new RegExp(`^${label}:`) });
     expect(chips.length).toBeGreaterThan(0);
-    expect(within(chips[0]).getByText(label)).toBeInTheDocument();
+    /* shell header: the normal step is icon + amount; the label shows up
+       from "Saldo bajo" on — a label that appears is the non-color signal. */
+    if (step === "ok") expect(within(chips[0]).queryByText(label)).not.toBeInTheDocument();
+    else expect(within(chips[0]).getByText(label)).toBeInTheDocument();
   });
 
   it("the pause banner names the way out; a low balance shows no banner", async () => {

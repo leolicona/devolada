@@ -18,10 +18,18 @@ api. / consta.              APIs (no UI)
 - **Workspace switcher** in the header (US-B02): current business name; a
   menu lists the user's businesses + "Crear negocio". Switching swaps the
   whole data context, no re-login. One business → the switcher renders as a
-  plain label.
+  plain label. The role reads in the sidebar and in Configuración → Equipo,
+  not in the phone's header.
+- **The phone's header is one row** (2026-09-02): business name left, Saldo
+  chip right, 48px. Three stacked rows (name, role, chip) took a quarter of
+  the screen before the page title with nothing the reader acts on daily.
+  **Rejected**: no header at all with a badge on Configuración — the
+  balance is the number that decides a top-up, it stays in sight; the
+  saldo inside the page-title row — that row is already full at 375px.
 - **Saldo chip** in the header (US-B04): current credit, always visible.
   Each step changes **label and icon, never color alone** (the brief's own
-  law): normal shows the amount; at 20% it gains "Saldo bajo" + its icon;
+  law): normal shows icon + amount and no word ("Saldo" next to a coin and
+  a figure said nothing); at 20% it gains "Saldo bajo" + its icon;
   at ≤0, "Sin saldo"; past the cap, "Validación en pausa". The US-B04 child
   spec's UI Contract states the exact set. Tapping it opens Configuración → Saldo y recargas. A chip, not a nav
   section — it is a status, not a place. **Rejected**: a sixth nav section

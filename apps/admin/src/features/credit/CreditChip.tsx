@@ -2,13 +2,20 @@ import { Alert, Amount } from "@devolada/ui";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, CircleDollarSign, PauseCircle, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { BusinessActor } from "../auth/session";
 
 /* prepaid-credit D7 (US-B04): the chip in the shell. Each step changes
    label and icon, never color alone (FRONTEND law, brief). A chip, not a
    nav section (IA): it is a status, not a place — tapping opens
    Configuración → Saldo y recargas. Every role sees it: a paused
-   business is everyone's problem to know. */
+   business is everyone's problem to know.
+
+   shell header (2026-09-02): in the normal step the chip is icon + amount
+   and nothing else — "Saldo" next to a coin and a figure said nothing.
+   The label appears from "Saldo bajo" on: a label that shows up is the
+   non-color signal D7 asks for. Screen readers hear the step in every
+   state through the aria-label. */
 
 export const STEP_COPY = {
   ok: { label: "Saldo", icon: CircleDollarSign, tone: "text-foreground" },
@@ -17,18 +24,23 @@ export const STEP_COPY = {
   paused: { label: "Validación en pausa", icon: PauseCircle, tone: "text-error" },
 } as const;
 
-export function CreditChip({ credit }: { credit: BusinessActor["credit"] }) {
+export function CreditChip({ credit, className }: { credit: BusinessActor["credit"]; className?: string }) {
   const step = STEP_COPY[credit.step];
   const Icon = step.icon;
+  const quiet = credit.step === "ok";
   return (
     <Link
       to="/settings"
       hash="saldo"
       aria-label={`${step.label}: ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(credit.balanceCents / 100)}`}
-      className={`flex items-center gap-2 rounded-md border border-border bg-well px-3 py-1.5 text-sm ${step.tone} hover:bg-muted`}
+      className={cn(
+        "inline-flex h-8 items-center gap-2 rounded-md border border-border bg-well px-2.5 text-sm hover:bg-muted",
+        step.tone,
+        className,
+      )}
     >
       <Icon className="size-4 shrink-0" aria-hidden />
-      <span className="font-medium">{step.label}</span>
+      {!quiet && <span className="truncate font-medium">{step.label}</span>}
       <Amount cents={credit.balanceCents} className="ml-auto text-sm font-semibold" />
     </Link>
   );

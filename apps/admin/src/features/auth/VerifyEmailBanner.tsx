@@ -10,7 +10,7 @@ import { sendVerificationCode, verifyEmailCode } from "./session";
 /* Verification banner (better-auth.spec.md UI contract): the código is
    typed right here, where it was asked — never a link (D4). Verification
    gates store registration, not the session. */
-export function VerifyEmailBanner({ email }: { email: string }) {
+export function VerifyEmailBanner({ email, className }: { email: string; className?: string }) {
   const queryClient = useQueryClient();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,7 +32,9 @@ export function VerifyEmailBanner({ email }: { email: string }) {
   }
 
   return (
-    <Alert variant="warning" className="m-4 space-y-3 lg:mx-8 lg:mt-6">
+    /* Margins are the caller's: the shell's gutters made the banner an
+       indented box inside the wizard's card (design review "identidad") */
+    <Alert variant="warning" className={`space-y-3 ${className ?? ""}`}>
       <span className="flex items-center gap-2">
         <MailWarning className="size-4 shrink-0" aria-hidden />
         Confirma tu correo para operar: escribe el código que enviamos a {email}.

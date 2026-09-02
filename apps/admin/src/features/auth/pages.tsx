@@ -266,8 +266,19 @@ export function RecoverPage() {
     "Revisa que la contraseña tenga 8 caracteres y coincida.",
   );
 
+  const backToLogin = (
+    <p className="text-center text-sm">
+      <Link to="/login" className="text-link hover:underline">
+        Volver a iniciar sesión
+      </Link>
+    </p>
+  );
+
   return (
-    <AccessLayout title="Recuperar contraseña">
+    <AccessLayout
+      title="Recuperar contraseña"
+      description={step === "email" ? "Te enviamos un código para elegir una contraseña nueva." : undefined}
+    >
       {step === "email" ? (
         <form
           onSubmit={(e) => {
@@ -285,6 +296,7 @@ export function RecoverPage() {
           <Button type="submit" size="lg" className="w-full" disabled={ask.busy}>
             {ask.busy ? "Enviando…" : "Enviar código"}
           </Button>
+          {backToLogin}
         </form>
       ) : (
         <form
@@ -295,7 +307,7 @@ export function RecoverPage() {
           className="space-y-4"
           noValidate
         >
-          <Alert>Si existe una cuenta con ese correo, le enviamos un código.</Alert>
+          <Alert>Si existe una cuenta con {email}, le enviamos un código.</Alert>
           <div>
             <Label htmlFor="code">Código</Label>
             <Input
@@ -335,6 +347,7 @@ export function RecoverPage() {
               {resent ? "Código reenviado" : "Reenviar código"}
             </button>
           </p>
+          {backToLogin}
         </form>
       )}
     </AccessLayout>

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ApiError } from "@/lib/api";
 import { AccessLayout } from "../auth/AccessLayout";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
+import { SignOutLink } from "../auth/SignOutLink";
 import { createBusiness, useUser } from "../auth/session";
 
 /* The onboarding wizard (business-and-memberships D5, US-B01): one
@@ -90,7 +91,7 @@ export function NewBusinessScreen() {
       title={step === 3 ? "Tu negocio está listo" : "Crea tu negocio"}
       description={step === 3 ? "Ya puedes cobrar por transferencia." : stepLabel}
     >
-      {!user.data.emailVerified && <VerifyEmailBanner email={user.data.email} />}
+      {!user.data.emailVerified && <VerifyEmailBanner email={user.data.email} className="mb-4" />}
 
       {step === 1 && (
         <form
@@ -204,6 +205,7 @@ export function NewBusinessScreen() {
           </Button>
         </div>
       )}
+      <SignOutLink email={user.data.email} />
     </AccessLayout>
   );
 }

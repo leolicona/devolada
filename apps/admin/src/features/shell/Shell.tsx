@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { roleCan } from "@devolada/api/role-matrix";
 import { logout, useSession } from "../auth/session";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
+import { SignOutLink } from "../auth/SignOutLink";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 import { CreditBanner, CreditChip } from "../credit/CreditChip";
@@ -49,6 +50,8 @@ function SuspendedScreen() {
       <p className="max-w-sm text-base text-muted-foreground">
         Tu cuenta está suspendida. Escríbenos para revisarla.
       </p>
+      {/* The contact channel is open item 5 of better-auth.spec.md */}
+      <SignOutLink />
     </main>
   );
 }
@@ -199,7 +202,7 @@ export function Shell() {
         <CreditBanner credit={actor.credit} />
         {/* D5: unverified ISPs see a persistent banner; the código is
             typed right here (better-auth.spec.md D4) */}
-        {!actor.emailVerified && <VerifyEmailBanner email={actor.email} />}
+        {!actor.emailVerified && <VerifyEmailBanner email={actor.email} className="m-4 lg:mx-8 lg:mt-6" />}
         {/* Settings D8: a banner, not a wall — the admin still works
             without a key, but nothing reconnects until it is there.
             The key moved to Integraciones with the hub (BUG-013). */}

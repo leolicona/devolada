@@ -5,6 +5,7 @@ import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ApiError } from "@/lib/api";
 import { AccessLayout } from "../auth/AccessLayout";
+import { SignOutLink } from "../auth/SignOutLink";
 import { listOrganizations, setActiveBusiness } from "../auth/session";
 
 /* business-and-memberships D4 (US-B02): several memberships and no
@@ -63,6 +64,7 @@ export function ChooseBusinessScreen({ reason }: { reason: "choose" | "revoked" 
           Crear negocio
         </Link>
       </p>
+      <SignOutLink />
     </AccessLayout>
   );
 }

@@ -259,4 +259,7 @@ interview (2026-09-01). Its companion is
       **Cobro** = `payment_request` (+ the class row), **Pago** unchanged;
       nav renamed (#140); TASKS.md phase 4 boxes ticked.
 - [ ] The pilot on deployed dev: one real short payment reads `short`
-      with the right missing pesos in Pagos, and its proof opens.
+      with the right missing pesos in Pagos, and its proof opens. Same
+      pass: confirm the Desde/Hasta native date pickers read `dd/mm` on a
+      Mexican device (the browser owns their language; page `lang` does
+      not move Chromium — design-review 2026-09-01).

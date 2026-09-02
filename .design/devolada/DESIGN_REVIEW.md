@@ -51,6 +51,13 @@ product's pitch.
 
 ## Should Fix
 
+> **Applied 2026-09-01** (same PR as the must-fix): 1 — the dialog formats
+> es-MX ("14 de agosto de 2026"); 2 — the native control stays (the browser
+> owns its language; the dd/mm check on a Mexican device rides the spec's
+> pilot DoD); 3 — chips are one scrollable line below `sm` and Desde/Hasta
+> fold behind a "Fechas" toggle that stays open while a date is set; 4 —
+> the override shows the effective fee with the word "negociada".
+
 1. **The proof dialog shows a raw ISO date.** `FeedScreen.tsx` (ProofDialog)
    prints `2026-08-14` while every other date on the screen is es-MX formatted
    ("Vence 25 sep", "02:30 p.m."). See `review-pagos-proof-dialog-desktop-1280.png`.

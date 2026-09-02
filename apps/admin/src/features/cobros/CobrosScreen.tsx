@@ -155,7 +155,10 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
               )}
             </div>
           )}
-          <ul className="border-t border-line-soft bg-muted/50 px-4 py-2" aria-label={`Facturas de ${group.name}`}>
+          <ul
+            className={`${canOperate && linkUrl ? "" : "border-t border-line-soft "}bg-muted/50 px-4 py-2`}
+            aria-label={`Facturas de ${group.name}`}
+          >
             {group.cobros.map((c) => (
               <li key={c.externalId} className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
                 <span className="text-muted-foreground">

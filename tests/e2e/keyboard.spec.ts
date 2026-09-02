@@ -110,7 +110,7 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /Actualizar/ /* the roster's freshness control (pilot-UX round) */,
       /Buscar por nombre/,
       /Copiar/ /* the first customer's actions: the roster is alive on arrival */,
-      /Compartir/,
+      /WhatsApp/ /* one word for the channel (pilot-UX review) */,
     ]);
   });
 });

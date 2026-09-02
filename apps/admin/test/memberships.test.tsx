@@ -237,7 +237,7 @@ describe("US-B03: roles hide, never tease", () => {
     );
     renderApp("/links");
     expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /compartir/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
   });
 });
 

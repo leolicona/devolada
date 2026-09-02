@@ -137,6 +137,9 @@ describe("D7 scenario 9: a business is born with its own Consta key", () => {
     expect(res.status).toBe(201);
     const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.constaStatus).toBe("pending");
+    /* pilot-UX review: the in-flight row is born with its person */
+    expect(row.customerName).toBe("Janely");
+    expect(row.customerUsuario).toBe("greyes@wifiplus");
   });
 });
 

@@ -59,8 +59,10 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
     <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 sm:flex">
       <div className="min-w-0 sm:flex-1">
         <span className="block text-sm font-medium">{row.name || row.usuario}</span>
+        {/* a nameless customer must not read their usuario twice */}
         <span className="block text-sm text-muted-foreground">
-          {row.usuario} {row.phone ? `· ${row.phone}` : ""}
+          {row.name ? row.usuario : "Sin nombre en WispHub"}
+          {row.phone ? ` · ${row.phone}` : ""}
         </span>
       </div>
       {/* business-and-memberships D3: sharing is `payments: operate`;
@@ -98,7 +100,7 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
             onClick={() => window.open(row.waLink, "_blank", "noopener,noreferrer")}
           >
             <Share2 className="mr-2 size-4" aria-hidden />
-            Compartir
+            WhatsApp
           </Button>
         </div>
       )}

@@ -331,6 +331,15 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     proofKey: body.proofId ?? null,
     receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
     supersedesId: superseded?.id ?? null,
+    /* pilot-UX review: the row is born with its person. The pre-check
+       above already read the customer, so the in-flight row shows a name
+       where every other row does; the confirmation overwrites with its
+       own fresh read, as before. */
+    wisphubCustomerId: link.wisphubCustomerId,
+    customerUsuario: link.customerUsuario,
+    customerName: customer?.name ?? link.customerUsuario,
+    customerZone: customer?.zone ?? null,
+    customerPhone: customer?.phone ?? null,
     /* The row is born owned by the sweep (D7). The inline attempt
        below is an optimisation, not the mechanism: if it never
        finishes — a worker evicted, a provider that stalls past its

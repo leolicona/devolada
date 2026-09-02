@@ -260,6 +260,15 @@ from the trust block (US-V15), with the measured rate written into it. The
 profile selector considered during design lives behind that measurement:
 it is built when the data justifies it, or never.
 
+> **Amended 2026-09-01 (integrations-hub D8; pivot Open item 1).** The
+> switch moves from Configuración to the WispHub integration detail as
+> its own **pre-verdict** switch — never a row of the class→action
+> mapping, which is post-verdict. Observation mode (integrations-hub
+> D4) pauses the release too: a release is a WispHub write, and
+> observation means zero writes. Revocation (D5/D8) is declared an
+> **adapter action**, so both halves of the cycle live in one layer;
+> the good-faith evidence stays adapter-agnostic oracle machinery.
+
 ### D11 — Data
 
 `direct_payments` gains `provisionalReleaseAt` (timestamp, null) and

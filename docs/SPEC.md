@@ -33,6 +33,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | The transfer that arrived and reconciled | **Pago** | `payment` (table `payments`; absorbed the store-era `charge`) | "cobro" (that is the expected side, below) |
 | What a customer owes, read live from WispHub | **Cobro** | `payment_request` (route `/payment-requests`; **no table** — read live, cobros-live D2/D6) | "cargo" (reserved for fees); a stored copy (nothing mirrors it) |
 | The verdict against the ask | **Exacto / Pago parcial / Sobrante** | `reconciliation_class` (`exact/short/over`, payments-and-classes D1/D3) | reusing the lifecycle words (`partial` is a status, `short` a class) |
+| Actions paused, oracle still working | **Modo observación** | `actions_enabled = false` on `integrations` (integrations-hub D4) | "modo prueba"; "pausa" (that word is the credit pause) |
 | Who may do what inside a business | **Dueño / Administrador / Operador / Lector** | `role` (`owner/admin/operator/viewer`) | "usuario" as a role name |
 | Prepaid validation credit | **Saldo** | `credit_balance` (derived: SUM of `credit_entries`) | "monedero" |
 | Adding credit | **Recarga** | `top_up` | "depósito" |
@@ -270,6 +271,7 @@ Owner's decisions:
 | [direct-payment/claimed-amount.spec.md](direct-payment/claimed-amount.spec.md) | direct-payment | US-D13 | in development |
 | [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | in development |
 | [direct-payment/provisional-release.spec.md](direct-payment/provisional-release.spec.md) | direct-payment | US-D15 | proposed |
+| [integrations/integrations-hub.spec.md](integrations/integrations-hub.spec.md) | integrations | US-I01, US-I02, US-I03 | proposed |
 | [platform/pivot.spec.md](platform/pivot.spec.md) | platform | US-B01–B06, US-R01–R04, US-I01–I03, US-L02, US-L03 | in development (phase 1 executed) |
 | [business/business-and-memberships.spec.md](business/business-and-memberships.spec.md) | business | US-B01, US-B02, US-B03 | current |
 | [platform/prepaid-credit.spec.md](platform/prepaid-credit.spec.md) | platform | US-B04, US-B05, US-B06, US-L03 | current |

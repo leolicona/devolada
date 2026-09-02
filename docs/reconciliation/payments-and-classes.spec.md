@@ -57,7 +57,9 @@ interview (2026-09-01). Its companion is
   nullable, business-and-memberships D6) is written on `confirmed`,
   `partial` and `unapplied` (`unapplied` = `over` by definition: money
   arrived against a debt of zero — a class, not a credit; D2 keeps its
-  treatment at `flag`); a short payment is `short` even when the
+  treatment at `flag`; since the design-review pass 2026-09-01 the row also
+  keeps `receivedCents`, the CEP sender and the customer identity read at
+  the verdict, so the feed and the proof name the person to resolve with); a short payment is `short` even when the
   integration's threshold reconnects it (phase 5 owns the action; the
   class is the fact). Never on `invalid`/`expired` (no money).
 

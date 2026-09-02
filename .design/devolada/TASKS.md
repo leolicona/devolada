@@ -77,13 +77,13 @@ client's query memory; the webhook spike ran — no push surface exists.
 Child spec: integrations hub (US-I01–I03); formally amends
 provisional-release D10 (pivot Open item 1).
 
-- [ ] Integrations catalog + WispHub detail page (key reuses settings D1–D3)
-- [ ] Class → action mapping UI (three rows; threshold % + floor $ in corto)
-- [ ] Master switch → modo observación (shell badge; outcome `observation`)
-- [ ] Provisional release as a pre-verdict switch on the integration page;
+- [x] Integrations catalog + WispHub detail page (key reuses settings D1–D3)
+- [x] Class → action mapping UI (three rows; threshold % + floor $ in corto)
+- [x] Master switch → modo observación (shell badge; outcome `observation`)
+- [x] Provisional release as a pre-verdict switch on the integration page;
       revocation declared as an adapter action
-- [ ] Internal event dispatch with acknowledgment (Open item 5 constraints)
-- [ ] WispHub key setting moves from Configuración to Integraciones
+- [x] Internal event dispatch with acknowledgment (Open item 5 constraints)
+- [x] WispHub key setting moves from Configuración to Integraciones
 
 ## Cross-cutting, every phase
 

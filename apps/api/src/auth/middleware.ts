@@ -62,6 +62,7 @@ export async function findActor(
     /* integrations-hub D2: "configured" means the integration row holds
        a key */
     wisphubConfigured: Boolean(joined.integration?.apiKey),
+    observing: Boolean(joined.integration?.apiKey) && !joined.integration?.actionsEnabled,
     businesses: memberships.map((m) => ({
       id: m.businessId,
       orgId: m.orgId,

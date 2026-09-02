@@ -14,6 +14,8 @@ import { SettingsScreen } from "./features/settings/SettingsScreen";
 import { NewBusinessScreen } from "./features/onboarding/NewBusinessScreen";
 import { AcceptInvitationScreen } from "./features/invitations/AcceptInvitationScreen";
 import { OperatorScreen } from "./features/operator/OperatorScreen";
+import { IntegrationsScreen } from "./features/integrations/IntegrationsScreen";
+import { WispHubScreen } from "./features/integrations/WispHubScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -50,6 +52,18 @@ const cobrosRoute = createRoute({
   path: "/payment-requests",
   component: CobrosScreen,
 });
+/* integrations-hub D1: catalog + detail (routes are English, IA rule) */
+const integrationsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations",
+  component: IntegrationsScreen,
+});
+const wisphubRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/wisphub",
+  component: WispHubScreen,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -74,7 +88,7 @@ const routeTree = rootRoute.addChildren([
   recoverRoute,
   newBusinessRoute,
   invitationRoute,
-  appRoute.addChildren([indexRoute, feedRoute, cobrosRoute, linksRoute, settingsRoute, operatorRoute]),
+  appRoute.addChildren([indexRoute, feedRoute, cobrosRoute, linksRoute, integrationsRoute, wisphubRoute, settingsRoute, operatorRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

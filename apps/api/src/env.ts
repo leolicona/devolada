@@ -65,6 +65,10 @@ export type Actor = {
   timezone: string;
   timeFormat: "12h" | "24h";
   wisphubConfigured: boolean;
+  /* integrations-hub D4: connected with actions off — the shell chip.
+     Every role sees it: a paused hand is context everyone reading Pagos
+     needs. */
+  observing: boolean;
   /* Every business this user belongs to — the switcher's list (US-B02) */
   businesses: { id: string; orgId: string; name: string; role: Role }[];
   /* operator-panel D2: derived from the secret, per request (a string

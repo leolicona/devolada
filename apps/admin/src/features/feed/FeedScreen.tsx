@@ -80,6 +80,14 @@ const lifecycleBadge: Partial<Record<FeedCharge["status"], Status>> = {
   unapplied: "unapplied",
 };
 
+/* integrations-hub D5: the recorded hypothesis, in the ISP's words */
+function hypothesisCopy(observed: string | null): string {
+  if (observed === "register_only") return "Se habría registrado (solo registrar).";
+  if (observed === "register_and_reconnect:withhold")
+    return "Se habría registrado sin reactivar (umbral).";
+  return "Se habría reconectado.";
+}
+
 const classBadge: Record<NonNullable<FeedCharge["reconciliationClass"]>, Status> = {
   exact: "classExact",
   short: "classShort",
@@ -201,13 +209,24 @@ function ChargeRow({
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }),
   });
 
+  /* integrations-hub D5: dispatch exactly what the gate recorded — one
+     row, one human look. Observation rows only. */
+  const execute = useMutation<RetryResponse, ApiError>({
+    mutationFn: () =>
+      api<RetryResponse>(`/payments/${charge.id}/execute-action`, { method: "POST" }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }),
+  });
+
   const shortCents = charge.askedCents - charge.receivedCents;
   /* integrations-hub D7: the row speaks the generic vocabulary; the
-     badge keeps the action-specific es-MX word — WispHub v1's only
-     completed action is a reconnection, so `done` wears "Reconectado". */
+     badge keeps the action-specific es-MX word, from the ledger's last
+     dispatch — "Reconectado" under register_and_reconnect, "Registrado"
+     under register_only. */
   const badge: Status =
     charge.actionOutcome === "done"
-      ? "reconnected"
+      ? charge.dispatchedAction === "register_only"
+        ? "registered"
+        : "reconnected"
       : (charge.actionOutcome ?? lifecycleBadge[charge.status] ?? "validating");
   const showsMoney = ["confirmed", "partial", "unapplied"].includes(charge.status);
   return (
@@ -299,10 +318,27 @@ function ChargeRow({
             </div>
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
-              <p className="mt-1">Intentos de reconexión: {charge.actionAttempts}</p>
+              {charge.actionOutcome === "observation" ? (
+                /* D5: the hypothesis is the ramp's instrument — the ISP
+                   compares the oracle against their own hand */
+                <p className="mt-1 font-medium text-info">
+                  {hypothesisCopy(charge.observedAction)}
+                </p>
+              ) : (
+                <p className="mt-1">Intentos de reconexión: {charge.actionAttempts}</p>
+              )}
               {charge.actionError && <p className="mt-1 text-error">{reasonFor(charge.actionError)}</p>}
               {charge.actionDoneAt && (
                 <p className="mt-1 text-success">Reconectado a las {at(charge.actionDoneAt)}</p>
+              )}
+              {execute.error && (
+                <p className="mt-1 text-error">
+                  {execute.error.code === "NOT_OBSERVED"
+                    ? "Esta acción ya se ejecutó."
+                    : execute.error.code === "NOT_CONFIGURED"
+                      ? "Conecta WispHub para poder ejecutarla."
+                      : "No pudimos ejecutar la acción. Intenta de nuevo."}
+                </p>
               )}
               {retry.error && (
                 <p className="mt-1 text-error">
@@ -318,6 +354,13 @@ function ChargeRow({
                 {canOperate && charge.actionOutcome === "failed" && (
                   <Button disabled={retry.isPending} onClick={() => retry.mutate()}>
                     {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
+                  </Button>
+                )}
+                {/* D5: only observation rows — `withheld` offers nothing;
+                    the threshold is the owner's law */}
+                {canOperate && charge.actionOutcome === "observation" && (
+                  <Button disabled={execute.isPending} onClick={() => execute.mutate()}>
+                    {execute.isPending ? "Ejecutando…" : "Ejecutar ahora"}
                   </Button>
                 )}
               </div>
@@ -450,6 +493,7 @@ export function FeedScreen() {
             <Input
               id="feed-from"
               type="date"
+              lang="es-MX"
               className="mt-1"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
@@ -460,6 +504,7 @@ export function FeedScreen() {
             <Input
               id="feed-to"
               type="date"
+              lang="es-MX"
               className="mt-1"
               value={to}
               onChange={(e) => setTo(e.target.value)}

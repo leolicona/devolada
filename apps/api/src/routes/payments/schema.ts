@@ -72,6 +72,9 @@ export const feedCharge = z.object({
      ":withhold" / "register_only"); null on rows that really
      dispatched. */
   observedAction: z.string().nullable(),
+  /* The last dispatch decision's action, from the ledger (D6/D7): what
+     `done` should be called. Null when nothing ever dispatched. */
+  dispatchedAction: z.enum(["register_and_reconnect", "register_only"]).nullable(),
   customerName: z.string(),
   /* null for channel = 'spei': no store handled this money */
   storeName: z.string().nullable(),

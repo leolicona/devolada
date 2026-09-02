@@ -17,6 +17,7 @@ export const businessActor = {
   businesses: [{ id: "business-1", orgId: "org_business-1", name: "ISP Demo", role: "owner" }],
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },
+  observing: false,
 } as const;
 
 export const ok = (data: unknown, status = 200) =>
@@ -50,6 +51,14 @@ export const handlers = {
     http.get("/payments/:id/proof", ({ params }) => r(String(params.id))),
   retryReconnection: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/payments/:id/retry-action", ({ params }) => r(String(params.id))),
+  /* integrations-hub (US-I01–I03) */
+  integrations: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/integrations", () => r()),
+  patchWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/integrations/wisphub", async ({ request }) => r(await request.json())),
+  testWisphubIntegration: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/integrations/wisphub/test", async ({ request }) => r(await request.json())),
+  executeAction: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/payments/:id/execute-action", ({ params }) => r(String(params.id))),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),

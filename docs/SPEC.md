@@ -34,6 +34,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 | What a customer owes, read live from WispHub | **Cobro** | `payment_request` (route `/payment-requests`; **no table** — read live, cobros-live D2/D6) | "cargo" (reserved for fees); a stored copy (nothing mirrors it) |
 | The verdict against the ask | **Exacto / Pago parcial / Sobrante** | `reconciliation_class` (`exact/short/over`, payments-and-classes D1/D3) | swapping the two axes' labels: **"Pago parcial"** is always the CLASS `short` (chip and badge); **"Pago incompleto"** is always the lifecycle STATUS `partial` — a payment can wear both, and they answer different questions (what arrived vs. where the row is) |
 | Actions paused, oracle still working | **Modo observación** | `actions_enabled = false` on `integrations` (integrations-hub D4) | "modo prueba"; "pausa" (that word is the credit pause) |
+| Dispatching one observed row's recorded hypothesis by hand | **Ejecutar ahora** | `POST /payments/:id/execute-action` (integrations-hub D5) | "forzar" (it never bypasses the threshold) |
 | Who may do what inside a business | **Dueño / Administrador / Operador / Lector** | `role` (`owner/admin/operator/viewer`) | "usuario" as a role name |
 | Prepaid validation credit | **Saldo** | `credit_balance` (derived: SUM of `credit_entries`) | "monedero" |
 | Adding credit | **Recarga** | `top_up` | "depósito" |

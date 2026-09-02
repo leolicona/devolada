@@ -25,6 +25,7 @@ const feed = feedResponse.parse({
       missingCents: 0,
       surplusCents: 0,
       observedAction: null,
+      dispatchedAction: null,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
       createdAt: Date.UTC(2026, 7, 14, 20, 30),
@@ -37,6 +38,19 @@ const feed = feedResponse.parse({
   effectiveOverTreatment: "flag",
   today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 });
+
+const integrationsFixture = {
+  wisphub: {
+    provider: "wisphub",
+    configured: true,
+    keyTail: "1234",
+    actionsEnabled: false,
+    mapping: { exact: "register_and_reconnect", short: "register_and_reconnect", over: "register_and_reconnect" },
+    thresholdPercent: 100,
+    floorCents: 0,
+    provisionalReleaseEnabled: false,
+  },
+} as const;
 
 const settings = settingsResponse.parse({
   serviceFeeCents: 1500,
@@ -76,13 +90,33 @@ describe("US-P04: the admin passes axe on every section", () => {
     await expectNoViolations(document.body);
   });
 
-  it("Configuración, including the missing-key banner", async () => {
+  it("Configuración", async () => {
     server.use(
-      handlers.session(() => ok({ ...businessActor, wisphubConfigured: false })),
+      handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings)),
     );
     renderApp("/settings");
-    await screen.findByLabelText(/nueva llave/i);
+    await screen.findByLabelText("CLABE");
+    await expectNoViolations(document.body);
+  });
+
+  it("Integraciones: the catalog and the WispHub detail", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.integrations(() => ok(integrationsFixture)),
+    );
+    renderApp("/integrations");
+    await screen.findByText("Integración genérica");
+    await expectNoViolations(document.body);
+  });
+
+  it("WispHub detail, mapping and switches", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.integrations(() => ok(integrationsFixture)),
+    );
+    renderApp("/integrations/wisphub");
+    await screen.findByLabelText("Ejecutar acciones automáticamente");
     await expectNoViolations(document.body);
   });
 });

@@ -290,12 +290,17 @@ per business (D10); no outgoing webhooks in v1 (D17).
 - [x] Scenarios 3, 4, 5, 7 and 9 (server halves) automated in the
       dispatch PR (`integration-dispatch.test.ts`); the rest ride the
       hub-UI PR.
-- [ ] Scenarios 1, 2, 6, 8 and 10–12 automated (hub-UI PR).
+- [x] Scenarios 1, 2, 6, 8 and 10–12 automated (hub-UI PR:
+      `integrations.test.ts` api-side; `integrations.test.tsx` and the
+      feed's observation tests admin-side; scenario 8 held by the
+      charge-feed suite since the rename).
 - [ ] provisional-release D10 amendment note landed (same PR as this
       spec); pivot Open item 1 marked executed.
-- [ ] Glossary: Modo observación row; "Ejecutar ahora" copy recorded.
-- [ ] Light + dark, contrast-lint, axe on the new screens; states:
-      loading / error-with-retry / true-empty / role-hidden.
+- [x] Glossary: Modo observación row (#143) and the Ejecutar ahora row
+      (hub-UI PR).
+- [x] Light + dark, contrast-lint (e2e page: the WispHub detail), axe
+      (catalog + detail) on the new screens; states: loading /
+      error-with-retry / role-hidden (nav and 403).
 - [ ] The pilot on deployed dev: flip observation on, receive one real
       payment, read its hypothesis, execute it by hand from the row,
       flip actions back on.

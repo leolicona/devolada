@@ -10,6 +10,7 @@ import { stubAdminApi } from "./stubs";
 
 const screens = [
   { name: "Cobros", url: ADMIN, stub: stubAdminApi, ready: "Janely Guadalupe Reyes" },
+  { name: "WispHub", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Ejecutar acciones automáticamente" },
 ] as const;
 
 for (const theme of ["light", "dark"] as const) {

@@ -12,6 +12,7 @@ import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
 import { backfillConstaKeys } from "./consta/issuer";
 import { paymentsRoute } from "./routes/payments";
 import { paymentRequestsRoute } from "./routes/payment-requests";
+import { integrationsRoute } from "./routes/integrations";
 import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
 
@@ -40,6 +41,7 @@ app.get("/health", (c) => c.json({ success: true, status: "healthy" }));
 app.route("/auth", auth);
 app.route("/payments", paymentsRoute);
 app.route("/payment-requests", paymentRequestsRoute);
+app.route("/integrations", integrationsRoute);
 app.route("/settings", settingsRoute);
 app.route("/businesses", businessesRoute);
 app.route("/credit", creditRoute);

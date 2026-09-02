@@ -7,21 +7,24 @@ import {
   HandCoins,
   KeyRound,
   LogOut,
+  Plug,
   Settings,
   ShieldCheck,
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { roleCan } from "@devolada/api/role-matrix";
 import { logout, useSession } from "../auth/session";
 import { VerifyEmailBanner } from "../auth/VerifyEmailBanner";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 import { CreditBanner, CreditChip } from "../credit/CreditChip";
+import { ObservationChip } from "../integrations/ObservationChip";
 
 /* payments-and-classes D6: the feed is Pagos the moment Cobros exists —
    never two words for one thing, never one word for two (IA). */
-const sections = [
+const baseSections = [
   { to: "/payments", label: "Pagos", icon: Banknote, exact: false },
   { to: "/payment-requests", label: "Cobros", icon: HandCoins, exact: false },
   /* "Links", not "Enlaces SPEI": the glossary's word for this is
@@ -29,8 +32,12 @@ const sections = [
      already named — and the two words wrapped onto a second line in the
      bottom bar at 360px while every neighbour stayed on one. */
   { to: "/links", label: "Links", icon: LinkIcon, exact: false },
-  { to: "/settings", label: "Configuración", icon: Settings, exact: false },
 ] as const;
+
+/* integrations-hub D1: the fifth and last section, owner/admin only —
+   the law: hide, never disable. Operators read outcomes in Pagos. */
+const integrationsSection = { to: "/integrations", label: "Integraciones", icon: Plug, exact: false } as const;
+const settingsSection = { to: "/settings", label: "Configuración", icon: Settings, exact: false } as const;
 
 function SuspendedScreen() {
   return (
@@ -49,6 +56,12 @@ function SuspendedScreen() {
 /* The links, in both shapes. */
 function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
   const sidebar = variant === "sidebar";
+  const { data: actor } = useSession();
+  const sections = [
+    ...baseSections,
+    ...(roleCan(actor?.role ?? "viewer", "integrations", "manage") ? [integrationsSection] : []),
+    settingsSection,
+  ];
 
   return (
     <nav
@@ -71,7 +84,11 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             className={
               sidebar
                 ? "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                : "flex flex-1 flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"
+                : /* min-w-0 so a long label (Integraciones) shrinks inside
+                     its cell instead of colliding with its neighbour
+                     (design review fase 5); 11px buys the five labels
+                     their one line at 360-375px */
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium text-muted-foreground"
             }
             activeProps={{
               className: sidebar ? "bg-accent-soft text-link" : "text-link font-semibold",
@@ -81,7 +98,7 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             <span className={sidebar ? "contents" : "relative"}>
               <Icon className={sidebar ? "size-4" : "size-5"} aria-hidden />
             </span>
-            {label}
+            <span className={sidebar ? undefined : "max-w-full truncate"}>{label}</span>
           </Link>
         ))}
       </div>
@@ -125,6 +142,7 @@ export function Shell() {
         </div>
         <div className="mb-6 mt-3 px-3">
           <CreditChip credit={actor.credit} />
+          {actor.observing && <ObservationChip />}
         </div>
         <SectionLinks variant="sidebar" />
         {/* operator-panel D3: outside the five sections, only for the operator */}
@@ -156,6 +174,7 @@ export function Shell() {
         <header className="space-y-2 border-b border-border bg-card px-4 py-2 lg:hidden">
           <BusinessSwitcher actor={actor} />
           <CreditChip credit={actor.credit} />
+          {actor.observing && <ObservationChip />}
         </header>
         <CreditBanner credit={actor.credit} />
         {/* D5: unverified ISPs see a persistent banner; the código is

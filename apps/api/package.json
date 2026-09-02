@@ -37,6 +37,7 @@
     "./credit-schema": "./src/routes/credit/schema.ts",
     "./platform-schema": "./src/routes/platform/schema.ts",
     "./settings-schema": "./src/routes/settings/schema.ts",
+    "./integrations-schema": "./src/routes/integrations/schema.ts",
     "./direct-payments-schema": "./src/routes/direct-payments/schema.ts"
   }
 }

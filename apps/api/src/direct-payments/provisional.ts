@@ -162,6 +162,9 @@ export async function maybeProvisionalRelease(
 ): Promise<Partial<typeof payments.$inferInsert>> {
   if (!evidence) return {};
   if (!integration?.provisionalReleaseEnabled) return {};
+  /* integrations-hub D8: observation pauses the release too — a payment
+     promise is a WispHub write, and observation means zero writes. */
+  if (!integration.actionsEnabled) return {};
   if (payment.provisionalReleaseAt) return {};
   if (!integration.apiKey) return {};
 

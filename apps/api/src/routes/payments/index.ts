@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
 import { feedQuery } from "./schema";
-import { getPaymentProof, listPaymentFeed, retryAction } from "./handler";
+import { executeAction, getPaymentProof, listPaymentFeed, retryAction } from "./handler";
 
 /* Pure router: validation + wiring only (code organization law). The
    feed reads `payments` (business-and-memberships D6); the proof is
@@ -21,4 +21,9 @@ paymentsRoute.get("/:id/proof", requireSession, requireArea("payments", "read"),
 
 paymentsRoute.post("/:id/retry-action", requireSession, requireArea("payments", "operate"), (c) => {
   return retryAction(c, c.req.param("id"));
+});
+
+/* integrations-hub D5: observation rows only */
+paymentsRoute.post("/:id/execute-action", requireSession, requireArea("payments", "operate"), (c) => {
+  return executeAction(c, c.req.param("id"));
 });

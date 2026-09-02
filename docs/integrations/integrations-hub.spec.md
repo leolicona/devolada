@@ -287,7 +287,10 @@ per business (D10); no outgoing webhooks in v1 (D17).
       `payments` renames with `reconnected → done` mapped, and
       `observed_action`. Configuración serves as a FAÇADE over the
       integration row until the UI PR moves its cards (D9).
-- [ ] Scenarios 1–12 automated, citing their stories.
+- [x] Scenarios 3, 4, 5, 7 and 9 (server halves) automated in the
+      dispatch PR (`integration-dispatch.test.ts`); the rest ride the
+      hub-UI PR.
+- [ ] Scenarios 1, 2, 6, 8 and 10–12 automated (hub-UI PR).
 - [ ] provisional-release D10 amendment note landed (same PR as this
       spec); pivot Open item 1 marked executed.
 - [ ] Glossary: Modo observación row; "Ejecutar ahora" copy recorded.

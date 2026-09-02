@@ -24,6 +24,7 @@ const feed = feedResponse.parse({
       askedCents: 41400,
       missingCents: 0,
       surplusCents: 0,
+      observedAction: null,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
       createdAt: Date.UTC(2026, 7, 14, 20, 30),

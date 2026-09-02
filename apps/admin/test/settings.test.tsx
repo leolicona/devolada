@@ -140,6 +140,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
       askedCents: 41400,
       missingCents: 0,
       surplusCents: 0,
+      observedAction: null,
       customerName: "Janely",
       storeName: "Abarrotes La Esquina",
       createdAt: at,

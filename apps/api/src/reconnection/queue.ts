@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { payments } from "../db/schema";
 import { integrationsFor } from "../integrations/store";
+import { settleDispatch } from "../integrations/dispatch";
 import { WispHub } from "../wisphub/client";
 import { attemptReconnection } from "../wisphub/reconnection";
 
@@ -141,6 +142,8 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
           actionError: null,
         })
         .where(eq(payments.id, charge.id));
+      /* integrations-hub D6: the decision that queued this closes acked */
+      await settleDispatch(db, charge.id, "acked", null, now);
       report.reconnected++;
       continue;
     }
@@ -174,8 +177,11 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
           : { nextAttemptAt: new Date(now.getTime() + minutes(wait)) }),
       })
       .where(eq(payments.id, charge.id));
-    if (wait === undefined) report.failed++;
-    else report.stillQueued++;
+    if (wait === undefined) {
+      /* integrations-hub D6: the schedule is spent — the ledger says so */
+      await settleDispatch(db, charge.id, "failed", result.error, now);
+      report.failed++;
+    } else report.stillQueued++;
   }
 
   return report;

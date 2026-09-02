@@ -21,6 +21,7 @@ const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   askedCents: 41400,
   missingCents: 0,
   surplusCents: 0,
+  observedAction: null,
   customerName: "Janely",
   storeName: null,
   createdAt: Date.now(),

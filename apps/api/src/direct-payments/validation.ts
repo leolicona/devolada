@@ -18,6 +18,13 @@ import { signedProofUrl } from "./proofs";
 import { classifyPayment } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
 import {
+  actionForClass,
+  hypothesisOf,
+  outcomeOf,
+  recordDispatch,
+  settleDispatch,
+} from "../integrations/dispatch";
+import {
   historyVouches,
   maybeProvisionalRelease,
   notifyProvisionalExpiry,
@@ -600,10 +607,58 @@ export async function runValidation(
     registeredCents: settlement.ispRegisteredCents,
   });
 
+  /* payments-and-classes D1/D3: the class, computed once at the verdict
+     against the fresh ask — the debt read seconds ago plus the service
+     fee, the same total the payer's page quoted. A later policy change
+     never rewrites it (scenario 1). */
+  const klass = classifyPayment({
+    receivedCents,
+    askedCents: ispDebtCents + payment.serviceFeeCents,
+    toleranceCents: business.toleranceCents,
+  });
+  /* integrations-hub D3: the class picks its mapped action; the
+     threshold only votes under register_and_reconnect. */
+  const action = actionForClass(integration, klass);
+
+  /* integrations-hub D4/D5: the observation gate, BEFORE any dispatch —
+     zero writes to WispHub. The verdict still lands whole (folio,
+     customer, class, the settled amount above), the credit is still
+     debited by `update()`, and the row records what the mapping WOULD
+     have executed — the ramp's instrument, and exactly what "Ejecutar
+     ahora" later dispatches. The invoice id rides along so that
+     dispatch reuses it (TD-009's guard). No ledger row: the gate sits
+     before dispatch, and the observation outcome IS the record (D6). */
+  if (!integration.actionsEnabled) {
+    return update({
+      ...base,
+      receivedCents,
+      status: settlement.status,
+      reconciliationClass: klass,
+      confirmedAt: now,
+      cepSenderName: cep?.senderName ?? null,
+      nextValidationAt: null,
+      lastError: null,
+      actionOutcome: "observation",
+      observedAction: hypothesisOf(action, settlement.reconnect),
+      wisphubInvoiceId: debt.invoiceId,
+      actionAttempts: 0,
+      nextAttemptAt: null,
+    });
+  }
+
   /* provider-latency D4: a confirmed payment now exists for this tenant,
      so the display cache is stale by definition. */
   invalidatePendingInvoices(business.id);
 
+  /* integrations-hub D6: the dispatch decision opens its ledger row
+     before the adapter runs; the terminal outcome acks it. */
+  await recordDispatch(db, {
+    businessId: business.id,
+    integrationId: integration.id,
+    paymentId: payment.id,
+    class: klass,
+    action,
+  });
   const attempt = await attemptReconnection(
     wisphub,
     business.id,
@@ -611,23 +666,20 @@ export async function runValidation(
     settlement.ispRegisteredCents,
     now,
     { invoiceId: debt.invoiceId, paymentRegistered: false },
-    settlement.reconnect,
+    /* D3: register_only never asks the router, whatever the threshold */
+    action === "register_and_reconnect" && settlement.reconnect,
   );
   const schedule = firstAttemptSchedule(attempt, now);
+  const outcome = outcomeOf(attempt.status, action);
+  if (outcome !== "queued") {
+    await settleDispatch(db, payment.id, "acked", null, now);
+  }
 
   return update({
     ...base,
     receivedCents,
     status: settlement.status,
-    /* payments-and-classes D1/D3: the class, computed once at the verdict
-       against the fresh ask — the debt read seconds ago plus the service
-       fee, the same total the payer's page quoted. A later policy change
-       never rewrites it (scenario 1). */
-    reconciliationClass: classifyPayment({
-      receivedCents,
-      askedCents: ispDebtCents + payment.serviceFeeCents,
-      toleranceCents: business.toleranceCents,
-    }),
+    reconciliationClass: klass,
     confirmedAt: now,
     /* D18: who Banxico says sent the money. Recorded and acted on by
        nothing — a name unrelated to the subscriber is the only signal
@@ -639,15 +691,15 @@ export async function runValidation(
     nextValidationAt: null,
     lastError: null,
     /* The queue's first attempt, on the same row (reconnection-queue D2).
-       The adapter speaks its own vocabulary ("reconnected"); the row
-       speaks the generic one (integrations-hub D7). */
-    actionOutcome: attempt.status === "reconnected" ? ("done" as const) : attempt.status,
+       The adapter speaks its own vocabulary; the row speaks the generic
+       one, and register_only's completed registration is `done` (D7). */
+    actionOutcome: outcome,
     actionAttempts: schedule.attempts,
     wisphubInvoiceId: attempt.invoiceId,
     paymentRegisteredAt: attempt.paymentRegistered ? now : null,
     nextAttemptAt: schedule.nextAttemptAt,
     actionError: attempt.error,
-    ...(attempt.status === "reconnected" ? { actionDoneAt: now } : {}),
+    ...(outcome === "done" ? { actionDoneAt: now } : {}),
   });
 }
 

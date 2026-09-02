@@ -101,10 +101,24 @@ per business (D10); no outgoing webhooks in v1 (D17).
   (partial-payment D9). The button exists **only** on observation rows:
   a `withheld` row (threshold said no) gets no button — the threshold
   is the owner's law and the exception is made in WispHub, as today.
-  **Rejected**: observation rows with no hypothesis (nothing to compare
-  — the ramp teaches nothing); "Ejecutar ahora" on `withheld`
-  (a one-click bypass of the owner's own policy; revisited only if the
-  pilot asks for it, as its own decision).
+  Turning the master switch on **never rewrites history in either
+  direction**: old `observation` rows keep their hypothesis and their
+  button (each still executed one by one, with the human look that is
+  the guard), and turning it off later only changes how the NEXT rows
+  are born. **Rejected**: observation rows with no hypothesis (nothing
+  to compare — the ramp teaches nothing); "Ejecutar ahora" on
+  `withheld` (a one-click bypass of the owner's own policy; revisited
+  only if the pilot asks for it, as its own decision); **"aplicar a
+  todas"** — a batch execute over the observed backlog (owner
+  evaluated 2026-09-01): during the ramp the backlog is not pending
+  work but work the ISP already did BY HAND, so a batch replay
+  double-registers nearly every payment in books with no idempotency
+  (TD-009), and the hypotheses have aged against debt that moved — the
+  one-row human look is exactly the guard the batch removes. The one
+  scenario where it earns its keep — observation used as an emergency
+  pause, with rows nobody handled — is a recovery tool built when the
+  pilot produces it, with a fresh-debt re-check per row (D14's
+  doctrine) as its entry price.
 
 - **D6 — The event ledger is real from day one (owner decision,
   against the minimal option).** Table `integration_events`: one row
@@ -215,7 +229,13 @@ per business (D10); no outgoing webhooks in v1 (D17).
 - **Pagos**: observation rows wear the "Observación" badge, the
   expansion shows the hypothesis line and **Ejecutar ahora** for
   `payments: operate`; `done` rows label by action (Reconectado /
-  Registrado).
+  Registrado). Which button lives on which row — the two never coexist:
+
+  | row outcome | button | what it does |
+  |---|---|---|
+  | `observation` | Ejecutar ahora | first dispatch of the action the gate held back (D5) |
+  | `failed` | Reintentar | re-queue an action that was dispatched and failed (payments-and-classes D5) |
+  | `queued` / `done` / `withheld` | none | nothing to execute — `withheld` is where "the threshold is law" is written |
 
 ## Scenarios
 

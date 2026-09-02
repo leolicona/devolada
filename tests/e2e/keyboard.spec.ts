@@ -94,9 +94,10 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
     await page.goto(`${ADMIN}/links`);
     await expect(page.getByPlaceholder(/buscar por nombre/i)).toBeVisible();
 
-    /* Sidebar first (the dashboard's spine), then the screen's one control
-       before any result exists: the search. (The store-era walk — Entregas
-       and its pending card — retired with the network, 2026-08-31.) */
+    /* Sidebar first (the dashboard's spine), then the screen's controls
+       in reading order: the roster arrives alive (pilot-UX round), so
+       Actualizar precedes the search. (The store-era walk retired with
+       the network, 2026-08-31.) */
     await snapshotRestingStyles(page);
     await expectTabOrder(page, [
       /^Saldo:/ /* the credit chip (prepaid-credit D7) sits under the business name, before the spine */,
@@ -106,7 +107,10 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /^Integraciones$/ /* the hub (integrations-hub D1), owner-only */,
       /^Configuración$/,
       /Cerrar sesión/,
+      /Actualizar/ /* the roster's freshness control (pilot-UX round) */,
       /Buscar por nombre/,
+      /Copiar/ /* the first customer's actions: the roster is alive on arrival */,
+      /Compartir/,
     ]);
   });
 });

@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, RefreshCw, TriangleAlert } from "lucide-react";
+import { ChevronDown, RefreshCw, TriangleAlert, Check, Link as LinkIcon, Share2 } from "lucide-react";
 import { Alert, Amount, Card, Skeleton } from "@devolada/ui";
 import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { roleCan } from "@devolada/api/role-matrix";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
-import { useDisplaySettings } from "../auth/session";
+import { useDisplaySettings, useSession } from "../auth/session";
 
 /* Cobros — who owes what, read live from WispHub (cobros-live spec,
    US-R01). No copy exists anywhere (D6): this screen holds WispHub's
@@ -86,8 +87,24 @@ function Freshness({ at }: { at: number }) {
   );
 }
 
-function CustomerRow({ group }: { group: CustomerGroup }) {
+function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: boolean }) {
   const n = group.cobros.length;
+  /* pilot-UX round: the link is per person — one pair of actions per
+     customer, in the expansion (the collapsed row is full at 360px).
+     Null (roster not visited yet) simply hides them. */
+  const linkUrl = group.cobros[0]?.linkUrl ?? null;
+  const waLink = group.cobros[0]?.waLink ?? null;
+  const [copied, setCopied] = useState<null | boolean>(null);
+  const copyLink = async () => {
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(linkUrl!);
+    } catch {
+      ok = false;
+    }
+    setCopied(ok);
+    setTimeout(() => setCopied(null), 2000);
+  };
   return (
     <li>
       <Collapsible>
@@ -116,6 +133,28 @@ function CustomerRow({ group }: { group: CustomerGroup }) {
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
+          {canOperate && linkUrl && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-line-soft bg-muted/50 px-4 pt-3">
+              <Button variant="outline" aria-live="polite" onClick={() => void copyLink()}>
+                {copied === null ? (
+                  <>
+                    <LinkIcon className="size-4" aria-hidden /> Copiar link
+                  </>
+                ) : copied ? (
+                  <>
+                    <Check className="size-4" aria-hidden /> Copiado
+                  </>
+                ) : (
+                  "No se copió"
+                )}
+              </Button>
+              {waLink && (
+                <Button onClick={() => window.open(waLink, "_blank", "noopener,noreferrer")}>
+                  <Share2 className="size-4" aria-hidden /> WhatsApp
+                </Button>
+              )}
+            </div>
+          )}
           <ul className="border-t border-line-soft bg-muted/50 px-4 py-2" aria-label={`Facturas de ${group.name}`}>
             {group.cobros.map((c) => (
               <li key={c.externalId} className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
@@ -141,6 +180,8 @@ const filters = [
 
 export function CobrosScreen() {
   const { timezone } = useDisplaySettings();
+  const { data: actor } = useSession();
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState(1);
@@ -262,7 +303,7 @@ export function CobrosScreen() {
                 <Card className="mt-4 overflow-hidden p-0">
                   <ul className="divide-y divide-line-soft" aria-label="Cobros pendientes">
                     {shown.map((g) => (
-                      <CustomerRow key={g.usuario} group={g} />
+                      <CustomerRow key={g.usuario} group={g} canOperate={canOperate} />
                     ))}
                   </ul>
                 </Card>

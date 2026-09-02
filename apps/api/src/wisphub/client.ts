@@ -75,6 +75,22 @@ function mapBillingStatus(estadoFacturas: unknown): WispHubCustomer["billingStat
   return "unknown";
 }
 
+/* D2: the mapping is an allow-list — extra WispHub fields never leak. */
+function mapCustomer(c: WispHubListItem): WispHubCustomer {
+  return {
+    wisphubId: c.id_servicio,
+    usuario: c.usuario ?? "",
+    name: c.nombre ?? "",
+    zone: c.zona?.nombre ?? null,
+    phone: c.telefono?.trim() ? c.telefono.trim() : null,
+    serviceStatus: mapStatus(c.estado),
+    billingStatus: mapBillingStatus(c.estado_facturas),
+    planPriceCents: c.precio_plan ? decimalToCents(c.precio_plan) : 0,
+    /* D9: already in this response — reading it costs no extra call */
+    carriedBalanceCents: c.saldo ? decimalToCents(c.saldo) : 0,
+  };
+}
+
 /* D1: the query type is detected, not selected. */
 export function queryParamFor(q: string): "telefono" | "usuario" | "nombre" {
   if (/^\d+$/.test(q)) return "telefono";
@@ -181,18 +197,26 @@ export class WispHub {
     const data = await this.get<{ results: WispHubListItem[] }>(
       `/clientes/?${param}=${encodeURIComponent(q)}&limit=10`,
     );
-    return data.results.map((c) => ({
-      wisphubId: c.id_servicio,
-      usuario: c.usuario ?? "",
-      name: c.nombre ?? "",
-      zone: c.zona?.nombre ?? null,
-      phone: c.telefono?.trim() ? c.telefono.trim() : null,
-      serviceStatus: mapStatus(c.estado),
-      billingStatus: mapBillingStatus(c.estado_facturas),
-      planPriceCents: c.precio_plan ? decimalToCents(c.precio_plan) : 0,
-      /* D9: already in this response — reading it costs no extra call */
-      carriedBalanceCents: c.saldo ? decimalToCents(c.saldo) : 0,
-    }));
+    return data.results.map(mapCustomer);
+  }
+
+  /* The whole tenant, full shape — the Links roster (admin-links-view,
+     amended by the pilot-UX round: WispHub's own filters are
+     exact-match and the param was guessed, so "search" moved client-side
+     over this list). Same pagination and cap as listCustomers below;
+     `complete` says whether the cap was hit. */
+  async listCustomersFull(): Promise<{ customers: WispHubCustomer[]; complete: boolean }> {
+    const customers: WispHubCustomer[] = [];
+    let path: string | null = "/clientes/?limit=100";
+    let page = 0;
+    for (; page < 10 && path; page++) {
+      const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
+      for (const c of data.results) {
+        if (c.usuario) customers.push(mapCustomer(c));
+      }
+      path = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    }
+    return { customers, complete: path === null };
   }
 
   /* Every customer of the tenant, for payment-link generation

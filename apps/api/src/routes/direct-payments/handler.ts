@@ -5,7 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { creditSummary } from "../../credit";
 import { WispHub, WispHubError } from "../../wisphub/client";
-import { pendingInvoicesForDisplay } from "../../wisphub/cache";
+import { pendingInvoicesForDisplay, rosterForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
   isUniqueViolation,
@@ -775,9 +775,14 @@ export async function listLinks(c: Ctx, cursor?: string) {
 const shareText = (url: string) =>
   `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
 
-/* GET /direct-payments/links/search?q=XYZ — ISP session (US-D07).
-   Searches WispHub and ensures links exist for the results. */
-export async function searchLinks(c: Ctx, q: string) {
+/* GET /direct-payments/links/roster — ISP session (US-D07, amended by
+   the pilot-UX round). The WHOLE tenant with each customer's permanent
+   link: WispHub's own filters are exact-match and the old search
+   guessed one parameter from the text's shape, so finding "greyes" by
+   half a name was impossible. Now the list travels once (30s display
+   cache, Cobros' own pattern) and the browser searches it by contains.
+   Listing IS what creates missing links, exactly like /links (D5). */
+export async function linksRoster(c: Ctx) {
   const actor = c.get("actor");
   if (actor.type !== "business") {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
@@ -788,16 +793,14 @@ export async function searchLinks(c: Ctx, q: string) {
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
   }
 
-  let customers;
+  const now = new Date();
+  let roster;
   try {
-    customers = await new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL).searchCustomers(q);
+    roster = await rosterForDisplay(actor.id, new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL), now);
   } catch (e) {
     return wisphubFailure(c, e);
   }
-  /* A customer without usuario cannot own a link (D5): a row with
-     customer_usuario = "" would be a link that never resolves. The
-     batch generator already skips them; this path does too. */
-  customers = customers.filter((customer) => customer.usuario !== "");
+  const customers = roster.customers.filter((customer) => customer.usuario !== "");
 
   if (customers.length) {
     await db
@@ -810,18 +813,15 @@ export async function searchLinks(c: Ctx, q: string) {
           customerUsuario: customer.usuario,
         })),
       )
-      /* D5: same rule as the batch generator above — the usuario keeps
-         its token, the recycled numeric id only refreshes the cache. */
+      /* D5: the usuario keeps its token, the recycled numeric id only
+         refreshes the cache. */
       .onConflictDoUpdate({
         target: [paymentLinks.businessId, paymentLinks.customerUsuario],
         set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
       });
   }
 
-  /* Joined by usuario, the identity — never by the numeric id: a
-     recycled id can match a dead link of a previous customer, and that
-     token must not reach the new person (D5). */
-  const usuarios = customers.map((c) => c.usuario);
+  const usuarios = customers.map((cst) => cst.usuario);
   let links: { customerUsuario: string; token: string }[] = [];
   if (usuarios.length) {
     links = await db
@@ -829,31 +829,33 @@ export async function searchLinks(c: Ctx, q: string) {
       .from(paymentLinks)
       .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, usuarios)));
   }
-
   const linkMap = new Map(links.map((l) => [l.customerUsuario, l.token]));
 
-  const results = customers.flatMap((customer) => {
-    const token = linkMap.get(customer.usuario);
-    /* No token means the insert above skipped this customer; a link to
-       `/p/undefined` is worse than one row missing from the results. */
-    if (!token) return [];
-    const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
-    return [
-      {
-        wisphubId: customer.wisphubId,
-        usuario: customer.usuario,
-        name: customer.name,
-        phone: customer.phone,
-        url,
-        /* The API owns the message and the number (receipt spec D2, D3).
-           `toWhatsAppPhone` is what puts Mexico's 52 in front and refuses
-           a number it cannot read — without it a plain 10-digit phone
-           becomes wa.me/55…, which is Brazil, not the customer. */
-        waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
-      },
-    ];
+  const results = customers
+    .flatMap((customer) => {
+      const token = linkMap.get(customer.usuario);
+      /* No token means the insert above skipped this customer; a link to
+         `/p/undefined` is worse than one row missing from the results. */
+      if (!token) return [];
+      const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
+      return [
+        {
+          wisphubId: customer.wisphubId,
+          usuario: customer.usuario,
+          name: customer.name,
+          phone: customer.phone,
+          url,
+          /* The API owns the message and the number (receipt spec D2, D3):
+             `toWhatsAppPhone` puts Mexico's 52 in front and refuses a
+             number it cannot read — wa.me/55… is Brazil. */
+          waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
+        },
+      ];
+    })
+    .sort((a, b) => (a.name || a.usuario).localeCompare(b.name || b.usuario, "es"));
+
+  return c.json({
+    success: true,
+    data: { results, complete: roster.complete, readAt: now.getTime() },
   });
-
-  return c.json({ success: true, data: { results } });
 }
-

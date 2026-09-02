@@ -116,6 +116,34 @@ describe("US-A04: today's totals follow the ISP timezone", () => {
   });
 });
 
+describe("payments-and-classes D4 (pilot-UX amendment): money in flight is in the default view", () => {
+  it("a validating row rides the default list; today still counts only landed money", async () => {
+    const business = await seedBusiness();
+    await seedConfirmedPayment(business, {
+      folio: null,
+      status: "validating",
+      actionOutcome: null,
+      confirmedAt: null,
+      receivedCents: null,
+      registeredCents: null,
+      customerName: null,
+      customerUsuario: null,
+      trackingKey: "TRACKFLIGHT1",
+    });
+    await seedConfirmedPayment(business, { folio: "DV-LANDED1", receivedCents: 41400 });
+
+    const res = await (await app()).request("/payments/feed", asBusiness, env);
+    const { data } = await res.json();
+    expect(data.payments).toHaveLength(2);
+    const inFlight = data.payments.find((p: { status: string }) => p.status === "validating");
+    expect(inFlight).toMatchObject({ folio: "", actionOutcome: null });
+    /* identity falls back to the link's usuario */
+    expect(inFlight.customerName).toBe("greyes@wifiplus");
+    expect(data.today.count).toBe(1);
+    expect(data.today.totalCents).toBe(41400);
+  });
+});
+
 describe("D6: tenant isolation is tested, not assumed", () => {
   it("another ISP sees nothing", async () => {
     await seedFeed();

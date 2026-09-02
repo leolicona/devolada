@@ -16,6 +16,10 @@ export const cobroRow = z.object({
      field (verified against the live tenant per the spec's contract) */
   invoiceDate: z.string().nullable(),
   dueDate: z.string().nullable(),
+  /* pilot-UX round: the debtor's permanent link, when it already exists
+     (the roster lazy-creates them); null hides the buttons */
+  linkUrl: z.string().nullable(),
+  waLink: z.string().nullable(),
 });
 
 export const paymentRequestsResponse = z.object({

@@ -1,9 +1,12 @@
 import type { Context } from "hono";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
+import { paymentLinks } from "../../db/schema";
 import { integrationOf } from "../../integrations/store";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay } from "../../wisphub/cache";
+import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -28,15 +31,41 @@ export async function listPaymentRequests(c: Ctx) {
   try {
     const wisphub = new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL);
     const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now);
+
+    /* pilot-UX round: the debtor's permanent link rides the row, so
+       "veo quién me debe → le mando su link" is one expansion away.
+       STORED links only — the invoice list carries no numeric id to
+       lazy-create with; the roster (which does) creates them all, and a
+       missing one simply hides the buttons. The wa.me link has no phone
+       here (the invoice row carries none): it opens WhatsApp's own
+       picker with the message ready, never a stranger's chat. */
+    const usuarios = [...new Set(pending.invoices.map((f) => f.usuario))];
+    const links = usuarios.length
+      ? await db
+          .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
+          .from(paymentLinks)
+          .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, usuarios)))
+      : [];
+    const urlByUsuario = new Map(
+      links.map((l) => [l.customerUsuario, `${c.env.PAGO_BASE_URL}/p/${l.token}`]),
+    );
+    const shareTextFor = (url: string) =>
+      `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
+
     const data: PaymentRequestsResponse = {
-      cobros: pending.invoices.map((f) => ({
+      cobros: pending.invoices.map((f) => {
+        const linkUrl = urlByUsuario.get(f.usuario) ?? null;
+        return {
         externalId: f.invoiceId,
         customerUsuario: f.usuario,
         customerName: f.customerName,
         amountCents: f.totalCents,
         invoiceDate: f.invoiceDate,
         dueDate: f.dueDate,
-      })),
+        linkUrl,
+        waLink: linkUrl ? whatsAppLink(shareTextFor(linkUrl), toWhatsAppPhone(null)) : null,
+        };
+      }),
       complete: pending.complete,
       readAt: now.getTime(),
     };

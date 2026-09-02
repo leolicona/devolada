@@ -169,6 +169,10 @@ each spec, and they are what the pilot is for.
 
 ## Post-MVP backlog
 
+- CSV export of the Links roster (usuario → URL) — the mass-distribution
+  bridge until WABA lands; build when the pilot asks (pilot-UX round,
+  2026-09-02).
+
 Ideas live here as one-liners until one is picked up; picking one up means
 reserving its US-ID above and writing its spec — the golden rule starts there,
 not here. Owner's priority order (2026-08-16):

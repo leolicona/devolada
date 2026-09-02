@@ -225,16 +225,17 @@ describe("US-B03: roles hide, never tease", () => {
   it("scenario 8 (UI): a viewer sees the customer on Links and nothing to press", async () => {
     server.use(
       handlers.session(() => ok(asRole("viewer"))),
-      handlers.linksSearch(() =>
+      handlers.linksRoster(() =>
         ok({
           results: [
             { wisphubId: 6, usuario: "greyes@wifiplus", name: "Janely Reyes", phone: null, url: "https://pago.test/p/tok", waLink: "https://wa.me/?text=x" },
           ],
+          complete: true,
+          readAt: Date.now(),
         }),
       ),
     );
     renderApp("/links");
-    await userEvent.type(await screen.findByRole("searchbox"), "Jan");
     expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /compartir/i })).not.toBeInTheDocument();
   });

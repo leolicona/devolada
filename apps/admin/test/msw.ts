@@ -64,8 +64,8 @@ export const handlers = {
     http.patch("/settings", async ({ request }) => r(await request.json())),
   testWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/settings/wisphub/test", async ({ request }) => r(await request.json())),
-  linksSearch: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/direct-payments/links/search", ({ request }) => r(new URL(request.url))),
+  linksRoster: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/direct-payments/links/roster", () => r()),
   /* business-and-memberships (US-B01–B03) */
   getSession: (r: () => Response) => http.get("/auth/get-session", () => r()),
   createBusiness: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>

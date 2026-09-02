@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
-import { linksListQuery, linksSearchQuery, payRequest, readProofRequest } from "./schema";
+import { linksListQuery, payRequest, readProofRequest } from "./schema";
 import {
   getDirectPaymentStatus,
   getLinkStatus,
+  linksRoster,
   listLinks,
   readProof,
-  searchLinks,
   serveProof,
   submitPayment,
   uploadProof,
@@ -24,8 +24,9 @@ directPaymentsRoute.get("/links", requireSession, requireArea("payments", "read"
   return listLinks(c, c.req.valid("query").cursor);
 });
 
-directPaymentsRoute.get("/links/search", requireSession, requireArea("payments", "read"), zValidator("query", linksSearchQuery), (c) => {
-  return searchLinks(c, c.req.valid("query").q);
+/* pilot-UX round: the roster replaced the parameter-guessing search */
+directPaymentsRoute.get("/links/roster", requireSession, requireArea("payments", "read"), (c) => {
+  return linksRoster(c);
 });
 
 directPaymentsRoute.get("/links/:token", (c) => {

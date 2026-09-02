@@ -1,112 +1,201 @@
-import { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search, Share2, Link as LinkIcon, AlertCircle, Check } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, Share2, Link as LinkIcon, AlertCircle, Check, RefreshCw } from "lucide-react";
 import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
-import type { LinksSearchResponse } from "@devolada/api/direct-payments-schema";
+import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
 
-/* US-D07: ISP searches WispHub customers and shares permanent SPEI payment links via WhatsApp. */
+/* US-D07, amended by the pilot-UX round: the page is the ROSTER — every
+   customer with their permanent link, alive on arrival — and search is
+   a local contains over name, usuario and phone at once. The old
+   WispHub search guessed one exact-match parameter from the text's
+   shape, started blank, and forgot everything on navigation; the
+   Cobros pattern (whole list, 30s server cache, 2min query memory,
+   50 per local page) kills all three at once. */
 
-export function LinksScreen() {
-  const { data: actor } = useSession();
-  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  /* design-review: the clipboard call can reject, and either way the
-     admin is about to paste into a customer chat — the button says
-     which of the two happened. */
-  const [copyResult, setCopyResult] = useState<{ id: number; ok: boolean } | null>(null);
+const STALE_MS = 2 * 60_000;
+const PAGE = 50;
+
+const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+function Freshness({ readAt }: { readAt: number }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const mins = Math.max(0, Math.round((Date.now() - readAt) / 60_000));
+  return (
+    <span className="text-sm text-muted-foreground">
+      {mins === 0 ? "consultado hace un momento" : `consultado hace ${mins} min`}
+    </span>
+  );
+}
+
+type Row = LinksRosterResponse["results"][number];
+
+function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
+  const [copyResult, setCopyResult] = useState<{ ok: boolean } | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
   useEffect(() => () => clearTimeout(copyTimer.current), []);
 
-  const handleCopy = async (result: LinksSearchResponse["results"][0]) => {
+  const handleCopy = async () => {
     let ok = true;
     try {
-      await navigator.clipboard.writeText(result.url);
+      await navigator.clipboard.writeText(row.url);
     } catch {
       ok = false;
     }
-    setCopyResult({ id: result.wisphubId, ok });
+    setCopyResult({ ok });
     clearTimeout(copyTimer.current);
     copyTimer.current = setTimeout(() => setCopyResult(null), 2000);
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [search]);
+  return (
+    <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 sm:flex">
+      <div className="min-w-0 sm:flex-1">
+        <span className="block text-sm font-medium">{row.name || row.usuario}</span>
+        <span className="block text-sm text-muted-foreground">
+          {row.usuario} {row.phone ? `· ${row.phone}` : ""}
+        </span>
+      </div>
+      {/* business-and-memberships D3: sharing is `payments: operate`;
+          a viewer sees the customer and nothing to press */}
+      {canOperate && (
+        <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
+          <Button
+            variant="outline"
+            className="shrink-0"
+            onClick={() => void handleCopy()}
+            title="Copiar enlace"
+            aria-live="polite"
+          >
+            {copyResult ? (
+              copyResult.ok ? (
+                <>
+                  <Check className="mr-2 size-4" aria-hidden />
+                  Copiado
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="mr-2 size-4" aria-hidden />
+                  No se copió
+                </>
+              )
+            ) : (
+              <>
+                <LinkIcon className="size-4" aria-hidden />
+                <span className="sr-only">Copiar</span>
+              </>
+            )}
+          </Button>
+          <Button
+            className="shrink-0"
+            onClick={() => window.open(row.waLink, "_blank", "noopener,noreferrer")}
+          >
+            <Share2 className="mr-2 size-4" aria-hidden />
+            Compartir
+          </Button>
+        </div>
+      )}
+    </li>
+  );
+}
 
-  /* design-review: the contract 400s under 2 characters, so firing at 1
-     showed an error screen for a normal typing moment. */
-  const query = debouncedSearch.trim();
-  const searching = query.length >= 2;
+export function LinksScreen() {
+  const { data: actor } = useSession();
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [limit, setLimit] = useState(PAGE);
 
-  const { data, isPending, isError, refetch, isRefetching, error } = useQuery<LinksSearchResponse, ApiError>({
-    queryKey: ["payment-links", "search", query],
-    queryFn: () => api<LinksSearchResponse>(`/direct-payments/links/search?q=${encodeURIComponent(query)}`),
-    enabled: searching,
+  const roster = useQuery<LinksRosterResponse, ApiError>({
+    queryKey: ["links-roster"],
+    queryFn: () => api<LinksRosterResponse>("/direct-payments/links/roster"),
+    staleTime: STALE_MS,
     retry: false,
   });
 
-  /* The API hands over a finished wa.me link, message and country code
-     included (D3). Building it here was where the number lost its 52. */
-  const handleShare = (link: LinksSearchResponse["results"][0]) => {
-    window.open(link.waLink, "_blank", "noopener,noreferrer");
-  };
+  const q = norm(search.trim());
+  const filtered = useMemo(() => {
+    const all = roster.data?.results ?? [];
+    if (!q) return all;
+    return all.filter(
+      (r) =>
+        norm(r.name).includes(q) || norm(r.usuario).includes(q) || (r.phone ?? "").includes(q),
+    );
+  }, [roster.data, q]);
+  const visible = filtered.slice(0, limit);
 
-  const isConfigError = isError && error?.status === 503;
+  const isConfigError = roster.isError && roster.error?.status === 503;
 
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {/* The glossary's full term; the nav carries the short form */}
         <h1 className="text-xl font-semibold">Links de pago</h1>
+        {roster.data && (
+          <span className="flex items-center gap-3">
+            <Freshness readAt={roster.data.readAt} />
+            <Button
+              variant="outline"
+              disabled={roster.isFetching}
+              onClick={() => {
+                void queryClient.invalidateQueries({ queryKey: ["links-roster"] });
+              }}
+            >
+              <RefreshCw className={`size-4 ${roster.isFetching ? "animate-spin" : ""}`} aria-hidden />
+              Actualizar
+            </Button>
+          </span>
+        )}
       </div>
 
       <div className="mt-6">
         <label className="relative block max-w-md">
           <span className="sr-only">Buscar cliente</span>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
+          {/* name + autoComplete: without them, phone password managers
+              saw a field near the word "usuario" and offered credentials */}
           <Input
             type="search"
+            name="roster-search"
+            autoComplete="off"
             placeholder="Buscar por nombre, usuario o teléfono..."
             className="pl-9"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setLimit(PAGE);
+            }}
           />
         </label>
       </div>
 
       {isConfigError && (
-        <Alert
-          variant="destructive"
-          layout="icon"
-          className="mt-6"
-        >
+        <Alert variant="destructive" layout="icon" className="mt-6">
           <AlertCircle aria-hidden />
           <span>
-            <strong>Sin conexión a WispHub.</strong> No pudimos conectar con WispHub para buscar a tus clientes. Revisa tu llave de API en Configuración.
+            <strong>Sin conexión a WispHub.</strong> Conecta tu llave en Integraciones para ver a
+            tus clientes y sus links.
           </span>
         </Alert>
       )}
 
-      {isError && !isConfigError && (
+      {roster.isError && !isConfigError && (
         <ListError
-          what="los enlaces"
-          onRetry={() => void refetch()}
-          retrying={isRefetching}
+          what="los links"
+          onRetry={() => void roster.refetch()}
+          retrying={roster.isRefetching}
           className="mt-6"
         />
       )}
 
-      {isPending && searching && !isError && (
+      {roster.isPending && !roster.isError && (
         <Card className="mt-6 p-4">
           {[0, 1, 2].map((k) => (
             <div key={k} className="flex items-center gap-4 py-3">
@@ -120,82 +209,38 @@ export function LinksScreen() {
         </Card>
       )}
 
-      {!searching && !isError && (
-        <p className="mt-6 max-w-lg text-sm text-muted-foreground">
-          Busca a un cliente por nombre, usuario o teléfono para obtener su enlace permanente de pago por transferencia.
-        </p>
-      )}
-
-      {/* design-review: results arrive while focus stays in the input,
-          so the region announces them — the feed's list already does. */}
       <div aria-live="polite">
-        {!isPending && !isError && data?.results.length === 0 && searching && (
+        {roster.data && !roster.data.complete && (
+          <Alert variant="warning" className="mt-6">
+            La lista puede estar incompleta: WispHub devolvió más clientes de los que podemos leer
+            de una vez.
+          </Alert>
+        )}
+
+        {roster.data && filtered.length === 0 && (
           <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-            No se encontraron clientes con "{query}".
+            {q
+              ? `Ningún cliente coincide con "${search.trim()}".`
+              : "WispHub no devolvió clientes todavía."}
           </p>
         )}
 
-        {data && data.results.length > 0 && (
+        {visible.length > 0 && (
           <Card className="mt-6">
             <ul className="divide-y divide-line-soft">
-              {data.results.map((result) => (
-                <li
-                  key={result.wisphubId}
-                  /* design-review: no row hover — unlike StoresScreen the
-                     row itself does nothing, only its buttons act */
-                  className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 sm:flex"
-                >
-                  <div className="min-w-0 sm:flex-1">
-                    <span className="block text-sm font-medium">{result.name || result.usuario}</span>
-                    <span className="block text-sm text-muted-foreground">
-                      {result.usuario} {result.phone ? `· ${result.phone}` : ""}
-                    </span>
-                  </div>
-                
-                  {/* business-and-memberships D3: sharing is `payments: operate`;
-                      a viewer sees the customer and nothing to press */}
-                  {canOperate && (
-                  <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
-                    <Button
-                      variant="outline"
-                      className="shrink-0"
-                      onClick={() => void handleCopy(result)}
-                      title="Copiar enlace"
-                      aria-live="polite"
-                    >
-                      {copyResult?.id === result.wisphubId ? (
-                        copyResult.ok ? (
-                          <>
-                            <Check className="mr-2 size-4" aria-hidden />
-                            Copiado
-                          </>
-                        ) : (
-                          <>
-                            <AlertCircle className="mr-2 size-4" aria-hidden />
-                            No se copió
-                          </>
-                        )
-                      ) : (
-                        <>
-                          <LinkIcon className="size-4" aria-hidden />
-                          <span className="sr-only">Copiar</span>
-                        </>
-                      )}
-                    </Button>
-                  
-                    <Button
-                      className="shrink-0"
-                      onClick={() => handleShare(result)}
-                    >
-                      <Share2 className="mr-2 size-4" aria-hidden />
-                      Compartir
-                    </Button>
-                  </div>
-                  )}
-                </li>
+              {visible.map((row) => (
+                <LinkRow key={row.usuario} row={row} canOperate={canOperate} />
               ))}
             </ul>
           </Card>
+        )}
+
+        {filtered.length > limit && (
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => setLimit((n) => n + PAGE)}>
+              Mostrar más ({filtered.length - limit} restantes)
+            </Button>
+          </div>
         )}
       </div>
     </main>

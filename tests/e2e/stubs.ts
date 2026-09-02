@@ -106,6 +106,8 @@ export const cobros = {
       amountCents: 49900,
       invoiceDate: "2026-08-01",
       dueDate: "2026-08-11",
+      linkUrl: null,
+      waLink: null,
     },
   ],
   complete: true,
@@ -129,11 +131,27 @@ export const integrationsHub = {
   },
 };
 
+export const linksRoster = {
+  results: [
+    {
+      wisphubId: 6,
+      usuario: "greyes@wifiplus",
+      name: "Janely Guadalupe Reyes",
+      phone: "5551234567",
+      url: "https://link.dev.devoladapago.com/p/tok-greyes",
+      waLink: "https://wa.me/525551234567?text=hola",
+    },
+  ],
+  complete: true,
+  readAt: at,
+};
+
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
   await apiRoute(page, "**/payments/feed*", feed);
   await apiRoute(page, "**/payment-requests", cobros);
   await apiRoute(page, "**/integrations", integrationsHub);
+  await apiRoute(page, "**/direct-payments/links/roster", linksRoster);
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

@@ -10,7 +10,11 @@ import { LoginPage, RecoverPage, SignupPage, VerifyEmailPage } from "./features/
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { CobrosScreen } from "./features/cobros/CobrosScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
-import { BusinessSettingsScreen } from "./features/settings/SettingsScreen";
+import {
+  BusinessSettingsRedirect,
+  DirectPaymentSettingsScreen,
+  PreferencesScreen,
+} from "./features/settings/SettingsScreen";
 import { AccountIndex, AccountLayout } from "./features/account/AccountHub";
 import { CreditScreen, SecurityScreen, UsersScreen } from "./features/account/pages";
 import { NewBusinessScreen } from "./features/onboarding/NewBusinessScreen";
@@ -104,7 +108,11 @@ const settingsRoute = createRoute({
   component: AccountLayout,
 });
 const settingsIndexRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/", component: AccountIndex });
-const settingsBusinessRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/business", component: BusinessSettingsScreen });
+/* settings D11: the business's settings are two pages; /business is the
+   path they came from and stays as a redirect, hash included. */
+const settingsDirectPaymentRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/direct-payment", component: DirectPaymentSettingsScreen });
+const settingsPreferencesRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/preferences", component: PreferencesScreen });
+const settingsBusinessRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/business", component: BusinessSettingsRedirect });
 const settingsCreditRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/credit", component: CreditScreen });
 const settingsUsersRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/users", component: UsersScreen });
 const settingsSecurityRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/security", component: SecurityScreen });
@@ -135,7 +143,15 @@ const routeTree = rootRoute.addChildren([
     linksRoute,
     integrationsRoute,
     wisphubRoute,
-    settingsRoute.addChildren([settingsIndexRoute, settingsBusinessRoute, settingsCreditRoute, settingsUsersRoute, settingsSecurityRoute]),
+    settingsRoute.addChildren([
+      settingsIndexRoute,
+      settingsDirectPaymentRoute,
+      settingsPreferencesRoute,
+      settingsBusinessRoute,
+      settingsCreditRoute,
+      settingsUsersRoute,
+      settingsSecurityRoute,
+    ]),
     operatorRoute,
   ]),
 ]);

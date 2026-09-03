@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
@@ -54,7 +54,7 @@ describe("US-D13: the beneficiary name is recommended, never required", () => {
         return ok(settings());
       }),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
 
     const clabe = await screen.findByLabelText("CLABE");
     await userEvent.type(clabe, "646180157000000004");
@@ -94,7 +94,7 @@ describe("US-A04: the service fee has one control, on the SPEI card", () => {
         return ok(configured());
       }),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
 
     const fee = await screen.findByLabelText("Cargo por servicio SPEI");
     /* BUG-017: the general card is gone — one field for one number */
@@ -114,7 +114,7 @@ describe("US-A04: the service fee has one control, on the SPEI card", () => {
 
   it("D9: an empty fee cannot be saved — there is no general fee to fall back to", async () => {
     server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(configured())));
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
 
     const fee = await screen.findByLabelText("Cargo por servicio SPEI");
     await userEvent.clear(fee);
@@ -174,7 +174,7 @@ describe("US-R02: the reconciliation policy is the business's", () => {
         return ok(settings());
       }),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
 
     const tolerance = await screen.findByLabelText("Tolerancia");
     await userEvent.clear(tolerance);
@@ -199,27 +199,67 @@ describe("US-R02: the reconciliation policy is the business's", () => {
         ),
       ),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
 
     expect(await screen.findByText(/tratamiento efectivo/)).toBeInTheDocument();
   });
 });
-/* design-review 2026-09-01 (could improve): the in-page section index. */
-describe("Configuración carries an in-page index", () => {
-  it("links every section the role can use, as anchors", async () => {
+/* US-A04, D10: the in-page index retired — three cards need no table of
+   contents, and the ids it linked to are still the deep-link contract. */
+describe("Configuración has no in-page index", () => {
+  it("renders no section nav, and keeps the ids the deep links land on", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
 
-    const nav = await screen.findByRole("navigation", { name: "Secciones de configuración" });
-    const { getByRole } = within(nav);
+    expect(await screen.findByRole("heading", { name: "Pago directo por SPEI" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Secciones de configuración" })).not.toBeInTheDocument();
     for (const label of ["Pago directo", "Política de conciliación", "Zona y hora"]) {
-      expect(getByRole("link", { name: label })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
-    /* settings D9: the fee has no card of its own anymore */
-    expect(within(nav).queryByRole("link", { name: "Cargo por servicio" })).not.toBeInTheDocument();
-    expect(getByRole("link", { name: "Política de conciliación" })).toHaveAttribute("href", "#politica");
+    /* account-hub D4: the deep links still have somewhere to land */
+    for (const id of ["spei", "politica"]) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+  });
+});
+
+/* US-A04 scenario 6 (D11): one page answering three questions became two
+   pages, and the path they came from still leads to both. */
+describe("US-A04 scenario 6: Configuración splits in two", () => {
+  it("each page holds its own cards, and neither holds the other's", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings())));
+    renderApp("/settings/direct-payment");
+
+    expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /política de conciliación/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /zona horaria y hora/i })).not.toBeInTheDocument();
+  });
+
+  it("Preferencias holds the clock and nothing about money", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings())));
+    renderApp("/settings/preferences");
+
+    expect(await screen.findByRole("heading", { name: /zona horaria y hora/i })).toBeInTheDocument();
+    expect(document.getElementById("zona")).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: /pago directo por spei/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /política de conciliación/i })).not.toBeInTheDocument();
+  });
+
+  it("the old path redirects, and the hash decides which of the two it meant", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings())));
+    const router = renderApp("/settings/business#zona");
+    expect(await screen.findByRole("heading", { name: /zona horaria y hora/i })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/settings/preferences");
+    expect(router.state.location.hash).toBe("zona");
+  });
+
+  it("the old path without a hash lands on Pago directo y conciliación", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings())));
+    const router = renderApp("/settings/business");
+    expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/settings/direct-payment");
   });
 });

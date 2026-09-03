@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { Link, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Amount, Card } from "@devolada/ui";
-import { ChevronLeft, ChevronRight, Eye, Fingerprint, LogOut, Plug, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Fingerprint, Landmark, LogOut, Plug, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
 import { roleCan } from "@devolada/api/role-matrix";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,15 +19,16 @@ import { Avatar } from "./Avatar";
 /* D4: the anchors the rest of the admin linked to for months keep
    landing where their card went. `hash` is the id on the sub-page that
    holds the card now — `#cargo` lands on the SPEI card, where the one
-   service fee lives since settings D9. */
+   service fee lives since settings D9, and `#zona` on Preferencias since
+   the page split in two (settings D11). */
 const HASH_HOMES: Record<string, { to: string; hash?: string }> = {
   saldo: { to: "/settings/credit" },
   usuarios: { to: "/settings/users" },
   sesion: { to: "/settings" },
-  cargo: { to: "/settings/business", hash: "spei" },
-  spei: { to: "/settings/business", hash: "spei" },
-  politica: { to: "/settings/business", hash: "politica" },
-  zona: { to: "/settings/business", hash: "zona" },
+  cargo: { to: "/settings/direct-payment", hash: "spei" },
+  spei: { to: "/settings/direct-payment", hash: "spei" },
+  politica: { to: "/settings/direct-payment", hash: "politica" },
+  zona: { to: "/settings/preferences", hash: "zona" },
 };
 
 export function AccountLayout() {
@@ -113,8 +114,17 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
           },
         ]
       : []),
+    /* D11: two rows, each saying what is behind it — "Configuración"
+       inside a settings hub named nothing */
     ...(roleCan(actor.role, "settings", "update")
-      ? [{ to: "/settings/business", label: "Configuración", icon: SlidersHorizontal, detail: "Cargo, pago directo, política, zona horaria" }]
+      ? [
+          {
+            to: "/settings/direct-payment",
+            label: "Pago directo y conciliación",
+            icon: Landmark,
+            detail: "CLABE, cargo por servicio y tolerancia",
+          },
+        ]
       : []),
     ...(roleCan(actor.role, "integrations", "manage")
       ? [
@@ -135,6 +145,9 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
       : []),
     ...(roleCan(actor.role, "members", "invite_below_admin")
       ? [{ to: "/settings/users", label: "Usuarios", icon: Users, detail: "Quién entra y con qué rol" }]
+      : []),
+    ...(roleCan(actor.role, "settings", "update")
+      ? [{ to: "/settings/preferences", label: "Preferencias", icon: SlidersHorizontal, detail: "Zona horaria y formato de hora" }]
       : []),
   ];
   const cuenta: Row[] = [

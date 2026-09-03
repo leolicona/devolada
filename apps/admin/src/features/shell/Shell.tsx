@@ -237,7 +237,7 @@ export function Shell() {
               Falta la CLABE del negocio. Sin ella tus clientes no pueden pagarte por transferencia.
             </span>
             {roleCan(actor.role, "clabe", "update") && (
-              <Link to="/settings/business" hash="spei" className="block">
+              <Link to="/settings/direct-payment" hash="spei" className="block">
                 <Button variant="outline">Configurar</Button>
               </Link>
             )}

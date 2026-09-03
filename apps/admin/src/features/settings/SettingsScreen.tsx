@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "@tanstack/react-router";
+import { Navigate, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
 import { Card, Skeleton, parseMoney } from "@devolada/ui";
@@ -18,12 +18,14 @@ import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
 
-/* Configuración (US-A04): the business's three cards — the SPEI channel
-   (with the one service fee, settings D9), the reconciliation policy and
-   the two display settings that decide what "today" and "2:30 p.m."
-   mean. Since the account hub (US-A05, D4) this is the sub-page
-   /settings/business; Saldo, Usuarios and the passkeys have pages of
-   their own. */
+/* The business's settings, in two pages since D11 (US-A04):
+   /settings/direct-payment answers where the money arrives (the SPEI
+   channel, with the one service fee — D9) and how a payment is judged
+   against what was asked (the reconciliation policy); /settings/preferences
+   answers how a clock reads. One page called "Configuración" was naming
+   none of the three. /settings/business, the page they come from, is now
+   a redirect. Saldo, Usuarios and the passkeys have pages of their own
+   (account-hub D4). */
 
 const pesos = (cents: number) => (cents / 100).toFixed(2);
 
@@ -44,35 +46,20 @@ function useSaveSettings() {
 function SectionCard({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
     <Card className="p-6" id={id}>
-      {/* scroll-mt keeps the heading clear of the top edge when the index
-          below jumps here */}
+      {/* scroll-mt keeps the heading clear of the top edge when a deep
+          link (the CLABE banner, the wizard, a legacy hash) lands here */}
       <h3 className="scroll-mt-24 text-base font-semibold">{title}</h3>
       <div className="mt-4 space-y-4">{children}</div>
     </Card>
   );
 }
 
-/* design-review 2026-09-01 (could improve): Configuración is a long single
-   column — an in-page index beats scrolling ~3,000px to reach Usuarios.
-   Anchors, not tabs: the page stays one document, the URL stays shareable
-   (the Saldo chip already deep-links #saldo). Entries follow the same
-   role gates as the cards — roles hide, never tease. */
-function SectionIndex({ entries }: { entries: { href: string; label: string }[] }) {
-  if (entries.length < 3) return null;
-  return (
-    <nav aria-label="Secciones de configuración" className="mt-1">
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {entries.map((e) => (
-          <li key={e.href}>
-            <a href={e.href} className="text-link hover:underline">
-              {e.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
+/* D10 (2026-09-03): no in-page index. It was born when this page was
+   ~3,000px and ended at Usuarios; the hub took four cards away (account-hub
+   D4) and the fee took a fifth (D9), leaving three cards a reader sees
+   without scrolling — a table of contents for a page you can already see
+   is furniture. The ids stay: #spei, #politica and #zona are the deep-link
+   contract the banners and HASH_HOMES depend on. */
 
 /* Pago directo por SPEI (direct-payment spec, US-D05). D4: the account
    is the ISP's own — the money never touches Devolada. Settings D9: the
@@ -385,48 +372,71 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
-export function BusinessSettingsScreen() {
+/* D11: the old page's path is never deleted, only redirected — the CLABE
+   banner, the wizard, Cobros and months of habit point at it. The hash
+   decides which of the two pages it meant. */
+export function BusinessSettingsRedirect() {
+  const hash = useRouterState({ select: (s) => s.location.hash });
+  const to = hash === "zona" ? "/settings/preferences" : "/settings/direct-payment";
+  return <Navigate to={to} hash={hash === "" ? undefined : hash} replace />;
+}
+
+/* The role gate both pages share: a role without the area does not see
+   the page — back to the hub, hidden not disabled (business-and-
+   memberships D3 / account-hub D5). */
+function useBusinessSettings() {
   const { data: actor } = useSession();
   const role: Role = actor?.role ?? "viewer";
   const canSettings = roleCan(role, "settings", "update");
-  const canClabe = roleCan(role, "clabe", "update");
-  const { data, isPending } = useQuery<SettingsResponse, ApiError>({
+  const query = useQuery<SettingsResponse, ApiError>({
     queryKey: ["settings"],
     queryFn: () => api<SettingsResponse>("/settings"),
     enabled: canSettings,
   });
-  /* business-and-memberships D3 / account-hub D5: a role without the
-     area does not see the page — back to the hub, hidden not disabled */
+  return { actor, role, canSettings, ...query };
+}
+
+function CardsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="mt-4 space-y-4">
+      {Array.from({ length: count }, (_, k) => (
+        <Card key={k} className="space-y-3 p-6">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-40" />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+export function DirectPaymentSettingsScreen() {
+  const { actor, role, canSettings, data, isPending } = useBusinessSettings();
+  const canClabe = roleCan(role, "clabe", "update");
   if (actor && !canSettings) return <Navigate to="/settings" replace />;
 
   return (
-    <SubPage title="Configuración">
-      {data && (
-        <SectionIndex
-          entries={[
-            { href: "#spei", label: "Pago directo" },
-            { href: "#politica", label: "Política de conciliación" },
-            { href: "#zona", label: "Zona y hora" },
-          ]}
-        />
-      )}
-
-      {isPending && (
-        <div className="mt-4 space-y-4">
-          {[0, 1, 2].map((k) => (
-            <Card key={k} className="space-y-3 p-6">
-              <Skeleton className="h-5 w-48" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-40" />
-            </Card>
-          ))}
-        </div>
-      )}
-
+    <SubPage title="Pago directo y conciliación">
+      {isPending && <CardsSkeleton count={2} />}
       {data && (
         <div className="mt-4 space-y-4">
           <SpeiCard settings={data} canEditClabe={canClabe} />
           <PolicyCard settings={data} />
+        </div>
+      )}
+    </SubPage>
+  );
+}
+
+export function PreferencesScreen() {
+  const { actor, canSettings, data, isPending } = useBusinessSettings();
+  if (actor && !canSettings) return <Navigate to="/settings" replace />;
+
+  return (
+    <SubPage title="Preferencias">
+      {isPending && <CardsSkeleton count={1} />}
+      {data && (
+        <div className="mt-4 space-y-4">
           <DisplayCard settings={data} />
         </div>
       )}

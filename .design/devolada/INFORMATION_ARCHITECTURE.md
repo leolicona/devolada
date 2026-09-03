@@ -100,19 +100,23 @@ Unchanged; already speaks the glossary.
   provisional-release switch (pre-verdict, its own block — Open item 1).
 
 ### Configuración (exists — becomes a hub of pages)
-1. **Negocio** — name, timezone, time format (exists).
-2. **Pago directo por SPEI** — CLABE, bank, beneficiary, fee, fee payer
-   (exists).
-3. **Política de conciliación** (phase 4) — tolerance in cents, surplus
-   treatment (business-level, pivot D8).
-4. **Saldo y recargas** (phase 3, US-B04/B05) — balance, entry history
+1. **Preferencias** — timezone, time format (exists; its own page since
+   settings D11, 2026-09-03).
+2. **Pago directo y conciliación** — the SPEI card (CLABE, bank,
+   beneficiary and the one service fee, settings D9) and the reconciliation
+   policy, one page at `/settings/direct-payment` (exists). Detail in
+   [INFORMATION_ARCHITECTURE-settings.md](INFORMATION_ARCHITECTURE-settings.md).
+3. **Saldo y recargas** (phase 3, US-B04/B05) — balance, entry history
    (append-only list, same visual grammar as the old ledger), "Recargar":
    instructions to transfer to the platform's CLABE + proof upload → the
    same validation flow the business's own customers use. Warnings staged
    per D6.
-5. **Usuarios** (phase 2, US-B03) — members with roles; invite by email.
-6. **WispHub** key moves under Integraciones when phase 5 lands; until then
-   it stays here (exists).
+4. **Usuarios** (phase 2, US-B03) — members with roles; invite by email.
+5. **Entrar con huella o rostro** (US-S07) — the person's passkeys.
+
+The **WispHub key** left for Integraciones when phase 5 landed, and the
+policy card (phase 4, tolerance + surplus treatment, business-level per
+pivot D8) rides with the SPEI channel in 2 while SPEI is the only one.
 
 ### /operador (phase 3, US-L02)
 Behind `platform_operator`. One table of platform settings (fee, welcome

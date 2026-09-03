@@ -104,7 +104,7 @@ describe("US-B01 / D5: a business born without a CLABE wears a banner and shares
     server.use(handlers.session(() => ok({ ...businessActor, speiConfigured: false })), handlers.feed(emptyFeed));
     renderApp("/payments");
     expect(await screen.findByText(/falta la clabe del negocio/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/settings/business#spei");
+    expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/settings/direct-payment#spei");
   });
 
   it("Links: the roster reads, the share buttons wait for the CLABE", async () => {
@@ -145,7 +145,7 @@ describe("US-B01 / D5: the CLABE form in Configuración keeps the wizard's prefi
       ),
       handlers.members(() => ok({ ...team, pending: [] })),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
     const clabe = await screen.findByLabelText("CLABE");
     await userEvent.type(clabe, "646180157000000004");
     expect(screen.getByRole("combobox", { name: "Banco" })).toHaveTextContent("STP");

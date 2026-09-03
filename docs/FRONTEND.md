@@ -30,6 +30,8 @@ Cross-cutting UI rules. Each `.spec.md` additionally includes its own **UI Contr
 - Desktop-first but usable on mobile: tables collapse to cards, sidebar to a bottom menu.
 - Single-level navigation: **at most 5 sections**, detail lives inside each one. Five is the ceiling, not a target: below `lg` the sidebar becomes a bottom bar, and five items at the 360px floor leave ~71px each — enough for a one-word label and nothing more (measured 2026-08-17, when "Enlaces SPEI" wrapped onto a second line and broke the row's baseline). A section whose name does not fit in one word belongs inside another one, and a sixth section needs a different pattern, not a thinner bar.
 
+- **No in-page anchor indexes.** A row of links that jumps to sections of the page you are already on is a fourth navigation layer under the nav, the sub-page rail and the page title, and it earns its place only on a page too long to read — which is the thing to fix. A page that wants a table of contents is split into rail rows instead (`admin/settings.spec.md` D10, born 2026-09-03 when the index outlived the 3,000px page it was drawn for). **Ids stay**: a card's `id` is the deep-link contract for banners, wizards and legacy hashes, and it is what lets the visible index go without breaking a single link.
+
 ## Both surfaces
 
 - Light + dark via tokens (`[data-theme]` + `prefers-color-scheme`); dark is recalibrated warm charcoal, never inversion.

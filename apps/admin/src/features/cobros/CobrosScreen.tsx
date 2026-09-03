@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, RefreshCw, TriangleAlert, Check, Link as LinkIcon, Share2 } from "lucide-react";
+import { ChevronDown, TriangleAlert, Check, Link as LinkIcon, Share2, WifiOff } from "lucide-react";
 import { Alert, Amount, Card, ListError, Skeleton } from "@devolada/ui";
 import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-requests-schema";
+import type { PulseResponse } from "@devolada/api/payments-schema";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { roleCan } from "@devolada/api/role-matrix";
@@ -11,13 +12,19 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PULSE_MS, liveReadOptions, usePresence } from "@/lib/presence";
 import { useDisplaySettings, useSession } from "../auth/session";
 
 /* Cobros — who owes what, read live from WispHub (cobros-live spec,
    US-R01). No copy exists anywhere (D6): this screen holds WispHub's
    answer in query memory for two minutes (D3) and says how old it is.
    The whole list travels once; grouping, search, filter and paging are
-   local (D4). */
+   local (D4).
+
+   presence-freshness (US-P07): no "Actualizar". The list re-reads on
+   return to the tab, on a slow heartbeat while someone is present, and
+   when Devolada's own pulse says a payment reached WispHub; a failed
+   background read keeps the rows with a quiet note. */
 
 const STALE_MS = 2 * 60_000; /* D3: the owner's navigate-and-return case */
 const PAGE = 50; /* customer rows per local page (D4) */
@@ -190,13 +197,36 @@ export function CobrosScreen() {
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState(1);
+  const present = usePresence();
+  const queryClient = useQueryClient();
 
   const query = useQuery<PaymentRequestsResponse, ApiError>({
     queryKey: ["payment-requests"],
     queryFn: () => api<PaymentRequestsResponse>("/payment-requests"),
     staleTime: STALE_MS,
     retry: false,
+    ...liveReadOptions(present),
   });
+
+  /* presence-freshness D5: one D1 read every 30 s while present; when
+     WispHub last learned about a payment moves, the list is stale by
+     definition and re-reads itself */
+  const pulse = useQuery<PulseResponse, ApiError>({
+    queryKey: ["payments-pulse"],
+    queryFn: () => api<PulseResponse>("/payments/pulse"),
+    retry: false,
+    refetchInterval: present ? PULSE_MS : false,
+    refetchIntervalInBackground: false,
+  });
+  const lastPulse = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (!pulse.data) return;
+    const seen = lastPulse.current;
+    lastPulse.current = pulse.data.registeredAt;
+    if (seen !== undefined && seen !== pulse.data.registeredAt) {
+      void queryClient.invalidateQueries({ queryKey: ["payment-requests"] });
+    }
+  }, [pulse.data, queryClient]);
 
   const groups = useMemo(
     () => groupCobros(query.data?.cobros ?? [], todayIn(timezone)),
@@ -225,27 +255,32 @@ export function CobrosScreen() {
     );
   }
 
+  /* presence-freshness D9: a background failure with rows on screen is
+     a quiet note, never the error block */
+  const staleAfterFailure = !!query.error && !!query.data;
+
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Cobros</h1>
-        <div className="flex items-center gap-3">
-          {query.dataUpdatedAt > 0 && <Freshness at={query.dataUpdatedAt} />}
-          <Button
-            variant="outline"
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-            aria-label="Actualizar"
-          >
-            <RefreshCw className={cn("size-4", query.isFetching && "animate-spin")} aria-hidden />
-            Actualizar
-          </Button>
-        </div>
+        {/* D7 of presence-freshness (BUG-013): the provider read's own
+            time, and nothing to press next to it */}
+        {query.data && <Freshness at={query.data.readAt} />}
       </div>
+
+      {staleAfterFailure && (
+        <p
+          role="status"
+          className="mt-4 flex max-w-lg items-center gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
+        >
+          <WifiOff className="size-4 shrink-0" aria-hidden />
+          Sin conexión a WispHub. Mostrando la última lectura.
+        </p>
+      )}
 
       {/* D7: a failed read says so — never an empty claim, never stale
           data presented as fresh */}
-      {query.error && (
+      {query.error && !query.data && (
         <ListError
           what="tus cobros en WispHub"
           onRetry={() => void query.refetch()}

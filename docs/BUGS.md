@@ -17,6 +17,20 @@ Format:
 
 ---
 
+## BUG-014 — Links read a stalled WispHub as "conecta tu llave"
+- Status: fixed
+- Detected: 2026-09-03 · presence-freshness scenario 5 (a background failure with nothing to show) failed against the deployed behaviour
+- Affected spec: docs/direct-payment/admin-links-view.spec.md
+- Symptom: with the key configured and WispHub down, the roster page showed "Sin conexión a WispHub. Conecta tu llave en Integraciones" — a prompt to fix something that was not broken. Root cause: `LinksScreen` keyed the integration prompt on `status === 503`, and the roster answers 503 for both `WISPHUB_NOT_CONFIGURED` and `WISPHUB_UNAVAILABLE`. Fix: the screen reads the error code (presence-freshness DoD).
+- Regression test: `apps/admin/test/presence-freshness.test.tsx` scenario 5 (503 `WISPHUB_UNAVAILABLE` → `ListError` with Reintentar) alongside `links.test.tsx` "without WispHub the page points at Integraciones" (503 `WISPHUB_NOT_CONFIGURED` → the prompt)
+
+## BUG-013 — "consultado hace un momento" after a cache hit up to 30 s old
+- Status: fixed
+- Detected: 2026-09-03 · code reading while retiring the "Actualizar" button (deployed on dev since the pilot-UX round)
+- Affected spec: docs/reconciliation/cobros-live.spec.md (D3), docs/direct-payment/admin-links-view.spec.md
+- Symptom: pressing "Actualizar" inside the 30-second display window reset the freshness label to "hace un momento" although the list came from the cache, so the label affirmed a freshness it had not obtained. Root cause: both handlers sealed `readAt: now.getTime()` regardless of where the answer came from. Fix: the cached entry carries `readAt` and the handlers forward it (presence-freshness D7).
+- Regression test: `apps/api/test/presence-freshness.test.ts` (scenarios 8, 9 — two reads inside the window answer the same `readAt`)
+
 ## BUG-001 — WispHub API key committed to the public repo
 - Status: mitigated, **pending key rotation by the owner**
 - Detected: 2026-08-14 · commit `dc1915c` pushed to `feat/store-pwa-shell` (public repo; branch since deleted, commit unreachable from any branch but fetchable by SHA until GitHub GC)

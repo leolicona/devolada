@@ -25,6 +25,14 @@ updated: 2026-08-30
 > a CSV export (usuario → URL) is the SPEC backlog's bridge; real bulk
 > send waits for WABA.
 
+> **Amended 2026-09-03 (polish/presence-freshness.spec.md, US-P07).**
+> The header's "Actualizar" retired: the roster refreshes on return to
+> the tab (30-second floor), on a 3-minute heartbeat while someone is
+> present, and never while the tab is hidden or idle; a failed
+> background read keeps the rows and says so quietly; `readAt` is the
+> provider read's time (BUG-013). The 30-second display cache now lives
+> in the colo (TD-014 paid there).
+
 
 Allows ISP administrators to search their WispHub customers and share permanent SPEI payment links via WhatsApp directly from the Devolada Pagos admin dashboard.
 

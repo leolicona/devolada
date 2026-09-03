@@ -5,7 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { creditSummary } from "../../credit";
 import { WispHub, WispHubError } from "../../wisphub/client";
-import { pendingInvoicesForDisplay, rosterForDisplay } from "../../wisphub/cache";
+import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
   isUniqueViolation,
@@ -116,9 +116,10 @@ export async function getLinkStatus(c: Ctx, token: string) {
     /* provider-latency D2: independent reads, one wait. D3: the page
        renders here; the submission below re-reads fresh before any
        amount is committed, so a 30s-old list cannot decide money. */
+    const version = await pendingVersion(ctx.db, business.id);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      pendingInvoicesForDisplay(business.id, wisphub, now),
+      pendingInvoicesForDisplay(business.id, wisphub, now, version),
     ]);
     /* debt-truth D7: invoices plus the carried balance. A payer whose
        invoice closed on a short payment owes a remainder that the
@@ -865,6 +866,7 @@ export async function linksRoster(c: Ctx) {
 
   return c.json({
     success: true,
-    data: { results, complete: roster.complete, readAt: now.getTime() },
+    /* presence-freshness D7 (BUG-013): the provider read's time */
+    data: { results, complete: roster.complete, readAt: roster.readAt },
   });
 }

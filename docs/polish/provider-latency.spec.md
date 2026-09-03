@@ -2,8 +2,8 @@
 status: in-development
 stories: [US-P06]
 domain: polish
-updated: 2026-08-18
-debt: [TD-014]
+updated: 2026-09-03
+debt: []
 ---
 
 # Spec: A slow WispHub never becomes a slow app
@@ -47,9 +47,9 @@ The provider is not ours to fix. What is ours is the arithmetic: how many calls 
 
   Every path that can take money reads WispHub fresh. Nothing that decides money reads a cache. Display can be 30 s stale; it was always a snapshot, and the screen the customer looks at while they walk to the counter has never been live. *Discarded: caching in the adapter* — it would make the freshness rule invisible at the call site, and the call site is exactly where the rule has to be readable. *Discarded: no cache at all* — search is the most frequent screen in the product and it was paying for a tenant-wide invoice fetch on every debounced keystroke.
 
-  The cache lives in the isolate, keyed by ISP id, and holds only successful responses. *Discarded: the Cache API* — it would be shared across an entire colo instead of one isolate, which is better, but it is a second failure surface for a 30 s window; if measurement later shows the isolate hit rate is poor, TD-014 is where that gets revisited.
+  ~~The cache lives in the isolate, keyed by ISP id~~, and holds only successful responses. ~~*Discarded: the Cache API*~~ — **amended 2026-09-03 (presence-freshness D6, TD-014 paid)**: the cache lives in the colo's Cache API now, keyed per tenant, because a presence heartbeat per open tab is exactly the load an isolate cache does not dampen. The freshness rule of this table is untouched: display reads the cache, guards never do. Each read logs `hit`/`miss`.
 
-- **D4 — A charge invalidates its tenant's cached list, immediately.** Without this, D3 would break a behaviour `debt-truth.spec.md` already verified against the live tenant: charge a customer, search again at once, and the app says *"al corriente"*. A 30 s cache would keep answering *"debe"* for half a minute after the money was taken — the exact confusion the owner reproduced before US-C06. So `recordCharge` and a confirmed `runValidation` both drop the tenant's entry the moment a charge exists. A cache that outlives the fact it caches is not a cache, it is a bug with a TTL.
+- **D4 — A charge invalidates its tenant's cached list, immediately** *(mechanism amended 2026-09-03, presence-freshness D6: `cache.delete` is per data center, so the invalidation moved into the key — the pending-list key carries the tenant's `MAX(payment_registered_at)`, and a registration anywhere is a new key everywhere; `invalidatePendingInvoices` retired)*. Without this, D3 would break a behaviour `debt-truth.spec.md` already verified against the live tenant: charge a customer, search again at once, and the app says *"al corriente"*. A 30 s cache would keep answering *"debe"* for half a minute after the money was taken — the exact confusion the owner reproduced before US-C06. So `recordCharge` and a confirmed `runValidation` both drop the tenant's entry the moment a charge exists. A cache that outlives the fact it caches is not a cache, it is a bug with a TTL.
 
 - **D5 — The cash payment-method id is cached for 10 minutes.** `getCashPaymentMethodId` is a catalog lookup — WispHub's list of payment methods, unchanged for the life of a tenant — and it sat in the middle of the charge path costing a full provider round trip on every single charge. It carries no debt information, so D3's rule does not apply to it. Ten minutes, not forever: an ISP that adds a cash method should not have to wait for an isolate to recycle.
 

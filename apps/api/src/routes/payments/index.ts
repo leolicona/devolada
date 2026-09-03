@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
 import { feedQuery } from "./schema";
-import { executeAction, getPaymentProof, listPaymentFeed, retryAction } from "./handler";
+import { executeAction, getPaymentProof, listPaymentFeed, paymentsPulse, retryAction } from "./handler";
 
 /* Pure router: validation + wiring only (code organization law). The
    feed reads `payments` (business-and-memberships D6); the proof is
@@ -13,6 +13,11 @@ export const paymentsRoute = new Hono<{ Bindings: Bindings; Variables: Variables
 
 paymentsRoute.get("/feed", requireSession, requireArea("payments", "read"), zValidator("query", feedQuery), (c) => {
   return listPaymentFeed(c, c.req.valid("query"));
+});
+
+/* presence-freshness D5: before `/:id/*` so "pulse" is never read as an id */
+paymentsRoute.get("/pulse", requireSession, requireArea("payments", "read"), (c) => {
+  return paymentsPulse(c);
 });
 
 paymentsRoute.get("/:id/proof", requireSession, requireArea("payments", "read"), (c) => {

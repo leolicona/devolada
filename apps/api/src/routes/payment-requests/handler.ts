@@ -5,7 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { paymentLinks } from "../../db/schema";
 import { integrationOf } from "../../integrations/store";
 import { WispHub, WispHubError } from "../../wisphub/client";
-import { pendingInvoicesForDisplay } from "../../wisphub/cache";
+import { pendingInvoicesForDisplay, pendingVersion } from "../../wisphub/cache";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 
@@ -30,7 +30,9 @@ export async function listPaymentRequests(c: Ctx) {
   const now = new Date();
   try {
     const wisphub = new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL);
-    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now);
+    /* presence-freshness D6: the key carries the tenant's last
+       registration, so a payment registered anywhere is a miss here */
+    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now, await pendingVersion(db, actor.id));
 
     /* pilot-UX round: the debtor's permanent link rides the row, so
        "veo quién me debe → le mando su link" is one expansion away.
@@ -67,7 +69,8 @@ export async function listPaymentRequests(c: Ctx) {
         };
       }),
       complete: pending.complete,
-      readAt: now.getTime(),
+      /* presence-freshness D7 (BUG-013): when WispHub was asked, not now */
+      readAt: pending.readAt,
     };
     return c.json({ success: true, data });
   } catch (e) {

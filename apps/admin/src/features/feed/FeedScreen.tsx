@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronDown, TriangleAlert } from "lucide-react";
+import { ChevronDown, Search, TriangleAlert } from "lucide-react";
 import {
   Alert,
   Amount,
@@ -18,11 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
-import { formatDateRange, formatTime } from "@/lib/datetime";
+import { formatTime } from "@/lib/datetime";
 import { useDisplaySettings, useSession } from "../auth/session";
+import { DateRangeField } from "./DateRangeField";
 
 /* Pagos (US-A01, payments-and-classes D4/D5). Polling every 5s — "live"
    without sockets (charge-feed D1). The ISP's timezone owns "today" and
@@ -400,18 +400,8 @@ export function FeedScreen() {
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  /* design-review 2026-09-01 (should fix): on a phone the header stacked
-     alert + search + dates + three lines of chips before the first row.
-     The dates fold behind "Fechas" below sm.
-     design-review 2026-09-02 (pagos-filtros, D4): the fold used to stay
-     open once a date was set, so the filter was never invisible — at the
-     price of a toggle that reported a state change it never performed.
-     Now the toggle is the truth, and the active range moves onto its
-     label instead. */
-  const [datesOpen, setDatesOpen] = useState(false);
-  const showDates = datesOpen;
-  const rangeLabel = formatDateRange(from, to);
   const { data: actor } = useSession();
+  const { timezone } = useDisplaySettings();
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
 
   /* The search travels debounced: a keystroke is not a query */
@@ -430,7 +420,6 @@ export function FeedScreen() {
     setQ("");
     setFrom("");
     setTo("");
-    setDatesOpen(false);
   };
   const feed = useInfiniteQuery<FeedResponse, ApiError>({
     queryKey: ["feed", status, q, from, to],
@@ -507,58 +496,35 @@ export function FeedScreen() {
             ))}
           </TabsList>
 
-          {/* D4: customer search and the date range, in the business's
-              zone. The native date pickers render `mm/dd/yyyy` whatever
-              `lang` says (measured 2026-09-02 with es-MX on the page, the
-              input and the browser) — the calendar that replaces them is
-              the next spec revision. */}
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div className="min-w-48 flex-1">
-              <Label htmlFor="feed-q">Cliente</Label>
+          {/* D4 (2026-09-02 revision): the search leads with the verb and
+              carries a magnifier, so it needs no label; the dates are a
+              calendar of our own — the native pickers rendered
+              `mm/dd/yyyy` whatever `lang` said. The row wraps: two rows
+              in the common case, the trigger drops to its own line only
+              when a wide range makes it wide. */}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="min-w-48 flex-1 sm:max-w-sm">
               <Input
                 id="feed-q"
                 type="search"
-                className="mt-1 h-11 sm:h-10"
-                placeholder="Nombre o usuario"
+                icon={Search}
+                className="h-11 sm:h-10"
+                placeholder="Buscar cliente"
+                aria-label="Buscar por nombre o usuario"
                 value={qInput}
                 onChange={(e) => setQInput(e.target.value)}
               />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 sm:hidden"
-              aria-expanded={showDates}
-              aria-controls="feed-dates"
-              onClick={() => setDatesOpen((v) => !v)}
-            >
-              <CalendarDays className="size-4" aria-hidden />
-              {rangeLabel ?? "Fechas"}
-            </Button>
-            <div id="feed-dates" className={`${showDates ? "flex" : "hidden"} w-full items-end gap-3 sm:flex sm:w-auto`}>
-              <div className="flex-1 sm:flex-none">
-                <Label htmlFor="feed-from">Desde</Label>
-                <Input
-                  id="feed-from"
-                  type="date"
-                  lang="es-MX"
-                  className="mt-1 h-11 sm:h-10"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-              </div>
-              <div className="flex-1 sm:flex-none">
-                <Label htmlFor="feed-to">Hasta</Label>
-                <Input
-                  id="feed-to"
-                  type="date"
-                  lang="es-MX"
-                  className="mt-1 h-11 sm:h-10"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </div>
-            </div>
+            <DateRangeField
+              from={from}
+              to={to}
+              onChange={(f, t) => {
+                setFrom(f);
+                setTo(t);
+              }}
+              timezone={timezone}
+              todayMs={today?.startedAtMs}
+            />
           </div>
         </section>
         <TabsContent value={status}>

@@ -109,10 +109,33 @@ interview (2026-09-01). Its companion is
   `mm/dd/yyyy` with `es-MX` on the page, on the input and in the browser
   — Chromium follows its application locale, page `lang` does not move
   it. The dev observation this DoD waited for is done; the answer is that
-  only a calendar of our own recovers the format, and it is the next
-  revision of this decision (bottom sheet under `sm`, popover above;
-  three presets in the business's zone; Aplicar/Limpiar; one day + Aplicar
-  = that day).
+  only a calendar of our own recovers the format.
+  *Revised 2026-09-02, same round (PR2)*: **the date filter is a calendar
+  of our own** — `react-day-picker` with the `es` locale, themed from
+  `tokens.css`, the library's stylesheet not imported. Bottom sheet under
+  `sm`, popover above; two triggers in the DOM and CSS shows one (the
+  a11y D5 precedent), one staged draft, one calendar body. **Closing
+  discards, Aplicar commits, Limpiar clears and commits in one tap.**
+  Three presets — Hoy · Últimos 7 días · Este mes — are complete answers
+  and apply on the spot; their dates come from the business's zone
+  (`useDisplaySettings().timezone` + `Intl`, with the feed's
+  `today.startedAtMs` preferred when present), so an ISP in Hermosillo
+  consulted from Mexico City still gets its own day. **One day + Aplicar
+  is that one day** (`from = to`) — a premature Aplicar must never widen
+  the filter in silence; the API keeps accepting open ranges. Future days
+  are disabled, boundary in the business's zone. The search leads with
+  the verb — *"Buscar cliente"*, magnifier, `aria-label` "Buscar por
+  nombre o usuario" — and needs no visible label; the controls row wraps
+  so a wide range (`28 dic 2025 – 3 ene 2026`) drops the trigger to its
+  own line instead of truncating the search. Day cells are 44px under
+  `sm`. **Measured**: the chips keep their own row at every width — seven
+  chips (742px) plus search plus trigger exceed the `main` even at 1280 —
+  so Cobros' one-row shape is Cobros' (three chips), not the product's.
+  **Rejected**: the native inputs behind a `lang` (measured, does not
+  move Chromium); a centred Dialog on desktop (too heavy for adjusting a
+  range); open-ended ranges in the UI (a half-picked range applied by
+  accident); `useMediaQuery` to pick the container (a second breakpoint
+  source that can disagree with the CSS).
 
 - **D5 — A failed action can be retried by an operator.** `POST
   /payments/:id/retry-reconnection` (D3 matrix: `payments: operate`) puts
@@ -300,5 +323,5 @@ interview (2026-09-01). Its companion is
       `dd/mm` on a Mexican device.~~ **Closed 2026-09-02 without the
       pilot**: measured `mm/dd/yyyy` with `es-MX` on the page, the input
       and the browser locale (`.design/devolada/screenshots/review-pagos-dates-esmx-mobile-375.png`).
-      Chromium follows its application locale; the pickers are replaced
-      by the calendar in D4's next revision.
+      Chromium follows its application locale; the pickers were replaced
+      by the calendar the same day (D4, PR2).

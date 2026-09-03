@@ -79,3 +79,41 @@ export function formatDateRange(
   if (a.y === b.y) return `${dayMonth(a)} – ${dayMonth(b)}${year}`;
   return `${dayMonth(a)} ${a.y} – ${dayMonth(b)} ${b.y}`;
 }
+
+/* Calendar dates in the business's zone (settings D5). The date filter
+   travels as `YYYY-MM-DD` and the server owns the midnight boundary, so
+   the client only needs the right calendar day — and "today" for an ISP
+   in Hermosillo consulted from Mexico City is Hermosillo's. `Intl` gives
+   it without waiting for the feed (`today.startedAtMs` is null while
+   pending and on error). Arithmetic runs on UTC-noon anchors so no zone
+   can slide a day. */
+
+export function isoDateIn(timezone: string, ms: number = Date.now()): string {
+  /* en-CA formats as YYYY-MM-DD; parts avoid trusting the separator */
+  const parts = formatter(`d-${timezone}`, {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(ms));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+const anchor = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Date.UTC(y, m - 1, d, 12);
+};
+const fromAnchor = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+export const shiftIsoDate = (iso: string, days: number) => fromAnchor(anchor(iso) + days * 86_400_000);
+export const monthStartIso = (iso: string) => `${iso.slice(0, 7)}-01`;
+
+/* react-day-picker speaks local `Date`s; noon keeps the calendar day
+   stable in every zone the browser might be in. */
+export const isoToDate = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d, 12);
+};
+export const dateToIso = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;

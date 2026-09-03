@@ -30,8 +30,11 @@ test("US-S07: enrol a passkey, sign out, sign in with one touch", async ({ page 
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Pagos" })).toBeVisible();
 
-  /* Enrol on this "device" */
-  await page.goto(`${ADMIN}/settings`);
+  /* Enrol on this "device": the passkey card is Cuenta's security
+     sub-page since the account hub (US-A05 D4) — reached through the
+     avatar and its row, the way a person does */
+  await page.getByRole("link", { name: "Cuenta" }).first().click();
+  await page.getByRole("link", { name: /entrar con huella o rostro/i }).click();
   await page.getByRole("button", { name: /activar en este dispositivo/i }).click();
   await expect(page.getByText(/ya puede entrar con huella o rostro/i)).toBeVisible();
   /* D18: the credential is listed, with its Quitar */
@@ -39,8 +42,8 @@ test("US-S07: enrol a passkey, sign out, sign in with one touch", async ({ page 
   await expect(devices.getByRole("listitem")).toHaveCount(1);
   await expect(devices.getByRole("button", { name: /quitar/i })).toBeVisible();
 
-  /* Sign out from the Sesión card (BUG-016: the door that exists at
-     every width), then back in with the passkey alone */
+  /* Sign out from the hub's door (BUG-016: the one that exists at every
+     width, now in Cuenta's rail), then back in with the passkey alone */
   await page.getByRole("button", { name: /cerrar sesión/i }).last().click();
   await expect(page.getByLabel("Correo")).toBeVisible();
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Alert, Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
+import { Card, ListError, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
 import type {
   IntegrationsResponse,
   WisphubIntegration,
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 /* The WispHub detail (integrations-hub D3/D4/D8/D9, US-I01–I03): the
    key (settings D1–D3 verbatim, moved), the class→action mapping with
@@ -103,7 +104,7 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
       {result && (
         <p
           role="status"
-          className={`flex items-start gap-2 text-sm font-medium ${result.ok ? "text-success" : "text-error"}`}
+          className={cn("flex items-start gap-2 text-sm font-medium", result.ok ? "text-success" : "text-error")}
         >
           {result.ok ? (
             <>
@@ -335,12 +336,12 @@ export function WispHubScreen() {
         </div>
       )}
       {integrations.error && (
-        <Alert variant="destructive" className="mt-4">
-          No pudimos cargar la integración.{" "}
-          <button type="button" className="underline" onClick={() => void integrations.refetch()}>
-            Reintentar
-          </button>
-        </Alert>
+        <ListError
+          what="la integración"
+          onRetry={() => void integrations.refetch()}
+          retrying={integrations.isRefetching}
+          className="mt-4"
+        />
       )}
       {integrations.data && (
         <div className="mt-4 space-y-4 pb-8">

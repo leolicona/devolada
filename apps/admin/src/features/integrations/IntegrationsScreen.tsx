@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Plug, PlugZap } from "lucide-react";
-import { Alert, Card, Skeleton } from "@devolada/ui";
+import { Card, ListError, Skeleton } from "@devolada/ui";
 import type { IntegrationsResponse } from "@devolada/api/integrations-schema";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
@@ -26,12 +26,12 @@ export function IntegrationsScreen() {
 
       {integrations.isPending && <Skeleton className="mt-4 h-32 w-full" />}
       {integrations.error && (
-        <Alert variant="destructive" className="mt-4">
-          No pudimos cargar tus integraciones.{" "}
-          <button type="button" className="underline" onClick={() => void integrations.refetch()}>
-            Reintentar
-          </button>
-        </Alert>
+        <ListError
+          what="tus integraciones"
+          onRetry={() => void integrations.refetch()}
+          retrying={integrations.isRefetching}
+          className="mt-4"
+        />
       )}
 
       {integrations.data && (

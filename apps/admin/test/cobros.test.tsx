@@ -101,7 +101,7 @@ describe("US-R01: who owes what, grouped by customer, oldest debt first", () => 
 
   it("scenario 7: WispHub down → the section says so, with Reintentar", async () => {
     arrange(() => fail("WISPHUB_UNAVAILABLE", 503));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/no pudimos consultar tus cobros/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no pudimos cargar tus cobros en wisphub/i);
     expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
     /* never an empty claim on a failure (US-P01) */
     expect(screen.queryByText(/nadie te debe hoy/i)).not.toBeInTheDocument();

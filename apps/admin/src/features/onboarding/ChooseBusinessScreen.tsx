@@ -1,4 +1,4 @@
-import { Alert, Card } from "@devolada/ui";
+import { Alert, Card, ListError, Skeleton } from "@devolada/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Building2 } from "lucide-react";
@@ -32,14 +32,9 @@ export function ChooseBusinessScreen({ reason }: { reason: "choose" | "revoked" 
       {reason === "revoked" && (
         <Alert variant="warning">Ya no formas parte del negocio en el que estabas. Elige otro.</Alert>
       )}
-      {orgs.isPending && <p className="text-sm text-ink-soft">Cargando…</p>}
+      {orgs.isPending && <Skeleton className="h-24 w-full" />}
       {orgs.error && (
-        <Alert variant="destructive">
-          No pudimos cargar tus negocios.{" "}
-          <button type="button" className="underline" onClick={() => void orgs.refetch()}>
-            Reintentar
-          </button>
-        </Alert>
+        <ListError what="tus negocios" onRetry={() => void orgs.refetch()} retrying={orgs.isRefetching} />
       )}
       {orgs.data && (
         <ul className="space-y-2">

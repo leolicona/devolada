@@ -2,7 +2,7 @@ import { expect, test, type Browser } from "@playwright/test";
 
 /* The identity journey, end to end against the real API (wrangler + D1,
    same harness as the passkey ceremony): signup → the código opens the
-   session → the one-step wizard → the CLABE in Configuración → an
+   session → the one-step wizard → the CLABE in Pago directo → an
    invitation → the invitee creates a password on the invitation page and
    lands inside → the owner changes the role, then removes the member →
    the member's next request is named a revoked membership.
@@ -49,14 +49,16 @@ test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, a
   await expect(ownerPage.getByRole("heading", { name: /tu negocio está listo/i })).toBeVisible();
   await ownerPage.getByRole("button", { name: /configurar mi clabe/i }).click();
 
-  /* The shell wears the CLABE banner until Configuración closes it */
+  /* The shell wears the CLABE banner until the SPEI card closes it */
   await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toBeVisible();
   await ownerPage.getByLabel("CLABE").fill("646180157000000004");
   await expect(ownerPage.getByRole("combobox", { name: "Banco" })).toHaveText(/STP/);
   await ownerPage.getByRole("button", { name: /guardar pago directo/i }).click();
   await expect(ownerPage.getByText(/guardado|listo|actualizad/i).first()).toBeVisible({ timeout: 10_000 });
   await ownerPage.reload();
-  await expect(ownerPage.getByRole("heading", { name: "Configuración" })).toBeVisible();
+  /* settings D11: the page the wizard lands on is Pago directo y
+     conciliación — "Configuración" was one page naming three subjects */
+  await expect(ownerPage.getByRole("heading", { name: "Pago directo y conciliación" })).toBeVisible();
   await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toHaveCount(0);
 
   /* Invite (verified by construction — the session exists), and the
@@ -65,7 +67,7 @@ test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, a
      row, the way a person does (TESTING rule 9). */
   await ownerPage.getByRole("link", { name: "Cuenta" }).first().click();
   await ownerPage.getByRole("link", { name: /^usuarios/i }).click();
-  const users = ownerPage.getByRole("region", { name: "Usuarios" }).or(ownerPage.locator("#usuarios"));
+  const users = ownerPage.getByRole("region", { name: "Usuarios" });
   await users.getByLabel(/invitar por correo/i).fill(invitee);
   await users.getByRole("combobox", { name: "Rol" }).click();
   await ownerPage.getByRole("option", { name: "Operador" }).click();

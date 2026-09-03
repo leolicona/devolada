@@ -118,6 +118,7 @@ The Configuración section: the WispHub API key that makes reconnection possible
 - [x] Scenarios 1–4 automated in the API layer (`test/settings.test.ts` 5 tests, `test/charge-feed.test.ts`, `test/business-day.test.ts` 3 tests)
 - [x] Scenarios 5, 7 and 8 automated with Testing Library + MSW (`apps/admin/test/settings.test.tsx`; scenario 5 rewritten 2026-09-03 for D9, the index suite rewritten the same day for D10 — no section nav, ids intact, plus `apps/api/test/settings.test.ts` "the general fee is not patchable" and `apps/admin/test/account-hub.test.tsx` "#cargo lands on the SPEI card")
 - [x] Scenario 6 automated (`apps/admin/test/settings.test.tsx` — the redirect with each hash, and the two rail rows in `account-hub.test.tsx`)
+- [x] The real-API journey follows the rename (`tests/passkey/identity-journey.spec.ts`: the wizard's CLABE step lands on Pago directo y conciliación) — it runs on the dev deploy, not in PR CI, and it caught D11 the way it caught the hub (TESTING rule 13)
 - [x] Scenario 9 automated (`apps/admin/test/session-round.test.tsx`, 2026-09-02)
 - [x] Real check (2026-08-16, owner, deployed dev): the renewed WispHub key was
       saved through the settings screen (live validation) and charges from the

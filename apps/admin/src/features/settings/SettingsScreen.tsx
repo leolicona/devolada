@@ -44,8 +44,8 @@ function useSaveSettings() {
 function SectionCard({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
     <Card className="p-6" id={id}>
-      {/* scroll-mt keeps the heading clear of the top edge when the index
-          below jumps here */}
+      {/* scroll-mt keeps the heading clear of the top edge when a deep
+          link (the CLABE banner, the wizard, a legacy hash) lands here */}
       <h3 className="scroll-mt-24 text-base font-semibold">{title}</h3>
       <div className="mt-4 space-y-4">{children}</div>
     </Card>

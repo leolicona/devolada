@@ -77,7 +77,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
   const mayInvite = grantable.length > 0;
 
   return (
-    <section id="usuarios" className="scroll-mt-24 rounded-lg border border-border bg-card p-6" aria-labelledby="users-title">
+    <section className="rounded-lg border border-border bg-card p-6" aria-labelledby="users-title">
       <h2 id="users-title" className="text-base font-semibold">
         Usuarios
       </h2>

@@ -35,8 +35,8 @@ export function PasskeyCard() {
   if (!supported) return null;
 
   return (
-    <Card className="p-6" id="acceso">
-      <h2 className="scroll-mt-24 text-base font-semibold">Entrar con huella o rostro</h2>
+    <Card className="p-6">
+      <h2 className="text-base font-semibold">Entrar con huella o rostro</h2>
       <p className="mt-2 text-sm text-muted-foreground">
         Activa el acceso con la huella o el rostro de este dispositivo. Tu contraseña sigue
         funcionando; esto solo agrega un camino más rápido. Si tu llavero de iCloud o de Google

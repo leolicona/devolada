@@ -202,7 +202,7 @@ export function CreditCard() {
   }
 
   return (
-    <Card className="p-6" id="saldo">
+    <Card className="p-6">
       <h2 className="text-base font-semibold">Saldo y recargas</h2>
       {credit.isPending && <Skeleton className="mt-4 h-10 w-48" />}
       {credit.error && (

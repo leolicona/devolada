@@ -41,7 +41,12 @@ The Configuración section: the WispHub API key that makes reconnection possible
   rail and the page title. The **ids stay** — `#spei`, `#politica` and
   `#zona` are the deep-link contract the CLABE banner, the wizard and
   `HASH_HOMES` depend on, and they are what makes the index removable
-  without breaking a link. **Rejected**: keeping it until the page grows
+  without breaking a link. The one-card sub-pages drop theirs (`#saldo`,
+  `#usuarios`, `#acceso`) along with the `scroll-mt` that served them: the
+  hub redirects those hashes to the page, not into it, so nothing could
+  land on them — an anchor no link can reach is not a contract, it is the
+  index's shadow. The retirement is a **FRONTEND law**, not a settings
+  preference: no surface gets an in-page anchor index. **Rejected**: keeping it until the page grows
   again (the growth rule is rows, not cards — the IA's S4 — so it never
   will); turning it into tabs (one document becomes four, and a shareable
   URL becomes a component's state).

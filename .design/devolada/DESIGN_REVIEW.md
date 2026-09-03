@@ -87,6 +87,11 @@ product's pitch.
    is ~3,300px tall). Fine at pilot scale; phase 5 already plans to move the
    WispHub key to Integraciones, which shortens it. If it grows further, an
    in-page section index (the `#saldo` anchor already exists) beats tabs.
+   _Superseded 2026-09-03 (settings D10, FRONTEND law)_: the index was built,
+   and then the page it was for stopped existing — the hub moved four cards
+   to their own pages and the one-fee change retired a fifth. Three cards
+   were left wearing a table of contents. The answer to a page that grows is
+   a new rail row, never an index; neither index nor tabs.
 2. **`unapplied` rows show the usuario** (`jperez@wifiplus`) where every other
    row shows a name (`review-pagos-desktop-1280.png`, last row) — honest (the
    name is never denormalized on that path) but slightly raw; the customer name

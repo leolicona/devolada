@@ -30,6 +30,8 @@ Out of scope for now (a decision, not an oversight): Storybook/Chromatic and vis
 
 12. **A migration that rebuilds a table is proven on seeded data, not only on the suite's empty D1.** D1 runs a migration as one transaction and ignores `PRAGMA foreign_keys` inside it; drizzle-kit's rebuild (`__new_T` → insert → drop → rename) then fails at commit on any table with children, because the deferred-FK counter never settles. The house pattern is 0007's: `PRAGMA defer_foreign_keys = true`, then **copy → drop → recreate under its own name → refill**. Before a rebuild ships, apply it to a local D1 seeded with pre-migration rows (`wrangler d1 migrations apply … --local --persist-to <scratch>`) and read the rows back (real case 2026-09-01: 0018 passed 181 tests and failed on the dev database at the first tenant).
 
+13. **A route or a page title that changes sweeps `tests/passkey/` in the same PR.** Those journeys need a real API, so they run on the dev deploy and not in PR CI (CICD D3): a rename that every unit test accepts meets them only after the merge, on `main`, as a red deploy. Twice now the same way — 2026-09-02, the account hub moved Usuarios and the passkey card and #159 met the journeys at #161; 2026-09-03, settings D11 renamed the page the wizard lands on and #165 met them again. They walk the app the way a person does (rule 9), which is exactly why they read labels a refactor moves. Grep the label and the path you are changing across `tests/` before pushing, and run `pnpm e2e:passkey` — it boots its own `wrangler dev` + D1, so it needs nothing deployed.
+
 ## Retroactive debt
 
 `auth/sessions.spec.md` was verified with curl before this strategy existed; its 8 scenarios must become API-layer tests when the infrastructure lands (TD-005).

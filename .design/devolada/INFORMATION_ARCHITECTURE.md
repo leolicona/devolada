@@ -36,7 +36,7 @@ api. / consta.              APIs (no UI)
   (breaks the ≤5 law); burying it in settings with no ambient signal (a
   business discovers the pause when a customer complains — exactly what D6's
   warnings exist to prevent).
-- **User menu**: account, passkey, sign out. Role badge shown here.
+- **User menu**: account, passkey, sign out. Role badge shown here. *(Built 2026-09-02 as **Cuenta**, the fifth section — the avatar replaces the Configuración gear at both widths; `docs/admin/account-hub.spec.md`.)*
 - Nav (≤5, one-word labels — the FRONTEND law measured at 360px):
 
 | Section | es-MX label | Stories | Phase | Exists? |

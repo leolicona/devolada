@@ -90,12 +90,26 @@ describe("US-P04: the admin passes axe on every section", () => {
     await expectNoViolations(document.body);
   });
 
+  it("Cuenta: the hub (account-hub scenario 8)", async () => {
+    server.use(handlers.session(() => ok(businessActor)));
+    renderApp("/settings");
+    await screen.findByRole("heading", { name: "Cuenta" });
+    await expectNoViolations(document.body);
+  });
+
+  it("Cuenta: the security sub-page", async () => {
+    server.use(handlers.session(() => ok(businessActor)));
+    renderApp("/settings/security");
+    await screen.findByRole("link", { name: /volver a cuenta/i });
+    await expectNoViolations(document.body);
+  });
+
   it("Configuración", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings)),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
     await screen.findByLabelText("CLABE");
     await expectNoViolations(document.body);
   });

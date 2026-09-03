@@ -11,6 +11,8 @@ import { stubAdminApi } from "./stubs";
 const screens = [
   { name: "Cobros", url: ADMIN, stub: stubAdminApi, ready: "Janely Guadalupe Reyes" },
   { name: "WispHub", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Ejecutar acciones automáticamente" },
+  /* account-hub (US-A05): the rail, the identity card and the door */
+  { name: "Cuenta", url: `${ADMIN}/settings`, stub: stubAdminApi, ready: "Cerrar sesión" },
 ] as const;
 
 for (const theme of ["light", "dark"] as const) {

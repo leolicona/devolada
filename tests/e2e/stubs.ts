@@ -36,6 +36,7 @@ export const businessActor = {
   role: "owner",
   orgId: "org_business-1",
   userId: "user-1",
+  userName: "Leo Licona",
   businesses: [{ id: "business-1", orgId: "org_business-1", name: "ISP Demo", role: "owner" }],
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },

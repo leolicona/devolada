@@ -62,6 +62,9 @@ export type Actor = {
   orgId: string;
   name: string;
   userId: string;
+  /* account-hub D2: the person behind the session, for the avatar's
+     initials and the hub's identity card — one request, not two */
+  userName: string;
   email: string;
   emailVerified: boolean;
   status: "active" | "suspended";

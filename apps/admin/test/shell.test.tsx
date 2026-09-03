@@ -20,7 +20,7 @@ describe("US-S04: login lands on the dashboard shell", () => {
     await userEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
-    for (const label of ["Links", "Configuración"]) {
+    for (const label of ["Links", "Cuenta"]) {
       expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
     expect(router.state.location.pathname).toBe("/payments");

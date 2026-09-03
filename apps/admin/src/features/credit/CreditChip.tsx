@@ -30,8 +30,7 @@ export function CreditChip({ credit, className }: { credit: BusinessActor["credi
   const quiet = credit.step === "ok";
   return (
     <Link
-      to="/settings"
-      hash="saldo"
+      to="/settings/credit"
       aria-label={`${step.label}: ${new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(credit.balanceCents / 100)}`}
       className={cn(
         "inline-flex h-8 items-center gap-2 rounded-md border border-border bg-well px-2.5 text-sm hover:bg-muted",
@@ -63,7 +62,7 @@ export function CreditBanner({ credit }: { credit: BusinessActor["credit"] }) {
           ? "Validación en pausa: los comprobantes nuevos de tus clientes quedan guardados sin validarse hasta que recargues."
           : "Tu saldo llegó a cero. Los pagos se siguen validando unos días más; recarga para no llegar a la pausa."}
       </span>
-      <Link to="/settings" hash="saldo" className="block">
+      <Link to="/settings/credit" className="block">
         <Button variant={paused ? "default" : "outline"}>Recargar</Button>
       </Link>
     </Alert>

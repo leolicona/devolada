@@ -153,15 +153,18 @@ describe("US-B02: one login, several businesses", () => {
 });
 
 describe("US-B03: roles hide, never tease", () => {
-  it("scenario 7 (UI): an operator's settings hold no business card (the passkey card is theirs, when the device has one)", async () => {
+  it("scenario 7 (UI): an operator's hub holds no business row, and the business page sends them back (account-hub D5)", async () => {
     server.use(handlers.session(() => ok(asRole("operator"))), handlers.settings(() => ok(settings())));
-    renderApp("/settings");
-    expect(await screen.findByRole("heading", { name: "Configuración" })).toBeInTheDocument();
-    /* The settings answered (skeletons gone); nothing of the business rendered */
-    await waitFor(() => expect(document.querySelectorAll(".animate-pulse")).toHaveLength(0));
-    expect(screen.queryByText(/conexión con wisphub/i)).not.toBeInTheDocument();
+    const router = renderApp("/settings/business");
+    expect(await screen.findByRole("heading", { name: "Cuenta" })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings"));
     expect(screen.queryByText(/pago directo por spei/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Usuarios" })).not.toBeInTheDocument();
+    for (const row of [/^configuración/i, /^usuarios/i, /^saldo y recargas/i, /^integraciones/i]) {
+      expect(screen.queryByRole("link", { name: row })).not.toBeInTheDocument();
+    }
+    /* The person's own things stay: the passkeys row and the door */
+    expect(screen.getByRole("link", { name: /entrar con huella o rostro/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cerrar sesión/i })).toBeInTheDocument();
   });
 
   it("scenario 6 (UI): an admin sees the CLABE as text — the field is the owner's — and may invite operators and viewers only", async () => {
@@ -170,11 +173,18 @@ describe("US-B03: roles hide, never tease", () => {
       handlers.settings(() => ok(settings())),
       handlers.members(() => ok({ ...members, grantable: ["operator", "viewer"] })),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "CLABE" })).not.toBeInTheDocument();
     expect(screen.getByText("646180157000000004")).toBeInTheDocument();
+  });
 
+  it("scenario 6 (UI): an admin may invite operators and viewers only", async () => {
+    server.use(
+      handlers.session(() => ok(asRole("admin"))),
+      handlers.members(() => ok({ ...members, grantable: ["operator", "viewer"] })),
+    );
+    renderApp("/settings/users");
     const users = (await screen.findByRole("heading", { name: "Usuarios" })).closest("section")!;
     expect(within(users).getByText("Ana")).toBeInTheDocument();
     await userEvent.click(within(users).getByRole("combobox", { name: "Rol" }));
@@ -194,7 +204,7 @@ describe("US-B03: roles hide, never tease", () => {
         return ok({ id: "inv-1", email: "contador@wifiplus.mx", role: "viewer" }, 201);
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/users");
     const users = (await screen.findByRole("heading", { name: "Usuarios" })).closest("section")!;
     await userEvent.type(within(users).getByLabelText(/invitar por correo/i), "contador@wifiplus.mx");
     await userEvent.click(within(users).getByRole("combobox", { name: "Rol" }));

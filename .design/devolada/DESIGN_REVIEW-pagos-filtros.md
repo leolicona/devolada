@@ -2,7 +2,7 @@
 
 Reviewed against: `.design/devolada/DESIGN_BRIEF.md` (pivot phase 2)
 Philosophy: functionalist, tokens are law, warm accent; calm by default
-Date: 2026-09-02 · Status: **PR1 built and verified (branch `feat/pagos-filter-bar`); PR2 pending**
+Date: 2026-09-02 · Status: **PR1 merged (#157); PR2 built and verified (branch `feat/pagos-date-range`)**
 Code: `apps/admin/src/features/feed/FeedScreen.tsx`, `apps/admin/src/components/ui/tabs.tsx`
 Owning spec: `docs/reconciliation/payments-and-classes.spec.md` **D4** (US-R03) — everything here amends D4; no new US-ID.
 
@@ -35,6 +35,13 @@ Method: local dev (`:5174` + API `:8787`, seeded), Playwright/Chromium, locale `
 | `review-pagos-chip-focus-after-mobile-360.png` | Mobile 360 (rail crop) · after | Focus ring on "En cola" intact on all four sides |
 | `review-pagos-filters-after-desktop-1280.png` | Desktop 1280 · after | Chips row above the labelled controls row |
 | `review-pagos-filters-after-tablet-768.png` | Tablet 768 · after | Chips wrap to two rows, controls row below — the 640–1024 band holds in PR1's two-row shape |
+| `review-pagos-range-bar-mobile-360.png` | Mobile 360 · **after PR2** | Magnifier search "Buscar cliente" + `Fechas` on one row, no label |
+| `review-pagos-range-sheet-mobile-360.png` | Mobile 360 · PR2 | Bottom sheet: presets, es calendar, future days disabled, Limpiar/Aplicar |
+| `review-pagos-range-sheet-range-mobile-360.png` | Mobile 360 · PR2 | A range: strong ends, soft band between, preview `27 ago – 2 sep` |
+| `review-pagos-range-sheet-oneday-mobile-360.png` | Mobile 360 · PR2 | One day picked: a full circle, preview `1 sep` |
+| `review-pagos-range-sheet-dark-mobile-360.png` | Mobile 360, dark · PR2 | Same range in the dark palette |
+| `review-pagos-range-popover-desktop-1280.png` | Desktop 1280 · PR2 | Popover anchored to the trigger's end |
+| `review-pagos-range-bar-tablet-768.png` | Tablet 768 · PR2 | Chips on two rows, controls row below |
 
 > All in `.design/devolada/screenshots/`.
 
@@ -108,13 +115,13 @@ Desde 30 sep › Hasta 1 sep → 0 rows and *"Sin pagos por aquí todavía. Apar
 | # | Decision | Why |
 |---|---|---|
 | D1 | **Two PRs.** PR1 = rail + order + filtered-empty copy + test + specs (no deps). PR2 = date control + label/placeholder (+1 dep, revises D4). | PR1 does not depend on the sheet. The copy change moves to PR2 so the desktop row is never half-labelled. |
-| D2 | Chips **first**, in Cobros' one-row shape once PR2 lands; in PR1, chips row above the controls row. | Scope before refine; adjacency to the tabpanel; one shape across the product. |
+| D2 | Chips **first**, on their own row at every width; the controls row (search + trigger) below it. *Corrected in PR2: Cobros' one-row shape does not fit Pagos even at 1280 — seven chips (742px) + search + trigger exceed the ~976px `main`. One row is Cobros' (three chips), not the product's.* | Scope before refine; adjacency to the tabpanel. |
 | D3 | Placeholder **`"Buscar cliente"`** + `aria-label="Buscar por nombre o usuario"`; label removed. | 101px is the only verb-leading string that fits beside a labelled trigger at 360 (152px of room). "o usuario" is a hint, not a gate. |
 | D4 | `Fechas` **keeps its text** and **names an active range**. | F6. The invisible-filter requirement is met by the label, not by a panel that cannot close. |
 | D5 | Range copy: **compact adaptive** — `1–15 sep` · `28 ago – 15 sep` · `28 dic 2025 – 3 ene 2026` · `3 sep`. New short formatter beside `formatTime` in `lib/datetime.ts`, landing in **PR1** (D4 needs it). | `fmtCepDate` gives "1 de septiembre de 2026" — too long for a button. |
 | D6 | Row 2 is **`flex-wrap`**: two rows in the common case, the trigger drops to its own line only when wide. | *est.* `28 ago – 15 sep` leaves ~101px for the placeholder (zero margin); cross-year leaves ~41px. A promise that degrades beats one that lies. |
 | D7 | **Popover on desktop** (`pnpm dlx shadcn@latest add popover`), **Sheet below `sm`** on the existing Dialog dep. | A centred modal is too heavy for adjusting a range; the cost is 1 dep + 1 file against 6 Radix deps present. |
-| D8 | **Two triggers, CSS hides one**; the draft lives in a shared `DateRangeField`; one calendar body. | Matches the a11y D5 precedent and avoids a JS/CSS breakpoint split. Radix mounts only the open one. Triggers get **distinct accessible names** (as "Secciones" / "Secciones, barra inferior") so `getByRole` stays unambiguous in happy-dom. |
+| D8 | **Two triggers, CSS hides one**; the draft lives in a shared `DateRangeField`; one calendar body. | Matches the a11y D5 precedent and avoids a JS/CSS breakpoint split. Radix mounts only the open one. *Built as: both triggers read "Fechas" (a real browser exposes only the visible one; an invented suffix would reach screen readers for happy-dom's sake), and the unit tests read the first with `getAllByRole`, as `shell.test.tsx:24` reads the two navs.* |
 | D9 | **Dismiss discards · Aplicar commits · Limpiar clears + commits + closes.** | Removing a filter must not cost two taps. Staging also ends the query-per-keystroke (F3). |
 | D10 | **Three presets** — Hoy · Últimos 7 días · Este mes — **apply immediately**. Dates as `YYYY-MM-DD` strings in the business zone from `useDisplaySettings().timezone` + `Intl`; `today.startedAtMs` preferred when present. Future days disabled, boundary in the business zone. | `today` is `null` on pending/error; the strings need no feed. At 23:00 in Tijuana a UTC boundary would disable *today*. |
 | D11 | **No open-ended ranges in the UI**: one day + Aplicar = that day (`from = to`). The sheet previews the pending selection so Aplicar's effect is visible. | A premature Aplicar must not widen the filter silently. The API keeps accepting open ranges. |
@@ -136,7 +143,9 @@ Verified on the branch: `tsc` clean on every workspace; admin unit tests 116/116
 5. Filter-bar controls ≥44px; `expectTouchTargets` wired for that selector (D13). Open TD-019.
 6. Specs: amend D4 (order), amend `design-review.spec.md` with this round, correct the 44px claims in both specs.
 
-### PR2 — the date range control (+ `react-day-picker`)
+### PR2 — the date range control (+ `react-day-picker`) — **built 2026-09-02**
+
+Verified on the branch: `tsc` clean on every workspace; admin unit tests 122/122 (6 new: presets in the business's zone, one day + Aplicar, dismiss discards, Limpiar + disabled tomorrow, zone helpers); e2e `responsive.spec.ts` 5/5; `spec-lint` clean. Measured after: sheet day cells 44×44 at 360, 32 future days disabled, `lu ma mi ju vi sá do`, preset `Últimos 7 días` → `27 ago – 2 sep`; popover `align="end"` on the trigger at 1280; search + trigger share a row at 360. Deps: `@radix-ui/react-popover` (scoped, like every other Radix dep — the CLI's monolithic `radix-ui` and its `date-fns` were removed), `react-day-picker` 10. Files: `components/ui/{popover,sheet,calendar}.tsx`, `features/feed/DateRangeField.tsx`, `FeedScreen.tsx`, `components/ui/input.tsx` (+`icon`), `lib/datetime.ts` (+zone helpers), tests, `payments-and-classes.spec.md` D4 revised, `FRONTEND.md` primitives list.
 
 1. `shadcn add popover`; `react-day-picker` v9, locale `es`, `mode="range"`, themed from `tokens.css` (selected range on `--accent-soft`, matching the active chip; both palettes).
 2. `DateRangeField` (draft state) → `Sheet` trigger `sm:hidden` / `Popover` trigger `hidden sm:block` with distinct names (D8); one `RangeCalendar` body; D9–D11 semantics.

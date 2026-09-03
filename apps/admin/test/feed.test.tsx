@@ -332,29 +332,82 @@ describe("US-R03: the proof and the retry live on the row", () => {
   });
 });
 /* design-review 2026-09-01 (should fix): the mobile header's height. */
-/* payments-and-classes D4, amended 2026-09-02 (pagos-filtros review):
-   the fold used to stay open once a date was set, so the filter was never
-   invisible — and the toggle reported a state change it never performed.
-   Now the toggle is the truth and the range lives on its label. */
-describe("US-R03: the date filters fold behind 'Fechas', and a set range moves onto the label", () => {
-  it("the toggle opens, closes again, and names the active range when closed", async () => {
+/* payments-and-classes D4, 2026-09-02 revision: the date filter is a
+   calendar of our own, staged behind Aplicar. Two triggers live in the
+   DOM (sheet under sm, popover above; CSS shows one) — happy-dom hides
+   neither, so the first is the sheet's, as shell.test.tsx reads the two
+   navs. The stub feed says today started at 2026-08-14 00:00 in the
+   business's zone (Mexico City), so every date below is deterministic. */
+describe("US-R03: the date range is a calendar — presets apply, Aplicar commits, closing discards, Limpiar clears", () => {
+  const seen: { from: string | null; to: string | null }[] = [];
+  const setup = () => {
+    seen.length = 0;
     server.use(
       handlers.session(() => ok(businessActor)),
-      handlers.feed(() => ok(feedOf([charge()]))),
+      handlers.feed((url) => {
+        seen.push({ from: url.searchParams.get("from"), to: url.searchParams.get("to") });
+        return ok(feedOf([charge()]));
+      }),
     );
     renderApp("/");
+  };
+  const trigger = () => screen.getAllByRole("button", { name: /Fechas|ago/ })[0];
+
+  it("a preset is a complete answer: 'Últimos 7 días' applies in the business's zone and names itself", async () => {
+    setup();
     await screen.findByRole("button", { name: /janely/i });
 
-    const toggle = screen.getByRole("button", { name: "Fechas" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(trigger());
+    await userEvent.click(await screen.findByRole("button", { name: "Últimos 7 días" }));
 
-    await userEvent.type(screen.getByLabelText("Desde"), "2026-08-01");
-    await userEvent.click(toggle);
-    /* collapsed for real — and the filter is not invisible: the label says it */
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveAccessibleName(/Desde 1 ago/);
+    expect((await screen.findAllByRole("button", { name: /8–14 ago/ }))[0]).toBeInTheDocument();
+    expect(seen.at(-1)).toEqual({ from: "2026-08-08", to: "2026-08-14" });
+    /* the sheet closed on its own */
+    expect(screen.queryByRole("button", { name: "Aplicar" })).not.toBeInTheDocument();
+  });
+
+  it("one day + Aplicar is that day, not an open range", async () => {
+    setup();
+    await screen.findByRole("button", { name: /janely/i });
+
+    await userEvent.click(trigger());
+    await userEvent.click(await screen.findByRole("button", { name: /13 de agosto/ }));
+    expect(screen.getByText("13 ago")).toBeInTheDocument(); /* the preview says what Aplicar will do */
+    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+
+    expect((await screen.findAllByRole("button", { name: /13 ago/ }))[0]).toBeInTheDocument();
+    expect(seen.at(-1)).toEqual({ from: "2026-08-13", to: "2026-08-13" });
+  });
+
+  it("closing without Aplicar discards the draft", async () => {
+    setup();
+    await screen.findByRole("button", { name: /janely/i });
+    const before = seen.length;
+
+    await userEvent.click(trigger());
+    await userEvent.click(await screen.findByRole("button", { name: /13 de agosto/ }));
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByRole("button", { name: "Aplicar" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Fechas" }).length).toBeGreaterThan(0);
+    expect(seen.slice(before).some((s) => s.from !== null)).toBe(false);
+  });
+
+  it("Limpiar clears and applies in one tap; tomorrow cannot be picked", async () => {
+    setup();
+    await screen.findByRole("button", { name: /janely/i });
+
+    await userEvent.click(trigger());
+    await userEvent.click(await screen.findByRole("button", { name: "Hoy" }));
+    expect(seen.at(-1)).toEqual({ from: "2026-08-14", to: "2026-08-14" });
+
+    await userEvent.click(screen.getAllByRole("button", { name: /14 ago/ })[0]);
+    /* the business's today is the 14th: the 15th is disabled */
+    expect(await screen.findByRole("button", { name: /15 de agosto/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Limpiar" }));
+
+    expect(seen.at(-1)).toEqual({ from: null, to: null });
+    expect(screen.getAllByRole("button", { name: "Fechas" }).length).toBeGreaterThan(0);
   });
 });
 

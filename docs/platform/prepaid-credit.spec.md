@@ -202,7 +202,9 @@ computes money.
 
 ## UI Contract
 
-- **Chip** (shell header, IA): icon + amount in the normal step, no word;
+- **Chip** (shell sidebar — `lg` and up; the phone has no header since
+  account-hub D8, 2026-09-02, and reads the step on the bottom bar's avatar
+  and in Cuenta): icon + amount in the normal step, no word;
   step label + icon per D7 from "Saldo bajo" on (the label appearing is the
   non-color signal; the aria-label names the step in every state); tapping
   opens Cuenta → Saldo y recargas (`/settings/credit` since the account hub, 2026-09-02). Owner and admin see it; operator
@@ -213,8 +215,10 @@ computes money.
   pago page's two doors, restyled for desktop); a top-up in flight shows
   its calm wait; the entry list below (Bono de bienvenida · Recarga ·
   Validación · Ajuste) with amounts signed, `<Amount>` everywhere.
-- **Banners**: "Saldo bajo" and "Sin saldo" as warning alerts in the
-  shell; "Validación en pausa" as an error alert with "Recargar".
+- **Banners**: "Sin saldo" as a warning alert in the shell; "Validación en
+  pausa" as an error alert. "Saldo bajo" is the chip on a monitor and a
+  one-line strip the owner closes on a phone (account-hub D9). "Recargar"
+  on any of them only with `credit: manage` (account-hub D10).
 - **Pago page**: the `queued_for_credit` state per D9.
 - es-MX only: Saldo, Recarga, Validación, Ajuste, "Validación en pausa".
 

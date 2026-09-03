@@ -47,8 +47,10 @@ export function CreditChip({ credit, className }: { credit: BusinessActor["credi
 
 /* The two banners that change what an owner would do today (D7): "Sin
    saldo" as a warning, "Validación en pausa" as an error with the way
-   out. "Saldo bajo" stays in the chip alone. */
-export function CreditBanner({ credit }: { credit: BusinessActor["credit"] }) {
+   out. "Saldo bajo" is the sidebar chip on a monitor and CreditStrip on a
+   phone (account-hub D9). Recargar renders only for a role that can top
+   up (account-hub D10) — a viewer reads the state, never a dead button. */
+export function CreditBanner({ credit, canTopUp }: { credit: BusinessActor["credit"]; canTopUp: boolean }) {
   if (credit.step === "ok" || credit.step === "low") return null;
   const paused = credit.step === "paused";
   return (
@@ -58,13 +60,21 @@ export function CreditBanner({ credit }: { credit: BusinessActor["credit"] }) {
     >
       <span className="flex items-center gap-2">
         {paused ? <PauseCircle className="size-4 shrink-0" aria-hidden /> : <AlertTriangle className="size-4 shrink-0" aria-hidden />}
+        {/* D10: the sentence speaks to who can act — a viewer is told what
+            the business must do, never "recarga" as if it were their hand */}
         {paused
-          ? "Validación en pausa: los comprobantes nuevos de tus clientes quedan guardados sin validarse hasta que recargues."
-          : "Tu saldo llegó a cero. Los pagos se siguen validando unos días más; recarga para no llegar a la pausa."}
+          ? canTopUp
+            ? "Validación en pausa: los comprobantes nuevos de tus clientes quedan guardados sin validarse hasta que recargues."
+            : "Validación en pausa: los comprobantes nuevos de tus clientes quedan guardados sin validarse hasta que el negocio recargue."
+          : canTopUp
+            ? "Tu saldo llegó a cero. Los pagos se siguen validando unos días más; recarga para no llegar a la pausa."
+            : "El saldo llegó a cero. Los pagos se siguen validando unos días más; el negocio debe recargar para no llegar a la pausa."}
       </span>
-      <Link to="/settings/credit" className="block">
-        <Button variant={paused ? "default" : "outline"}>Recargar</Button>
-      </Link>
+      {canTopUp && (
+        <Link to="/settings/credit" className="block">
+          <Button variant={paused ? "default" : "outline"}>Recargar</Button>
+        </Link>
+      )}
     </Alert>
   );
 }

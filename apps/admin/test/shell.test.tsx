@@ -197,6 +197,23 @@ describe("D3: the guard sends session-less visits to login", () => {
   });
 });
 
+describe("US-A05 scenario 9: the phone has no header (account-hub D8)", () => {
+  it("renders no <header>; the business name reads in the sidebar's switcher and the avatar carries the step", async () => {
+    server.use(
+      handlers.session(() => ok({ ...businessActor, credit: { balanceCents: 2000, step: "low" }, observing: true })),
+      handlers.feed(() => ok({ payments: [], nextCursor: null, effectiveOverTreatment: "flag", today: { count: 0, totalCents: 0, startedAtMs: 0 } })),
+    );
+    renderApp("/payments");
+    await screen.findByRole("heading", { name: "Pagos" });
+    expect(document.querySelector("header")).toBeNull();
+    /* Once: the sidebar's. The phone's copy of the name and both chips are gone */
+    expect(screen.getAllByText("ISP Demo")).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: /^Saldo bajo:/ })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Modo observación" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Cuenta, saldo bajo" })).toHaveLength(2);
+  });
+});
+
 describe("integrations-hub D10: the shell's banner names no provider and points at the catalog", () => {
   it("without an integration the banner asks to connect a system; the button goes to /integrations", async () => {
     server.use(

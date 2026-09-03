@@ -15,7 +15,7 @@ api. / consta.              APIs (no UI)
 
 ## Shell (`app.`)
 
-- **Workspace switcher** in the header (US-B02): current business name; a
+- **Workspace switcher** in the sidebar and in Cuenta's identity card (US-B02; the phone's header retired 2026-09-02, account-hub D8): current business name; a
   menu lists the user's businesses + "Crear negocio". Switching swaps the
   whole data context, no re-login. One business → the switcher renders as a
   plain label. The role reads in the sidebar and in Configuración → Equipo,
@@ -26,7 +26,7 @@ api. / consta.              APIs (no UI)
   **Rejected**: no header at all with a badge on Configuración — the
   balance is the number that decides a top-up, it stays in sight; the
   saldo inside the page-title row — that row is already full at 375px.
-- **Saldo chip** in the header (US-B04): current credit, always visible.
+- **Saldo chip** in the sidebar (US-B04): current credit, always visible on a monitor; on a phone the bottom bar's avatar wears the step and "Saldo bajo" is a strip the owner closes (account-hub D3, D8, D9 — 2026-09-02).
   Each step changes **label and icon, never color alone** (the brief's own
   law): normal shows icon + amount and no word ("Saldo" next to a coin and
   a figure said nothing); at 20% it gains "Saldo bajo" + its icon;

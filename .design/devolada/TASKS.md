@@ -97,7 +97,7 @@ provisional-release D10 (pivot Open item 1).
 
 Child spec: [account-hub.spec.md](../../docs/admin/account-hub.spec.md) (US-A05).
 
-- [ ] PR A: Cuenta (avatar with initials + credit-step glyph) as the fifth
+- [x] PR A (#159): Cuenta (avatar with initials + credit-step glyph) as the fifth
       section at both widths; hub with sub-pages under `/settings`;
       Cerrar sesión unified at the hub's foot; `userName` on `/auth/me`
 - [ ] PR B: the phone's header strip retires — "Saldo bajo" as a one-line

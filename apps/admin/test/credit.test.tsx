@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { businessActor, handlers, ok, server } from "./msw";
@@ -62,11 +62,76 @@ describe("US-B04: the chip and the banners — label and icon per step, never co
     expect(screen.getByRole("button", { name: /^recargar$/i })).toBeInTheDocument();
   });
 
-  it("low balance: chip only", async () => {
-    server.use(handlers.session(() => withCredit("low", 2000)), handlers.feed(() => ok(feed)));
+  it("a viewer reads the pause banner without Recargar (account-hub D10)", async () => {
+    server.use(handlers.session(() => ok({ ...businessActor, role: "viewer", credit: { balanceCents: -6000, step: "paused" } })), handlers.feed(() => ok(feed)));
     renderApp("/");
-    await screen.findAllByText("Saldo bajo");
+    expect(await screen.findByText(/los comprobantes nuevos de tus clientes quedan guardados/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^recargar$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^recargar$/i })).not.toBeInTheDocument();
+  });
+});
+
+/* account-hub D9/D10 (US-A05 scenarios 10, 11): the phone's word for a
+   low balance is a strip the owner closes, remembered per business and
+   step; Recargar only for a role that can top up. */
+/* The amount is its own element, so the strip is found by its landmark
+   and read as a whole */
+const findStrip = async () => {
+  const all = await screen.findAllByRole("status");
+  const strip = all.find((el) => el.textContent?.includes("Saldo bajo"));
+  if (!strip) throw new Error("no strip");
+  return strip;
+};
+const stripShown = () => screen.queryAllByRole("status").some((el) => el.textContent?.includes("Saldo bajo"));
+
+describe("US-A05: 'Saldo bajo' is a strip the owner closes, not a toast", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("scenario 10: shows the amount and Recargar; closing hides it and a reload keeps it hidden; a new step announces again", async () => {
+    let step: "low" | "empty" = "low";
+    let balance = 2000;
+    server.use(handlers.session(() => withCredit(step, balance)), handlers.feed(() => ok(feed)));
+    renderApp("/");
+
+    const strip = await findStrip();
+    expect(strip).toHaveTextContent("Saldo bajo: $20.00");
+    expect(within(strip).getByRole("link", { name: /^recargar$/i })).toHaveAttribute("href", "/settings/credit");
+    /* No banner for a low balance: the strip is the whole signal */
+    expect(screen.queryByText(/tu saldo llegó a cero/i)).not.toBeInTheDocument();
+
+    await userEvent.click(within(strip).getByRole("button", { name: /cerrar aviso/i }));
+    expect(stripShown()).toBe(false);
+    /* The sidebar chip still says it: the strip was the phone's copy */
+    expect(screen.getAllByRole("link", { name: /^Saldo bajo:/ }).length).toBeGreaterThan(0);
+
+    /* A reload (fresh app, same browser) keeps the choice */
+    cleanup();
+    renderApp("/");
+    await screen.findByRole("heading", { name: "Pagos" });
+    expect(stripShown()).toBe(false);
+
+    /* The balance hits zero: the banner, not the strip; then recovers to
+       low again: the strip returns — a new crossing is a new notice */
+    cleanup();
+    step = "empty";
+    balance = 0;
+    renderApp("/");
+    expect(await screen.findByText(/tu saldo llegó a cero/i)).toBeInTheDocument();
+    expect(stripShown()).toBe(false);
+    cleanup();
+    step = "low";
+    balance = 1500;
+    renderApp("/");
+    expect(await findStrip()).toHaveTextContent("Saldo bajo: $15.00");
+  }, 15_000); /* four mounts in one story: the default 5s is one mount's budget (TESTING rule 7) */
+
+  it("scenario 11: a viewer reads the strip without Recargar", async () => {
+    server.use(handlers.session(() => ok({ ...businessActor, role: "viewer", credit: { balanceCents: 2000, step: "low" } })), handlers.feed(() => ok(feed)));
+    renderApp("/");
+    const strip = await findStrip();
+    expect(strip).toHaveTextContent("Saldo bajo: $20.00");
+    expect(within(strip).queryByRole("link", { name: /^recargar$/i })).not.toBeInTheDocument();
+    expect(within(strip).getByRole("button", { name: /cerrar aviso/i })).toBeInTheDocument();
   });
 });
 

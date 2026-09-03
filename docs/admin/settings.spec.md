@@ -14,6 +14,8 @@ debt: [TD-001]
 >
 > **2026-09-02, account hub (US-A05)**: the page became a hub of sub-pages under `/settings` — the four business cards live at `/settings/business` (ids kept), Saldo at `/settings/credit`, Usuarios at `/settings/users`, the passkey card at `/settings/security`; the **Sesión** card retired (the hub's Cerrar sesión is the door at every width, BUG-016 still closed). [account-hub.spec.md](account-hub.spec.md) D4–D5.
 >
+> **2026-09-03, the page splits (D11)**: `/settings/business` is retired as a page — **Pago directo y conciliación** (`/settings/direct-payment`) and **Preferencias** (`/settings/preferences`) are two rows of the hub's rail. The old path redirects, hashes included.
+>
 > **2026-09-03, no index (D10)**: the in-page section index retired with the page it was built for — `/settings/business` is three cards and no table of contents.
 >
 > **2026-09-03, one fee (BUG-017)**: the **Cargo por servicio** card retired — the SPEI card's "Cargo por servicio SPEI" is the service fee's only control (D9). `/settings/business` holds three cards; `#cargo` lands on the SPEI card.
@@ -50,6 +52,31 @@ The Configuración section: the WispHub API key that makes reconnection possible
   again (the growth rule is rows, not cards — the IA's S4 — so it never
   will); turning it into tabs (one document becomes four, and a shareable
   URL becomes a component's state).
+- **D11 — Configuración splits in two (2026-09-03).** One page was
+  answering three unrelated questions — where the money arrives (CLABE,
+  banco, beneficiario, the service fee), how a payment is judged against
+  what was asked (tolerance, surplus), and how a clock reads (timezone,
+  format) — under a title that named none of them. "Configuración" as a
+  row inside a settings hub tells the reader nothing; a row has to say
+  what is behind it. Two rows, two pages:
+  **Pago directo y conciliación** (`/settings/direct-payment`: the SPEI
+  card and the reconciliation policy) and **Preferencias**
+  (`/settings/preferences`: zona horaria y hora). The policy rides with
+  the channel because SPEI is the only one (pivot D15), so today "the
+  rules of this channel" and "the rules of all payments" are the same
+  sentence; when a second channel exists the policy promotes to a row of
+  its own. The label is **not** "Cobro y conciliación": *Cobros* already
+  names the payment-requests section, and the glossary allows one word one
+  concept. `/settings/business` stays as a **permanent redirect** —
+  `#zona` lands on Preferencias, everything else on Pago directo y
+  conciliación with its hash — because the CLABE banner, the wizard,
+  Cobros and months of habit point at it, and a path is never deleted,
+  only redirected (IA S2). **Rejected**: keeping one page with three cards
+  (the cheapest option, and the one that made "Configuración" mean
+  nothing); moving the policy next to WispHub's class→action mapping (the
+  policy is the business's, not the integration's — pivot D8 — and it
+  breaks the day a second integration exists); renaming the page without
+  splitting it (a title cannot name three subjects honestly).
 
 ## Contract (ISP session only)
 
@@ -65,7 +92,8 @@ The Configuración section: the WispHub API key that makes reconnection possible
 ## UI Contract
 
 - `/settings`, three cards: **Conexión con WispHub** (masked key `••••1234` or "Sin configurar", field for a new key, "Probar conexión", plain result), **Cobro y comisiones** (service fee and store commission in pesos, with the platform share computed live below), **Zona horaria y hora** (timezone `Select` with the three Mexican zones named in plain es-MX, and a 12h/24h `Select` showing a live example).
-- **2026-09-03 (D9)**: `/settings/business` holds **Pago directo por SPEI** (CLABE, banco, beneficiario, and **Cargo por servicio SPEI** — the fee's only field, opened on the fee in force, required, helper "Lo que paga tu cliente además de su cargo del periodo al transferir"), **Política de conciliación** and **Zona horaria y hora**, in that order, with no index above them (D10). The cards keep their ids (`#spei`, `#politica`, `#zona`). No card named "Cargo por servicio" exists, and no anchor links to one.
+- **2026-09-03 (D11)**: **Pago directo y conciliación** (`/settings/direct-payment`) holds **Pago directo por SPEI** (`#spei`) and **Política de conciliación** (`#politica`); **Preferencias** (`/settings/preferences`) holds **Zona horaria y hora** (`#zona`). `/settings/business` renders nothing and redirects, keeping the hash. The hub's rail lists both rows, gated by `settings: update`.
+- **2026-09-03 (D9)**: the direct-payment page holds **Pago directo por SPEI** (CLABE, banco, beneficiario, and **Cargo por servicio SPEI** — the fee's only field, opened on the fee in force, required, helper "Lo que paga tu cliente además de su cargo del periodo al transferir"), **Política de conciliación** with no index above them (D10); **Zona horaria y hora** moved to Preferencias (D11). The cards keep their ids (`#spei`, `#politica`, `#zona`). No card named "Cargo por servicio" exists, and no anchor links to one.
 - Saving is per card, each with its own state; a saved card says so.
 - **Reconexión con pago incompleto** (added 2026-08-25, `partial-payment` D2/D4): the threshold percentage and the floor in pesos, with the meaning of the current values computed in one live sentence — the default (100 / $0) reads "El servicio regresa cuando el pago cubre todo el adeudo."
 - The shell shows the missing-integration banner while `integrationConfigured` is false (D8; copy and target per integrations-hub D10).
@@ -80,15 +108,17 @@ The Configuración section: the WispHub API key that makes reconnection possible
 3. The connection test answers `ok` for a good key and distinguishes the two failures (D2, D3)
 4. The feed's "today" totals follow the ISP timezone, not the browser (D5)
 5. UI: the settings screen offers the service fee once — on the SPEI card, opened on the fee in force — saves it as `speiServiceFeeCents`, and refuses an empty fee (US-A04, D9; *was*: saves the split and shows the platform share, D4, retired with the store network)
-6. UI: testing a typed key reports the result without saving it (D2)
-7. UI: the admin renders times in the configured format (D6)
-8. UI: a viewer signs out from the Sesión card and lands on login (BUG-016); the passkey card lists and removes credentials (better-auth D18)
+6. UI: `/settings/business` redirects — with `#zona` to Preferencias, with `#spei` to Pago directo y conciliación, hash kept; the hub's rail offers both rows (D11)
+7. UI: testing a typed key reports the result without saving it (D2)
+8. UI: the admin renders times in the configured format (D6)
+9. UI: a viewer signs out from the Sesión card and lands on login (BUG-016); the passkey card lists and removes credentials (better-auth D18)
 
 ## Definition of Done
 
 - [x] Scenarios 1–4 automated in the API layer (`test/settings.test.ts` 5 tests, `test/charge-feed.test.ts`, `test/business-day.test.ts` 3 tests)
-- [x] Scenarios 5–7 automated with Testing Library + MSW (`apps/admin/test/settings.test.tsx`; scenario 5 rewritten 2026-09-03 for D9, the index suite rewritten the same day for D10 — no section nav, ids intact, plus `apps/api/test/settings.test.ts` "the general fee is not patchable" and `apps/admin/test/account-hub.test.tsx` "#cargo lands on the SPEI card")
-- [x] Scenario 8 automated (`apps/admin/test/session-round.test.tsx`, 2026-09-02)
+- [x] Scenarios 5, 7 and 8 automated with Testing Library + MSW (`apps/admin/test/settings.test.tsx`; scenario 5 rewritten 2026-09-03 for D9, the index suite rewritten the same day for D10 — no section nav, ids intact, plus `apps/api/test/settings.test.ts` "the general fee is not patchable" and `apps/admin/test/account-hub.test.tsx` "#cargo lands on the SPEI card")
+- [x] Scenario 6 automated (`apps/admin/test/settings.test.tsx` — the redirect with each hash, and the two rail rows in `account-hub.test.tsx`)
+- [x] Scenario 9 automated (`apps/admin/test/session-round.test.tsx`, 2026-09-02)
 - [x] Real check (2026-08-16, owner, deployed dev): the renewed WispHub key was
       saved through the settings screen (live validation) and charges from the
       PWA went through against it — the full save-then-charge loop the box asks

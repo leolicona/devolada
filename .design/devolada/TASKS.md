@@ -100,6 +100,12 @@ Child spec: [account-hub.spec.md](../../docs/admin/account-hub.spec.md) (US-A05)
 - [x] PR A (#159): Cuenta (avatar with initials + credit-step glyph) as the fifth
       section at both widths; hub with sub-pages under `/settings`;
       Cerrar sesión unified at the hub's foot; `userName` on `/auth/me`
+- [x] Settings restructured (2026-09-03, settings D9–D11): one service fee
+      on the SPEI card; the in-page anchor index retired as a pattern
+      (FRONTEND law); Configuración split into **Pago directo y
+      conciliación** and **Preferencias**, `/settings/business` kept as a
+      redirect. IA: [INFORMATION_ARCHITECTURE-settings.md](INFORMATION_ARCHITECTURE-settings.md)
+- [ ] Design review of both business pages at 360/768/1280, light + dark
 - [ ] PR B: the phone's header strip retires — "Saldo bajo" as a one-line
       strip dismissed by hand, observation chip only in the hub and on the
       integration page; amends prepaid-credit D7 UI Contract, shell D2, IA

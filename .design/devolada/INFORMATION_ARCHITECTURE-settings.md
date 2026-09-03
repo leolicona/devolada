@@ -9,8 +9,9 @@ shape lands in `docs/admin/account-hub.spec.md` (D4/D5) and
 `docs/admin/settings.spec.md`, which remain the contract — an IA is where
 the shape is argued, a spec is where it is owed.
 
-**(exists)** marks what is built today. Everything else is a move this
-document proposes; nothing here is code yet.
+**(exists)** marks what is built today. The split this document argued
+(S2) shipped 2026-09-03 as settings D11, so the map below is the router's,
+not a proposal.
 
 ## Site map
 
@@ -18,17 +19,18 @@ document proposes; nothing here is code yet.
 /settings                       Cuenta — the hub (exists)
   ├ (index)                     the person, read-only (exists)
   ├ /settings/credit            Saldo y recargas (exists)
-  ├ /settings/direct-payment    Pago directo y conciliación   ← splits out of /settings/business
-  ├ /settings/preferences       Preferencias                  ← splits out of /settings/business
+  ├ /settings/direct-payment    Pago directo y conciliación (exists, D11)
+  ├ /settings/preferences       Preferencias (exists, D11)
   ├ /settings/users             Usuarios (exists)
   ├ /settings/security          Entrar con huella o rostro (exists)
-  └ /settings/business          → redirect, permanent (exists as the page being split)
+  └ /settings/business          → redirect, permanent (exists, D11)
 → /integrations                 Integraciones — a link out of the hub, not a child (exists)
 ```
 
-Two things this map asserts and the router does not yet:
+Two things this map asserts that are easy to lose:
 
-- `/settings/business` stops being a page and becomes a redirect (S2).
+- `/settings/business` is no longer a page. It is a redirect, and it stays
+  one — the hash decides which of the two pages it meant (S2, settings D11).
 - `/integrations` is reachable from the hub but is **not** under it: it is a
   section of the main nav with its own home (S3).
 
@@ -226,14 +228,21 @@ The rail grows by rows; a page does not grow by cards (S4).
   page that account-hub D4 has just finished undoing; a third "Avanzado"
   group, which asks us to sort screens that do not exist yet.
 
-## What this costs, if it is built
+## What it cost (built 2026-09-03, settings D11)
 
-1. `docs/admin/settings.spec.md` — a decision for the split (D10), the UI
-   Contract rewritten for two pages, the anchor map stated.
-2. `docs/admin/account-hub.spec.md` — D4's route list and the UI Contract's
-   sub-page bullet updated; `HASH_HOMES` gains `zona → /settings/preferences`.
-3. `apps/admin/src/router.tsx` — two routes, one redirect.
-4. `SettingsScreen.tsx` — split into two screens; the cards move unchanged.
-5. Five call sites re-pointed; `settings.test.tsx`, `account-hub.test.tsx`,
-   `memberships.test.tsx`, `identity-round.test.tsx`, `a11y.test.tsx`
-   updated; the parent IA's Configuración list amended.
+1. `docs/admin/settings.spec.md` — D11, the UI Contract for two pages, the
+   anchor map, scenario 6 and its DoD row.
+2. `docs/admin/account-hub.spec.md` — D4's route list, D5's rail order and
+   role gates, the sub-page and deep-link bullets, scenarios 5 and 6.
+3. `apps/admin/src/router.tsx` — two routes and one redirect.
+4. `SettingsScreen.tsx` — two screens sharing one role gate and one query;
+   the three cards moved unchanged. `HASH_HOMES` re-pointed, and the rail
+   went from one row to two.
+5. Three call sites re-pointed (the CLABE banner, the wizard, Cobros);
+   `settings.test.tsx`, `account-hub.test.tsx`, `memberships.test.tsx`,
+   `identity-round.test.tsx` and `a11y.test.tsx` updated, six tests added;
+   the parent IA's Configuración list amended.
+
+Still open: a design review of both pages at 360/768/1280 in light and
+dark, which is where a two-card page and a one-card page get judged as
+shapes rather than as routes.

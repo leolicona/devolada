@@ -41,7 +41,7 @@ describe("US-A05 scenario 1: the fifth section is the avatar, labelled Cuenta, a
 });
 
 describe("US-A05 scenario 2: the hub's rows follow the role — business first, the person below, the door last", () => {
-  it("the owner sees Saldo (with the balance), Configuración, Integraciones and Usuarios, then the passkeys row and Cerrar sesión", async () => {
+  it("the owner sees Saldo (with the balance), the two business rows, Integraciones and Usuarios, then the passkeys row and Cerrar sesión", async () => {
     server.use(handlers.session(() => ok({ ...businessActor, observing: true })));
     renderApp("/settings");
     await screen.findByRole("heading", { name: "Cuenta" });
@@ -53,7 +53,14 @@ describe("US-A05 scenario 2: the hub's rows follow the role — business first, 
 
     const negocio = screen.getByRole("region", { name: "Negocio" });
     const rows = within(negocio).getAllByRole("link").map((l) => l.getAttribute("href"));
-    expect(rows).toEqual(["/settings/credit", "/settings/business", "/integrations", "/settings/users"]);
+    /* settings D11: "Configuración" was one row naming nothing; it is two */
+    expect(rows).toEqual([
+      "/settings/credit",
+      "/settings/direct-payment",
+      "/integrations",
+      "/settings/users",
+      "/settings/preferences",
+    ]);
     expect(within(negocio).getByRole("link", { name: /^saldo y recargas/i })).toHaveTextContent("$100.00");
     /* D5: the observation state has a home in the hub */
     expect(within(negocio).getByRole("link", { name: /^integraciones/i })).toHaveTextContent("Modo observación");
@@ -107,11 +114,11 @@ describe("US-A05 scenario 5: the old anchors keep landing on their card", () => 
     expect(router.state.location.pathname).toBe("/settings/credit");
   });
 
-  it("/settings#spei opens the business page with the hash kept", async () => {
+  it("/settings#spei opens Pago directo y conciliación with the hash kept", async () => {
     server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings)));
     const router = renderApp("/settings#spei");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/settings/business");
+    expect(router.state.location.pathname).toBe("/settings/direct-payment");
     expect(router.state.location.hash).toBe("spei");
   });
 
@@ -119,21 +126,30 @@ describe("US-A05 scenario 5: the old anchors keep landing on their card", () => 
     server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings)));
     const router = renderApp("/settings#cargo");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/settings/business");
+    expect(router.state.location.pathname).toBe("/settings/direct-payment");
     expect(router.state.location.hash).toBe("spei");
+  });
+
+  /* settings D11: the clock left the money page, so its hash leads elsewhere */
+  it("/settings#zona lands on Preferencias", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings)));
+    const router = renderApp("/settings#zona");
+    expect(await screen.findByRole("heading", { name: /zona horaria y hora/i })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/settings/preferences");
+    expect(router.state.location.hash).toBe("zona");
   });
 });
 
 describe("US-A05 scenario 6: each sub-page renders its cards; a phone gets the way back", () => {
-  it("/settings/business holds the three business cards and its index; Volver a Cuenta points at the hub", async () => {
+  it("/settings/direct-payment holds the channel and its rules; Volver a Cuenta points at the hub", async () => {
     server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings)));
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
-    for (const name of [/política de conciliación/i, /zona horaria y hora/i]) {
-      expect(screen.getByRole("heading", { name })).toBeInTheDocument();
-    }
+    expect(screen.getByRole("heading", { name: /política de conciliación/i })).toBeInTheDocument();
     /* settings D9: the general fee card is gone; the SPEI card holds the fee */
     expect(screen.queryByRole("heading", { name: /^cargo por servicio$/i })).not.toBeInTheDocument();
+    /* settings D11: the clock is a page of its own now */
+    expect(screen.queryByRole("heading", { name: /zona horaria y hora/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Usuarios" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Sesión" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /volver a cuenta/i })).toHaveAttribute("href", "/settings");

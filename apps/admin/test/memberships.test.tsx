@@ -155,11 +155,11 @@ describe("US-B02: one login, several businesses", () => {
 describe("US-B03: roles hide, never tease", () => {
   it("scenario 7 (UI): an operator's hub holds no business row, and the business page sends them back (account-hub D5)", async () => {
     server.use(handlers.session(() => ok(asRole("operator"))), handlers.settings(() => ok(settings())));
-    const router = renderApp("/settings/business");
+    const router = renderApp("/settings/direct-payment");
     expect(await screen.findByRole("heading", { name: "Cuenta" })).toBeInTheDocument();
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings"));
     expect(screen.queryByText(/pago directo por spei/i)).not.toBeInTheDocument();
-    for (const row of [/^configuración/i, /^usuarios/i, /^saldo y recargas/i, /^integraciones/i]) {
+    for (const row of [/^pago directo y conciliación/i, /^preferencias/i, /^usuarios/i, /^saldo y recargas/i, /^integraciones/i]) {
       expect(screen.queryByRole("link", { name: row })).not.toBeInTheDocument();
     }
     /* The person's own things stay: the passkeys row and the door */
@@ -173,7 +173,7 @@ describe("US-B03: roles hide, never tease", () => {
       handlers.settings(() => ok(settings())),
       handlers.members(() => ok({ ...members, grantable: ["operator", "viewer"] })),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "CLABE" })).not.toBeInTheDocument();
     expect(screen.getByText("646180157000000004")).toBeInTheDocument();

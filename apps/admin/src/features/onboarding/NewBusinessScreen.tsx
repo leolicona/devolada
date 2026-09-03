@@ -87,7 +87,7 @@ export function NewBusinessScreen() {
             Tus clientes te pagan por transferencia a tu propia cuenta. Configura la CLABE donde
             quieres recibirlas y comparte tu primer link.
           </p>
-          <Button size="lg" className="w-full" onClick={() => void navigate({ to: "/settings/business", hash: "spei" })}>
+          <Button size="lg" className="w-full" onClick={() => void navigate({ to: "/settings/direct-payment", hash: "spei" })}>
             Configurar mi CLABE
           </Button>
           <Button size="lg" variant="outline" className="w-full" onClick={() => void navigate({ to: "/" })}>

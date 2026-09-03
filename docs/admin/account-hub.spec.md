@@ -47,29 +47,35 @@ retires and "Saldo bajo" becomes a strip (D8–D10); it amends
   is the ambient signal PR B will lean on when the phone's chip leaves;
   it costs no space today.
 - **D4 — A hub of sub-pages under `/settings`.** `/settings` is the hub;
-  the areas are routes: `/settings/business` (Pago directo por SPEI ·
-  Política de conciliación · Zona horaria y hora — the Cargo por servicio
-  card retired 2026-09-03, settings D9),
-  `/settings/credit` (Saldo y recargas), `/settings/users` (Usuarios),
-  `/settings/security` (Entrar con huella o rostro). Routes stay English
-  identifiers (IA rule). The old anchors keep working: a visit to
-  `/settings#saldo`, `#usuarios`, `#cargo`, `#spei`, `#politica` or
-  `#zona` is redirected by the hub on mount to the sub-page that holds the
-  card (the hash survives on the business page, whose cards keep their
-  ids; `#cargo` lands on `#spei`, where the one fee lives since settings
-  D9). **Rejected**: one long page with an in-page index behind the
+  the areas are routes: `/settings/direct-payment` (Pago directo por SPEI ·
+  Política de conciliación) and `/settings/preferences` (Zona horaria y
+  hora) — one page, `/settings/business`, until it split 2026-09-03
+  (settings D11); the Cargo por servicio card retired the same day
+  (settings D9) — plus `/settings/credit` (Saldo y recargas),
+  `/settings/users` (Usuarios), `/settings/security` (Entrar con huella o
+  rostro). Routes stay English identifiers (IA rule). The old anchors keep
+  working: a visit to `/settings#saldo`, `#usuarios`, `#cargo`, `#spei`,
+  `#politica` or `#zona` is redirected by the hub on mount to the sub-page
+  that holds the card (the hash survives where the card kept its id;
+  `#cargo` lands on `#spei`, where the one fee lives, and `#zona` on
+  Preferencias). `/settings/business` itself redirects the same way, so
+  the links pointing at it from banners and from the wizard keep landing
+  on the card they meant. **Rejected**: one long page with an in-page index behind the
   avatar (not sub-menus: 3,000px of scroll on a phone, and the person's
   cards mixed with the business's).
 - **D5 — Business first; the person's things below; the door last.** The
   hub's order: the identity card (avatar, name, email, the business and
   the person's role in it — the switcher when there are several
-  businesses), then **Negocio** (Saldo y recargas · Configuración ·
-  Integraciones · Usuarios), then **Tu cuenta** (passkeys), then
+  businesses), then **Negocio** (Saldo y recargas · Pago directo y
+  conciliación · Integraciones · Usuarios · Preferencias — the first was
+  one row called Configuración until settings D11 split it, and
+  Preferencias sits last because a clock format is the least of the five),
+  then **Tu cuenta** (passkeys), then
   **Cerrar sesión** as a button for every role. The owner enters for
   Saldo and Usuarios daily; the person's own things almost never change.
   Every row is gated by the role matrix the cards already obey (hide,
-  never disable — brief law): Saldo needs `credit: manage`, Configuración
-  `settings: update`, Integraciones `integrations: manage`, Usuarios
+  never disable — brief law): Saldo needs `credit: manage`, both business
+  rows `settings: update`, Integraciones `integrations: manage`, Usuarios
   `members: invite_below_admin`; passkeys and the door are everyone's.
   The Integraciones row carries the "Modo observación" chip while the
   business observes — the hub is one of the two homes the state keeps
@@ -143,10 +149,10 @@ list).
   the balance and its step label; Integraciones shows the observation
   chip while observing); group **Tu cuenta** with "Entrar con huella o
   rostro"; **Cerrar sesión** (outline, `LogOut` icon) at the foot.
-- **Sub-pages**: `/settings/business` keeps the business cards and their
-  ids (`#spei`, `#politica`, `#zona` — `#cargo` retired with its card,
-  settings D9; the in-page index retired 2026-09-03, settings D10 — the
-  ids remain, the anchor row does not); `/settings/credit` = `CreditCard`;
+- **Sub-pages**: `/settings/direct-payment` keeps `#spei` and `#politica`,
+  `/settings/preferences` keeps `#zona` (settings D11; `#cargo` retired
+  with its card, D9, and the in-page index with the page it was drawn for,
+  D10); `/settings/credit` = `CreditCard`;
   `/settings/users` = `UsersCard`; `/settings/security` = `PasskeyCard`.
   Each sub-page's `h1` is the row's label; "Volver a Cuenta" shows below
   `lg`. A sub-page the role may not use renders nothing of it and
@@ -155,9 +161,9 @@ list).
   **Sesión** card (settings spec, 2026-09-02): the hub's door is the one
   for every width — BUG-016 stays closed.
 - **Deep links** elsewhere in the admin move to the sub-page: the CLABE
-  banner and the wizard's "Configurar mi CLABE" → `/settings/business#spei`;
+  banner and the wizard's "Configurar mi CLABE" → `/settings/direct-payment#spei`;
   the credit chip and banners → `/settings/credit`; Cobros' "Configurar"
-  → `/settings/business`.
+  → `/settings/direct-payment` (settings D11).
 - Copy in es-MX. Light + dark from the tokens; icon + text everywhere.
 
 ## Scenarios
@@ -175,9 +181,10 @@ list).
    carries "saldo bajo" and shows the glyph; with `'ok'` it is "Cuenta"
    alone (D3).
 5. UI: `/settings#saldo` lands on `/settings/credit`; `/settings#spei`
-   lands on `/settings/business` with the hash kept (D4).
-6. UI: each sub-page renders its cards; an operator opening
-   `/settings/business` is sent back to the hub (D5, roles hide).
+   lands on `/settings/direct-payment` with the hash kept; `/settings#zona`
+   on `/settings/preferences` (D4, settings D11).
+6. UI: each sub-page renders its cards and none of another's; an operator
+   opening a business page is sent back to the hub (D5, roles hide).
 7. API: `/auth/me` carries `userName` (D2).
 8. a11y: the hub and the four sub-pages pass axe (US-P04).
 9. UI: below `lg` the shell renders no header — no business name, no chip

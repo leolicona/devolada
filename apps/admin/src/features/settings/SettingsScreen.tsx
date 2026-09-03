@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "@tanstack/react-router";
+import { Navigate, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
 import { Card, Skeleton, parseMoney } from "@devolada/ui";
@@ -18,12 +18,14 @@ import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
 
-/* Configuración (US-A04): the business's three cards — the SPEI channel
-   (with the one service fee, settings D9), the reconciliation policy and
-   the two display settings that decide what "today" and "2:30 p.m."
-   mean. Since the account hub (US-A05, D4) this is the sub-page
-   /settings/business; Saldo, Usuarios and the passkeys have pages of
-   their own. */
+/* The business's settings, in two pages since D11 (US-A04):
+   /settings/direct-payment answers where the money arrives (the SPEI
+   channel, with the one service fee — D9) and how a payment is judged
+   against what was asked (the reconciliation policy); /settings/preferences
+   answers how a clock reads. One page called "Configuración" was naming
+   none of the three. /settings/business, the page they come from, is now
+   a redirect. Saldo, Usuarios and the passkeys have pages of their own
+   (account-hub D4). */
 
 const pesos = (cents: number) => (cents / 100).toFixed(2);
 
@@ -370,38 +372,71 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
-export function BusinessSettingsScreen() {
+/* D11: the old page's path is never deleted, only redirected — the CLABE
+   banner, the wizard, Cobros and months of habit point at it. The hash
+   decides which of the two pages it meant. */
+export function BusinessSettingsRedirect() {
+  const hash = useRouterState({ select: (s) => s.location.hash });
+  const to = hash === "zona" ? "/settings/preferences" : "/settings/direct-payment";
+  return <Navigate to={to} hash={hash === "" ? undefined : hash} replace />;
+}
+
+/* The role gate both pages share: a role without the area does not see
+   the page — back to the hub, hidden not disabled (business-and-
+   memberships D3 / account-hub D5). */
+function useBusinessSettings() {
   const { data: actor } = useSession();
   const role: Role = actor?.role ?? "viewer";
   const canSettings = roleCan(role, "settings", "update");
-  const canClabe = roleCan(role, "clabe", "update");
-  const { data, isPending } = useQuery<SettingsResponse, ApiError>({
+  const query = useQuery<SettingsResponse, ApiError>({
     queryKey: ["settings"],
     queryFn: () => api<SettingsResponse>("/settings"),
     enabled: canSettings,
   });
-  /* business-and-memberships D3 / account-hub D5: a role without the
-     area does not see the page — back to the hub, hidden not disabled */
+  return { actor, role, canSettings, ...query };
+}
+
+function CardsSkeleton({ count }: { count: number }) {
+  return (
+    <div className="mt-4 space-y-4">
+      {Array.from({ length: count }, (_, k) => (
+        <Card key={k} className="space-y-3 p-6">
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-40" />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+export function DirectPaymentSettingsScreen() {
+  const { actor, role, canSettings, data, isPending } = useBusinessSettings();
+  const canClabe = roleCan(role, "clabe", "update");
   if (actor && !canSettings) return <Navigate to="/settings" replace />;
 
   return (
-    <SubPage title="Configuración">
-      {isPending && (
-        <div className="mt-4 space-y-4">
-          {[0, 1, 2].map((k) => (
-            <Card key={k} className="space-y-3 p-6">
-              <Skeleton className="h-5 w-48" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-40" />
-            </Card>
-          ))}
-        </div>
-      )}
-
+    <SubPage title="Pago directo y conciliación">
+      {isPending && <CardsSkeleton count={2} />}
       {data && (
         <div className="mt-4 space-y-4">
           <SpeiCard settings={data} canEditClabe={canClabe} />
           <PolicyCard settings={data} />
+        </div>
+      )}
+    </SubPage>
+  );
+}
+
+export function PreferencesScreen() {
+  const { actor, canSettings, data, isPending } = useBusinessSettings();
+  if (actor && !canSettings) return <Navigate to="/settings" replace />;
+
+  return (
+    <SubPage title="Preferencias">
+      {isPending && <CardsSkeleton count={1} />}
+      {data && (
+        <div className="mt-4 space-y-4">
           <DisplayCard settings={data} />
         </div>
       )}

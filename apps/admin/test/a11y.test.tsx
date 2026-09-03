@@ -111,13 +111,23 @@ describe("US-P04: the admin passes axe on every section", () => {
     await expectNoViolations(document.body);
   });
 
-  it("Configuración", async () => {
+  it("Pago directo y conciliación", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings)),
     );
-    renderApp("/settings/business");
+    renderApp("/settings/direct-payment");
     await screen.findByLabelText("CLABE");
+    await expectNoViolations(document.body);
+  });
+
+  it("Preferencias", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() => ok(settings)),
+    );
+    renderApp("/settings/preferences");
+    await screen.findByRole("heading", { name: /zona horaria y hora/i });
     await expectNoViolations(document.body);
   });
 

@@ -25,7 +25,9 @@ export const timezone = z.enum([
 export const timeFormat = z.enum(["12h", "24h"]);
 
 export const settingsResponse = z.object({
-  /* Survives the store retirement as the SPEI fee's fallback (D3) */
+  /* Read-only since D9: the birth default the SPEI fee inherits until the
+     business saves one (direct-payment D3). Nothing edits it anymore —
+     `spei.effectiveServiceFeeCents` is the number in force. */
   serviceFeeCents: z.number().int(),
   timezone,
   timeFormat,
@@ -37,8 +39,9 @@ export const settingsResponse = z.object({
     clabe: z.string().nullable(),
     bank: z.string().nullable(),
     beneficiaryName: z.string().nullable(),
-    /* null → falls back to serviceFeeCents (D3) */
+    /* null → never saved yet; falls back to serviceFeeCents (D3) */
     serviceFeeCents: z.number().int().nullable(),
+    /* The fee in force — the one control on the settings page (D9) */
     effectiveServiceFeeCents: z.number().int(),
     /* The bank is set but outside apiCEP's vocabulary (BUG-008) */
     bankUnknown: z.boolean(),
@@ -54,9 +57,11 @@ export const settingsResponse = z.object({
   }),
 });
 
+/* D9: the service fee has one control and it writes `speiServiceFeeCents`
+   — `serviceFeeCents` is not patchable; a second writable fee is how the
+   page grew two cards for one number. */
 export const settingsPatchRequest = z
   .object({
-    serviceFeeCents: z.number().int().nonnegative(),
     timezone,
     timeFormat,
     /* SPEI config (direct-payment D3, D4): explicit null clears a field */

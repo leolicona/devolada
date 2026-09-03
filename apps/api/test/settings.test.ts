@@ -45,14 +45,13 @@ describe("US-A04: the ISP reads its settings", () => {
   });
 });
 
-describe("US-A04: saving the fee, the zone and the format", () => {
+describe("US-A04: saving the zone and the format", () => {
   it("saves the fields", async () => {
     await seedBusiness();
     const client = await app();
 
     const ok = await client.request(
       ...send("/settings", "PATCH", {
-        serviceFeeCents: 2000,
         timezone: "America/Hermosillo",
         timeFormat: "24h",
       }),
@@ -60,7 +59,6 @@ describe("US-A04: saving the fee, the zone and the format", () => {
     );
     expect(ok.status).toBe(200);
     expect((await ok.json()).data).toMatchObject({
-      serviceFeeCents: 2000,
       timezone: "America/Hermosillo",
       timeFormat: "24h",
     });
@@ -73,6 +71,21 @@ describe("US-A04: saving the fee, the zone and the format", () => {
     expect(badZone.status).toBe(400);
   });
 
+  it("D9 (BUG-017): the general fee is not patchable — the SPEI fee is the one control", async () => {
+    await seedBusiness();
+    const client = await app();
+
+    const res = await client.request(
+      ...send("/settings", "PATCH", { serviceFeeCents: 2000, speiServiceFeeCents: 900 }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    /* the unknown key is dropped at the edge; the birth default stands */
+    expect(data.serviceFeeCents).toBe(1500);
+    expect(data.spei.serviceFeeCents).toBe(900);
+    expect(data.spei.effectiveServiceFeeCents).toBe(900);
+  });
 });
 
 describe("US-D05: the ISP configures its SPEI account and fee", () => {
@@ -99,7 +112,8 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
       configured: true,
     });
 
-    /* clearing the fee falls back to the store fee (D3) */
+    /* clearing the fee falls back to the birth default (D3) — the API
+       still takes null; the settings page never sends it (settings D9) */
     const cleared = await (await app()).request(
       ...send("/settings", "PATCH", { speiServiceFeeCents: null }),
       env,

@@ -69,25 +69,56 @@ describe("US-D13: the beneficiary name is recommended, never required", () => {
   });
 });
 
-describe("US-A04: the service fee is saved", () => {
-  it("saves the fee that the SPEI channel falls back to", async () => {
+/* settings D9 (BUG-017): one fee, one control — the SPEI card's field. */
+describe("US-A04: the service fee has one control, on the SPEI card", () => {
+  const configured = () =>
+    settings({
+      spei: {
+        clabe: "646180157000000004",
+        bank: "STP",
+        beneficiaryName: null,
+        serviceFeeCents: null,
+        effectiveServiceFeeCents: 1500,
+        bankUnknown: false,
+        configured: true,
+      },
+    });
+
+  it("scenario 5: the page offers the fee once, opened on the fee in force, and saves it as the SPEI fee", async () => {
     const patches: unknown[] = [];
     server.use(
       handlers.session(() => ok(businessActor)),
-      handlers.settings(() => ok(settings())),
+      handlers.settings(() => ok(configured())),
       handlers.patchSettings((body) => {
         patches.push(body);
-        return ok(settings({ serviceFeeCents: 2000 }));
+        return ok(configured());
       }),
     );
     renderApp("/settings/business");
 
-    const fee = await screen.findByLabelText("Cargo por servicio");
+    const fee = await screen.findByLabelText("Cargo por servicio SPEI");
+    /* BUG-017: the general card is gone — one field for one number */
+    expect(screen.queryByRole("heading", { name: "Cargo por servicio" })).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText(/cargo por servicio/i)).toHaveLength(1);
+    /* never saved yet → the field shows the default in force, not a blank */
+    expect(fee).toHaveValue("15.00");
+
     await userEvent.clear(fee);
     await userEvent.type(fee, "20.00");
+    await userEvent.click(screen.getByRole("button", { name: /guardar pago directo/i }));
 
-    await userEvent.click(screen.getByRole("button", { name: /guardar cargo por servicio/i }));
-    expect(patches).toEqual([{ serviceFeeCents: 2000 }]);
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toMatchObject({ speiServiceFeeCents: 2000 });
+    expect(patches[0]).not.toHaveProperty("serviceFeeCents");
+  });
+
+  it("D9: an empty fee cannot be saved — there is no general fee to fall back to", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(configured())));
+    renderApp("/settings/business");
+
+    const fee = await screen.findByLabelText("Cargo por servicio SPEI");
+    await userEvent.clear(fee);
+    expect(screen.getByRole("button", { name: /guardar pago directo/i })).toBeDisabled();
   });
 });
 
@@ -184,9 +215,11 @@ describe("Configuración carries an in-page index", () => {
 
     const nav = await screen.findByRole("navigation", { name: "Secciones de configuración" });
     const { getByRole } = within(nav);
-    for (const label of ["Cargo por servicio", "Pago directo", "Política de conciliación", "Zona y hora"]) {
+    for (const label of ["Pago directo", "Política de conciliación", "Zona y hora"]) {
       expect(getByRole("link", { name: label })).toBeInTheDocument();
     }
+    /* settings D9: the fee has no card of its own anymore */
+    expect(within(nav).queryByRole("link", { name: "Cargo por servicio" })).not.toBeInTheDocument();
     expect(getByRole("link", { name: "Política de conciliación" })).toHaveAttribute("href", "#politica");
   });
 });

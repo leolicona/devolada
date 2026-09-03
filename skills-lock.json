@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "skills": {
+    "api-authentication": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-authentication/skills/api-authentication/SKILL.md",
+      "computedHash": "f133636372c42d3e419bd48b28d3aa252233898767002551b222a35ed3d265e0"
+    },
+    "api-contract-testing": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-contract-testing/skills/api-contract-testing/SKILL.md",
+      "computedHash": "a3c99eb074e2424ca64cebfe92084643b240a067e99891363aec88531b060248"
+    },
+    "api-design-principles": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-design-principles/skills/api-design-principles/SKILL.md",
+      "computedHash": "e5b15476bb966aa2639f44316f8238d69c171db2592a992debb42eaa3c85a524"
+    },
+    "api-error-handling": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-error-handling/skills/api-error-handling/SKILL.md",
+      "computedHash": "b5f023f0790510f02a1f89d2ea75fd8ef794f6b2234c63e6265b7c89187fe93e"
+    },
+    "api-filtering-sorting": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-filtering-sorting/skills/api-filtering-sorting/SKILL.md",
+      "computedHash": "19207fcd7c2e26ec7567ffd6aa0b04e953517fb071fc2d3b693efcfa4c68d716"
+    },
+    "api-pagination": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-pagination/skills/api-pagination/SKILL.md",
+      "computedHash": "df5f45aa75db2fc22748d38d9fc0c12a7260329260ce23d130e17cac7aebe4c3"
+    },
+    "api-rate-limiting": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-rate-limiting/skills/api-rate-limiting/SKILL.md",
+      "computedHash": "5614b3778e70c9147ffc173b0f552afe411c9970903f7db907f04f7ffdd8989e"
+    },
+    "api-reference-documentation": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-reference-documentation/skills/api-reference-documentation/SKILL.md",
+      "computedHash": "10599a9702ff6b1ef3e1e056901b0a1bd92be499ce114c2ed338c0277081030f"
+    },
+    "api-response-optimization": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-response-optimization/skills/api-response-optimization/SKILL.md",
+      "computedHash": "ecb57ceaec943401d3b1e1040df5e5e09e8bfd0f92f979e3b3e7206e26a17d67"
+    },
+    "api-security-hardening": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-security-hardening/skills/api-security-hardening/SKILL.md",
+      "computedHash": "bb3d6be0d2c870f4610939c3e6766c8f950cab7452db4478e77713887b4653b1"
+    },
+    "api-testing": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-testing/skills/api-testing/SKILL.md",
+      "computedHash": "8a3fb3bbdbe93fcd0fd88042e95f9f7837de955c85331113a23631f7d916abed"
+    },
+    "api-versioning-strategy": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/api-versioning-strategy/skills/api-versioning-strategy/SKILL.md",
+      "computedHash": "05091f4f42f0422ee6eafe0f8e3e20cfff1e510a85a117ca431cecb3f5991634"
+    },
+    "brief-to-tasks": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "brief-to-tasks/SKILL.md",
+      "computedHash": "8cf913dde5f87b8e5774a5d042dcf7e0dabf69fb511c57ef91eab8e6568927e1"
+    },
+    "claude-code-bash-patterns": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/claude-code-bash-patterns/skills/claude-code-bash-patterns/SKILL.md",
+      "computedHash": "7b535782be02165b71f67d656cba04485d6e93610a225030c012bf8077e1feb0"
+    },
+    "claude-hook-writer": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/claude-hook-writer/skills/claude-hook-writer/SKILL.md",
+      "computedHash": "8b75c75fb80377f6ce16338595b42154c0ef82e9e415301620f02f56cc8af961"
+    },
+    "cloudflare": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloudflare/SKILL.md",
+      "computedHash": "39190adf7d6256fa5d66465223f04098c92525077a02fdc5898008fd14d631f5"
+    },
+    "cloudflare-cron-triggers": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-cron-triggers/skills/cloudflare-cron-triggers/SKILL.md",
+      "computedHash": "354d213b9887656f79eecf764fd9fcd367133199c879fd16b249c846c58b8580"
+    },
+    "cloudflare-d1": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-d1/skills/cloudflare-d1/SKILL.md",
+      "computedHash": "b1a64d663e793885c5f2948cd9c432a1dfca898fa63b82860c90ee85289b319b"
+    },
+    "cloudflare-durable-objects": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-durable-objects/skills/cloudflare-durable-objects/SKILL.md",
+      "computedHash": "a31bbff36a3c006ff8f4db6b760dda1a22968c126182da567fd0757ce641c4d4"
+    },
+    "cloudflare-kv": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-kv/skills/cloudflare-kv/SKILL.md",
+      "computedHash": "12315ba5ce852724866d8d4a3f71bc2b3fc5c7e87c066e4af07d2fcefe121f0f"
+    },
+    "cloudflare-queues": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-queues/skills/cloudflare-queues/SKILL.md",
+      "computedHash": "caa47730496c517d512d270fa9047becf21b75a540a8563cedb40fbb26541ee1"
+    },
+    "cloudflare-r2": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-r2/skills/cloudflare-r2/SKILL.md",
+      "computedHash": "0b85d438ef70a9f8009a44e867999cc94cbc96d970ccb71b75f8f066d79e09ff"
+    },
+    "cloudflare-turnstile": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-turnstile/skills/cloudflare-turnstile/SKILL.md",
+      "computedHash": "7ada08eaedcbb599095c653ffc7be32af1a516ae37af0dd6979f7112de1375bd"
+    },
+    "cloudflare-workers-ai": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-workers-ai/skills/cloudflare-workers-ai/SKILL.md",
+      "computedHash": "c363ae6a8ff3cae096ed9fc5b14a1b0ab66b0f87415061245d241e41777d0d73"
+    },
+    "cloudflare-workers-ci-cd": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-workers/skills/cloudflare-workers-ci-cd/SKILL.md",
+      "computedHash": "b1183effdfd9539f2daa7311d2b6dcd4112ec75a01865c7a4d7f0a883f567510"
+    },
+    "cloudflare-workers-dev-experience": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-workers/skills/cloudflare-workers-dev-experience/SKILL.md",
+      "computedHash": "4f79f342f4d2642ff55ead0b48cf1e495bb5403cf98352ab62ea72273443f14e"
+    },
+    "cloudflare-workers-performance": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/cloudflare-workers/skills/cloudflare-workers-performance/SKILL.md",
+      "computedHash": "0f198ba17db37163a8214b16ebf3d4dc62f2e9104e2bc7b66afeda4e1808f434"
+    },
+    "cross-critique": {
+      "source": "warpdotdev/common-skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/cross-critique/SKILL.md",
+      "computedHash": "eba85912da3e1fba5e698aed0932de110deb9ef8af71ba8bdd7161cba97c8471"
+    },
+    "design-brief": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "design-brief/SKILL.md",
+      "computedHash": "3edf0a4ef2c79b1bf74c759316d43fe985a8a4085eec70f657b764ced95346c2"
+    },
+    "design-flow": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "design-flow/SKILL.md",
+      "computedHash": "4c4a621051f3592aefcf79acad0204960ae58bf733a385b24b8577d3ebc4fde7"
+    },
+    "design-review": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "design-review/SKILL.md",
+      "computedHash": "8d4bbee4f6eb3fc19896064307b8a267c0bddf8dc7800a36a6573e0430815798"
+    },
+    "design-tokens": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "design-tokens/SKILL.md",
+      "computedHash": "20df23737f28b34cb3d0d808d16a958c5ff3bddf0dcb8eedd700735ecb5ae8d1"
+    },
+    "durable-objects": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/durable-objects/SKILL.md",
+      "computedHash": "72efa2277fea08f43b393c74abaacc9fa575e20bc63bdc9d46829b8a39352852"
+    },
+    "frontend-design": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "frontend-design/SKILL.md",
+      "computedHash": "624e351c79615ca40248769486bd4de7734aea1b4b5059cc46098282d420dc44"
+    },
+    "grill-me": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "grill-me/SKILL.md",
+      "computedHash": "81770c424f4bcbe02503f997d1e633e4e62974e537c824af4780e9161b7e20e7"
+    },
+    "information-architecture": {
+      "source": "julianoczkowski/designer-skills",
+      "sourceType": "github",
+      "skillPath": "information-architecture/SKILL.md",
+      "computedHash": "42b3b96103c0c910ff73841b9c843c8be8111c3d1fdc0746c07d911a23335191"
+    },
+    "redesign-existing-projects": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/redesign-skill/SKILL.md",
+      "computedHash": "b405eee0e0e80fc243f731d9aa368bca307e356db7e6157d27101d369dac6726"
+    },
+    "turnstile-spin": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/turnstile-spin/SKILL.md",
+      "computedHash": "1b1d7b58ff1a7805b7d86347cc842dcda4cffa4228cfd958225755c2d2a9e4b7"
+    },
+    "web-perf": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-perf/SKILL.md",
+      "computedHash": "7ae53856c320574f7440f50aef7892f96837eec9fd49d329d049d432fb4b299a"
+    },
+    "workers-best-practices": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/workers-best-practices/SKILL.md",
+      "computedHash": "420e1ad3eaeb8ed2016e6b34fff3757de6aa39899ec2bd6e9784a29c38e70f9a"
+    },
+    "wrangler": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/wrangler/SKILL.md",
+      "computedHash": "11edeb37eedb91deedde694b2bb1cc4ff4e8b5a8f1836c217a8c871fe39abcb5"
+    }
+  }
+}

@@ -1,0 +1,1441 @@
+{
+  "version": "1.0",
+  "skills": {
+    "skill-developer": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Meta-skill for creating and managing Claude Code skills",
+      "promptTriggers": {
+        "keywords": [
+          "skill system",
+          "create skill",
+          "add skill",
+          "skill triggers",
+          "skill rules",
+          "hook system",
+          "skill development",
+          "skill-rules.json"
+        ],
+        "intentPatterns": [
+          "(how do|how does|explain).*?skill",
+          "(create|add|modify|build).*?skill",
+          "skill.*?(work|trigger|activate|system)"
+        ]
+      }
+    },
+    "react": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "react",
+          "useState",
+          "useEffect",
+          "useCallback",
+          "useMemo",
+          "useRef",
+          "useContext",
+          "useReducer",
+          "useTransition",
+          "useDeferredValue",
+          "useId",
+          "useSyncExternalStore",
+          "useImperativeHandle",
+          "useLayoutEffect",
+          "React.lazy",
+          "React.memo",
+          "React.forwardRef",
+          "React.createContext",
+          "createContext",
+          "forwardRef",
+          "Suspense",
+          "ErrorBoundary",
+          "StrictMode",
+          "startTransition",
+          "flushSync",
+          "createPortal",
+          "cloneElement"
+        ],
+        "intentPatterns": [
+          "use.*react.*hook",
+          "implement.*(useState|useEffect|useCallback|useMemo|useContext|useReducer)",
+          "add.*react.*(lazy|suspense|memo)",
+          "create.*react.*context",
+          "optimize.*react.*component",
+          "memoize.*react.*component",
+          "use.*(useTransition|useDeferredValue)",
+          "create.*error.*boundary",
+          "implement.*react.*(forwardRef|memo)",
+          "add.*react.*portal"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/*.tsx",
+          "**/*.jsx",
+          "**/components/**/*.ts",
+          "**/features/**/*.tsx",
+          "**/hooks/**/*.ts",
+          "**/hooks/**/*.tsx"
+        ],
+        "contentPatterns": [
+          "import.*from ['\"]react['\"]",
+          "import.*React.*from ['\"]react['\"]",
+          "useState\\(",
+          "useEffect\\(",
+          "useCallback\\(",
+          "useMemo\\(",
+          "useContext\\(",
+          "useReducer\\(",
+          "React\\.memo\\(",
+          "React\\.lazy\\(",
+          "forwardRef\\("
+        ]
+      }
+    },
+    "tailwindcss": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "tailwind",
+          "tailwindcss",
+          "utility classes",
+          "@apply",
+          "tailwind.config",
+          "dark mode"
+        ],
+        "intentPatterns": [
+          "style.*with.*tailwind",
+          "add.*tailwind.*classes",
+          "configure.*tailwind",
+          "setup.*tailwind",
+          "customize.*theme",
+          "add.*dark.*mode"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/tailwind.config.js",
+          "**/tailwind.config.ts",
+          "**/globals.css",
+          "**/*.css"
+        ],
+        "contentPatterns": [
+          "className=['\"].*flex",
+          "className=['\"].*grid",
+          "className=['\"].*bg-",
+          "@apply"
+        ]
+      }
+    },
+    "tanstack-query": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "tanstack query",
+          "react query",
+          "@tanstack/react-query",
+          "useQuery",
+          "useMutation",
+          "useSuspenseQuery",
+          "useInfiniteQuery",
+          "useQueries",
+          "useQueryClient",
+          "useIsFetching",
+          "useIsMutating",
+          "useMutationState",
+          "QueryClient",
+          "QueryClientProvider",
+          "queryKey",
+          "queryFn",
+          "mutationFn",
+          "invalidateQueries",
+          "setQueryData",
+          "getQueryData",
+          "removeQueries",
+          "resetQueries",
+          "staleTime",
+          "cacheTime",
+          "refetchInterval",
+          "refetchOnWindowFocus",
+          "refetchOnReconnect",
+          "isLoading",
+          "isError",
+          "isFetching",
+          "isSuccess",
+          "queryCache",
+          "mutationCache"
+        ],
+        "intentPatterns": [
+          "use.*tanstack.*query",
+          "use.*react.*query",
+          "create.*tanstack.*(query|mutation)",
+          "invalidate.*query.*cache",
+          "invalidate.*tanstack.*queries",
+          "prefetch.*query",
+          "setup.*query.*client",
+          "configure.*tanstack.*query",
+          "use.*(useQuery|useMutation|useInfiniteQuery)",
+          "implement.*query.*invalidation",
+          "add.*query.*key",
+          "set.*query.*data"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/api/**/*.ts",
+          "**/api/**/*.tsx",
+          "**/queries/**/*.ts",
+          "**/queries/**/*.tsx",
+          "**/hooks/**/*.ts",
+          "**/hooks/**/*.tsx",
+          "**/mutations/**/*.ts",
+          "**/mutations/**/*.tsx"
+        ],
+        "contentPatterns": [
+          "useQuery\\(",
+          "useMutation\\(",
+          "useSuspenseQuery\\(",
+          "useInfiniteQuery\\(",
+          "useQueryClient\\(",
+          "queryClient\\.",
+          "import.*@tanstack/react-query",
+          "from '@tanstack/react-query'",
+          "QueryClientProvider",
+          "new QueryClient\\(",
+          "invalidateQueries\\(",
+          "setQueryData\\(",
+          "queryKey:",
+          "queryFn:"
+        ]
+      }
+    },
+    "tanstack-router": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "tanstack router",
+          "@tanstack/react-router",
+          "createFileRoute",
+          "createRootRoute",
+          "createRoute",
+          "createRouter",
+          "RouterProvider",
+          "useNavigate",
+          "useParams",
+          "useSearch",
+          "useLoaderData",
+          "useRouter",
+          "useMatches",
+          "useMatch",
+          "useLocation",
+          "route loader",
+          "Route.lazy",
+          "beforeLoad",
+          "validateSearch",
+          "Link",
+          "Outlet",
+          "Navigate",
+          "redirect",
+          "notFound"
+        ],
+        "intentPatterns": [
+          "create.*tanstack.*route",
+          "add.*tanstack.*route",
+          "setup.*tanstack.*router",
+          "implement.*file.*based.*routing",
+          "create.*route.*loader",
+          "add.*route.*validation",
+          "use.*tanstack.*navigation",
+          "create.*lazy.*route",
+          "implement.*route.*guard",
+          "add.*search.*params.*validation",
+          "create.*router.*tanstack"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/routes/**/*.tsx",
+          "**/routes/**/*.ts",
+          "**/routes/**/*.lazy.tsx",
+          "**/routes/**/*.lazy.ts",
+          "**/__root.tsx"
+        ],
+        "contentPatterns": [
+          "createFileRoute\\(",
+          "createRootRoute\\(",
+          "createRoute\\(",
+          "createRouter\\(",
+          "import.*@tanstack/react-router",
+          "from '@tanstack/react-router'",
+          "RouterProvider",
+          "useNavigate\\(\\)",
+          "useParams\\(\\)",
+          "useSearch\\(\\)",
+          "Route\\.lazy"
+        ]
+      }
+    },
+    "shadcn": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "shadcn",
+          "shadcn/ui",
+          "npx shadcn",
+          "@/components/ui",
+          "table component",
+          "form component",
+          "dialog component",
+          "card component",
+          "button component"
+        ],
+        "intentPatterns": [
+          "create.*(table|form|dialog|card|button)",
+          "add.*(table|form|dialog|card|button).*component",
+          "add.*shadcn.*component",
+          "install.*shadcn.*component",
+          "style.*component.*shadcn",
+          "use.*shadcn"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/components/ui/**",
+          "**/components.json"
+        ]
+      }
+    },
+    "api-authentication": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Auth flows: JWT, OAuth, API keys, sessions (Better Auth lives in apps/api)",
+      "promptTriggers": {
+        "keywords": [
+          "jwt",
+          "oauth",
+          "oauth 2.0",
+          "access token",
+          "refresh token",
+          "api key",
+          "better auth",
+          "session cookie",
+          "auth flow"
+        ],
+        "intentPatterns": [
+          "(add|implement|fix|debug|agreg\\w*|implement\\w*|arregl\\w*).*(auth|authentication|autenticaci[oó]n|login|sesi[oó]n)"
+        ]
+      }
+    },
+    "api-contract-testing": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Consumer-driven contract testing between services (Pact)",
+      "promptTriggers": {
+        "keywords": [
+          "contract testing",
+          "pact",
+          "consumer-driven contract"
+        ]
+      }
+    },
+    "api-design-principles": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "REST/GraphQL design principles for new endpoints",
+      "promptTriggers": {
+        "keywords": [
+          "api design",
+          "rest api design",
+          "graphql schema",
+          "resource naming",
+          "hateoas",
+          "idempotency"
+        ],
+        "intentPatterns": [
+          "(design|dise[nñ]\\w*).*(api|endpoint|endpoints)"
+        ]
+      }
+    },
+    "api-error-handling": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Standardized error responses; our envelope is { success:false, error:{ code } }",
+      "promptTriggers": {
+        "keywords": [
+          "error response",
+          "error envelope",
+          "problem details",
+          "http status code",
+          "error code"
+        ],
+        "intentPatterns": [
+          "(standardize|improve|add|estandariz\\w*|mejor\\w*).*error.*(response|handling)",
+          "(manej\\w*).*(error|errores)"
+        ]
+      }
+    },
+    "api-filtering-sorting": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Query-parameter filtering and sorting, parsed and validated",
+      "promptTriggers": {
+        "keywords": [
+          "filtering",
+          "sorting",
+          "query params",
+          "query parameters",
+          "sort order",
+          "search endpoint",
+          "filtrado",
+          "ordenamiento"
+        ],
+        "intentPatterns": [
+          "(filter|sort|ordena\\w*|filtra\\w*).*(list|results|table|endpoint|lista|tabla)"
+        ]
+      }
+    },
+    "api-pagination": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Offset/cursor/keyset pagination for collection endpoints",
+      "promptTriggers": {
+        "keywords": [
+          "pagination",
+          "paginate",
+          "cursor pagination",
+          "offset pagination",
+          "keyset",
+          "infinite scroll",
+          "paginación",
+          "paginacion"
+        ],
+        "intentPatterns": [
+          "(paginate|page through|pagin\\w*).*(list|results|collection|lista|resultados|endpoint)"
+        ]
+      }
+    },
+    "api-rate-limiting": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Rate limiting for public endpoints",
+      "promptTriggers": {
+        "keywords": [
+          "rate limit",
+          "rate limiting",
+          "token bucket",
+          "sliding window",
+          "throttle",
+          "429"
+        ],
+        "intentPatterns": [
+          "(limit|throttle|limit\\w*).*(request|requests|abuse|peticiones|abuso)"
+        ]
+      }
+    },
+    "api-reference-documentation": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "OpenAPI reference docs for the API surface",
+      "promptTriggers": {
+        "keywords": [
+          "openapi",
+          "swagger",
+          "api reference",
+          "api docs",
+          "developer portal",
+          "sdk reference"
+        ],
+        "intentPatterns": [
+          "(document\\w*|documentar).*(api|endpoint|endpoints)"
+        ]
+      }
+    },
+    "api-response-optimization": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Payload reduction, caching and compression",
+      "promptTriggers": {
+        "keywords": [
+          "payload size",
+          "response caching",
+          "compression",
+          "gzip",
+          "brotli",
+          "etag"
+        ],
+        "intentPatterns": [
+          "(reduce|optimize|reduc\\w*|optimiz\\w*).*(payload|response|respuesta).*(size|time|tama[nñ]o|tiempo)"
+        ]
+      }
+    },
+    "api-security-hardening": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Defense-in-depth for public endpoints (payment links are public)",
+      "promptTriggers": {
+        "keywords": [
+          "security headers",
+          "cors",
+          "input validation",
+          "owasp",
+          "injection",
+          "csrf",
+          "security audit"
+        ],
+        "intentPatterns": [
+          "(harden|secure|asegur\\w*|endurec\\w*).*(api|endpoint|endpoints)"
+        ]
+      }
+    },
+    "api-testing": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "HTTP endpoint tests (see docs/TESTING.md for this repo's infrastructure)",
+      "promptTriggers": {
+        "keywords": [
+          "supertest",
+          "httpx",
+          "endpoint test",
+          "api test",
+          "api tests",
+          "pruebas de api"
+        ],
+        "intentPatterns": [
+          "(test|prueb\\w*|prob\\w*).*(endpoint|endpoints|api route|api)"
+        ]
+      }
+    },
+    "api-versioning-strategy": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Versioning the API without breaking existing consumers",
+      "promptTriggers": {
+        "keywords": [
+          "api version",
+          "api versioning",
+          "breaking change",
+          "deprecation"
+        ],
+        "intentPatterns": [
+          "(version\\w*|versionar).*(api|endpoint)"
+        ]
+      }
+    },
+    "brief-to-tasks": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Turns a brief into an ordered checklist of vertical slices (.design/devolada/TASKS.md)",
+      "promptTriggers": {
+        "keywords": [
+          "brief to tasks",
+          "task breakdown",
+          "vertical slices",
+          "tasks.md",
+          "desglose de tareas"
+        ],
+        "intentPatterns": [
+          "(break down|desglos\\w*).*(brief|work|feature|trabajo)"
+        ]
+      }
+    },
+    "claude-code-bash-patterns": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Bash tool patterns, permission guards, slash commands, git workflows",
+      "promptTriggers": {
+        "keywords": [
+          "bash tool",
+          "slash command",
+          "custom command",
+          "command chaining",
+          "bash permissions"
+        ]
+      }
+    },
+    "claude-hook-writer": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Writing and debugging Claude Code hooks (.claude/hooks/)",
+      "promptTriggers": {
+        "keywords": [
+          "claude code hook",
+          "hook script",
+          "pretooluse",
+          "posttooluse",
+          "userpromptsubmit",
+          "stop hook"
+        ],
+        "intentPatterns": [
+          "(write|create|debug|fix|escrib\\w*|cre\\w*|arregl\\w*).*claude.*hook",
+          "hook.*(de )?claude"
+        ]
+      }
+    },
+    "cloudflare": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Umbrella Cloudflare platform skill; sub-skills carry the specific triggers",
+      "promptTriggers": {
+        "keywords": [
+          "cloudflare",
+          "cloudflare platform",
+          "cloudflare docs"
+        ],
+        "intentPatterns": [
+          "(use|on|deploy to).*cloudflare"
+        ]
+      }
+    },
+    "cloudflare-cron-triggers": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Scheduled Workers execution",
+      "promptTriggers": {
+        "keywords": [
+          "cron trigger",
+          "cron triggers",
+          "cron expression",
+          "scheduled worker",
+          "scheduled handler",
+          "scheduled task"
+        ],
+        "intentPatterns": [
+          "(schedule|run|programa\\w*).*(every|daily|hourly|nightly|cada|diario).*(job|task|worker|tarea)"
+        ]
+      }
+    },
+    "cloudflare-d1": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "D1 is the database of apps/api and apps/consta (Drizzle + migrations)",
+      "promptTriggers": {
+        "keywords": [
+          "d1",
+          "d1 database",
+          "cloudflare d1",
+          "drizzle",
+          "drizzle-orm",
+          "db:generate",
+          "db:migrate",
+          "d1_error",
+          "prepared statement",
+          "local d1"
+        ],
+        "intentPatterns": [
+          "(create|generate|apply|run|genera\\w*|aplica\\w*|corre).*(migration|migrations|migraci[oó]n|migraciones)",
+          "(add|change|alter|agreg\\w*|a[nñ]ad\\w*|cambi\\w*).*(column|columna|db schema|database schema|drizzle schema|esquema)",
+          "(query|insert into|select from|consulta\\w*).*(d1|sqlite)"
+        ]
+      }
+    },
+    "cloudflare-durable-objects": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Aspirational: no Durable Objects binding exists in any wrangler.jsonc yet. Durable Objects reference: config, migrations, WebSocket hibernation, errors",
+      "promptTriggers": {
+        "keywords": [
+          "websocket hibernation",
+          "do migration",
+          "durable object class",
+          "durable object binding",
+          "new_sqlite_classes"
+        ],
+        "intentPatterns": [
+          "(configure|migrate|export).*durable object"
+        ]
+      }
+    },
+    "cloudflare-kv": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Aspirational: no KV binding exists in any wrangler.jsonc yet. Workers KV key-value storage",
+      "promptTriggers": {
+        "keywords": [
+          "workers kv",
+          "cloudflare kv",
+          "kv namespace",
+          "kv binding",
+          "kv.get",
+          "kv.put"
+        ],
+        "intentPatterns": [
+          "(store|cache|read|write|guard\\w*|cache\\w*|le[eé]\\w*).*(in |en )kv"
+        ]
+      }
+    },
+    "cloudflare-queues": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Aspirational: no Queues binding exists in any wrangler.jsonc yet. Cloudflare Queues producers/consumers and dead-letter queues",
+      "promptTriggers": {
+        "keywords": [
+          "cloudflare queues",
+          "queue consumer",
+          "queue producer",
+          "dead letter queue",
+          "message batch"
+        ],
+        "intentPatterns": [
+          "(publish|send|consume|publica\\w*|env[ií]a\\w*|consum\\w*).*(message|messages|mensaje|mensajes).*(queue|cola)",
+          "(create|add|configure|cre\\w*|configur\\w*).*(queue consumer|consumidor de cola)"
+        ]
+      }
+    },
+    "cloudflare-r2": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "R2 object storage (S3-compatible)",
+      "promptTriggers": {
+        "keywords": [
+          "r2",
+          "r2 bucket",
+          "object storage",
+          "presigned url",
+          "multipart upload",
+          "s3-compatible"
+        ],
+        "intentPatterns": [
+          "(upload|store|serve|sub\\w*|guard\\w*|sirv\\w*).*(file|image|object|archivo|imagen|comprobante|objeto).*(r2|bucket)"
+        ]
+      }
+    },
+    "cloudflare-turnstile": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Turnstile bot protection: widget, siteverify, error codes",
+      "promptTriggers": {
+        "keywords": [
+          "turnstile",
+          "captcha",
+          "bot protection",
+          "siteverify"
+        ],
+        "intentPatterns": [
+          "(protect|proteg\\w*).*(form|formulario|endpoint).*(bot|bots|spam)"
+        ]
+      }
+    },
+    "cloudflare-workers-ai": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "In use: apps/consta declares the `ai` binding and EXTRACTION_MODEL (@cf/mistralai/mistral-small-3.1-24b-instruct); it is the proof-extraction engine (apps/consta/src/extraction/reader.ts)",
+      "promptTriggers": {
+        "keywords": [
+          "workers ai",
+          "ai binding",
+          "ai gateway",
+          "llm inference",
+          "extraction model",
+          "modelo de extracción",
+          "mistral"
+        ]
+      }
+    },
+    "cloudflare-workers-ci-cd": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "GitHub Actions pipelines for Workers (this repo never deploys from a laptop)",
+      "promptTriggers": {
+        "keywords": [
+          "github actions",
+          "ci/cd",
+          "deployment pipeline",
+          "preview environment",
+          "gitlab ci",
+          "deploy workflow"
+        ],
+        "intentPatterns": [
+          "(fix|add|configure|debug|arregl\\w*|agreg\\w*|configur\\w*).*(github action|workflow|pipeline|despliegue)"
+        ]
+      }
+    },
+    "cloudflare-workers-dev-experience": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Local Workers dev: wrangler config, Miniflare, hot reload, binding simulation",
+      "promptTriggers": {
+        "keywords": [
+          "miniflare",
+          "hot reload",
+          "hmr",
+          "local worker",
+          "workers local development"
+        ],
+        "intentPatterns": [
+          "(set ?up|configure).*local.*(dev|development).*worker"
+        ]
+      }
+    },
+    "cloudflare-workers-performance": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Workers CPU, memory, bundle-size and caching optimization",
+      "promptTriggers": {
+        "keywords": [
+          "cpu time",
+          "cpu limit",
+          "cold start",
+          "bundle size",
+          "worker performance",
+          "memory limit"
+        ],
+        "intentPatterns": [
+          "(worker|workers).*(slow|latency|timeout)"
+        ]
+      }
+    },
+    "cross-critique": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Circulates competing proposals between subagents, then synthesizes",
+      "promptTriggers": {
+        "keywords": [
+          "cross critique",
+          "cross-critique",
+          "competing proposals",
+          "second opinion"
+        ]
+      }
+    },
+    "design-brief": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Interactive design brief; this repo keeps them in .design/devolada/",
+      "promptTriggers": {
+        "keywords": [
+          "design brief",
+          "brief de diseño"
+        ],
+        "intentPatterns": [
+          "(write|create|escrib\\w*|cre\\w*).*(design )?brief"
+        ]
+      }
+    },
+    "design-flow": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Runs the whole designer sequence in order (grill -> brief -> IA -> tasks -> build -> review)",
+      "promptTriggers": {
+        "keywords": [
+          "design flow",
+          "design process",
+          "full design workflow"
+        ]
+      }
+    },
+    "design-review": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Structured design critique against the brief (hierarchy, a11y, responsiveness)",
+      "promptTriggers": {
+        "keywords": [
+          "design review",
+          "design critique",
+          "polish pass",
+          "qa pass",
+          "revisión de diseño"
+        ],
+        "intentPatterns": [
+          "(review|critique|revis\\w*|critic\\w*).*(design|ui|interface|interfaz|dise[nñ]o|pantalla)"
+        ]
+      }
+    },
+    "design-tokens": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Generates a NEW token file; packages/ui/src/styles/tokens.css is already law here",
+      "promptTriggers": {
+        "keywords": [
+          "design tokens",
+          "type ramp",
+          "spacing scale",
+          "token file"
+        ]
+      }
+    },
+    "durable-objects": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Aspirational: no Durable Objects binding exists in any wrangler.jsonc yet. Authoring and reviewing Durable Objects (RPC, SQLite storage, alarms)",
+      "promptTriggers": {
+        "keywords": [
+          "durable object",
+          "durable objects",
+          "do rpc",
+          "do alarm",
+          "sqlite storage"
+        ],
+        "intentPatterns": [
+          "(create|build|write|review|cre\\w*|construy\\w*|revis\\w*).*durable object"
+        ]
+      }
+    },
+    "frontend-design": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Opinionated frontend build guidance; in this repo the tokens and StatusBadge stay law",
+      "promptTriggers": {
+        "keywords": [
+          "frontend design",
+          "aesthetic philosophy"
+        ],
+        "intentPatterns": [
+          "(build|construy\\w*).*(component|page|interface|componente|p[aá]gina|pantalla).*(from scratch|new|nuev\\w+)"
+        ]
+      }
+    },
+    "grill-me": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Adversarial interview to stress-test a plan or design before building",
+      "promptTriggers": {
+        "keywords": [
+          "grill me",
+          "grill",
+          "stress test the plan",
+          "challenge my approach"
+        ]
+      }
+    },
+    "information-architecture": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Navigation, content hierarchy, URL patterns and user flows before visual design",
+      "promptTriggers": {
+        "keywords": [
+          "information architecture",
+          "site structure",
+          "navigation structure",
+          "user flows",
+          "url patterns"
+        ],
+        "intentPatterns": [
+          "(plan|define|defin\\w*|plane\\w*).*(navigation|site structure|user flow|navegaci[oó]n|arquitectura de informaci[oó]n)"
+        ]
+      }
+    },
+    "redesign-existing-projects": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Audit-first redesign of an existing site; heavyweight, invoke by hand",
+      "promptTriggers": {
+        "keywords": [
+          "redesign",
+          "rediseño"
+        ]
+      }
+    },
+    "turnstile-spin": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "End-to-end Turnstile setup: create the widget, embed it, wire siteverify",
+      "promptTriggers": {
+        "keywords": [
+          "turnstile setup",
+          "turnstile widget"
+        ],
+        "intentPatterns": [
+          "(add|set ?up|setup|integrate|agreg\\w*|integr\\w*|instal\\w*).*(turnstile|captcha)"
+        ]
+      }
+    },
+    "ui-refactor": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "low",
+      "description": "Diagnostic UI tactics (hierarchy, spacing, type, contrast). Fires only on a described visual problem, never on routine component work - shadcn is the recipe and tokens.css is the law here, so ignore its build-a-palette-from-scratch advice",
+      "promptTriggers": {
+        "keywords": [
+          "make this look better",
+          "looks cluttered",
+          "cluttered",
+          "visual hierarchy",
+          "whitespace",
+          "line-height",
+          "type scale",
+          "font pairing",
+          "jerarquía visual",
+          "se ve desordenado",
+          "se ve amontonado",
+          "amontonado"
+        ],
+        "intentPatterns": [
+          "(make|makes|hacer que).*(look|feel|vea).*(better|nicer|cleaner|professional|mejor)",
+          "(se ve|queda|luce).*(desordenad\\w*|amontonad\\w*|apretad\\w*|mal acomodad\\w*)",
+          "(fix|improve|arregl\\w*|mejor\\w*).*(hierarchy|jerarqu[ií]a|spacing|espaciado|alignment|alineaci[oó]n|typography|tipograf[ií]a)",
+          "(too|demasiado).*(cluttered|busy|cramped|apretado|junto)"
+        ]
+      }
+    },
+    "web-perf": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Core Web Vitals audit of apps/pago and apps/admin via Chrome DevTools MCP",
+      "promptTriggers": {
+        "keywords": [
+          "core web vitals",
+          "lcp",
+          "inp",
+          "cls",
+          "lighthouse",
+          "page speed",
+          "web performance",
+          "render blocking"
+        ],
+        "intentPatterns": [
+          "(audit|profile|optimize|mid\\w*|audit\\w*|optimiz\\w*).*(page load|load time|site speed|carga|velocidad|rendimiento)"
+        ]
+      }
+    },
+    "workers-best-practices": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Production review rules for Workers code (streaming, floating promises, global state)",
+      "promptTriggers": {
+        "keywords": [
+          "workers best practices",
+          "worker anti-pattern",
+          "floating promise",
+          "waituntil",
+          "executionctx",
+          "fetch handler",
+          "worker code review"
+        ],
+        "intentPatterns": [
+          "(review|audit|revis\\w*|audit\\w*).*(worker|workers)",
+          "(write|create|author|escrib\\w*|cre\\w*).*(new|nuev\\w+).*worker"
+        ]
+      }
+    },
+    "wrangler": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Wrangler is the CLI for local dev and (CI-only) deploys of every Worker",
+      "promptTriggers": {
+        "keywords": [
+          "wrangler",
+          "wrangler.jsonc",
+          "wrangler.toml",
+          "wrangler dev",
+          "wrangler deploy",
+          "wrangler tail",
+          "wrangler secret",
+          "binding",
+          "bindings",
+          "compatibility_date"
+        ],
+        "intentPatterns": [
+          "(deploy|publish|despleg\\w*|publica\\w*).*(worker|workers|api|consta)",
+          "(despliegue).*(worker|api)",
+          "(add|configure|set|agreg\\w*|configur\\w*|defin\\w*).*(secret|secreto|binding|env var|variable de entorno)"
+        ]
+      }
+    }
+  },
+  "agents": {
+    "auto-error-resolver": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "critical",
+      "promptTriggers": {
+        "keywords": [
+          "build error",
+          "build errors",
+          "compilation error",
+          "compilation errors",
+          "typescript error",
+          "typescript errors",
+          "tsc error",
+          "build fail",
+          "build failed",
+          "build failing",
+          "fix errors",
+          "fix build",
+          "resolve errors",
+          "errors in build"
+        ],
+        "intentPatterns": [
+          "(fix|resolve|solve).*(build|compilation|typescript|tsc).*(error|errors|issue)",
+          "(build|compilation).*(fail|failed|failing|broken)",
+          "(typescript|tsc).*(error|errors|issue).*( in | with )",
+          "\\d+.*(error|errors).*(found|detected|in)",
+          "(clean|fix).*(build|compilation)"
+        ]
+      },
+      "errorTriggers": {
+        "enabled": true,
+        "patterns": [
+          "TS\\d{4}:",
+          "error TS\\d{4}:",
+          "Type error:",
+          "build failed",
+          "Compilation failed"
+        ],
+        "description": "Automatically suggest when TypeScript or build errors are detected"
+      }
+    },
+    "code-architecture-reviewer": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "review code",
+          "review my code",
+          "finished implementing",
+          "completed",
+          "done with",
+          "check my code",
+          "code review",
+          "review this",
+          "review the",
+          "added a new",
+          "created a new",
+          "implemented a new",
+          "finished the",
+          "completed the"
+        ],
+        "intentPatterns": [
+          "(review|check).*(code|implementation)",
+          "(finished|completed|done).*(implementing|building|creating|adding)",
+          "(finished|completed|done).*(component|feature|endpoint|service|function)",
+          "(added|created|implemented).*(new).*(component|endpoint|service|feature)",
+          "i('ve| have).*(finished|completed|added|created|implemented)",
+          "(refactored|updated).*(to use|with)"
+        ]
+      },
+      "postToolUseTriggers": {
+        "enabled": true,
+        "tools": [
+          "Edit",
+          "Write",
+          "MultiEdit"
+        ],
+        "minEdits": 3,
+        "withinMinutes": 10,
+        "description": "Suggest code review after significant editing session"
+      }
+    },
+    "code-refactor-master": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "reorganize",
+          "cleanup",
+          "clean up",
+          "is a mess",
+          "messy",
+          "break down",
+          "extract",
+          "split up",
+          "too large",
+          "too big",
+          "unmaintainable",
+          "hard to maintain",
+          "loading patterns",
+          "loading returns",
+          "file structure",
+          "move files",
+          "relocate"
+        ],
+        "intentPatterns": [
+          "(reorganize|cleanup|clean up).*(folder|directory|structure|components)",
+          "(folder|directory|component).*(is a mess|messy)",
+          "(break down|split|extract).*(large|big).*(component|file)",
+          "(file|component).*(too large|too big|over \\d+ lines)",
+          "(fix|replace).*(loading|early return).*(pattern|indicator)",
+          "(move|relocate).*(files|components)"
+        ]
+      }
+    },
+    "documentation-architect": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "document",
+          "documentation",
+          "create docs",
+          "write docs",
+          "readme",
+          "api docs",
+          "api documentation",
+          "data flow",
+          "architecture diagram",
+          "developer guide",
+          "document this",
+          "document the",
+          "needs documentation",
+          "needs docs",
+          "update docs",
+          "update documentation"
+        ],
+        "intentPatterns": [
+          "(create|write|update|enhance).*(documentation|docs|readme)",
+          "(document|explain).*(this|the).*(feature|system|api|flow)",
+          "(need|needs).*(documentation|docs)",
+          "(api|endpoint|feature).*(needs|requires).*(documentation|docs)",
+          "(data flow|architecture).*(diagram|documentation)"
+        ]
+      }
+    },
+    "plan-reviewer": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "review plan",
+          "review my plan",
+          "review this plan",
+          "check plan",
+          "check my plan",
+          "before implementation",
+          "before implementing",
+          "before i start",
+          "before proceeding",
+          "plan to",
+          "strategy for",
+          "approach for",
+          "migration plan",
+          "integration plan"
+        ],
+        "intentPatterns": [
+          "(review|check|validate).*(plan|strategy|approach)",
+          "(before).*(implementation|implementing|proceeding|starting)",
+          "here('s| is).*(plan|strategy|approach)",
+          "(migration|integration|refactoring).*(plan|strategy)",
+          "(want|need).*(to make sure|ensure|verify)",
+          "(haven't|might have).*(missed|overlooked)"
+        ]
+      }
+    },
+    "principal-engineer": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "high",
+      "description": "Apply rigorous first-principles engineering analysis to any technical task",
+      "promptTriggers": {
+        "keywords": [
+          "implement",
+          "build",
+          "create",
+          "write",
+          "develop",
+          "add feature",
+          "new feature",
+          "debug",
+          "fix",
+          "solve",
+          "troubleshoot",
+          "broken",
+          "not working",
+          "issue",
+          "problem",
+          "bug",
+          "error",
+          "optimize",
+          "improve",
+          "refactor",
+          "enhance",
+          "performance",
+          "slow",
+          "faster",
+          "efficient",
+          "design",
+          "architect",
+          "architecture",
+          "structure",
+          "organize",
+          "plan",
+          "approach",
+          "strategy",
+          "review",
+          "analyze",
+          "evaluate",
+          "check",
+          "assess",
+          "investigate",
+          "best way",
+          "right way",
+          "correct way",
+          "should i",
+          "how do i",
+          "how to",
+          "what's the best",
+          "which approach",
+          "trade-off",
+          "tradeoff",
+          "pros and cons",
+          "alternative",
+          "better way",
+          "complex",
+          "complicated",
+          "messy",
+          "clean up",
+          "simplify",
+          "scale",
+          "scalability",
+          "production",
+          "edge case",
+          "corner case"
+        ],
+        "intentPatterns": [
+          "(how|what).*(best|right|correct|proper).*(way|approach|method)",
+          "(should i|can i|would you).*(use|implement|build|create)",
+          "(implement|build|create|write|add).*(feature|function|component|service|api)",
+          "(debug|fix|solve|troubleshoot).*(bug|error|issue|problem)",
+          "(optimize|improve|make.*faster|speed up|enhance)",
+          "(refactor|restructure|reorganize|clean up)",
+          "(design|architect|plan).*(system|architecture|approach|solution)",
+          "(review|analyze|evaluate|assess).*(code|implementation|approach|design)",
+          "(performance|slow|bottleneck|inefficient)",
+          "(trade.*off|tradeoff|alternative|option|choice)",
+          "(complex|complicated|messy|hard to understand)",
+          "(scale|scalability|production|real world)",
+          "(is this|does this).*(right|correct|good|best)",
+          "what.*think.*(about|of)",
+          "(help|assist).*(with|me).*(implement|build|design|fix|optimize)"
+        ]
+      },
+      "contextTriggers": {
+        "fileTypes": [
+          ".ts",
+          ".tsx",
+          ".js",
+          ".jsx",
+          ".py",
+          ".go",
+          ".rs",
+          ".java",
+          ".c",
+          ".cpp",
+          ".h",
+          ".hpp"
+        ],
+        "description": "Activate for any serious engineering work in code files"
+      }
+    },
+    "refactor-planner": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "refactor",
+          "restructure",
+          "reorganize",
+          "improve code",
+          "modernize",
+          "code structure",
+          "better organization",
+          "technical debt",
+          "code smell",
+          "design patterns",
+          "getting large",
+          "getting complex",
+          "legacy code",
+          "messy code"
+        ],
+        "intentPatterns": [
+          "(refactor|restructure|reorganize).*(code|component|service|module)",
+          "improve.*(organization|structure|architecture)",
+          "(need|want).*(better|cleaner).*(organization|structure)",
+          "(code|component|file).*(is|getting).*(large|complex|messy)",
+          "(modernize|update).*(legacy|old).*(code|patterns)",
+          "(consolidate|deduplicate).*(code|logic|patterns)"
+        ]
+      }
+    },
+    "web-research-specialist": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "research",
+          "find solution",
+          "search for",
+          "look up",
+          "debug",
+          "debugging",
+          "error",
+          "getting error",
+          "how do others",
+          "how to",
+          "best practices",
+          "pros and cons",
+          "compare",
+          "comparison",
+          "stack overflow",
+          "github issues",
+          "similar issues"
+        ],
+        "intentPatterns": [
+          "(research|find|search|look up).*(solution|information|approach)",
+          "(how|what).*(others|developers).*(implement|approach|handle)",
+          "(debug|fix|solve).*(error|issue|problem)",
+          "(getting|encountering|having).*(error|issue|problem)",
+          "(compare|comparison).*(different|various).*(solutions|approaches|libraries)",
+          "(pros and cons|advantages).*(of)",
+          "(best practice|recommended way).*(to|for)"
+        ]
+      }
+    }
+  }
+}

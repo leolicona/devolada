@@ -26,6 +26,7 @@ pnpm --filter @devolada/api db:migrate:local  # apply migrations to the local D1
 pnpm -r --if-present typecheck                # typecheck every workspace
 pnpm -r --if-present test                     # tests (infrastructure defined in docs/TESTING.md)
 node scripts/spec-lint.mjs                    # local golden-rule enforcement
+pnpm setup:claude                             # hook deps (.claude/hooks) — required for skill auto-activation
 ```
 
 Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` creates a demo ISP (`demo@devolada.app`), password `devolada123`. `/dev/*` routes exist only with `ENVIRONMENT=dev`.

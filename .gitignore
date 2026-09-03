@@ -11,4 +11,9 @@ dist/
 test-results/
 playwright-report/
 dist-passkey/
-.claude/
+
+# Claude Code
+.claude/settings.local.json
+.claude/hooks/node_modules/
+# Installer store for .claude/skills (provenance in skills-lock.json)
+.agents/

@@ -1,4 +1,4 @@
-import { Alert } from "@devolada/ui";
+import { Alert, ListError, Skeleton } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MembersResponse } from "@devolada/api/businesses-schema";
@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { ROLE_LABELS } from "../auth/roles";
 import { cancelInvitation, resendInvitation, updateMemberRole } from "../auth/session";
 
@@ -84,14 +85,14 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
         Quién puede entrar a este negocio y qué puede hacer.
       </p>
 
-      {members.isPending && <p className="mt-4 text-sm text-ink-soft">Cargando…</p>}
+      {members.isPending && <Skeleton className="mt-4 h-24 w-full" />}
       {members.error && (
-        <Alert variant="destructive" className="mt-4">
-          No pudimos cargar los usuarios.{" "}
-          <button type="button" className="underline" onClick={() => void members.refetch()}>
-            Reintentar
-          </button>
-        </Alert>
+        <ListError
+          what="los usuarios"
+          onRetry={() => void members.refetch()}
+          retrying={members.isRefetching}
+          className="mt-4"
+        />
       )}
 
       {members.data && (
@@ -156,7 +157,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
                       </AlertDialog>
                     </div>
                   ) : (
-                    <span className={`shrink-0 text-sm ${m.email ? "hidden sm:inline" : "hidden"}`}>{ROLE_LABELS[m.role]}</span>
+                    <span className={cn("shrink-0 text-sm", m.email ? "hidden sm:inline" : "hidden")}>{ROLE_LABELS[m.role]}</span>
                   )}
                 </li>
               );

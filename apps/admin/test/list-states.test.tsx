@@ -95,3 +95,64 @@ describe("US-P01: retrying loads the data without leaving the screen", () => {
   });
 
 });
+
+/* 2026-09-03, ui-refactor: D3 said the recipe would be repeated seven
+   times, and it was — every SaaS-era read screen hand-rolled its own
+   underlined "Reintentar" instead of the atom. These are the five that
+   had the state but no test, so the drift could come back unnoticed. */
+describe("US-P01: every admin read screen fails through the same atom", () => {
+  const screens = [
+    { name: "Saldo y recargas", path: "/settings/credit", what: /no pudimos cargar tu saldo/i, down: () => handlers.credit(() => fail("INTERNAL_SERVER_ERROR", 500)) },
+    { name: "Usuarios", path: "/settings/users", what: /no pudimos cargar los usuarios/i, down: () => handlers.members(() => fail("INTERNAL_SERVER_ERROR", 500)) },
+    { name: "Integraciones", path: "/integrations", what: /no pudimos cargar tus integraciones/i, down: () => handlers.integrations(() => fail("INTERNAL_SERVER_ERROR", 500)) },
+    { name: "WispHub", path: "/integrations/wisphub", what: /no pudimos cargar la integración/i, down: () => handlers.integrations(() => fail("INTERNAL_SERVER_ERROR", 500)) },
+  ];
+
+  for (const s of screens) {
+    it(`${s.name}: the failure names the list and offers one real retry button`, async () => {
+      server.use(
+        handlers.session(() => ok(businessActor)),
+        handlers.creditEntries(() => ok({ entries: [], nextCursor: null })),
+        handlers.topUps(() => ok({ topUps: [] })),
+        s.down(),
+      );
+      renderApp(s.path);
+
+      /* D1: an error is announced, never dressed as an empty state */
+      const alert = await screen.findByText(s.what);
+      expect(alert).toBeInTheDocument();
+      /* D3: the atom's button, not an underlined <button> in a sentence */
+      expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    });
+  }
+
+  it("Saldo: tapping Reintentar refetches without leaving the screen (D2)", async () => {
+    let failNext = true;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.creditEntries(() => ok({ entries: [], nextCursor: null })),
+      handlers.topUps(() => ok({ topUps: [] })),
+      handlers.credit(() => {
+        if (failNext) {
+          failNext = false;
+          return fail("INTERNAL_SERVER_ERROR", 500);
+        }
+        return ok({
+          balanceCents: 10000,
+          feeCents: 500,
+          capCents: 5000,
+          minTopUpCents: 5000,
+          step: "ok",
+          topUp: { clabe: "646180157099999999", bank: "STP", beneficiary: "Devolada" },
+        });
+      }),
+    );
+    const router = renderApp("/settings/credit");
+
+    await userEvent.click(await screen.findByRole("button", { name: /reintentar/i }));
+
+    expect(await screen.findByText(/cada validación cuesta/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos cargar tu saldo/i)).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/settings/credit");
+  });
+});

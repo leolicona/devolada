@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, RefreshCw, TriangleAlert, Check, Link as LinkIcon, Share2 } from "lucide-react";
-import { Alert, Amount, Card, Skeleton } from "@devolada/ui";
+import { Alert, Amount, Card, ListError, Skeleton } from "@devolada/ui";
 import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -10,6 +10,7 @@ import { roleCan } from "@devolada/api/role-matrix";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useDisplaySettings, useSession } from "../auth/session";
 
 /* Cobros — who owes what, read live from WispHub (cobros-live spec,
@@ -156,7 +157,7 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
             </div>
           )}
           <ul
-            className={`${canOperate && linkUrl ? "" : "border-t border-line-soft "}bg-muted/50 px-4 py-2`}
+            className={cn(!(canOperate && linkUrl) && "border-t border-line-soft", "bg-muted/50 px-4 py-2")}
             aria-label={`Facturas de ${group.name}`}
           >
             {group.cobros.map((c) => (
@@ -236,7 +237,7 @@ export function CobrosScreen() {
             disabled={query.isFetching}
             aria-label="Actualizar"
           >
-            <RefreshCw className={`size-4 ${query.isFetching ? "animate-spin" : ""}`} aria-hidden />
+            <RefreshCw className={cn("size-4", query.isFetching && "animate-spin")} aria-hidden />
             Actualizar
           </Button>
         </div>
@@ -245,12 +246,12 @@ export function CobrosScreen() {
       {/* D7: a failed read says so — never an empty claim, never stale
           data presented as fresh */}
       {query.error && (
-        <Alert variant="destructive" className="mt-4 flex items-center justify-between gap-4">
-          <span>No pudimos consultar tus cobros en WispHub.</span>
-          <Button variant="outline" onClick={() => void query.refetch()}>
-            Reintentar
-          </Button>
-        </Alert>
+        <ListError
+          what="tus cobros en WispHub"
+          onRetry={() => void query.refetch()}
+          retrying={query.isRefetching}
+          className="mt-4"
+        />
       )}
 
       {query.data && !query.data.complete && (

@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { formatTime } from "@/lib/datetime";
+import { cn } from "@/lib/utils";
 import { useDisplaySettings, useSession } from "../auth/session";
 import { ENTRY_LABELS } from "../credit/CreditCard";
 import { STEP_COPY } from "../credit/CreditChip";
@@ -103,7 +104,7 @@ function SettingField({ setting }: { setting: Setting }) {
         ) : (
           <Input
             id={id}
-            className={`mt-1 ${setting.type === "clabe" ? "font-mono" : ""}`}
+            className={cn("mt-1", setting.type === "clabe" && "font-mono")}
             prefix={isCents ? "$" : undefined}
             inputMode={isCents || setting.type === "int" || setting.type === "clabe" ? "decimal" : undefined}
             value={value}
@@ -272,7 +273,7 @@ function BusinessesTab() {
                       <span className="block text-sm font-medium">{b.name}</span>
                       <span className="block text-sm text-ink-soft">{b.email}</span>
                     </span>
-                    <span className={`flex items-center gap-1 text-sm ${step.tone}`}>
+                    <span className={cn("flex items-center gap-1 text-sm", step.tone)}>
                       <Icon className="size-4" aria-hidden />
                       {step.label}
                     </span>

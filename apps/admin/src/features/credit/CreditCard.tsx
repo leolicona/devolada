@@ -1,4 +1,4 @@
-import { Alert, Amount, Card, Skeleton, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Card, ListError, Skeleton, parseMoney } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api, ApiError } from "@/lib/api";
 import { API_BASE } from "@/lib/base";
 import { formatTime } from "@/lib/datetime";
+import { cn } from "@/lib/utils";
 import { useDisplaySettings } from "../auth/session";
 import { STEP_COPY } from "./CreditChip";
 
@@ -30,6 +31,16 @@ export const ENTRY_LABELS: Record<CreditEntriesResponse["entries"][number]["kind
 };
 
 const POLL_MS = 5000;
+
+function StepMark({ step }: { step: keyof typeof STEP_COPY }) {
+  const { label, icon: Icon, tone } = STEP_COPY[step];
+  return (
+    <span className={cn("flex items-center gap-1 text-sm font-medium", tone)}>
+      <Icon className="size-4 shrink-0" aria-hidden />
+      {label}
+    </span>
+  );
+}
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [done, setDone] = useState(false);
@@ -195,18 +206,22 @@ export function CreditCard() {
       <h2 className="text-base font-semibold">Saldo y recargas</h2>
       {credit.isPending && <Skeleton className="mt-4 h-10 w-48" />}
       {credit.error && (
-        <Alert variant="destructive" className="mt-4">
-          No pudimos cargar tu saldo.{" "}
-          <button type="button" className="underline" onClick={() => void credit.refetch()}>
-            Reintentar
-          </button>
-        </Alert>
+        <ListError
+          what="tu saldo"
+          onRetry={() => void credit.refetch()}
+          retrying={credit.isRefetching}
+          className="mt-4"
+        />
       )}
       {credit.data && (
         <div className="mt-4 space-y-4">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <Amount cents={credit.data.balanceCents} className="text-3xl font-semibold" />
-            <span className={`text-sm font-medium ${STEP_COPY[credit.data.step].tone}`}>{STEP_COPY[credit.data.step].label}</span>
+            {/* The step is one status with one representation: the same
+                label + icon the chip carries (prepaid-credit D7). It read
+                as colour + text here, which is the shape the FRONTEND law
+                exists to forbid. */}
+            <StepMark step={credit.data.step} />
             <span className="text-sm text-ink-soft">
               Cada validación cuesta <Amount cents={credit.data.feeCents} />.
             </span>

@@ -2,13 +2,15 @@
 status: in-development
 stories: [US-P01]
 domain: polish
-updated: 2026-08-14
+updated: 2026-09-03
 debt: []
 ---
 
 # Spec: List states — the failed request
 
 > **2026-08-31, retirement PR**: the tienda and store-list scenarios left with `devolada-red`; the rule (a failed list never claims to be empty) stays law on every surviving list.
+
+> **2026-09-03, ui-refactor**: D3 predicted the recipe would be repeated seven times, and after the pivot it was — six SaaS-era read screens had grown their own `<Alert>` with an underlined "Reintentar" instead of the atom. They now all call `ListError`. The screen list below is the post-pivot one.
 
 Both apps already show a skeleton while data loads and an honest sentence when there is none. The third state was missing: **when the request fails, every list currently renders its empty state.** "Todavía no tienes movimientos" is what a shopkeeper sees when the network dropped — and the reasonable thing for them to conclude is that the charge they just made did not record. This spec is about never telling that lie again.
 
@@ -27,7 +29,7 @@ No API change. The states come from what TanStack Query already exposes: `isPend
 
 ## UI Contract
 
-Screens covered: admin **Cobros** (feed), **Tiendas** (list and detail), **Entregas**; store PWA **Caja**, **Movimientos**.
+Screens covered, every admin read path: **Pagos** (feed), **Enlaces**, **Cobros** (WispHub), **Saldo y recargas**, **Usuarios**, **Integraciones**, **WispHub**, **Elegir negocio**. (The store-era screens — Tiendas, Entregas, PWA Caja and Movimientos — left with `devolada-red`.)
 
 - `ListError`: alert-triangle icon, one sentence naming the list, "Reintentar" button. Error tone from tokens (`bg-error-soft`, `border-error-line`, `text-error`), `role="alert"` so it is announced.
 - Retry shows its pending state on the button while the refetch runs, so a slow connection does not read as a dead tap.
@@ -42,6 +44,8 @@ Screens covered: admin **Cobros** (feed), **Tiendas** (list and detail), **Entre
 
 ## Definition of Done
 
-- [x] Scenarios 1–2 automated in the admin (`apps/admin/test/list-states.test.tsx`, 4 tests)
-- [x] Scenarios 3–4 automated in the PWA (`apps/tienda/test/list-states.test.tsx`, 4 tests)
-- [x] The five screens above check `isError` before emptiness
+- [x] Scenarios 1–2 automated in the admin (`apps/admin/test/list-states.test.tsx`, 8 tests)
+- [x] Scenarios 3–4 automated in the PWA — left with `devolada-red` (2026-08-31)
+- [x] Every screen above checks `isError` before emptiness
+- [x] Every screen above renders the failure through `ListError`, not its own
+      recipe (2026-09-03) — the four that had the state but no test now have one

@@ -5,6 +5,7 @@ import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
@@ -153,7 +154,7 @@ export function LinksScreen() {
                 void queryClient.invalidateQueries({ queryKey: ["links-roster"] });
               }}
             >
-              <RefreshCw className={`size-4 ${roster.isFetching ? "animate-spin" : ""}`} aria-hidden />
+              <RefreshCw className={cn("size-4", roster.isFetching && "animate-spin")} aria-hidden />
               Actualizar
             </Button>
           </span>

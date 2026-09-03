@@ -100,6 +100,6 @@ Child spec: [account-hub.spec.md](../../docs/admin/account-hub.spec.md) (US-A05)
 - [x] PR A (#159): Cuenta (avatar with initials + credit-step glyph) as the fifth
       section at both widths; hub with sub-pages under `/settings`;
       Cerrar sesión unified at the hub's foot; `userName` on `/auth/me`
-- [ ] PR B: the phone's header strip retires — "Saldo bajo" as a one-line
+- [x] PR B (#160): the phone's header strip retires — "Saldo bajo" as a one-line
       strip dismissed by hand, observation chip only in the hub and on the
       integration page; amends prepaid-credit D7 UI Contract, shell D2, IA

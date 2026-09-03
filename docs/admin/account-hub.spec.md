@@ -1,5 +1,5 @@
 ---
-status: in-development
+status: current # shell round complete: PR A (hub) + PR B (the phone's header)
 stories: [US-A05]
 domain: admin
 updated: 2026-09-03
@@ -188,20 +188,21 @@ list).
 
 ## Definition of Done
 
-- [ ] Scenarios 1–6 and 8 automated (`apps/admin/test/account-hub.test.tsx`,
+- [x] Scenarios 1–6 and 8 automated (`apps/admin/test/account-hub.test.tsx`,
       plus the repointed settings/credit/memberships/identity suites)
-- [ ] Scenario 7 asserted in `apps/api/test/business-memberships.test.ts`
+- [x] Scenario 7 asserted in `apps/api/test/business-memberships.test.ts`
 - [x] Keyboard walk (`tests/e2e/keyboard.spec.ts`) updated: Cuenta replaces
       Configuración; the sidebar's Cerrar sesión stop is gone
 - [x] The real-API journeys (`tests/passkey/*`, run by the dev deploy, not
       by PR CI) travel through the avatar to Usuarios and to the passkey
       card — repointed after #159's deploy-dev run found them at `/settings`
-- [ ] Settings spec, shell spec, IA and TASKS.md annotated
+- [x] Settings spec, shell spec, IA and TASKS.md annotated
 - [x] Design review of the hub at 360/768/1280, light + dark
       (`.design/devolada/DESIGN_REVIEW-cuenta.md`, PR #159)
-- [ ] PR B: scenarios 9–11 automated (`credit.test.tsx`, `shell.test.tsx`);
-      prepaid-credit UI Contract, shell D2 and the IA amended; captures of
-      the phone without its header
+- [x] PR B: scenarios 9–11 automated (`credit.test.tsx`, `shell.test.tsx`,
+      the strip's axe pass in `a11y.test.tsx`); prepaid-credit UI Contract,
+      shell D2 and the IA amended; captures of the phone without its header
+      (`.design/devolada/DESIGN_REVIEW-cuenta-b.md`, PR #160)
 
 ## Open items
 

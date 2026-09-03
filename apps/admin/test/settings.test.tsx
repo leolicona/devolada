@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
@@ -204,22 +204,24 @@ describe("US-R02: the reconciliation policy is the business's", () => {
     expect(await screen.findByText(/tratamiento efectivo/)).toBeInTheDocument();
   });
 });
-/* design-review 2026-09-01 (could improve): the in-page section index. */
-describe("Configuración carries an in-page index", () => {
-  it("links every section the role can use, as anchors", async () => {
+/* US-A04, D10: the in-page index retired — three cards need no table of
+   contents, and the ids it linked to are still the deep-link contract. */
+describe("Configuración has no in-page index", () => {
+  it("renders no section nav, and keeps the ids the deep links land on", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
     );
     renderApp("/settings/business");
 
-    const nav = await screen.findByRole("navigation", { name: "Secciones de configuración" });
-    const { getByRole } = within(nav);
+    expect(await screen.findByRole("heading", { name: "Pago directo por SPEI" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Secciones de configuración" })).not.toBeInTheDocument();
     for (const label of ["Pago directo", "Política de conciliación", "Zona y hora"]) {
-      expect(getByRole("link", { name: label })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
-    /* settings D9: the fee has no card of its own anymore */
-    expect(within(nav).queryByRole("link", { name: "Cargo por servicio" })).not.toBeInTheDocument();
-    expect(getByRole("link", { name: "Política de conciliación" })).toHaveAttribute("href", "#politica");
+    /* account-hub D4: #spei, #politica and #zona still have somewhere to land */
+    for (const id of ["spei", "politica", "zona"]) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
   });
 });

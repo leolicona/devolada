@@ -145,7 +145,8 @@ list).
   rostro"; **Cerrar sesión** (outline, `LogOut` icon) at the foot.
 - **Sub-pages**: `/settings/business` keeps the business cards and their
   ids (`#spei`, `#politica`, `#zona` — `#cargo` retired with its card,
-  settings D9) plus the in-page index when three or more render; `/settings/credit` = `CreditCard`;
+  settings D9; the in-page index retired 2026-09-03, settings D10 — the
+  ids remain, the anchor row does not); `/settings/credit` = `CreditCard`;
   `/settings/users` = `UsersCard`; `/settings/security` = `PasskeyCard`.
   Each sub-page's `h1` is the row's label; "Volver a Cuenta" shows below
   `lg`. A sub-page the role may not use renders nothing of it and

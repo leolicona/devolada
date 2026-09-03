@@ -45,10 +45,12 @@ Two things this map asserts and the router does not yet:
   never disabled. From `lg` the rail and the sub-page are two columns;
   below `lg` the rail is the page and each row opens full width with
   "Volver a Cuenta" (account-hub D6).
-- **Tertiary navigation** — the in-page anchor index inside a sub-page,
-  rendered only when three or more cards do (`SectionIndex`). After the
-  split no sub-page has three cards, so the index renders nowhere; it stays
-  in the code as the growth valve S4 names.
+- **Tertiary navigation** — none. The in-page anchor index retired
+  2026-09-03 (settings D10): a page of three cards does not need a table of
+  contents, and under the nav, the rail and the page title it read as a
+  fourth layer. The card **ids** survive it — they are the deep-link
+  contract, not navigation. Nothing replaces it after the split: S4's
+  ceiling is what keeps a page short enough to not want one.
 - **Utility navigation** — the credit chip (sidebar) and the "Saldo bajo"
   strip (phone) deep-link to `/settings/credit`; the missing-CLABE banner
   and the wizard's "Configurar mi CLABE" deep-link to
@@ -149,7 +151,6 @@ One card each, unchanged. Their hierarchy is the card's own.
 | `AccountRail` / `RailGroup` / `RailRow` | the hub | Rows filtered by the role matrix; the Integraciones row is the one that leaves the tree (S3). |
 | `SubPage` | every sub-page | "Volver a Cuenta" below `lg`; the title is optional — cards that carry their own heading pass none. |
 | `SectionCard` | direct-payment, preferences | Card + `h3` + `id` for the anchor; the id is the deep-link contract, so ids outlive the pages they sit on. |
-| `SectionIndex` | direct-payment, preferences | Renders only at ≥3 cards. Dormant after the split, by design. |
 | `CreditCard` · `UsersCard` · `PasskeyCard` | their sub-pages | One card is the whole page; the page adds nothing but the frame. |
 | `CreditChip` / `CreditStrip` | shell | Not part of the hub, but their only target is inside it. |
 
@@ -204,7 +205,8 @@ The rail grows by rows; a page does not grow by cards (S4).
   and Preferencias.** One page was holding a payment channel, a money rule
   and a clock format — three answers to three unrelated questions, sharing
   a title that named none of them. Split, each row says what it is and the
-  in-page index stops being needed to find anything. **Cost, accepted**: a
+  in-page index stops being needed to find anything — it was removed the
+  same day (settings D10). **Cost, accepted**: a
   second route, a hash migration for `#zona`, and a permanent redirect from
   `/settings/business`. **Rejected**: keeping one page with three cards (the
   cheapest option and the one that made "Configuración" mean nothing);

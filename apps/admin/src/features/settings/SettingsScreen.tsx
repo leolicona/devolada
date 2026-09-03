@@ -52,27 +52,12 @@ function SectionCard({ title, id, children }: { title: string; id?: string; chil
   );
 }
 
-/* design-review 2026-09-01 (could improve): Configuración is a long single
-   column — an in-page index beats scrolling ~3,000px to reach Usuarios.
-   Anchors, not tabs: the page stays one document, the URL stays shareable
-   (the Saldo chip already deep-links #saldo). Entries follow the same
-   role gates as the cards — roles hide, never tease. */
-function SectionIndex({ entries }: { entries: { href: string; label: string }[] }) {
-  if (entries.length < 3) return null;
-  return (
-    <nav aria-label="Secciones de configuración" className="mt-1">
-      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {entries.map((e) => (
-          <li key={e.href}>
-            <a href={e.href} className="text-link hover:underline">
-              {e.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
+/* D10 (2026-09-03): no in-page index. It was born when this page was
+   ~3,000px and ended at Usuarios; the hub took four cards away (account-hub
+   D4) and the fee took a fifth (D9), leaving three cards a reader sees
+   without scrolling — a table of contents for a page you can already see
+   is furniture. The ids stay: #spei, #politica and #zona are the deep-link
+   contract the banners and HASH_HOMES depend on. */
 
 /* Pago directo por SPEI (direct-payment spec, US-D05). D4: the account
    is the ISP's own — the money never touches Devolada. Settings D9: the
@@ -401,16 +386,6 @@ export function BusinessSettingsScreen() {
 
   return (
     <SubPage title="Configuración">
-      {data && (
-        <SectionIndex
-          entries={[
-            { href: "#spei", label: "Pago directo" },
-            { href: "#politica", label: "Política de conciliación" },
-            { href: "#zona", label: "Zona y hora" },
-          ]}
-        />
-      )}
-
       {isPending && (
         <div className="mt-4 space-y-4">
           {[0, 1, 2].map((k) => (

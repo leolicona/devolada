@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
-import { formatTime } from "@/lib/datetime";
+import { formatDateRange, formatTime } from "@/lib/datetime";
 import { useDisplaySettings, useSession } from "../auth/session";
 
 /* Pagos (US-A01, payments-and-classes D4/D5). Polling every 5s — "live"
@@ -402,10 +402,15 @@ export function FeedScreen() {
   const [to, setTo] = useState("");
   /* design-review 2026-09-01 (should fix): on a phone the header stacked
      alert + search + dates + three lines of chips before the first row.
-     The dates fold behind "Fechas" below sm — and stay open once one is
-     set, so an active filter is never invisible. */
+     The dates fold behind "Fechas" below sm.
+     design-review 2026-09-02 (pagos-filtros, D4): the fold used to stay
+     open once a date was set, so the filter was never invisible — at the
+     price of a toggle that reported a state change it never performed.
+     Now the toggle is the truth, and the active range moves onto its
+     label instead. */
   const [datesOpen, setDatesOpen] = useState(false);
-  const showDates = datesOpen || from !== "" || to !== "";
+  const showDates = datesOpen;
+  const rangeLabel = formatDateRange(from, to);
   const { data: actor } = useSession();
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
 
@@ -416,6 +421,17 @@ export function FeedScreen() {
   }, [qInput]);
 
   const filters: Filters = { chip: status, q, from, to };
+  /* D10: a list filtered down to nothing is not a business that was
+     never paid — the empty copy must say which it is. */
+  const hasFilters = status !== ALL || q !== "" || from !== "" || to !== "";
+  const clearFilters = () => {
+    setStatus(ALL);
+    setQInput("");
+    setQ("");
+    setFrom("");
+    setTo("");
+    setDatesOpen(false);
+  };
   const feed = useInfiniteQuery<FeedResponse, ApiError>({
     queryKey: ["feed", status, q, from, to],
     queryFn: ({ pageParam }) =>
@@ -463,76 +479,88 @@ export function FeedScreen() {
         </Alert>
       )}
 
-      {/* D4: customer search and the date range, in the business's zone.
-          The date pickers are the platform's own control on purpose — the
-          browser owns their display language (page `lang` does not move
-          Chromium); confirming they read dd/mm on a Mexican device rides
-          the scheduled dev observation (spec DoD). */}
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-48 flex-1">
-          <Label htmlFor="feed-q">Cliente</Label>
-          <Input
-            id="feed-q"
-            type="search"
-            className="mt-1"
-            placeholder="Nombre o usuario"
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-          />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="sm:hidden"
-          aria-expanded={showDates}
-          aria-controls="feed-dates"
-          onClick={() => setDatesOpen((v) => !v)}
-        >
-          <CalendarDays className="size-4" aria-hidden />
-          Fechas
-        </Button>
-        <div id="feed-dates" className={`${showDates ? "flex" : "hidden"} w-full items-end gap-3 sm:flex sm:w-auto`}>
-          <div className="flex-1 sm:flex-none">
-            <Label htmlFor="feed-from">Desde</Label>
-            <Input
-              id="feed-from"
-              type="date"
-              lang="es-MX"
-              className="mt-1"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </div>
-          <div className="flex-1 sm:flex-none">
-            <Label htmlFor="feed-to">Hasta</Label>
-            <Input
-              id="feed-to"
-              type="date"
-              lang="es-MX"
-              className="mt-1"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* D7: status filters are shadcn Tabs. D8 (US-P04): the list lives
           inside TabsContent — a tab that advertises aria-controls without
-          a panel points a screen reader at nothing. */}
+          a panel points a screen reader at nothing.
+          design-review 2026-09-02 (pagos-filtros, D4): the chips come
+          first — they choose the view, the search and the dates narrow it
+          — and the whole bar sits directly on the panel it labels, as in
+          Cobros. */}
       <Tabs value={status} onValueChange={setStatus} className="mt-4">
-        {/* design-review 2026-09-01 (should fix): one scrollable line on a
-            phone instead of three wrapped ones; desktop keeps the wrap */}
-        <TabsList
-          aria-label="Filtrar por estado"
-          className="max-w-full flex-nowrap overflow-x-auto pb-1 sm:flex-wrap sm:overflow-x-visible sm:pb-0"
-        >
-          {statusFilters.map((f) => (
-            <TabsTrigger key={f.value} value={f.value}>
-              {f.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <section aria-label="Filtros">
+          {/* design-review 2026-09-01 (should fix): one scrollable line on
+              a phone instead of three wrapped ones; desktop keeps the wrap.
+              design-review 2026-09-02: the rail bleeds to the screen edge
+              (a cut that stops 16px short read as clipping, not as "more"),
+              keeps 4px on both axes for the 3px focus ring that
+              `overflow-x: auto` — which forces `overflow-y: auto` — was
+              slicing off, and hides the scrollbar a classic-scrollbar OS
+              would paint under the chips. */}
+          <TabsList
+            aria-label="Filtrar por estado"
+            className="-mx-4 -my-1 flex flex-nowrap overflow-x-auto px-4 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:my-0 sm:flex-wrap sm:overflow-x-visible sm:p-0"
+          >
+            {statusFilters.map((f) => (
+              <TabsTrigger key={f.value} value={f.value}>
+                {f.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {/* D4: customer search and the date range, in the business's
+              zone. The native date pickers render `mm/dd/yyyy` whatever
+              `lang` says (measured 2026-09-02 with es-MX on the page, the
+              input and the browser) — the calendar that replaces them is
+              the next spec revision. */}
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div className="min-w-48 flex-1">
+              <Label htmlFor="feed-q">Cliente</Label>
+              <Input
+                id="feed-q"
+                type="search"
+                className="mt-1 h-11 sm:h-10"
+                placeholder="Nombre o usuario"
+                value={qInput}
+                onChange={(e) => setQInput(e.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 sm:hidden"
+              aria-expanded={showDates}
+              aria-controls="feed-dates"
+              onClick={() => setDatesOpen((v) => !v)}
+            >
+              <CalendarDays className="size-4" aria-hidden />
+              {rangeLabel ?? "Fechas"}
+            </Button>
+            <div id="feed-dates" className={`${showDates ? "flex" : "hidden"} w-full items-end gap-3 sm:flex sm:w-auto`}>
+              <div className="flex-1 sm:flex-none">
+                <Label htmlFor="feed-from">Desde</Label>
+                <Input
+                  id="feed-from"
+                  type="date"
+                  lang="es-MX"
+                  className="mt-1 h-11 sm:h-10"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </div>
+              <div className="flex-1 sm:flex-none">
+                <Label htmlFor="feed-to">Hasta</Label>
+                <Input
+                  id="feed-to"
+                  type="date"
+                  lang="es-MX"
+                  className="mt-1 h-11 sm:h-10"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
         <TabsContent value={status}>
 
       {failedFirstLoad && (
@@ -548,7 +576,16 @@ export function FeedScreen() {
 
       {rows.length === 0 && !feed.isPending && !feed.isError && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Sin pagos por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar.
+          {hasFilters ? (
+            <>
+              Ningún pago coincide con estos filtros.{" "}
+              <button type="button" className="underline" onClick={clearFilters}>
+                Limpiar filtros
+              </button>
+            </>
+          ) : (
+            "Sin pagos por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar."
+          )}
         </p>
       )}
 

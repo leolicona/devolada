@@ -332,8 +332,12 @@ describe("US-R03: the proof and the retry live on the row", () => {
   });
 });
 /* design-review 2026-09-01 (should fix): the mobile header's height. */
-describe("the date filters fold behind 'Fechas'", () => {
-  it("the toggle opens the fields and reports its state", async () => {
+/* payments-and-classes D4, amended 2026-09-02 (pagos-filtros review):
+   the fold used to stay open once a date was set, so the filter was never
+   invisible — and the toggle reported a state change it never performed.
+   Now the toggle is the truth and the range lives on its label. */
+describe("US-R03: the date filters fold behind 'Fechas', and a set range moves onto the label", () => {
+  it("the toggle opens, closes again, and names the active range when closed", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.feed(() => ok(feedOf([charge()]))),
@@ -346,10 +350,46 @@ describe("the date filters fold behind 'Fechas'", () => {
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
-    /* an active filter keeps the fields visible even after closing */
     await userEvent.type(screen.getByLabelText("Desde"), "2026-08-01");
     await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    /* collapsed for real — and the filter is not invisible: the label says it */
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveAccessibleName(/Desde 1 ago/);
+  });
+});
+
+/* payments-and-classes D10 (pagos-filtros review, 2026-09-02) — the
+   US-P01 principle: a list filtered down to nothing is not a business
+   that was never paid, and the copy must say which it is. */
+describe("US-R03: a filtered-to-nothing list never claims the business has never been paid", () => {
+  it("shows the no-match copy with a clear action, and clearing brings the rows back", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => {
+        const filtered = url.searchParams.get("class") === "short" || url.searchParams.get("action") === "failed";
+        return ok(feedOf(filtered ? [] : [charge()]));
+      }),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Pago parcial" }));
+    expect(await screen.findByText(/Ningún pago coincide con estos filtros/)).toBeInTheDocument();
+    expect(screen.queryByText(/Sin pagos por aquí todavía/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    expect(await screen.findByRole("button", { name: /janely/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Todos" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keeps the first-run copy when nothing is filtered", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed(() => ok(feedOf([], { count: 0, totalCents: 0, startedAtMs: Date.UTC(2026, 7, 14, 6) }))),
+    );
+    renderApp("/");
+    expect(await screen.findByText(/Sin pagos por aquí todavía/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Limpiar filtros" })).not.toBeInTheDocument();
   });
 });
 /* docs/integrations/integrations-hub.spec.md — the hub's face in Pagos. */

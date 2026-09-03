@@ -2,6 +2,12 @@
 
 Conscious technical debt: things deliberately postponed during a spec. Each entry states what was postponed, why that was reasonable, and what makes it payable.
 
+## TD-019 — The 44px floor is asserted on one region of the admin, not the admin
+- Status: open · Origin: pagos-filtros design review (2026-09-02), design-review.spec.md D10
+- `expectTouchTargets` (`tests/e2e/responsive.spec.ts`) was defined and never called, while design-review.spec.md D1 and responsive.spec.md scenario 2 reported the floor as proven. It is now invoked for `section[aria-label="Filtros"]` on `/payments` at 360px. Everything else the admin renders on a phone is unmeasured — and the first measurement says it fails: `Button`'s default size is `h-10` = 40px (`apps/admin/src/components/ui/button.tsx`), so Configurar, Verlos, Ver comprobante, Cargar más and every other default button are under the floor; the admin `Input` is `h-10` too.
+- Why it was reasonable: widening the assertion to the whole admin turns a filter-bar PR into an app-wide density change. Whether `Button` becomes `h-11` (and `Input` with it) on every screen is a design decision about the admin's desktop density that deserves its own round with captures, not a side effect of a green test.
+- Payable by: one PR that (1) decides `h-11` vs `h-11 sm:h-10` for `Button` and `Input`, with before/after captures of Settings, Integraciones and Links at 360 and 1280, (2) widens `expectTouchTargets` to `main` on every admin route the e2e suite visits, and (3) removes the scope from the Pagos test. Also the moment to give the admin section of FRONTEND.md a touch floor of its own — today ≥48px is `apps/pago` law and the admin has none.
+
 ## TD-016 — D13 may falsely reject SPIN tracking keys (the hyphen is unmeasured)
 - Status: open · Origin: the bank-email spike (branch `feat/email-provisional-match`, 2026-08-27) — the feature was discarded, this finding is independent of it
 - A real SPIN by OXXO transfer arrived carrying the clave `SPIN-20260824010834IVJWHVYH` — hyphen included — as relayed by Banco Azteca's own notification email. validation.spec.md D13 enforces `^[A-Za-z0-9]{6,30}$`, so a SPIN payer who types the clave exactly as their bank shows it would be refused at the edge with `VALIDATION_ERROR` — the false-reject class D12/D13 exist to prevent, at OXXO scale. Whether Banxico registers the hyphen as part of the clave is unmeasured (n=1 sighting).

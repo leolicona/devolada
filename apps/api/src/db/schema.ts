@@ -38,7 +38,8 @@ export const businesses = sqliteTable("businesses", {
   name: text("name").notNull(),
   /* Display/business copy of the contact email; auth never reads it */
   email: text("email").notNull().unique(),
-  /* Fee the end customer pays; the SPEI fee falls back to it (direct-payment D3) */
+  /* Birth default of the service fee; the SPEI fee falls back to it until
+     one is saved (direct-payment D3). Not editable since settings D9. */
   serviceFeeCents: integer("service_fee_cents").notNull().default(1500),
   /* Display settings (settings spec D5, D6). Mexico spans three zones, so
      the ISP — not the browser — decides where its business day starts. */

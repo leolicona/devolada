@@ -119,6 +119,16 @@ Format:
 - Regression test: none in code — the defect lives in the deploy, not the app (the app's own behaviour with and without the secret is already covered under US-D15). The deploy log's warning is the standing check.
 
 
+## BUG-017 — Two cards edited "the service fee", and only one of them was the fee
+- Status: **fixed** (2026-09-03 — settings.spec.md D9)
+- Detected: 2026-09-03 · owner, on the dev pilot's Configuración (`/settings/business`)
+- Affected spec: docs/admin/settings.spec.md (UI contract, D9), docs/direct-payment/direct-payment.spec.md (D3), docs/admin/account-hub.spec.md (D4)
+- Symptom: Configuración offered **Cargo por servicio** and, inside Pago directo por SPEI, **Cargo por servicio SPEI** — two fields, two save buttons, for what the payer sees as one number. Once the SPEI fee had been saved the first card's value changed nothing the payer could see; before, it was the one that counted, and the second card's helper said so in a sentence nobody reads twice.
+- Root cause: the general fee was the store channel's, and the SPEI fee was designed as its per-channel override (direct-payment D3). The store network left (pivot D15) and the retirement PR kept the general fee "as the fallback" — which kept its card too. An override with nothing left to override is a duplicate.
+- **The lesson**: when a channel leaves, its settings leave with it — a fallback is a value, not a card. What survives a retirement has to be re-read from the payer's side: how many numbers can they see?
+- Fix: one control — the SPEI card's field, opened on the fee in force, required, saving `speiServiceFeeCents`; `serviceFeeCents` is read-only (the birth default) and left the PATCH; `#cargo` lands on the SPEI card.
+- Regression test: `apps/admin/test/settings.test.tsx` — "scenario 5: the page offers the fee once, opened on the fee in force, and saves it as the SPEI fee"; `apps/api/test/settings.test.ts` — "D9 (BUG-017): the general fee is not patchable".
+
 ## BUG-016 — On a phone there was no way to sign out
 - Status: **fixed** (2026-09-02, session round)
 - Detected: 2026-09-02 · owner's question ("no existe un modo de cerrar sesión, correcto?"); dev pilot affected on every phone and tablet

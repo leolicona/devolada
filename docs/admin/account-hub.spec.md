@@ -47,15 +47,17 @@ retires and "Saldo bajo" becomes a strip (D8–D10); it amends
   is the ambient signal PR B will lean on when the phone's chip leaves;
   it costs no space today.
 - **D4 — A hub of sub-pages under `/settings`.** `/settings` is the hub;
-  the areas are routes: `/settings/business` (Cargo por servicio · Pago
-  directo por SPEI · Política de conciliación · Zona horaria y hora),
+  the areas are routes: `/settings/business` (Pago directo por SPEI ·
+  Política de conciliación · Zona horaria y hora — the Cargo por servicio
+  card retired 2026-09-03, settings D9),
   `/settings/credit` (Saldo y recargas), `/settings/users` (Usuarios),
   `/settings/security` (Entrar con huella o rostro). Routes stay English
   identifiers (IA rule). The old anchors keep working: a visit to
   `/settings#saldo`, `#usuarios`, `#cargo`, `#spei`, `#politica` or
   `#zona` is redirected by the hub on mount to the sub-page that holds the
   card (the hash survives on the business page, whose cards keep their
-  ids). **Rejected**: one long page with an in-page index behind the
+  ids; `#cargo` lands on `#spei`, where the one fee lives since settings
+  D9). **Rejected**: one long page with an in-page index behind the
   avatar (not sub-menus: 3,000px of scroll on a phone, and the person's
   cards mixed with the business's).
 - **D5 — Business first; the person's things below; the door last.** The

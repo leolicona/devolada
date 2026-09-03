@@ -114,16 +114,26 @@ describe("US-A05 scenario 5: the old anchors keep landing on their card", () => 
     expect(router.state.location.pathname).toBe("/settings/business");
     expect(router.state.location.hash).toBe("spei");
   });
+
+  it("/settings#cargo lands on the SPEI card, where the one fee lives (settings D9)", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings)));
+    const router = renderApp("/settings#cargo");
+    expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/settings/business");
+    expect(router.state.location.hash).toBe("spei");
+  });
 });
 
 describe("US-A05 scenario 6: each sub-page renders its cards; a phone gets the way back", () => {
-  it("/settings/business holds the four business cards and its index; Volver a Cuenta points at the hub", async () => {
+  it("/settings/business holds the three business cards and its index; Volver a Cuenta points at the hub", async () => {
     server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings)));
     renderApp("/settings/business");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
-    for (const name of [/cargo por servicio/i, /política de conciliación/i, /zona horaria y hora/i]) {
+    for (const name of [/política de conciliación/i, /zona horaria y hora/i]) {
       expect(screen.getByRole("heading", { name })).toBeInTheDocument();
     }
+    /* settings D9: the general fee card is gone; the SPEI card holds the fee */
+    expect(screen.queryByRole("heading", { name: /^cargo por servicio$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Usuarios" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Sesión" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /volver a cuenta/i })).toHaveAttribute("href", "/settings");

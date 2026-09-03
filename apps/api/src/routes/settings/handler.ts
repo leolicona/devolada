@@ -28,8 +28,9 @@ function toSettings(
   integration: Integration | null,
 ): SettingsResponse {
   return {
-    /* With the store network retired, this fee survives as the fallback
-       the SPEI fee inherits when unset (direct-payment D3). */
+    /* The birth default the SPEI fee inherits until one is saved
+       (direct-payment D3); read-only since D9 — the page edits the
+       SPEI fee alone. */
     serviceFeeCents: business.serviceFeeCents,
     timezone: business.timezone as SettingsResponse["timezone"],
     timeFormat: business.timeFormat,
@@ -83,7 +84,6 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
   const [business] = await ctx.db.select().from(businesses).where(eq(businesses.id, ctx.actor.id));
 
   const businessPatch = {
-      ...(body.serviceFeeCents !== undefined ? { serviceFeeCents: body.serviceFeeCents } : {}),
       ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
       ...(body.timeFormat !== undefined ? { timeFormat: body.timeFormat } : {}),
       ...(body.speiClabe !== undefined ? { speiClabe: body.speiClabe } : {}),

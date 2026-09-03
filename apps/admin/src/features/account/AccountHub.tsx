@@ -17,15 +17,17 @@ import { Avatar } from "./Avatar";
    below, the way out last; D6: two columns from lg, a stack below. */
 
 /* D4: the anchors the rest of the admin linked to for months keep
-   landing where their card went. */
-const HASH_HOMES: Record<string, { to: string; keepHash: boolean }> = {
-  saldo: { to: "/settings/credit", keepHash: false },
-  usuarios: { to: "/settings/users", keepHash: false },
-  sesion: { to: "/settings", keepHash: false },
-  cargo: { to: "/settings/business", keepHash: true },
-  spei: { to: "/settings/business", keepHash: true },
-  politica: { to: "/settings/business", keepHash: true },
-  zona: { to: "/settings/business", keepHash: true },
+   landing where their card went. `hash` is the id on the sub-page that
+   holds the card now — `#cargo` lands on the SPEI card, where the one
+   service fee lives since settings D9. */
+const HASH_HOMES: Record<string, { to: string; hash?: string }> = {
+  saldo: { to: "/settings/credit" },
+  usuarios: { to: "/settings/users" },
+  sesion: { to: "/settings" },
+  cargo: { to: "/settings/business", hash: "spei" },
+  spei: { to: "/settings/business", hash: "spei" },
+  politica: { to: "/settings/business", hash: "politica" },
+  zona: { to: "/settings/business", hash: "zona" },
 };
 
 export function AccountLayout() {
@@ -186,7 +188,7 @@ export function AccountIndex() {
     const hash = router.state.location.hash;
     const home = hash ? HASH_HOMES[hash] : undefined;
     if (!home || home.to === "/settings") return;
-    void navigate({ to: home.to, hash: home.keepHash ? hash : undefined, replace: true });
+    void navigate({ to: home.to, hash: home.hash, replace: true });
   }, [router, navigate]);
   if (!actor) return null;
   return (

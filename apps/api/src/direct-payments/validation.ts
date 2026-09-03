@@ -50,7 +50,8 @@ const LEASE_MINUTES = 2;
 const BATCH = 20;
 const minutes = (n: number) => n * 60 * 1000;
 
-/* D3: the SPEI fee falls back to the store fee when unset */
+/* D3: the SPEI fee falls back to the birth default until one is saved
+   (settings D9: the SPEI fee is the only fee the business edits) */
 export function speiFeeCents(business: Isp): number {
   return business.speiServiceFeeCents ?? business.serviceFeeCents;
 }

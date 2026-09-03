@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Amount, Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
+import { Card, Skeleton, parseMoney } from "@devolada/ui";
 import type { SettingsPatchRequest, SettingsResponse } from "@devolada/api/settings-schema";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
@@ -18,11 +18,12 @@ import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
 
-/* Configuración (US-A04): the business's four cards — the fee, the SPEI
-   channel, the reconciliation policy and the two display settings that
-   decide what "today" and "2:30 p.m." mean. Since the account hub
-   (US-A05, D4) this is the sub-page /settings/business; Saldo, Usuarios
-   and the passkeys have pages of their own. */
+/* Configuración (US-A04): the business's three cards — the SPEI channel
+   (with the one service fee, settings D9), the reconciliation policy and
+   the two display settings that decide what "today" and "2:30 p.m."
+   mean. Since the account hub (US-A05, D4) this is the sub-page
+   /settings/business; Saldo, Usuarios and the passkeys have pages of
+   their own. */
 
 const pesos = (cents: number) => (cents / 100).toFixed(2);
 
@@ -73,52 +74,11 @@ function SectionIndex({ entries }: { entries: { href: string; label: string }[] 
   );
 }
 
-/* The general service fee. With the store network retired it survives
-   as the fallback the SPEI fee inherits when unset (direct-payment D3). */
-function MoneyCard({ settings }: { settings: SettingsResponse }) {
-  const save = useSaveSettings();
-  const [fee, setFee] = useState(pesos(settings.serviceFeeCents));
-
-  const feeCents = parseMoney(fee);
-  const valid = feeCents !== null;
-
-  return (
-    <SectionCard title="Cargo por servicio" id="cargo">
-      <div>
-        <Label htmlFor="service-fee">Cargo por servicio</Label>
-        {/* design-review D8: money fields carry the sign */}
-        <Input
-          id="service-fee"
-          prefix="$"
-          inputMode="decimal"
-          className="mt-1"
-          value={fee}
-          onChange={(e) => setFee(e.target.value)}
-        />
-        <p className="mt-1 text-sm text-ink-soft">
-          Lo que paga el cliente además de su cargo del periodo. El pago
-          directo por SPEI usa este monto cuando no tiene uno propio.
-        </p>
-      </div>
-
-      <Button
-        disabled={!valid || save.isPending}
-        onClick={() => save.mutate({ serviceFeeCents: feeCents! })}
-      >
-        {save.isPending ? "Guardando…" : "Guardar cargo por servicio"}
-      </Button>
-      {save.isSuccess && !save.isPending && (
-        <p role="status" className="text-sm font-medium text-success">
-          Guardado.
-        </p>
-      )}
-    </SectionCard>
-  );
-}
-
 /* Pago directo por SPEI (direct-payment spec, US-D05). D4: the account
-   is the ISP's own — the money never touches Devolada. D3: the SPEI fee
-   is separate; empty falls back to the store fee. */
+   is the ISP's own — the money never touches Devolada. Settings D9: the
+   service fee is one number and this is its only control — the field
+   opens on the fee in force and always saves a number, so the API's
+   birth default (direct-payment D3) is never something the owner edits. */
 function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canEditClabe: boolean }) {
   const save = useSaveSettings();
   const [clabe, setClabe] = useState(settings.spei.clabe ?? "");
@@ -134,14 +94,13 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
     if (!bankTouched) setBank(bankForClabe(value) ?? "");
   }
   const [beneficiary, setBeneficiary] = useState(settings.spei.beneficiaryName ?? "");
-  const [fee, setFee] = useState(
-    settings.spei.serviceFeeCents === null ? "" : pesos(settings.spei.serviceFeeCents),
-  );
+  const [fee, setFee] = useState(pesos(settings.spei.effectiveServiceFeeCents));
 
   const clabeValid = /^\d{18}$/.test(clabe.trim());
-  /* Empty = clear: fall back to the store fee (D3) */
-  const feeCents = fee.trim() === "" ? null : parseMoney(fee);
-  const feeValid = fee.trim() === "" || feeCents !== null;
+  /* D9: a fee is required — an empty field is not "clear", it is a
+     payer shown an amount nobody chose */
+  const feeCents = parseMoney(fee);
+  const feeValid = feeCents !== null;
   /* claimed-amount D5: the beneficiary name is recommended, not required —
      empty is a valid configuration, and the API takes ≥3 chars or null */
   const beneficiaryValid = beneficiary.trim() === "" || beneficiary.trim().length >= 3;
@@ -241,6 +200,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
         </div>
         <div>
           <Label htmlFor="spei-fee">Cargo por servicio SPEI</Label>
+          {/* design-review D8: money fields carry the sign */}
           <Input
             id="spei-fee"
             prefix="$"
@@ -248,10 +208,12 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
             className="mt-1"
             value={fee}
             onChange={(e) => setFee(e.target.value)}
-            placeholder={pesos(settings.serviceFeeCents)}
           />
+          {fee.trim() !== "" && !feeValid && (
+            <p className="mt-1 text-sm font-medium text-error">Escribe un monto válido.</p>
+          )}
           <p className="mt-1 text-sm text-ink-soft">
-            Vacío usa el cargo por servicio general ({formatMoney(settings.serviceFeeCents)}).
+            Lo que paga tu cliente además de su cargo del periodo al transferir.
           </p>
         </div>
       </div>
@@ -264,7 +226,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
             speiBank: bank === "" ? null : bank,
             /* D5: empty clears — the API takes ≥3 chars or null */
             speiBeneficiaryName: beneficiary.trim() === "" ? null : beneficiary.trim(),
-            speiServiceFeeCents: feeCents,
+            speiServiceFeeCents: feeCents!,
           })
         }
       >
@@ -442,7 +404,6 @@ export function BusinessSettingsScreen() {
       {data && (
         <SectionIndex
           entries={[
-            { href: "#cargo", label: "Cargo por servicio" },
             { href: "#spei", label: "Pago directo" },
             { href: "#politica", label: "Política de conciliación" },
             { href: "#zona", label: "Zona y hora" },
@@ -464,7 +425,6 @@ export function BusinessSettingsScreen() {
 
       {data && (
         <div className="mt-4 space-y-4">
-          <MoneyCard settings={data} />
           <SpeiCard settings={data} canEditClabe={canClabe} />
           <PolicyCard settings={data} />
           <DisplayCard settings={data} />

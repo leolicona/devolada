@@ -138,7 +138,7 @@ describe("US-B03: roles reach exactly their areas", () => {
     const business = await seedBusiness();
     await seedMember(business, "admin@wifiplus.mx", "admin");
 
-    const fee = await patch("admin@wifiplus.mx", "/settings", { serviceFeeCents: 2000 });
+    const fee = await patch("admin@wifiplus.mx", "/settings", { speiServiceFeeCents: 2000 });
     expect(fee.status).toBe(200);
 
     const clabe = await patch("admin@wifiplus.mx", "/settings", { speiClabe: "646180157000000004" });

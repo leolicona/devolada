@@ -21,6 +21,7 @@ import { SignOutLink } from "../auth/SignOutLink";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 import { CreditBanner, CreditChip, STEP_COPY } from "../credit/CreditChip";
+import { CreditStrip } from "../credit/CreditStrip";
 import { Avatar } from "../account/Avatar";
 import { ObservationChip } from "../integrations/ObservationChip";
 
@@ -216,19 +217,14 @@ export function Shell() {
             name and its amount ended up a screen apart on a wide monitor —
             the Stripe dashboard the brief points at caps its content too. */}
         <div className="mx-auto w-full max-w-7xl">
-        {/* The switcher rides the top on phones; the sidebar holds it on desktop.
-            shell header (2026-09-02): one 48px row — name left, saldo right.
-            Three stacked rows (name, role, chip) took a quarter of a phone
-            before the page title; the role went to the sidebar and to
-            Configuración, the chip lost its idle word (CreditChip). */}
-        <header className="flex h-12 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:hidden">
-          <BusinessSwitcher actor={actor} variant="bar" />
-          <div className="flex shrink-0 items-center gap-2">
-            {actor.observing && <ObservationChip compact />}
-            <CreditChip credit={actor.credit} />
-          </div>
-        </header>
-        <CreditBanner credit={actor.credit} />
+        {/* account-hub D8 (PR B, 2026-09-02): the phone has no header. The
+            business, the switcher and the balance live one tap away in
+            Cuenta; the avatar in the bottom bar wears the credit step (D3);
+            "Saldo bajo" is the strip below, Sin saldo and Pausa keep their
+            banners. The 48px row this replaced had itself replaced three
+            rows the same day — the page title is the first thing now. */}
+        <CreditStrip credit={actor.credit} businessId={actor.id} canTopUp={roleCan(actor.role, "credit", "manage")} />
+        <CreditBanner credit={actor.credit} canTopUp={roleCan(actor.role, "credit", "manage")} />
         {/* business-and-memberships D5 (2026-09-02): born without a CLABE;
             the banner is the wizard's missing step, the owner's to close.
             Both banners stack under sm: a sentence in a 130px column next

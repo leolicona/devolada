@@ -90,6 +90,13 @@ describe("US-P04: the admin passes axe on every section", () => {
     await expectNoViolations(document.body);
   });
 
+  it("Pagos on a low balance: the strip (account-hub D9)", async () => {
+    server.use(handlers.session(() => ok({ ...businessActor, credit: { balanceCents: 2000, step: "low" } })), handlers.feed(() => ok(feed)));
+    renderApp("/");
+    await screen.findByRole("button", { name: /cerrar aviso/i });
+    await expectNoViolations(document.body);
+  });
+
   it("Cuenta: the hub (account-hub scenario 8)", async () => {
     server.use(handlers.session(() => ok(businessActor)));
     renderApp("/settings");

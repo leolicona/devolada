@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-A05]
 domain: admin
-updated: 2026-09-02
+updated: 2026-09-03
 debt: []
 ---
 
@@ -18,11 +18,10 @@ built; sign-out lived in two places (the sidebar's foot, and a card at the
 end of a 3,000px settings page — BUG-016) and the settings page mixed the
 business's cards with the person's.
 
-Decided in the 2026-09-02 interview. **Scope of this spec (PR A)**: the
-avatar, the hub, the sub-pages, the unified sign-out. The retirement of
-the phone's header strip (the "Saldo bajo" strip, the observation chip's
-new home) is **PR B**, which amends `prepaid-credit` D7's UI Contract and
-the IA when it lands; nothing here touches the strip.
+Decided in the 2026-09-02 interview. **PR A** (#159): the avatar, the hub,
+the sub-pages, the unified sign-out (D1–D7). **PR B**: the phone's header
+retires and "Saldo bajo" becomes a strip (D8–D10); it amends
+`prepaid-credit` D7's UI Contract, shell D2 and the IA's Shell section.
 
 ## Decisions
 
@@ -88,6 +87,38 @@ the IA when it lands; nothing here touches the strip.
   `change-password`, but no story covers them and the código flow (better-
   auth D4/D16) would have to extend to a password change. Open item 1.
 
+### PR B — the phone's header retires (2026-09-02, same interview)
+
+- **D8 — The phone has no header.** The 48px row (business name + credit
+  chip) leaves; the page title is the first thing on a phone. The
+  business, the switcher and the balance live one tap away in Cuenta; the
+  avatar in the bottom bar wears the credit step (D3). Decided knowing the
+  row had already shrunk from three rows to one the same day: the owner
+  reaffirmed the goal — the phone is for what matters. From `lg` the
+  sidebar keeps the chip and the observation chip; a monitor has the room.
+  **Rejected**: keeping the one-line bar (48px on every screen for a
+  number the avatar already signals); a business-name subtitle on every
+  screen (five screens repeating one fact).
+- **D9 — "Saldo bajo" is a strip the owner closes, not a toast.** One line
+  above the content (`role="status"`, icon + "Saldo bajo: $X" + Recargar +
+  a close button), phone only. Closing it is remembered per business and
+  step (`localStorage`) until the step changes: a balance that recovers
+  and drops again is announced again. No timer. **Rejected**: a notice that
+  fades in seconds (the owner reading Pagos never saw it — D7 rejected
+  "chip only" for less; WCAG 2.2.1); nothing at all (the IA's rejected
+  "no ambient signal"). Sin saldo and Validación en pausa keep their
+  persistent banners (prepaid-credit D7): money at risk stays loud.
+- **D10 — Recargar only for a role that can; the observation state only
+  where it can be acted on.** The strip and the two banners render
+  Recargar only with `credit: manage` — a viewer reads the state, never a
+  dead button (hide, never tease; this also corrects the banners, which
+  offered it to every role). On a phone the observation state reads in
+  Cuenta's Integraciones row and on the integration's page; the shell
+  chip stays in the sidebar only. **Rejected**: a persistent observation
+  strip on the phone (a configuration the owner chose, shouted on every
+  screen); a badge in Pagos' header (the mode also applies in Cobros and
+  Links).
+
 ## Contract (consumes, adds one field)
 
 `/auth/me` (business actor) gains `userName: string` — the Better Auth
@@ -146,6 +177,14 @@ list).
    `/settings/business` is sent back to the hub (D5, roles hide).
 7. API: `/auth/me` carries `userName` (D2).
 8. a11y: the hub and the four sub-pages pass axe (US-P04).
+9. UI: below `lg` the shell renders no header — no business name, no chip
+   — and the bottom bar's avatar carries the step (D8; the sidebar keeps
+   both chips).
+10. UI: `step: 'low'` shows the strip with the amount; closing it hides
+    it and a reload keeps it hidden; the same business at `'empty'` shows
+    the banner, and back at `'low'` the strip returns (D9).
+11. UI: a viewer at `'low'`/`'paused'` reads the strip/banner without
+    Recargar; the owner gets the link/button (D10).
 
 ## Definition of Done
 
@@ -155,16 +194,16 @@ list).
 - [ ] Keyboard walk (`tests/e2e/keyboard.spec.ts`) updated: Cuenta replaces
       Configuración; the sidebar's Cerrar sesión stop is gone
 - [ ] Settings spec, shell spec, IA and TASKS.md annotated
-- [ ] Design review of the hub at 360/768/1280, light + dark
+- [x] Design review of the hub at 360/768/1280, light + dark
+      (`.design/devolada/DESIGN_REVIEW-cuenta.md`, PR #159)
+- [ ] PR B: scenarios 9–11 automated (`credit.test.tsx`, `shell.test.tsx`);
+      prepaid-credit UI Contract, shell D2 and the IA amended; captures of
+      the phone without its header
 
 ## Open items
 
 1. **Editing the person**: name, email (through a código), password
    change. Needs its own story under auth; the hub's identity card is
    where it would live (D7).
-2. **PR B** — the phone's header strip retires: "Saldo bajo" as a
-   one-line strip dismissed by hand (remembered per business and step
-   until the step changes), Sin saldo / Pausa persistent as today,
-   Recargar only with `credit: manage`, the observation chip only in the
-   hub and on the integration's page. Amends prepaid-credit D7's UI
-   Contract, shell D2 and the IA's Shell section.
+2. ~~PR B — the phone's header strip retires~~ — decided as D8–D10
+   above, built in the PR after #159.

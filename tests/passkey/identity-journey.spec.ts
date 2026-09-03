@@ -60,7 +60,11 @@ test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, a
   await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toHaveCount(0);
 
   /* Invite (verified by construction — the session exists), and the
-     pending list shows the clock */
+     pending list shows the clock. Usuarios is a sub-page of Cuenta since
+     the account hub (US-A05 D4): travel there through the avatar and the
+     row, the way a person does (TESTING rule 9). */
+  await ownerPage.getByRole("link", { name: "Cuenta" }).first().click();
+  await ownerPage.getByRole("link", { name: /^usuarios/i }).click();
   const users = ownerPage.getByRole("region", { name: "Usuarios" }).or(ownerPage.locator("#usuarios"));
   await users.getByLabel(/invitar por correo/i).fill(invitee);
   await users.getByRole("combobox", { name: "Rol" }).click();

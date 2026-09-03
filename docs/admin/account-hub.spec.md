@@ -191,8 +191,11 @@ list).
 - [ ] Scenarios 1–6 and 8 automated (`apps/admin/test/account-hub.test.tsx`,
       plus the repointed settings/credit/memberships/identity suites)
 - [ ] Scenario 7 asserted in `apps/api/test/business-memberships.test.ts`
-- [ ] Keyboard walk (`tests/e2e/keyboard.spec.ts`) updated: Cuenta replaces
+- [x] Keyboard walk (`tests/e2e/keyboard.spec.ts`) updated: Cuenta replaces
       Configuración; the sidebar's Cerrar sesión stop is gone
+- [x] The real-API journeys (`tests/passkey/*`, run by the dev deploy, not
+      by PR CI) travel through the avatar to Usuarios and to the passkey
+      card — repointed after #159's deploy-dev run found them at `/settings`
 - [ ] Settings spec, shell spec, IA and TASKS.md annotated
 - [x] Design review of the hub at 360/768/1280, light + dark
       (`.design/devolada/DESIGN_REVIEW-cuenta.md`, PR #159)

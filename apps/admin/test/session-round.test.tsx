@@ -19,8 +19,8 @@ const settings = settingsResponse.parse({
   reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
 });
 
-describe("BUG-016: Configuración holds a Cerrar sesión for every role, so a phone has a door out", () => {
-  it("a viewer signs out from the Sesión card and lands on login", async () => {
+describe("BUG-016 / US-A05 scenario 3: the hub holds the Cerrar sesión for every role, so a phone has a door out", () => {
+  it("a viewer signs out from the hub and lands on login", async () => {
     let signedOut = false;
     server.use(
       handlers.session(() => ok({ ...businessActor, role: "viewer" })),
@@ -32,9 +32,9 @@ describe("BUG-016: Configuración holds a Cerrar sesión for every role, so a ph
     );
     const router = renderApp("/settings");
 
-    const card = (await screen.findByRole("heading", { name: "Sesión" })).closest("div")!;
-    expect(within(card).getByText(/entraste como/i)).toHaveTextContent(businessActor.email);
-    await userEvent.click(within(card).getByRole("button", { name: /cerrar sesión/i }));
+    await screen.findByRole("heading", { name: "Cuenta" });
+    expect(screen.getAllByText(businessActor.email).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: /cerrar sesión/i }));
     expect(signedOut).toBe(true);
     expect(await screen.findByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/login");
@@ -66,7 +66,7 @@ describe("US-S07 / D18: the passkey card lists every credential and removes one"
         return baOk();
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/security");
 
     const devices = await screen.findByRole("list", { name: /dispositivos con acceso/i });
     const rows = within(devices).getAllByRole("listitem");
@@ -90,7 +90,7 @@ describe("US-S07 / D18: the passkey card lists every credential and removes one"
       handlers.settings(() => ok(settings)),
       handlers.passkeyList(() => HttpResponse.json([])),
     );
-    renderApp("/settings");
+    renderApp("/settings/security");
     expect(await screen.findByText(/ningún dispositivo tiene acceso/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /activar en este dispositivo/i })).toBeInTheDocument();
   });

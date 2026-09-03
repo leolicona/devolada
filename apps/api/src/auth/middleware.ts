@@ -13,7 +13,7 @@ import { speiBankIsKnown } from "../direct-payments/validation";
    organization picks one, the membership's role rides on the actor. */
 export async function findActor(
   env: Bindings,
-  user: { id: string; email: string; emailVerified: boolean },
+  user: { id: string; name: string; email: string; emailVerified: boolean },
   activeOrganizationId: string | null | undefined,
 ): Promise<Actor | { error: "NO_BUSINESS" | "NO_ACTIVE_BUSINESS" | "MEMBERSHIP_REVOKED" }> {
   const db = drizzle(env.DB);
@@ -54,6 +54,7 @@ export async function findActor(
     orgId: business.orgId,
     name: business.name,
     userId: user.id,
+    userName: user.name,
     email: user.email,
     emailVerified: user.emailVerified,
     status: business.status,

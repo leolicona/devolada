@@ -62,7 +62,7 @@ describe("US-B03 / D8: pending invitations are listed, resent and cancelled", ()
         return ok({});
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/users");
     const users = await usersSection();
     const pending = within(users).getByRole("list", { name: /invitaciones pendientes/i });
     expect(within(pending).getByText("carlos@wifiplus.mx")).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe("US-B03 / D12: the role is a picker for the members I could have invite
         return ok({ id, role: (body as { role: string }).role });
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/users");
     const users = await usersSection();
     expect(within(users).queryByRole("combobox", { name: /rol de leo/i })).not.toBeInTheDocument();
     await userEvent.click(within(users).getByRole("combobox", { name: /rol de ana/i }));
@@ -104,7 +104,7 @@ describe("US-B01 / D5: a business born without a CLABE wears a banner and shares
     server.use(handlers.session(() => ok({ ...businessActor, speiConfigured: false })), handlers.feed(emptyFeed));
     renderApp("/payments");
     expect(await screen.findByText(/falta la clabe del negocio/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/settings#spei");
+    expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/settings/business#spei");
   });
 
   it("Links: the roster reads, the share buttons wait for the CLABE", async () => {
@@ -145,7 +145,7 @@ describe("US-B01 / D5: the CLABE form in Configuración keeps the wizard's prefi
       ),
       handlers.members(() => ok({ ...team, pending: [] })),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
     const clabe = await screen.findByLabelText("CLABE");
     await userEvent.type(clabe, "646180157000000004");
     expect(screen.getByRole("combobox", { name: "Banco" })).toHaveTextContent("STP");

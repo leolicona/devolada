@@ -216,7 +216,7 @@ export function CobrosScreen() {
         <h1 className="text-xl font-semibold">Cobros</h1>
         <Card className="mt-4 p-6">
           <p className="text-sm">Conecta WispHub para ver tus cobros.</p>
-          <Link to="/settings" className="mt-3 block">
+          <Link to="/settings/business" className="mt-3 block">
             <Button variant="outline">Ir a Configuración</Button>
           </Link>
         </Card>

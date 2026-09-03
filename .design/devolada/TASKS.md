@@ -92,3 +92,14 @@ provisional-release D10 (pivot Open item 1).
 - Light + dark, contrast-lint, axe pass on every new screen
 - States: loading / error-with-retry / true-empty / role-hidden
 - IMPI filing for "Devolada" (pivot Open item 3) — owner task, non-blocking
+
+## Shell round — the account hub (2026-09-02 interview)
+
+Child spec: [account-hub.spec.md](../../docs/admin/account-hub.spec.md) (US-A05).
+
+- [ ] PR A: Cuenta (avatar with initials + credit-step glyph) as the fifth
+      section at both widths; hub with sub-pages under `/settings`;
+      Cerrar sesión unified at the hub's foot; `userName` on `/auth/me`
+- [ ] PR B: the phone's header strip retires — "Saldo bajo" as a one-line
+      strip dismissed by hand, observation chip only in the hub and on the
+      integration page; amends prepaid-credit D7 UI Contract, shell D2, IA

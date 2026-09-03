@@ -10,7 +10,9 @@ import { LoginPage, RecoverPage, SignupPage, VerifyEmailPage } from "./features/
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { CobrosScreen } from "./features/cobros/CobrosScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
-import { SettingsScreen } from "./features/settings/SettingsScreen";
+import { BusinessSettingsScreen } from "./features/settings/SettingsScreen";
+import { AccountIndex, AccountLayout } from "./features/account/AccountHub";
+import { CreditScreen, SecurityScreen, UsersScreen } from "./features/account/pages";
 import { NewBusinessScreen } from "./features/onboarding/NewBusinessScreen";
 import { AcceptInvitationScreen } from "./features/invitations/AcceptInvitationScreen";
 import { OperatorScreen } from "./features/operator/OperatorScreen";
@@ -94,11 +96,18 @@ const wisphubRoute = createRoute({
   component: WispHubScreen,
 });
 
+/* account-hub D4: /settings is the hub (Cuenta); the areas are its
+   children. The old anchors are redirected by the index on mount. */
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: SettingsScreen,
+  component: AccountLayout,
 });
+const settingsIndexRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/", component: AccountIndex });
+const settingsBusinessRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/business", component: BusinessSettingsScreen });
+const settingsCreditRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/credit", component: CreditScreen });
+const settingsUsersRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/users", component: UsersScreen });
+const settingsSecurityRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/security", component: SecurityScreen });
 
 const linksRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -119,7 +128,16 @@ const routeTree = rootRoute.addChildren([
   recoverRoute,
   newBusinessRoute,
   invitationRoute,
-  appRoute.addChildren([indexRoute, feedRoute, cobrosRoute, linksRoute, integrationsRoute, wisphubRoute, settingsRoute, operatorRoute]),
+  appRoute.addChildren([
+    indexRoute,
+    feedRoute,
+    cobrosRoute,
+    linksRoute,
+    integrationsRoute,
+    wisphubRoute,
+    settingsRoute.addChildren([settingsIndexRoute, settingsBusinessRoute, settingsCreditRoute, settingsUsersRoute, settingsSecurityRoute]),
+    operatorRoute,
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });

@@ -73,6 +73,7 @@ Single source of vocabulary. UI copy is **es-MX** (the product ships in Mexico);
 - **US-A02** — *Retired 2026-08-31 → `devolada-red` (store registration).*
 - **US-A03** — *Retired 2026-08-31 → `devolada-red` (store management).*
 - **US-A04** — As an ISP, I configure my WispHub API Key (validated live), the service fee and the commission split.
+- **US-A05** — As a person using the dashboard, my avatar is the fifth section: it opens my account — who I am and my role, my business's settings by area, my passkeys, and the one way out — at every width. *(reserved 2026-09-02, account-hub spec)*
 
 ### Platform (L)
 - **US-L01** — *Retired 2026-08-31 → `devolada-red` (settlement statement v1); superseded here by the prepaid credit (pivot D5, US-B04–B06/US-L03).*
@@ -258,6 +259,7 @@ Owner's decisions:
 | [admin/shell.spec.md](admin/shell.spec.md) | admin | US-S04, US-S06 (UI) | in development |
 | [admin/charge-feed.spec.md](admin/charge-feed.spec.md) | admin | US-A01 | in development |
 | [admin/settings.spec.md](admin/settings.spec.md) | admin | US-A04 | in development |
+| [admin/account-hub.spec.md](admin/account-hub.spec.md) | admin | US-A05 | in development |
 | [polish/list-states.spec.md](polish/list-states.spec.md) | polish | US-P01 | in development |
 | [polish/dark-and-contrast.spec.md](polish/dark-and-contrast.spec.md) | polish | US-P02, US-P04 (contrast) | in development |
 | [polish/accessibility.spec.md](polish/accessibility.spec.md) | polish | US-P04 | in development |

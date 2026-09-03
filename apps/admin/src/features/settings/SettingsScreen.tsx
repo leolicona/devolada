@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
+import { Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
 import { Amount, Card, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
 import type { SettingsPatchRequest, SettingsResponse } from "@devolada/api/settings-schema";
-import { PasskeyCard } from "../auth/PasskeyCard";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
-import { UsersCard } from "./UsersCard";
-import { SessionCard } from "./SessionCard";
+import { SubPage } from "../account/AccountHub";
 import { bankForClabe } from "@devolada/api/clabe";
-import { CreditCard } from "../credit/CreditCard";
 import type { Bank } from "@devolada/api/settings-schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +18,11 @@ import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
 
-/* Configuración (US-A04): the WispHub key, the money split, and the two
-   display settings that decide what "today" and "2:30 p.m." mean. */
+/* Configuración (US-A04): the business's four cards — the fee, the SPEI
+   channel, the reconciliation policy and the two display settings that
+   decide what "today" and "2:30 p.m." mean. Since the account hub
+   (US-A05, D4) this is the sub-page /settings/business; Saldo, Usuarios
+   and the passkeys have pages of their own. */
 
 const pesos = (cents: number) => (cents / 100).toFixed(2);
 
@@ -44,7 +45,7 @@ function SectionCard({ title, id, children }: { title: string; id?: string; chil
     <Card className="p-6" id={id}>
       {/* scroll-mt keeps the heading visible under the mobile header when
           the index below jumps here */}
-      <h2 className="scroll-mt-24 text-base font-semibold">{title}</h2>
+      <h3 className="scroll-mt-24 text-base font-semibold">{title}</h3>
       <div className="mt-4 space-y-4">{children}</div>
     </Card>
   );
@@ -58,7 +59,7 @@ function SectionCard({ title, id, children }: { title: string; id?: string; chil
 function SectionIndex({ entries }: { entries: { href: string; label: string }[] }) {
   if (entries.length < 3) return null;
   return (
-    <nav aria-label="Secciones de configuración" className="mt-3">
+    <nav aria-label="Secciones de configuración" className="mt-1">
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {entries.map((e) => (
           <li key={e.href}>
@@ -422,38 +423,29 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
   );
 }
 
-export function SettingsScreen() {
-  const { data, isPending } = useQuery<SettingsResponse, ApiError>({
-    queryKey: ["settings"],
-    queryFn: () => api<SettingsResponse>("/settings"),
-  });
-  /* business-and-memberships D3: cards render by area — a role that
-     cannot use a section does not see it (the brief's law: hide, never
-     disable). The passkey is the user's own and shows for every role. */
+export function BusinessSettingsScreen() {
   const { data: actor } = useSession();
   const role: Role = actor?.role ?? "viewer";
   const canSettings = roleCan(role, "settings", "update");
   const canClabe = roleCan(role, "clabe", "update");
-  const canMembers = roleCan(role, "members", "invite_below_admin");
-  const canCredit = roleCan(role, "credit", "manage");
+  const { data, isPending } = useQuery<SettingsResponse, ApiError>({
+    queryKey: ["settings"],
+    queryFn: () => api<SettingsResponse>("/settings"),
+    enabled: canSettings,
+  });
+  /* business-and-memberships D3 / account-hub D5: a role without the
+     area does not see the page — back to the hub, hidden not disabled */
+  if (actor && !canSettings) return <Navigate to="/settings" replace />;
 
   return (
-    <main className="max-w-3xl px-4 pt-4 lg:px-8 lg:pt-8">
-      <h1 className="text-xl font-semibold">Configuración</h1>
+    <SubPage title="Configuración">
       {data && (
         <SectionIndex
           entries={[
-            ...(canSettings
-              ? [
-                  { href: "#cargo", label: "Cargo por servicio" },
-                  { href: "#spei", label: "Pago directo" },
-                  { href: "#politica", label: "Política de conciliación" },
-                  { href: "#zona", label: "Zona y hora" },
-                ]
-              : []),
-            ...(canCredit ? [{ href: "#saldo", label: "Saldo y recargas" }] : []),
-            ...(canMembers ? [{ href: "#usuarios", label: "Usuarios" }] : []),
-            { href: "#sesion", label: "Sesión" },
+            { href: "#cargo", label: "Cargo por servicio" },
+            { href: "#spei", label: "Pago directo" },
+            { href: "#politica", label: "Política de conciliación" },
+            { href: "#zona", label: "Zona y hora" },
           ]}
         />
       )}
@@ -471,17 +463,13 @@ export function SettingsScreen() {
       )}
 
       {data && (
-        <div className="mt-4 space-y-4 pb-8">
-          {canSettings && <MoneyCard settings={data} />}
-          {canSettings && <SpeiCard settings={data} canEditClabe={canClabe} />}
-          {canSettings && <PolicyCard settings={data} />}
-          {canSettings && <DisplayCard settings={data} />}
-          {canCredit && <CreditCard />}
-          {canMembers && actor && <UsersCard role={role} selfUserId={actor.userId} />}
-          <PasskeyCard />
-          {actor && <SessionCard email={actor.email} />}
+        <div className="mt-4 space-y-4">
+          <MoneyCard settings={data} />
+          <SpeiCard settings={data} canEditClabe={canClabe} />
+          <PolicyCard settings={data} />
+          <DisplayCard settings={data} />
         </div>
       )}
-    </main>
+    </SubPage>
   );
 }

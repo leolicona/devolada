@@ -54,7 +54,7 @@ describe("US-D13: the beneficiary name is recommended, never required", () => {
         return ok(settings());
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
 
     const clabe = await screen.findByLabelText("CLABE");
     await userEvent.type(clabe, "646180157000000004");
@@ -80,7 +80,7 @@ describe("US-A04: the service fee is saved", () => {
         return ok(settings({ serviceFeeCents: 2000 }));
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
 
     const fee = await screen.findByLabelText("Cargo por servicio");
     await userEvent.clear(fee);
@@ -143,7 +143,7 @@ describe("US-R02: the reconciliation policy is the business's", () => {
         return ok(settings());
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
 
     const tolerance = await screen.findByLabelText("Tolerancia");
     await userEvent.clear(tolerance);
@@ -168,7 +168,7 @@ describe("US-R02: the reconciliation policy is the business's", () => {
         ),
       ),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
 
     expect(await screen.findByText(/tratamiento efectivo/)).toBeInTheDocument();
   });
@@ -180,11 +180,11 @@ describe("Configuración carries an in-page index", () => {
       handlers.session(() => ok(businessActor)),
       handlers.settings(() => ok(settings())),
     );
-    renderApp("/settings");
+    renderApp("/settings/business");
 
     const nav = await screen.findByRole("navigation", { name: "Secciones de configuración" });
     const { getByRole } = within(nav);
-    for (const label of ["Pago directo", "Política de conciliación", "Saldo y recargas", "Usuarios"]) {
+    for (const label of ["Cargo por servicio", "Pago directo", "Política de conciliación", "Zona y hora"]) {
       expect(getByRole("link", { name: label })).toBeInTheDocument();
     }
     expect(getByRole("link", { name: "Política de conciliación" })).toHaveAttribute("href", "#politica");

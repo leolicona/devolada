@@ -1,28 +1,27 @@
 import { Alert } from "@devolada/ui";
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Outlet, useNavigate, useRouter } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Banknote,
   HandCoins,
   Landmark,
-  LogOut,
   Mail,
   MessageCircle,
   Plug,
-  Settings,
   ShieldCheck,
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { roleCan } from "@devolada/api/role-matrix";
-import { logout, useSession } from "../auth/session";
+import { useSession } from "../auth/session";
 import { api } from "@/lib/api";
 import { SignOutLink } from "../auth/SignOutLink";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
 import { BusinessSwitcher } from "./BusinessSwitcher";
-import { CreditBanner, CreditChip } from "../credit/CreditChip";
+import { CreditBanner, CreditChip, STEP_COPY } from "../credit/CreditChip";
+import { Avatar } from "../account/Avatar";
 import { ObservationChip } from "../integrations/ObservationChip";
 
 /* payments-and-classes D6: the feed is Pagos the moment Cobros exists —
@@ -40,7 +39,10 @@ const baseSections = [
 /* integrations-hub D1: the fifth and last section, owner/admin only —
    the law: hide, never disable. Operators read outcomes in Pagos. */
 const integrationsSection = { to: "/integrations", label: "Integraciones", icon: Plug, exact: false } as const;
-const settingsSection = { to: "/settings", label: "Configuración", icon: Settings, exact: false } as const;
+/* account-hub D1: the fifth section is the person — the avatar, labelled
+   Cuenta, at both widths. D3: its accessible name says the credit step
+   from "Saldo bajo" on, and the avatar wears the glyph. */
+const accountSection = { to: "/settings", label: "Cuenta", icon: null, exact: false } as const;
 
 /* operator-panel D1 (identity round): the channel is a platform setting,
    read without a session — the suspended one was just revoked. */
@@ -91,8 +93,10 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
   const sections = [
     ...baseSections,
     ...(roleCan(actor?.role ?? "viewer", "integrations", "manage") ? [integrationsSection] : []),
-    settingsSection,
+    accountSection,
   ];
+  const step = actor?.credit.step ?? "ok";
+  const accountName = step === "ok" ? undefined : `Cuenta, ${STEP_COPY[step].label.toLowerCase()}`;
 
   return (
     <nav
@@ -112,6 +116,7 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             key={to}
             to={to}
             activeOptions={{ exact }}
+            aria-label={Icon === null ? accountName : undefined}
             className={
               sidebar
                 ? "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -127,7 +132,11 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             }}
           >
             <span className={sidebar ? "contents" : "relative"}>
-              <Icon className={sidebar ? "size-4" : "size-5"} aria-hidden />
+              {Icon === null ? (
+                <Avatar name={actor?.userName ?? ""} size="xs" step={step} />
+              ) : (
+                <Icon className={sidebar ? "size-4" : "size-5"} aria-hidden />
+              )}
             </span>
             <span className={sidebar ? undefined : "max-w-full truncate"}>{label}</span>
           </Link>
@@ -146,7 +155,6 @@ const HANDLED_CODES = ["ACCOUNT_SUSPENDED", "NO_BUSINESS", "NO_ACTIVE_BUSINESS",
 export function Shell() {
   const { data: actor, isPending, error } = useSession();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const router = useRouter();
   /* better-auth.spec.md D12: login brings you back here, not to "/".
      Imperative on purpose, and read off the router without subscribing:
@@ -177,12 +185,6 @@ export function Shell() {
   if (error?.code === "MEMBERSHIP_REVOKED") return <ChooseBusinessScreen reason="revoked" />;
   if (error || !actor) return null; /* the effect above is on its way to /login */
 
-  async function onLogout() {
-    await logout().catch(() => {});
-    queryClient.clear();
-    void navigate({ to: "/login" });
-  }
-
   return (
     <div className="min-h-dvh bg-background lg:flex">
       {/* Sidebar (desktop) */}
@@ -207,13 +209,6 @@ export function Shell() {
             Operador
           </Link>
         )}
-        <div className="border-t border-border pt-3">
-          <p className="truncate px-3 text-sm text-muted-foreground">{actor.email}</p>
-          <Button variant="ghost" size="default" className="mt-1 w-full justify-start" onClick={() => void onLogout()}>
-            <LogOut className="size-4" aria-hidden />
-            Cerrar sesión
-          </Button>
-        </div>
       </aside>
 
       <div className="flex-1 pb-20 lg:pb-0">
@@ -246,7 +241,7 @@ export function Shell() {
               Falta la CLABE del negocio. Sin ella tus clientes no pueden pagarte por transferencia.
             </span>
             {roleCan(actor.role, "clabe", "update") && (
-              <Link to="/settings" hash="spei" className="block">
+              <Link to="/settings/business" hash="spei" className="block">
                 <Button variant="outline">Configurar</Button>
               </Link>
             )}

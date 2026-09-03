@@ -85,7 +85,7 @@ describe("US-B05: Saldo y recargas — the owner's page", () => {
         return ok({ id: "t1", status: "credited", claimedCents: 25000, creditedCents: 25000, proofMode: "transfer", trackingKey: "TOPUP0001ABC", validationAttempts: 1, nextValidationAt: null, error: null, createdAt: 1, confirmedAt: 2 }, 201);
       }),
     );
-    renderApp("/settings");
+    renderApp("/settings/credit");
     const card = (await screen.findByRole("heading", { name: "Saldo y recargas" })).closest("div")!.parentElement!;
     expect(within(card).getByText("Bono de bienvenida")).toBeInTheDocument();
     expect(within(card).getByText("Validación")).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe("US-B05: Saldo y recargas — the owner's page", () => {
       handlers.creditEntries(() => ok(entries)),
       handlers.topUps(() => ok({ topUps: [] })),
     );
-    renderApp("/settings");
+    renderApp("/settings/credit");
     await userEvent.click(await screen.findByRole("button", { name: /^recargar$/i }));
     await userEvent.type(await screen.findByLabelText("Monto transferido"), "20.00");
     expect(await screen.findByText(/el mínimo es/i)).toBeInTheDocument();
@@ -127,9 +127,12 @@ describe("US-B05: Saldo y recargas — the owner's page", () => {
       handlers.settings(() => ok(settings)),
       handlers.members(() => ok({ members: [], grantable: ["operator", "viewer"] })),
     );
-    renderApp("/settings");
-    await screen.findByRole("heading", { name: "Usuarios" });
+    /* account-hub D5: the sub-page sends the role back to the hub */
+    const router = renderApp("/settings/credit");
+    await screen.findByRole("heading", { name: "Cuenta" });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings"));
     expect(screen.queryByRole("heading", { name: "Saldo y recargas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^saldo y recargas/i })).not.toBeInTheDocument();
   });
 });
 

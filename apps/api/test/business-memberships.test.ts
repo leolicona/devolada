@@ -109,6 +109,8 @@ describe("US-B02: one login, isolated workspaces", () => {
 
     const me = await (await get("demo@devolada.app", "/auth/me")).json();
     expect(me.data.id).toBe(a.id);
+    /* account-hub D2: the person rides the actor for the avatar */
+    expect(me.data.userName).toBe("ISP Demo");
     expect(me.data.businesses.map((x: { id: string }) => x.id).sort()).toEqual([a.id, b.id].sort());
   });
 

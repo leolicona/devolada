@@ -22,6 +22,8 @@ export type BusinessActor = {
   role: "owner" | "admin" | "operator" | "viewer";
   orgId: string;
   userId: string;
+  /* account-hub D2: the person, for the avatar and the identity card */
+  userName: string;
   businesses: { id: string; orgId: string; name: string; role: "owner" | "admin" | "operator" | "viewer" }[];
   /* operator-panel D2 */
   platformOperator: boolean;

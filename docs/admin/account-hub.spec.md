@@ -143,9 +143,9 @@ list).
   the balance and its step label; Integraciones shows the observation
   chip while observing); group **Tu cuenta** with "Entrar con huella o
   rostro"; **Cerrar sesión** (outline, `LogOut` icon) at the foot.
-- **Sub-pages**: `/settings/business` keeps the four business cards and
-  their ids (`#cargo`, `#spei`, `#politica`, `#zona`) plus the in-page
-  index when three or more render; `/settings/credit` = `CreditCard`;
+- **Sub-pages**: `/settings/business` keeps the business cards and their
+  ids (`#spei`, `#politica`, `#zona` — `#cargo` retired with its card,
+  settings D9) plus the in-page index when three or more render; `/settings/credit` = `CreditCard`;
   `/settings/users` = `UsersCard`; `/settings/security` = `PasskeyCard`.
   Each sub-page's `h1` is the row's label; "Volver a Cuenta" shows below
   `lg`. A sub-page the role may not use renders nothing of it and

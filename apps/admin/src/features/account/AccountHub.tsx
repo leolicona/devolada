@@ -114,7 +114,7 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
         ]
       : []),
     ...(roleCan(actor.role, "settings", "update")
-      ? [{ to: "/settings/business", label: "Configuración", icon: SlidersHorizontal, detail: "Cargo, pago directo, política, zona horaria" }]
+      ? [{ to: "/settings/business", label: "Configuración", icon: SlidersHorizontal, detail: "Pago directo, política de conciliación, zona horaria" }]
       : []),
     ...(roleCan(actor.role, "integrations", "manage")
       ? [

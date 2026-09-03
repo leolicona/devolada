@@ -1,8 +1,8 @@
 ---
 status: in-development
-stories: [US-P05, US-P03, US-P04, US-P02]
+stories: [US-P05, US-P03, US-P04, US-P02, US-R03]
 domain: polish
-updated: 2026-08-14
+updated: 2026-09-02
 debt: []
 ---
 
@@ -22,7 +22,9 @@ through everything else — **a list row can render correctly and say nothing**,
 ## Decisions
 
 - **D1 — A row's identity is an assertion, not a screenshot.** `responsive.spec.md`
-  proved that no page scrolls sideways and every control clears 44px. Three rows
+  proved that no page scrolls sideways and every control clears 44px. *(Corrected
+  2026-09-02: the second half was never true. `expectTouchTargets` existed in
+  `tests/e2e/responsive.spec.ts` and was never called — see D10.)* Three rows
   passed both and still showed nothing: the Tiendas row printed a chip, a badge and
   an amount but not the store; the Entregas history row printed `A..` and `1...`.
   A `min-w-0 flex-1` column beside fixed-width siblings collapses to zero and
@@ -66,6 +68,18 @@ through everything else — **a list row can render correctly and say nothing**,
   `<main>`, so switching a filter chip re-announced the heading, the alert and the
   chips. `charge-feed.spec.md` asked for the feed to announce, and the feed is the
   list.
+
+- **D10 — A spec claim is a call site, not a sentence.** The pagos-filtros
+  review (2026-09-02, `.design/devolada/DESIGN_REVIEW-pagos-filtros.md`) found
+  `expectTouchTargets` defined and never invoked, while D1 above and
+  `responsive.spec.md` scenario 2 both reported the 44px floor as proven. That is
+  how 36px chips and 40px inputs shipped for weeks. The assertion is now wired
+  for the Pagos filter bar (`section[aria-label="Filtros"]`, at the 360 floor)
+  together with a measurement that a focused chip keeps its 3px ring inside the
+  rail — the visible-focus gap SPEC.md admits — and the rest of the admin is
+  **TD-019**, which also carries the one decision this round refused to take in
+  passing: whether `Button`'s default `h-10` becomes `h-11` app-wide. Rule going
+  forward: a DoD line that says "every X clears Y" names the test that walks X.
 
 ## Rejected
 

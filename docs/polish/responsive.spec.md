@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-P03, US-P02, US-P04]
 domain: polish
-updated: 2026-08-14
+updated: 2026-09-02
 debt: []
 ---
 
@@ -39,7 +39,7 @@ That last one is the layer earning its keep: `contrast-lint` measures the pairs 
 ## Scenarios
 
 1. No screen scrolls sideways at 360px, in either app (US-P03, D1)
-2. Every visible control clears 44px, and the decisive charge action is full-width and ≥48px (US-P03, D5)
+2. Every visible control clears 44px, and the decisive charge action is full-width and ≥48px (US-P03, D5). *Corrected 2026-09-02: `expectTouchTargets` was written and never called, so this scenario had no call site. It now runs on the Pagos filter bar (design-review D10); the admin at large is TD-019.*
 3. The admin's sidebar becomes a bottom bar below `lg` and returns on desktop (US-P03)
 4. Confirming a handover is reachable on a phone and still takes two taps (US-P03, cash-drops D6)
 5. Both apps pass axe's contrast and target-size rules in light and dark (US-P02, US-P04)

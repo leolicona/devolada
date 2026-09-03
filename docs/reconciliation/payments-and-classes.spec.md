@@ -2,7 +2,7 @@
 status: in development
 stories: [US-R02, US-R03]
 domain: reconciliation
-updated: 2026-09-01
+updated: 2026-09-02
 debt: []
 ---
 
@@ -92,6 +92,27 @@ interview (2026-09-01). Its companion is
   answered by whoever picks up the phone). **Rejected**: CEP only (the
   operator answering a dispute wants the receipt as it arrived); image
   only (the image is not the proof).
+  *Amended 2026-09-02 (pagos-filtros review, `.design/devolada/DESIGN_REVIEW-pagos-filtros.md`)*:
+  **the chips come first.** They choose the view; the search and the
+  dates narrow it — scope before refinement — and the whole bar sits
+  directly on the `tabpanel` it labels, as Cobros already did. The
+  `Fechas` fold no longer stays open once a date is set (that solved
+  "an active filter must never be invisible" with a toggle that reported
+  a state change it never performed, and its test asserted it); the
+  toggle is now the truth and **the trigger names the active range** —
+  compact and adaptive: `1–15 sep`, `28 ago – 15 sep`, `28 dic 2025 – 3
+  ene 2026`, `3 sep`, `Desde 1 sep`. A list filtered down to nothing says
+  *"Ningún pago coincide con estos filtros"* with a clear action, never
+  the first-run copy (D10). The chip rail bleeds to the screen edge
+  on a phone, keeps 4px on both axes for the focus ring, and hides its
+  scrollbar. **Measured and closed**: the native date inputs render
+  `mm/dd/yyyy` with `es-MX` on the page, on the input and in the browser
+  — Chromium follows its application locale, page `lang` does not move
+  it. The dev observation this DoD waited for is done; the answer is that
+  only a calendar of our own recovers the format, and it is the next
+  revision of this decision (bottom sheet under `sm`, popover above;
+  three presets in the business's zone; Aplicar/Limpiar; one day + Aplicar
+  = that day).
 
 - **D5 — A failed action can be retried by an operator.** `POST
   /payments/:id/retry-reconnection` (D3 matrix: `payments: operate`) puts
@@ -168,6 +189,15 @@ interview (2026-09-01). Its companion is
   key as the cut (couples a reversible platform state to an irreversible
   Consta one); letting queued rows finish (spends the credit of a business
   the platform just froze).
+
+- **D10 — A filtered-to-nothing list never claims the business has
+  never been paid.** With any filter active (`status`, `q`, `from`, `to`),
+  an empty result reads *"Ningún pago coincide con estos filtros"* and
+  offers *Limpiar filtros*; the first-run copy is reserved for a business
+  with no filter and no payment. Found 2026-09-02: an inverted range
+  (Desde 30 sep › Hasta 1 sep) showed *"Sin pagos por aquí todavía"*
+  under a header that still counted two payments. Same principle as
+  US-P01 — a list that says "nothing" must be right about why.
 
 ## Schema
 
@@ -265,7 +295,10 @@ interview (2026-09-01). Its companion is
       **Cobro** = `payment_request` (+ the class row), **Pago** unchanged;
       nav renamed (#140); TASKS.md phase 4 boxes ticked.
 - [ ] The pilot on deployed dev: one real short payment reads `short`
-      with the right missing pesos in Pagos, and its proof opens. Same
-      pass: confirm the Desde/Hasta native date pickers read `dd/mm` on a
-      Mexican device (the browser owns their language; page `lang` does
-      not move Chromium — design-review 2026-09-01).
+      with the right missing pesos in Pagos, and its proof opens.
+      ~~Same pass: confirm the Desde/Hasta native date pickers read
+      `dd/mm` on a Mexican device.~~ **Closed 2026-09-02 without the
+      pilot**: measured `mm/dd/yyyy` with `es-MX` on the page, the input
+      and the browser locale (`.design/devolada/screenshots/review-pagos-dates-esmx-mobile-375.png`).
+      Chromium follows its application locale; the pickers are replaced
+      by the calendar in D4's next revision.

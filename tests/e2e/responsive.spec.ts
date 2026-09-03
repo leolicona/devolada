@@ -26,10 +26,12 @@ async function expectNoHorizontalScroll(page: Page) {
 
 /* FRONTEND.md: touch targets ≥ 48px, and the charge path's decisive
    actions at 64px. Anything interactive and visible has to clear it. */
-async function expectTouchTargets(page: Page, min = 44) {
-  const small = await page.evaluate((minSize) => {
+async function expectTouchTargets(page: Page, min = 44, within = "body") {
+  const small = await page.evaluate(([minSize, scope]) => {
     const offenders: string[] = [];
-    for (const el of document.querySelectorAll("a, button, input, select, textarea")) {
+    const root = document.querySelector(scope as string);
+    if (!root) return [`scope "${scope}" not found`];
+    for (const el of root.querySelectorAll("a, button, input, select, textarea")) {
       const box = el.getBoundingClientRect();
       if (box.width === 0 || box.height === 0) continue; /* not rendered */
       if (box.height < minSize) {
@@ -37,7 +39,7 @@ async function expectTouchTargets(page: Page, min = 44) {
       }
     }
     return offenders;
-  }, min);
+  }, [min, within] as const);
   expect(small, `controls under ${min}px tall`).toEqual([]);
 }
 
@@ -117,6 +119,37 @@ test.describe("US-P03: the admin follows the ISP to a phone", () => {
     await page.setViewportSize(TABLET);
     await page.goto(ADMIN);
     await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
+    await expectNoHorizontalScroll(page);
+  });
+
+  /* pagos-filtros review (2026-09-02): `expectTouchTargets` had never
+     been called by anyone, while two specs claimed it proved the floor.
+     It is wired here for the one region that round fixed; the rest of
+     the admin is TD-019. The chip rail is a scroll container, and
+     `overflow-x: auto` forces `overflow-y: auto`, which was slicing the
+     3px focus ring off the top of every chip — the ring's room is a
+     measurement, not a screenshot. */
+  test("the Pagos filter bar clears 44px, and a focused chip keeps its ring", async ({ page }) => {
+    await stubAdminApi(page);
+    await page.setViewportSize(PHONE);
+    await page.goto(ADMIN);
+    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
+
+    await expectTouchTargets(page, 44, 'section[aria-label="Filtros"]');
+
+    const rail = page.getByRole("tablist", { name: "Filtrar por estado" });
+    await rail.getByRole("tab", { name: "En cola" }).focus();
+    const room = await rail.evaluate((list) => {
+      const chip = list.querySelector('[role="tab"][data-state], [role="tab"]:focus') as HTMLElement | null;
+      const focused = (document.activeElement as HTMLElement) ?? chip;
+      const a = list.getBoundingClientRect();
+      const b = focused.getBoundingClientRect();
+      return { above: b.top - a.top, below: a.bottom - b.bottom, overflowY: getComputedStyle(list).overflowY };
+    });
+    /* the ring is 3px (`--shadow-focus`); the rail clips at its padding box */
+    expect(room.overflowY, "the rail is a scroll container, so it clips").not.toBe("visible");
+    expect(room.above, "room above the chip for the focus ring").toBeGreaterThanOrEqual(3);
+    expect(room.below, "room below the chip for the focus ring").toBeGreaterThanOrEqual(3);
     await expectNoHorizontalScroll(page);
   });
 });

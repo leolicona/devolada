@@ -95,9 +95,11 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
     await expect(page.getByPlaceholder(/buscar por nombre/i)).toBeVisible();
 
     /* Sidebar first (the dashboard's spine), then the screen's controls
-       in reading order: the roster arrives alive (pilot-UX round), so
-       Actualizar precedes the search. (The store-era walk retired with
-       the network, 2026-08-31.) */
+       in reading order: the roster arrives alive (pilot-UX round) and
+       the search is the first control — "Actualizar" retired with
+       presence-freshness D1 (2026-09-03); the freshness label is text,
+       not a stop. (The store-era walk retired with the network,
+       2026-08-31.) */
     await snapshotRestingStyles(page);
     await expectTabOrder(page, [
       /^Saldo:/ /* the credit chip (prepaid-credit D7) sits under the business name, before the spine */,
@@ -106,7 +108,6 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /^Links$/,
       /^Integraciones$/ /* the hub (integrations-hub D1), owner-only */,
       /Cuenta$/ /* the account hub (US-A05): the avatar (its initials precede the word) is the fifth section; the sidebar's Cerrar sesión lives inside it now */,
-      /Actualizar/ /* the roster's freshness control (pilot-UX round) */,
       /Buscar por nombre/,
       /Copiar/ /* the first customer's actions: the roster is alive on arrival */,
       /WhatsApp/ /* one word for the channel (pilot-UX review) */,

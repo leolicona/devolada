@@ -54,7 +54,9 @@ client's query memory; the webhook spike ran — no push surface exists.
 - [x] Cobros section, live (US-R01, cobros-live D2–D7): `GET
       /payment-requests` through the 30 s display cache; grouped by
       customer, search, Vencidas filter, 50 rows per local page, 2-min
-      query memory, freshness + Actualizar; connect/empty/error states.
+      query memory, freshness + ~~Actualizar~~ (retired 2026-09-03 —
+      presence-freshness, US-P07: focus, heartbeat and pulse replace
+      the button); connect/empty/error states.
       Link page lists its own Cobros (US-R04). Feed renamed to **Pagos**
       (`/payments`, response key `payments`, `receivedCents`) —
       payments-and-classes D6, done here so the two words never coexist.

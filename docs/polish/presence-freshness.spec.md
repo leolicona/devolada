@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-P07]
 domain: polish
-updated: 2026-09-03
+updated: 2026-09-04
 debt: []
 ---
 
@@ -74,5 +74,7 @@ Unchanged wire shapes with one meaning change: `readAt` on `GET /payment-request
 - [x] Scenarios 7–9 automated in `apps/api/test/presence-freshness.test.ts` (4 tests); scenario 10 is `provider-latency.test.ts` unchanged in its assertions, now running on the Cache API.
 - [x] `pnpm -r --if-present typecheck` and `pnpm -r --if-present test` green (API 264, admin 151); `node scripts/spec-lint.mjs` clean.
 - [x] Found by scenario 5 and fixed here (BUG-014): `LinksScreen` read every 503 as "conecta tu llave", so a stalled WispHub (`WISPHUB_UNAVAILABLE`, also 503) showed the integration prompt instead of the error block; the screen now reads the code.
-- [ ] Deployed check on dev with the live tenant: the `hit`/`miss` log shows colo sharing across two members' tabs, and `caches.default` is functional on the custom domain (the Cache API is a no-op on `workers.dev` — both environments run on `api.*.devoladapago.com`, so this is a confirmation, not a risk). **Unverified at authoring time**: the synthetic cache-key origin — the docs page was unreachable from the authoring session; if the platform requires a zone hostname in the key, the fix is the constant in `cache.ts`.
+- [x] Platform contract read against the Workers Cache API reference (2026-09-04, `cloudflare-docs` source): "Workers deployed to custom domains have access to functional cache operations" (both environments run on `api.*.devoladapago.com`; dashboard and Playground previews are no-ops); "the contents of the cache do not replicate outside of the originating data center" and "`cache.delete` only purges content of the cache in the data center that the Worker was invoked" (why D6 carries the invalidation in the key); `cache.put` throws on a non-GET key, a 206 or `Vary: *`, answers 413 when `Cache-Control` says not to cache, and "responses with `Set-Cookie` headers are never cached" — our stored `Response` is a GET-keyed 200 with `max-age` and no cookie. The reference states **no constraint on the key's hostname**, so the synthetic origin stands; the deployed check below is what turns "not forbidden" into "observed".
+- [ ] Deployed check on dev with the live tenant: the `hit`/`miss` log shows colo sharing across two members' tabs (second read within 30 s logs `hit`), and the pulse-driven re-read is observed once on a real registration. This is the one box a merge to `main` (→ dev deploy, CICD.md) has to open.
+- [x] The e2e keyboard walk (`tests/e2e/keyboard.spec.ts`, TD-010) no longer expects an "Actualizar" stop on Links; `.design/devolada/TASKS.md` records the retirement.
 - [x] TD-014 closed in TECH_DEBT.md; BUG-013 and BUG-014 recorded in BUGS.md.

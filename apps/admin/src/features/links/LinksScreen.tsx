@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
+import { ListSkeleton, PAGE_STACK, PageFrame } from "../shell/PageFrame";
 
 /* US-D07, amended by the pilot-UX round: the page is the ROSTER — every
    customer with their permanent link, alive on arrival — and search is
@@ -67,32 +68,38 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
         </span>
       </div>
       {/* business-and-memberships D3: sharing is `payments: operate`;
-          a viewer sees the customer and nothing to press */}
+          a viewer sees the customer and nothing to press.
+          espaciado review E6/E7: no `mr-2` on the glyphs — the `Button`
+          already sets `gap-2`, and the two together made this the only
+          16px icon gap in the admin against Cobros' 8px, on the same two
+          buttons. The copy button keeps its label at every state too: as
+          an icon in a text button's box it was 58px wide and jumped to
+          128px on the click, dragging the row's controls 70px left for
+          two seconds. */}
       {canOperate && (
         <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
           <Button
             variant="outline"
             className="shrink-0"
             onClick={() => void handleCopy()}
-            title="Copiar enlace"
             aria-live="polite"
           >
             {copyResult ? (
               copyResult.ok ? (
                 <>
-                  <Check className="mr-2 size-4" aria-hidden />
+                  <Check className="size-4" aria-hidden />
                   Copiado
                 </>
               ) : (
                 <>
-                  <AlertCircle className="mr-2 size-4" aria-hidden />
+                  <AlertCircle className="size-4" aria-hidden />
                   No se copió
                 </>
               )
             ) : (
               <>
                 <LinkIcon className="size-4" aria-hidden />
-                <span className="sr-only">Copiar</span>
+                Copiar link
               </>
             )}
           </Button>
@@ -100,7 +107,7 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
             className="shrink-0"
             onClick={() => window.open(row.waLink, "_blank", "noopener,noreferrer")}
           >
-            <Share2 className="mr-2 size-4" aria-hidden />
+            <Share2 className="size-4" aria-hidden />
             WhatsApp
           </Button>
         </div>
@@ -140,53 +147,59 @@ export function LinksScreen() {
   const isConfigError = roster.isError && roster.error?.status === 503;
 
   return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* The glossary's full term; the nav carries the short form */}
-        <h1 className="text-xl font-semibold">Links de pago</h1>
-        {roster.data && (
-          <span className="flex items-center gap-3">
-            <Freshness readAt={roster.data.readAt} />
-            <Button
-              variant="outline"
-              disabled={roster.isFetching}
-              onClick={() => {
-                void queryClient.invalidateQueries({ queryKey: ["links-roster"] });
-              }}
-            >
-              <RefreshCw className={cn("size-4", roster.isFetching && "animate-spin")} aria-hidden />
-              Actualizar
-            </Button>
-          </span>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <label className="relative block max-w-md">
-          <span className="sr-only">Buscar cliente</span>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
-          {/* name + autoComplete: without them, phone password managers
-              saw a field near the word "usuario" and offered credentials */}
-          <Input
-            type="search"
-            name="roster-search"
-            autoComplete="off"
-            placeholder="Buscar por nombre, usuario o teléfono..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setLimit(PAGE);
+    <PageFrame
+      title="Links de pago"
+      /* The glossary's full term; the nav carries the short form.
+         espaciado review E4: Actualizar renders in both states — gated on
+         `roster.data` it appeared only once the roster landed, growing the
+         header from 34 to 40px and sliding the search and the whole list
+         6px down on load. Cobros already gates only the freshness label. */
+      actions={
+        <span className="flex items-center gap-3">
+          {roster.data && <Freshness readAt={roster.data.readAt} />}
+          <Button
+            variant="outline"
+            disabled={roster.isFetching}
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ["links-roster"] });
             }}
-          />
-        </label>
+          >
+            <RefreshCw className={cn("size-4", roster.isFetching && "animate-spin")} aria-hidden />
+            Actualizar
+          </Button>
+        </span>
+      }
+    >
+      {/* espaciado review E8: the atom's own magnifier and the shared
+          384px cap, in place of a hand-rolled absolute `Search` and a
+          448px `max-w-md`. */}
+      <div className="w-full sm:max-w-sm">
+        {/* name + autoComplete: without them, phone password managers saw
+            a field near the word "usuario" and offered credentials */}
+        <Input
+          icon={Search}
+          type="search"
+          name="roster-search"
+          autoComplete="off"
+          placeholder="Buscar por nombre, usuario o teléfono..."
+          /* The name the sr-only label carried before the atom's icon
+             replaced it — unchanged on purpose: what the accessible name
+             should say is a copy decision this round did not take (Pagos
+             says "Buscar por nombre o usuario", Cobros a third thing). */
+          aria-label="Buscar cliente"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setLimit(PAGE);
+          }}
+        />
       </div>
 
       {/* No page notice for the missing CLABE: the shell's banner already
           says it one screen above (design review identidad-2, should fix 2) */}
 
       {isConfigError && (
-        <Alert variant="destructive" layout="icon" className="mt-6">
+        <Alert variant="destructive" layout="icon">
           <AlertCircle aria-hidden />
           <span>
             <strong>Sin conexión a WispHub.</strong> Conecta tu llave en Integraciones para ver a
@@ -200,34 +213,23 @@ export function LinksScreen() {
           what="los links"
           onRetry={() => void roster.refetch()}
           retrying={roster.isRefetching}
-          className="mt-6"
         />
       )}
 
       {roster.isPending && !roster.isError && (
-        <Card className="mt-6 p-4">
-          {[0, 1, 2].map((k) => (
-            <div key={k} className="flex items-center gap-4 py-3">
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-44" />
-                <Skeleton className="h-3 w-32" />
-              </div>
-              <Skeleton className="h-9 w-28 rounded-md" />
-            </div>
-          ))}
-        </Card>
+        <ListSkeleton trailing={<Skeleton className="h-10 w-32 rounded-md" />} />
       )}
 
-      <div aria-live="polite">
+      <div className={PAGE_STACK} aria-live="polite">
         {roster.data && !roster.data.complete && (
-          <Alert variant="warning" className="mt-6">
+          <Alert variant="warning">
             La lista puede estar incompleta: WispHub devolvió más clientes de los que podemos leer
             de una vez.
           </Alert>
         )}
 
         {roster.data && filtered.length === 0 && (
-          <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+          <p className="max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
             {q
               ? `Ningún cliente coincide con "${search.trim()}".`
               : "WispHub no devolvió clientes todavía."}
@@ -235,7 +237,7 @@ export function LinksScreen() {
         )}
 
         {visible.length > 0 && (
-          <Card className="mt-6">
+          <Card className="overflow-hidden">
             <ul className="divide-y divide-line-soft">
               {visible.map((row) => (
                 <LinkRow key={row.usuario} row={row} canOperate={canOperate} />
@@ -245,13 +247,13 @@ export function LinksScreen() {
         )}
 
         {filtered.length > limit && (
-          <div className="mt-4">
+          <div>
             <Button variant="outline" onClick={() => setLimit((n) => n + PAGE)}>
               Mostrar más ({filtered.length - limit} restantes)
             </Button>
           </div>
         )}
       </div>
-    </main>
+    </PageFrame>
   );
 }

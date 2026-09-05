@@ -29,7 +29,7 @@ function useTheme() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-t border-line pt-6 pb-12">
-      <h2 className="mb-6 text-xs font-semibold tracking-[0.06em] uppercase text-ink-faint">
+      <h2 className="mb-6 text-xs font-semibold tracking-wide uppercase text-ink-faint">
         {title}
       </h2>
       {children}
@@ -127,7 +127,7 @@ export function Showcase() {
           <p className="text-sm text-ink-soft">Total a cobrar</p>
           <Amount
             cents={41500}
-            className="mt-1 block font-semibold tracking-tight text-amount leading-[1.15]"
+            className="mt-1 block font-semibold tracking-tight text-amount leading-tight"
           />
           <AmountBreakdown
             className="mt-6 border-t border-line-soft pt-4"

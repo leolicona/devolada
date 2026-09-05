@@ -263,3 +263,53 @@ describe("US-A04 scenario 6: Configuración splits in two", () => {
     expect(router.state.location.pathname).toBe("/settings/direct-payment");
   });
 });
+
+describe("BUG-018: the bank-unknown warning is painted with a token that exists", () => {
+  it("carries the error ink, not a class that compiles to nothing", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() =>
+        ok(
+          settings({
+            spei: {
+              clabe: "012180001234567895",
+              bank: "Banco Viejo",
+              beneficiaryName: null,
+              serviceFeeCents: null,
+              effectiveServiceFeeCents: 1500,
+              bankUnknown: true,
+              configured: false,
+            },
+          }),
+        ),
+      ),
+    );
+    renderApp("/settings/direct-payment");
+
+    const warning = await screen.findByRole("status");
+    /* happy-dom applies no stylesheet (TESTING rule 6), so the assertion
+       is the class, not the pixel: `text-danger` named no token, Tailwind
+       emitted nothing for it, and the one notice that says transfers are
+       off rendered in body ink. `scripts/contrast-lint.mjs` now fails on
+       any colour utility that resolves to nothing; this holds the line
+       for the element the bug was found on. */
+    expect(warning).toHaveClass("text-error");
+    expect(warning.className).not.toMatch(/text-danger/);
+  });
+});
+
+describe("US-A04: a sub-page is titled only when it holds more than one card", () => {
+  it("Pago directo y conciliación names its two cards; Preferencias does not repeat its one", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(settings())));
+    renderApp("/settings/direct-payment");
+
+    /* The page title, one step under the hub's own h1 (review T1/T2) */
+    expect(
+      await screen.findByRole("heading", { name: "Pago directo y conciliación", level: 2 }),
+    ).toBeInTheDocument();
+
+    renderApp("/settings/preferences");
+    expect(await screen.findByRole("heading", { name: /zona horaria y hora/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Preferencias" })).not.toBeInTheDocument();
+  });
+});

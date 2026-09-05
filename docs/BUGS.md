@@ -119,6 +119,15 @@ Format:
 - Regression test: none in code — the defect lives in the deploy, not the app (the app's own behaviour with and without the secret is already covered under US-D15). The deploy log's warning is the standing check.
 
 
+## BUG-018 — `text-danger` names no token, so the closed-SPEI-channel warning rendered in body ink
+- Status: fixed
+- Detected: 2026-09-05 · espaciado-y-tipografía design review (T9), measuring type and icon size across Cuenta
+- Affected spec: `docs/admin/settings.spec.md` (the SPEI card's `bankUnknown` notice, BUG-008's own warning)
+- Symptom: the notice that says *"El banco guardado (…) ya no está en la lista, así que los pagos por transferencia están desactivados"* — the one line telling an owner their transfers are off — was charcoal, not red, and its `TriangleAlert` with it.
+- Root cause: `SettingsScreen.tsx` styled it `text-danger`. There is no `--color-danger` in `tokens.css` or in either app's stylesheet; the token is `error`. Tailwind emits nothing for a name it does not know, so the class was inert. Verified against the built bundle: `.text-error` is present in `apps/admin/dist/assets/*.css`, `.text-danger` is not. Nothing could catch it — no build error, no failing test, and `contrast-lint.mjs` measures colours, of which this element had none to measure. The same failure mode as the `@source "../"` gap in FRONTEND.md, from a typo'd token name rather than a missed source path.
+- Fix: `text-danger` → `text-error`, and `scripts/contrast-lint.mjs` now fails on any `text-*`/`bg-*`/`border-*` utility whose name is neither a `--color-*` declared in an `@theme` block nor a size or side keyword (it reports this exact line when the fix is reverted).
+- Regression test: `apps/admin/test/settings.test.tsx` ("BUG-018: the bank-unknown warning is painted with a token that exists") asserts the class, since happy-dom applies no stylesheet (TESTING rule 6); the lint holds the general case.
+
 ## BUG-017 — Two cards edited "the service fee", and only one of them was the fee
 - Status: **fixed** (2026-09-03 — settings.spec.md D9)
 - Detected: 2026-09-03 · owner, on the dev pilot's Configuración (`/settings/business`)

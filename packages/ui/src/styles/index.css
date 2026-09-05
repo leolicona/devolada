@@ -85,6 +85,29 @@
   --container-wide: var(--max-width-wide);
   --container-page: var(--max-width-page);
 
+  /* Spacing: the one unit every p-*, m-*, gap-* and space-* is built
+     from. Tailwind computes `p-6` as `calc(var(--spacing) * 6)`, so
+     mapping the token here is what makes the utility ladder and the
+     token ladder the same ladder (TD-020, review E10). Before this line
+     they were two, and they disagreed from index 5 up. */
+  --spacing: var(--space-base);
+
+  /* Letter spacing: tracking-tight / tracking-normal / tracking-wide.
+     `tracking-wide` was Tailwind's 0.025em while the token said 0.06em,
+     which is why the playground wrote `tracking-[0.06em]` by hand for
+     the same all-caps label the admin renders with `tracking-wide`. */
+  --tracking-tight: var(--letter-spacing-tight);
+  --tracking-normal: var(--letter-spacing-normal);
+  --tracking-wide: var(--letter-spacing-wide);
+
+  /* Line height: leading-tight / leading-normal / leading-relaxed.
+     Only the explicit `leading-*` utilities: the line-height Tailwind
+     pairs with each `text-*` size is a separate set of theme keys
+     (`--text-sm--line-height`), still Tailwind's — TD-021. */
+  --leading-tight: var(--line-height-tight);
+  --leading-normal: var(--line-height-normal);
+  --leading-relaxed: var(--line-height-relaxed);
+
   /* Typography: text-xs … text-amount */
   --text-xs: var(--font-size-xs);
   --text-sm: var(--font-size-sm);

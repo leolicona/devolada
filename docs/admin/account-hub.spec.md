@@ -154,8 +154,12 @@ list).
   with its card, D9, and the in-page index with the page it was drawn for,
   D10); `/settings/credit` = `CreditCard`;
   `/settings/users` = `UsersCard`; `/settings/security` = `PasskeyCard`.
-  Each sub-page's `h1` is the row's label; "Volver a Cuenta" shows below
-  `lg`. A sub-page the role may not use renders nothing of it and
+  A sub-page is titled **only when it holds more than one card** (D11):
+  Pago directo y conciliación names two cards called something else, so it
+  carries an `h2` at `text-lg`; Saldo, Usuarios, Passkeys and Preferencias
+  are one card each whose own heading already says the row's words, and a
+  title there would say them twice — the argument that killed the settings
+  index (settings D10). "Volver a Cuenta" shows below `lg`. A sub-page the role may not use renders nothing of it and
   redirects to the hub.
 - **Retired**: the sidebar's foot (email + Cerrar sesión) and the
   **Sesión** card (settings spec, 2026-09-02): the hub's door is the one
@@ -165,6 +169,21 @@ list).
   the credit chip and banners → `/settings/credit`; Cobros' "Configurar"
   → `/settings/direct-payment` (settings D11).
 - Copy in es-MX. Light + dark from the tokens; icon + text everywhere.
+
+- **D11 — A sub-page is titled only when it holds more than one card
+  (2026-09-05, espaciado review T1/T2).** Two of the five passed a title
+  and three passed none, so the right column started 49px lower on the
+  two and level with the rail on the three, and the same tap opened a page
+  whose name was an `h2` or a page whose name lived inside a card. The
+  rule is the content's, not the route's: more than one card and the page
+  needs a name of its own; one card and the card's heading *is* the name.
+  The size is `text-lg` — the ramp's "section titles" — because at
+  `text-xl` it matched the hub's own `h1`, 24px against 24px in two
+  columns, the longer string reading as the page's real title.
+  **Rejected**: a title on all five (three pages would print the row's
+  words twice, one inside a card and one above it); none at all (Pago
+  directo y conciliación is the one page where the title does real work,
+  naming two cards that are called something else).
 
 ## Scenarios
 

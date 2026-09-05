@@ -97,7 +97,7 @@ export function PasskeyCard() {
               if (!result?.error) refresh();
             }}
           >
-            <Fingerprint className="size-5" aria-hidden />
+            <Fingerprint className="size-4" aria-hidden />
             {state === "busy" ? "Esperando a tu dispositivo…" : "Activar en este dispositivo"}
           </Button>
         )}

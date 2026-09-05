@@ -69,6 +69,25 @@ through everything else — **a list row can render correctly and say nothing**,
   chips. `charge-feed.spec.md` asked for the feed to announce, and the feed is the
   list.
 
+- **D11 — One archetype, one answer (2026-09-05).** The
+  espaciado-y-tipografía review
+  (`.design/devolada/DESIGN_REVIEW-espaciado-y-tipografia.md`) measured
+  Pagos, Cobros and Links and found the same page drawn three times: 16 /
+  16 / 24px under the title, a search field 44 / 40 / 40px tall and 384 /
+  256 / 448px wide, a list card that clipped on one page of three, and a
+  `padding-bottom: 0` on two of them. The answer is a frame, not a rule to
+  copy: `PageFrame` owns the padding and the ladder, `ListSkeleton` owns
+  the placeholder's geometry (FRONTEND.md). Two things follow from the
+  round and generalise past it: **a skeleton is the list's geometry or it
+  is a layout shift** — three 60px rows standing in for 72px ones move
+  every row 12px on load, and no assertion here could see it — and **a
+  colour utility that names no token is invisible to every check we
+  have**, which is BUG-018 and now a `contrast-lint.mjs` rule. In Cuenta
+  the same review set the sub-page title rule (account-hub D11) and made
+  the icon size one number, 16px, in every button.
+  The heights of the three search fields are deliberately *not* settled
+  here: they are the density decision TD-019 owns.
+
 - **D10 — A spec claim is a call site, not a sentence.** The pagos-filtros
   review (2026-09-02, `.design/devolada/DESIGN_REVIEW-pagos-filtros.md`) found
   `expectTouchTargets` defined and never invoked, while D1 above and

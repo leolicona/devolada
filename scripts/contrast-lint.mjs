@@ -206,11 +206,67 @@ for (const dir of ["apps/admin/src", "apps/pago/src", "packages/ui/src"]) {
   }
 }
 
+/* BUG-018: the other way a color stops following the theme — a utility
+   that names a token which does not exist. `text-danger` (there is no
+   --color-danger; the token is `error`) rode the settings page for weeks:
+   Tailwind emits nothing for an unknown name, so the class was inert, the
+   bank-unknown warning rendered in body ink, and neither a build error
+   nor the pair checks above could see it — there was no colour to
+   measure. Every colour-taking utility must resolve to a name declared in
+   an `@theme inline` block; anything else is either a token typo or a
+   utility this list has not met yet. */
+const themeColors = new Set();
+for (const file of ["packages/ui/src/styles/index.css", "apps/admin/src/styles.css"]) {
+  for (const m of readFileSync(join(root, file), "utf8").matchAll(/--color-([a-z0-9-]+):/g)) {
+    themeColors.add(m[1]);
+  }
+}
+
+/* The same prefixes also take sizes, sides, alignments and border
+   styles. A name here is "not a colour", not "a colour we allow". */
+const NOT_A_COLOR = new Set([
+  /* font sizes (--text-*) */ "xs", "sm", "base", "md", "lg", "xl", "2xl", "3xl", "4xl", "amount",
+  /* alignment */ "left", "center", "right", "justify", "start", "end",
+  /* sides and axes */ "t", "b", "l", "r", "x", "y",
+  /* border and divide styles */ "none", "solid", "dashed", "dotted", "double", "hidden",
+  /* tables */ "collapse", "separate",
+  /* ring geometry: ring-offset-N */ "offset-0", "offset-1", "offset-2", "offset-4", "offset-8",
+  /* Tailwind's own keywords */ "transparent", "current", "inherit", "black", "white",
+]);
+
+const COLOR_UTILITY = /\b(?:text|bg|border|divide|ring|fill|stroke|outline|placeholder|caret|accent|decoration)-([a-z][a-z0-9-]*)/g;
+/* Comments name classes while talking about them (this one does), so
+   they are blanked — keeping their newlines, or every reported line
+   number after the first comment would be wrong. */
+const stripComments = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/^(\s*)\/\/.*$/gm, "$1");
+
+for (const dir of ["apps/admin/src", "apps/pago/src", "packages/ui/src"]) {
+  for (const file of sources(join(root, dir))) {
+    if (!/\.tsx?$/.test(file)) continue; /* class names live in the components */
+    stripComments(readFileSync(file, "utf8"))
+      .split("\n")
+      .forEach((line, i) => {
+        for (const [utility, name] of line.matchAll(COLOR_UTILITY)) {
+          if (themeColors.has(name) || NOT_A_COLOR.has(name)) continue;
+          failures++;
+          console.error(
+            `✘ ${relative(root, file)}:${i + 1} — \`${utility}\` names no token: ` +
+              `no --color-${name} in any @theme block, and it is not a size or a side`,
+          );
+        }
+      });
+  }
+}
+
 if (failures) {
   console.error(`\n✘ contrast-lint: ${failures} failing pair(s)`);
   process.exit(1);
 }
 console.log(
-  `✔ contrast-lint: ${PAIRS.length * 2} pairs in both themes at AA, no hardcoded colors` +
+  `✔ contrast-lint: ${PAIRS.length * 2} pairs in both themes at AA, ` +
+    `no hardcoded colors, every colour utility resolves to a token` +
     (aimMisses ? ` (${aimMisses} below the AAA target)` : ""),
 );

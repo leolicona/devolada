@@ -147,7 +147,7 @@ export function LoginPage() {
               goOn();
             }}
           >
-            <Fingerprint className="size-5" aria-hidden />
+            <Fingerprint className="size-4" aria-hidden />
             Entrar con huella o rostro
           </Button>
         )}

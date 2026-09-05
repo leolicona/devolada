@@ -126,7 +126,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
           {canEditClabe && clabe.trim() !== "" && !clabeValid && (
             <p className="mt-1 text-sm font-medium text-error">La CLABE debe tener 18 dígitos.</p>
           )}
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-muted-foreground">
             La cuenta donde recibes las transferencias. El dinero llega directo a ti.
           </p>
         </div>
@@ -136,7 +136,11 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
             /* BUG-008: the bank was saved before the list existed and no
                longer resolves, so the channel is closed until it is picked
                again. Silence here meant every payment failing invisibly. */
-            <p role="status" className="mt-1 flex items-start gap-2 text-sm text-danger">
+            /* BUG-018: this said `text-danger`, and no --color-danger token
+               exists — the class never reached the stylesheet, so the one
+               notice that says the SPEI channel is closed rendered in body
+               ink. The token is `error`. */
+            <p role="status" className="mt-1 flex items-start gap-2 text-sm text-error">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
               <span>
                 El banco guardado (<strong>{settings.spei.bank}</strong>) ya no está en la lista, así
@@ -181,7 +185,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
             onChange={(e) => setBeneficiary(e.target.value)}
             placeholder="Como aparece en tu cuenta"
           />
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-muted-foreground">
             Recomendado: es lo que tu cliente compara antes de transferir.
           </p>
         </div>
@@ -199,7 +203,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
           {fee.trim() !== "" && !feeValid && (
             <p className="mt-1 text-sm font-medium text-error">Escribe un monto válido.</p>
           )}
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-muted-foreground">
             Lo que paga tu cliente además de su cargo del periodo al transferir.
           </p>
         </div>
@@ -261,7 +265,7 @@ function PolicyCard({ settings }: { settings: SettingsResponse }) {
             value={tolerance}
             onChange={(e) => setTolerance(e.target.value)}
           />
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-muted-foreground">
             Diferencia que todavía cuenta como pago exacto. $0.00 es lo honesto en SPEI: la
             transferencia llega exacta al centavo.
           </p>
@@ -278,7 +282,7 @@ function PolicyCard({ settings }: { settings: SettingsResponse }) {
             </SelectContent>
           </Select>
           {overridden && (
-            <p className="mt-1 text-sm text-ink-soft">
+            <p className="mt-1 text-sm text-muted-foreground">
               Tu integración con WispHub abona el sobrante al cliente por sí sola, así que hoy el
               tratamiento efectivo es «queda a favor del cliente».
             </p>
@@ -335,7 +339,7 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
               ))}
             </SelectContent>
           </Select>
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-muted-foreground">
             Decide dónde empieza tu día: los totales de hoy y las fechas de los movimientos.
           </p>
         </div>
@@ -351,7 +355,7 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
               <SelectItem value="24h">24 horas</SelectItem>
             </SelectContent>
           </Select>
-          <p className="mt-1 text-sm text-ink-soft">
+          <p className="mt-1 text-sm text-muted-foreground">
             Así se verá: {formatTime(SAMPLE_TIME_MS, timeFormat === "24h" ? "24h" : "12h", timezone)}
           </p>
         </div>
@@ -432,8 +436,10 @@ export function PreferencesScreen() {
   const { actor, canSettings, data, isPending } = useBusinessSettings();
   if (actor && !canSettings) return <Navigate to="/settings" replace />;
 
+  /* T2/D3: one card, whose own heading is already "Zona horaria y hora" —
+     a page title here would say the row's words twice. */
   return (
-    <SubPage title="Preferencias">
+    <SubPage>
       {isPending && <CardsSkeleton count={1} />}
       {data && (
         <div className="mt-4 space-y-4">

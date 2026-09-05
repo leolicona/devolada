@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, RefreshCw, TriangleAlert, Check, Link as LinkIcon, Share2 } from "lucide-react";
+import { ChevronDown, RefreshCw, Search, TriangleAlert, Check, Link as LinkIcon, Share2 } from "lucide-react";
 import { Alert, Amount, Card, ListError, Skeleton } from "@devolada/ui";
 import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useDisplaySettings, useSession } from "../auth/session";
+import { ListSkeleton, PAGE_STACK, PageFrame } from "../shell/PageFrame";
 
 /* Cobros — who owes what, read live from WispHub (cobros-live spec,
    US-R01). No copy exists anywhere (D6): this screen holds WispHub's
@@ -134,42 +135,46 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          {canOperate && linkUrl && (
-            <div className="flex flex-wrap items-center gap-2 border-t border-line-soft bg-muted/50 px-4 pt-3">
-              <Button variant="outline" aria-live="polite" onClick={() => void copyLink()}>
-                {copied === null ? (
-                  <>
-                    <LinkIcon className="size-4" aria-hidden /> Copiar link
-                  </>
-                ) : copied ? (
-                  <>
-                    <Check className="size-4" aria-hidden /> Copiado
-                  </>
-                ) : (
-                  "No se copió"
-                )}
-              </Button>
-              {waLink && (
-                <Button onClick={() => window.open(waLink, "_blank", "noopener,noreferrer")}>
-                  <Share2 className="size-4" aria-hidden /> WhatsApp
+          {/* espaciado review E5: one box, 16px on four sides, like the row
+              it grew from and like Pagos' expansion. It used to be two
+              blocks — `px-4 pt-3` with no bottom over `px-4 py-2` — so a
+              40px button had 12px above it and 0 below, and the panel
+              ended 8px from its own edge. */}
+          <div className="border-t border-line-soft bg-muted/50 p-4">
+            {canOperate && linkUrl && (
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Button variant="outline" aria-live="polite" onClick={() => void copyLink()}>
+                  {copied === null ? (
+                    <>
+                      <LinkIcon className="size-4" aria-hidden /> Copiar link
+                    </>
+                  ) : copied ? (
+                    <>
+                      <Check className="size-4" aria-hidden /> Copiado
+                    </>
+                  ) : (
+                    "No se copió"
+                  )}
                 </Button>
-              )}
-            </div>
-          )}
-          <ul
-            className={cn(!(canOperate && linkUrl) && "border-t border-line-soft", "bg-muted/50 px-4 py-2")}
-            aria-label={`Facturas de ${group.name}`}
-          >
-            {group.cobros.map((c) => (
-              <li key={c.externalId} className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
-                <span className="text-muted-foreground">
-                  {fmtDay(c.invoiceDate) ?? `Factura ${c.externalId}`}
-                  {c.dueDate && <span> · vence {fmtDay(c.dueDate)}</span>}
-                </span>
-                <Amount cents={c.amountCents} />
-              </li>
-            ))}
-          </ul>
+                {waLink && (
+                  <Button onClick={() => window.open(waLink, "_blank", "noopener,noreferrer")}>
+                    <Share2 className="size-4" aria-hidden /> WhatsApp
+                  </Button>
+                )}
+              </div>
+            )}
+            <ul aria-label={`Facturas de ${group.name}`}>
+              {group.cobros.map((c) => (
+                <li key={c.externalId} className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
+                  <span className="text-muted-foreground">
+                    {fmtDay(c.invoiceDate) ?? `Factura ${c.externalId}`}
+                    {c.dueDate && <span> · vence {fmtDay(c.dueDate)}</span>}
+                  </span>
+                  <Amount cents={c.amountCents} />
+                </li>
+              ))}
+            </ul>
+          </div>
         </CollapsibleContent>
       </Collapsible>
     </li>
@@ -213,22 +218,21 @@ export function CobrosScreen() {
      Configuración today.) */
   if (query.error?.code === "NOT_CONFIGURED") {
     return (
-      <main className="px-4 pt-4 lg:px-8 lg:pt-8">
-        <h1 className="text-xl font-semibold">Cobros</h1>
-        <Card className="mt-4 p-6">
+      <PageFrame title="Cobros">
+        <Card className="p-6">
           <p className="text-sm">Conecta WispHub para ver tus cobros.</p>
           <Link to="/settings/direct-payment" className="mt-3 block">
             <Button variant="outline">Ir a Configuración</Button>
           </Link>
         </Card>
-      </main>
+      </PageFrame>
     );
   }
 
   return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Cobros</h1>
+    <PageFrame
+      title="Cobros"
+      actions={
         <div className="flex items-center gap-3">
           {query.dataUpdatedAt > 0 && <Freshness at={query.dataUpdatedAt} />}
           <Button
@@ -241,7 +245,8 @@ export function CobrosScreen() {
             Actualizar
           </Button>
         </div>
-      </div>
+      }
+    >
 
       {/* D7: a failed read says so — never an empty claim, never stale
           data presented as fresh */}
@@ -250,34 +255,21 @@ export function CobrosScreen() {
           what="tus cobros en WispHub"
           onRetry={() => void query.refetch()}
           retrying={query.isRefetching}
-          className="mt-4"
         />
       )}
 
       {query.data && !query.data.complete && (
         /* D4: a cut-off read warns, never a silent truncation */
-        <Alert variant="warning" className="mt-4 flex items-center gap-2">
+        <Alert variant="warning" className="flex items-center gap-2">
           <TriangleAlert className="size-4 shrink-0" aria-hidden />
           La lista puede estar incompleta: WispHub devolvió más facturas de las que pudimos leer.
         </Alert>
       )}
 
-      {query.isPending && (
-        <Card className="mt-4 p-4">
-          {[0, 1, 2].map((k) => (
-            <div key={k} className="flex items-center gap-4 py-3">
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-28" />
-              </div>
-              <Skeleton className="h-4 w-16" />
-            </div>
-          ))}
-        </Card>
-      )}
+      {query.isPending && <ListSkeleton trailing={<Skeleton className="h-4 w-16" />} />}
 
       {query.data && (
-        <Tabs value={filter} onValueChange={(v) => { setFilter(v); setPages(1); }} className="mt-4">
+        <Tabs value={filter} onValueChange={(v) => { setFilter(v); setPages(1); }} className={PAGE_STACK}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <TabsList aria-label="Filtrar cobros">
               {filters.map((f) => (
@@ -286,18 +278,27 @@ export function CobrosScreen() {
                 </TabsTrigger>
               ))}
             </TabsList>
-            <Input
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setPages(1); }}
-              placeholder="Buscar por nombre o usuario"
-              aria-label="Buscar por nombre o usuario"
-              className="w-full sm:w-64"
-            />
+            {/* espaciado review E8: the magnifier the `Input` atom already
+                offers (Pagos got it on 2026-09-02 and this call site never
+                heard), and the 384px cap the three pages now share — the
+                widths were 384 / 256 / 448. The width lives on the wrapper
+                because an `icon` makes the atom render a `relative` box
+                around the field. The height stays TD-019's to decide for
+                the whole admin. */}
+            <div className="w-full sm:max-w-sm">
+              <Input
+                icon={Search}
+                value={q}
+                onChange={(e) => { setQ(e.target.value); setPages(1); }}
+                placeholder="Buscar por nombre o usuario"
+                aria-label="Buscar por nombre o usuario"
+              />
+            </div>
           </div>
           {filters.map((f) => (
-            <TabsContent key={f.value} value={f.value}>
+            <TabsContent key={f.value} value={f.value} className={PAGE_STACK}>
               {visible.length === 0 ? (
-                <Card className="mt-4 p-6 text-sm text-muted-foreground">
+                <Card className="p-6 text-sm text-muted-foreground">
                   {needle
                     ? "Nadie coincide con tu búsqueda."
                     : f.value === "overdue"
@@ -305,7 +306,7 @@ export function CobrosScreen() {
                       : "Nadie te debe hoy."}
                 </Card>
               ) : (
-                <Card className="mt-4 overflow-hidden p-0">
+                <Card className="overflow-hidden">
                   <ul className="divide-y divide-line-soft" aria-label="Cobros pendientes">
                     {shown.map((g) => (
                       <CustomerRow key={g.usuario} group={g} canOperate={canOperate} />
@@ -314,7 +315,7 @@ export function CobrosScreen() {
                 </Card>
               )}
               {visible.length > shown.length && (
-                <Button variant="outline" className="mt-3" onClick={() => setPages((p) => p + 1)}>
+                <Button variant="outline" onClick={() => setPages((p) => p + 1)}>
                   Mostrar más ({visible.length - shown.length} restantes)
                 </Button>
               )}
@@ -322,6 +323,6 @@ export function CobrosScreen() {
           ))}
         </Tabs>
       )}
-    </main>
+    </PageFrame>
   );
 }

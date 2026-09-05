@@ -2,7 +2,7 @@
 
 Reviewed against: `.design/devolada/DESIGN_BRIEF.md` (pivot phase 2) and `docs/FRONTEND.md`
 Philosophy: functionalist (Rams), tokens are law, subtle borders over shadows
-Date: 2026-09-03 · Status: **findings only — no code changed; decisions pending the owner**
+Date: 2026-09-03 · Status: **built 2026-09-05** — the owner answered the five open questions and every finding below is fixed or explicitly deferred (see *What was built*)
 Code: `apps/admin/src/features/{feed,cobros,links}/*`, `apps/admin/src/features/{account,settings,auth}/*`, `packages/ui/src/styles/index.css`
 Owning specs: `docs/admin/charge-feed.spec.md`, `docs/reconciliation/payments-and-classes.spec.md` (D4), `docs/admin/settings.spec.md` (D9–D11), `docs/admin/account-hub.spec.md` (D4–D6). Everything here amends existing decisions; no new US-ID.
 
@@ -22,24 +22,24 @@ Method: the review harness — the admin built and previewed, the API stubbed at
 
 | Screenshot | Breakpoint | What it shows |
 |---|---|---|
-| `review-espaciado-pagos-desktop-1280.png` | Desktop 1280 | Title 16px above the alert, 16px to the chips; list ends at the viewport with no bottom padding |
-| `review-espaciado-cobros-desktop-1280.png` | Desktop 1280 | Same 16px rhythm, chips and search on one row, no bottom padding |
-| `review-espaciado-links-desktop-1280.png` | Desktop 1280 | 24px rhythm; the WhatsApp button's 16px icon gap is visible against Actualizar's 8px |
-| `review-espaciado-pagos-mobile-360.png` | Mobile 360 | 44px chips and search; the alert sits 12px above the rail |
-| `review-espaciado-cobros-mobile-360.png` | Mobile 360 | 40px search under 44px chips |
-| `review-espaciado-links-mobile-360.png` | Mobile 360 | 40px search, 40px buttons, 32px of page bottom |
-| `review-espaciado-pagos-expandido-desktop-1280.png` | Desktop 1280 | Pagos' expansion: 16px on four sides, 24px between columns, `sm:pl-20` alignment |
-| `review-espaciado-cobros-expandido-desktop-1280.png` | Desktop 1280 | Cobros' expansion: 12px above the buttons, 0 below them, 8px of bottom |
-| `review-espaciado-links-copiado-desktop-1280.png` | Desktop 1280 | The copy button after the click — 128px where it was 58px |
-| `review-espaciado-pagos-skeleton-desktop-1280.png` | Desktop 1280 | The skeleton's 60px rows against the list's 72px |
-| `review-tipografia-hub-desktop-1280.png` | Desktop 1280 | The hub: 24px Cuenta, 14px rail labels, 12px details, 16px icons |
-| `review-tipografia-pago-directo-desktop-1280.png` | Desktop 1280 | `h1` Cuenta and `h2` Pago directo y conciliación at the same 24px; columns 49px out of alignment |
-| `review-tipografia-pago-directo-mobile-360.png` | Mobile 360 | A sub-page **with** a title |
-| `review-tipografia-usuarios-mobile-360.png` | Mobile 360 | A sub-page **without** one — and the 14px card radius |
-| `review-tipografia-seguridad-desktop-1280.png` | Desktop 1280 | The 20px `Fingerprint`, the only non-16px icon in the area |
-| `review-tipografia-hub-observando-desktop-1280.png` | Desktop 1280 | "Modo observación" at 16px in the sidebar and 12px in the rail row |
+| `review-espaciado-pagos-desktop-1280-before.png` | Desktop 1280 | Title 16px above the alert, 16px to the chips; list ends at the viewport with no bottom padding |
+| `review-espaciado-cobros-desktop-1280-before.png` | Desktop 1280 | Same 16px rhythm, chips and search on one row, no bottom padding |
+| `review-espaciado-links-desktop-1280-before.png` | Desktop 1280 | 24px rhythm; the WhatsApp button's 16px icon gap is visible against Actualizar's 8px |
+| `review-espaciado-pagos-mobile-360-before.png` | Mobile 360 | 44px chips and search; the alert sits 12px above the rail |
+| `review-espaciado-cobros-mobile-360-before.png` | Mobile 360 | 40px search under 44px chips |
+| `review-espaciado-links-mobile-360-before.png` | Mobile 360 | 40px search, 40px buttons, 32px of page bottom |
+| `review-espaciado-pagos-expandido-desktop-1280-before.png` | Desktop 1280 | Pagos' expansion: 16px on four sides, 24px between columns, `sm:pl-20` alignment |
+| `review-espaciado-cobros-expandido-desktop-1280-before.png` | Desktop 1280 | Cobros' expansion: 12px above the buttons, 0 below them, 8px of bottom |
+| `review-espaciado-links-copiado-desktop-1280-before.png` | Desktop 1280 | The copy button after the click — 128px where it was 58px |
+| `review-espaciado-pagos-skeleton-desktop-1280-before.png` | Desktop 1280 | The skeleton's 60px rows against the list's 72px |
+| `review-tipografia-hub-desktop-1280-before.png` | Desktop 1280 | The hub: 24px Cuenta, 14px rail labels, 12px details, 16px icons |
+| `review-tipografia-pago-directo-desktop-1280-before.png` | Desktop 1280 | `h1` Cuenta and `h2` Pago directo y conciliación at the same 24px; columns 49px out of alignment |
+| `review-tipografia-pago-directo-mobile-360-before.png` | Mobile 360 | A sub-page **with** a title |
+| `review-tipografia-usuarios-mobile-360-before.png` | Mobile 360 | A sub-page **without** one — and the 14px card radius |
+| `review-tipografia-seguridad-desktop-1280-before.png` | Desktop 1280 | The 20px `Fingerprint`, the only non-16px icon in the area |
+| `review-tipografia-hub-observando-desktop-1280-before.png` | Desktop 1280 | "Modo observación" at 16px in the sidebar and 12px in the rail row |
 
-> All in `.design/devolada/screenshots/`. The capture spec writes the full 360 / 768 / 1280 grid for all nine routes; the table above is the curated set the findings cite.
+> All in `.design/devolada/screenshots/`. The names above are the **before** state and carry a `-before` suffix since the fixes landed; the same names without it are the current state, and the capture spec writes the full 360 / 768 / 1280 grid for all nine routes.
 
 ---
 
@@ -260,13 +260,44 @@ This is a defect in shipped code, not a design opinion: **BUG-018**, fixable in 
 
 19. **E10** — map the spacing / tracking / leading / weight tokens, or renumber `--space-*` to Tailwind's ladder. Proposed as **TD-020**; it is what would keep findings 6–10 from coming back on the sixth list page.
 
-## Open questions for the owner
+## The five questions, answered (2026-09-05)
 
-1. **One page frame, or three?** Every finding in E1, E2 and E4 is a consequence of `main className="px-4 pt-4 lg:px-8 lg:pt-8"` being retyped per page. A `ListPage` frame (title slot, filter slot, list slot) would hold the ladder in one place, at the cost of a component the three screens do not otherwise need. The alternative is to write the ladder into FRONTEND.md and keep copying it.
-2. **E10's direction** — token ladder wins (rename every utility) or Tailwind's ladder wins (rewrite the `--space-*` block). The second is a one-file change and makes the tokens honest; the first is what "tokens are law" literally says.
-3. **T2's direction** — titles on all five sub-pages (and the cards lose their duplicated heading), or on none.
-4. **Does any of this ride the same PR as TD-019?** E8 and the 44px floor are the same measurement on the same controls; splitting them means measuring Cobros and Links twice.
-5. **BUGS.md for T9** — recorded as BUG-018 when it is fixed, or folded into whichever PR takes it (the lite path asks for the entry *and* a test).
+| # | Question | Answer |
+|---|---|---|
+| 1 | One page frame, or three? | **A thin `PageFrame`** — it owns `main`'s padding, the title row and the 24px ladder; filters and list stay each page's own. |
+| 2 | E10's direction | **Tailwind's ladder wins.** `--space-*` became `--space-base`, mapped to `--spacing`, so `p-N` is `--space-base × N` by construction. |
+| 3 | T2's direction | **A title only when the page holds more than one card.** Only Preferencias changes: one card whose heading already says the row's words. |
+| 4 | Ride with TD-019? | **No, and only the height waits.** The three searches got the same icon and the same 384px cap now; 44 vs 40px is the density decision TD-019 owns. |
+| 5 | BUGS.md for T9 | **BUG-018**, with the entry, the fix and a test — plus the lint that makes the class of bug visible. |
+
+## What was built
+
+Everything in *Ranked* is fixed except what row 4 defers. The numbers, re-measured on the same harness:
+
+| | Before | After |
+|---|---|---|
+| `main` padding-bottom (Pagos / Cobros / Links) | 0 / 0 / 32px | **32 / 32 / 32px** |
+| Gap under the title | 16 / 16 / 24px | **24 / 24 / 24px** |
+| List card overflow | visible / hidden / visible | **hidden on all three** |
+| Skeleton row vs list row | 60px vs 72px | **72px vs 72px** |
+| Cobros' expansion padding | `12 / 16 / 0` then `8 / 16` | **16px on four sides** |
+| Icon→label in the shared buttons | 8px (Cobros) vs 16px (Links) | **8px on both** |
+| Links' copy button, idle → pressed | 58 → 128px | **labelled at every state, no jump** |
+| Search width @1280 | 384 / 256 / 448px | **384px on all three**, all with the magnifier |
+| Search height @360 | 44 / 40 / 40px | *unchanged — TD-019* |
+| Sub-page title | 24px, on two pages of five | **20px, on the one page that holds two cards** |
+| Icons in Cuenta | 16px, except a 12px `Eye` and a 20px `Fingerprint` | **16px, no exceptions** |
+| Hand-rolled cards | 14px radius on two | **10px, both from the `Card` atom** |
+| `text-danger` | inert; the warning rendered in body ink | **`text-error`, and the lint fails on the next one** |
+
+Two things the round changed its mind about while building:
+
+- **T6 (the rail's 12px detail) cost a truncation.** At 14px, "CLABE, cargo por servicio y tolerancia" no longer fits the 17rem rail and was cut to "…y toler…". A cut-off description is worse than a small one when the description is what a reader scans to pick a row, so the detail line **wraps** instead of truncating. Two-line rows in the rail; the label still truncates.
+- **The skeleton parity assertion needed the padding box.** A three-row skeleton carries a `divide-y` border on its first row and a one-row list does not, so the raw heights differ by 1px forever. The assertion measures `clientHeight`; the finding was 12px, not 1.
+
+What is now asserted rather than photographed (`tests/e2e/responsive.spec.ts`, real browser): every list page's bottom padding, the clipping card, one gap under all three titles, and the skeleton row against the real row. Plus `scripts/contrast-lint.mjs` on every colour utility, and a unit test on the element BUG-018 was found on.
+
+Still open, and deliberately not taken here: the three pages' **accessible names for the search** are three different strings (Pagos "Buscar por nombre o usuario", Cobros the same as its placeholder, Links "Buscar cliente") — a copy decision, and the pagos-filtros round already left Cobros' placeholder open. TD-021 (the line-height Tailwind pairs with each font size) came out of paying TD-020.
 
 ## What works well
 
@@ -286,4 +317,4 @@ pnpm exec playwright test --config playwright.review.config.ts tests/design/revi
 
 It reuses the e2e harness (the built-and-previewed admin plus `tests/e2e/stubs.ts`) and adds stubs for `/settings`, `/businesses/members`, `/credit*` and the passkey list. For each of `/payments`, `/payment-requests`, `/links` and the five Cuenta routes, at 360 / 768 / 1280, it records `main`'s computed padding, every top-level block's box and the gap between consecutive ones, the type ramp (one row per distinct size / weight / tracking / colour), every `<svg>`'s rendered box, every control's height, and every bordered panel's radius, overflow and padding. Five targeted tests measure the open expansions, the icon→label distance inside buttons, the copy button before and after its click, the skeleton against the loaded list with the stubs delayed 2.5s, and the observation `Eye` at both of its sizes at once.
 
-Unlike the other specs under `tests/design/`, this one **measures as well as captures** — it prints a table per route and asserts nothing beyond the screen having rendered, because the numbers are the finding. That is deliberate: four of the findings here (E1, E3, E4, T9) are invisible to every assertion the suite makes today, which is the same gap `design-review.spec.md` D1 and D10 were written about. Whichever PR takes the fixes is the one that should turn the numbers it settles into assertions.
+Unlike the other specs under `tests/design/`, this one **measures as well as captures** — it prints a table per route and asserts nothing beyond the screen having rendered, because the numbers are the finding. That was deliberate: four of the findings here (E1, E3, E4, T9) were invisible to every assertion the suite made. The PR that took the fixes turned the numbers it settled into assertions — `tests/e2e/responsive.spec.ts` ("the three list pages share one frame") and the colour-utility rule in `scripts/contrast-lint.mjs` — and this spec stayed what it is: the measuring tape, for the next round.

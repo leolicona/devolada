@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { formatTime } from "@/lib/datetime";
 import { useDisplaySettings, useSession } from "../auth/session";
+import { ListSkeleton, PAGE_STACK, PageFrame } from "../shell/PageFrame";
 import { DateRangeField } from "./DateRangeField";
 
 /* Pagos (US-A01, payments-and-classes D4/D5). Polling every 5s — "live"
@@ -248,10 +249,6 @@ function ChargeRow({
             <span className="block text-sm font-medium">{charge.customerName}</span>
             <span className="block text-sm text-muted-foreground">Pago directo · SPEI</span>
           </span>
-          <Amount
-            cents={charge.receivedCents}
-            className="shrink-0 text-right text-sm font-semibold sm:order-last sm:w-20"
-          />
           <span className="col-span-2 flex flex-wrap gap-2 sm:contents">
             <StatusBadge status={badge} />
             {/* D4: the class next to the action outcome — a lenient
@@ -261,6 +258,16 @@ function ChargeRow({
               <StatusBadge status={classBadge[charge.reconciliationClass]} />
             )}
           </span>
+          {/* espaciado review E9: the amount ends the row and the chevron
+              closes it, as in Cobros. It used to ride `sm:order-last`,
+              which put the disclosure affordance *between* the badges and
+              the number the eye scans down the right edge. The grid keeps
+              its phone placement explicitly, since the DOM order that
+              fixes the flex row would otherwise wrap it to a third row. */}
+          <Amount
+            cents={charge.receivedCents}
+            className="col-start-3 row-start-1 shrink-0 text-right text-sm font-semibold sm:w-20"
+          />
           <ChevronDown
             className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform duration-150 group-data-[state=open]:rotate-180"
             aria-hidden
@@ -378,19 +385,15 @@ function ChargeRow({
 
 function FeedSkeleton() {
   return (
-    <Card className="mt-4 p-4">
-      {[0, 1, 2].map((k) => (
-        <div key={k} className="flex items-center gap-4 py-3">
-          <Skeleton className="h-4 w-12" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-28" />
-          </div>
+    <ListSkeleton
+      leading={<Skeleton className="h-4 w-12" />}
+      trailing={
+        <>
           <Skeleton className="h-6 w-28 rounded-full" />
           <Skeleton className="h-4 w-16" />
-        </div>
-      ))}
-    </Card>
+        </>
+      }
+    />
   );
 }
 
@@ -445,19 +448,19 @@ export function FeedScreen() {
   const failedCount = failed.data?.payments.length ?? 0;
 
   return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-xl font-semibold">Pagos</h1>
-        {today && (
+    <PageFrame
+      title="Pagos"
+      actions={
+        today && (
           <p className="text-sm text-muted-foreground">
             Hoy: <span className="font-semibold text-foreground">{formatMoney(today.totalCents)}</span> ·{" "}
             {today.count} {today.count === 1 ? "pago" : "pagos"}
           </p>
-        )}
-      </div>
-
+        )
+      }
+    >
       {failedCount > 0 && status !== "failed" && (
-        <Alert variant="warning" className="mt-4 flex items-center justify-between gap-4">
+        <Alert variant="warning" className="flex items-center justify-between gap-4">
           <span className="flex items-center gap-2">
             <TriangleAlert className="size-4 shrink-0" aria-hidden />
             {failedCount} {failedCount === 1 ? "pago fallido necesita" : "pagos fallidos necesitan"} tu atención.
@@ -475,7 +478,7 @@ export function FeedScreen() {
           first — they choose the view, the search and the dates narrow it
           — and the whole bar sits directly on the panel it labels, as in
           Cobros. */}
-      <Tabs value={status} onValueChange={setStatus} className="mt-4">
+      <Tabs value={status} onValueChange={setStatus} className={PAGE_STACK}>
         <section aria-label="Filtros">
           {/* design-review 2026-09-01 (should fix): one scrollable line on
               a phone instead of three wrapped ones; desktop keeps the wrap.
@@ -527,65 +530,60 @@ export function FeedScreen() {
             />
           </div>
         </section>
-        <TabsContent value={status}>
-
-      {failedFirstLoad && (
-        <ListError
-          what="los pagos"
-          onRetry={() => void feed.refetch()}
-          retrying={feed.isRefetching}
-          className="mt-4"
-        />
-      )}
-
-      {feed.isPending && !feed.isError && <FeedSkeleton />}
-
-      {rows.length === 0 && !feed.isPending && !feed.isError && (
-        <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-          {hasFilters ? (
-            <>
-              Ningún pago coincide con estos filtros.{" "}
-              <button type="button" className="underline" onClick={clearFilters}>
-                Limpiar filtros
-              </button>
-            </>
-          ) : (
-            "Sin pagos por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar."
+        <TabsContent value={status} className={PAGE_STACK}>
+          {failedFirstLoad && (
+            <ListError what="los pagos" onRetry={() => void feed.refetch()} retrying={feed.isRefetching} />
           )}
-        </p>
-      )}
 
-      {/* design-review D9: the live region is the list, not the page —
-          charge-feed asked for the feed to announce, and wrapping <main>
-          re-read the heading, the alert and the chips on every filter. */}
-      {rows.length > 0 && (
-        <Card className="mt-4">
-          <ul className="divide-y divide-line-soft" aria-live="polite">
-            {rows.map((charge) => (
-              <ChargeRow key={charge.id} charge={charge} treatment={treatment} canOperate={canOperate} />
-            ))}
-          </ul>
-        </Card>
-      )}
+          {feed.isPending && !feed.isError && <FeedSkeleton />}
 
-      {feed.isError && feed.data && (
-        <ListError
-          what="más pagos"
-          onRetry={() => void feed.fetchNextPage()}
-          retrying={feed.isFetchingNextPage}
-          className="mt-4"
-        />
-      )}
+          {rows.length === 0 && !feed.isPending && !feed.isError && (
+            <p className="max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+              {hasFilters ? (
+                <>
+                  Ningún pago coincide con estos filtros.{" "}
+                  <button type="button" className="underline" onClick={clearFilters}>
+                    Limpiar filtros
+                  </button>
+                </>
+              ) : (
+                "Sin pagos por aquí todavía. Aparecerán en cuanto tus clientes empiecen a pagar."
+              )}
+            </p>
+          )}
 
-      {feed.hasNextPage && !feed.isError && (
-        <div className="mt-4 pb-6">
-          <Button variant="outline" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
-            {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
-          </Button>
-        </div>
-      )}
+          {/* design-review D9: the live region is the list, not the page —
+              charge-feed asked for the feed to announce, and wrapping <main>
+              re-read the heading, the alert and the chips on every filter.
+              espaciado review E3: the card clips, or a row's hover fill
+              squares off the 10px corner it is painted over. */}
+          {rows.length > 0 && (
+            <Card className="overflow-hidden">
+              <ul className="divide-y divide-line-soft" aria-live="polite">
+                {rows.map((charge) => (
+                  <ChargeRow key={charge.id} charge={charge} treatment={treatment} canOperate={canOperate} />
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {feed.isError && feed.data && (
+            <ListError
+              what="más pagos"
+              onRetry={() => void feed.fetchNextPage()}
+              retrying={feed.isFetchingNextPage}
+            />
+          )}
+
+          {feed.hasNextPage && !feed.isError && (
+            <div>
+              <Button variant="outline" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
+                {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
+              </Button>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
-    </main>
+    </PageFrame>
   );
 }

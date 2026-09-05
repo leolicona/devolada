@@ -69,18 +69,21 @@
 
   --color-surface-overlay: rgb(28 25 23 / 0.45);
 
-  /* ---------- Spacing (4px base, Rams scale) ---------- */
-  --space-0: 0;
-  --space-1: 0.25rem;   /*  4px */
-  --space-2: 0.5rem;    /*  8px */
-  --space-3: 0.75rem;   /* 12px */
-  --space-4: 1rem;      /* 16px */
-  --space-5: 1.5rem;    /* 24px */
-  --space-6: 2rem;      /* 32px */
-  --space-7: 3rem;      /* 48px */
-  --space-8: 4rem;      /* 64px */
-  --space-9: 6rem;      /* 96px */
-  --space-10: 8rem;     /* 128px */
+  /* ---------- Spacing: one unit, not a ladder of names ----------
+     TD-020 (2026-09-05, espaciado-y-tipografía review E10). This was ten
+     hand-written steps that exactly one line consumed and nothing
+     enforced: every `p-*`, `m-*` and `gap-*` in both apps resolves
+     against Tailwind's ladder, and the two agreed only up to index 4 —
+     `--space-6` said 32px while `p-6` rendered 24. The steps in use are
+     also not ten but sixteen, from 0.5 to 24, so a list was always going
+     to be a lie by omission as well.
+     The unit is the token now, mapped to Tailwind's `--spacing` in
+     styles/index.css, so `p-N` is `--space-base × N` **by construction**
+     and the two ladders cannot drift again: p-1 = 4px, p-4 = 16px,
+     p-6 = 24px, p-8 = 32px. The Rams rhythm survives as the multiples
+     the product actually writes (4 · 8 · 12 · 16 · 24 · 32), which is
+     what it always was. */
+  --space-base: 0.25rem;   /* 4px */
 
   /* ---------- Counter sizes ---------- */
   --size-touch: 3rem;        /* 48px: minimum touch target in the PWA */
@@ -103,6 +106,11 @@
   --font-size-4xl: 3rem;      /* 48px: display */
   --font-size-amount: 3.75rem;/* 60px: the amount spoken out loud */
 
+  /* These four names are Tailwind's own theme keys, and this block is
+     unlayered, so they already drive `font-medium` / `font-semibold`
+     without a mapping — the values happen to be identical, which is why
+     nothing ever showed it (TD-020). Changing one here changes the
+     utility. */
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
@@ -279,7 +287,7 @@
   /* Cards */
   --card-radius: var(--border-radius-md);
   --card-border: 1px solid var(--color-border-primary);
-  --card-padding: var(--space-5);
+  --card-padding: calc(var(--space-base) * 6);  /* 24px, and `p-6` says so */
 
   /* Admin sidebar / PWA tabs */
   --sidebar-width: 15rem;                         /* 240px */

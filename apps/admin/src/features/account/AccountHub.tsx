@@ -67,7 +67,12 @@ function RailRow({ row }: { row: Row }) {
         <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{row.label}</span>
-          <span className="block truncate text-xs text-ink-soft">{row.detail}</span>
+          {/* espaciado review T6: 14px like every other line in the area,
+              and wrapping rather than truncating — at 14px "CLABE, cargo
+              por servicio y tolerancia" no longer fits the 17rem rail, and
+              a cut-off description is worse than a small one when the
+              description is what a reader scans to pick the row. */}
+          <span className="block text-sm text-ink-soft">{row.detail}</span>
         </span>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground lg:hidden" aria-hidden />
       </Link>
@@ -134,7 +139,7 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
             icon: Plug,
             detail: actor.observing ? (
               <span className="inline-flex items-center gap-1 text-info">
-                <Eye className="size-3" aria-hidden />
+                <Eye className="size-4" aria-hidden />
                 Modo observación
               </span>
             ) : (
@@ -162,8 +167,10 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
 
   return (
     <div>
-      {/* The identity card (D5): who, where, as what */}
-      <div className="rounded-lg border border-border bg-card p-4">
+      {/* The identity card (D5): who, where, as what.
+          espaciado review T5: the `Card` atom, so this is 10px like every
+          other card instead of the 14px modal radius it had picked. */}
+      <Card className="p-4">
         <div className="flex items-center gap-3">
           <Avatar name={actor.userName} size="lg" step={actor.credit.step} />
           <div className="min-w-0">
@@ -176,7 +183,7 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
         <div className="mt-3 border-t border-line-soft pt-3">
           <BusinessSwitcher actor={actor} />
         </div>
-      </div>
+      </Card>
 
       <RailGroup id="hub-negocio" title="Negocio" rows={negocio} />
       <RailGroup id="hub-cuenta" title="Tu cuenta" rows={cuenta} />
@@ -232,8 +239,16 @@ export function AccountIndex() {
   );
 }
 
-/* The sub-page frame: the way back on a phone, an optional title (the
-   cards that already carry their own heading pass none). */
+/* The sub-page frame: the way back on a phone, and a title only when the
+   page holds more than one card (espaciado-y-tipografía review T2, D3).
+   A page that is one card whose heading already says the row's words —
+   Saldo y recargas, Usuarios, Entrar con huella o rostro, Zona horaria y
+   hora — would say them twice; the settings page killed its own index on
+   that same argument (settings D10). Pago directo y conciliación keeps
+   its title because it names two cards that are called something else.
+   The size is `text-lg`, the ramp's "section titles" (T1): at `text-xl`
+   it matched the hub's own `h1` — 24px against 24px, side by side in two
+   columns, the longer string reading as the page's real name. */
 export function SubPage({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <div>
@@ -241,7 +256,7 @@ export function SubPage({ title, children }: { title?: string; children: ReactNo
         <ChevronLeft className="size-4" aria-hidden />
         Volver a Cuenta
       </Link>
-      {title && <h2 className="mb-4 text-xl font-semibold">{title}</h2>}
+      {title && <h2 className="mb-4 text-lg font-semibold">{title}</h2>}
       {children}
     </div>
   );

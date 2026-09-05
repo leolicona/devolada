@@ -107,7 +107,10 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /^Integraciones$/ /* the hub (integrations-hub D1), owner-only */,
       /Cuenta$/ /* the account hub (US-A05): the avatar (its initials precede the word) is the fifth section; the sidebar's Cerrar sesión lives inside it now */,
       /Actualizar/ /* the roster's freshness control (pilot-UX round) */,
-      /Buscar por nombre/,
+      /Buscar cliente/ /* the search's accessible name, unchanged since the
+         sr-only label carried it — `readStop` reads `aria-label` before
+         `placeholder`, and the espaciado round (E8) made the name explicit
+         when the atom's own magnifier replaced the hand-rolled label */,
       /Copiar/ /* the first customer's actions: the roster is alive on arrival */,
       /WhatsApp/ /* one word for the channel (pilot-UX review) */,
     ]);

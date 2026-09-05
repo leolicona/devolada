@@ -153,3 +153,84 @@ test.describe("US-P03: the admin follows the ISP to a phone", () => {
     await expectNoHorizontalScroll(page);
   });
 });
+
+/* espaciado-y-tipografía review (2026-09-05, design-review.spec.md D11).
+   The round found four things no assertion in this suite could see, all
+   of them geometry the stylesheet decides: a page frame with no bottom
+   padding, a list card that does not clip the hover fill painted over
+   its corner, a skeleton 12px per row shorter than the list it stands
+   in for, and three pages measuring three different gaps under their
+   title. `PageFrame` settles them in one place; these are the numbers
+   it settles, so they stop being a screenshot. */
+const LIST_PAGES = [
+  { name: "Pagos", path: "/", row: "Janely Guadalupe Reyes" },
+  { name: "Cobros", path: "/payment-requests", row: "Janely Guadalupe Reyes" },
+  { name: "Links", path: "/links", row: "Janely Guadalupe Reyes" },
+] as const;
+
+test.describe("US-P03: the three list pages share one frame", () => {
+  test.use({ viewport: DESKTOP });
+
+  test("every page ends with room under its last row, and its card clips", async ({ page }) => {
+    await stubAdminApi(page);
+    const gaps: number[] = [];
+
+    for (const { name, path, row } of LIST_PAGES) {
+      await page.goto(ADMIN + path);
+      await expect(page.getByText(row).first()).toBeVisible({ timeout: 15_000 });
+
+      const frame = await page.evaluate(() => {
+        const main = document.querySelector("main");
+        const title = main?.querySelector("h1");
+        /* the first block under the title row, whatever the page puts there */
+        const titleRow = title?.parentElement;
+        const next = titleRow?.nextElementSibling;
+        const card = document.querySelector("main ul")?.parentElement;
+        return {
+          paddingBottom: parseFloat(getComputedStyle(main!).paddingBottom),
+          gapUnderTitle: next
+            ? Math.round(next.getBoundingClientRect().top - titleRow!.getBoundingClientRect().bottom)
+            : null,
+          cardOverflow: card ? getComputedStyle(card).overflow : null,
+        };
+      });
+
+      expect(frame.paddingBottom, `${name} ends on the viewport's last pixel`).toBeGreaterThanOrEqual(24);
+      expect(frame.cardOverflow, `${name}'s list card must clip its corners`).toBe("hidden");
+      if (frame.gapUnderTitle !== null) gaps.push(frame.gapUnderTitle);
+    }
+
+    expect(new Set(gaps).size, `three pages, ${gaps.join("/")}px under the title`).toBe(1);
+  });
+
+  test("the skeleton is the list's own shape, so nothing jumps when it loads", async ({ page }) => {
+    await stubAdminApi(page);
+    /* Hold the roster back long enough to measure the placeholder.
+       Registered *after* the stubs on purpose: Playwright runs the most
+       recent matching handler first, and `fallback()` hands the request
+       down to the stub underneath. The other way round the stub answers
+       at once and the delay is dead code. */
+    await page.route("**/direct-payments/links/roster", async (route) => {
+      if (route.request().resourceType() === "document") return route.fallback();
+      await new Promise((r) => setTimeout(r, 1500));
+      return route.fallback();
+    });
+
+    /* `clientHeight` is the padding box: it leaves out the 1px `divide-y`
+       border, which a three-row skeleton has on its first row and a
+       one-row list does not. The finding was 12px per row, not 1. */
+    const rowHeight = () =>
+      page.evaluate(() => {
+        const first = document.querySelector("main ul > li, main .divide-y > div");
+        return first ? (first as HTMLElement).clientHeight : null;
+      });
+
+    await page.goto(`${ADMIN}/links`);
+    await page.waitForSelector("main .divide-y > div");
+    const placeholder = await rowHeight();
+    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible({ timeout: 15_000 });
+    const real = await rowHeight();
+
+    expect(placeholder, "a skeleton row and a real row are the same height").toBe(real);
+  });
+});

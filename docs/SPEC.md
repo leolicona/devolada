@@ -141,6 +141,7 @@ Pivot stories (platform/pivot.spec.md); the bridge to operational actions.
 - **US-I01** — As a business, I connect my system from the integrations page: I pick WispHub, paste my API key — write-only, testable before saving — and see it validated live. *(reserved 2026-08-31, pivot D9; reuses settings D1–D3)*
 - **US-I02** — As a business, I map each reconciliation class to an action my integration declares — and for a short payment, reconnection obeys my threshold percent and floor in pesos; invalid or not-found never triggers any action. *(reserved 2026-08-31, pivot D8/D9)*
 - **US-I03** — As a business, a master switch pauses all automatic actions (observation mode): the oracle keeps validating and reconciling while I execute by hand, and my key stays configured. *(reserved 2026-08-31, pivot D9)*
+- **US-I04** — As a business, my integration is one of many: no screen, error, row or column assumes WispHub; a business with no integration gets a coherent product, not a broken one; and Devolada's base behavior (link, proof, validation, class, credit, ledger, observation) is the same whatever system I connect. *(reserved 2026-09-07, provider-port interview; integrations/provider-port.spec.md)*
 
 ### Polish & reliability (P)
 - **US-P01** — As a user of either app, a failed request tells me so and lets me retry; it never shows me an empty state that says I have nothing.
@@ -281,6 +282,7 @@ Owner's decisions:
 | [direct-payment/reading-check.spec.md](direct-payment/reading-check.spec.md) | direct-payment | US-D14 | in development |
 | [direct-payment/provisional-release.spec.md](direct-payment/provisional-release.spec.md) | direct-payment | US-D15 | proposed |
 | [integrations/integrations-hub.spec.md](integrations/integrations-hub.spec.md) | integrations | US-I01, US-I02, US-I03 | proposed |
+| [integrations/provider-port.spec.md](integrations/provider-port.spec.md) | integrations | US-I04 | proposed |
 | [platform/pivot.spec.md](platform/pivot.spec.md) | platform | US-B01–B06, US-R01–R04, US-I01–I03, US-L02, US-L03 | in development (phase 1 executed) |
 | [business/business-and-memberships.spec.md](business/business-and-memberships.spec.md) | business | US-B01, US-B02, US-B03 | current |
 | [platform/prepaid-credit.spec.md](platform/prepaid-credit.spec.md) | platform | US-B04, US-B05, US-B06, US-L03 | current |

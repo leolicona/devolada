@@ -391,6 +391,8 @@ them by accident:
    the cycle live in one layer; the good-faith evidence stays
    adapter-agnostic oracle machinery — an adapter only declares whether
    it offers a provisional action.
+   *(The declaration is executed 2026-09-07 as provider-port D9's
+   `capabilities.provisionalRelease`.)*
 2. **Consta programmatic key issuance (phase 4).** D20's internal door
    amends validation US-V05; the phase 4 child spec decides who may call
    it and how it is secured.
@@ -419,6 +421,9 @@ them by accident:
    `invalid`/`not_found`/`unapplied` never dispatch. Outgoing webhooks
    and the public API remain D17's backlog — the bus grows into them by
    adding subscribers, amending nothing here.
+   *(The bidirectional adapter is executed 2026-09-07 as provider-port
+   D2 — `ProviderSource` synchronous, `ProviderActions` through the
+   ledger — with the constraints above unchanged.)*
 
 ## Out of scope (v1)
 

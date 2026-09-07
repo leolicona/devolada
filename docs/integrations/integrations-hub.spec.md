@@ -196,6 +196,10 @@ per business (D10); no outgoing webhooks in v1 (D17).
   another trade can register, add its CLABE and find nothing to collect;
   the banner is right about the fact and now right about the words.
   Whether manual Cobros move up is a pivot decision, not this one.
+  *(Amended 2026-09-07 by provider-port D4: the per-payment reasons
+  are `PROVIDER_*`; the provider's name is interpolated once from the
+  integration row. "Provider words stay where the provider is" now
+  means the adapter's own code and tests.)*
 
 ## Schema
 

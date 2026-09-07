@@ -428,6 +428,10 @@ export function FeedScreen() {
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: POLL_MS,
+    /* presence-freshness D8: a hidden tab pauses the poll, and nothing
+       else does — "ver entrar el dinero" may live on a monitor nobody
+       touches, so the idle guard of Cobros/Links does not apply here */
+    refetchIntervalInBackground: false,
   });
 
   /* D3: failures beyond page one still surface */
@@ -435,6 +439,7 @@ export function FeedScreen() {
     queryKey: ["feed", "failed-strip"],
     queryFn: () => api<FeedResponse>(feedPath({ chip: "failed" })),
     refetchInterval: POLL_MS,
+    refetchIntervalInBackground: false,
   });
 
   const rows = feed.data?.pages.flatMap((p) => p.payments) ?? [];

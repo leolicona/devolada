@@ -2,7 +2,7 @@
 status: in development
 stories: [US-R01, US-R04]
 domain: reconciliation
-updated: 2026-09-01
+updated: 2026-09-03
 debt: []
 ---
 
@@ -48,8 +48,15 @@ that truth in D1; the owner replaced it with a **live read** on
   (TanStack Query, `staleTime` **2 min**, the owner's case: navigate away
   and come back → painted at once, no request; come back later → painted
   at once from memory while a background refetch updates it —
-  stale-while-revalidate where it is free). "Actualizar" forces a
-  refetch; the header shows "consultado hace X". **Rejected**: a longer
+  stale-while-revalidate where it is free). ~~"Actualizar" forces a
+  refetch~~; the header shows "consultado hace X". **Amended 2026-09-03
+  (polish/presence-freshness.spec.md, US-P07)**: the button retired —
+  the section refreshes on return to the tab, on a 3-minute heartbeat
+  while someone is present, and when Devolada's own pulse says a payment
+  got registered; `readAt` is the provider read's time, not the
+  request's (BUG-018); a failed background read keeps the rows and says
+  so quietly. The 2-minute memory stays for navigation inside the app.
+  **Rejected**: a longer
   `staleTime` (10 min was the mirror's tolerance; a read this cheap
   deserves fresher), persisting to localStorage (memory covers the
   navigate-and-return case; a reload may fetch).
@@ -111,13 +118,14 @@ the date exists).
 
 - **Cobros section** (nav, IA): customer rows (name · usuario, total,
   oldest due date, count) expandable to invoices (date · amount ·
-  due); header "Consultado hace X" + "Actualizar"; filter Vencidas /
+  due); header "Consultado hace X" (no button since 2026-09-03,
+  presence-freshness D1); filter Vencidas /
   Por vencer / Todas; search input. 50 customer rows per local page.
   Read-only. Empty states: no integration (D9), "Nadie te debe hoy",
   error-with-Reintentar (D7), `complete: false` warning (D4).
 - **Link page**: under the total, the invoices that make it (date ·
   amount), oldest first; no interaction.
-- es-MX: Cobro, Cobros, "consultado hace", "Actualizar", "Vencidas".
+- es-MX: Cobro, Cobros, "consultado hace", "Vencidas" ("Actualizar" retired 2026-09-03).
 
 ## Scenarios
 
@@ -128,7 +136,8 @@ the date exists).
 3. Back after 2 minutes → instant paint from memory, background refetch
    lands the fresh answer (D3).
 4. Two members open within 30 seconds → one provider read (D3);
-   "Actualizar" → a refetch.
+   ~~"Actualizar" → a refetch~~ (the refetch now rides presence signals —
+   presence-freshness scenarios 2, 3, 6).
 5. Search finds by usuario and by name; "Vencidas" keeps only overdue
    customers (D4).
 6. `complete: false` → the warning row renders (D4).

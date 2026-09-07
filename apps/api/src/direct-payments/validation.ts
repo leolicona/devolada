@@ -10,7 +10,6 @@ import { WispHub, WispHubError } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
-import { invalidatePendingInvoices } from "../wisphub/cache";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
@@ -647,9 +646,10 @@ export async function runValidation(
     });
   }
 
-  /* provider-latency D4: a confirmed payment now exists for this tenant,
-     so the display cache is stale by definition. */
-  invalidatePendingInvoices(business.id);
+  /* provider-latency D4, as amended by presence-freshness D6: the
+     display cache is keyed by the tenant's last registration, so the
+     dispatch below — the moment WispHub learns about this payment — is
+     what turns the cached list stale, in every colo at once. */
 
   /* integrations-hub D6: the dispatch decision opens its ledger row
      before the adapter runs; the terminal outcome acks it. */

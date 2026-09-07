@@ -3,9 +3,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { paymentLinks } from "../../db/schema";
+import { D1_MAX_PARAMS, chunks } from "../../db/params";
 import { integrationOf } from "../../integrations/store";
 import { WispHub, WispHubError } from "../../wisphub/client";
-import { pendingInvoicesForDisplay } from "../../wisphub/cache";
+import { pendingInvoicesForDisplay, pendingVersion } from "../../wisphub/cache";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 
@@ -30,7 +31,9 @@ export async function listPaymentRequests(c: Ctx) {
   const now = new Date();
   try {
     const wisphub = new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL);
-    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now);
+    /* presence-freshness D6: the key carries the tenant's last
+       registration, so a payment registered anywhere is a miss here */
+    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now, await pendingVersion(db, actor.id));
 
     /* pilot-UX round: the debtor's permanent link rides the row, so
        "veo quién me debe → le mando su link" is one expansion away.
@@ -40,12 +43,16 @@ export async function listPaymentRequests(c: Ctx) {
        here (the invoice row carries none): it opens WhatsApp's own
        picker with the message ready, never a stranger's chat. */
     const usuarios = [...new Set(pending.invoices.map((f) => f.usuario))];
-    const links = usuarios.length
-      ? await db
+    /* One parameter is the business id; the rest are usuarios (BUG-021) */
+    const links: { customerUsuario: string; token: string }[] = [];
+    for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
+      links.push(
+        ...(await db
           .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
           .from(paymentLinks)
-          .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, usuarios)))
-      : [];
+          .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, part)))),
+      );
+    }
     const urlByUsuario = new Map(
       links.map((l) => [l.customerUsuario, `${c.env.PAGO_BASE_URL}/p/${l.token}`]),
     );
@@ -67,7 +74,8 @@ export async function listPaymentRequests(c: Ctx) {
         };
       }),
       complete: pending.complete,
-      readAt: now.getTime(),
+      /* presence-freshness D7 (BUG-018): when WispHub was asked, not now */
+      readAt: pending.readAt,
     };
     return c.json({ success: true, data });
   } catch (e) {

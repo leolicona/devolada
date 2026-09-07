@@ -3,9 +3,10 @@ import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
+import { D1_MAX_PARAMS, chunks } from "../../db/params";
 import { creditSummary } from "../../credit";
 import { WispHub, WispHubError } from "../../wisphub/client";
-import { pendingInvoicesForDisplay, rosterForDisplay } from "../../wisphub/cache";
+import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
   isUniqueViolation,
@@ -45,6 +46,78 @@ function makeLinkToken(): string {
   let out = "";
   for (const b of bytes) out += alphabet[b % 32];
   return out;
+}
+
+/* Every customer of the roster has a link (direct-payment D5,
+   admin-links-view D5): the usuario is the identity, the numeric id a
+   cache. Writes only what changed. The upsert this replaces rewrote one
+   `payment_links` row per customer on every read, cache hit or not —
+   and the roster is read on every return to the Links tab (BUG-020).
+   Statements grow with the tenant, so each goes in chunks under D1's
+   parameter cap (BUG-021). Returns usuario → token. */
+async function ensureLinks(
+  db: ReturnType<typeof drizzle>,
+  businessId: string,
+  customers: { usuario: string; wisphubId: number }[],
+): Promise<Map<string, string>> {
+  const tokens = new Map<string, string>();
+  if (!customers.length) return tokens;
+  /* usuario → the numeric id the row holds today */
+  const storedId = new Map<string, string>();
+  const readTokens = async (usuarios: string[]) => {
+    /* one parameter is the business id */
+    for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
+      const rows = await db
+        .select({
+          customerUsuario: paymentLinks.customerUsuario,
+          token: paymentLinks.token,
+          wisphubCustomerId: paymentLinks.wisphubCustomerId,
+        })
+        .from(paymentLinks)
+        .where(and(eq(paymentLinks.businessId, businessId), inArray(paymentLinks.customerUsuario, part)));
+      for (const row of rows) {
+        tokens.set(row.customerUsuario, row.token);
+        storedId.set(row.customerUsuario, row.wisphubCustomerId);
+      }
+    }
+  };
+  await readTokens(customers.map((customer) => customer.usuario));
+
+  const missing = customers.filter((customer) => !tokens.has(customer.usuario));
+  /* six values per row at most (id and created_at defaults included) */
+  for (const part of chunks(missing, Math.floor(D1_MAX_PARAMS / 6))) {
+    const inserted = await db
+      .insert(paymentLinks)
+      .values(
+        part.map((customer) => ({
+          businessId,
+          token: makeLinkToken(),
+          wisphubCustomerId: String(customer.wisphubId),
+          customerUsuario: customer.usuario,
+        })),
+      )
+      /* Two members listing at once: the first insert wins the usuario,
+         the second reads its token below. */
+      .onConflictDoNothing({ target: [paymentLinks.businessId, paymentLinks.customerUsuario] })
+      .returning({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token });
+    for (const row of inserted) tokens.set(row.customerUsuario, row.token);
+  }
+  const raced = missing.filter((customer) => !tokens.has(customer.usuario)).map((c) => c.usuario);
+  if (raced.length) await readTokens(raced);
+
+  /* D5: the numeric id refreshes on sight — one row each, only when it
+     moved, which is a recycled id on the demo tenant and nothing on a
+     real one. */
+  for (const customer of customers) {
+    const stored = storedId.get(customer.usuario);
+    if (stored !== undefined && stored !== String(customer.wisphubId)) {
+      await db
+        .update(paymentLinks)
+        .set({ wisphubCustomerId: String(customer.wisphubId) })
+        .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.customerUsuario, customer.usuario)));
+    }
+  }
+  return tokens;
 }
 
 async function resolveLink(c: Ctx, token: string) {
@@ -116,9 +189,10 @@ export async function getLinkStatus(c: Ctx, token: string) {
     /* provider-latency D2: independent reads, one wait. D3: the page
        renders here; the submission below re-reads fresh before any
        amount is committed, so a 30s-old list cannot decide money. */
+    const version = await pendingVersion(ctx.db, business.id);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      pendingInvoicesForDisplay(business.id, wisphub, now),
+      pendingInvoicesForDisplay(business.id, wisphub, now, version),
     ]);
     /* debt-truth D7: invoices plus the carried balance. A payer whose
        invoice closed on a short payment owes a remainder that the
@@ -728,25 +802,10 @@ export async function listLinks(c: Ctx, cursor?: string) {
 
   try {
     const customers = await new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL).listCustomers();
-    if (customers.length) {
-      await db
-        .insert(paymentLinks)
-        .values(
-          customers.map((customer) => ({
-            businessId: actor.id,
-            token: makeLinkToken(),
-            wisphubCustomerId: String(customer.wisphubId),
-            customerUsuario: customer.usuario,
-          })),
-        )
-        /* D5: the usuario is the identity — an existing usuario keeps
-           its token (the link is permanent while its usuario exists) and
-           only the numeric id, a cache WispHub may recycle, refreshes. */
-        .onConflictDoUpdate({
-          target: [paymentLinks.businessId, paymentLinks.customerUsuario],
-          set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
-        });
-    }
+    /* D5: the usuario is the identity — an existing usuario keeps its
+       token (the link is permanent while its usuario exists) and only
+       the numeric id, a cache WispHub may recycle, refreshes. */
+    await ensureLinks(db, actor.id, customers);
   } catch (e) {
     return wisphubFailure(c, e);
   }
@@ -810,35 +869,9 @@ export async function linksRoster(c: Ctx) {
     return wisphubFailure(c, e);
   }
   const customers = roster.customers.filter((customer) => customer.usuario !== "");
-
-  if (customers.length) {
-    await db
-      .insert(paymentLinks)
-      .values(
-        customers.map((customer) => ({
-          businessId: actor.id,
-          token: makeLinkToken(),
-          wisphubCustomerId: String(customer.wisphubId),
-          customerUsuario: customer.usuario,
-        })),
-      )
-      /* D5: the usuario keeps its token, the recycled numeric id only
-         refreshes the cache. */
-      .onConflictDoUpdate({
-        target: [paymentLinks.businessId, paymentLinks.customerUsuario],
-        set: { wisphubCustomerId: sql`excluded.wisphub_customer_id` },
-      });
-  }
-
-  const usuarios = customers.map((cst) => cst.usuario);
-  let links: { customerUsuario: string; token: string }[] = [];
-  if (usuarios.length) {
-    links = await db
-      .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
-      .from(paymentLinks)
-      .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, usuarios)));
-  }
-  const linkMap = new Map(links.map((l) => [l.customerUsuario, l.token]));
+  /* D5: the usuario keeps its token, the recycled numeric id only
+     refreshes the cache — and only the missing links are written. */
+  const linkMap = await ensureLinks(db, actor.id, customers);
 
   const results = customers
     .flatMap((customer) => {
@@ -865,6 +898,7 @@ export async function linksRoster(c: Ctx) {
 
   return c.json({
     success: true,
-    data: { results, complete: roster.complete, readAt: now.getTime() },
+    /* presence-freshness D7 (BUG-018): the provider read's time */
+    data: { results, complete: roster.complete, readAt: roster.readAt },
   });
 }

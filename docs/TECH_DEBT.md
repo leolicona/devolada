@@ -104,7 +104,7 @@ Conscious technical debt: things deliberately postponed during a spec. Each entr
 - Note: prod has no first deploy yet (correct: it ships with the first `v*` tag and your approval).
 
 ## TD-014 — The provider cache is per isolate, not per colo
-- Status: open · Origin: polish/provider-latency.spec.md (D3)
+- Status: **paid** (2026-09-03, polish/presence-freshness.spec.md D6: the three display caches moved to `caches.default`, keyed per tenant with the invalidation carried in the key; each read logs hit/miss — the measurement this entry asked for now runs in production instead of before it) · Origin: polish/provider-latency.spec.md (D3)
 - The 30-second pending-invoice cache and the 10-minute payment-method cache live in module state, so their hit rate is whatever one isolate happens to serve. A colo-wide cache (the Cache API, keyed by ISP) would be shared by every request landing in the same city — strictly better for an ISP whose stores all sit in one region, which is the pilot's shape exactly.
 - Not paid now on purpose: the isolate cache is a few lines with no new failure surface, and the win being chased is a 30-second window. Buying a second cache layer before measuring the first one's hit rate is guessing.
 - Paid by: measuring the hit rate on dev with the pilot ISP (log the miss count per ISP for a day). If misses dominate, move both caches behind `caches.default` with the same keys and the same freshness rule — display reads the cache, guards never do.

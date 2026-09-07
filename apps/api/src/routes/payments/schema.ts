@@ -136,6 +136,13 @@ export const retryResponse = z.object({
   nextAttemptAt: z.number().int().nullable(),
 });
 
+/* presence-freshness D5: the tenant's latest `payment_registered_at`,
+   null while WispHub was never told about a payment */
+export const pulseResponse = z.object({
+  registeredAt: z.number().int().nullable(),
+});
+
+export type PulseResponse = z.infer<typeof pulseResponse>;
 export type FeedCharge = z.infer<typeof feedCharge>;
 export type FeedResponse = z.infer<typeof feedResponse>;
 export type ProofResponse = z.infer<typeof proofResponse>;

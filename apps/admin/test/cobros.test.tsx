@@ -52,8 +52,11 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
     ...over,
   });
 
+/* presence-freshness D5: the section also polls the pulse; quiet here */
+const pulse = () => handlers.paymentsPulse(() => ok({ registeredAt: null }));
+
 const arrange = (response: () => ReturnType<typeof ok | typeof fail>) => {
-  server.use(handlers.session(() => ok(businessActor)), handlers.paymentRequests(response));
+  server.use(handlers.session(() => ok(businessActor)), handlers.paymentRequests(response), pulse());
   return renderApp("/payment-requests");
 };
 
@@ -155,6 +158,7 @@ describe("pilot-UX: Copiar link y WhatsApp por deudor", () => {
     server.use(
       handlers.session(() => ok({ ...businessActor, role: "viewer" })),
       handlers.paymentRequests(() => ok(withLink())),
+      pulse(),
     );
     renderApp("/payment-requests");
 

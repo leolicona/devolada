@@ -54,6 +54,9 @@ export const handlers = {
   /* cobros-live (US-R01) */
   paymentRequests: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payment-requests", () => r()),
+  /* presence-freshness D5 */
+  paymentsPulse: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/payments/pulse", () => r()),
   /* payments-and-classes D4/D5 */
   paymentProof: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/:id/proof", ({ params }) => r(String(params.id))),

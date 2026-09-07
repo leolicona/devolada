@@ -149,6 +149,7 @@ Pivot stories (platform/pivot.spec.md); the bridge to operational actions.
 - **US-P04** — As a user with low vision or a screen reader, every status reaches me as icon + text, contrast holds, and the feed announces what changed.
 - **US-P05** — As a user of either app, every list row tells me what it is about, and every word and colour means one thing across both surfaces.
 - **US-P06** — As a user of any of the three apps, a slow or stalled WispHub never leaves me waiting: the app answers quickly, or it tells me it could not reach the provider. *(added 2026-08-18, found live: WispHub stalls ~1 call in 8 and never recovers, and our adapter had no deadline)*
+- **US-P07** — As a member of a business, the screens that mirror WispHub (Cobros, Links) stay current on their own while I am looking at them — no refresh button — and a failed background read never hides what I already had. *(added 2026-09-03, owner decision: the "Actualizar" button retires; polish/presence-freshness.spec.md)*
 
 ## Features by Phase
 
@@ -161,7 +162,7 @@ The pivot's own sequencing lives in platform/pivot.spec.md.*
 - **Phase 2 — Store PWA**: shell ✅ · search ✅ · charge ✅ · live result ✅ · cash box ✅ · cash drops ✅ · ledger ✅ · special states ✅
 - **Phase 3 — Admin Dashboard**: shell ✅ · live feed ✅ · stores ✅ · cash drops ✅ · settings ✅
 - **Phase 4 — Supporting backend**: reconnection queue ✅ · receipts ✅ (manual `wa.me` until TD-003)
-- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05) · provider latency ◐ (US-P06 — deadlines, parallel calls and a display-only cache; the deployed check with the live tenant is open)
+- **Phase 5 — Polish**: list states ✅ (US-P01) · dark mode ✅ (US-P02) · responsive ✅ (US-P03) · accessibility ◐ (US-P04 — markup, contrast and touch targets done; **keyboard order and visible focus are covered by no test**) · design review ✅ (US-P05) · provider latency ◐ (US-P06 — deadlines, parallel calls and a display-only cache; the deployed check with the live tenant is open) · presence freshness ◐ (US-P07 — no refresh button, presence signals, colo cache; the deployed check is open)
 - **Phase 6 — Better Auth migration** (better-auth.spec.md; spike passed 2026-08-15): spec ✅ · API ✅ · admin pages ✅ · tienda pages ✅ · custom domains ✅ (`*.devoladapago.com`, browser login verified) · passkeys ✅ (scenario 9 e2e in deploy-dev) — retired Agnostic Auth; TD-001 and TD-012 died by elimination
 
 Every ✅ above means "built, specced and tested". None of them means "verified on
@@ -266,6 +267,7 @@ Owner's decisions:
 | [polish/responsive.spec.md](polish/responsive.spec.md) | polish | US-P03, US-P02, US-P04 (rendered) | in development |
 | [polish/design-review.spec.md](polish/design-review.spec.md) | polish | US-P05, US-P03, US-P04, US-P02 | in development |
 | [polish/provider-latency.spec.md](polish/provider-latency.spec.md) | polish | US-P06 | in development |
+| [polish/presence-freshness.spec.md](polish/presence-freshness.spec.md) | polish | US-P07 | in development |
 | [consta/validation.spec.md](consta/validation.spec.md) | consta | US-V01, US-V02, US-V03, US-V04, US-V05, US-V06, US-V07, US-V08 | in development |
 | [consta/proof-extraction.spec.md](consta/proof-extraction.spec.md) | consta | US-V09, US-V10, US-V11, US-V17 | proposed |
 | [consta/trust-layer.spec.md](consta/trust-layer.spec.md) | consta | US-V15 | proposed |

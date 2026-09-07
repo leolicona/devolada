@@ -14,10 +14,10 @@ import {
 } from "../../integrations/dispatch";
 import { WispHub } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
-import { invalidatePendingInvoices } from "../../wisphub/cache";
+import { pendingVersion } from "../../wisphub/cache";
 import { firstAttemptSchedule } from "../../reconnection/queue";
 import { signedProofUrl } from "../../direct-payments/proofs";
-import type { ProofResponse } from "./schema";
+import type { ProofResponse, PulseResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -308,8 +308,9 @@ export async function executeAction(c: Ctx, id: string) {
     })
     .where(eq(payments.id, row.id))
     .returning();
-  /* the registration just changed what WispHub owes this tenant's screen */
-  invalidatePendingInvoices(actor.id);
+  /* the registration just changed what WispHub owes this tenant's
+     screen — and `paymentRegisteredAt` above is the display cache's own
+     key (presence-freshness D6), so nothing else has to be told */
   return c.json({
     success: true,
     data: {
@@ -359,4 +360,15 @@ export async function retryAction(c: Ctx, id: string) {
       nextAttemptAt: updated.nextAttemptAt?.getTime() ?? null,
     },
   });
+}
+
+/* GET /payments/pulse (presence-freshness D5): when WispHub last learned
+   about a payment of this tenant. Cobros polls it — one D1 read, never
+   the provider — and re-reads its list when the number moves. */
+export async function paymentsPulse(c: Ctx) {
+  const guard = businessGuard(c);
+  if ("error" in guard) return guard.error;
+  const version = await pendingVersion(guard.db, guard.actor.id);
+  const data: PulseResponse = { registeredAt: version || null };
+  return c.json({ success: true, data });
 }

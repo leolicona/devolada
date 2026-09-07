@@ -1,6 +1,10 @@
+import { eq, sql } from "drizzle-orm";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+import { payments } from "../db/schema";
 import type { PendingInvoices, WispHub, WispHubCustomer } from "./client";
 
-/* Provider caches (provider-latency spec D3, D4, D5).
+/* Provider caches (provider-latency spec D3, D4, D5; presence-freshness
+   D6, which paid TD-014).
 
    The freshness rule lives here in one place, but it is enforced at the
    call sites on purpose: a caller that decides money calls the adapter
@@ -8,51 +12,111 @@ import type { PendingInvoices, WispHub, WispHubCustomer } from "./client";
    choice inside the adapter would hide the one thing a reader of the
    charge guard has to be able to see.
 
-   In-isolate on purpose (TD-014): a colo-wide Cache API layer would hit
-   more often, and it is the documented upgrade once the miss rate is
-   measured rather than guessed. */
+   The entries live in the colo's Cache API (`caches.default`), not in
+   the isolate: a presence heartbeat per open tab is exactly the load an
+   isolate map does not dampen, and every request landing in the same
+   city now shares one provider read. Two clocks, on purpose: the Cache
+   API's `max-age` evicts, the entry's own `expiresAt` — checked against
+   the caller's `now` — decides freshness, so the rule is ours and the
+   tests can time-travel.
 
-/* D3: long enough that a shopkeeper's search → confirm shares one
-   fetch, short enough that nobody reasons about staleness for long. */
+   `cache.delete` is per data center, so the invalidation of D4 rides
+   the KEY instead: the pending-list key carries the tenant's
+   `MAX(payment_registered_at)`, the same number `/payments/pulse`
+   reports, and a registration in any colo is a new key in every colo. */
+
+/* D3: long enough that a search → confirm shares one fetch, short
+   enough that nobody reasons about staleness for long. */
 const PENDING_TTL_MS = 30_000;
 /* D5: a catalog lookup, not debt. Ten minutes, not forever — an ISP that
    adds a cash method should not wait for an isolate to recycle. */
 const PAYMENT_METHOD_TTL_MS = 10 * 60_000;
 
-type Entry<T> = { value: T; expiresAt: number };
+/* Synthetic origin for the cache keys: the entries are never served,
+   only matched by this Worker. presence-freshness DoD carries the
+   deployed check that the platform accepts a key off the zone. */
+const CACHE_ORIGIN = "https://provider-cache.devolada.internal";
 
-const pendingByBusiness = new Map<string, Entry<PendingInvoices>>();
-type Roster = { customers: WispHubCustomer[]; complete: boolean };
-const rosterByBusiness = new Map<string, Entry<Roster>>();
-const paymentMethodByBusiness = new Map<string, Entry<number>>();
+/* Tests only (TESTING.md rule 10): the Cache API cannot be enumerated,
+   so "start from empty" is a generation prefix in every key. */
+let generation = 0;
+export function resetProviderCaches(): void {
+  generation++;
+}
 
-function read<T>(store: Map<string, Entry<T>>, key: string, now: Date): T | null {
-  const hit = store.get(key);
-  if (!hit) return null;
-  if (hit.expiresAt <= now.getTime()) {
-    store.delete(key);
-    return null;
-  }
-  return hit.value;
+type Entry<T> = { value: T; readAt: number; expiresAt: number };
+
+function keyFor(kind: string, businessId: string, version: number | null): Request {
+  const v = version === null ? "" : `/${version}`;
+  return new Request(
+    `${CACHE_ORIGIN}/${generation}/${kind}/${encodeURIComponent(businessId)}${v}`,
+    { method: "GET" },
+  );
+}
+
+/* Guarded, not assumed: a runtime without the Cache API (a unit test in
+   plain node, the dashboard preview) reads as a miss and stores nothing,
+   which is slower and never wrong. */
+function store(): Cache | null {
+  const caches = (globalThis as { caches?: CacheStorage & { default?: Cache } }).caches;
+  return caches?.default ?? null;
+}
+
+async function read<T>(kind: string, businessId: string, version: number | null, now: Date): Promise<Entry<T> | null> {
+  const cache = store();
+  const hit = cache ? await cache.match(keyFor(kind, businessId, version)) : null;
+  const entry = hit ? ((await hit.json()) as Entry<T>) : null;
+  const fresh = entry !== null && entry.expiresAt > now.getTime();
+  /* TD-014's own payment condition: the hit rate is measured, not guessed */
+  console.log(`provider cache ${fresh ? "hit" : "miss"}: ${kind} ${businessId}`);
+  return fresh ? entry : null;
+}
+
+async function write<T>(kind: string, businessId: string, version: number | null, entry: Entry<T>): Promise<void> {
+  const cache = store();
+  if (!cache) return;
+  const maxAge = Math.max(1, Math.ceil((entry.expiresAt - entry.readAt) / 1000));
+  await cache.put(
+    keyFor(kind, businessId, version),
+    new Response(JSON.stringify(entry), {
+      headers: { "Content-Type": "application/json", "Cache-Control": `max-age=${maxAge}` },
+    }),
+  );
+}
+
+/* The number the pending-list key carries (presence-freshness D5/D6):
+   when WispHub last learned about a payment of this tenant. 0 when it
+   never did — observation mode registers nothing, and that is right. */
+export async function pendingVersion(db: DrizzleD1Database, businessId: string): Promise<number> {
+  const [row] = await db
+    .select({ v: sql<number | null>`max(${payments.paymentRegisteredAt})` })
+    .from(payments)
+    .where(eq(payments.businessId, businessId));
+  return Number(row?.v ?? 0);
 }
 
 /* The tenant's pending-invoice list, for **display only** (D3).
    Never call this from a path that decides whether money moves — the
    charge guard, the SPEI amount and the re-validation all read the
-   adapter directly, and debt-truth.spec.md D1/D5 depend on that. */
+   adapter directly, and debt-truth.spec.md D1/D5 depend on that.
+   `readAt` is when the provider was asked (presence-freshness D7). */
 export async function pendingInvoicesForDisplay(
   businessId: string,
   wisphub: WispHub,
   now: Date,
-): Promise<PendingInvoices> {
-  const hit = read(pendingByBusiness, businessId, now);
-  if (hit) return hit;
+  version = 0,
+): Promise<PendingInvoices & { readAt: number }> {
+  const hit = await read<PendingInvoices>("pending", businessId, version, now);
+  if (hit) return { ...hit.value, readAt: hit.readAt };
   /* Only a successful answer is cached: a provider failure must not
      become 30 seconds of remembered failure (scenario 10). */
   const fresh = await wisphub.pendingInvoices(now);
-  pendingByBusiness.set(businessId, { value: fresh, expiresAt: now.getTime() + PENDING_TTL_MS });
-  return fresh;
+  const readAt = now.getTime();
+  await write("pending", businessId, version, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
+  return { ...fresh, readAt };
 }
+
+type Roster = { customers: WispHubCustomer[]; complete: boolean };
 
 /* The tenant roster for the Links page — display only, same TTL and
    the same rule as the pending list above: money paths never read it. */
@@ -60,19 +124,13 @@ export async function rosterForDisplay(
   businessId: string,
   wisphub: WispHub,
   now: Date,
-): Promise<Roster> {
-  const hit = read(rosterByBusiness, businessId, now);
-  if (hit) return hit;
+): Promise<Roster & { readAt: number }> {
+  const hit = await read<Roster>("roster", businessId, null, now);
+  if (hit) return { ...hit.value, readAt: hit.readAt };
   const fresh = await wisphub.listCustomersFull();
-  rosterByBusiness.set(businessId, { value: fresh, expiresAt: now.getTime() + PENDING_TTL_MS });
-  return fresh;
-}
-
-/* D4: a charge just changed the answer this cache holds. Dropping the
-   entry is what keeps debt-truth's verified behaviour — charge, search
-   again at once, read "al corriente" — true with a cache in the path. */
-export function invalidatePendingInvoices(businessId: string): void {
-  pendingByBusiness.delete(businessId);
+  const readAt = now.getTime();
+  await write("roster", businessId, null, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
+  return { ...fresh, readAt };
 }
 
 /* D5: the cash payment-method id, on the charge path every single time
@@ -82,20 +140,10 @@ export async function cashPaymentMethodId(
   wisphub: WispHub,
   now: Date,
 ): Promise<number> {
-  const hit = read(paymentMethodByBusiness, businessId, now);
-  if (hit !== null) return hit;
+  const hit = await read<number>("payment-method", businessId, null, now);
+  if (hit) return hit.value;
   const fresh = await wisphub.getCashPaymentMethodId();
-  paymentMethodByBusiness.set(businessId, {
-    value: fresh,
-    expiresAt: now.getTime() + PAYMENT_METHOD_TTL_MS,
-  });
+  const readAt = now.getTime();
+  await write("payment-method", businessId, null, { value: fresh, readAt, expiresAt: readAt + PAYMENT_METHOD_TTL_MS });
   return fresh;
-}
-
-/* Tests only: module state outlives a test file's isolate, so a suite
-   that counts provider calls has to start from empty. */
-export function resetProviderCaches(): void {
-  pendingByBusiness.clear();
-  paymentMethodByBusiness.clear();
-  rosterByBusiness.clear();
 }

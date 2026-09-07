@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Share2, Link as LinkIcon, AlertCircle, Check, RefreshCw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Share2, Link as LinkIcon, AlertCircle, Check, WifiOff } from "lucide-react";
 import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { focusReadOptions } from "@/lib/presence";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
@@ -16,7 +16,13 @@ import { useSession } from "../auth/session";
    WispHub search guessed one exact-match parameter from the text's
    shape, started blank, and forgot everything on navigation; the
    Cobros pattern (whole list, 30s server cache, 2min query memory,
-   50 per local page) kills all three at once. */
+   50 per local page) kills all three at once.
+
+   presence-freshness (US-P07): no "Actualizar". The roster re-reads on
+   return to the tab (30-second floor) and nowhere else — it moves when
+   the ISP adds a customer, not by the minute, so it carries no heartbeat
+   (D4, amended 2026-09-07); a failed background read keeps the rows
+   with a quiet note. */
 
 const STALE_MS = 2 * 60_000;
 const PAGE = 50;
@@ -115,7 +121,6 @@ export function LinksScreen() {
      CLABE lands, the roster reads and the buttons wait */
   const speiConfigured = actor?.speiConfigured ?? true;
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && speiConfigured;
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(PAGE);
 
@@ -124,6 +129,7 @@ export function LinksScreen() {
     queryFn: () => api<LinksRosterResponse>("/direct-payments/links/roster"),
     staleTime: STALE_MS,
     retry: false,
+    ...focusReadOptions(),
   });
 
   const q = norm(search.trim());
@@ -137,28 +143,23 @@ export function LinksScreen() {
   }, [roster.data, q]);
   const visible = filtered.slice(0, limit);
 
-  const isConfigError = roster.isError && roster.error?.status === 503;
+  /* The code, not the status: the roster answers 503 both for a missing
+     key (WISPHUB_NOT_CONFIGURED) and for a provider that stalled
+     (WISPHUB_UNAVAILABLE), and only the first one is "conecta tu llave"
+     (found by presence-freshness scenario 5) */
+  const isConfigError = roster.isError && roster.error?.code === "WISPHUB_NOT_CONFIGURED";
+  /* D9: a background failure with rows on screen is a quiet note, never
+     the error block — that one is for a failure with nothing to show */
+  const staleAfterFailure = roster.isError && !!roster.data && !isConfigError;
 
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* The glossary's full term; the nav carries the short form */}
         <h1 className="text-xl font-semibold">Links de pago</h1>
-        {roster.data && (
-          <span className="flex items-center gap-3">
-            <Freshness readAt={roster.data.readAt} />
-            <Button
-              variant="outline"
-              disabled={roster.isFetching}
-              onClick={() => {
-                void queryClient.invalidateQueries({ queryKey: ["links-roster"] });
-              }}
-            >
-              <RefreshCw className={cn("size-4", roster.isFetching && "animate-spin")} aria-hidden />
-              Actualizar
-            </Button>
-          </span>
-        )}
+        {/* D7/D9: the only freshness signal — it ticks from the provider
+            read's time, and there is nothing to press */}
+        {roster.data && <Freshness readAt={roster.data.readAt} />}
       </div>
 
       <div className="mt-6">
@@ -195,7 +196,17 @@ export function LinksScreen() {
         </Alert>
       )}
 
-      {roster.isError && !isConfigError && (
+      {staleAfterFailure && (
+        <p
+          role="status"
+          className="mt-6 flex max-w-lg items-center gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
+        >
+          <WifiOff className="size-4 shrink-0" aria-hidden />
+          Sin conexión a WispHub. Mostrando la última lectura.
+        </p>
+      )}
+
+      {roster.isError && !roster.data && !isConfigError && (
         <ListError
           what="los links"
           onRetry={() => void roster.refetch()}

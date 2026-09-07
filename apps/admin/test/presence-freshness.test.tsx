@@ -8,7 +8,7 @@ import { FOCUS_FLOOR_MS, HEARTBEAT_MS, PULSE_MS, resetPresenceForTests } from ".
 
 /* docs/polish/presence-freshness.spec.md (US-P07), admin side:
    scenarios 1–6. The button is gone; the signals are the return to the
-   tab (D3), the presence heartbeat (D2/D4), Devolada's own pulse (D5),
+   tab (D3), the presence heartbeat on Cobros (D2/D4), Devolada's own pulse (D5),
    and a background failure that keeps the rows (D9). */
 
 const roster = (names: string[]) =>
@@ -106,7 +106,38 @@ describe("US-P07: returning to the tab re-reads, with a 30-second floor (D3)", (
 });
 
 describe("US-P07: the heartbeat runs while someone is present, never while hidden (D2, D4)", () => {
-  it("scenario 3: a present tab re-reads after 3 minutes; a hidden one does not", async () => {
+  it("scenario 3: a present Cobros tab re-reads after 3 minutes; a hidden one does not", async () => {
+    withClock();
+    let reads = 0;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.paymentsPulse(() => ok({ registeredAt: null })),
+      handlers.paymentRequests(() => {
+        reads++;
+        return ok(cobros(reads === 1 ? ["Janely"] : ["Janely", "Abraham"]));
+      }),
+    );
+    renderApp("/payment-requests");
+    expect(await screen.findByRole("button", { name: /janely/i })).toBeInTheDocument();
+
+    /* Hidden: three minutes pass and nobody asks */
+    setVisibility("hidden");
+    vi.advanceTimersByTime(HEARTBEAT_MS + 1_000);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(reads).toBe(1);
+
+    /* Visible again, but the return itself is inside no floor here (the
+       last read is minutes old) — so the return reads once, and the
+       heartbeat reads again three minutes later */
+    setVisibility("visible");
+    expect(await screen.findByRole("button", { name: /abraham/i })).toBeInTheDocument();
+    const afterReturn = reads;
+
+    vi.advanceTimersByTime(HEARTBEAT_MS + 1_000);
+    await vi.waitFor(() => expect(reads).toBe(afterReturn + 1));
+  });
+
+  it("scenario 3b: Links carries no heartbeat — three present minutes ask nothing, the return to the tab still does (D4 amended)", async () => {
     withClock();
     let reads = 0;
     server.use(
@@ -119,21 +150,15 @@ describe("US-P07: the heartbeat runs while someone is present, never while hidde
     renderApp("/links");
     expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
 
-    /* Hidden: three minutes pass and nobody asks */
-    setVisibility("hidden");
     vi.advanceTimersByTime(HEARTBEAT_MS + 1_000);
     await new Promise((r) => setTimeout(r, 50));
     expect(reads).toBe(1);
+    expect(screen.queryByText("Abraham Flores")).not.toBeInTheDocument();
 
-    /* Visible again, but the return itself is inside no floor here (the
-       last read is minutes old) — so the return reads once, and the
-       heartbeat reads again three minutes later */
+    setVisibility("hidden");
     setVisibility("visible");
     expect(await screen.findByText("Abraham Flores")).toBeInTheDocument();
-    const afterReturn = reads;
-
-    vi.advanceTimersByTime(HEARTBEAT_MS + 1_000);
-    await vi.waitFor(() => expect(reads).toBe(afterReturn + 1));
+    expect(reads).toBe(2);
   });
 });
 

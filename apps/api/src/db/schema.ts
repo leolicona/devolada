@@ -274,6 +274,12 @@ export const payments = sqliteTable(
     index("payments_due_idx").on(t.status, t.nextValidationAt),
     index("payments_action_due_idx").on(t.actionOutcome, t.nextAttemptAt),
     index("payments_business_created_idx").on(t.businessId, t.createdAt),
+    /* presence-freshness D5/D6: `MAX(payment_registered_at)` per tenant
+       is the pulse and the display cache's key, read every 30 s per open
+       Cobros tab and on every payer-page render. Covering index, so the
+       read is one seek — measured against the `(business_id, created_at)`
+       index it walked every payment of the tenant. */
+    index("payments_business_registered_idx").on(t.businessId, t.paymentRegisteredAt),
     /* D8: one transfer pays once — the database, not the provider,
        refuses the second submission, racing ones included */
     uniqueIndex("payments_business_tracking_idx")

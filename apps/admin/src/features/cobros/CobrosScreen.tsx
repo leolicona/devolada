@@ -263,7 +263,7 @@ export function CobrosScreen() {
     <main className="px-4 pt-4 lg:px-8 lg:pt-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Cobros</h1>
-        {/* D7 of presence-freshness (BUG-013): the provider read's own
+        {/* D7 of presence-freshness (BUG-018): the provider read's own
             time, and nothing to press next to it */}
         {query.data && <Freshness at={query.data.readAt} />}
       </div>

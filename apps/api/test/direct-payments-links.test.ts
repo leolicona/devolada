@@ -217,3 +217,29 @@ describe("US-D07 D5: the usuario is the identity, the numeric id is a cache", ()
     expect(tokens.size).toBe(2);
   });
 });
+
+describe("US-D07: the roster writes only what is missing, in chunks under D1's parameter cap", () => {
+  it("150 customers get 150 links in one read; the second read creates nothing and keeps every token (BUG-020, BUG-021)", async () => {
+    await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    resetProviderCaches();
+    const many = Array.from({ length: 150 }, (_, i) =>
+      customer({ id_servicio: 1000 + i, usuario: `c${i}@wifiplus`, nombre: `Cliente ${i}`, telefono: null }),
+    );
+    mockList(many);
+
+    const first = (await (await search()).json()).data;
+    expect(first.results).toHaveLength(150);
+    const rows = await drizzle(env.DB).select().from(paymentLinks);
+    expect(rows).toHaveLength(150);
+    expect(new Set(rows.map((r) => r.token)).size).toBe(150);
+
+    /* Inside the 30 s cache: no provider call (no interceptor is armed),
+       and the read has nothing to insert — the same 150 rows, the same
+       URLs, in the same order. */
+    const second = (await (await search()).json()).data;
+    expect(second.results.map((r: { url: string }) => r.url)).toEqual(
+      first.results.map((r: { url: string }) => r.url),
+    );
+    expect(await drizzle(env.DB).select().from(paymentLinks)).toHaveLength(150);
+  });
+});

@@ -6,7 +6,7 @@ import { resetProviderCaches } from "../src/wisphub/cache";
 /* docs/polish/presence-freshness.spec.md (US-P07), API side: the pulse
    (scenario 7), the colo cache keyed by the tenant's last registration
    (scenario 8, provider-latency D4 by key) and the honest readAt
-   (scenarios 8–9, BUG-013). Scenario 10 is provider-latency.test.ts
+   (scenarios 8–9, BUG-018). Scenario 10 is provider-latency.test.ts
    running unchanged on the new store. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
@@ -90,7 +90,7 @@ describe("US-P07: the colo cache is keyed by the last registration, and readAt i
     const first = (await (await a.request("/payment-requests", await asBusiness(), env)).json()).data;
     expect(first.cobros).toHaveLength(1);
 
-    /* No interceptor: this read must be the cache's. BUG-013 — the
+    /* No interceptor: this read must be the cache's. BUG-018 — the
        label's timestamp is the provider read's, so it repeats. */
     const second = (await (await a.request("/payment-requests", await asBusiness(), env)).json()).data;
     expect(second.cobros).toHaveLength(1);

@@ -54,7 +54,7 @@ that truth in D1; the owner replaced it with a **live read** on
   the section refreshes on return to the tab, on a 3-minute heartbeat
   while someone is present, and when Devolada's own pulse says a payment
   got registered; `readAt` is the provider read's time, not the
-  request's (BUG-013); a failed background read keeps the rows and says
+  request's (BUG-018); a failed background read keeps the rows and says
   so quietly. The 2-minute memory stays for navigation inside the app.
   **Rejected**: a longer
   `staleTime` (10 min was the mirror's tolerance; a read this cheap

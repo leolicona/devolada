@@ -17,14 +17,28 @@ Format:
 
 ---
 
-## BUG-014 — Links read a stalled WispHub as "conecta tu llave"
+## BUG-021 — Tenant-wide statements bound more than D1's 100 parameters
+- Status: fixed (latent — never triggered: the demo tenant holds 14 customers and prod has no deploy)
+- Detected: 2026-09-07 · code reading during the review of PR #167
+- Affected spec: docs/direct-payment/admin-links-view.spec.md (D4/D5), docs/reconciliation/cobros-live.spec.md (D4)
+- Symptom: none observed. `linksRoster`, `listLinks` and `listPaymentRequests` bound the whole roster (or every debtor) into one multi-row INSERT or one `IN (…)`. D1 caps bound parameters at 100 per query; the roster insert binds six values per row (four columns plus the client-side `id` and `created_at` defaults), so the first tenant past 16 customers would have failed the roster and the batch generator, and past 99 debtors the Cobros read. The local D1 the suite runs on (workerd's SQLite) does not enforce the cap, which is why no test ever failed. Fix: `src/db/params.ts` (`D1_MAX_PARAMS`, `chunks`) on every statement that grows with the tenant; the sweeps stay under the cap by their `BATCH` of 20.
+- Regression test: `apps/api/test/direct-payments-links.test.ts` ("150 customers get 150 links in one read") exercises the chunked paths; the cap itself cannot be reproduced locally.
+
+## BUG-020 — The Links roster rewrote every customer's link row on every read
+- Status: fixed
+- Detected: 2026-09-07 · review of PR #167 (presence-freshness), on dev since the pilot-UX round (2026-09-02)
+- Affected spec: docs/direct-payment/admin-links-view.spec.md (D5), docs/polish/presence-freshness.spec.md (D4)
+- Symptom: every `GET /direct-payments/links/roster` ran `INSERT … ON CONFLICT DO UPDATE` over the whole tenant, cache hit or not — one row written per customer per read (measured in SQLite: an upsert with unchanged values still writes the row). Harmless while a read was a page load or a click; #167's 3-minute heartbeat made it periodic: with 500 customers, ~80k rows written per present tab per 8 h, against the free plan's 100k rows written per day per account (the ceiling CICD.md D7 already met once). Root cause: the upsert was the mechanism for "every customer has a link" (D5). Fix: `ensureLinks` reads what exists, inserts only the missing usuarios (`ON CONFLICT DO NOTHING`, so two members listing at once do not collide), refreshes a numeric id only when it moved; and Links carries no heartbeat (presence-freshness D4 amended).
+- Regression test: `apps/api/test/direct-payments-links.test.ts` (the second read of 150 customers creates nothing and keeps every token); the D5 tests keep covering the id refresh on a recycled id.
+
+## BUG-019 — Links read a stalled WispHub as "conecta tu llave"
 - Status: fixed
 - Detected: 2026-09-03 · presence-freshness scenario 5 (a background failure with nothing to show) failed against the deployed behaviour
 - Affected spec: docs/direct-payment/admin-links-view.spec.md
 - Symptom: with the key configured and WispHub down, the roster page showed "Sin conexión a WispHub. Conecta tu llave en Integraciones" — a prompt to fix something that was not broken. Root cause: `LinksScreen` keyed the integration prompt on `status === 503`, and the roster answers 503 for both `WISPHUB_NOT_CONFIGURED` and `WISPHUB_UNAVAILABLE`. Fix: the screen reads the error code (presence-freshness DoD).
 - Regression test: `apps/admin/test/presence-freshness.test.tsx` scenario 5 (503 `WISPHUB_UNAVAILABLE` → `ListError` with Reintentar) alongside `links.test.tsx` "without WispHub the page points at Integraciones" (503 `WISPHUB_NOT_CONFIGURED` → the prompt)
 
-## BUG-013 — "consultado hace un momento" after a cache hit up to 30 s old
+## BUG-018 — "consultado hace un momento" after a cache hit up to 30 s old
 - Status: fixed
 - Detected: 2026-09-03 · code reading while retiring the "Actualizar" button (deployed on dev since the pilot-UX round)
 - Affected spec: docs/reconciliation/cobros-live.spec.md (D3), docs/direct-payment/admin-links-view.spec.md

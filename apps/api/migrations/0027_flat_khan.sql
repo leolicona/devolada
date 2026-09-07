@@ -1,0 +1,1 @@
+CREATE INDEX `payments_business_registered_idx` ON `payments` (`business_id`,`payment_registered_at`);

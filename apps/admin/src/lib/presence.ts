@@ -74,24 +74,34 @@ export function usePresence(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-/* The query options a live read carries (D3, D4). `present` comes from
-   `usePresence()` so the interval re-arms when presence changes; the
-   function form of `refetchInterval` is re-evaluated on every query
-   update, which is how a failed background read switches the heartbeat
-   off until the next signal. */
 /* The slice of TanStack's `Query` the options read — structural, so the
    same options fit every typed `useQuery` */
 type LiveQuery = { state: { status: "pending" | "error" | "success"; dataUpdatedAt: number } };
 
+/* D3 alone: the return to the tab, with its floor. What a screen whose
+   list moves rarely carries — Links: the roster changes when the ISP
+   adds a customer, not by the minute, and every roster read is a
+   provider call, so no heartbeat polls it (D4, amended 2026-09-07).
+   "always" ignores staleTime — the 2-minute memory is for navigation
+   inside the app, not for the return from the provider's own tab. */
+export function focusReadOptions() {
+  return {
+    refetchOnWindowFocus: (query: LiveQuery) =>
+      Date.now() - query.state.dataUpdatedAt >= FOCUS_FLOOR_MS ? ("always" as const) : false,
+  };
+}
+
+/* D3 + D4: the return to the tab plus the presence heartbeat — Cobros.
+   `present` comes from `usePresence()` so the interval re-arms when
+   presence changes; the function form of `refetchInterval` is
+   re-evaluated on every query update, which is how a failed background
+   read switches the heartbeat off until the next signal. */
 export function liveReadOptions(present: boolean, intervalMs = HEARTBEAT_MS) {
   return {
+    ...focusReadOptions(),
     refetchInterval: (query: LiveQuery) =>
       present && query.state.status !== "error" ? intervalMs : false,
     refetchIntervalInBackground: false,
-    /* "always" ignores staleTime — the 2-minute memory is for navigation
-       inside the app, not for the return from WispHub's own tab */
-    refetchOnWindowFocus: (query: LiveQuery) =>
-      Date.now() - query.state.dataUpdatedAt >= FOCUS_FLOOR_MS ? ("always" as const) : false,
   };
 }
 

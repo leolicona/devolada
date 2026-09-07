@@ -2,7 +2,7 @@
 status: in-development
 stories: [US-D07]
 domain: direct-payment
-updated: 2026-08-30
+updated: 2026-09-07
 ---
 
 # Spec: Admin Payment Links View
@@ -27,11 +27,15 @@ updated: 2026-08-30
 
 > **Amended 2026-09-03 (polish/presence-freshness.spec.md, US-P07).**
 > The header's "Actualizar" retired: the roster refreshes on return to
-> the tab (30-second floor), on a 3-minute heartbeat while someone is
-> present, and never while the tab is hidden or idle; a failed
+> the tab (30-second floor) and nowhere else — the 3-minute heartbeat of
+> 2026-09-03 retired on 2026-09-07 (presence-freshness D4 amended: the
+> roster moves when the ISP adds a customer, and every read was
+> rewriting one `payment_links` row per customer, BUG-020); a failed
 > background read keeps the rows and says so quietly; `readAt` is the
-> provider read's time (BUG-013). The 30-second display cache now lives
-> in the colo (TD-014 paid there).
+> provider read's time (BUG-018). The 30-second display cache now lives
+> in the colo (TD-014 paid there). The roster read creates only the
+> links that are missing, in chunks under D1's 100 bound parameters
+> (BUG-021).
 
 
 Allows ISP administrators to search their WispHub customers and share permanent SPEI payment links via WhatsApp directly from the Devolada Pagos admin dashboard.

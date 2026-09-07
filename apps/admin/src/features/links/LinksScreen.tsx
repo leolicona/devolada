@@ -5,7 +5,7 @@ import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
-import { liveReadOptions, usePresence } from "@/lib/presence";
+import { focusReadOptions } from "@/lib/presence";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
@@ -19,8 +19,10 @@ import { useSession } from "../auth/session";
    50 per local page) kills all three at once.
 
    presence-freshness (US-P07): no "Actualizar". The roster re-reads on
-   return to the tab, on a slow heartbeat while someone is present, and
-   a failed background read keeps the rows with a quiet note. */
+   return to the tab (30-second floor) and nowhere else — it moves when
+   the ISP adds a customer, not by the minute, so it carries no heartbeat
+   (D4, amended 2026-09-07); a failed background read keeps the rows
+   with a quiet note. */
 
 const STALE_MS = 2 * 60_000;
 const PAGE = 50;
@@ -119,7 +121,6 @@ export function LinksScreen() {
      CLABE lands, the roster reads and the buttons wait */
   const speiConfigured = actor?.speiConfigured ?? true;
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && speiConfigured;
-  const present = usePresence();
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(PAGE);
 
@@ -128,7 +129,7 @@ export function LinksScreen() {
     queryFn: () => api<LinksRosterResponse>("/direct-payments/links/roster"),
     staleTime: STALE_MS,
     retry: false,
-    ...liveReadOptions(present),
+    ...focusReadOptions(),
   });
 
   const q = norm(search.trim());

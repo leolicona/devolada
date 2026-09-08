@@ -1,0 +1,118 @@
+{
+  "$comment": "Agent skills vendored into .claude/skills/. Copied by hand from leolicona/miabot@ae37d82 on 2026-09-08, where tools/scripts/sync-skills.sh had synced them from the upstream repositories below at the recorded commits. No overlay was applied to any of these. Devolada carries no sync script: to update a skill, copy it again from its upstream at a newer commit and record the commit here.",
+  "sources": {
+    "cloudflare": {
+      "repo": "https://github.com/cloudflare/skills.git",
+      "ref": "main",
+      "commit": "d924cd8f59e75e08fd3dd52843bb2776de35c77e",
+      "synced_at": "2026-09-06T20:41:18Z",
+      "license": "Apache-2.0",
+      "official": true,
+      "skills": [
+        {
+          "name": "wrangler",
+          "path": "skills/wrangler"
+        },
+        {
+          "name": "workers-best-practices",
+          "path": "skills/workers-best-practices"
+        }
+      ]
+    },
+    "hono": {
+      "repo": "https://github.com/honojs/skills.git",
+      "ref": "main",
+      "commit": "b53a71865bcfbcec721a9a902df2a3620d33096a",
+      "synced_at": "2026-09-06T20:41:19Z",
+      "license": "MIT",
+      "official": true,
+      "skills": [
+        {
+          "name": "hono",
+          "path": "skills/hono"
+        }
+      ]
+    },
+    "shadcn": {
+      "repo": "https://github.com/shadcn-ui/ui.git",
+      "ref": "main",
+      "commit": "5c7072da672b0048bc6771e3204063a2537df91a",
+      "synced_at": "2026-09-06T20:41:21Z",
+      "license": "MIT",
+      "official": true,
+      "skills": [
+        {
+          "name": "shadcn",
+          "path": "skills/shadcn"
+        }
+      ]
+    },
+    "vercel": {
+      "repo": "https://github.com/vercel-labs/agent-skills.git",
+      "ref": "main",
+      "commit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+      "synced_at": "2026-09-06T20:41:22Z",
+      "license": "see upstream (no LICENSE file on 2026-09-06)",
+      "official": true,
+      "skills": [
+        {
+          "name": "vercel-react-best-practices",
+          "path": "skills/react-best-practices"
+        }
+      ],
+      "note": "Devolada's frontends are Vite SPAs: the React rules apply, the server/Next.js rules (server-*, hydration) do not."
+    },
+    "antfu": {
+      "repo": "https://github.com/antfu/skills.git",
+      "ref": "main",
+      "commit": "a74f281a27dadc02397bc1a174b0f2c97531b6ae",
+      "synced_at": "2026-09-06T20:41:24Z",
+      "license": "MIT",
+      "official": false,
+      "note": "Maintained by a Vite/Vitest core team member; generated from official docs",
+      "skills": [
+        {
+          "name": "vite",
+          "path": "skills/vite"
+        },
+        {
+          "name": "vitest",
+          "path": "skills/vitest"
+        },
+        {
+          "name": "pnpm",
+          "path": "skills/pnpm"
+        }
+      ]
+    },
+    "anthropic": {
+      "repo": "https://github.com/anthropics/skills.git",
+      "ref": "main",
+      "commit": "41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f",
+      "synced_at": "2026-09-06T20:41:27Z",
+      "license": "see upstream (no LICENSE file on 2026-09-06)",
+      "official": true,
+      "skills": [
+        {
+          "name": "webapp-testing",
+          "path": "skills/webapp-testing"
+        }
+      ]
+    },
+    "secondsky": {
+      "repo": "https://github.com/secondsky/claude-skills.git",
+      "ref": "main",
+      "commit": "ac5905b4f0545461034885bb385645b4c7a5562a",
+      "synced_at": "2026-09-06T20:41:28Z",
+      "license": "MIT",
+      "official": false,
+      "note": "Community collection; taken because Drizzle on D1 has no official skill",
+      "skills": [
+        {
+          "name": "drizzle-orm-d1",
+          "path": "plugins/drizzle-orm-d1/skills/drizzle-orm-d1"
+        }
+      ]
+    }
+  }
+}

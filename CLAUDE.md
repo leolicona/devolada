@@ -32,6 +32,7 @@ The project is **spec-driven**; the constitution governs and CI enforces the gat
 - **Lite path**: bugfixes/typos/copy carry no spec — they carry an entry in `docs/legacy/BUGS.md` (if production was affected) and a test.
 - Conscious debt → `docs/legacy/TECH_DEBT.md` (TD-NNN format with a payment condition).
 - **Tests cite their story** (constitution VII): a Spec Kit feature uses its per-feature number carrying the feature slug (`direct-payment US1: …`); a feature not yet rebuilt keeps `US-XNN`. `spec-lint` accepts both while the migration runs.
+- **The stack is decided in the constitution** (*Stack conventions*): each convention names the skill under `.claude/skills/` that carries its patterns, and a task that writes code under a convention loads that skill first.
 - Cross-cutting layers no feature re-decides: `docs/legacy/ARCHITECTURE.md`, `docs/legacy/FRONTEND.md`, `docs/legacy/TESTING.md`, `docs/legacy/CICD.md`, `docs/legacy/integrations/*.md`.
 - `docs/legacy/integrations/agnostic-auth.md` documents the **verified real contract**, which differs from the service's official guide — on conflict, the local file wins.
 

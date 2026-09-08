@@ -322,12 +322,18 @@ citations, and A is the only option that spends them.
    Consta stays a domain. Not decided here.
 3. **Timing against the pivot.** Phases 2–5 are live and specs are amended
    weekly. PR 2 wants a quiet week.
-4. **Still unverified:** whether a command override in
-   `.specify/templates/overrides/commands/` can redirect `/speckit-specify`
-   to create `docs/<domain>/<feature>/` instead of `specs/NNN-slug/`. The
-   template override mechanism is confirmed (`resolve_template_content`,
-   priority 1, "replace"); the command-layer equivalent was read but not
-   exercised. PR 1 settles it.
+4. ~~Still unverified: whether a command override can redirect
+   `/speckit-specify`.~~ **Settled by PR1.B (2026-09-08), and the answer
+   changes the mechanism, not the conclusion.** A command override never
+   reaches the rendered `SKILL.md` — neither `specify integration upgrade
+   claude` nor `specify init --here --force` re-renders it from
+   `.specify/templates/overrides/`, and the skill keeps pointing at the core
+   template. It is not needed. The two mechanisms that carry option B were
+   both exercised instead: template overrides resolve at priority 1 and
+   **survive `init --force`**, and `SPECIFY_FEATURE_DIRECTORY` takes an
+   arbitrary path — `setup-plan.sh` aimed at a `docs/` directory resolved
+   `FEATURE_SPEC` and `IMPL_PLAN` inside it. So redirection is an instruction
+   to the agent (in `CLAUDE.md` / the constitution), not a file to override.
 
 ## Sources
 

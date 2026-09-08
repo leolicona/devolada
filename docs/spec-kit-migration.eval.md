@@ -315,11 +315,16 @@ citations, and A is the only option that spends them.
 1. **Is the goal the workflow or the standard?** If it is the repeatable
    interview→clarify→plan→converge loop, B delivers it. If it is
    interoperability with a wider ecosystem, only A does — at the cost in §6.
-2. **Does `apps/consta` get its own Spec Kit project?** Spec Kit resolves the
-   nearest `.specify/`, so `specify init apps/consta` would give Consta its
-   own constitution and numbering — which matches `SPEC.md`'s "own spec tree,
-   extracting it later stays a folder move". Or one project at the root, and
-   Consta stays a domain. Not decided here.
+2. ~~Does `apps/consta` get its own Spec Kit project?~~ **Decided
+   2026-09-08: no — one Spec Kit project at the repository root, and Consta
+   is one domain among the others.** The owner also retired the commercial
+   premise the question rested on: Consta is the validation engine, is not
+   sold separately, and its API is offered through devoladapago. The runtime
+   boundary (own Worker, own D1, own API-key auth) is untouched by that — it
+   is architectural, not commercial. Two consequences are open and recorded
+   in [BRIEF.md](BRIEF.md) §7: how an API integrator is billed, and whether
+   the no-internals rule survives now that "extraction stays a folder move"
+   is no longer its justification.
 3. **Timing against the pivot.** Phases 2–5 are live and specs are amended
    weekly. PR 2 wants a quiet week.
 4. ~~Still unverified: whether a command override can redirect

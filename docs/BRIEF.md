@@ -25,10 +25,19 @@ on its own.
 - **Business model:** prepaid validation credit. A confirmed validation debits
   the business's balance at the current fee — never per attempt, never a
   percentage.
-- **Two products, one house:** Devolada (the platform) and **Consta** (the SPEI
-  validation engine, sold on its own to integrators via API key). Consta is
-  *adjacent*, not a Devolada feature: no Devolada code may depend on its
-  internals, only on its public API, so extracting it stays a folder move.
+- **Consta is the validation engine, not a second product** *(decided
+  2026-09-08, supersedes the "adjacent product, own product shared house"
+  framing in `docs/legacy/SPEC.md` and the owner decisions of 2026-08-17)*.
+  It is one domain of Devolada. It is **not sold separately**: the validation
+  API is offered **through devoladapago**, to its customers.
+  - The **runtime boundary is unchanged** by this decision, because it is
+    architectural and not commercial: `apps/consta` stays its own Worker with
+    its own D1 and its own API-key auth, on `consta.devoladapago.com`. Nothing
+    here licenses merging it into `apps/api`.
+  - What the decision does retire is the *reason* the old rule gave for the
+    boundary — "so extracting it to its own repo later stays a folder move".
+    Whether the no-internals rule survives on architectural merit alone is
+    open (§7).
 
 **Out of scope, decided:** funds custody, dynamic CLABEs, percentage fees,
 manual verification. The store network (payment points in corner stores) was
@@ -189,7 +198,7 @@ close every gap in the code's favour.
 | Settings | US-A04 | in development | `admin/settings.spec.md` |
 | Account hub | US-A05 | in development | `admin/account-hub.spec.md` |
 
-### Consta (adjacent product)
+### Consta — the validation engine (a domain, not a separate product)
 | Feature | Stories | State | Legacy source |
 |---|---|---|---|
 | Validation (verdict, failure taxonomy, cost, keys) | US-V01–V08 | in development | `consta/validation.spec.md` |
@@ -244,3 +253,28 @@ verifies it with `gen-banks.mjs --check`.
 
 Legacy is deleted in the migration's last PR, once PR3 has emptied it of value
 — not before.
+
+## 7. Open questions this brief does not answer
+
+Recorded so PR1.C writes a constitution around what is decided, and PR3 does
+not quietly invent an answer while rebuilding a spec.
+
+1. **How an API integrator is billed.** `US-L03` says every confirmed
+   validation debits **the business's** prepaid credit at the current fee.
+   `US-V05` logs every validation under its API key "so the fixed fee per
+   transaction can be derived later" — which was Consta's own billing, from
+   when it was sold on its own. Now that the API is offered through
+   devoladapago, either a third-party integrator *is* a `business` with a
+   prepaid balance like any other, or there is a second billing path for API
+   customers. The two produce different schemas and different specs.
+2. **Whether the no-internals rule survives.** `docs/legacy/SPEC.md` forbids
+   any Devolada spec depending on Consta's internals, justified by keeping a
+   future extraction to a folder move. That justification is gone. The
+   boundary still has independent merit — separate Worker, separate D1,
+   separate secrets, API keys instead of cookies — but "still a good idea" and
+   "still law" are different claims, and only the second one belongs in a
+   constitution.
+3. **What the US-V actor is called.** The stories say "integrators
+   (developers calling its API)" and "the operator". The integrator is still a
+   real actor, but is now a devoladapago customer rather than a Consta
+   customer. The glossary has no row for them.

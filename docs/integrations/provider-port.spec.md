@@ -2,7 +2,7 @@
 status: proposed
 stories: [US-I04]
 domain: integrations
-updated: 2026-09-07
+updated: 2026-09-08
 debt: []
 ---
 
@@ -32,6 +32,29 @@ v1 (D17); the adapter is bidirectional — SOURCE synchronous inside the
 reconciliation path, ACTIONS through the acknowledged dispatch (pivot Open
 item 5); observation is zero writes (integrations-hub D4).
 
+## Responsibilities
+
+Who answers which question. Settled with the owner 2026-09-08; no child
+spec re-decides a row of this table by accident.
+
+| Question | Who answers | Where it is written |
+|---|---|---|
+| Does the money exist at Banxico? | **Consta** | `consta/*`, validation.spec.md |
+| What arrived, and what does it mean against what was expected? (exact / short / over) | **Devolada** — the business's tolerance, against the fresh ask | payments-and-classes D1/D3 |
+| Against what is it compared? (the receivable) | **A source**: the adapter today; the manual source later | pivot D2, provider-port D1/D6 |
+| What does each class deserve, and with what threshold and floor? | **The business** | integrations-hub D3, partial-payment D2–D4 |
+| Where did a surplus physically go? | **The adapter**, as a declared fact (`absorbsOverpayment`), never as a policy | payments-and-classes D2, provider-port D9 |
+| What can the connected system do, and how? | **The adapter** | provider-port D7/D9 |
+| How is a partial payment registered? | **An entry requirement of the port**, not an adapter's choice | provider-port D8 |
+
+Two principles fall out of the table. **Classification is never
+delegated**: an adapter cannot "handle" short, exact or over — it can
+only declare where money went and which actions exist. And **the port is
+the same surface the public API will expose** (pivot D17's backlog): an
+adapter is an internal consumer of that surface, and neither contract is
+written without the other in view — the day the API exists with a
+different vocabulary, the oracle has two truths.
+
 ## Decisions
 
 - **D1 — The base is the oracle, in port vocabulary; the null provider
@@ -55,7 +78,15 @@ item 5); observation is zero writes (integrations-hub D4).
   pivot D2's "one source only"), sequenced after this one. This spec
   keeps the door open (D5: refs may be Devolada's own identity; D9: "no
   actions" is a first-class catalog; `integrations.provider` reserves
-  `manual`) and builds nothing of it. **Rejected**: folding the manual
+  `manual`) and builds nothing of it. **One decision is reserved for that
+  spec by name** (2026-09-08): under `over_treatment = credit` with no
+  running account behind it, nobody remembers the credit — WispHub nets
+  it into the next debt (debt-truth D12), Devolada stores nothing
+  (direct-payment D4). The manual source must either keep a credit of its
+  own (append-only, `credit_entries`-style, netted into the next Cobro)
+  or not offer `credit` at all and treat every surplus as `flag`. The
+  recommendation on record is the second for v1: honest, and it invents
+  no running account. **Rejected**: folding the manual
   source into this spec (it re-decides pivot D2 by accident); accepting a
   payment with no receivable as class `unapplied` for the null provider
   (breaks direct-payment D1/D8's premise that a link belongs to a customer
@@ -255,6 +286,37 @@ item 5); observation is zero writes (integrations-hub D4).
   one PR (the spec would be born `in development` before the interview's
   decisions were reviewable on their own).
 
+- **D13 — "Can Devolada validate this transfer?" and "is there something
+  to reconcile it against?" are two gates, not one (2026-09-08).**
+  `speiAvailable` answers one boolean with five conditions — CLABE,
+  a bank in apiCEP's vocabulary, Consta's URL and key, **and the
+  provider's key**. Fused that way, the provider became a precondition
+  for *validating*, which is the core (Responsibilities, row 1–2) and
+  owes the provider nothing. Traced 2026-09-08: with no integration the
+  payer's page answers `unavailable` ("SPEI is not ready", false), the
+  proof submit answers 409 `SPEI_NOT_CONFIGURED` (same lie), and a
+  payment in flight retries on `WISPHUB_NOT_CONFIGURED` *before*
+  `settle()` reads anything — so a short or over transfer is never
+  classified, not because the machinery needs the provider (it does not:
+  `classifyPayment` takes an ask and a tolerance) but because there is no
+  ask. The split: **`canValidate(business, env)`** = CLABE + known bank +
+  Consta, the provider absent; **`hasAsk(source, customer)`** = the
+  source has a receivable for this customer. What each door says:
+
+  | Surface | `canValidate` false | `canValidate` true, `hasAsk` false |
+  |---|---|---|
+  | payer's page (`GET`) | `unavailable`, as today | **`no_ask`**, new and honest: "Tu negocio aún no tiene nada que cobrarte por aquí" |
+  | proof submit (`POST`) | 409 `SPEI_NOT_CONFIGURED`, as today | 409 `NOTHING_DUE` — debt-truth D5's code, no new one |
+  | the sweep (`settle`) | `retryLater("SPEI_NOT_CONFIGURED")` | `retryLater("PROVIDER_NOT_CONFIGURED")` for the transitional case only (key removed with a payment in flight), evaluated **after** `canValidate` so a missing CLABE names itself and never blames the provider |
+
+  Nothing here invents a reconciliation without an ask: no receivable,
+  no class, same as today. It only stops saying validation depends on
+  the provider. PR 2 splits the function with the combined result
+  unchanged; PR 3 ships `no_ask`. **Rejected**: keeping one gate and
+  adding the null provider to it (the lie survives with a new name);
+  classifying against the claimed amount when no ask exists (a validator
+  posing as a reconciler — pivot D2's rejected alternative).
+
 ## Schema
 
 Migration (PR 3, one file):
@@ -305,6 +367,8 @@ Routes (PR 3; every other route keeps its shape and swaps codes per D4):
 | `PATCH /integrations/:provider` | `integrations: manage` | hub's `PATCH /integrations/wisphub` generalized; unknown `:provider` → 404; undeclared action in the mapping → 409 `PROVIDER_ACTION_UNSUPPORTED` |
 | `POST /integrations/:provider/test` | `integrations: manage` | `Source.probe()`; failures come back as `data.ok = false` with a `PROVIDER_*` code, as settings D2 shaped it |
 | `GET /payment-requests`, `GET /direct-payments/links`, `…/roster` | `payments: read` | null provider → 409 `PROVIDER_NOT_CONFIGURED`; stalled → 503 `PROVIDER_UNAVAILABLE`; the body's `provider` field names the adapter for the copy map |
+| `GET /direct-payments/:token` | payer | D13: `status: "no_ask"` when validation is ready and the source has nothing for this customer; `unavailable` only when Devolada itself cannot validate; the body carries `overTreatment` (the **effective** one, payments-and-classes D2) so the page's surplus copy tells the truth |
+| `POST /direct-payments/:token` | payer | D13: 409 `NOTHING_DUE` when `hasAsk` is false; 409 `SPEI_NOT_CONFIGURED` only when `canValidate` is false |
 
 ## UI Contract
 
@@ -326,6 +390,18 @@ Routes (PR 3; every other route keeps its shape and swaps codes per D4):
   sheet says so (D9). Nothing else on the page moves.
 - **Pagos / feed**: unchanged shape; the reason column speaks through the
   copy map.
+- **Payer's page, surplus line**: today `PaymentPage.tsx` says "El
+  sobrante quedará a favor con tu proveedor para tu siguiente factura"
+  unconditionally — the `credit` sentence, true today only because every
+  reachable business runs WispHub, which absorbs. After PR 3 the line
+  follows the effective treatment the API sends: `credit` → that
+  sentence; `flag` → "Tu negocio te devolverá el sobrante" — the same
+  three-way voice the feed already has (partial-payment D15, payments-
+  and-classes D2). Latent, not a production bug: `flag` is unreachable
+  until the null provider or the manual source makes it so.
+- **Payer's page, `no_ask`**: "Tu negocio aún no tiene nada que cobrarte
+  por aquí." with the business's name — never the `unavailable` copy,
+  which blames SPEI for a fact about the source.
 
 ## Scenarios
 
@@ -373,6 +449,24 @@ Routes (PR 3; every other route keeps its shape and swaps codes per D4):
    cache under key `wisphub:<business>:<version>`; a registered payment
    moves the pulse and the next read misses — presence-freshness
    scenarios 1–4 unchanged. (D10)
+10. **Validation ready, nothing to reconcile.** Business with CLABE, known
+    bank and Consta configured, no integration: the payer's page answers
+    `no_ask` (not `unavailable`); a proof submit answers 409
+    `NOTHING_DUE`; nothing is written. Remove the CLABE → `unavailable`
+    and `SPEI_NOT_CONFIGURED`, the provider never named. (D13)
+11. **Key removed with a payment in flight.** A `pending` row whose
+    business drops its key: the sweep answers
+    `retryLater("PROVIDER_NOT_CONFIGURED")` and the row stays `pending`;
+    drop the CLABE instead → `retryLater("SPEI_NOT_CONFIGURED")` — the
+    reason names what is actually missing. Restore either → the next
+    sweep settles. (D13, scenario 2 sharpened)
+12. **Surplus copy follows the effective treatment.** Fake provider with
+    `absorbsOverpayment: false`, business policy `flag`: a reading of
+    200.00 against an ask of 170.00 + fee shows "Tu negocio te devolverá
+    el sobrante"; flip the fake to `true` → "El sobrante quedará a favor
+    con tu proveedor…"; an `unapplied` row always reads "resolver con el
+    cliente" in the feed whatever the policy. (payments-and-classes D2,
+    UI contract)
 
 ## Definition of Done
 
@@ -383,7 +477,7 @@ Routes (PR 3; every other route keeps its shape and swaps codes per D4):
 - [ ] PR 3 merged: migration 00NN (D5 renames + D4 rewrite) applied to
       dev; `PROVIDER_*` in API and both apps' copy maps; generic hub
       routes; `rg WISPHUB_ apps/` returns only the adapter and its tests.
-- [ ] Scenarios 1–9 covered by tests citing US-I04 (and the story of the
+- [ ] Scenarios 1–12 covered by tests citing US-I04 (and the story of the
       spec each scenario inherits from).
 - [ ] Deployed check (dev, live tenant): Cobros, Links, a real
       registration and a forced retry behave as before the port; the
@@ -391,7 +485,11 @@ Routes (PR 3; every other route keeps its shape and swaps codes per D4):
 - [ ] Amendments landed: integrations-hub D10 note; pivot Open item 5
       note; ARCHITECTURE.md adapter bullet; SPEC.md US-I04 and index.
 - [ ] `charges/manual-charges.spec.md` reserved as the next spec (D1),
-      not written here.
+      not written here; it inherits the credit-without-running-account
+      decision (D1) and the Responsibilities table as given.
+- [ ] PR 2 splits `speiAvailable` into `canValidate` + `hasAsk` with the
+      combined result unchanged; PR 3 ships `no_ask` and the surplus
+      copy by effective treatment (D13, UI contract).
 
 ## Amendments this spec makes
 
@@ -405,7 +503,13 @@ Routes (PR 3; every other route keeps its shape and swaps codes per D4):
   provisional action" is executed as D9's `provisionalRelease`.
 - **payments-and-classes D2** — `absorbsOverpayment` is read from the
   business's provider capability sheet, not from a WispHub constant
-  (meaning unchanged).
+  (meaning unchanged); the effective treatment now travels to the
+  payer's page so its surplus copy can tell the truth (UI contract).
+- **direct-payment D4 (link status)** — `unavailable` narrows to "Devolada
+  cannot validate"; `no_ask` is born for "nothing to reconcile against"
+  (D13).
+- **debt-truth D5** — `NOTHING_DUE` gains a second speaker: the
+  `hasAsk` gate, same meaning (D13).
 - **debt-truth D7/D12/D15** — unchanged in substance; D7/D12 move to the
   oracle (D6), D15 stays whole inside the WispHub adapter (D7).
 - **ARCHITECTURE.md, Code organization** — the adapter bullet names the

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "cloudflare": {
+      "version": "0.1.0",
+      "source": "local",
+      "manifest_hash": "sha256:52a0c0de765b07b83de2d4d691f5800b0ddf97e1687c9e01ad1e84db85163691",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.cloudflare.discover",
+          "speckit.cloudflare.review"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-09-08T18:59:14.830049+00:00"
+    }
+  }
+}

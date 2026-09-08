@@ -1,0 +1,35 @@
+installed:
+- cloudflare
+settings:
+  auto_execute_hooks: true
+hooks:
+  before_plan:
+  - extension: cloudflare
+    command: speckit.cloudflare.discover
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: Map this feature's needs to Cloudflare products and limits with the cloudflare
+      skill before planning?
+    description: Offer product discovery right before the plan
+    condition: null
+  after_plan:
+  - extension: cloudflare
+    command: speckit.cloudflare.review
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: 'Review the plan''s Cloudflare Platform Context against workers-best-practices
+      and current docs (run with argument: plan)?'
+    description: Offer a platform review of the plan
+    condition: null
+  after_implement:
+  - extension: cloudflare
+    command: speckit.cloudflare.review
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: 'Review the Worker code and Wrangler configuration against Cloudflare
+      best practices (run with argument: code)?'
+    description: Offer a platform review of the implementation
+    condition: null

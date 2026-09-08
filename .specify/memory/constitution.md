@@ -212,16 +212,25 @@ skill to load **before** writing that kind of code.
 | Authentication | **Better Auth inside `apps/api`, and nowhere else** (BFF). HTTP-only cookies; account status re-checked in the database on every request; passkeys and organizations through its plugins. | `better-auth-best-practices` ᶠ, `organization-best-practices` ᶠ, `email-and-password-best-practices` ᶠ, `better-auth-security-best-practices` ᶠ, `create-auth` ᶠ |
 | Object storage · inference | **R2** (`PROOFS`) for transfer evidence; **Workers AI** for receipt extraction. | `cloudflare-r2`, `cloudflare-workers-ai` |
 | UI | **React 19** with **TanStack Router** (routes are dumb; logic lives in features) and **TanStack Query** (the only home of server state). **Tailwind v4** through the tokens; **shadcn** primitives copied into `src/components/ui/`, never added as a dependency. | `react-router` ᶠ, `router-core` ᶠ, `router-query` ᶠ, `shadcn` ᶠ, `tanstack-query`, `react`, `tailwindcss` |
-| API tests | **Vitest under `@cloudflare/vitest-pool-workers`**: the real workerd runtime and a real local D1. **No database mocks.** Provider bases are pinned in `vitest.config.ts`, interceptor counts are exact, module caches reset per test. | `vitest-testing` |
-| Component and network tests | **Vitest + React Testing Library + happy-dom**, queried by what the user sees. Network through **MSW**, handlers validated against the Zod schemas. Travel from the origin screen; do not mount the destination. | `vitest-testing`, `react` |
+| API tests | **Vitest under `@cloudflare/vitest-pool-workers`**: the real workerd runtime and a real local D1. **No database mocks.** Provider bases are pinned in `vitest.config.ts`, interceptor counts are exact, module caches reset per test. | `vitest` |
+| Component and network tests | **Vitest + React Testing Library + happy-dom**, queried by what the user sees. Network through **MSW**, handlers validated against the Zod schemas. Travel from the origin screen; do not mount the destination. | `vitest`, `react` |
 | End-to-end | **Playwright + axe** against built previews for breakpoints, touch geometry and real contrast; against the real API (`pnpm e2e:passkey`) for the passkey and identity journeys. | `playwright` |
 | Workers, config, deploy | **Wrangler** and `wrangler.jsonc`; Workers best practices (no floating promises, no global state, bindings not globals). Deploys through GitHub Actions only. | `wrangler`, `workers-best-practices`, `cloudflare`, `cloudflare-workers-ci-cd` |
+| Build and packaging | **Vite 6** for every frontend; **pnpm** workspaces with `--filter`, `workspace:*` and a committed lockfile. | `vite`, `pnpm` |
 
 Two rules make the table bite:
 
 - A plan MUST list, under *Skills to load* in its Technical Context, the skill of
   every concern the feature touches. A plan that touches a concern without its skill
   fails the Constitution Check.
+- A plan MUST fill the **Cloudflare Platform Context** table before Phase 0, and every
+  limit or quota in it MUST be verified against current documentation — through the
+  Cloudflare MCP server where it is connected, otherwise against the bundled
+  references, marked as such. `/speckit-cloudflare-discover` writes that table from
+  the spec and `/speckit-cloudflare-review` audits it; both run as optional hooks
+  around `/speckit-plan`. **A memorised limit is not a verified limit**: BUG-021 was
+  D1's hundred-parameter cap, invisible to a local D1 that does not enforce it and to
+  181 passing tests.
 - A task MUST NOT introduce a library for a concern in this table other than the one
   named. Doing so is a decision — it goes through Complexity Tracking with the
   rejected alternative, or it is a defect.

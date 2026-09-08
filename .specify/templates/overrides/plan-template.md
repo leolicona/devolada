@@ -40,6 +40,16 @@ says it could not reach the provider (deadlines on every provider call)
 that grows with the tenant). Migrations are additive; a table rebuild is proven on seeded
 data first. Money is integer cents everywhere.
 
+**Cloudflare Platform Context** *(project override — the "Stack and runtime boundaries" section)*:
+
+| Need | Product | Binding (name / type) | Limit or quota to verify | Verified against | Status |
+|---|---|---|---|---|---|
+| [e.g. store transfer evidence] | [R2] | [PROOFS / r2_bucket] | [object size, class A ops] | [docs URL or `.claude/skills/cloudflare/references/...`] | [OK / At risk / Unverified] |
+
+Fill this before Phase 0. `/speckit-cloudflare-discover` writes it from the spec and
+verifies every limit through the Cloudflare MCP server; `/speckit-cloudflare-review`
+checks it afterwards. A row marked **Unverified** is a memorised number, not a fact.
+
 **Skills to load**: [one per concern this feature touches, from the constitution's
 "Implementation conventions" table — e.g. `hono-routing`, `drizzle-orm-d1`, `zod`.
 A touched concern without its skill fails the Constitution Check.]

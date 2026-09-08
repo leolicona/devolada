@@ -978,63 +978,6 @@
         ]
       }
     },
-    "vitest-testing": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Vitest: API tests in @cloudflare/vitest-pool-workers against real workerd + local D1 (no DB mocks), RTL + happy-dom for components",
-      "promptTriggers": {
-        "keywords": [
-          "vitest",
-          "unit test",
-          "integration test",
-          "test file",
-          "describe",
-          "it(",
-          "expect",
-          "vi.mock",
-          "vi.fn",
-          "test setup",
-          "vitest config",
-          "vitest-pool-workers",
-          "workerd",
-          "testing library",
-          "happy-dom",
-          "write a test",
-          "add a test",
-          "fix the test",
-          "failing test"
-        ],
-        "intentPatterns": [
-          "(write|add|create|fix|update).*(test|spec)",
-          "(test|cover).*(route|handler|component|hook|invariant)",
-          "vitest.*(config|mock|setup|pool)",
-          "(mock|stub).*(fetch|provider|module)"
-        ]
-      },
-      "fileTriggers": {
-        "pathPatterns": [
-          "apps/*/test/**/*.ts",
-          "apps/*/test/**/*.tsx",
-          "packages/*/test/**",
-          "**/*.test.ts",
-          "**/*.test.tsx",
-          "apps/*/vitest.config.ts"
-        ],
-        "contentPatterns": [
-          "from ['\"]vitest",
-          "describe\\(",
-          "it\\(",
-          "expect\\(",
-          "vi\\.(mock|fn|spyOn)\\(",
-          "vitest-pool-workers",
-          "fetchMock\\.",
-          "SELF\\.fetch",
-          "@testing-library/react",
-          "render\\("
-        ]
-      }
-    },
     "playwright": {
       "type": "domain",
       "enforcement": "suggest",
@@ -1433,6 +1376,225 @@
           "useSuspenseQuery\\(",
           "context:.*queryClient",
           "prefetchQuery\\("
+        ]
+      }
+    },
+    "vitest": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Vitest (generated from the upstream repo): config, mocking, coverage, browser mode. House rules — workers pool, real D1, no DB mocks — are in the constitution",
+      "promptTriggers": {
+        "keywords": [
+          "vitest",
+          "unit test",
+          "integration test",
+          "describe",
+          "it(",
+          "expect",
+          "vi.mock",
+          "vi.fn",
+          "test setup",
+          "vitest config",
+          "coverage",
+          "testing library",
+          "happy-dom",
+          "write a test",
+          "add a test",
+          "failing test"
+        ],
+        "intentPatterns": [
+          "(write|add|create|fix|update).*(test|spec)",
+          "(test|cover).*(route|handler|component|hook|invariant)",
+          "vitest.*(config|mock|setup|coverage|pool)",
+          "(mock|stub).*(fetch|provider|module)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/*/test/**/*.ts",
+          "apps/*/test/**/*.tsx",
+          "packages/*/test/**",
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "apps/*/vitest.config.ts"
+        ],
+        "contentPatterns": [
+          "from ['\"]vitest",
+          "describe\\(",
+          "it\\(",
+          "expect\\(",
+          "vi\\.(mock|fn|spyOn)\\(",
+          "vitest-pool-workers",
+          "fetchMock\\.",
+          "SELF\\.fetch"
+        ]
+      }
+    },
+    "vite": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Vite (generated from the upstream repo): config, plugins, dev server, build",
+      "promptTriggers": {
+        "keywords": [
+          "vite",
+          "vite config",
+          "vite.config",
+          "vite plugin",
+          "dev server",
+          "hmr",
+          "build config",
+          "rollup",
+          "esbuild",
+          "import.meta.env",
+          "base url",
+          "alias"
+        ],
+        "intentPatterns": [
+          "(configure|fix|change|add).*(vite|build|dev server|plugin|alias)",
+          "vite.*(config|plugin|build|hmr)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/*/vite.config.ts",
+          "packages/*/vite.config.ts",
+          "**/vite.config.*"
+        ],
+        "contentPatterns": [
+          "from ['\"]vite",
+          "defineConfig\\(",
+          "@vitejs/plugin-react",
+          "import\\.meta\\.env",
+          "plugins:\\s*\\["
+        ]
+      }
+    },
+    "pnpm": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "pnpm (generated from the upstream repo): workspaces, filters, lockfile, strict resolution",
+      "promptTriggers": {
+        "keywords": [
+          "pnpm",
+          "workspace",
+          "pnpm-workspace",
+          "monorepo",
+          "--filter",
+          "lockfile",
+          "pnpm-lock",
+          "catalog",
+          "add dependency",
+          "install dependency",
+          "hoisting",
+          "peer dependency"
+        ],
+        "intentPatterns": [
+          "(add|install|remove|update).*(dependency|package|workspace)",
+          "pnpm.*(filter|workspace|lock|install)",
+          "(configure|fix).*(monorepo|workspace)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "pnpm-workspace.yaml",
+          "package.json",
+          "**/package.json",
+          "pnpm-lock.yaml",
+          ".npmrc"
+        ],
+        "contentPatterns": [
+          "\"packageManager\":\\s*\"pnpm",
+          "workspace:\\*",
+          "pnpm-workspace",
+          "--filter"
+        ]
+      }
+    },
+    "speckit-cloudflare-discover": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Spec Kit extension: map a feature's needs to Cloudflare products, bindings and limits before planning, verified through the Cloudflare MCP server",
+      "promptTriggers": {
+        "keywords": [
+          "cloudflare discover",
+          "cloudflare product",
+          "cloudflare products",
+          "producto de cloudflare",
+          "binding",
+          "bindings",
+          "quota",
+          "cuota",
+          "límite",
+          "limite",
+          "limits",
+          "platform discovery",
+          "descubrimiento",
+          "kv",
+          "queues",
+          "durable object",
+          "vectorize",
+          "hyperdrive",
+          "r2",
+          "d1",
+          "workers ai",
+          "cron trigger"
+        ],
+        "intentPatterns": [
+          "(which|what|qu[ée]|cu[áa]l).{0,40}(cloudflare|product|producto|binding|servicio)",
+          "(map|choose|decide|elegir|escoger|decidir|usar?|uso).{0,40}(product|producto|binding|storage|almacenamiento|queue|cola|base de datos)",
+          "discover.*(cloudflare|platform)",
+          "(necesito|need).{0,30}(kv|queue|cola|durable|r2|d1|vectorize|hyperdrive)",
+          "(add|a[ñn]adir|introducir|meter).{0,30}(kv|queues?|durable objects?|vectorize|hyperdrive)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "specs/**/spec.md",
+          "docs/**/spec.md"
+        ],
+        "contentPatterns": [
+          "cloudflare-discovery",
+          "Cloudflare Platform Context"
+        ]
+      }
+    },
+    "speckit-cloudflare-review": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Spec Kit extension: review a plan or Worker code and Wrangler config against Cloudflare best practices and current documented limits",
+      "promptTriggers": {
+        "keywords": [
+          "cloudflare review",
+          "platform review",
+          "review the plan",
+          "review the worker",
+          "wrangler config review",
+          "compatibility_date",
+          "observability",
+          "check limits"
+        ],
+        "intentPatterns": [
+          "review.*(plan|worker|wrangler|cloudflare|platform)",
+          "(check|verify).*(limit|quota|binding|compatibility|observability)",
+          "audit.*(worker|config)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "specs/**/plan.md",
+          "apps/*/wrangler.jsonc",
+          "apps/*/src/index.ts"
+        ],
+        "contentPatterns": [
+          "compatibility_date",
+          "observability",
+          "wrangler\\.jsonc",
+          "cloudflare-platform-check"
         ]
       }
     }

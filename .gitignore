@@ -17,3 +17,6 @@ dist-passkey/
 .claude/hooks/node_modules/
 # Installer store for .claude/skills (provenance in skills-lock.json)
 .agents/
+
+# Spec Kit extension catalog cache (machine-local)
+.specify/extensions/.cache/

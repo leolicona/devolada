@@ -1,0 +1,1 @@
+../../../.specify/extensions/cloudflare/.specify-dev/agent-commands/claude/speckit-cloudflare-discover/SKILL.md

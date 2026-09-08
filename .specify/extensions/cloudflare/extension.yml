@@ -1,0 +1,49 @@
+schema_version: "1.0"
+
+extension:
+  id: cloudflare
+  name: "Cloudflare Platform"
+  version: "0.1.0"
+  description: "Bring the Cloudflare Agent Skills and the Cloudflare MCP server into the Spec Kit flow: product discovery before planning, and platform review of plans and Worker code"
+  author: leolicona
+  repository: https://github.com/leolicona/devolada
+  license: MIT
+
+requires:
+  speckit_version: ">=1.0.0"
+
+provides:
+  commands:
+    - name: speckit.cloudflare.discover
+      file: commands/speckit.cloudflare.discover.md
+      description: "Map a feature's needs to Cloudflare products, bindings and limits using the cloudflare skill and the Cloudflare MCP server, before /speckit-plan"
+    - name: speckit.cloudflare.review
+      file: commands/speckit.cloudflare.review.md
+      description: "Review a plan (mode plan) or Worker code and Wrangler config (mode code) against Cloudflare best practices, verifying limits and APIs through the Cloudflare MCP server"
+  templates:
+    - name: cloudflare-platform-check
+      file: templates/cloudflare-platform-check.md
+
+hooks:
+  before_plan:
+    command: speckit.cloudflare.discover
+    optional: true
+    prompt: "Map this feature's needs to Cloudflare products and limits with the cloudflare skill before planning?"
+    description: "Offer product discovery right before the plan"
+  after_plan:
+    command: speckit.cloudflare.review
+    optional: true
+    prompt: "Review the plan's Cloudflare Platform Context against workers-best-practices and current docs (run with argument: plan)?"
+    description: "Offer a platform review of the plan"
+  after_implement:
+    command: speckit.cloudflare.review
+    optional: true
+    prompt: "Review the Worker code and Wrangler configuration against Cloudflare best practices (run with argument: code)?"
+    description: "Offer a platform review of the implementation"
+
+tags:
+  - "cloudflare"
+  - "workers"
+  - "wrangler"
+  - "mcp"
+  - "platform"

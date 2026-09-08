@@ -1,40 +1,36 @@
 <!--
 Sync Impact Report
 ==================
-Version: 1.0.0 (revised before first merge — v1.0.0 never reached main, so this
-replaces it in place rather than bumping; nothing has operated under the old text).
+Version: 1.0.0 → 1.1.0 (MINOR: materially expanded guidance — the stack is now
+decided here, and each convention names the skill that carries it).
 
-Removed:
-  - "Spec before code" (was Principle I). GitHub Spec Kit *is* a spec-before-code
-    workflow; restating it as a principle was ceremony. The two parts of it that
-    Spec Kit does NOT provide were moved rather than dropped: spec-lint stays a
-    blocking CI gate (Development workflow), and the lite path moved to the same
-    section — it is a workflow rule about which changes legitimately carry no spec,
-    not a restatement of spec-before-code.
+Added:
+  - "Stack conventions" under Stack and runtime boundaries: seven conventions
+    (Hono, Drizzle on D1, Wrangler, React + Vite, shadcn, Vitest + Playwright,
+    pnpm) stated as MUSTs, each naming the skill under .claude/skills/ that holds
+    its procedural knowledge, plus the rule that binds plan → tasks → implement to
+    them. Motivation: a skill is model-invoked — it loads when its description
+    matches the moment, and nothing guarantees the moment. This file is the
+    deterministic layer: /speckit-plan fills the Constitution Check from it,
+    /speckit-tasks and /speckit-implement read it, so a convention written here is
+    carried by the plan and named on the task, and the skill is loaded on purpose.
 
-Renumbered: former II–VIII are now I–VII.
+Modified principles: none.
+Removed sections: none.
 
-Redefined:
-  - IV (was V): the no-internals rule is now law, on its own justification.
-    Closes TODO(NO_INTERNALS_RULE).
-  - VII (was VIII): user-story identifiers adopt Spec Kit's per-feature `US<n>`
-    numbering, prefixed with the feature slug so grep traceability survives the
-    loss of global uniqueness. Legacy `US-XNN` stays valid per feature until that
-    feature is rebuilt.
-  - Governance: precedence inverted. The constitution now wins over the layer
-    documents, which is Spec Kit's own model (its constitution is the single
-    governance artifact; it has no concept of cross-cutting layer docs). The
-    layers remain the detailed reference until PR3 folds their content in.
+Templates: plan-template.md's Constitution Check is filled from this file at plan
+time (speckit-plan, step 2); no template edit is needed, and the core templates
+stay unmodified by decision (CLAUDE.md, 2026-09-08).
 
-Deferred:
+Deferred (carried from 1.0.0, still open):
   - TODO(INTEGRATOR_TERM): the glossary still has no row for the API integrator
     (docs/BRIEF.md §7.3). Principle V governs the term once it exists.
   - Drift for PR3, not patched here: docs/legacy/ARCHITECTURE.md still says
     "ispId" (renamed to businessId by the pivot) and names Agnostic Auth (retired
     for Better Auth). This document states the current truth.
-  - New task for the migration plan: PR3 must fold the layer documents' content
-    into this constitution before PR4 deletes docs/legacy/, or the precedence
-    rule below will point at files that no longer exist.
+  - PR3 must fold the layer documents' content into this constitution before PR4
+    deletes docs/legacy/, or the precedence rule in Governance will point at files
+    that no longer exist.
 -->
 
 # Devolada Constitution
@@ -182,6 +178,31 @@ spec before use.
   entries under Principle I, and what replaces API-key authentication at the seam.
 - `/dev/*` routes MUST exist only when `ENVIRONMENT=dev`.
 
+### Stack conventions
+
+The stack is decided here, not per plan. Each convention below is law for every feature,
+and beside it is the skill under `.claude/skills/` that carries its procedural knowledge —
+the house patterns, the pitfalls, the commands. Skills are model-invoked: one loads when
+its description matches the moment, and nothing guarantees the moment. This table is the
+deterministic anchor. A plan's Constitution Check MUST name every convention the feature
+touches; `tasks.md` MUST carry that convention on each task that writes code under it; and
+such a task MUST load the named skill before writing. A deviation from a convention is
+recorded in the plan's Complexity Tracking with the alternative rejected, and it lands as
+an amendment here before the code does — never as a feature-level decision.
+
+| Convention | Skill |
+|---|---|
+| Every HTTP service MUST be a **Hono** app on Workers. Routes validate with Zod through `@hono/zod-validator` and answer with the envelope above; a Hono app is tested through `app.request()` under `@cloudflare/vitest-pool-workers`. | `hono` |
+| Every database access MUST go through **Drizzle** on D1. `src/db/schema.ts` is the source of truth; migrations are generated with `drizzle-kit generate` into `migrations/`, versioned, and applied only through `wrangler d1 migrations apply`. | `drizzle-orm-d1` |
+| Every Worker MUST be declared in a versioned `wrangler.jsonc` and run locally with `wrangler dev`; it deploys only from GitHub Actions (Development workflow). | `wrangler`, `workers-best-practices` |
+| Every frontend MUST be **React with Vite**, shipped as static assets from its own Worker — no server rendering, no Next.js. Server state lives in TanStack Query; `apps/admin` routes with TanStack Router. | `vite`, `vercel-react-best-practices` |
+| UI primitives MUST come from the **shadcn** catalog, copied into the app's `src/components/ui/` and themed with the tokens (Principle VI). A component library MUST NOT be added as a dependency. | `shadcn` |
+| Tests MUST run on **Vitest** in every workspace — Workers under `@cloudflare/vitest-pool-workers`, UI under happy-dom with Testing Library — and end-to-end flows on **Playwright** from the root configs. | `vitest`, `webapp-testing` |
+| The monorepo MUST stay on **pnpm workspaces**; `pnpm-lock.yaml` is written only by pnpm. | `pnpm` |
+
+*Rationale*: a rule the plan carries and the task names is followed; a skill that may or
+may not load is a hope. The skill holds the how; the constitution holds the must.
+
 ## Development workflow and quality gates
 
 Trunk-based on `main`. A PR opens the gate; merging deploys to dev; a `v*` tag deploys
@@ -237,4 +258,4 @@ living only there MUST be folded into this document before it goes
   plan's complexity tracking with the simpler alternative that was rejected; an
   unrecorded violation is a defect.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-08
+**Version**: 1.1.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-08

@@ -12,7 +12,7 @@ Cross-cutting UI rules. Each `.spec.md` additionally includes its own **UI Contr
 
 ## Component sourcing
 
-- **Frontend work starts with the `/shadcn` skill.** Before writing a component by hand, check the shadcn catalog. If the primitive exists there (Tabs, Collapsible, Dialog, Skeleton, Select, Table…), copy it into the app's `src/components/ui/` and theme it with our tokens. A hand-rolled filter chip, accordion or spinner is drift, not a shortcut.
+- **Frontend work starts at the shadcn catalog.** Before writing a component by hand, check it. If the primitive exists there (Tabs, Collapsible, Dialog, Skeleton, Select, Table…), copy it into the app's `src/components/ui/` and theme it with our tokens. A hand-rolled filter chip, accordion or spinner is drift, not a shortcut.
 - Search order for any piece of UI: domain atom in `@devolada/ui` → shadcn primitive → new component (and if two surfaces need it, it becomes a shared atom).
 - **shadcn is the recipe; the tokens stay the law** (`admin/shell.spec.md` D1). Copy the code into the repo — never add a component library as a dependency.
 - Not every primitive fits: pick the one the UI Contract needs, and write down what you rejected and why (`charge-feed.spec.md` D7 refuses `Table` because rows expand and must become cards on mobile).

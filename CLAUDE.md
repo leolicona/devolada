@@ -47,7 +47,6 @@ pnpm --filter @devolada/api db:migrate:local  # apply migrations to the local D1
 pnpm -r --if-present typecheck                # typecheck every workspace
 pnpm -r --if-present test                     # tests (infrastructure defined in docs/legacy/TESTING.md)
 node scripts/spec-lint.mjs                    # local golden-rule enforcement
-pnpm setup:claude                             # hook deps (.claude/hooks) — required for skill auto-activation
 ```
 
 Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` creates a demo ISP (`demo@devolada.app`), password `devolada123`. `/dev/*` routes exist only with `ENVIRONMENT=dev`.
@@ -77,7 +76,7 @@ Invariants that cut across everything (detail in `docs/legacy/ARCHITECTURE.md`):
 
 Laws in `docs/legacy/FRONTEND.md`; design artifacts (brief, IA, tasks) in `.design/devolada/` (the SaaS cycle — pivot phase 2; the store-era layer lives in `devolada-red`).
 
-**Use the `/shadcn` skill for every frontend task.** Check the shadcn catalog before writing a component by hand; copy the primitive into the app's `src/components/ui/` and theme it with our tokens. shadcn is the recipe, the tokens are the law. Order: domain atom in `@devolada/ui` → shadcn primitive → new component.
+**Every frontend task starts at the shadcn catalog.** Check it before writing a component by hand; copy the primitive into the app's `src/components/ui/` and theme it with our tokens. shadcn is the recipe, the tokens are the law. Order: domain atom in `@devolada/ui` → shadcn primitive → new component.
 
 The other essentials: the tokens in `packages/ui/src/styles/tokens.css` are law (zero hardcoded values; mapped to Tailwind via `@theme inline` in `src/styles/index.css`); `StatusBadge` is the only representation of domain statuses; light+dark via `[data-theme]` (dark is its own palette, not inversion); status is never communicated by color alone (always icon + text).
 

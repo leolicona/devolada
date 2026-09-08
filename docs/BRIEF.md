@@ -259,14 +259,13 @@ Legacy is deleted in the migration's last PR, once PR3 has emptied it of value
 Recorded so PR1.C writes a constitution around what is decided, and PR3 does
 not quietly invent an answer while rebuilding a spec.
 
-1. **How an API integrator is billed.** `US-L03` says every confirmed
-   validation debits **the business's** prepaid credit at the current fee.
-   `US-V05` logs every validation under its API key "so the fixed fee per
-   transaction can be derived later" — which was Consta's own billing, from
-   when it was sold on its own. Now that the API is offered through
-   devoladapago, either a third-party integrator *is* a `business` with a
-   prepaid balance like any other, or there is a second billing path for API
-   customers. The two produce different schemas and different specs.
+1. ~~How an API integrator is billed.~~ **Decided 2026-09-08: an integrator
+   is a `business` with prepaid credit like any other — there is no second
+   billing path** (constitution, Principle IV). The API surface itself is
+   later work and stays undefined for now; what is settled is the billing
+   model it must arrive into, so no spec invents a parallel one meanwhile.
+   `US-V05` still logs every validation under its API key, but as accounting
+   under the one model rather than as Consta's own billing.
 2. **Whether the no-internals rule survives.** `docs/legacy/SPEC.md` forbids
    any Devolada spec depending on Consta's internals, justified by keeping a
    future extraction to a folder move. That justification is gone. The

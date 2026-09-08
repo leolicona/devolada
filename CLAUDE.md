@@ -6,24 +6,32 @@ Devolada: direct SPEI payments with automatic validation for service businesses 
 
 ## Methodology (not optional)
 
-> **Migration in flight (from 2026-09-08).** The documentation is moving to
-> GitHub Spec Kit. The whole previous corpus is archived under `docs/legacy/`
-> — still normative, still the source of truth, and `spec-lint` still enforces
-> it there. The new tree begins at [`docs/BRIEF.md`](docs/BRIEF.md) (brief,
-> stack, invariants, glossary, feature list); the plan and its alternatives are
-> in [`docs/spec-kit-migration.eval.md`](docs/spec-kit-migration.eval.md). The
-> laws that no feature re-decides are summarized in the constitution at
-> [`.specify/memory/constitution.md`](.specify/memory/constitution.md) — which
-> links these files rather than replacing them: on a conflict of detail, the
-> linked file wins.
-> Until the rebuild lands, **read `docs/legacy/` for anything you need to
-> know** and keep amending specs there.
+> **Spec Kit is the working flow (decided 2026-09-08).** A new feature is
+> specified with GitHub Spec Kit, using **its core templates unmodified**:
+> `/speckit-specify` creates `specs/NNN-<slug>/`, and `plan.md` / `tasks.md`
+> are committed there alongside `spec.md`. There is no
+> `.specify/templates/overrides/` and none is to be added — the shape of a
+> spec is Spec Kit's to decide, not ours.
+> The previous corpus is archived under `docs/legacy/`: still normative for
+> every feature already built, still enforced there by `spec-lint`, and still
+> where those features' specs are amended. The laws no feature re-decides are
+> in the constitution at
+> [`.specify/memory/constitution.md`](.specify/memory/constitution.md), which
+> links the layer documents rather than replacing them: on a conflict of
+> detail, the linked file wins. The brief is
+> [`docs/BRIEF.md`](docs/BRIEF.md); the migration plan and the alternatives it
+> weighed are in
+> [`docs/spec-kit-migration.eval.md`](docs/spec-kit-migration.eval.md).
+> **Read `docs/legacy/` for anything about a feature that has not been rebuilt
+> yet.**
 
-The project is **spec-driven**; the rules live in `docs/legacy/SPEC.md` and CI enforces them (`scripts/spec-lint.mjs`):
+The project is **spec-driven**; the constitution governs and CI enforces the gate (`scripts/spec-lint.mjs`):
 
-- **Golden rule**: if it exists in the code but not in `SPEC.md`, it's wrong. Every new feature starts by writing `docs/legacy/<domain>/<feature>.spec.md` (with a US-ID reserved in `docs/legacy/SPEC.md`) **before** touching code, registered in the index within the same PR. The spec is updated with reality during development; it never forks.
+- **Golden rule**: if it exists in the code but not in a spec, it's wrong. A new feature starts at `/speckit-specify` — never by touching code first. The spec is updated with reality during development; it never forks.
+- **A feature already built keeps its spec where it lives**: amend `docs/legacy/<domain>/<feature>.spec.md` and its row in the `docs/legacy/SPEC.md` index, in the same PR. It moves to `specs/` only when the feature itself is rebuilt.
 - **Lite path**: bugfixes/typos/copy carry no spec — they carry an entry in `docs/legacy/BUGS.md` (if production was affected) and a test.
-- Conscious debt → `docs/legacy/TECH_DEBT.md` (TD-NNN format with a payment condition). Spec template: `docs/legacy/auth/sessions.spec.md`.
+- Conscious debt → `docs/legacy/TECH_DEBT.md` (TD-NNN format with a payment condition).
+- **Tests cite their story** (constitution VII): a Spec Kit feature uses its per-feature number carrying the feature slug (`direct-payment US1: …`); a feature not yet rebuilt keeps `US-XNN`. `spec-lint` accepts both while the migration runs.
 - Cross-cutting layers no feature re-decides: `docs/legacy/ARCHITECTURE.md`, `docs/legacy/FRONTEND.md`, `docs/legacy/TESTING.md`, `docs/legacy/CICD.md`, `docs/legacy/integrations/*.md`.
 - `docs/legacy/integrations/agnostic-auth.md` documents the **verified real contract**, which differs from the service's official guide — on conflict, the local file wins.
 

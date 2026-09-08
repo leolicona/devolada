@@ -1,137 +1,6 @@
 {
   "version": "1.0",
   "skills": {
-    "skill-developer": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "high",
-      "description": "Meta-skill for creating and managing Claude Code skills",
-      "promptTriggers": {
-        "keywords": [
-          "skill system",
-          "create skill",
-          "add skill",
-          "skill triggers",
-          "skill rules",
-          "hook system",
-          "skill development",
-          "skill-rules.json"
-        ],
-        "intentPatterns": [
-          "(how do|how does|explain).*?skill",
-          "(create|add|modify|build).*?skill",
-          "skill.*?(work|trigger|activate|system)"
-        ]
-      }
-    },
-    "react": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "promptTriggers": {
-        "keywords": [
-          "react",
-          "useState",
-          "useEffect",
-          "useCallback",
-          "useMemo",
-          "useRef",
-          "useContext",
-          "useReducer",
-          "useTransition",
-          "useDeferredValue",
-          "useId",
-          "useSyncExternalStore",
-          "useImperativeHandle",
-          "useLayoutEffect",
-          "React.lazy",
-          "React.memo",
-          "React.forwardRef",
-          "React.createContext",
-          "createContext",
-          "forwardRef",
-          "Suspense",
-          "ErrorBoundary",
-          "StrictMode",
-          "startTransition",
-          "flushSync",
-          "createPortal",
-          "cloneElement"
-        ],
-        "intentPatterns": [
-          "use.*react.*hook",
-          "implement.*(useState|useEffect|useCallback|useMemo|useContext|useReducer)",
-          "add.*react.*(lazy|suspense|memo)",
-          "create.*react.*context",
-          "optimize.*react.*component",
-          "memoize.*react.*component",
-          "use.*(useTransition|useDeferredValue)",
-          "create.*error.*boundary",
-          "implement.*react.*(forwardRef|memo)",
-          "add.*react.*portal"
-        ]
-      },
-      "fileTriggers": {
-        "pathPatterns": [
-          "**/*.tsx",
-          "**/*.jsx",
-          "**/components/**/*.ts",
-          "**/features/**/*.tsx",
-          "**/hooks/**/*.ts",
-          "**/hooks/**/*.tsx"
-        ],
-        "contentPatterns": [
-          "import.*from ['\"]react['\"]",
-          "import.*React.*from ['\"]react['\"]",
-          "useState\\(",
-          "useEffect\\(",
-          "useCallback\\(",
-          "useMemo\\(",
-          "useContext\\(",
-          "useReducer\\(",
-          "React\\.memo\\(",
-          "React\\.lazy\\(",
-          "forwardRef\\("
-        ]
-      }
-    },
-    "tailwindcss": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "promptTriggers": {
-        "keywords": [
-          "tailwind",
-          "tailwindcss",
-          "utility classes",
-          "@apply",
-          "tailwind.config",
-          "dark mode"
-        ],
-        "intentPatterns": [
-          "style.*with.*tailwind",
-          "add.*tailwind.*classes",
-          "configure.*tailwind",
-          "setup.*tailwind",
-          "customize.*theme",
-          "add.*dark.*mode"
-        ]
-      },
-      "fileTriggers": {
-        "pathPatterns": [
-          "**/tailwind.config.js",
-          "**/tailwind.config.ts",
-          "**/globals.css",
-          "**/*.css"
-        ],
-        "contentPatterns": [
-          "className=['\"].*flex",
-          "className=['\"].*grid",
-          "className=['\"].*bg-",
-          "@apply"
-        ]
-      }
-    },
     "tanstack-query": {
       "type": "domain",
       "enforcement": "suggest",
@@ -222,20 +91,26 @@
       "priority": "high",
       "promptTriggers": {
         "keywords": [
+          "@/components/ui",
+          "button component",
+          "card component",
+          "componente de interfaz",
+          "dialog component",
+          "diálogo",
+          "form component",
+          "formulario",
+          "npx shadcn",
+          "primitiva",
           "shadcn",
           "shadcn/ui",
-          "npx shadcn",
-          "@/components/ui",
-          "table component",
-          "form component",
-          "dialog component",
-          "card component",
-          "button component"
+          "tabla",
+          "table component"
         ],
         "intentPatterns": [
-          "create.*(table|form|dialog|card|button)",
+          "(a[ñn]ad(e|ir)|instala|instalar|copia|copiar).{0,30}(componente|primitiva|shadcn)",
           "add.*(table|form|dialog|card|button).*component",
           "add.*shadcn.*component",
+          "create.*(table|form|dialog|card|button)",
           "install.*shadcn.*component",
           "style.*component.*shadcn",
           "use.*shadcn"
@@ -457,24 +332,6 @@
         ]
       }
     },
-    "brief-to-tasks": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Turns a brief into an ordered checklist of vertical slices (.design/devolada/TASKS.md)",
-      "promptTriggers": {
-        "keywords": [
-          "brief to tasks",
-          "task breakdown",
-          "vertical slices",
-          "tasks.md",
-          "desglose de tareas"
-        ],
-        "intentPatterns": [
-          "(break down|desglos\\w*).*(brief|work|feature|trabajo)"
-        ]
-      }
-    },
     "claude-code-bash-patterns": {
       "type": "domain",
       "enforcement": "suggest",
@@ -526,142 +383,6 @@
         ]
       }
     },
-    "cloudflare-cron-triggers": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Scheduled Workers execution",
-      "promptTriggers": {
-        "keywords": [
-          "cron trigger",
-          "cron triggers",
-          "cron expression",
-          "scheduled worker",
-          "scheduled handler",
-          "scheduled task"
-        ],
-        "intentPatterns": [
-          "(schedule|run|programa\\w*).*(every|daily|hourly|nightly|cada|diario).*(job|task|worker|tarea)"
-        ]
-      }
-    },
-    "cloudflare-d1": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "high",
-      "description": "D1 is the database of apps/api and apps/consta (Drizzle + migrations)",
-      "promptTriggers": {
-        "keywords": [
-          "d1",
-          "d1 database",
-          "cloudflare d1",
-          "drizzle",
-          "drizzle-orm",
-          "db:generate",
-          "db:migrate",
-          "d1_error",
-          "prepared statement",
-          "local d1"
-        ],
-        "intentPatterns": [
-          "(create|generate|apply|run|genera\\w*|aplica\\w*|corre).*(migration|migrations|migraci[oó]n|migraciones)",
-          "(add|change|alter|agreg\\w*|a[nñ]ad\\w*|cambi\\w*).*(column|columna|db schema|database schema|drizzle schema|esquema)",
-          "(query|insert into|select from|consulta\\w*).*(d1|sqlite)"
-        ]
-      }
-    },
-    "cloudflare-r2": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "R2 object storage (S3-compatible)",
-      "promptTriggers": {
-        "keywords": [
-          "r2",
-          "r2 bucket",
-          "object storage",
-          "presigned url",
-          "multipart upload",
-          "s3-compatible"
-        ],
-        "intentPatterns": [
-          "(upload|store|serve|sub\\w*|guard\\w*|sirv\\w*).*(file|image|object|archivo|imagen|comprobante|objeto).*(r2|bucket)"
-        ]
-      }
-    },
-    "cloudflare-workers-ai": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "In use: apps/consta declares the `ai` binding and EXTRACTION_MODEL (@cf/mistralai/mistral-small-3.1-24b-instruct); it is the proof-extraction engine (apps/consta/src/extraction/reader.ts)",
-      "promptTriggers": {
-        "keywords": [
-          "workers ai",
-          "ai binding",
-          "ai gateway",
-          "llm inference",
-          "extraction model",
-          "modelo de extracción",
-          "mistral"
-        ]
-      }
-    },
-    "cloudflare-workers-ci-cd": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "GitHub Actions pipelines for Workers (this repo never deploys from a laptop)",
-      "promptTriggers": {
-        "keywords": [
-          "github actions",
-          "ci/cd",
-          "deployment pipeline",
-          "preview environment",
-          "gitlab ci",
-          "deploy workflow"
-        ],
-        "intentPatterns": [
-          "(fix|add|configure|debug|arregl\\w*|agreg\\w*|configur\\w*).*(github action|workflow|pipeline|despliegue)"
-        ]
-      }
-    },
-    "cloudflare-workers-dev-experience": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Local Workers dev: wrangler config, Miniflare, hot reload, binding simulation",
-      "promptTriggers": {
-        "keywords": [
-          "miniflare",
-          "hot reload",
-          "hmr",
-          "local worker",
-          "workers local development"
-        ],
-        "intentPatterns": [
-          "(set ?up|configure).*local.*(dev|development).*worker"
-        ]
-      }
-    },
-    "cloudflare-workers-performance": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Workers CPU, memory, bundle-size and caching optimization",
-      "promptTriggers": {
-        "keywords": [
-          "cpu time",
-          "cpu limit",
-          "cold start",
-          "bundle size",
-          "worker performance",
-          "memory limit"
-        ],
-        "intentPatterns": [
-          "(worker|workers).*(slow|latency|timeout)"
-        ]
-      }
-    },
     "cross-critique": {
       "type": "domain",
       "enforcement": "suggest",
@@ -673,153 +394,6 @@
           "cross-critique",
           "competing proposals",
           "second opinion"
-        ]
-      }
-    },
-    "design-brief": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Interactive design brief; this repo keeps them in .design/devolada/",
-      "promptTriggers": {
-        "keywords": [
-          "design brief",
-          "brief de diseño"
-        ],
-        "intentPatterns": [
-          "(write|create|escrib\\w*|cre\\w*).*(design )?brief"
-        ]
-      }
-    },
-    "design-flow": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Runs the whole designer sequence in order (grill -> brief -> IA -> tasks -> build -> review)",
-      "promptTriggers": {
-        "keywords": [
-          "design flow",
-          "design process",
-          "full design workflow"
-        ]
-      }
-    },
-    "design-review": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Structured design critique against the brief (hierarchy, a11y, responsiveness)",
-      "promptTriggers": {
-        "keywords": [
-          "design review",
-          "design critique",
-          "polish pass",
-          "qa pass",
-          "revisión de diseño"
-        ],
-        "intentPatterns": [
-          "(review|critique|revis\\w*|critic\\w*).*(design|ui|interface|interfaz|dise[nñ]o|pantalla)"
-        ]
-      }
-    },
-    "design-tokens": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Generates a NEW token file; packages/ui/src/styles/tokens.css is already law here",
-      "promptTriggers": {
-        "keywords": [
-          "design tokens",
-          "type ramp",
-          "spacing scale",
-          "token file"
-        ]
-      }
-    },
-    "frontend-design": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Opinionated frontend build guidance; in this repo the tokens and StatusBadge stay law",
-      "promptTriggers": {
-        "keywords": [
-          "frontend design",
-          "aesthetic philosophy"
-        ],
-        "intentPatterns": [
-          "(build|construy\\w*).*(component|page|interface|componente|p[aá]gina|pantalla).*(from scratch|new|nuev\\w+)"
-        ]
-      }
-    },
-    "grill-me": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Adversarial interview to stress-test a plan or design before building",
-      "promptTriggers": {
-        "keywords": [
-          "grill me",
-          "grill",
-          "stress test the plan",
-          "challenge my approach"
-        ]
-      }
-    },
-    "information-architecture": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Navigation, content hierarchy, URL patterns and user flows before visual design",
-      "promptTriggers": {
-        "keywords": [
-          "information architecture",
-          "site structure",
-          "navigation structure",
-          "user flows",
-          "url patterns"
-        ],
-        "intentPatterns": [
-          "(plan|define|defin\\w*|plane\\w*).*(navigation|site structure|user flow|navegaci[oó]n|arquitectura de informaci[oó]n)"
-        ]
-      }
-    },
-    "redesign-existing-projects": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Audit-first redesign of an existing site; heavyweight, invoke by hand",
-      "promptTriggers": {
-        "keywords": [
-          "redesign",
-          "rediseño"
-        ]
-      }
-    },
-    "ui-refactor": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Diagnostic UI tactics (hierarchy, spacing, type, contrast). Fires only on a described visual problem, never on routine component work - shadcn is the recipe and tokens.css is the law here, so ignore its build-a-palette-from-scratch advice",
-      "promptTriggers": {
-        "keywords": [
-          "make this look better",
-          "looks cluttered",
-          "cluttered",
-          "visual hierarchy",
-          "whitespace",
-          "line-height",
-          "type scale",
-          "font pairing",
-          "jerarquía visual",
-          "se ve desordenado",
-          "se ve amontonado",
-          "amontonado"
-        ],
-        "intentPatterns": [
-          "(make|makes|hacer que).*(look|feel|vea).*(better|nicer|cleaner|professional|mejor)",
-          "(se ve|queda|luce).*(desordenad\\w*|amontonad\\w*|apretad\\w*|mal acomodad\\w*)",
-          "(fix|improve|arregl\\w*|mejor\\w*).*(hierarchy|jerarqu[ií]a|spacing|espaciado|alignment|alineaci[oó]n|typography|tipograf[ií]a)",
-          "(too|demasiado).*(cluttered|busy|cramped|apretado|junto)"
         ]
       }
     },
@@ -897,20 +471,28 @@
       "description": "Drizzle ORM on Cloudflare D1: schema, migrations (drizzle-kit), batch API, the 100-parameter cap",
       "promptTriggers": {
         "keywords": [
-          "drizzle",
-          "drizzle-orm",
-          "drizzle-kit",
+          "columna",
+          "consulta",
+          "d1 batch",
           "d1 schema",
-          "sqliteTable",
-          "migration",
           "db:generate",
           "db:migrate",
+          "drizzle",
           "drizzle query",
+          "drizzle-kit",
+          "drizzle-orm",
+          "esquema",
+          "migraciones",
+          "migración",
+          "migration",
           "prepared statement",
-          "d1 batch"
+          "sqliteTable",
+          "tabla"
         ],
         "intentPatterns": [
+          "(a[ñn]ad(e|ir)|crea|crear|altera|alterar|cambia|cambiar).{0,30}(tabla|columna|esquema|migraci[óo]n)",
           "(add|create|alter|change).*(table|column|schema|migration)",
+          "(escrib(e|ir)|construi?r).{0,25}(consulta|query)",
           "(write|build).*(query|select|insert|update).*(drizzle|d1)",
           "drizzle.*(schema|migration|query|relation)",
           "generate.*migration"
@@ -943,21 +525,26 @@
       "description": "Zod schemas: request/response contracts at the edge, z.infer types, MSW handlers validated against them",
       "promptTriggers": {
         "keywords": [
-          "zod",
-          "z.object",
-          "z.infer",
-          "schema validation",
-          "zod schema",
-          "validate input",
+          "contract",
+          "esquema",
+          "input validation",
           "parse",
           "safeParse",
+          "schema validation",
+          "validación",
+          "validar",
+          "validate input",
+          "z.infer",
+          "z.object",
+          "zod",
           "zod error",
-          "input validation",
-          "contract"
+          "zod schema"
         ],
         "intentPatterns": [
+          "(defin(e|ir)|escrib(e|ir)|crea|crear|a[ñn]ad(e|ir)).{0,25}(esquema|validaci[óo]n|validador)",
           "(define|write|create|add).*(schema|validation|validator)",
           "(validate|parse).*(input|payload|body|response|env)",
+          "valida(r)?.{0,25}(entrada|payload|cuerpo|respuesta)",
           "zod.*(schema|infer|transform|refine)"
         ]
       },
@@ -985,25 +572,32 @@
       "description": "Playwright + axe: e2e on built previews (breakpoints, touch targets, contrast) and the real-API passkey/identity journeys",
       "promptTriggers": {
         "keywords": [
-          "playwright",
+          "accesibilidad",
+          "accessibility test",
+          "axe",
+          "browser test",
+          "captura",
+          "contrast test",
+          "contraste",
           "e2e",
           "end to end",
-          "browser test",
-          "page.goto",
-          "axe",
-          "accessibility test",
-          "screenshot",
-          "responsive test",
-          "touch target",
-          "contrast test",
+          "extremo a extremo",
           "identity journey",
+          "navegador",
+          "page.goto",
           "passkey ceremony",
+          "playwright",
+          "playwright config",
           "pnpm e2e",
-          "playwright config"
+          "responsive test",
+          "screenshot",
+          "touch target"
         ],
         "intentPatterns": [
-          "(write|add|create|fix|run).*(e2e|playwright|browser).*(test|spec|journey)",
+          "(escrib(e|ir)|a[ñn]ad(e|ir)|arregla|arreglar|corre|correr|ejecuta|ejecutar).{0,30}(e2e|playwright|navegador)",
+          "(prueba|verifica|comprueba).{0,30}(contraste|accesibilidad|responsive|breakpoint)",
           "(test|check|verify).*(responsive|contrast|accessibility|a11y|breakpoint|touch)",
+          "(write|add|create|fix|run).*(e2e|playwright|browser).*(test|spec|journey)",
           "playwright.*(config|fixture|locator|trace)"
         ]
       },
@@ -1032,23 +626,30 @@
       "description": "Hono (first-party): routing, middleware, validation, testing, streaming on Workers",
       "promptTriggers": {
         "keywords": [
-          "hono",
-          "hono route",
-          "hono middleware",
-          "zValidator",
           "@hono/zod-validator",
           "c.json",
           "c.req",
           "createMiddleware",
-          "hono rpc",
-          "route handler",
           "endpoint",
-          "http service"
+          "hono",
+          "hono middleware",
+          "hono route",
+          "hono rpc",
+          "http service",
+          "manejador",
+          "middleware",
+          "route handler",
+          "ruta",
+          "rutas",
+          "validador",
+          "zValidator"
         ],
         "intentPatterns": [
+          "(a[ñn]ad(e|ir)|crea|crear|escrib(e|ir)|implementa|implementar).{0,30}(ruta|endpoint|middleware|manejador)",
           "(add|create|write|implement).*(route|endpoint|handler|middleware)",
           "(validate|parse).*(request|body|query|params)",
-          "hono.*(route|middleware|validator|rpc|test)"
+          "hono.*(route|middleware|validator|rpc|test)",
+          "valida(r)?.{0,25}(body|cuerpo|petici[óo]n|query|par[áa]metros)"
         ]
       },
       "fileTriggers": {
@@ -1143,24 +744,36 @@
       "description": "Better Auth (first-party): multi-tenant organizations, members, invitations, custom roles — the business/membership model",
       "promptTriggers": {
         "keywords": [
-          "organization",
-          "organizations",
-          "multi-tenant",
-          "tenant",
-          "membership",
-          "member",
+          "business switch",
+          "espacio de trabajo",
+          "invitaciones",
+          "invitación",
           "invitation",
           "invite",
-          "role",
-          "permission",
-          "workspace",
+          "member",
+          "membership",
+          "miembro",
+          "miembros",
+          "multi-tenant",
           "negocio",
-          "business switch"
+          "negocios",
+          "organization",
+          "organizations",
+          "permiso",
+          "permisos",
+          "permission",
+          "rol",
+          "role",
+          "roles",
+          "tenant",
+          "workspace"
         ],
         "intentPatterns": [
+          "(a[ñn]ad(e|ir)|cambia|cambiar|arregla|arreglar|implementa|implementar).{0,35}(organizaci[óo]n|miembro|invitaci[óo]n|rol|permiso|negocio)",
           "(add|change|fix|implement).*(organization|member|membership|invitation|role|permission|workspace)",
-          "invite.*(user|member)",
-          "(switch|change).*(workspace|business|organization)"
+          "(switch|change).*(workspace|business|organization)",
+          "invita(r)?.{0,20}(usuario|miembro|persona)",
+          "invite.*(user|member)"
         ]
       },
       "fileTriggers": {
@@ -1186,19 +799,24 @@
       "description": "Better Auth (first-party): email verification, OTP codes, password reset and policies",
       "promptTriggers": {
         "keywords": [
-          "email verification",
-          "verify email",
-          "password reset",
-          "forgot password",
-          "otp",
-          "one-time code",
+          "contraseña",
           "código",
+          "email verification",
           "emailOTP",
+          "forgot password",
+          "one-time code",
+          "otp",
+          "password policy",
+          "password reset",
+          "registro",
+          "restablecer contraseña",
           "sign up",
           "signup",
-          "password policy"
+          "verificación de correo",
+          "verify email"
         ],
         "intentPatterns": [
+          "(a[ñn]ad(e|ir)|arregla|arreglar|implementa|implementar).{0,35}(verificaci[óo]n|contrase[ñn]a|c[óo]digo|registro|otp)",
           "(add|fix|implement).*(email verification|password reset|otp|one.?time code|sign.?up)",
           "send.*(code|verification|reset)"
         ]
@@ -1225,17 +843,23 @@
       "description": "Better Auth (first-party): rate limiting, secrets, CSRF, trusted origins",
       "promptTriggers": {
         "keywords": [
+          "auth secret",
+          "auth security",
+          "brute force",
+          "cookie security",
+          "cookie segura",
+          "csrf",
+          "límite de peticiones",
+          "orígenes confiables",
           "rate limit",
           "rate limiting",
-          "csrf",
-          "trusted origins",
-          "auth secret",
-          "cookie security",
+          "secreto",
+          "secretos",
           "secure cookie",
-          "brute force",
-          "auth security"
+          "trusted origins"
         ],
         "intentPatterns": [
+          "(a[ñn]ad(e|ir)|configura|configurar|endurec(e|er)|arregla|arreglar).{0,35}(rate.?limit|l[íi]mite|csrf|cookie|secreto|origen)",
           "(add|configure|harden|fix).*(rate ?limit|csrf|trusted origin|cookie|secret)",
           "secure.*(auth|session|cookie)"
         ]
@@ -1261,25 +885,32 @@
       "description": "TanStack Router (first-party): route definitions, type-safe navigation, loaders, search params",
       "promptTriggers": {
         "keywords": [
-          "tanstack router",
-          "react router",
-          "createRoute",
-          "createRootRoute",
-          "createFileRoute",
-          "routeTree",
-          "useNavigate",
           "Link to",
-          "useParams",
-          "useSearch",
-          "router",
-          "route",
+          "createFileRoute",
+          "createRootRoute",
+          "createRoute",
+          "enlace",
+          "navegación",
+          "navegar",
+          "navigate",
           "navigation",
-          "navigate"
+          "react router",
+          "route",
+          "routeTree",
+          "router",
+          "ruta",
+          "rutas",
+          "tanstack router",
+          "useNavigate",
+          "useParams",
+          "useSearch"
         ],
         "intentPatterns": [
+          "(a[ñn]ad(e|ir)|crea|crear|cambia|cambiar|arregla|arreglar).{0,30}(ruta|navegaci[óo]n|enlace)",
           "(add|create|change|fix).*(route|routing|navigation|link)",
-          "navigate.*(to|route)",
-          "(type.?safe).*(route|param|search)"
+          "(type.?safe).*(route|param|search)",
+          "navega(r)?.{0,20}(a|hacia|ruta)",
+          "navigate.*(to|route)"
         ]
       },
       "fileTriggers": {
@@ -1386,28 +1017,35 @@
       "description": "Vitest (generated from the upstream repo): config, mocking, coverage, browser mode. House rules — workers pool, real D1, no DB mocks — are in the constitution",
       "promptTriggers": {
         "keywords": [
-          "vitest",
-          "unit test",
-          "integration test",
-          "describe",
-          "it(",
-          "expect",
-          "vi.mock",
-          "vi.fn",
-          "test setup",
-          "vitest config",
-          "coverage",
-          "testing library",
-          "happy-dom",
-          "write a test",
           "add a test",
-          "failing test"
+          "cobertura",
+          "coverage",
+          "describe",
+          "expect",
+          "failing test",
+          "happy-dom",
+          "integration test",
+          "it(",
+          "prueba",
+          "pruebas",
+          "test",
+          "test setup",
+          "testing library",
+          "tests",
+          "unit test",
+          "vi.fn",
+          "vi.mock",
+          "vitest",
+          "vitest config",
+          "write a test"
         ],
         "intentPatterns": [
-          "(write|add|create|fix|update).*(test|spec)",
+          "(escrib(e|ir)|a[ñn]ad(e|ir)|crea|crear|arregla|arreglar|corrige|corregir).{0,25}(test|prueba|spec)",
+          "(mock|stub).*(fetch|provider|module)",
+          "(prueba|cubrir?).{0,25}(ruta|manejador|componente|invariante)",
           "(test|cover).*(route|handler|component|hook|invariant)",
-          "vitest.*(config|mock|setup|coverage|pool)",
-          "(mock|stub).*(fetch|provider|module)"
+          "(write|add|create|fix|update).*(test|spec)",
+          "vitest.*(config|mock|setup|coverage|pool)"
         ]
       },
       "fileTriggers": {
@@ -1438,20 +1076,24 @@
       "description": "Vite (generated from the upstream repo): config, plugins, dev server, build",
       "promptTriggers": {
         "keywords": [
+          "alias",
+          "base url",
+          "build config",
+          "compilación",
+          "construcción",
+          "dev server",
+          "esbuild",
+          "hmr",
+          "import.meta.env",
+          "rollup",
+          "servidor de desarrollo",
           "vite",
           "vite config",
-          "vite.config",
           "vite plugin",
-          "dev server",
-          "hmr",
-          "build config",
-          "rollup",
-          "esbuild",
-          "import.meta.env",
-          "base url",
-          "alias"
+          "vite.config"
         ],
         "intentPatterns": [
+          "(configura|configurar|arregla|arreglar|cambia|cambiar).{0,30}(vite|build|compilaci[óo]n|plugin|alias)",
           "(configure|fix|change|add).*(vite|build|dev server|plugin|alias)",
           "vite.*(config|plugin|build|hmr)"
         ]
@@ -1478,23 +1120,28 @@
       "description": "pnpm (generated from the upstream repo): workspaces, filters, lockfile, strict resolution",
       "promptTriggers": {
         "keywords": [
-          "pnpm",
-          "workspace",
-          "pnpm-workspace",
-          "monorepo",
           "--filter",
-          "lockfile",
-          "pnpm-lock",
-          "catalog",
           "add dependency",
-          "install dependency",
+          "catalog",
+          "dependencia",
+          "dependencias",
+          "espacio de trabajo",
           "hoisting",
-          "peer dependency"
+          "install dependency",
+          "lockfile",
+          "monorepo",
+          "paquete",
+          "peer dependency",
+          "pnpm",
+          "pnpm-lock",
+          "pnpm-workspace",
+          "workspace"
         ],
         "intentPatterns": [
           "(add|install|remove|update).*(dependency|package|workspace)",
-          "pnpm.*(filter|workspace|lock|install)",
-          "(configure|fix).*(monorepo|workspace)"
+          "(configure|fix).*(monorepo|workspace)",
+          "(instala|instalar|a[ñn]ad(e|ir)|quita|quitar|actualiza|actualizar).{0,30}(dependencia|paquete)",
+          "pnpm.*(filter|workspace|lock|install)"
         ]
       },
       "fileTriggers": {
@@ -1595,6 +1242,141 @@
           "observability",
           "wrangler\\.jsonc",
           "cloudflare-platform-check"
+        ]
+      }
+    },
+    "vercel-react-best-practices": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "React and Next.js performance patterns from Vercel Engineering — components, data fetching, bundle size",
+      "promptTriggers": {
+        "keywords": [
+          "bundle",
+          "component",
+          "componente",
+          "componentes",
+          "hook",
+          "memo",
+          "memoizar",
+          "optimizar",
+          "performance",
+          "re-render",
+          "react",
+          "render",
+          "renderizado",
+          "rendimiento",
+          "rerender",
+          "rerenderizado",
+          "suspense",
+          "useCallback",
+          "useEffect",
+          "useMemo",
+          "useState"
+        ],
+        "intentPatterns": [
+          "(escribir?|crear?|a[ñn]adir|arreglar).{0,25}(componente|hook)",
+          "(optimi[sz]e|speed up).*(react|render|bundle)",
+          "(optimi[zc]ar?|mejorar|acelerar).{0,30}(render|componente|rendimiento|bundle)",
+          "(write|add|create|fix|refactor).*(component|hook|render)",
+          "react.*(pattern|performance|suspense)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/*/src/**/*.tsx",
+          "packages/ui/src/**/*.tsx"
+        ],
+        "contentPatterns": [
+          "from ['\"]react",
+          "useState\\(",
+          "useEffect\\(",
+          "useMemo\\(",
+          "useCallback\\(",
+          "React\\.memo\\(",
+          "<Suspense"
+        ]
+      }
+    },
+    "skill-creator": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Create, edit and evaluate Claude Code skills (Anthropic, first-party)",
+      "promptTriggers": {
+        "keywords": [
+          "SKILL.md",
+          "crear skill",
+          "create skill",
+          "descripción de skill",
+          "edit skill",
+          "editar skill",
+          "improve skill",
+          "new skill",
+          "nueva skill",
+          "skill",
+          "skill description",
+          "skill eval",
+          "skill frontmatter",
+          "skills"
+        ],
+        "intentPatterns": [
+          "(create|write|add|edit|improve|optimi[sz]e).*(skill)",
+          "(crea|crear|escribe|escribir|a[ñn]ade|a[ñn]adir|edita|editar|mejora|mejorar).{0,25}skill",
+          "\\bcrea(r)?\\b.{0,25}\\bskill\\b",
+          "\\bnuev[ao]\\b.{0,15}\\bskill\\b",
+          "\\bskill\\b.{0,25}\\bnuev[ao]\\b",
+          "skill.*(frontmatter|description|trigger|eval)",
+          "skill.{0,20}(nueva|nuevo|frontmatter|descripci[óo]n|trigger)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          ".claude/skills/**/SKILL.md",
+          "tools/skills.json"
+        ],
+        "contentPatterns": [
+          "^name:",
+          "^description:",
+          "user-invocable"
+        ]
+      }
+    },
+    "speckit-design-foundations": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Spec Kit extension: detect existing tokens and components, then draft the visual foundations — runs after the constitution",
+      "promptTriggers": {
+        "keywords": [
+          "design foundations",
+          "visual foundations",
+          "tokens",
+          "design tokens",
+          "paleta",
+          "palette",
+          "tipografía",
+          "typography",
+          "escala",
+          "spacing scale",
+          "accessibility bar",
+          "fundamentos visuales"
+        ],
+        "intentPatterns": [
+          "(define|draft|detect|revisar?).*(foundation|token|visual|palette|paleta)",
+          "design.*(foundation|system|token)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "packages/ui/src/styles/tokens.css",
+          "packages/ui/src/styles/*.css"
+        ],
+        "contentPatterns": [
+          "--color-",
+          "\\[data-theme",
+          "@theme inline",
+          ":root"
         ]
       }
     }

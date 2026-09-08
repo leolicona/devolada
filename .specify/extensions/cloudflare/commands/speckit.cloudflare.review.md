@@ -36,7 +36,7 @@ repository, otherwise `plan`. Any further text is extra context.
 4. **Cloudflare MCP server** (`cloudflare`, tools prefixed `mcp__cloudflare__`): when
    connected, verify each limit, quota and API claim through its documentation search
    and cite the URL. When not connected, use the bundled references and mark the item
-   **Unverified** with the sync date from `skills-lock.json (source `cloudflare`)`.
+   **Unverified** with the sync date from `.claude/skills/skills.lock.json (source `cloudflare`)`.
 
 Prefer retrieval over pre-training. Use the project's installed Wrangler version,
 generated types and configured `compatibility_date` as the baseline; a newer type

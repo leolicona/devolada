@@ -208,10 +208,10 @@ skill to load **before** writing that kind of code.
 |---|---|---|
 | HTTP service | **Hono.** Every HTTP surface in `apps/api` and `apps/consta` is a Hono app. Validation with `@hono/zod-validator` at the edge; the uniform envelope on every response. | `hono` ᶠ |
 | Contracts and validation | **Zod.** A route's `schema.ts` is the contract; frontends derive types from it and MSW handlers are validated against it, so a mock cannot lie. | `zod` |
-| Persistence | **Drizzle on D1.** Migrations through `drizzle-kit`, additive, a rebuild proven on seeded data. Any statement that grows with the tenant is chunked under `D1_MAX_PARAMS` (BUG-021). | `drizzle-orm-d1`, `cloudflare-d1` |
+| Persistence | **Drizzle on D1.** Migrations through `drizzle-kit`, additive, a rebuild proven on seeded data. Any statement that grows with the tenant is chunked under `D1_MAX_PARAMS` (BUG-021). | `drizzle-orm-d1`, `cloudflare` ᶠ |
 | Authentication | **Better Auth inside `apps/api`, and nowhere else** (BFF). HTTP-only cookies; account status re-checked in the database on every request; passkeys and organizations through its plugins. | `better-auth-best-practices` ᶠ, `organization-best-practices` ᶠ, `email-and-password-best-practices` ᶠ, `better-auth-security-best-practices` ᶠ, `create-auth` ᶠ |
-| Object storage · inference | **R2** (`PROOFS`) for transfer evidence; **Workers AI** for receipt extraction. | `cloudflare-r2`, `cloudflare-workers-ai` |
-| UI | **React 19** with **TanStack Router** (routes are dumb; logic lives in features) and **TanStack Query** (the only home of server state). **Tailwind v4** through the tokens; **shadcn** primitives copied into `src/components/ui/`, never added as a dependency. | `react-router` ᶠ, `router-core` ᶠ, `router-query` ᶠ, `shadcn` ᶠ, `tanstack-query`, `react`, `tailwindcss` |
+| Object storage · inference | **R2** (`PROOFS`) for transfer evidence; **Workers AI** for receipt extraction. | `cloudflare` ᶠ |
+| UI | **React 19** with **TanStack Router** (routes are dumb; logic lives in features) and **TanStack Query** (the only home of server state). **Tailwind v4** through the tokens; **shadcn** primitives copied into `src/components/ui/`, never added as a dependency. | `react-router` ᶠ, `router-core` ᶠ, `router-query` ᶠ, `shadcn` ᶠ, `vercel-react-best-practices` ᶠ, `tanstack-query` |
 | API tests | **Vitest under `@cloudflare/vitest-pool-workers`**: the real workerd runtime and a real local D1. **No database mocks.** Provider bases are pinned in `vitest.config.ts`, interceptor counts are exact, module caches reset per test. | `vitest` |
 | Component and network tests | **Vitest + React Testing Library + happy-dom**, queried by what the user sees. Network through **MSW**, handlers validated against the Zod schemas. Travel from the origin screen; do not mount the destination. | `vitest`, `react` |
 | End-to-end | **Playwright + axe** against built previews for breakpoints, touch geometry and real contrast; against the real API (`pnpm e2e:passkey`) for the passkey and identity journeys. | `playwright` |
@@ -240,19 +240,29 @@ of the workers pool; there is no MSW skill at all), **this table is the law and 
 skill is the reference**.
 
 **ᶠ marks a skill published by the technology's own maintainers**, resolved to a
-verified GitHub organization: `honojs/skills`, `better-auth/skills`, `TanStack/router`,
-`shadcn-ui/ui`, `cloudflare/skills`. An unmarked skill is community-authored, because
-no first-party one exists — Drizzle, Zod, Tailwind, TanStack Query, Vitest, MSW and
-React publish none as of 2026-09-08. Two consequences bind:
+verified GitHub organization. An unmarked skill is community-authored because no
+first-party one exists — Drizzle, Zod, Tailwind, TanStack Query, Vitest and MSW
+publish none as of 2026-09-08.
+
+Every vendored skill MUST be declared in [`tools/skills.json`](../../tools/skills.json)
+with its repository, `license` and `official` flag, and MUST arrive through
+`tools/scripts/sync-skills.sh`, which pins each source's upstream commit in
+`.claude/skills/skills.lock.json`. That manifest is the single register of what is
+installed and where it came from. Three rules follow:
 
 - A skill that contradicts this constitution or a spec is **wrong**, whoever wrote it.
   That holds for first-party skills too, and doubly for community ones.
+- **A skill not declared in the manifest has unknown provenance and MUST be replaced
+  or removed** — never kept because it seems useful. Local changes to a vendored skill
+  go in `tools/skill-overlays/<name>/`, never edited in place, or the next sync
+  silently reverts them.
 - `skills.sh` performs **no signature verification** on install
-  ([RFC](https://github.com/vercel-labs/skills/issues/617)), so a skill MUST be pinned
-  to an owner/repo that has been verified as the maintainer's, never to a registry
-  slug or a display badge. The provenance of every installed skill is recorded in
-  `skills-lock.json`; a skill with no entry there has unknown provenance and MUST be
-  replaced or removed.
+  ([RFC](https://github.com/vercel-labs/skills/issues/617)), so a source MUST be pinned
+  to an owner/repo verified as the maintainer's, never to a registry slug or a display
+  badge. A community source MUST carry a `note` in the manifest saying why it was taken
+  when no first-party skill exists.
+- A skill whose technology is **not in this project's stack MUST NOT be vendored**. A
+  skill nobody can use is noise in every prompt that lists it.
 
 ## Development workflow and quality gates
 

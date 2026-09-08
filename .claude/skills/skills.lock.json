@@ -1,0 +1,233 @@
+{
+  "sources": {
+    "anthropic": {
+      "repo": "https://github.com/anthropics/skills.git",
+      "ref": "main",
+      "commit": "41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f",
+      "synced_at": "2026-09-08T19:08:22Z",
+      "skills": [
+        {
+          "name": "skill-creator",
+          "path": "skills/skill-creator"
+        }
+      ]
+    },
+    "better-auth": {
+      "repo": "https://github.com/better-auth/skills.git",
+      "ref": "main",
+      "commit": "20c9e88a5c007461a703f1c213572b073196113e",
+      "synced_at": "2026-09-08T19:08:24Z",
+      "skills": [
+        {
+          "name": "better-auth-best-practices",
+          "path": "better-auth/best-practices"
+        },
+        {
+          "name": "better-auth-security-best-practices",
+          "path": "security"
+        },
+        {
+          "name": "create-auth",
+          "path": "better-auth/create-auth"
+        },
+        {
+          "name": "email-and-password-best-practices",
+          "path": "better-auth/emailAndPassword"
+        },
+        {
+          "name": "organization-best-practices",
+          "path": "better-auth/organization"
+        }
+      ]
+    },
+    "cloudflare": {
+      "repo": "https://github.com/cloudflare/skills.git",
+      "ref": "main",
+      "commit": "b052c32bab7dd493513260228a36c88294f343f1",
+      "synced_at": "2026-09-08T19:08:27Z",
+      "skills": [
+        {
+          "name": "cloudflare",
+          "path": "skills/cloudflare"
+        },
+        {
+          "name": "web-perf",
+          "path": "skills/web-perf"
+        },
+        {
+          "name": "workers-best-practices",
+          "path": "skills/workers-best-practices"
+        },
+        {
+          "name": "wrangler",
+          "path": "skills/wrangler"
+        }
+      ]
+    },
+    "hono": {
+      "repo": "https://github.com/honojs/skills.git",
+      "ref": "main",
+      "commit": "f916476e71029ebf62160c3286550a99f0b6c687",
+      "synced_at": "2026-09-08T19:08:29Z",
+      "skills": [
+        {
+          "name": "hono",
+          "path": "skills/hono"
+        }
+      ]
+    },
+    "shadcn": {
+      "repo": "https://github.com/shadcn-ui/ui.git",
+      "ref": "main",
+      "commit": "3ba91b1cc83e1bbe4ab35a422ff2a694849c5048",
+      "synced_at": "2026-09-08T19:08:31Z",
+      "skills": [
+        {
+          "name": "shadcn",
+          "path": "skills/shadcn"
+        }
+      ]
+    },
+    "tanstack": {
+      "repo": "https://github.com/TanStack/router.git",
+      "ref": "main",
+      "commit": "9871c0625806001d6bf373524821a00303438a91",
+      "synced_at": "2026-09-08T19:08:33Z",
+      "skills": [
+        {
+          "name": "react-router",
+          "path": "packages/react-router/skills/react-router"
+        },
+        {
+          "name": "router-core",
+          "path": "packages/router-core/skills/router-core"
+        },
+        {
+          "name": "router-query",
+          "path": "packages/react-router/skills/compositions/router-query"
+        }
+      ]
+    },
+    "vercel": {
+      "repo": "https://github.com/vercel-labs/agent-skills.git",
+      "ref": "main",
+      "commit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+      "synced_at": "2026-09-08T19:08:35Z",
+      "skills": [
+        {
+          "name": "vercel-react-best-practices",
+          "path": "skills/react-best-practices"
+        }
+      ]
+    },
+    "antfu": {
+      "repo": "https://github.com/antfu/skills.git",
+      "ref": "main",
+      "commit": "a74f281a27dadc02397bc1a174b0f2c97531b6ae",
+      "synced_at": "2026-09-08T19:08:36Z",
+      "skills": [
+        {
+          "name": "pnpm",
+          "path": "skills/pnpm"
+        },
+        {
+          "name": "vite",
+          "path": "skills/vite"
+        },
+        {
+          "name": "vitest",
+          "path": "skills/vitest"
+        }
+      ]
+    },
+    "secondsky": {
+      "repo": "https://github.com/secondsky/claude-skills.git",
+      "ref": "main",
+      "commit": "ac5905b4f0545461034885bb385645b4c7a5562a",
+      "synced_at": "2026-09-08T19:08:42Z",
+      "skills": [
+        {
+          "name": "api-authentication",
+          "path": "plugins/api-authentication/skills/api-authentication"
+        },
+        {
+          "name": "api-contract-testing",
+          "path": "plugins/api-contract-testing/skills/api-contract-testing"
+        },
+        {
+          "name": "api-design-principles",
+          "path": "plugins/api-design-principles/skills/api-design-principles"
+        },
+        {
+          "name": "api-error-handling",
+          "path": "plugins/api-error-handling/skills/api-error-handling"
+        },
+        {
+          "name": "api-filtering-sorting",
+          "path": "plugins/api-filtering-sorting/skills/api-filtering-sorting"
+        },
+        {
+          "name": "api-pagination",
+          "path": "plugins/api-pagination/skills/api-pagination"
+        },
+        {
+          "name": "api-rate-limiting",
+          "path": "plugins/api-rate-limiting/skills/api-rate-limiting"
+        },
+        {
+          "name": "api-reference-documentation",
+          "path": "plugins/api-reference-documentation/skills/api-reference-documentation"
+        },
+        {
+          "name": "api-response-optimization",
+          "path": "plugins/api-response-optimization/skills/api-response-optimization"
+        },
+        {
+          "name": "api-security-hardening",
+          "path": "plugins/api-security-hardening/skills/api-security-hardening"
+        },
+        {
+          "name": "api-versioning-strategy",
+          "path": "plugins/api-versioning-strategy/skills/api-versioning-strategy"
+        },
+        {
+          "name": "claude-code-bash-patterns",
+          "path": "plugins/claude-code-bash-patterns/skills/claude-code-bash-patterns"
+        },
+        {
+          "name": "claude-hook-writer",
+          "path": "plugins/claude-hook-writer/skills/claude-hook-writer"
+        },
+        {
+          "name": "drizzle-orm-d1",
+          "path": "plugins/drizzle-orm-d1/skills/drizzle-orm-d1"
+        },
+        {
+          "name": "playwright",
+          "path": "plugins/playwright/skills/playwright"
+        },
+        {
+          "name": "tanstack-query",
+          "path": "plugins/tanstack-query/skills/tanstack-query"
+        },
+        {
+          "name": "zod",
+          "path": "plugins/zod/skills/zod"
+        }
+      ]
+    },
+    "warp": {
+      "repo": "https://github.com/warpdotdev/common-skills.git",
+      "ref": "main",
+      "commit": "b811c24365ae505bfc9646458957b886e29110b5",
+      "synced_at": "2026-09-08T19:08:46Z",
+      "skills": [
+        {
+          "name": "cross-critique",
+          "path": ".agents/skills/cross-critique"
+        }
+      ]
+    }
+  },
+  "note": "Managed by tools/scripts/sync-skills.sh from tools/skills.json - do not edit synced skill folders by hand; put local changes in tools/skill-overlays/<skill>/."
+}

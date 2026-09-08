@@ -1,5 +1,6 @@
 installed:
 - cloudflare
+- design
 settings:
   auto_execute_hooks: true
 hooks:
@@ -32,4 +33,14 @@ hooks:
     prompt: 'Review the Worker code and Wrangler configuration against Cloudflare
       best practices (run with argument: code)?'
     description: Offer a platform review of the implementation
+    condition: null
+  after_constitution:
+  - extension: design
+    command: speckit.design.foundations
+    enabled: true
+    optional: true
+    priority: 10
+    prompt: Does this project have a UI? Define its visual foundations now, before
+      the first feature?
+    description: Offer to define visual foundations right after the constitution
     condition: null

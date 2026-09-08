@@ -1,0 +1,250 @@
+{
+  "$comment": "Agent skills vendored into .claude/skills/ by tools/scripts/sync-skills.sh. Each source is a git repository; each skill is copied from `path` to .claude/skills/<name>. `official` records whether the source is the technology's own maintainer org — the constitution's provenance rule turns on it. Overlays under tools/skill-overlays/<name>/ are applied after the copy.",
+  "sources": [
+    {
+      "id": "anthropic",
+      "repo": "https://github.com/anthropics/skills.git",
+      "ref": "main",
+      "license": "see upstream (no LICENSE file on 2026-09-08)",
+      "official": true,
+      "note": "Anthropic labels these demonstration and educational; document skills are source-available, not open source.",
+      "skills": [
+        {
+          "name": "skill-creator",
+          "path": "skills/skill-creator"
+        }
+      ]
+    },
+    {
+      "id": "better-auth",
+      "repo": "https://github.com/better-auth/skills.git",
+      "ref": "main",
+      "license": "see upstream (no LICENSE file on 2026-09-08)",
+      "official": true,
+      "note": "The marketplace manifest exposes only 2 of the 6 skills; the rest are taken directly from the repo.",
+      "skills": [
+        {
+          "name": "better-auth-best-practices",
+          "path": "better-auth/best-practices"
+        },
+        {
+          "name": "better-auth-security-best-practices",
+          "path": "security"
+        },
+        {
+          "name": "create-auth",
+          "path": "better-auth/create-auth"
+        },
+        {
+          "name": "email-and-password-best-practices",
+          "path": "better-auth/emailAndPassword"
+        },
+        {
+          "name": "organization-best-practices",
+          "path": "better-auth/organization"
+        }
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "repo": "https://github.com/cloudflare/skills.git",
+      "ref": "main",
+      "license": "Apache-2.0",
+      "official": true,
+      "skills": [
+        {
+          "name": "cloudflare",
+          "path": "skills/cloudflare"
+        },
+        {
+          "name": "web-perf",
+          "path": "skills/web-perf"
+        },
+        {
+          "name": "workers-best-practices",
+          "path": "skills/workers-best-practices"
+        },
+        {
+          "name": "wrangler",
+          "path": "skills/wrangler"
+        }
+      ]
+    },
+    {
+      "id": "hono",
+      "repo": "https://github.com/honojs/skills.git",
+      "ref": "main",
+      "license": "MIT",
+      "official": true,
+      "note": "Official but young: the repo was created 2026-08-31. Review before relying on it.",
+      "skills": [
+        {
+          "name": "hono",
+          "path": "skills/hono"
+        }
+      ]
+    },
+    {
+      "id": "shadcn",
+      "repo": "https://github.com/shadcn-ui/ui.git",
+      "ref": "main",
+      "license": "MIT",
+      "official": true,
+      "skills": [
+        {
+          "name": "shadcn",
+          "path": "skills/shadcn"
+        }
+      ]
+    },
+    {
+      "id": "tanstack",
+      "repo": "https://github.com/TanStack/router.git",
+      "ref": "main",
+      "license": "MIT",
+      "official": true,
+      "note": "Shipped inside the npm packages via TanStack Intent. router-core nests its ten child skills; taking it takes the tree.",
+      "skills": [
+        {
+          "name": "react-router",
+          "path": "packages/react-router/skills/react-router"
+        },
+        {
+          "name": "router-core",
+          "path": "packages/router-core/skills/router-core"
+        },
+        {
+          "name": "router-query",
+          "path": "packages/react-router/skills/compositions/router-query"
+        }
+      ]
+    },
+    {
+      "id": "vercel",
+      "repo": "https://github.com/vercel-labs/agent-skills.git",
+      "ref": "main",
+      "license": "see upstream (no LICENSE file on 2026-09-08)",
+      "official": true,
+      "skills": [
+        {
+          "name": "vercel-react-best-practices",
+          "path": "skills/react-best-practices"
+        }
+      ]
+    },
+    {
+      "id": "antfu",
+      "repo": "https://github.com/antfu/skills.git",
+      "ref": "main",
+      "license": "see upstream (no LICENSE file on 2026-09-08)",
+      "official": false,
+      "note": "Personal account, not an org. The author is a Vite and Vitest core team member and the skills are generated from the upstream repos.",
+      "skills": [
+        {
+          "name": "pnpm",
+          "path": "skills/pnpm"
+        },
+        {
+          "name": "vite",
+          "path": "skills/vite"
+        },
+        {
+          "name": "vitest",
+          "path": "skills/vitest"
+        }
+      ]
+    },
+    {
+      "id": "secondsky",
+      "repo": "https://github.com/secondsky/claude-skills.git",
+      "ref": "main",
+      "license": "MIT",
+      "official": false,
+      "note": "Community collection; only skills with no first-party equivalent are taken.",
+      "skills": [
+        {
+          "name": "api-authentication",
+          "path": "plugins/api-authentication/skills/api-authentication"
+        },
+        {
+          "name": "api-contract-testing",
+          "path": "plugins/api-contract-testing/skills/api-contract-testing"
+        },
+        {
+          "name": "api-design-principles",
+          "path": "plugins/api-design-principles/skills/api-design-principles"
+        },
+        {
+          "name": "api-error-handling",
+          "path": "plugins/api-error-handling/skills/api-error-handling"
+        },
+        {
+          "name": "api-filtering-sorting",
+          "path": "plugins/api-filtering-sorting/skills/api-filtering-sorting"
+        },
+        {
+          "name": "api-pagination",
+          "path": "plugins/api-pagination/skills/api-pagination"
+        },
+        {
+          "name": "api-rate-limiting",
+          "path": "plugins/api-rate-limiting/skills/api-rate-limiting"
+        },
+        {
+          "name": "api-reference-documentation",
+          "path": "plugins/api-reference-documentation/skills/api-reference-documentation"
+        },
+        {
+          "name": "api-response-optimization",
+          "path": "plugins/api-response-optimization/skills/api-response-optimization"
+        },
+        {
+          "name": "api-security-hardening",
+          "path": "plugins/api-security-hardening/skills/api-security-hardening"
+        },
+        {
+          "name": "api-versioning-strategy",
+          "path": "plugins/api-versioning-strategy/skills/api-versioning-strategy"
+        },
+        {
+          "name": "claude-code-bash-patterns",
+          "path": "plugins/claude-code-bash-patterns/skills/claude-code-bash-patterns"
+        },
+        {
+          "name": "claude-hook-writer",
+          "path": "plugins/claude-hook-writer/skills/claude-hook-writer"
+        },
+        {
+          "name": "drizzle-orm-d1",
+          "path": "plugins/drizzle-orm-d1/skills/drizzle-orm-d1"
+        },
+        {
+          "name": "playwright",
+          "path": "plugins/playwright/skills/playwright"
+        },
+        {
+          "name": "tanstack-query",
+          "path": "plugins/tanstack-query/skills/tanstack-query"
+        },
+        {
+          "name": "zod",
+          "path": "plugins/zod/skills/zod"
+        }
+      ]
+    },
+    {
+      "id": "warp",
+      "repo": "https://github.com/warpdotdev/common-skills.git",
+      "ref": "main",
+      "license": "MIT",
+      "official": false,
+      "note": "Community; no first-party equivalent exists.",
+      "skills": [
+        {
+          "name": "cross-critique",
+          "path": ".agents/skills/cross-critique"
+        }
+      ]
+    }
+  ]
+}

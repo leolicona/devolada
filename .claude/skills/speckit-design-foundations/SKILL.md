@@ -1,0 +1,1 @@
+../../../.specify/extensions/design/.specify-dev/agent-commands/claude/speckit-design-foundations/SKILL.md

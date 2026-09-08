@@ -35,7 +35,7 @@ developer already chose, a need not yet in the spec).
    is connected, use its documentation search for every limit, quota, pricing or API
    claim you record, and cite the URL it returns. If it is not connected or a call
    fails, use the bundled references and mark the row **Unverified (bundled
-   reference, synced <date from skills-lock.json (source `cloudflare`)>)**. Never
+   reference, synced <date from .claude/skills/skills.lock.json (source `cloudflare`)>)**. Never
    present a memorised number as verified.
 
 Prefer retrieval over pre-training: your knowledge of Cloudflare limits and APIs may

@@ -11,7 +11,11 @@ Devolada: direct SPEI payments with automatic validation for service businesses 
 > — still normative, still the source of truth, and `spec-lint` still enforces
 > it there. The new tree begins at [`docs/BRIEF.md`](docs/BRIEF.md) (brief,
 > stack, invariants, glossary, feature list); the plan and its alternatives are
-> in [`docs/spec-kit-migration.eval.md`](docs/spec-kit-migration.eval.md).
+> in [`docs/spec-kit-migration.eval.md`](docs/spec-kit-migration.eval.md). The
+> laws that no feature re-decides are summarized in the constitution at
+> [`.specify/memory/constitution.md`](.specify/memory/constitution.md) — which
+> links these files rather than replacing them: on a conflict of detail, the
+> linked file wins.
 > Until the rebuild lands, **read `docs/legacy/` for anything you need to
 > know** and keep amending specs there.
 

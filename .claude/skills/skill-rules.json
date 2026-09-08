@@ -216,74 +216,6 @@
         ]
       }
     },
-    "tanstack-router": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "high",
-      "promptTriggers": {
-        "keywords": [
-          "tanstack router",
-          "@tanstack/react-router",
-          "createFileRoute",
-          "createRootRoute",
-          "createRoute",
-          "createRouter",
-          "RouterProvider",
-          "useNavigate",
-          "useParams",
-          "useSearch",
-          "useLoaderData",
-          "useRouter",
-          "useMatches",
-          "useMatch",
-          "useLocation",
-          "route loader",
-          "Route.lazy",
-          "beforeLoad",
-          "validateSearch",
-          "Link",
-          "Outlet",
-          "Navigate",
-          "redirect",
-          "notFound"
-        ],
-        "intentPatterns": [
-          "create.*tanstack.*route",
-          "add.*tanstack.*route",
-          "setup.*tanstack.*router",
-          "implement.*file.*based.*routing",
-          "create.*route.*loader",
-          "add.*route.*validation",
-          "use.*tanstack.*navigation",
-          "create.*lazy.*route",
-          "implement.*route.*guard",
-          "add.*search.*params.*validation",
-          "create.*router.*tanstack"
-        ]
-      },
-      "fileTriggers": {
-        "pathPatterns": [
-          "**/routes/**/*.tsx",
-          "**/routes/**/*.ts",
-          "**/routes/**/*.lazy.tsx",
-          "**/routes/**/*.lazy.ts",
-          "**/__root.tsx"
-        ],
-        "contentPatterns": [
-          "createFileRoute\\(",
-          "createRootRoute\\(",
-          "createRoute\\(",
-          "createRouter\\(",
-          "import.*@tanstack/react-router",
-          "from '@tanstack/react-router'",
-          "RouterProvider",
-          "useNavigate\\(\\)",
-          "useParams\\(\\)",
-          "useSearch\\(\\)",
-          "Route\\.lazy"
-        ]
-      }
-    },
     "shadcn": {
       "type": "domain",
       "enforcement": "suggest",
@@ -958,52 +890,6 @@
         ]
       }
     },
-    "hono-routing": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "high",
-      "description": "Hono routing, middleware, Zod validators at the edge — every HTTP service in apps/api and apps/consta",
-      "promptTriggers": {
-        "keywords": [
-          "hono",
-          "hono route",
-          "hono middleware",
-          "zValidator",
-          "@hono/zod-validator",
-          "c.json",
-          "c.req",
-          "Hono app",
-          "hono rpc",
-          "hono handler",
-          "route handler",
-          "endpoint"
-        ],
-        "intentPatterns": [
-          "(add|create|write|implement).*(route|endpoint|handler|middleware)",
-          "(validate|parse).*(request|body|query|params)",
-          "hono.*(route|middleware|validator)"
-        ]
-      },
-      "fileTriggers": {
-        "pathPatterns": [
-          "apps/api/src/routes/**/*.ts",
-          "apps/consta/src/routes/**/*.ts",
-          "apps/*/src/index.ts",
-          "apps/*/src/app.ts",
-          "**/middleware/**/*.ts"
-        ],
-        "contentPatterns": [
-          "new Hono\\(",
-          "from ['\"]hono",
-          "zValidator\\(",
-          "c\\.json\\(",
-          "c\\.req\\.",
-          "app\\.(get|post|put|patch|delete)\\(",
-          "\\.route\\(",
-          "hono/"
-        ]
-      }
-    },
     "drizzle-orm-d1": {
       "type": "domain",
       "enforcement": "suggest",
@@ -1089,56 +975,6 @@
           "z\\.(string|number|enum|array|union|discriminatedUnion)\\(",
           "\\.safeParse\\(",
           "\\.parse\\("
-        ]
-      }
-    },
-    "better-auth": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "high",
-      "description": "Better Auth inside apps/api (BFF, HTTP-only cookies), D1 adapter, email-code, passkeys, organizations and roles",
-      "promptTriggers": {
-        "keywords": [
-          "better auth",
-          "better-auth",
-          "betterAuth",
-          "auth",
-          "login",
-          "session",
-          "passkey",
-          "webauthn",
-          "organization",
-          "membership",
-          "role",
-          "invitation",
-          "email otp",
-          "sign in",
-          "sign up",
-          "cookie"
-        ],
-        "intentPatterns": [
-          "(add|implement|change|fix).*(auth|login|session|passkey|invitation|membership|role)",
-          "better.?auth.*(plugin|adapter|organization|passkey|otp)",
-          "(check|require).*(session|role|permission)"
-        ]
-      },
-      "fileTriggers": {
-        "pathPatterns": [
-          "apps/api/src/auth/**/*.ts",
-          "apps/api/src/routes/auth/**",
-          "apps/admin/src/features/auth/**",
-          "tests/passkey/**"
-        ],
-        "contentPatterns": [
-          "from ['\"]better-auth",
-          "betterAuth\\(",
-          "createAuthClient\\(",
-          "organization\\(\\)",
-          "passkey\\(\\)",
-          "emailOTP\\(",
-          "requireSession",
-          "auth\\.api\\.",
-          "BETTER_AUTH_SECRET"
         ]
       }
     },
@@ -1243,6 +1079,360 @@
           "@axe-core/playwright",
           "AxeBuilder",
           "defineConfig\\("
+        ]
+      }
+    },
+    "hono": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Hono (first-party): routing, middleware, validation, testing, streaming on Workers",
+      "promptTriggers": {
+        "keywords": [
+          "hono",
+          "hono route",
+          "hono middleware",
+          "zValidator",
+          "@hono/zod-validator",
+          "c.json",
+          "c.req",
+          "createMiddleware",
+          "hono rpc",
+          "route handler",
+          "endpoint",
+          "http service"
+        ],
+        "intentPatterns": [
+          "(add|create|write|implement).*(route|endpoint|handler|middleware)",
+          "(validate|parse).*(request|body|query|params)",
+          "hono.*(route|middleware|validator|rpc|test)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/routes/**/*.ts",
+          "apps/consta/src/routes/**/*.ts",
+          "apps/*/src/index.ts",
+          "**/middleware/**/*.ts"
+        ],
+        "contentPatterns": [
+          "new Hono\\(",
+          "from ['\"]hono",
+          "zValidator\\(",
+          "c\\.json\\(",
+          "c\\.req\\.",
+          "app\\.(get|post|put|patch|delete)\\(",
+          "createMiddleware\\(",
+          "hono/"
+        ]
+      }
+    },
+    "better-auth-best-practices": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Better Auth (first-party): server/client config, database adapters, session management",
+      "promptTriggers": {
+        "keywords": [
+          "better auth",
+          "better-auth",
+          "betterAuth",
+          "auth config",
+          "auth server",
+          "auth client",
+          "session",
+          "drizzleAdapter",
+          "auth adapter",
+          "createAuthClient"
+        ],
+        "intentPatterns": [
+          "(configure|set ?up|add|fix).*(better.?auth|auth (server|client|adapter|session))",
+          "better.?auth.*(config|adapter|session|plugin)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/auth/**/*.ts",
+          "apps/admin/src/features/auth/**"
+        ],
+        "contentPatterns": [
+          "betterAuth\\(",
+          "createAuthClient\\(",
+          "drizzleAdapter\\(",
+          "from ['\"]better-auth",
+          "BETTER_AUTH_SECRET"
+        ]
+      }
+    },
+    "create-auth": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Better Auth (first-party): scaffold authentication in a TypeScript app",
+      "promptTriggers": {
+        "keywords": [
+          "scaffold auth",
+          "add authentication",
+          "set up auth",
+          "new auth",
+          "auth setup",
+          "install better auth"
+        ],
+        "intentPatterns": [
+          "(scaffold|bootstrap|set ?up|add).*(authentication|auth).*(from scratch|new)",
+          "implement.*authentication"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/auth/**/*.ts"
+        ],
+        "contentPatterns": [
+          "betterAuth\\(",
+          "createAuthClient\\("
+        ]
+      }
+    },
+    "organization-best-practices": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Better Auth (first-party): multi-tenant organizations, members, invitations, custom roles — the business/membership model",
+      "promptTriggers": {
+        "keywords": [
+          "organization",
+          "organizations",
+          "multi-tenant",
+          "tenant",
+          "membership",
+          "member",
+          "invitation",
+          "invite",
+          "role",
+          "permission",
+          "workspace",
+          "negocio",
+          "business switch"
+        ],
+        "intentPatterns": [
+          "(add|change|fix|implement).*(organization|member|membership|invitation|role|permission|workspace)",
+          "invite.*(user|member)",
+          "(switch|change).*(workspace|business|organization)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/auth/**/*.ts",
+          "apps/api/src/routes/businesses/**",
+          "apps/admin/src/features/**"
+        ],
+        "contentPatterns": [
+          "organization\\(\\)",
+          "organizationClient\\(",
+          "\\.organization\\.",
+          "activeOrganizationId",
+          "inviteMember",
+          "members?:"
+        ]
+      }
+    },
+    "email-and-password-best-practices": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Better Auth (first-party): email verification, OTP codes, password reset and policies",
+      "promptTriggers": {
+        "keywords": [
+          "email verification",
+          "verify email",
+          "password reset",
+          "forgot password",
+          "otp",
+          "one-time code",
+          "código",
+          "emailOTP",
+          "sign up",
+          "signup",
+          "password policy"
+        ],
+        "intentPatterns": [
+          "(add|fix|implement).*(email verification|password reset|otp|one.?time code|sign.?up)",
+          "send.*(code|verification|reset)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/auth/**/*.ts",
+          "apps/api/src/email/**",
+          "apps/admin/src/features/auth/**"
+        ],
+        "contentPatterns": [
+          "emailOTP\\(",
+          "sendVerificationEmail",
+          "requireEmailVerification",
+          "forgetPassword",
+          "resetPassword"
+        ]
+      }
+    },
+    "better-auth-security-best-practices": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Better Auth (first-party): rate limiting, secrets, CSRF, trusted origins",
+      "promptTriggers": {
+        "keywords": [
+          "rate limit",
+          "rate limiting",
+          "csrf",
+          "trusted origins",
+          "auth secret",
+          "cookie security",
+          "secure cookie",
+          "brute force",
+          "auth security"
+        ],
+        "intentPatterns": [
+          "(add|configure|harden|fix).*(rate ?limit|csrf|trusted origin|cookie|secret)",
+          "secure.*(auth|session|cookie)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/auth/**/*.ts",
+          "apps/api/src/index.ts"
+        ],
+        "contentPatterns": [
+          "rateLimit",
+          "trustedOrigins",
+          "AUTH_RATE_LIMIT",
+          "BETTER_AUTH_SECRET",
+          "crossSubDomainCookies"
+        ]
+      }
+    },
+    "react-router": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "TanStack Router (first-party): route definitions, type-safe navigation, loaders, search params",
+      "promptTriggers": {
+        "keywords": [
+          "tanstack router",
+          "react router",
+          "createRoute",
+          "createRootRoute",
+          "createFileRoute",
+          "routeTree",
+          "useNavigate",
+          "Link to",
+          "useParams",
+          "useSearch",
+          "router",
+          "route",
+          "navigation",
+          "navigate"
+        ],
+        "intentPatterns": [
+          "(add|create|change|fix).*(route|routing|navigation|link)",
+          "navigate.*(to|route)",
+          "(type.?safe).*(route|param|search)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/admin/src/router.tsx",
+          "apps/admin/src/routes/**",
+          "apps/*/src/router*.tsx"
+        ],
+        "contentPatterns": [
+          "from ['\"]@tanstack/react-router",
+          "createRoute\\(",
+          "createRootRoute\\(",
+          "createFileRoute\\(",
+          "useNavigate\\(",
+          "routeTree",
+          "<Link"
+        ]
+      }
+    },
+    "router-core": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "TanStack Router (first-party) core: data loading, navigation, path/search params, type safety, code splitting, not-found and errors",
+      "promptTriggers": {
+        "keywords": [
+          "loader",
+          "beforeLoad",
+          "search params",
+          "path params",
+          "route params",
+          "code splitting",
+          "lazy route",
+          "not found",
+          "route error",
+          "pendingComponent",
+          "errorComponent",
+          "route context"
+        ],
+        "intentPatterns": [
+          "(add|fix|implement).*(loader|search param|path param|code splitting|not.?found|route error)",
+          "load.*data.*route",
+          "validate.*search"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/admin/src/routes/**",
+          "apps/admin/src/router.tsx"
+        ],
+        "contentPatterns": [
+          "loader:",
+          "beforeLoad:",
+          "validateSearch",
+          "errorComponent",
+          "notFoundComponent",
+          "pendingComponent",
+          "\\.lazy\\("
+        ]
+      }
+    },
+    "router-query": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "TanStack Router + Query together (first-party composition): loaders that prefetch, queryClient in route context, suspense integration",
+      "promptTriggers": {
+        "keywords": [
+          "router query",
+          "router and query",
+          "prefetch",
+          "ensureQueryData",
+          "queryClient context",
+          "loader query",
+          "suspense route",
+          "route loader query"
+        ],
+        "intentPatterns": [
+          "(combine|integrate|use).*(router).*(query)",
+          "prefetch.*(loader|route)",
+          "ensureQueryData",
+          "queryClient.*route"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/admin/src/router.tsx",
+          "apps/admin/src/routes/**",
+          "apps/admin/src/features/**"
+        ],
+        "contentPatterns": [
+          "ensureQueryData\\(",
+          "queryClient",
+          "useSuspenseQuery\\(",
+          "context:.*queryClient",
+          "prefetchQuery\\("
         ]
       }
     }

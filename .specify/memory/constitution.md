@@ -206,12 +206,12 @@ skill to load **before** writing that kind of code.
 
 | Concern | MUST | Skill to load |
 |---|---|---|
-| HTTP service | **Hono.** Every HTTP surface in `apps/api` and `apps/consta` is a Hono app. Validation with `@hono/zod-validator` at the edge; the uniform envelope on every response. | `hono-routing` |
+| HTTP service | **Hono.** Every HTTP surface in `apps/api` and `apps/consta` is a Hono app. Validation with `@hono/zod-validator` at the edge; the uniform envelope on every response. | `hono` ᶠ |
 | Contracts and validation | **Zod.** A route's `schema.ts` is the contract; frontends derive types from it and MSW handlers are validated against it, so a mock cannot lie. | `zod` |
 | Persistence | **Drizzle on D1.** Migrations through `drizzle-kit`, additive, a rebuild proven on seeded data. Any statement that grows with the tenant is chunked under `D1_MAX_PARAMS` (BUG-021). | `drizzle-orm-d1`, `cloudflare-d1` |
-| Authentication | **Better Auth inside `apps/api`, and nowhere else** (BFF). HTTP-only cookies; account status re-checked in the database on every request; passkeys and organizations through its plugins. | `better-auth` |
+| Authentication | **Better Auth inside `apps/api`, and nowhere else** (BFF). HTTP-only cookies; account status re-checked in the database on every request; passkeys and organizations through its plugins. | `better-auth-best-practices` ᶠ, `organization-best-practices` ᶠ, `email-and-password-best-practices` ᶠ, `better-auth-security-best-practices` ᶠ, `create-auth` ᶠ |
 | Object storage · inference | **R2** (`PROOFS`) for transfer evidence; **Workers AI** for receipt extraction. | `cloudflare-r2`, `cloudflare-workers-ai` |
-| UI | **React 19** with **TanStack Router** (routes are dumb; logic lives in features) and **TanStack Query** (the only home of server state). **Tailwind v4** through the tokens; **shadcn** primitives copied into `src/components/ui/`, never added as a dependency. | `react`, `tanstack-router`, `tanstack-query`, `tailwindcss`, `shadcn` |
+| UI | **React 19** with **TanStack Router** (routes are dumb; logic lives in features) and **TanStack Query** (the only home of server state). **Tailwind v4** through the tokens; **shadcn** primitives copied into `src/components/ui/`, never added as a dependency. | `react-router` ᶠ, `router-core` ᶠ, `router-query` ᶠ, `shadcn` ᶠ, `tanstack-query`, `react`, `tailwindcss` |
 | API tests | **Vitest under `@cloudflare/vitest-pool-workers`**: the real workerd runtime and a real local D1. **No database mocks.** Provider bases are pinned in `vitest.config.ts`, interceptor counts are exact, module caches reset per test. | `vitest-testing` |
 | Component and network tests | **Vitest + React Testing Library + happy-dom**, queried by what the user sees. Network through **MSW**, handlers validated against the Zod schemas. Travel from the origin screen; do not mount the destination. | `vitest-testing`, `react` |
 | End-to-end | **Playwright + axe** against built previews for breakpoints, touch geometry and real contrast; against the real API (`pnpm e2e:passkey`) for the passkey and identity journeys. | `playwright` |
@@ -229,6 +229,21 @@ Two rules make the table bite:
 Where a skill is generic and the house rule is stricter (Vitest's skill knows nothing
 of the workers pool; there is no MSW skill at all), **this table is the law and the
 skill is the reference**.
+
+**ᶠ marks a skill published by the technology's own maintainers**, resolved to a
+verified GitHub organization: `honojs/skills`, `better-auth/skills`, `TanStack/router`,
+`shadcn-ui/ui`, `cloudflare/skills`. An unmarked skill is community-authored, because
+no first-party one exists — Drizzle, Zod, Tailwind, TanStack Query, Vitest, MSW and
+React publish none as of 2026-09-08. Two consequences bind:
+
+- A skill that contradicts this constitution or a spec is **wrong**, whoever wrote it.
+  That holds for first-party skills too, and doubly for community ones.
+- `skills.sh` performs **no signature verification** on install
+  ([RFC](https://github.com/vercel-labs/skills/issues/617)), so a skill MUST be pinned
+  to an owner/repo that has been verified as the maintainer's, never to a registry
+  slug or a display badge. The provenance of every installed skill is recorded in
+  `skills-lock.json`; a skill with no entry there has unknown provenance and MUST be
+  replaced or removed.
 
 ## Development workflow and quality gates
 

@@ -90,6 +90,33 @@ consumed by prompts. Drift is the acknowledged structural weakness; an
 entire cottage industry of community extensions (`reconcile`, `drift`,
 `ci-guard`, `arch-governance`) exists because core has no answer.
 
+**Audited 2026-09-08 — and that industry is mostly not installable.** `specify
+extension search` returns **169 extensions, of which 4 can be installed**:
+`agent-context`, `assess`, `bug`, `git`, all from `spec-kit-core`. The other 165
+— including every drift-and-parity extension named above, plus `canon`,
+`spec-sync`, `blueprint-index`, `golden-demo`, `docguard` and `trace` — are
+marked *"community catalog (discovery only — not installable)"*. `specify preset
+search` returns **36 presets, none installable** for the same reason; `preset
+add` refuses, naming the two escape hatches: `--install-allowed`, which trusts a
+whole third-party catalog, or `--from <repo>`, which installs from an unvetted
+repository. Both are supply-chain decisions rather than configuration, and this
+is a payments product.
+
+Two consequences. The enforcement gap below has **no off-the-shelf remedy**, so
+`spec-lint.mjs` stays load-bearing. And `.specify/templates/overrides/` is
+confirmed as the right vehicle for our own rules — which is what Spec Kit's docs
+say overrides are for: a one-off adjustment for a single project, without the
+ceremony of a preset.
+
+**The four installable extensions, judged against this repo:**
+
+| Extension | Verdict |
+|---|---|
+| `git` | **No.** Branch-per-feature; we are trunk-based on `main` (CICD D1) — already the recommendation in §8. |
+| `bug` | **No.** It writes `.specify/bugs/<slug>/{assessment,fix,test}.md` — three files per bug, no aggregated log. `BUGS.md`'s own header states the reason it would break: *"a defect buried in a spec's prose stops being a to-do"*. Twenty-one bugs would become sixty-three files and no single list. |
+| `assess` | **Defer.** Its idea-triage pipeline maps onto the post-MVP backlog, but that backlog is a handful of one-liners; a five-command pipeline needs a queue that justifies it. Cheap to add when there is one. |
+| `agent-context` | **Candidate for PR3, not now.** It maintains `CLAUDE.md` inside `<!-- SPECKIT START/END -->` markers, leaving the rest untouched — automating exactly the hand-editing this migration has already needed twice (the archive move, then the constitution link). It injects the *active feature's* plan references, so it earns its place when the feature loop starts, not while no feature is active. |
+
 ## 3. Concept mapping
 
 | Devolada | Spec Kit 1.x |

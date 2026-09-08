@@ -67,6 +67,12 @@
       "skillPath": "plugins/api-versioning-strategy/skills/api-versioning-strategy/SKILL.md",
       "computedHash": "05091f4f42f0422ee6eafe0f8e3e20cfff1e510a85a117ca431cecb3f5991634"
     },
+    "better-auth": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/better-auth/skills/better-auth/SKILL.md",
+      "computedHash": "3e6ea1df645760e88e102c6f41779763824e88279a7c747f413400b282a495f4"
+    },
     "brief-to-tasks": {
       "source": "julianoczkowski/designer-skills",
       "sourceType": "github",
@@ -163,6 +169,12 @@
       "skillPath": "design-tokens/SKILL.md",
       "computedHash": "20df23737f28b34cb3d0d808d16a958c5ff3bddf0dcb8eedd700735ecb5ae8d1"
     },
+    "drizzle-orm-d1": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/drizzle-orm-d1/skills/drizzle-orm-d1/SKILL.md",
+      "computedHash": "80a8f1079b7c611485ece22054ead476d3f09666b29fa0435ef2e10e3192a4d4"
+    },
     "frontend-design": {
       "source": "julianoczkowski/designer-skills",
       "sourceType": "github",
@@ -175,17 +187,35 @@
       "skillPath": "grill-me/SKILL.md",
       "computedHash": "81770c424f4bcbe02503f997d1e633e4e62974e537c824af4780e9161b7e20e7"
     },
+    "hono-routing": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/hono-routing/skills/hono-routing/SKILL.md",
+      "computedHash": "3ebf782ebe3ecf01d89610b97a3bbde704f5898aafc6b66356d9a64c0cbf1bf4"
+    },
     "information-architecture": {
       "source": "julianoczkowski/designer-skills",
       "sourceType": "github",
       "skillPath": "information-architecture/SKILL.md",
       "computedHash": "42b3b96103c0c910ff73841b9c843c8be8111c3d1fdc0746c07d911a23335191"
     },
+    "playwright": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/playwright/skills/playwright/SKILL.md",
+      "computedHash": "a4d3bdb9bdee41a841c59e1360afec67d44b6770c291fd9c244021fa51f1d813"
+    },
     "redesign-existing-projects": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/redesign-skill/SKILL.md",
       "computedHash": "b405eee0e0e80fc243f731d9aa368bca307e356db7e6157d27101d369dac6726"
+    },
+    "vitest-testing": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/vitest-testing/skills/vitest-testing/SKILL.md",
+      "computedHash": "2a937cd4b3ca9e062af25bfc5fb61a918d2b51db921c49c553345a48c35e30bb"
     },
     "web-perf": {
       "source": "cloudflare/skills",
@@ -204,6 +234,12 @@
       "sourceType": "github",
       "skillPath": "skills/wrangler/SKILL.md",
       "computedHash": "11edeb37eedb91deedde694b2bb1cc4ff4e8b5a8f1836c217a8c871fe39abcb5"
+    },
+    "zod": {
+      "source": "secondsky/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/zod/skills/zod/SKILL.md",
+      "computedHash": "19b2fd2ec767dfa0eefc5170f1ec2dbfacf37722008f22e3f5ef8c6b6181dc75"
     }
   }
 }

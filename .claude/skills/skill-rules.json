@@ -957,6 +957,294 @@
           "(add|configure|set|agreg\\w*|configur\\w*|defin\\w*).*(secret|secreto|binding|env var|variable de entorno)"
         ]
       }
+    },
+    "hono-routing": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Hono routing, middleware, Zod validators at the edge — every HTTP service in apps/api and apps/consta",
+      "promptTriggers": {
+        "keywords": [
+          "hono",
+          "hono route",
+          "hono middleware",
+          "zValidator",
+          "@hono/zod-validator",
+          "c.json",
+          "c.req",
+          "Hono app",
+          "hono rpc",
+          "hono handler",
+          "route handler",
+          "endpoint"
+        ],
+        "intentPatterns": [
+          "(add|create|write|implement).*(route|endpoint|handler|middleware)",
+          "(validate|parse).*(request|body|query|params)",
+          "hono.*(route|middleware|validator)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/routes/**/*.ts",
+          "apps/consta/src/routes/**/*.ts",
+          "apps/*/src/index.ts",
+          "apps/*/src/app.ts",
+          "**/middleware/**/*.ts"
+        ],
+        "contentPatterns": [
+          "new Hono\\(",
+          "from ['\"]hono",
+          "zValidator\\(",
+          "c\\.json\\(",
+          "c\\.req\\.",
+          "app\\.(get|post|put|patch|delete)\\(",
+          "\\.route\\(",
+          "hono/"
+        ]
+      }
+    },
+    "drizzle-orm-d1": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Drizzle ORM on Cloudflare D1: schema, migrations (drizzle-kit), batch API, the 100-parameter cap",
+      "promptTriggers": {
+        "keywords": [
+          "drizzle",
+          "drizzle-orm",
+          "drizzle-kit",
+          "d1 schema",
+          "sqliteTable",
+          "migration",
+          "db:generate",
+          "db:migrate",
+          "drizzle query",
+          "prepared statement",
+          "d1 batch"
+        ],
+        "intentPatterns": [
+          "(add|create|alter|change).*(table|column|schema|migration)",
+          "(write|build).*(query|select|insert|update).*(drizzle|d1)",
+          "drizzle.*(schema|migration|query|relation)",
+          "generate.*migration"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/*/src/db/**/*.ts",
+          "apps/*/migrations/**",
+          "apps/*/drizzle.config.*",
+          "**/schema.ts"
+        ],
+        "contentPatterns": [
+          "from ['\"]drizzle-orm",
+          "sqliteTable\\(",
+          "drizzle\\(env\\.DB",
+          "drizzle\\(",
+          "\\.select\\(\\)\\.from\\(",
+          "\\.insert\\(",
+          "\\.batch\\(",
+          "PRAGMA defer_foreign_keys",
+          "D1_MAX_PARAMS"
+        ]
+      }
+    },
+    "zod": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Zod schemas: request/response contracts at the edge, z.infer types, MSW handlers validated against them",
+      "promptTriggers": {
+        "keywords": [
+          "zod",
+          "z.object",
+          "z.infer",
+          "schema validation",
+          "zod schema",
+          "validate input",
+          "parse",
+          "safeParse",
+          "zod error",
+          "input validation",
+          "contract"
+        ],
+        "intentPatterns": [
+          "(define|write|create|add).*(schema|validation|validator)",
+          "(validate|parse).*(input|payload|body|response|env)",
+          "zod.*(schema|infer|transform|refine)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/*/src/routes/**/schema.ts",
+          "**/schema.ts",
+          "**/schemas/**/*.ts",
+          "apps/*/src/shared/api/**"
+        ],
+        "contentPatterns": [
+          "from ['\"]zod",
+          "z\\.object\\(",
+          "z\\.infer<",
+          "z\\.(string|number|enum|array|union|discriminatedUnion)\\(",
+          "\\.safeParse\\(",
+          "\\.parse\\("
+        ]
+      }
+    },
+    "better-auth": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Better Auth inside apps/api (BFF, HTTP-only cookies), D1 adapter, email-code, passkeys, organizations and roles",
+      "promptTriggers": {
+        "keywords": [
+          "better auth",
+          "better-auth",
+          "betterAuth",
+          "auth",
+          "login",
+          "session",
+          "passkey",
+          "webauthn",
+          "organization",
+          "membership",
+          "role",
+          "invitation",
+          "email otp",
+          "sign in",
+          "sign up",
+          "cookie"
+        ],
+        "intentPatterns": [
+          "(add|implement|change|fix).*(auth|login|session|passkey|invitation|membership|role)",
+          "better.?auth.*(plugin|adapter|organization|passkey|otp)",
+          "(check|require).*(session|role|permission)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/api/src/auth/**/*.ts",
+          "apps/api/src/routes/auth/**",
+          "apps/admin/src/features/auth/**",
+          "tests/passkey/**"
+        ],
+        "contentPatterns": [
+          "from ['\"]better-auth",
+          "betterAuth\\(",
+          "createAuthClient\\(",
+          "organization\\(\\)",
+          "passkey\\(\\)",
+          "emailOTP\\(",
+          "requireSession",
+          "auth\\.api\\.",
+          "BETTER_AUTH_SECRET"
+        ]
+      }
+    },
+    "vitest-testing": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Vitest: API tests in @cloudflare/vitest-pool-workers against real workerd + local D1 (no DB mocks), RTL + happy-dom for components",
+      "promptTriggers": {
+        "keywords": [
+          "vitest",
+          "unit test",
+          "integration test",
+          "test file",
+          "describe",
+          "it(",
+          "expect",
+          "vi.mock",
+          "vi.fn",
+          "test setup",
+          "vitest config",
+          "vitest-pool-workers",
+          "workerd",
+          "testing library",
+          "happy-dom",
+          "write a test",
+          "add a test",
+          "fix the test",
+          "failing test"
+        ],
+        "intentPatterns": [
+          "(write|add|create|fix|update).*(test|spec)",
+          "(test|cover).*(route|handler|component|hook|invariant)",
+          "vitest.*(config|mock|setup|pool)",
+          "(mock|stub).*(fetch|provider|module)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "apps/*/test/**/*.ts",
+          "apps/*/test/**/*.tsx",
+          "packages/*/test/**",
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "apps/*/vitest.config.ts"
+        ],
+        "contentPatterns": [
+          "from ['\"]vitest",
+          "describe\\(",
+          "it\\(",
+          "expect\\(",
+          "vi\\.(mock|fn|spyOn)\\(",
+          "vitest-pool-workers",
+          "fetchMock\\.",
+          "SELF\\.fetch",
+          "@testing-library/react",
+          "render\\("
+        ]
+      }
+    },
+    "playwright": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "description": "Playwright + axe: e2e on built previews (breakpoints, touch targets, contrast) and the real-API passkey/identity journeys",
+      "promptTriggers": {
+        "keywords": [
+          "playwright",
+          "e2e",
+          "end to end",
+          "browser test",
+          "page.goto",
+          "axe",
+          "accessibility test",
+          "screenshot",
+          "responsive test",
+          "touch target",
+          "contrast test",
+          "identity journey",
+          "passkey ceremony",
+          "pnpm e2e",
+          "playwright config"
+        ],
+        "intentPatterns": [
+          "(write|add|create|fix|run).*(e2e|playwright|browser).*(test|spec|journey)",
+          "(test|check|verify).*(responsive|contrast|accessibility|a11y|breakpoint|touch)",
+          "playwright.*(config|fixture|locator|trace)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "tests/e2e/**",
+          "tests/passkey/**",
+          "playwright*.config.ts",
+          "**/*.spec.ts"
+        ],
+        "contentPatterns": [
+          "from ['\"]@playwright/test",
+          "test\\(['\"]",
+          "page\\.(goto|getByRole|getByText|locator)\\(",
+          "expect\\(page",
+          "@axe-core/playwright",
+          "AxeBuilder",
+          "defineConfig\\("
+        ]
+      }
     }
   },
   "agents": {

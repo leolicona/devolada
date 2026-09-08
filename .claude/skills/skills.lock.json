@@ -1,24 +1,6 @@
 {
-  "$comment": "Agent skills vendored into .claude/skills/. Copied by hand from leolicona/miabot@ae37d82 on 2026-09-08, where tools/scripts/sync-skills.sh had synced them from the upstream repositories below at the recorded commits. No overlay was applied to any of these. Devolada carries no sync script: to update a skill, copy it again from its upstream at a newer commit and record the commit here.",
+  "$comment": "Agent skills vendored into .claude/skills/. Copied by hand from leolicona/miabot@ae37d82 on 2026-09-08, where tools/scripts/sync-skills.sh had synced them from the upstream repositories below at the recorded commits. No overlay was applied to any of these. Devolada carries no sync script: to update a skill, copy it again from its upstream at a newer commit and record the commit here. Cloudflare's skills are NOT vendored here \u2014 they are installed from Cloudflare's own marketplace by the plugin declared in .claude/settings.json, so they update from the source instead of drifting.",
   "sources": {
-    "cloudflare": {
-      "repo": "https://github.com/cloudflare/skills.git",
-      "ref": "main",
-      "commit": "d924cd8f59e75e08fd3dd52843bb2776de35c77e",
-      "synced_at": "2026-09-06T20:41:18Z",
-      "license": "Apache-2.0",
-      "official": true,
-      "skills": [
-        {
-          "name": "wrangler",
-          "path": "skills/wrangler"
-        },
-        {
-          "name": "workers-best-practices",
-          "path": "skills/workers-best-practices"
-        }
-      ]
-    },
     "hono": {
       "repo": "https://github.com/honojs/skills.git",
       "ref": "main",

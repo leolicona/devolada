@@ -2,18 +2,29 @@
 Sync Impact Report
 ==================
 Version: 1.0.0 → 1.1.0 (MINOR: materially expanded guidance — the stack is now
-decided here, and each convention names the skill that carries it).
+decided here, and each convention names the skill that carries it). Revised in place
+before first merge — 1.1.0 has not reached main, so this replaces it rather than
+bumping, the same way 1.0.0 was revised; nothing has operated under the earlier text.
 
 Added:
   - "Stack conventions" under Stack and runtime boundaries: seven conventions
     (Hono, Drizzle on D1, Wrangler, React + Vite, shadcn, Vitest + Playwright,
-    pnpm) stated as MUSTs, each naming the skill under .claude/skills/ that holds
-    its procedural knowledge, plus the rule that binds plan → tasks → implement to
-    them. Motivation: a skill is model-invoked — it loads when its description
-    matches the moment, and nothing guarantees the moment. This file is the
-    deterministic layer: /speckit-plan fills the Constitution Check from it,
-    /speckit-tasks and /speckit-implement read it, so a convention written here is
-    carried by the plan and named on the task, and the skill is loaded on purpose.
+    pnpm) stated as MUSTs, each naming the skill that holds its procedural
+    knowledge, plus the rule that binds plan → tasks → implement to them.
+    Motivation: a skill is model-invoked — it loads when its description matches
+    the moment, and nothing guarantees the moment. This file is the deterministic
+    layer: /speckit-plan fills the Constitution Check from it, /speckit-tasks and
+    /speckit-implement read it, so a convention written here is carried by the plan
+    and named on the task, and the skill is loaded on purpose.
+
+Revised in the same PR (2026-09-08), after measuring the cost of hand-copying a
+platform skill: the vendored `wrangler` was already two rows behind cloudflare/skills
+upstream two days after it was synced. Cloudflare's skills are no longer vendored;
+they install from Cloudflare's marketplace through the `cloudflare` plugin, declared
+project-wide in .claude/settings.json. The section now states how a skill reaches the
+repository (vendored and pinned, or plugin-installed), forbids copying a Cloudflare
+skill into .claude/skills/, and the Workers row gains the retrieval-over-memory rule
+that the workers-best-practices skill opens with.
 
 Modified principles: none.
 Removed sections: none.
@@ -181,20 +192,28 @@ spec before use.
 ### Stack conventions
 
 The stack is decided here, not per plan. Each convention below is law for every feature,
-and beside it is the skill under `.claude/skills/` that carries its procedural knowledge —
-the house patterns, the pitfalls, the commands. Skills are model-invoked: one loads when
-its description matches the moment, and nothing guarantees the moment. This table is the
-deterministic anchor. A plan's Constitution Check MUST name every convention the feature
-touches; `tasks.md` MUST carry that convention on each task that writes code under it; and
-such a task MUST load the named skill before writing. A deviation from a convention is
-recorded in the plan's Complexity Tracking with the alternative rejected, and it lands as
-an amendment here before the code does — never as a feature-level decision.
+and beside it is the skill that carries its procedural knowledge — the house patterns, the
+pitfalls, the commands. Skills are model-invoked: one loads when its description matches
+the moment, and nothing guarantees the moment. This table is the deterministic anchor. A
+plan's Constitution Check MUST name every convention the feature touches; `tasks.md` MUST
+carry that convention on each task that writes code under it; and such a task MUST load the
+named skill before writing. A deviation from a convention is recorded in the plan's
+Complexity Tracking with the alternative rejected, and it lands as an amendment here before
+the code does — never as a feature-level decision.
+
+A skill reaches the repository one of two ways, and the table says which. Most are vendored
+under `.claude/skills/`, pinned to the upstream commit recorded in
+`.claude/skills/skills.lock.json`. Cloudflare's are **not**: they are installed from
+Cloudflare's own marketplace by the `cloudflare` plugin, declared project-wide in
+`.claude/settings.json` so that every clone resolves the same one, and they MUST NOT be
+copied into `.claude/skills/` — a hand-copied platform skill goes stale against the
+platform it documents, which is how this rule was learned.
 
 | Convention | Skill |
 |---|---|
 | Every HTTP service MUST be a **Hono** app on Workers. Routes validate with Zod through `@hono/zod-validator` and answer with the envelope above; a Hono app is tested through `app.request()` under `@cloudflare/vitest-pool-workers`. | `hono` |
 | Every database access MUST go through **Drizzle** on D1. `src/db/schema.ts` is the source of truth; migrations are generated with `drizzle-kit generate` into `migrations/`, versioned, and applied only through `wrangler d1 migrations apply`. | `drizzle-orm-d1` |
-| Every Worker MUST be declared in a versioned `wrangler.jsonc` and run locally with `wrangler dev`; it deploys only from GitHub Actions (Development workflow). | `wrangler`, `workers-best-practices` |
+| Every Worker MUST be declared in a versioned `wrangler.jsonc` and run locally with `wrangler dev`; it deploys only from GitHub Actions (Development workflow). A platform limit, binding or API claim MUST be verified against current documentation rather than recalled. | `wrangler`, `workers-best-practices` (`cloudflare` plugin) |
 | Every frontend MUST be **React with Vite**, shipped as static assets from its own Worker — no server rendering, no Next.js. Server state lives in TanStack Query; `apps/admin` routes with TanStack Router. | `vite`, `vercel-react-best-practices` |
 | UI primitives MUST come from the **shadcn** catalog, copied into the app's `src/components/ui/` and themed with the tokens (Principle VI). A component library MUST NOT be added as a dependency. | `shadcn` |
 | Tests MUST run on **Vitest** in every workspace — Workers under `@cloudflare/vitest-pool-workers`, UI under happy-dom with Testing Library — and end-to-end flows on **Playwright** from the root configs. | `vitest`, `webapp-testing` |

@@ -307,6 +307,21 @@ Suggested phasing, one PR each:
   DoD template, the `## Constitution check` section, `.gitignore` for
   `plan.md`/`tasks.md`/`.specify/feature.json`.
 
+**Two tasks the constitution added to the plan (2026-09-08):**
+
+1. **Fold the layer documents into the constitution before `docs/legacy/` is
+   deleted.** Governance makes the constitution the governing document and the
+   layers its detailed reference — an arrangement that is temporary by
+   construction, since the final PR deletes them. Any law still living only in
+   `ARCHITECTURE` / `FRONTEND` / `TESTING` / `CICD` at that point would be
+   deleted with them. This is a per-domain job inside PR3, not a final sweep.
+2. **Test citations migrate with their feature, never separately.** Principle
+   VII adopts Spec Kit's per-feature `US<n>`, prefixed with the feature slug
+   (`direct-payment US1: …`) so grep traceability survives the loss of global
+   uniqueness. The 85 files citing a legacy `US-XNN` stay compliant until their
+   feature is rebuilt; `scripts/spec-lint.mjs` accepts both forms for the
+   duration, and drops the legacy one when the last domain lands.
+
 **Do not do A.** The corpus's value is the 367 decisions and their 2 347
 citations, and A is the only option that spends them.
 

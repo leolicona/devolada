@@ -1,74 +1,51 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (none) → 1.0.0
-Rationale: initial adoption. No prior constitution existed; the file held the
-unmodified Spec Kit placeholder scaffold, so this is a ratification and not a bump.
+Version: 1.0.0 (revised before first merge — v1.0.0 never reached main, so this
+replaces it in place rather than bumping; nothing has operated under the old text).
 
-Principles: 8 defined (template ships 5 slots; the extra three were requested and
-the heading hierarchy is unchanged).
-  I.    Spec before code
-  II.   Money is exact and its history immutable
-  III.  The oracle never loses a payment, and never holds it
-  IV.   One tenant model, one billing model
-  V.    Nothing outside an adapter speaks a provider's language
-  VI.   One word per concept
-  VII.  The interface obeys the tokens
-  VIII. Every test cites its story
+Removed:
+  - "Spec before code" (was Principle I). GitHub Spec Kit *is* a spec-before-code
+    workflow; restating it as a principle was ceremony. The two parts of it that
+    Spec Kit does NOT provide were moved rather than dropped: spec-lint stays a
+    blocking CI gate (Development workflow), and the lite path moved to the same
+    section — it is a workflow rule about which changes legitimately carry no spec,
+    not a restatement of spec-before-code.
 
-Added sections:
-  - Stack and runtime boundaries (SECTION_2)
-  - Development workflow and quality gates (SECTION_3)
-  - Governance
+Renumbered: former II–VIII are now I–VII.
 
-Removed sections: none.
+Redefined:
+  - IV (was V): the no-internals rule is now law, on its own justification.
+    Closes TODO(NO_INTERNALS_RULE).
+  - VII (was VIII): user-story identifiers adopt Spec Kit's per-feature `US<n>`
+    numbering, prefixed with the feature slug so grep traceability survives the
+    loss of global uniqueness. Legacy `US-XNN` stays valid per feature until that
+    feature is rebuilt.
+  - Governance: precedence inverted. The constitution now wins over the layer
+    documents, which is Spec Kit's own model (its constitution is the single
+    governance artifact; it has no concept of cross-cutting layer docs). The
+    layers remain the detailed reference until PR3 folds their content in.
 
-Sources: this document summarizes and links docs/legacy/{ARCHITECTURE,FRONTEND,
-TESTING,CICD,SPEC}.md and docs/BRIEF.md. It does not replace them; on any conflict
-of detail the linked file is the normative text.
-
-Follow-up TODOs:
-  - TODO(NO_INTERNALS_RULE): whether Devolada specs may depend on Consta internals
-    is unresolved (docs/BRIEF.md §7.2). The rule's original justification — keeping a
-    future extraction to a folder move — was retired on 2026-09-08. Deliberately absent
-    from Principle V until decided.
-  - TODO(INTEGRATOR_TERM): the glossary has no row for the API integrator
-    (docs/BRIEF.md §7.3). Principle VI governs the term once it exists.
-  - Drift found while drafting, to be reconciled in PR3, not here:
-    docs/legacy/ARCHITECTURE.md still says "ispId on every business table" (renamed to
-    businessId by the pivot) and names Agnostic Auth as the IdP (retired for Better Auth).
-    This document states the current truth; ARCHITECTURE.md has not been edited.
+Deferred:
+  - TODO(INTEGRATOR_TERM): the glossary still has no row for the API integrator
+    (docs/BRIEF.md §7.3). Principle V governs the term once it exists.
+  - Drift for PR3, not patched here: docs/legacy/ARCHITECTURE.md still says
+    "ispId" (renamed to businessId by the pivot) and names Agnostic Auth (retired
+    for Better Auth). This document states the current truth.
+  - New task for the migration plan: PR3 must fold the layer documents' content
+    into this constitution before PR4 deletes docs/legacy/, or the precedence
+    rule below will point at files that no longer exist.
 -->
 
 # Devolada Constitution
 
 Devolada is the SPEI validation-and-reconciliation platform — the oracle of truth
 about whether money arrived. This constitution states the rules no feature
-re-decides. It **summarizes and links** the normative layer documents; where a
-detail conflicts, the linked file wins.
+re-decides.
 
 ## Core Principles
 
-### I. Spec before code
-
-Every feature MUST have a written spec before code is touched, and that spec MUST be
-registered in the index within the same PR. If it exists in the code but not in a
-spec, it is wrong — this is the golden rule, and `scripts/spec-lint.mjs` enforces it
-as a blocking CI step rather than as a habit.
-
-Specs are **living documents**: they are amended with reality during development and
-MUST NOT fork into a second version of the truth. A spec records its decisions with
-stable identifiers and, for each, the alternative that was rejected and why — because
-code records what was built and never what was refused.
-
-A **lite path** exists and MUST NOT be widened: a bugfix, typo or copy change carries
-an entry in the bug log (when production was affected) plus a regression test, and no
-spec. The threshold is exact — if a business rule or a contract changes, it is a spec.
-
-*Rationale*: the corpus is the only place a rejected alternative survives. See
-[SPEC.md](../../docs/legacy/SPEC.md).
-
-### II. Money is exact, and its history is immutable
+### I. Money is exact, and its history is immutable
 
 Money MUST be integer cents everywhere. Floats MUST NOT touch amounts. Every visible
 amount MUST be rendered through `formatMoney` / `<Amount>` from `packages/ui`, and a
@@ -79,10 +56,9 @@ A correction is a counter-entry. A balance MUST be derived with `SUM` and MUST N
 stored. Tests MUST build their scenarios with entries, the way production does — a test
 that edits or deletes rows to reach a state is not a test of this system.
 
-*Rationale*: a stored balance is a second truth that drifts. See
-[ARCHITECTURE.md](../../docs/legacy/ARCHITECTURE.md).
+*Rationale*: a stored balance is a second truth that drifts.
 
-### III. The oracle never loses a payment, and never holds it
+### II. The oracle never loses a payment, and never holds it
 
 A payment MUST NOT be rejected because a provider failed. It MUST be recorded, with
 the dependent action queued on the same row under a status the user can see
@@ -95,7 +71,7 @@ No concentrator account, no percentage of the transfer.
 *Rationale*: the money has already moved when we are asked; refusing the record loses
 it. Custody is a different company with a different licence.
 
-### IV. One tenant model, one billing model
+### III. One tenant model, one billing model
 
 Every business table MUST carry `businessId`. The business is the tenant, and a user
 MAY hold several as isolated workspaces.
@@ -103,24 +79,31 @@ MAY hold several as isolated workspaces.
 Every **confirmed** validation MUST debit that business's prepaid credit at the
 current fee — never per attempt, never a percentage of the amount. An API integrator
 is a business with prepaid credit like any other: there MUST NOT be a second billing
-path. A feature that needs one is a constitutional amendment, not a design choice.
+path. A feature that needs one is an amendment to this constitution, not a design
+choice.
 
 *Rationale*: two billing paths become two schemas, two reconciliations and two truths
-about what a customer owes. Decided 2026-09-08 (docs/BRIEF.md §7.1).
+about what a customer owes.
 
-### V. Nothing outside an adapter speaks a provider's language
+### IV. A boundary is crossed through its contract, never around it
 
 Operated systems MUST sit behind the provider port. An adapter implements the read and
 write sides and declares its capabilities; nothing outside it may speak a provider's
-API or vocabulary. Rows, envelope and user-facing copy MUST say `PROVIDER_*`.
-
-No screen, row, column or error may assume a specific provider, and a business with no
+API or vocabulary. Rows, envelope and user-facing copy MUST say `PROVIDER_*`. No
+screen, row, column or error may assume a specific provider, and a business with no
 integration MUST get a coherent product rather than a broken one.
 
-*Rationale*: WispHub is the first integration, not the product. See
-[integrations/provider-port.spec.md](../../docs/legacy/integrations/provider-port.spec.md).
+The same rule governs the validation engine. `apps/consta` MUST be reached only
+through its public API — never through its database, its tables or its internal
+modules — even though it is a domain of Devolada rather than a separate product.
 
-### VI. One word per concept
+*Rationale for keeping this after the merge was planned*: unifying Consta into one
+database is intended, and this rule is what makes that unification cheap. While every
+caller goes through the contract, the merge is a change inside one adapter; the day
+callers reach into Consta's tables, it becomes an excavation of every caller instead.
+The rule is retired **by** the unification's own spec, not before it.
+
+### V. One word per concept
 
 The glossary is law. Each concept has exactly one word in user copy and one identifier
 in code; synonyms MUST NOT be introduced. User-facing copy MUST be **es-MX**; code
@@ -131,14 +114,12 @@ The distinctions the glossary draws MUST be preserved literally — notably that
 is always the lifecycle STATUS `partial`; a payment may wear both, and they answer
 different questions.
 
-Where a measured integration contract in `docs/legacy/integrations/*.md` disagrees
-with a vendor's official guide, **the local file wins** — it was measured against the
-live service.
+Where a measured integration contract disagrees with a vendor's official guide, **the
+measured contract wins** — it was verified against the live service.
 
-*Rationale*: a synonym is a second concept nobody declared. See the glossary in
-[BRIEF.md](../../docs/BRIEF.md).
+*Rationale*: a synonym is a second concept nobody declared.
 
-### VII. The interface obeys the tokens
+### VI. The interface obeys the tokens
 
 Every colour, space, radius, shadow and size MUST come from
 `packages/ui/src/styles/tokens.css`. Hardcoded values are forbidden anywhere outside
@@ -151,19 +132,30 @@ palettes — dark MUST NOT be an inversion. Contrast MUST meet AA at minimum.
 **Status MUST NOT be communicated by colour alone**: always icon + text.
 
 *Rationale*: colour alone excludes users who cannot see it, and a second status pill
-is a second vocabulary. See [FRONTEND.md](../../docs/legacy/FRONTEND.md).
+is a second vocabulary.
 
-### VIII. Every test cites its story
+### VII. Every test names the story it covers
 
-Every test MUST name the user story it covers (`describe("US-D03: …")`), so spec
-coverage is traced by grep rather than by faith. A spec's listed scenarios are the
-**floor** for its Definition of Done: the DoD MUST NOT be checked while any of them
-lacks a passing automated test.
+Every test MUST name the user story it covers, and the name MUST identify the story
+globally. Spec Kit numbers stories per feature (`US1`, `US2`), so the citation MUST
+carry the feature slug with it:
 
-Tests are part of building a feature, never a later phase.
+```
+describe("direct-payment US1: a valid transfer reconnects the service", …)
+```
 
-*Rationale*: an uncited test proves something about the code and nothing about the
-spec. See [TESTING.md](../../docs/legacy/TESTING.md).
+A bare `US1` is not a citation — two features would both own one, and the traceability
+this principle exists for is grep across the repository.
+
+A spec's acceptance scenarios are the **floor** for its Definition of Done: the DoD
+MUST NOT be checked while any of them lacks a passing automated test. Tests are part of
+building a feature, never a later phase.
+
+*Transition*: a feature not yet rebuilt keeps its legacy `US-XNN` identifier, and its
+tests are compliant as they stand. A feature's tests adopt the new form in the same PR
+that rebuilds its spec — never separately, or the citation points at nothing.
+
+*Rationale*: an uncited test proves something about the code and nothing about the spec.
 
 ## Stack and runtime boundaries
 
@@ -184,8 +176,10 @@ spec before use.
   schemas are the contract frontends and mocks derive from.
 - `apps/consta` is the **validation engine: a domain of Devolada, not a separate
   product**, and it is not sold on its own. It keeps its own Worker, its own D1 and its
-  own API-key authentication, because that boundary is architectural rather than
-  commercial. It MUST NOT be folded into `apps/api`.
+  own API-key authentication today. Unifying it onto one database is intended future
+  work and MUST arrive as its own spec, which weighs at least: the row-read quota a
+  single D1 then carries for both, how validation logs sit beside append-only credit
+  entries under Principle I, and what replaces API-key authentication at the seam.
 - `/dev/*` routes MUST exist only when `ENVIRONMENT=dev`.
 
 ## Development workflow and quality gates
@@ -193,13 +187,18 @@ spec before use.
 Trunk-based on `main`. A PR opens the gate; merging deploys to dev; a `v*` tag deploys
 to production behind an approval gate.
 
+**Not every change carries a spec.** A bugfix, typo or copy change carries a bug-log
+entry (when production was affected) plus a regression test, and no spec. The threshold
+is exact and MUST NOT be widened: if a business rule or a contract changes, it is a
+spec.
+
 The PR gate MUST stay blocking and MUST NOT be weakened to land a change:
 
 | Gate | What it protects |
 |---|---|
-| `scripts/spec-lint.mjs` | Principle I — the golden rule |
+| `scripts/spec-lint.mjs` | That code has a spec behind it, and that tests cite their story |
 | `scripts/gen-banks.mjs --check` | The bank vocabulary compiled from its measured source |
-| `scripts/contrast-lint.mjs` | Principle VII — tokens and contrast |
+| `scripts/contrast-lint.mjs` | Principle VI — tokens and contrast |
 | `pnpm -r typecheck` · `pnpm -r test` · `pnpm -r build` | The rest |
 
 - **No deploy ever runs from a local machine.** Every deploy goes through GitHub
@@ -214,8 +213,19 @@ The PR gate MUST stay blocking and MUST NOT be weakened to land a change:
 
 ## Governance
 
-This constitution supersedes convenience and precedent. It does not supersede the
-layer documents it summarizes: on a conflict of detail, the linked file is normative.
+**This constitution is the governing document.** Where it speaks, it is the final word;
+a practice that contradicts it is a defect, not a precedent.
+
+Detail it does not state lives in the layer documents under `docs/legacy/`
+([ARCHITECTURE](../../docs/legacy/ARCHITECTURE.md),
+[FRONTEND](../../docs/legacy/FRONTEND.md),
+[TESTING](../../docs/legacy/TESTING.md),
+[CICD](../../docs/legacy/CICD.md),
+[integrations](../../docs/legacy/integrations/)), which remain the reference — and,
+for anything not yet rebuilt, remain enforced by `spec-lint`. That arrangement is
+temporary by construction: the migration deletes `docs/legacy/`, so any law still
+living only there MUST be folded into this document before it goes
+([migration plan](../../docs/spec-kit-migration.eval.md)).
 
 - **Amendments** MUST arrive in their own PR, stating what changed and why, and MUST
   NOT ride along inside a feature PR.
@@ -226,9 +236,5 @@ layer documents it summarizes: on a conflict of detail, the linked file is norma
   before research and again after design. A justified violation MUST be recorded in the
   plan's complexity tracking with the simpler alternative that was rejected; an
   unrecorded violation is a defect.
-- **During the Spec Kit migration**, `docs/legacy/` remains normative and is still
-  enforced by `spec-lint`. This constitution governs new work; it does not retroactively
-  overrule an archived spec until that spec is rebuilt. Migration plan:
-  [spec-kit-migration.eval.md](../../docs/spec-kit-migration.eval.md).
 
 **Version**: 1.0.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-08

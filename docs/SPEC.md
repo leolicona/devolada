@@ -297,5 +297,6 @@ Owner's decisions:
 - [CICD.md](CICD.md) — pipeline: trunk-based, per-PR previews, auto dev, gated prod
 - [TESTING.md](TESTING.md) — testing rules
 - [BUGS.md](BUGS.md) · [TECH_DEBT.md](TECH_DEBT.md)
+- [spec-kit-migration.eval.md](spec-kit-migration.eval.md) — evaluation of migrating this methodology to GitHub Spec Kit (open decision, 2026-09-08)
 - [integrations/](integrations/) — third-party contracts (consumed, never re-decided)
 - `.design/devolada/` — design layer: brief, IA, tokens, tasks (the design system lives in `packages/ui`)

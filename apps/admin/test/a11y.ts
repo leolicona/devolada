@@ -1,7 +1,7 @@
 import axe from "axe-core";
 import { expect } from "vitest";
 
-/* Accessibility checks on rendered screens (US-P04, docs/TESTING.md).
+/* Accessibility checks on rendered screens (US-P04, docs/legacy/TESTING.md).
 
    axe runs against the DOM the component tests already produce, so a
    missing label or an unnamed control fails in CI instead of waiting for

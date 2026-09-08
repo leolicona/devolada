@@ -15,7 +15,7 @@ import {
   PASSWORD,
 } from "./helpers";
 
-/* docs/auth/sessions.spec.md scenarios, rewritten for Better Auth
+/* docs/legacy/auth/sessions.spec.md scenarios, rewritten for Better Auth
    (better-auth.spec.md D5): sessions live in our D1, no IdP to mock.
    The store-login scenarios retired with the store network
    (devolada-red); the ISP is the only credentialed actor now. */

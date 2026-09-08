@@ -21,7 +21,7 @@ const trackingKey = z.string().trim().regex(/^[A-Za-z0-9]{6,30}$/, {
 
 /* Numeric, bounded well above anything Banxico issues (7 digits in apiCEP's
    example). Their real maximum is undocumented — apiCEP 400s past it without
-   publishing the number (docs/integrations/apicep.md, open items). */
+   publishing the number (docs/legacy/integrations/apicep.md, open items). */
 const referenceNumber = z.string().trim().regex(/^\d{1,20}$/, {
   message: "must be digits only",
 });

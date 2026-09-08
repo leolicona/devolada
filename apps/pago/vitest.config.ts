@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-/* Component + network layers (docs/TESTING.md): Testing Library on
+/* Component + network layers (docs/legacy/TESTING.md): Testing Library on
    happy-dom, network mocked with MSW honoring the API's envelope. */
 export default defineConfig({
   plugins: [react()],

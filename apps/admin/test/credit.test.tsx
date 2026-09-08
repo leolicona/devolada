@@ -5,8 +5,8 @@ import { settingsResponse } from "@devolada/api/settings-schema";
 import { businessActor, handlers, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/platform/prepaid-credit.spec.md UI (US-B04, US-B05) and
-   docs/platform/operator-panel.spec.md scenario 9 (US-L02). */
+/* docs/legacy/platform/prepaid-credit.spec.md UI (US-B04, US-B05) and
+   docs/legacy/platform/operator-panel.spec.md scenario 9 (US-L02). */
 
 const feed = { payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } };
 const settings = settingsResponse.parse({

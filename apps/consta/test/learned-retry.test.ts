@@ -3,7 +3,7 @@ import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { app, db, seedApiKey, validations } from "./helpers";
 
-/* docs/consta/learned-retry.spec.md (US-V16): the suggested retry moment
+/* docs/legacy/consta/learned-retry.spec.md (US-V16): the suggested retry moment
    on `not_found`/`pending`, learned from the log's own attempts. The
    distributions below are seeded straight into `validations` — the
    suggestion is arithmetic over the log, so the log is the fixture.

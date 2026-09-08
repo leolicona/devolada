@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { stubAdminApi } from "./stubs";
 
-/* docs/polish/dark-and-contrast.spec.md, the half a token file cannot
+/* docs/legacy/polish/dark-and-contrast.spec.md, the half a token file cannot
    prove. contrast-lint measures the palette; this measures the pixels —
    an ink can pass on paper and still land on a surface nobody predicted,
    and only a browser knows which colours actually met. */

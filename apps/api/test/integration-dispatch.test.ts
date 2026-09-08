@@ -6,7 +6,7 @@ import { creditEntries, integrationEvents, integrations, paymentLinks, payments 
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
 
-/* docs/integrations/integrations-hub.spec.md scenarios 3, 4, 5, 7 and 9
+/* docs/legacy/integrations/integrations-hub.spec.md scenarios 3, 4, 5, 7 and 9
    (US-I02, US-I03) — the dispatch: the mapping in the real path, the
    observation gate, "Ejecutar ahora", the event ledger, and the
    provisional pause. */

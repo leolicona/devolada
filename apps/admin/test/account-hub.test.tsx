@@ -6,7 +6,7 @@ import { settingsResponse } from "@devolada/api/settings-schema";
 import { businessActor, handlers, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/admin/account-hub.spec.md scenarios 1, 2, 4, 5, 6 (US-A05).
+/* docs/legacy/admin/account-hub.spec.md scenarios 1, 2, 4, 5, 6 (US-A05).
    Scenario 3 lives in session-round.test.tsx (BUG-016), 8 in a11y.test.tsx. */
 
 const feed = feedResponse.parse({ payments: [], nextCursor: null, effectiveOverTreatment: "flag", today: { count: 0, totalCents: 0, startedAtMs: 0 } });

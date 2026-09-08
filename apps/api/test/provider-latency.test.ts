@@ -3,7 +3,7 @@ import { fetchMock } from "cloudflare:test";
 import { WispHub } from "../src/wisphub/client";
 import { cashPaymentMethodId, pendingInvoicesForDisplay } from "../src/wisphub/cache";
 
-/* docs/polish/provider-latency.spec.md (US-P06), adapter and cache
+/* docs/legacy/polish/provider-latency.spec.md (US-P06), adapter and cache
    scenarios: 1–2 (deadlines), 6–7 and 10 (display cache), 11b (payment
    method per tenant), 12 (configured base).
 

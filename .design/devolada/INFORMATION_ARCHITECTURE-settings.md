@@ -5,8 +5,8 @@ that leads into it from elsewhere in the admin. It refines the Shell and
 "Configuración" sections of [INFORMATION_ARCHITECTURE.md](INFORMATION_ARCHITECTURE.md),
 which stays the parent document; where the two disagree, this one is newer.
 Structure decided in the 2026-09-03 interview (S1–S4 below); the settled
-shape lands in `docs/admin/account-hub.spec.md` (D4/D5) and
-`docs/admin/settings.spec.md`, which remain the contract — an IA is where
+shape lands in `docs/legacy/admin/account-hub.spec.md` (D4/D5) and
+`docs/legacy/admin/settings.spec.md`, which remain the contract — an IA is where
 the shape is argued, a spec is where it is owed.
 
 **(exists)** marks what is built today. The split this document argued
@@ -230,9 +230,9 @@ The rail grows by rows; a page does not grow by cards (S4).
 
 ## What it cost (built 2026-09-03, settings D11)
 
-1. `docs/admin/settings.spec.md` — D11, the UI Contract for two pages, the
+1. `docs/legacy/admin/settings.spec.md` — D11, the UI Contract for two pages, the
    anchor map, scenario 6 and its DoD row.
-2. `docs/admin/account-hub.spec.md` — D4's route list, D5's rail order and
+2. `docs/legacy/admin/account-hub.spec.md` — D4's route list, D5's rail order and
    role gates, the sub-page and deep-link bullets, scenarios 5 and 6.
 3. `apps/admin/src/router.tsx` — two routes and one redirect.
 4. `SettingsScreen.tsx` — two screens sharing one role gate and one query;

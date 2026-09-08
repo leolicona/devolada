@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { app, seedApiKey } from "./helpers";
 import { BANKS } from "../src/provider/banks";
 
-/* docs/consta/validation.spec.md scenario 18 (D12). */
+/* docs/legacy/consta/validation.spec.md scenario 18 (D12). */
 
 describe("GET /banks", () => {
   it("US-V07: serves the vocabulary to a valid key so a picker is generated, not transcribed", async () => {

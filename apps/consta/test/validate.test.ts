@@ -15,7 +15,7 @@ import {
   validations,
 } from "./helpers";
 
-/* docs/consta/validation.spec.md scenarios 1–5, 7, and 16–17/19–20.
+/* docs/legacy/consta/validation.spec.md scenarios 1–5, 7, and 16–17/19–20.
    apiCEP is mocked with the shapes read from its documentation (2026-08-17)
    and measured against the live API (2026-08-19). */
 
@@ -306,7 +306,7 @@ describe("POST /validate — transfer door", () => {
    becomes a long silence". The 4xx/5xx shapes come from the 2026-08-19
    probe where measured, and from apiCEP's published reference where not
    (405, 422, 429, 500 — marked published-unverified in
-   docs/integrations/apicep.md). */
+   docs/legacy/integrations/apicep.md). */
 describe("The failure taxonomy (D9, D14–D16)", () => {
   it("US-V06, scenario 8: a 500 is retryable, with no promise about when", async () => {
     const { key } = await seedApiKey();
@@ -669,7 +669,7 @@ describe("Refused before a credit is spent (D12, D13)", () => {
   });
 });
 
-/* docs/consta/proof-extraction.spec.md scenarios 1, 3–12. The reader is
+/* docs/legacy/consta/proof-extraction.spec.md scenarios 1, 3–12. The reader is
    stubbed with the shapes the real model was measured producing on
    2026-08-19 — fenced JSON, and `esComprobante: false` on an image that
    is not a receipt (5/5). */
@@ -1205,7 +1205,7 @@ describe("US-V15: the trust block", () => {
   });
 });
 
-/* docs/consta/proof-extraction.spec.md scenarios 14–17 (US-V17). The
+/* docs/legacy/consta/proof-extraction.spec.md scenarios 14–17 (US-V17). The
    rules are derived from rows seeded straight into the log — the query
    is the feature, so nothing here is stubbed except the reader. */
 describe("US-V17: the shape rules act (proof-extraction D14–D16)", () => {

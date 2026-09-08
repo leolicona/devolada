@@ -5,7 +5,7 @@ import { paymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import { fail, handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/reconciliation/cobros-live.spec.md — the section (US-R01):
+/* docs/legacy/reconciliation/cobros-live.spec.md — the section (US-R01):
    grouped by customer, local search and filters, freshness, and the
    states a live read owes (error, not-configured, incomplete, empty). */
 

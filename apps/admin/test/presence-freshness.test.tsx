@@ -6,7 +6,7 @@ import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { FOCUS_FLOOR_MS, HEARTBEAT_MS, PULSE_MS, resetPresenceForTests } from "../src/lib/presence";
 
-/* docs/polish/presence-freshness.spec.md (US-P07), admin side:
+/* docs/legacy/polish/presence-freshness.spec.md (US-P07), admin side:
    scenarios 1–6. The button is gone; the signals are the return to the
    tab (D3), the presence heartbeat on Cobros (D2/D4), Devolada's own pulse (D5),
    and a background failure that keeps the rows (D9). */

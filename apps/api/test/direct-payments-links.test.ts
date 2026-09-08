@@ -5,7 +5,7 @@ import { paymentLinks } from "../src/db/schema";
 import { resetProviderCaches } from "../src/wisphub/cache";
 import { app, seedBusiness, sessionCookieHeader } from "./helpers";
 
-/* docs/direct-payment/admin-links-view.spec.md (US-D07), amended by the
+/* docs/legacy/direct-payment/admin-links-view.spec.md (US-D07), amended by the
    pilot-UX round: the roster replaced the parameter-guessing search. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";

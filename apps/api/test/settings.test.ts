@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { businesses, integrations } from "../src/db/schema";
 import { app, seedBusiness, sessionCookieHeader } from "./helpers";
 
-/* docs/admin/settings.spec.md scenarios 1–3. */
+/* docs/legacy/admin/settings.spec.md scenarios 1–3. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
 

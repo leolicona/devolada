@@ -6,7 +6,7 @@ import { businesses, integrations, paymentLinks, payments } from "../src/db/sche
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
-/* docs/reconciliation/payments-and-classes.spec.md scenarios 1–7 and 11
+/* docs/legacy/reconciliation/payments-and-classes.spec.md scenarios 1–7 and 11
    (US-R02, US-R03). Consta and WispHub are fetch-mocked respecting their
    contracts, like the direct-payment suite. */
 

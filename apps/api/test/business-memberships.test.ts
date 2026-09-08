@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { businesses, member, session as sessionTable } from "../src/db/schema";
 import { app, json, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
-/* docs/business/business-and-memberships.spec.md scenarios 2–11
+/* docs/legacy/business/business-and-memberships.spec.md scenarios 2–11
    (US-B01, US-B02, US-B03). Scenario 13's membership half is the D7
    backfill, checked on deployed dev (DoD); scenario 12 lives in
    sessions.test.ts. */

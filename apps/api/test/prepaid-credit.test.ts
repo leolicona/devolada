@@ -7,8 +7,8 @@ import { debitValidationFee, grantWelcomeBonus, stepFor } from "../src/credit";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
-/* docs/platform/prepaid-credit.spec.md scenarios 1–7, 13–14 (US-B04,
-   US-L03; 4 and 15 for the D2 amendment) and docs/platform/operator-panel.spec.md scenarios 1–8
+/* docs/legacy/platform/prepaid-credit.spec.md scenarios 1–7, 13–14 (US-B04,
+   US-L03; 4 and 15 for the D2 amendment) and docs/legacy/platform/operator-panel.spec.md scenarios 1–8
    (US-L02). Top-ups and the pause (prepaid-credit D6, D8, D9) land with
    their own PR. */
 

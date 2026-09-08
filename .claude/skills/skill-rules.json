@@ -512,7 +512,7 @@
       "type": "domain",
       "enforcement": "suggest",
       "priority": "medium",
-      "description": "HTTP endpoint tests (see docs/TESTING.md for this repo's infrastructure)",
+      "description": "HTTP endpoint tests (see docs/legacy/TESTING.md for this repo's infrastructure)",
       "promptTriggers": {
         "keywords": [
           "supertest",

@@ -1,4 +1,4 @@
-/* Phase 0 of learned-retry (docs/consta/learned-retry.spec.md, US-V16).
+/* Phase 0 of learned-retry (docs/legacy/consta/learned-retry.spec.md, US-V16).
 
    Read-only report over the two D1 logs: how long does Banxico take to
    publish a CEP, per bank cell? It joins Devolada's `direct_payments`

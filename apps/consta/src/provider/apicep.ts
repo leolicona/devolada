@@ -94,7 +94,7 @@ function readTelemetry(res: Response): ProviderTelemetry {
 /* D9 — the non-2xx taxonomy. The body decides as much as the status:
    apiCEP hides five different situations under 401 alone, and one of
    them cleared on retry against a token that was never revoked
-   (docs/integrations/apicep.md, Auth). Everything unrecognised fails
+   (docs/legacy/integrations/apicep.md, Auth). Everything unrecognised fails
    toward "we do not know", never toward "the request was wrong". */
 function classifyHttpFailure(
   res: Response,

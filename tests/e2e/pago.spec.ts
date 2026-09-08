@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PAGO } from "../../playwright.config";
 import { longTrackingKey, stubPagoApi } from "./stubs";
 
-/* docs/direct-payment/direct-payment.spec.md (D16, D18, D19) — the
+/* docs/legacy/direct-payment/direct-payment.spec.md (D16, D18, D19) — the
    customer's page in a real browser.
 
    happy-dom applies no stylesheet and reports no layout, so everything

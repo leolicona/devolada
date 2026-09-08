@@ -6,7 +6,7 @@ import { App } from "../src/App";
 import { readLinks } from "../src/links";
 import { fail, handlers, ok, server } from "./msw";
 
-/* docs/direct-payment/returning-customer-access.spec.md scenarios 1–5
+/* docs/legacy/direct-payment/returning-customer-access.spec.md scenarios 1–5
    (US-D08). Phase 1 adds no endpoint: everything here is the device
    remembering what it was already given. */
 

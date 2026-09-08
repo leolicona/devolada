@@ -5,7 +5,7 @@ import { feedResponse } from "@devolada/api/payments-schema";
 import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/admin/charge-feed.spec.md scenarios 4–6. */
+/* docs/legacy/admin/charge-feed.spec.md scenarios 4–6. */
 
 const charge = (over: Partial<Parameters<typeof Object.assign>[1]> = {}) => ({
   id: "ch-1",
@@ -121,7 +121,7 @@ describe("D5: the status chips re-query the feed", () => {
   });
 });
 
-/* docs/direct-payment/partial-payment.spec.md scenario 14 (US-D10, D15):
+/* docs/legacy/direct-payment/partial-payment.spec.md scenario 14 (US-D10, D15):
    `receivedCents` is what arrived, the other fields are what was asked, and
    the detail has to name the difference — the row header and a derived
    breakdown total disagreed on the same card with nothing in between. */
@@ -207,7 +207,7 @@ describe("US-D10: a short payment explains itself in the feed", () => {
     expect(seen).toContain("withheld");
   });
 });
-/* docs/reconciliation/payments-and-classes.spec.md — the classes PR. */
+/* docs/legacy/reconciliation/payments-and-classes.spec.md — the classes PR. */
 describe("US-R02: the class and the surplus explain themselves", () => {
   it("scenario 2/11: an unapplied payment reads 'resolver con el cliente', never 'queda a favor'", async () => {
     const unapplied = charge({
@@ -445,7 +445,7 @@ describe("US-R03: a filtered-to-nothing list never claims the business has never
     expect(screen.queryByRole("button", { name: "Limpiar filtros" })).not.toBeInTheDocument();
   });
 });
-/* docs/integrations/integrations-hub.spec.md — the hub's face in Pagos. */
+/* docs/legacy/integrations/integrations-hub.spec.md — the hub's face in Pagos. */
 describe("US-I03: the observed row teaches, and Ejecutar ahora dispatches", () => {
   const observed = charge({
     id: "ch-obs1",

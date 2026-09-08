@@ -1,6 +1,6 @@
 /* Consta adapter (direct-payment spec). All Consta traffic goes through
    this file, like the WispHub adapter. Contract in
-   docs/consta/validation.spec.md — same envelope as this API. Consta
+   docs/legacy/consta/validation.spec.md — same envelope as this API. Consta
    reports `alreadyValidated` without blocking (its D4): the replay
    policy is ours (direct-payment D8), applied by the caller. */
 

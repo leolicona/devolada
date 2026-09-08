@@ -6,7 +6,7 @@ import { paymentLinks } from "../src/db/schema";
 import { resetProviderCaches } from "../src/wisphub/cache";
 import type { Bindings } from "../src/env";
 
-/* docs/reconciliation/cobros-live.spec.md — the live read (US-R01:
+/* docs/legacy/reconciliation/cobros-live.spec.md — the live read (US-R01:
    scenarios 1, 4, 6, 7, 9) and the payer link's own Cobros (US-R04:
    scenario 8). No table exists; the DoD's "no migration" proof is this
    whole file running against a schema without payment_requests. */

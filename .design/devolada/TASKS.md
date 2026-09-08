@@ -6,7 +6,7 @@ tested. Phase 1 (extraction) executed 2026-08-31 (PR #123).
 
 ## Phase 2 — Foundation rename & workspaces
 
-Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
+Child spec: `docs/legacy/business/business-and-memberships.spec.md` (US-B01–B03).
 
 - [x] Design cycle (this folder) reviewed by the owner (PR #124)
 - [x] Child spec written and registered (PR #125); organizations spike
@@ -25,7 +25,7 @@ Child spec: `docs/business/business-and-memberships.spec.md` (US-B01–B03).
 
 ## Phase 3 — Prepaid credit & operator panel
 
-Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md) (US-B04–B06, US-L03) · [operator-panel.spec.md](../../docs/platform/operator-panel.spec.md) (US-L02) — written 2026-09-01 after the phase-3 interview.
+Child specs: [prepaid-credit.spec.md](../../docs/legacy/platform/prepaid-credit.spec.md) (US-B04–B06, US-L03) · [operator-panel.spec.md](../../docs/legacy/platform/operator-panel.spec.md) (US-L02) — written 2026-09-01 after the phase-3 interview.
 
 - [x] `credit_entries` (append-only house rule) + balance derivation
 - [x] Welcome bonus on business creation — per user, first business (D5)
@@ -43,8 +43,8 @@ Child specs: [prepaid-credit.spec.md](../../docs/platform/prepaid-credit.spec.md
 
 ## Phase 4 — Cobros mirror & reconciliation
 
-Child specs: [cobros-live.spec.md](../../docs/reconciliation/cobros-live.spec.md)
-(US-R01, US-R04) · [payments-and-classes.spec.md](../../docs/reconciliation/payments-and-classes.spec.md)
+Child specs: [cobros-live.spec.md](../../docs/legacy/reconciliation/cobros-live.spec.md)
+(US-R01, US-R04) · [payments-and-classes.spec.md](../../docs/legacy/reconciliation/payments-and-classes.spec.md)
 (US-R02, US-R03; carries pivot D20 and the trust-layer refs) — written
 2026-09-01 after the phase-4 interview. The Cobros section reads WispHub
 **live** (owner decision after the spike: the mirror bought nothing a link
@@ -97,7 +97,7 @@ provisional-release D10 (pivot Open item 1).
 
 ## Shell round — the account hub (2026-09-02 interview)
 
-Child spec: [account-hub.spec.md](../../docs/admin/account-hub.spec.md) (US-A05).
+Child spec: [account-hub.spec.md](../../docs/legacy/admin/account-hub.spec.md) (US-A05).
 
 - [x] PR A (#159): Cuenta (avatar with initials + credit-step glyph) as the fifth
       section at both widths; hub with sub-pages under `/settings`;

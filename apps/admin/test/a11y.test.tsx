@@ -6,7 +6,7 @@ import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
-/* docs/polish/accessibility.spec.md — the admin, screen by screen. */
+/* docs/legacy/polish/accessibility.spec.md — the admin, screen by screen. */
 
 const feed = feedResponse.parse({
   payments: [

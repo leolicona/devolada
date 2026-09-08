@@ -8,7 +8,7 @@ import { backfillConstaKeys } from "../src/consta/issuer";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, sessionCookieHeader } from "./helpers";
 
-/* docs/reconciliation/payments-and-classes.spec.md scenarios 9, 10 and
+/* docs/legacy/reconciliation/payments-and-classes.spec.md scenarios 9, 10 and
    12 (D7/D8/D9 — pivot D20 executed). */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";

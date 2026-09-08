@@ -508,25 +508,6 @@
         ]
       }
     },
-    "api-testing": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "HTTP endpoint tests (see docs/legacy/TESTING.md for this repo's infrastructure)",
-      "promptTriggers": {
-        "keywords": [
-          "supertest",
-          "httpx",
-          "endpoint test",
-          "api test",
-          "api tests",
-          "pruebas de api"
-        ],
-        "intentPatterns": [
-          "(test|prueb\\w*|prob\\w*).*(endpoint|endpoints|api route|api)"
-        ]
-      }
-    },
     "api-versioning-strategy": {
       "type": "domain",
       "enforcement": "suggest",
@@ -657,62 +638,6 @@
         ]
       }
     },
-    "cloudflare-durable-objects": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Aspirational: no Durable Objects binding exists in any wrangler.jsonc yet. Durable Objects reference: config, migrations, WebSocket hibernation, errors",
-      "promptTriggers": {
-        "keywords": [
-          "websocket hibernation",
-          "do migration",
-          "durable object class",
-          "durable object binding",
-          "new_sqlite_classes"
-        ],
-        "intentPatterns": [
-          "(configure|migrate|export).*durable object"
-        ]
-      }
-    },
-    "cloudflare-kv": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Aspirational: no KV binding exists in any wrangler.jsonc yet. Workers KV key-value storage",
-      "promptTriggers": {
-        "keywords": [
-          "workers kv",
-          "cloudflare kv",
-          "kv namespace",
-          "kv binding",
-          "kv.get",
-          "kv.put"
-        ],
-        "intentPatterns": [
-          "(store|cache|read|write|guard\\w*|cache\\w*|le[eé]\\w*).*(in |en )kv"
-        ]
-      }
-    },
-    "cloudflare-queues": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Aspirational: no Queues binding exists in any wrangler.jsonc yet. Cloudflare Queues producers/consumers and dead-letter queues",
-      "promptTriggers": {
-        "keywords": [
-          "cloudflare queues",
-          "queue consumer",
-          "queue producer",
-          "dead letter queue",
-          "message batch"
-        ],
-        "intentPatterns": [
-          "(publish|send|consume|publica\\w*|env[ií]a\\w*|consum\\w*).*(message|messages|mensaje|mensajes).*(queue|cola)",
-          "(create|add|configure|cre\\w*|configur\\w*).*(queue consumer|consumidor de cola)"
-        ]
-      }
-    },
     "cloudflare-r2": {
       "type": "domain",
       "enforcement": "suggest",
@@ -729,23 +654,6 @@
         ],
         "intentPatterns": [
           "(upload|store|serve|sub\\w*|guard\\w*|sirv\\w*).*(file|image|object|archivo|imagen|comprobante|objeto).*(r2|bucket)"
-        ]
-      }
-    },
-    "cloudflare-turnstile": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "Turnstile bot protection: widget, siteverify, error codes",
-      "promptTriggers": {
-        "keywords": [
-          "turnstile",
-          "captcha",
-          "bot protection",
-          "siteverify"
-        ],
-        "intentPatterns": [
-          "(protect|proteg\\w*).*(form|formulario|endpoint).*(bot|bots|spam)"
         ]
       }
     },
@@ -896,24 +804,6 @@
         ]
       }
     },
-    "durable-objects": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "low",
-      "description": "Aspirational: no Durable Objects binding exists in any wrangler.jsonc yet. Authoring and reviewing Durable Objects (RPC, SQLite storage, alarms)",
-      "promptTriggers": {
-        "keywords": [
-          "durable object",
-          "durable objects",
-          "do rpc",
-          "do alarm",
-          "sqlite storage"
-        ],
-        "intentPatterns": [
-          "(create|build|write|review|cre\\w*|construy\\w*|revis\\w*).*durable object"
-        ]
-      }
-    },
     "frontend-design": {
       "type": "domain",
       "enforcement": "suggest",
@@ -970,21 +860,6 @@
         "keywords": [
           "redesign",
           "rediseño"
-        ]
-      }
-    },
-    "turnstile-spin": {
-      "type": "domain",
-      "enforcement": "suggest",
-      "priority": "medium",
-      "description": "End-to-end Turnstile setup: create the widget, embed it, wire siteverify",
-      "promptTriggers": {
-        "keywords": [
-          "turnstile setup",
-          "turnstile widget"
-        ],
-        "intentPatterns": [
-          "(add|set ?up|setup|integrate|agreg\\w*|integr\\w*|instal\\w*).*(turnstile|captcha)"
         ]
       }
     },

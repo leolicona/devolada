@@ -61,12 +61,6 @@
       "skillPath": "plugins/api-security-hardening/skills/api-security-hardening/SKILL.md",
       "computedHash": "bb3d6be0d2c870f4610939c3e6766c8f950cab7452db4478e77713887b4653b1"
     },
-    "api-testing": {
-      "source": "secondsky/claude-skills",
-      "sourceType": "github",
-      "skillPath": "plugins/api-testing/skills/api-testing/SKILL.md",
-      "computedHash": "8a3fb3bbdbe93fcd0fd88042e95f9f7837de955c85331113a23631f7d916abed"
-    },
     "api-versioning-strategy": {
       "source": "secondsky/claude-skills",
       "sourceType": "github",
@@ -109,35 +103,11 @@
       "skillPath": "plugins/cloudflare-d1/skills/cloudflare-d1/SKILL.md",
       "computedHash": "b1a64d663e793885c5f2948cd9c432a1dfca898fa63b82860c90ee85289b319b"
     },
-    "cloudflare-durable-objects": {
-      "source": "secondsky/claude-skills",
-      "sourceType": "github",
-      "skillPath": "plugins/cloudflare-durable-objects/skills/cloudflare-durable-objects/SKILL.md",
-      "computedHash": "a31bbff36a3c006ff8f4db6b760dda1a22968c126182da567fd0757ce641c4d4"
-    },
-    "cloudflare-kv": {
-      "source": "secondsky/claude-skills",
-      "sourceType": "github",
-      "skillPath": "plugins/cloudflare-kv/skills/cloudflare-kv/SKILL.md",
-      "computedHash": "12315ba5ce852724866d8d4a3f71bc2b3fc5c7e87c066e4af07d2fcefe121f0f"
-    },
-    "cloudflare-queues": {
-      "source": "secondsky/claude-skills",
-      "sourceType": "github",
-      "skillPath": "plugins/cloudflare-queues/skills/cloudflare-queues/SKILL.md",
-      "computedHash": "caa47730496c517d512d270fa9047becf21b75a540a8563cedb40fbb26541ee1"
-    },
     "cloudflare-r2": {
       "source": "secondsky/claude-skills",
       "sourceType": "github",
       "skillPath": "plugins/cloudflare-r2/skills/cloudflare-r2/SKILL.md",
       "computedHash": "0b85d438ef70a9f8009a44e867999cc94cbc96d970ccb71b75f8f066d79e09ff"
-    },
-    "cloudflare-turnstile": {
-      "source": "secondsky/claude-skills",
-      "sourceType": "github",
-      "skillPath": "plugins/cloudflare-turnstile/skills/cloudflare-turnstile/SKILL.md",
-      "computedHash": "7ada08eaedcbb599095c653ffc7be32af1a516ae37af0dd6979f7112de1375bd"
     },
     "cloudflare-workers-ai": {
       "source": "secondsky/claude-skills",
@@ -193,12 +163,6 @@
       "skillPath": "design-tokens/SKILL.md",
       "computedHash": "20df23737f28b34cb3d0d808d16a958c5ff3bddf0dcb8eedd700735ecb5ae8d1"
     },
-    "durable-objects": {
-      "source": "cloudflare/skills",
-      "sourceType": "github",
-      "skillPath": "skills/durable-objects/SKILL.md",
-      "computedHash": "72efa2277fea08f43b393c74abaacc9fa575e20bc63bdc9d46829b8a39352852"
-    },
     "frontend-design": {
       "source": "julianoczkowski/designer-skills",
       "sourceType": "github",
@@ -222,12 +186,6 @@
       "sourceType": "github",
       "skillPath": "skills/redesign-skill/SKILL.md",
       "computedHash": "b405eee0e0e80fc243f731d9aa368bca307e356db7e6157d27101d369dac6726"
-    },
-    "turnstile-spin": {
-      "source": "cloudflare/skills",
-      "sourceType": "github",
-      "skillPath": "skills/turnstile-spin/SKILL.md",
-      "computedHash": "1b1d7b58ff1a7805b7d86347cc842dcda4cffa4228cfd958225755c2d2a9e4b7"
     },
     "web-perf": {
       "source": "cloudflare/skills",

@@ -269,13 +269,25 @@ and the corpus stops moving weekly.
 
 ## 8. Recommendation
 
+> **Partly superseded by the owner, 2026-09-08.** The decision is to adopt Spec
+> Kit's templates as they ship: no `.specify/templates/overrides/`, and no
+> Devolada spec shape layered on top. Point 2 below and the override clause of
+> PR 1 no longer hold and are struck. What survives: the `git` extension stays
+> uninstalled (point 1), `spec-lint` stays a blocking gate (point 3), the
+> constitution keeps summarizing and linking the layer documents (point 4), the
+> legacy corpus is not spent (the argument against A), and the rename of PR 2
+> becomes per-feature — a spec moves when its feature is rebuilt, not in one
+> sweep.
+
 **B, with D's enforcement additions folded into the same template.** Concretely:
 
 1. **Do not install the `git` extension.** Core is git-free; the branch
    convention would fight trunk-based `main` for nothing.
-2. **Do not adopt the five-artifact fan-out.** One spec, one file, as today.
+2. ~~**Do not adopt the five-artifact fan-out.** One spec, one file, as today.
    `plan.md`/`tasks.md` may exist per feature but are gitignored — which
-   turns `SPEC.md` rule 4 from a manual discipline into a mechanical one.
+   turns `SPEC.md` rule 4 from a manual discipline into a mechanical one.~~
+   **Reversed 2026-09-08**: Spec Kit's layout is adopted whole, and
+   `plan.md` / `tasks.md` are committed under `specs/NNN-slug/`.
 3. **Keep `spec-lint.mjs` and make it stricter**, not weaker: it learns the
    new path, and gains a rule that a spec at `status: current` carries no
    `[NEEDS CLARIFICATION]` marker. Spec Kit ships no enforcement; ours is the
@@ -295,8 +307,9 @@ and the corpus stops moving weekly.
 Suggested phasing, one PR each:
 
 - **PR 1 — no movement.** `specify init --here --integration claude --script sh
-  --non-interactive`; write `constitution.md`; write
-  `.specify/templates/overrides/spec-template.md` with our sections. Nothing
+  --non-interactive`; write `constitution.md`; ~~write
+  `.specify/templates/overrides/spec-template.md` with our sections~~ (dropped
+  2026-09-08 — the core template is used unmodified). Nothing
   in `docs/` moves. Try `/speckit-constitution` and `/speckit-clarify` on one
   spec by hand. **This PR alone answers whether the workflow suits us**, and
   is throwaway if it does not.

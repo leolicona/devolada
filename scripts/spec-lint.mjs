@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /* Golden-rule enforcement (docs/legacy/SPEC.md):
    1. Every docs/<domain>/<feature>.spec.md must be referenced in SPEC.md's index.
-   2. Test files must cite user stories (US-...). Warning-only until the test
+      Scoped to the legacy corpus: a feature specified with Spec Kit lives in
+      specs/NNN-slug/ and is indexed by Spec Kit itself, not by SPEC.md.
+   2. Test files must cite user stories. Warning-only until the test
       infrastructure lands; becomes an error when TD-005 is paid. */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -47,9 +49,18 @@ const tests = ["apps", "packages"]
     }
   });
 
-const withoutStory = tests.filter((t) => !/US-[A-Z]\d{2}/.test(readFileSync(t, "utf8")));
+/* Constitution VII: a citation must identify its story globally. Spec Kit numbers
+   stories per feature (US1, US2), so the new form carries the feature slug with it
+   ("direct-payment US1: ..."); a bare US1 is not a citation. A feature not yet
+   rebuilt keeps its legacy US-XNN, so both forms are accepted while the migration
+   runs. Drop the legacy branch when the last domain lands. */
+const STORY_CITATION = /US-[A-Z]\d{2}|[a-z][a-z0-9-]*\s+US\d+\b/;
+
+const withoutStory = tests.filter((t) => !STORY_CITATION.test(readFileSync(t, "utf8")));
 if (withoutStory.length) {
-  console.warn("⚠ Tests without a cited story (US-XNN) — becomes an error once TD-005 is paid:");
+  console.warn(
+    "⚠ Tests without a cited story (US-XNN, or <feature-slug> US<n>) — becomes an error once TD-005 is paid:",
+  );
   for (const t of withoutStory) console.warn(`  - ${relative(root, t)}`);
 }
 

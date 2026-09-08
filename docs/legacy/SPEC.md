@@ -14,14 +14,20 @@ Direct SPEI payments with automatic validation for service businesses — today,
 > `stores-network-final`. Its stories below are marked retired; its specs,
 > apps and routes left this repo in the retirement PR.
 
-## Spec-driven workflow rules (adapted)
+## Spec-driven workflow rules (this corpus)
 
-1. Every new feature: interview → justified decisions (D1…Dn as mini-ADRs: decision + discarded alternatives + why) → reserve a US-ID here → write `docs/<domain>/<feature>.spec.md` → register it in this index **within the same PR**.
+> **Superseded for new features (2026-09-08).** A new feature is specified with
+> GitHub Spec Kit using its core templates: `/speckit-specify` creates
+> `specs/NNN-<slug>/`, and no US-ID is reserved here for it. The rules below
+> govern the specs already in this corpus — normative until their feature is
+> rebuilt.
+
+1. A feature specified here keeps its spec here: amend `docs/<domain>/<feature>.spec.md` and its row in the index above, **within the same PR**. Its decisions stay as written (D1…Dn as mini-ADRs: decision + discarded alternatives + why); a feature leaves this corpus only when it is rebuilt under `specs/`.
 2. The `.spec.md` is updated with reality during development; it never forks.
 3. **Lite path**: bugfixes, typos and copy tweaks carry no spec or plan — they carry an entry in `BUGS.md` (if production was affected) and a test. The threshold: if a business rule or contract changes, it's a spec; otherwise it's the lite path.
-4. `.plan.md` files are **ephemeral**: deleted or archived on merge. Only the spec is maintained.
+4. `.plan.md` files in this corpus are **ephemeral**: deleted or archived on merge. Only the spec is maintained. Spec Kit's `plan.md` / `tasks.md` are the opposite — they are committed with the feature under `specs/`.
 5. On completion: conscious debt → `TECH_DEBT.md`; production defects → `BUGS.md`.
-6. Tests cite their story (`US-C02: charges the exact monthly fee…`) so spec coverage can be traced with grep.
+6. Tests cite their story (`US-C02: charges the exact monthly fee…`) so spec coverage can be traced with grep. A rebuilt feature adopts Spec Kit's per-feature number carrying its slug (`direct-payment US1: …`) per constitution VII; `spec-lint` accepts both forms.
 
 ## Glossary
 

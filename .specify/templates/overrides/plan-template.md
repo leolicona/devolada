@@ -40,6 +40,10 @@ says it could not reach the provider (deadlines on every provider call)
 that grows with the tenant). Migrations are additive; a table rebuild is proven on seeded
 data first. Money is integer cents everywhere.
 
+**Skills to load**: [one per concern this feature touches, from the constitution's
+"Implementation conventions" table — e.g. `hono-routing`, `drizzle-orm-d1`, `zod`.
+A touched concern without its skill fails the Constitution Check.]
+
 **Scale/Scope**: pilot scale — one ISP, tens of customers per tenant. Multi-workspace
 since phase 2, so nothing may assume a single business.
 

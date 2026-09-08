@@ -1,7 +1,21 @@
 <!--
 Sync Impact Report
 ==================
-Version: 1.0.0 (revised before first merge — v1.0.0 never reached main, so this
+Version change: 1.0.0 → 1.1.0 (MINOR — a section added that materially expands
+guidance; no principle removed or redefined).
+
+Added:
+  - "Implementation conventions": the per-concern MUST table naming the library
+    and the Claude Code skill to load. Skills are model-invoked and load only when
+    a description happens to match; this section is the deterministic anchor that
+    /speckit-plan carries through the Constitution Check. Adds the two rules that
+    make it bite: a plan lists the skills of every concern it touches, and a task
+    introducing a library outside the table needs a recorded decision.
+
+Companion change (same PR): the plan-template override gains a "Skills to load"
+line in Technical Context, so the plan has a place to satisfy the first rule.
+
+Previous report (1.0.0, revised before first merge — v1.0.0 never reached main, so this
 replaces it in place rather than bumping; nothing has operated under the old text).
 
 Removed:
@@ -182,6 +196,40 @@ spec before use.
   entries under Principle I, and what replaces API-key authentication at the seam.
 - `/dev/*` routes MUST exist only when `ENVIRONMENT=dev`.
 
+## Implementation conventions
+
+Skills are model-invoked: a skill loads when its description happens to match the
+context, and nothing guarantees it does. This section is the deterministic anchor.
+`/speckit-plan` carries it through the Constitution Check, tasks inherit it, and
+implementation has no escape from it. Each row names the concern, the law, and the
+skill to load **before** writing that kind of code.
+
+| Concern | MUST | Skill to load |
+|---|---|---|
+| HTTP service | **Hono.** Every HTTP surface in `apps/api` and `apps/consta` is a Hono app. Validation with `@hono/zod-validator` at the edge; the uniform envelope on every response. | `hono-routing` |
+| Contracts and validation | **Zod.** A route's `schema.ts` is the contract; frontends derive types from it and MSW handlers are validated against it, so a mock cannot lie. | `zod` |
+| Persistence | **Drizzle on D1.** Migrations through `drizzle-kit`, additive, a rebuild proven on seeded data. Any statement that grows with the tenant is chunked under `D1_MAX_PARAMS` (BUG-021). | `drizzle-orm-d1`, `cloudflare-d1` |
+| Authentication | **Better Auth inside `apps/api`, and nowhere else** (BFF). HTTP-only cookies; account status re-checked in the database on every request; passkeys and organizations through its plugins. | `better-auth` |
+| Object storage · inference | **R2** (`PROOFS`) for transfer evidence; **Workers AI** for receipt extraction. | `cloudflare-r2`, `cloudflare-workers-ai` |
+| UI | **React 19** with **TanStack Router** (routes are dumb; logic lives in features) and **TanStack Query** (the only home of server state). **Tailwind v4** through the tokens; **shadcn** primitives copied into `src/components/ui/`, never added as a dependency. | `react`, `tanstack-router`, `tanstack-query`, `tailwindcss`, `shadcn` |
+| API tests | **Vitest under `@cloudflare/vitest-pool-workers`**: the real workerd runtime and a real local D1. **No database mocks.** Provider bases are pinned in `vitest.config.ts`, interceptor counts are exact, module caches reset per test. | `vitest-testing` |
+| Component and network tests | **Vitest + React Testing Library + happy-dom**, queried by what the user sees. Network through **MSW**, handlers validated against the Zod schemas. Travel from the origin screen; do not mount the destination. | `vitest-testing`, `react` |
+| End-to-end | **Playwright + axe** against built previews for breakpoints, touch geometry and real contrast; against the real API (`pnpm e2e:passkey`) for the passkey and identity journeys. | `playwright` |
+| Workers, config, deploy | **Wrangler** and `wrangler.jsonc`; Workers best practices (no floating promises, no global state, bindings not globals). Deploys through GitHub Actions only. | `wrangler`, `workers-best-practices`, `cloudflare`, `cloudflare-workers-ci-cd` |
+
+Two rules make the table bite:
+
+- A plan MUST list, under *Skills to load* in its Technical Context, the skill of
+  every concern the feature touches. A plan that touches a concern without its skill
+  fails the Constitution Check.
+- A task MUST NOT introduce a library for a concern in this table other than the one
+  named. Doing so is a decision — it goes through Complexity Tracking with the
+  rejected alternative, or it is a defect.
+
+Where a skill is generic and the house rule is stricter (Vitest's skill knows nothing
+of the workers pool; there is no MSW skill at all), **this table is the law and the
+skill is the reference**.
+
 ## Development workflow and quality gates
 
 Trunk-based on `main`. A PR opens the gate; merging deploys to dev; a `v*` tag deploys
@@ -237,4 +285,4 @@ living only there MUST be folded into this document before it goes
   plan's complexity tracking with the simpler alternative that was rejected; an
   unrecorded violation is a defect.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-08
+**Version**: 1.1.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-08

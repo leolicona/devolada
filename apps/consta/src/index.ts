@@ -5,7 +5,7 @@ import { extractRoute } from "./routes/extract";
 import { adminKeysRoute } from "./routes/admin/keys";
 import { banksRoute } from "./routes/banks";
 
-/* Consta: SPEI transfer validation behind one endpoint (docs/consta/
+/* Consta: SPEI transfer validation behind one endpoint (docs/legacy/consta/
    validation.spec.md). Server-to-server in v1 — no CORS on purpose (D8). */
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 

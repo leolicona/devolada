@@ -4,7 +4,7 @@ Reviewed against: `.design/devolada/DESIGN_BRIEF.md` (pivot phase 2)
 Philosophy: functionalist, tokens are law, warm accent; calm by default
 Date: 2026-09-02 · Status: **PR1 merged (#157); PR2 built and verified (branch `feat/pagos-date-range`)**
 Code: `apps/admin/src/features/feed/FeedScreen.tsx`, `apps/admin/src/components/ui/tabs.tsx`
-Owning spec: `docs/reconciliation/payments-and-classes.spec.md` **D4** (US-R03) — everything here amends D4; no new US-ID.
+Owning spec: `docs/legacy/reconciliation/payments-and-classes.spec.md` **D4** (US-R03) — everything here amends D4; no new US-ID.
 
 The round started as four questions about the filter bar. Measuring them turned up two defects, one dead test, and one open spec question that the measurement closes. The owner then took decisions on each branch (grill session) and a second pass reviewed the agreement; this document is the consolidated result. The chronology is at the end.
 

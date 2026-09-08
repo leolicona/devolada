@@ -5,7 +5,7 @@ import { feedResponse } from "@devolada/api/payments-schema";
 import { fail, handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/polish/list-states.spec.md scenarios 1–2. */
+/* docs/legacy/polish/list-states.spec.md scenarios 1–2. */
 
 const emptyFeed = feedResponse.parse({
   payments: [],

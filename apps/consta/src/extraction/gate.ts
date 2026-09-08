@@ -16,7 +16,7 @@ export type Gate = {
   trackingKey: Extract<FieldGate, "ok" | "malformed" | "missing">;
   senderBank: Extract<FieldGate, "ok" | "unknown" | "missing">;
   /* apiCEP's direct mode requires `sender.amount`, so a reading without a
-     readable amount cannot buy a lookup at all (docs/integrations/apicep.md,
+     readable amount cannot buy a lookup at all (docs/legacy/integrations/apicep.md,
      required fields). It is a **search criterion here and nothing more** —
      D3 stands: what decides money is `cepDetails.amount`, which is also
      what lets a caller catch the $1-receipt that this one would otherwise

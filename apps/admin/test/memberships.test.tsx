@@ -6,7 +6,7 @@ import { settingsResponse } from "@devolada/api/settings-schema";
 import { baFail, baOk, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/business/business-and-memberships.spec.md — the UI half of
+/* docs/legacy/business/business-and-memberships.spec.md — the UI half of
    scenarios 1, 4–5, 6–9 (US-B01, US-B02, US-B03). The API half lives in
    apps/api/test/business-memberships.test.ts. */
 

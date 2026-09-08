@@ -2,7 +2,7 @@ import { and, gt, isNotNull } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { validations } from "../db/schema";
 
-/* learned-retry (docs/consta/learned-retry.spec.md, US-V16): a suggested
+/* learned-retry (docs/legacy/consta/learned-retry.spec.md, US-V16): a suggested
    retry moment on `not_found`/`pending`, learned from the attempts the
    log already records. Consta suggests, never schedules (D1): the
    caller's static schedule is the floor, and a missing field — silence —

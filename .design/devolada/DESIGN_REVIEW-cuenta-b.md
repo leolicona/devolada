@@ -1,7 +1,7 @@
 # Design Review: the phone without its header (US-A05, PR B)
 
 Reviewed against: `.design/devolada/DESIGN_BRIEF.md` and
-`docs/admin/account-hub.spec.md` D8–D10
+`docs/legacy/admin/account-hub.spec.md` D8–D10
 Philosophy: Functionalist, warm accent — calm by default, loud only for
 money at risk, roles hide never tease
 Date: 2026-09-03

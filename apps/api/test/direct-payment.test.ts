@@ -18,10 +18,10 @@ async function confirmedRows(db: ReturnType<typeof drizzle>) {
   return (await db.select().from(payments)).filter((p) => p.folio !== null);
 }
 
-/* docs/direct-payment/direct-payment.spec.md scenarios 1–12, 16–24
+/* docs/legacy/direct-payment/direct-payment.spec.md scenarios 1–12, 16–24
    (US-D01–US-D04). Consta and WispHub are fetch-mocked respecting
-   their contracts (docs/consta/validation.spec.md,
-   docs/integrations/wisphub.md). */
+   their contracts (docs/legacy/consta/validation.spec.md,
+   docs/legacy/integrations/wisphub.md). */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
 const CONSTA_ORIGIN = "https://consta.test";
@@ -929,7 +929,7 @@ describe("D17: a not-found is not a refusal", () => {
   });
 });
 
-/* docs/direct-payment/validation-status-ux.spec.md (US-D12): the late
+/* docs/legacy/direct-payment/validation-status-ux.spec.md (US-D12): the late
    slot (D4/D5) and the own-attempt carve-out across supersede (D8). */
 describe("US-D12: the late slot and the own-attempt carve-out", () => {
   type Seed = Partial<typeof payments.$inferInsert>;
@@ -1586,7 +1586,7 @@ describe("D12: proofs are private", () => {
 });
 
 /* D18: the machine reads, the human confirms, the direct door validates.
-   docs/direct-payment/direct-payment.spec.md scenarios 46–49. */
+   docs/legacy/direct-payment/direct-payment.spec.md scenarios 46–49. */
 describe("D18: reading a proof so a human can confirm it", () => {
   const READING = {
     extractionId: "ex-1",
@@ -1877,7 +1877,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   });
 });
 
-/* docs/direct-payment/partial-payment.spec.md scenarios 1–7 — US-D10.
+/* docs/legacy/direct-payment/partial-payment.spec.md scenarios 1–7 — US-D10.
    A short transfer used to be refused with no row written, while the
    money was already in the ISP's account. */
 describe("US-D10: a transfer that falls short", () => {

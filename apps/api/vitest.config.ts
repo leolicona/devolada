@@ -1,6 +1,6 @@
 import { defineWorkersConfig, readD1Migrations } from "@cloudflare/vitest-pool-workers/config";
 
-/* API-layer tests (docs/TESTING.md): the Hono app runs in workerd — the
+/* API-layer tests (docs/legacy/TESTING.md): the Hono app runs in workerd — the
    real Workers runtime — with a real local D1, no database mocks.
    Migrations are read here and applied per test in test/setup.ts. */
 export default defineWorkersConfig(async () => {

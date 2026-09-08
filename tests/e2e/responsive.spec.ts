@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { stubAdminApi } from "./stubs";
 
-/* docs/polish/responsive.spec.md — US-P03.
+/* docs/legacy/polish/responsive.spec.md — US-P03.
 
    Every assertion here is about real layout: the browser has the
    stylesheet, so a 48px touch target is measured rather than assumed. */

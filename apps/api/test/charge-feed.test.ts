@@ -3,7 +3,7 @@ import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { app, seedBusiness, seedConfirmedPayment, sessionCookieHeader } from "./helpers";
 
-/* docs/admin/charge-feed.spec.md scenarios 1–3. */
+/* docs/legacy/admin/charge-feed.spec.md scenarios 1–3. */
 
 beforeAll(() => {
   fetchMock.activate();
@@ -66,7 +66,7 @@ describe("US-A01: the ISP sees its charges newest first", () => {
   });
 });
 
-/* docs/admin/settings.spec.md scenario 4. */
+/* docs/legacy/admin/settings.spec.md scenario 4. */
 describe("US-A04: today's totals follow the ISP timezone", () => {
   /* The server reports the boundary it used, so this test never has to
      guess it — it holds at any hour, in any runner timezone. */
@@ -187,7 +187,7 @@ describe("BUG-012: a partial row carries what was asked, so the feed can name th
   });
 });
 
-/* docs/direct-payment/direct-payment.spec.md scenario 14. */
+/* docs/legacy/direct-payment/direct-payment.spec.md scenario 14. */
 describe("US-D06: direct SPEI charges ride the same feed, distinguished", () => {
   it("returns spei charges with channel and no store name", async () => {
     const { business } = await seedFeed();

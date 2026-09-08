@@ -1,13 +1,19 @@
 #!/usr/bin/env node
-/* Golden-rule enforcement (docs/SPEC.md):
+/* Golden-rule enforcement (docs/legacy/SPEC.md):
    1. Every docs/<domain>/<feature>.spec.md must be referenced in SPEC.md's index.
    2. Test files must cite user stories (US-...). Warning-only until the test
       infrastructure lands; becomes an error when TD-005 is paid. */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
-const docsDir = join(root, "docs");
+/* Spec Kit migration (docs/spec-kit-migration.eval.md): the corpus lives under
+   docs/legacy/ until PR3 rebuilds it. The golden rule follows it there so the
+   archive cannot rot while it is still the source PR3 reads. Delete this
+   branch — and the directory — when legacy is emptied in the final PR. */
+const legacyDir = join(root, "docs", "legacy");
+const docsDir = existsSync(legacyDir) ? legacyDir : join(root, "docs");
+const docsLabel = relative(root, docsDir);
 
 function walk(dir, filter, acc = []) {
   for (const name of readdirSync(dir)) {
@@ -24,7 +30,7 @@ const specFiles = walk(docsDir, (n) => n.endsWith(".spec.md"));
 const orphans = specFiles.filter((path) => !spec.includes(relative(docsDir, path)));
 
 if (orphans.length) {
-  console.error("✘ Specs not registered in docs/SPEC.md (golden rule):");
+  console.error(`✘ Specs not registered in ${docsLabel}/SPEC.md (golden rule):`);
   for (const o of orphans) console.error(`  - ${relative(root, o)}`);
   process.exit(1);
 }
@@ -48,5 +54,5 @@ if (withoutStory.length) {
 }
 
 console.log(
-  `✔ spec-lint: ${specFiles.length} specs registered, ${tests.length} test files checked`,
+  `✔ spec-lint: ${specFiles.length} specs registered under ${docsLabel}, ${tests.length} test files checked`,
 );

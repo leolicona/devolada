@@ -1,4 +1,4 @@
--- Phase 2 foundation (docs/business/business-and-memberships.spec.md D6, D7).
+-- Phase 2 foundation (docs/legacy/business/business-and-memberships.spec.md D6, D7).
 --> statement-breakpoint
 PRAGMA defer_foreign_keys = true;
 --> statement-breakpoint

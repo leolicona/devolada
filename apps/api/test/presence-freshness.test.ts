@@ -3,7 +3,7 @@ import { env, fetchMock } from "cloudflare:test";
 import { app, seedBusiness, seedConfirmedPayment, sessionCookieHeader } from "./helpers";
 import { resetProviderCaches } from "../src/wisphub/cache";
 
-/* docs/polish/presence-freshness.spec.md (US-P07), API side: the pulse
+/* docs/legacy/polish/presence-freshness.spec.md (US-P07), API side: the pulse
    (scenario 7), the colo cache keyed by the tenant's last registration
    (scenario 8, provider-latency D4 by key) and the honest readAt
    (scenarios 8–9, BUG-018). Scenario 10 is provider-latency.test.ts

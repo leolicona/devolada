@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/integrations/integrations-hub.spec.md scenarios 1, 10 and 11
+/* docs/legacy/integrations/integrations-hub.spec.md scenarios 1, 10 and 11
    (US-I01–US-I03) — the hub's UI. */
 
 const wisphub = (over: Record<string, unknown> = {}) => ({

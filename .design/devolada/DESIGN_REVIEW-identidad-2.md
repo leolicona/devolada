@@ -1,7 +1,7 @@
 # Design Review: Identidad y acceso — the second look (PRs #150–#154)
 
 Reviewed against: `.design/devolada/DESIGN_BRIEF.md` (the SaaS cycle) and
-`docs/FRONTEND.md`; the shadcn discipline from CLAUDE.md (domain atom in
+`docs/legacy/FRONTEND.md`; the shadcn discipline from CLAUDE.md (domain atom in
 `@devolada/ui` → shadcn primitive in `src/components/ui/` → new component).
 Philosophy: functionalist with a warm accent; status never by colour alone;
 roles hide, never tease; calm by default.

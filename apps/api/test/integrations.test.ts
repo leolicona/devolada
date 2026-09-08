@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { integrations } from "../src/db/schema";
 import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
 
-/* docs/integrations/integrations-hub.spec.md scenarios 1, 2 (API half),
+/* docs/legacy/integrations/integrations-hub.spec.md scenarios 1, 2 (API half),
    10 and 12 (US-I01–I03) — plus the key flow moved verbatim from
    settings D1–D3 (integrations-hub D9). */
 

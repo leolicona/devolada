@@ -7,7 +7,7 @@ import { Alert, Button, Card, Input, Skeleton } from "../src";
    These assert the class list, not rendered color: what is under test is
    the merge that decides which utility survives, which happy-dom can
    answer. Contrast still belongs to the Playwright+axe layer
-   (docs/TESTING.md rule 6). */
+   (docs/legacy/TESTING.md rule 6). */
 
 describe("US-S01: D6 — the login and drop fields keep the size their screen asks for", () => {
   it("keeps the caller's height on Input instead of stacking both", () => {

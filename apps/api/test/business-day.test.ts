@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { startOfBusinessDayMs } from "../src/time/business-day";
 
-/* docs/admin/settings.spec.md D5 — the pure part, on fixed instants. */
+/* docs/legacy/admin/settings.spec.md D5 — the pure part, on fixed instants. */
 
 const iso = (ms: number) => new Date(ms).toISOString();
 

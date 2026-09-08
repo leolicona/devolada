@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { baFail, baOk, businessActor, fail as failResponse, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/admin/shell.spec.md scenarios 2–6. */
+/* docs/legacy/admin/shell.spec.md scenarios 2–6. */
 
 describe("US-S04: login lands on the dashboard shell", () => {
   it("shows the four sections after login", async () => {

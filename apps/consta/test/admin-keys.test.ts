@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { app, apiKeys, db } from "./helpers";
 
-/* docs/consta/validation.spec.md scenario 6 (US-V05, D5) */
+/* docs/legacy/consta/validation.spec.md scenario 6 (US-V05, D5) */
 
 const admin = { Authorization: `Bearer ${env.CONSTA_ADMIN_TOKEN}` };
 

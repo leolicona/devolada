@@ -1,4 +1,4 @@
--- Payments merge (docs/business/business-and-memberships.spec.md D6): one row
+-- Payments merge (docs/legacy/business/business-and-memberships.spec.md D6): one row
 --> statement-breakpoint
 -- is the whole payment. `direct_payments` becomes `payments` and absorbs its
 --> statement-breakpoint

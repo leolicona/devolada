@@ -1,7 +1,7 @@
 # Design Review: Cuenta — the avatar is the fifth section (PR A)
 
 Reviewed against: `.design/devolada/DESIGN_BRIEF.md` and
-`docs/admin/account-hub.spec.md`
+`docs/legacy/admin/account-hub.spec.md`
 Philosophy: Functionalist, warm accent — calm by default, roles hide never
 tease
 Date: 2026-09-02

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { stubAdminApi } from "./stubs";
 
-/* docs/polish/accessibility.spec.md — US-P04, paying TD-010.
+/* docs/legacy/polish/accessibility.spec.md — US-P04, paying TD-010.
 
    The tab order needs a browser and a written expectation of the order.
    This is both: each flow's stops are spelled out, and every stop must

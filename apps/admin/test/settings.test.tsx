@@ -6,7 +6,7 @@ import { settingsResponse } from "@devolada/api/settings-schema";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 
-/* docs/admin/settings.spec.md scenarios 5–7. */
+/* docs/legacy/admin/settings.spec.md scenarios 5–7. */
 
 const settings = (over: Record<string, unknown> = {}) =>
   settingsResponse.parse({
@@ -160,7 +160,7 @@ describe("US-A04: the configured format reaches every time on screen", () => {
   });
 });
 
-/* docs/direct-payment/partial-payment.spec.md D2/D4 (US-D10): the dial
+/* docs/legacy/direct-payment/partial-payment.spec.md D2/D4 (US-D10): the dial
    for short payments, with its meaning computed on screen — the default
    (100 / $0) explained in one line, as the spec's DoD asks. */
 describe("US-R02: the reconciliation policy is the business's", () => {

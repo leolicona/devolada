@@ -2,17 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Devolada: direct SPEI payments with automatic validation for service businesses — today, ISPs running WispHub (permanent payment link → transfer to the ISP's CLABE → Banxico validation through Consta → automatic reconnection). The pivot spec (`docs/platform/pivot.spec.md`) is the constitution; the store network was extracted to the `devolada-red` repo (pivot D15, 2026-08-31). Code identifiers, docs and commits are written in **English**; **user-facing copy is es-MX** (the product ships in Mexico). The glossary in `docs/SPEC.md` maps domain terms both ways (Cobro→`charge`, Pago directo→`direct_payment`, Comprobante de transferencia→`proof`, …) — one word per concept, no synonyms.
+Devolada: direct SPEI payments with automatic validation for service businesses — today, ISPs running WispHub (permanent payment link → transfer to the ISP's CLABE → Banxico validation through Consta → automatic reconnection). The pivot spec (`docs/legacy/platform/pivot.spec.md`) is the constitution; the store network was extracted to the `devolada-red` repo (pivot D15, 2026-08-31). Code identifiers, docs and commits are written in **English**; **user-facing copy is es-MX** (the product ships in Mexico). The glossary in `docs/legacy/SPEC.md` maps domain terms both ways (Cobro→`charge`, Pago directo→`direct_payment`, Comprobante de transferencia→`proof`, …) — one word per concept, no synonyms.
 
 ## Methodology (not optional)
 
-The project is **spec-driven**; the rules live in `docs/SPEC.md` and CI enforces them (`scripts/spec-lint.mjs`):
+> **Migration in flight (from 2026-09-08).** The documentation is moving to
+> GitHub Spec Kit. The whole previous corpus is archived under `docs/legacy/`
+> — still normative, still the source of truth, and `spec-lint` still enforces
+> it there. The new tree begins at [`docs/BRIEF.md`](docs/BRIEF.md) (brief,
+> stack, invariants, glossary, feature list); the plan and its alternatives are
+> in [`docs/spec-kit-migration.eval.md`](docs/spec-kit-migration.eval.md).
+> Until the rebuild lands, **read `docs/legacy/` for anything you need to
+> know** and keep amending specs there.
 
-- **Golden rule**: if it exists in the code but not in `SPEC.md`, it's wrong. Every new feature starts by writing `docs/<domain>/<feature>.spec.md` (with a US-ID reserved in `SPEC.md`) **before** touching code, registered in the index within the same PR. The spec is updated with reality during development; it never forks.
-- **Lite path**: bugfixes/typos/copy carry no spec — they carry an entry in `docs/BUGS.md` (if production was affected) and a test.
-- Conscious debt → `docs/TECH_DEBT.md` (TD-NNN format with a payment condition). Spec template: `docs/auth/sessions.spec.md`.
-- Cross-cutting layers no feature re-decides: `docs/ARCHITECTURE.md`, `docs/FRONTEND.md`, `docs/TESTING.md`, `docs/CICD.md`, `docs/integrations/*.md`.
-- `docs/integrations/agnostic-auth.md` documents the **verified real contract**, which differs from the service's official guide — on conflict, the local file wins.
+The project is **spec-driven**; the rules live in `docs/legacy/SPEC.md` and CI enforces them (`scripts/spec-lint.mjs`):
+
+- **Golden rule**: if it exists in the code but not in `SPEC.md`, it's wrong. Every new feature starts by writing `docs/legacy/<domain>/<feature>.spec.md` (with a US-ID reserved in `docs/legacy/SPEC.md`) **before** touching code, registered in the index within the same PR. The spec is updated with reality during development; it never forks.
+- **Lite path**: bugfixes/typos/copy carry no spec — they carry an entry in `docs/legacy/BUGS.md` (if production was affected) and a test.
+- Conscious debt → `docs/legacy/TECH_DEBT.md` (TD-NNN format with a payment condition). Spec template: `docs/legacy/auth/sessions.spec.md`.
+- Cross-cutting layers no feature re-decides: `docs/legacy/ARCHITECTURE.md`, `docs/legacy/FRONTEND.md`, `docs/legacy/TESTING.md`, `docs/legacy/CICD.md`, `docs/legacy/integrations/*.md`.
+- `docs/legacy/integrations/agnostic-auth.md` documents the **verified real contract**, which differs from the service's official guide — on conflict, the local file wins.
 
 ## Commands
 
@@ -24,26 +33,26 @@ pnpm --filter @devolada/consta dev            # Consta validation API (wrangler,
 pnpm --filter @devolada/api db:generate       # generate a drizzle migration from src/db/schema.ts
 pnpm --filter @devolada/api db:migrate:local  # apply migrations to the local D1
 pnpm -r --if-present typecheck                # typecheck every workspace
-pnpm -r --if-present test                     # tests (infrastructure defined in docs/TESTING.md)
+pnpm -r --if-present test                     # tests (infrastructure defined in docs/legacy/TESTING.md)
 node scripts/spec-lint.mjs                    # local golden-rule enforcement
 pnpm setup:claude                             # hook deps (.claude/hooks) — required for skill auto-activation
 ```
 
 Local dev seed: with the API running, `curl -X POST localhost:8787/dev/seed` creates a demo ISP (`demo@devolada.app`), password `devolada123`. `/dev/*` routes exist only with `ENVIRONMENT=dev`.
 
-**Never deploy from a local machine**: every deploy goes through GitHub Actions (`docs/CICD.md`). Trunk-based on `main`; PR → CI + preview; merge → dev; `v*` tag → prod with approval gate. Parallel features use `git worktree` (coexistence rules in CICD.md: distinct ports, per-worktree local D1, one spec per worktree).
+**Never deploy from a local machine**: every deploy goes through GitHub Actions (`docs/legacy/CICD.md`). Trunk-based on `main`; PR → CI + preview; merge → dev; `v*` tag → prod with approval gate. Parallel features use `git worktree` (coexistence rules in CICD.md: distinct ports, per-worktree local D1, one spec per worktree).
 
 ## Architecture
 
 ```
 apps/api      Hono + Drizzle + Zod on Cloudflare Workers + D1
-apps/consta   Consta: the SPEI validation engine — own Worker + D1 (specs in docs/consta/)
+apps/consta   Consta: the SPEI validation engine — own Worker + D1 (specs in docs/legacy/consta/)
 apps/pago     Public payment page (no sessions; mobile-first)
 apps/admin    ISP dashboard (desktop-first)
 packages/ui   Design tokens (Tailwind v4) + shared atoms
 ```
 
-Invariants that cut across everything (detail in `docs/ARCHITECTURE.md`):
+Invariants that cut across everything (detail in `docs/legacy/ARCHITECTURE.md`):
 
 - **Money is always integer cents**; visible formatting comes solely from `formatMoney`/`<Amount>` in `packages/ui`.
 - **Money history tables are append-only** (house rule, ARCHITECTURE.md): never UPDATE/DELETE; corrections = counter-entries; balances derived with SUM, never stored. The store ledger that embodied it lives in `devolada-red`; the pivot's `credit_entries` is its next instance.
@@ -54,10 +63,10 @@ Invariants that cut across everything (detail in `docs/ARCHITECTURE.md`):
 
 ## Frontend
 
-Laws in `docs/FRONTEND.md`; design artifacts (brief, IA, tasks) in `.design/devolada/` (the SaaS cycle — pivot phase 2; the store-era layer lives in `devolada-red`).
+Laws in `docs/legacy/FRONTEND.md`; design artifacts (brief, IA, tasks) in `.design/devolada/` (the SaaS cycle — pivot phase 2; the store-era layer lives in `devolada-red`).
 
 **Use the `/shadcn` skill for every frontend task.** Check the shadcn catalog before writing a component by hand; copy the primitive into the app's `src/components/ui/` and theme it with our tokens. shadcn is the recipe, the tokens are the law. Order: domain atom in `@devolada/ui` → shadcn primitive → new component.
 
 The other essentials: the tokens in `packages/ui/src/styles/tokens.css` are law (zero hardcoded values; mapped to Tailwind via `@theme inline` in `src/styles/index.css`); `StatusBadge` is the only representation of domain statuses; light+dark via `[data-theme]` (dark is its own palette, not inversion); status is never communicated by color alone (always icon + text).
 
-The ordered build plan lives in `.design/devolada/TASKS.md`; tests cite their user story (`US-D03: …`) per `docs/TESTING.md`.
+The ordered build plan lives in `.design/devolada/TASKS.md`; tests cite their user story (`US-D03: …`) per `docs/legacy/TESTING.md`.

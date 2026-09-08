@@ -1,6 +1,6 @@
 import { defineWorkersConfig, readD1Migrations } from "@cloudflare/vitest-pool-workers/config";
 
-/* Same test shape as apps/api (docs/TESTING.md): the Hono app runs in
+/* Same test shape as apps/api (docs/legacy/TESTING.md): the Hono app runs in
    workerd with a real local D1; the provider is intercepted with fetchMock. */
 export default defineWorkersConfig(async () => {
   const migrations = await readD1Migrations("./migrations");

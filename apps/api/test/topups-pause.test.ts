@@ -8,7 +8,7 @@ import { sweepDirectPayments } from "../src/direct-payments/validation";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
-/* docs/platform/prepaid-credit.spec.md scenarios 8–12 (US-B05, US-B06):
+/* docs/legacy/platform/prepaid-credit.spec.md scenarios 8–12 (US-B05, US-B06):
    the top-up through the platform's own account, and the pause. */
 
 const CONSTA_ORIGIN = "https://consta.test";

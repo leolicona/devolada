@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Contrast enforcement for the design tokens (docs/FRONTEND.md).
+/* Contrast enforcement for the design tokens (docs/legacy/FRONTEND.md).
 
    The brief says minimum AA, with AAA as the target on amounts and
    statuses, and it says dark is its own palette rather than an

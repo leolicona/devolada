@@ -12,7 +12,7 @@ import { BANKS } from "@devolada/api/direct-payments-schema";
 import { App } from "../src/App";
 import { fail, handlers, ok, server } from "./msw";
 
-/* docs/direct-payment/direct-payment.spec.md scenario 15 (US-D01,
+/* docs/legacy/direct-payment/direct-payment.spec.md scenario 15 (US-D01,
    US-D03, D9, D10): the page's four main flows, in es-MX "pago" copy. */
 
 /* D19 put the remembered step in localStorage, so a test that walks to
@@ -887,7 +887,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
   });
 });
 
-/* docs/direct-payment/partial-payment.spec.md scenario 9 (US-D10, D7):
+/* docs/legacy/direct-payment/partial-payment.spec.md scenario 9 (US-D10, D7):
    the `partial` state speaks in pesos, never a percentage, and keeps the
    SPEI instructions in reach — the payer's next action is another
    transfer. */
@@ -1037,7 +1037,7 @@ describe("US-D10: the partial state", () => {
   });
 });
 
-/* docs/direct-payment/direct-payment.spec.md scenarios 57–62 (D19): the
+/* docs/legacy/direct-payment/direct-payment.spec.md scenarios 57–62 (D19): the
    instructions are two steps, and the device remembers which one — the
    transfer happens in the bank app, and coming back is usually a fresh
    page load. */

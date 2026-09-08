@@ -7,7 +7,7 @@ dist/
 # exact pattern did not cover it.
 .dev.vars*
 
-# Playwright (docs/polish/responsive.spec.md)
+# Playwright (docs/legacy/polish/responsive.spec.md)
 test-results/
 playwright-report/
 dist-passkey/

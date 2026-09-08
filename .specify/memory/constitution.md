@@ -19,12 +19,12 @@ Added:
 
 Revised in the same PR (2026-09-08), after measuring the cost of hand-copying a
 platform skill: the vendored `wrangler` was already two rows behind cloudflare/skills
-upstream two days after it was synced. Cloudflare's skills are no longer vendored;
-they install from Cloudflare's marketplace through the `cloudflare` plugin, declared
-project-wide in .claude/settings.json. The section now states how a skill reaches the
-repository (vendored and pinned, or plugin-installed), forbids copying a Cloudflare
-skill into .claude/skills/, and the Workers row gains the retrieval-over-memory rule
-that the workers-best-practices skill opens with.
+upstream two days after it was synced. Cloudflare's two skills are now installed with
+the `skills` CLI straight from cloudflare/skills, which records each one's source and
+content hash in skills-lock.json and can refresh them with `skills update`. The
+section now requires that a skill carry its provenance and prefer an installer that
+can update it over a hand copy, and the Workers row gains the retrieval-over-memory
+rule that the workers-best-practices skill opens with.
 
 Modified principles: none.
 Removed sections: none.
@@ -201,19 +201,22 @@ named skill before writing. A deviation from a convention is recorded in the pla
 Complexity Tracking with the alternative rejected, and it lands as an amendment here before
 the code does — never as a feature-level decision.
 
-A skill reaches the repository one of two ways, and the table says which. Most are vendored
-under `.claude/skills/`, pinned to the upstream commit recorded in
-`.claude/skills/skills.lock.json`. Cloudflare's are **not**: they are installed from
-Cloudflare's own marketplace by the `cloudflare` plugin, declared project-wide in
-`.claude/settings.json` so that every clone resolves the same one, and they MUST NOT be
-copied into `.claude/skills/` — a hand-copied platform skill goes stale against the
-platform it documents, which is how this rule was learned.
+Every skill lives under `.claude/skills/` and is committed, so a clone has them without
+running anything. What matters is where each one came from and whether it can be refreshed:
+a skill whose origin is not recorded cannot be updated, and a skill that is not updated goes
+stale against the thing it documents — the vendored `wrangler` was two rows behind its
+upstream two days after it was copied. So a skill MUST carry its provenance, and it SHOULD
+be installed by a tool that can update it rather than copied by hand. Cloudflare's are
+installed with the `skills` CLI from `cloudflare/skills` and recorded in `skills-lock.json`
+with the content hash of each, which `skills update` checks. The rest were copied from
+another repository before that path was known, and carry their upstream commit in
+`.claude/skills/skills.lock.json`; they move to the same CLI as each is next touched.
 
 | Convention | Skill |
 |---|---|
 | Every HTTP service MUST be a **Hono** app on Workers. Routes validate with Zod through `@hono/zod-validator` and answer with the envelope above; a Hono app is tested through `app.request()` under `@cloudflare/vitest-pool-workers`. | `hono` |
 | Every database access MUST go through **Drizzle** on D1. `src/db/schema.ts` is the source of truth; migrations are generated with `drizzle-kit generate` into `migrations/`, versioned, and applied only through `wrangler d1 migrations apply`. | `drizzle-orm-d1` |
-| Every Worker MUST be declared in a versioned `wrangler.jsonc` and run locally with `wrangler dev`; it deploys only from GitHub Actions (Development workflow). A platform limit, binding or API claim MUST be verified against current documentation rather than recalled. | `wrangler`, `workers-best-practices` (`cloudflare` plugin) |
+| Every Worker MUST be declared in a versioned `wrangler.jsonc` and run locally with `wrangler dev`; it deploys only from GitHub Actions (Development workflow). A platform limit, binding or API claim MUST be verified against current documentation rather than recalled. | `wrangler`, `workers-best-practices` |
 | Every frontend MUST be **React with Vite**, shipped as static assets from its own Worker — no server rendering, no Next.js. Server state lives in TanStack Query; `apps/admin` routes with TanStack Router. | `vite`, `vercel-react-best-practices` |
 | UI primitives MUST come from the **shadcn** catalog, copied into the app's `src/components/ui/` and themed with the tokens (Principle VI). A component library MUST NOT be added as a dependency. | `shadcn` |
 | Tests MUST run on **Vitest** in every workspace — Workers under `@cloudflare/vitest-pool-workers`, UI under happy-dom with Testing Library — and end-to-end flows on **Playwright** from the root configs. | `vitest`, `webapp-testing` |

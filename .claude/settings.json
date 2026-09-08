@@ -2,16 +2,5 @@
   "permissions": {
     "editPermissions": "auto-accept",
     "writePermissions": "auto-accept"
-  },
-  "extraKnownMarketplaces": {
-    "cloudflare": {
-      "source": {
-        "source": "github",
-        "repo": "cloudflare/skills"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "cloudflare@cloudflare": true
   }
 }

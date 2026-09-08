@@ -1,5 +1,5 @@
 {
-  "$comment": "Agent skills vendored into .claude/skills/. Copied by hand from leolicona/miabot@ae37d82 on 2026-09-08, where tools/scripts/sync-skills.sh had synced them from the upstream repositories below at the recorded commits. No overlay was applied to any of these. Devolada carries no sync script: to update a skill, copy it again from its upstream at a newer commit and record the commit here. Cloudflare's skills are NOT vendored here \u2014 they are installed from Cloudflare's own marketplace by the plugin declared in .claude/settings.json, so they update from the source instead of drifting.",
+  "$comment": "Skills copied by hand from leolicona/miabot@ae37d82 on 2026-09-08, where tools/scripts/sync-skills.sh had synced them from the upstream repositories below at the recorded commits. No overlay was applied. This file is the older mechanism: it records where a copy came from but cannot check or refresh it. Cloudflare's skills are NOT here \u2014 they are installed with the `skills` CLI and tracked in ../../skills-lock.json with a content hash, which is the mechanism these should move to as each is next touched.",
   "sources": {
     "hono": {
       "repo": "https://github.com/honojs/skills.git",

@@ -23,7 +23,7 @@ Adopted 2026-08-14 (critical evaluation of FSD + resource-routes). New code is b
 
 - **Resource routes**: `src/routes/<resource>/` with `index.ts` (pure router), `schema.ts` (Zod in/out), `handler.ts` (logic) — **when the resource has real logic**. Trivial routers (e.g. `dev`) stay single-file; the three-file split is a tool, not a dogma.
 - **`schema.ts` is the shareable contract**: frontends derive types from it and MSW handlers validate against it (TESTING.md rule 5 becomes mechanical).
-- **Adapters own the outside world**: `src/auth/` (IdP), `src/email/`, `src/wisphub/` — handlers orchestrate, adapters talk to third parties. No fetch to an external service outside an adapter.
+- **Adapters own the outside world**: `src/auth/` (IdP), `src/email/`, `src/integrations/<provider>/` — handlers orchestrate, adapters talk to third parties. No fetch to an external service outside an adapter. Operated systems sit behind the **provider port** (`docs/integrations/provider-port.spec.md`): an adapter implements `ProviderSource` (reads, synchronous in the reconciliation path) and `ProviderActions` (writes, through the dispatch ledger) and declares a static capability sheet; `providerFor(integration, env)` is the only way to obtain one, and the null provider is what a business with no integration gets. Nothing outside the adapter speaks a provider's API or vocabulary — rows, envelope and copy say `PROVIDER_*`.
 - **Cross-resource invariants get their own module**: an invariant more than one resource writes lives in one module, never inline in handlers (the retired store ledger set the pattern: every write went through `src/ledger/`). Duplicated invariants are dead invariants.
 
 ### Frontend (`apps/admin`, `apps/pago`)

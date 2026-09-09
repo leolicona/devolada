@@ -1,11 +1,11 @@
 {
-  "$comment": "Agent skills vendored into .claude/skills/. Copied by hand from leolicona/miabot@ae37d82 on 2026-09-08, where tools/scripts/sync-skills.sh had synced them from the upstream repositories below at the recorded commits. No overlay was applied to any of these. Devolada carries no sync script: to update a skill, copy it again from its upstream at a newer commit and record the commit here.",
+  "$comment": "Agent skills vendored into .claude/skills/. Every skill lives here as a real directory (no symlinks, no .agents/ mirror) and the commit it came from is recorded below. The original copy came by hand from leolicona/miabot@ae37d82 on 2026-09-08. To update a skill, fetch it again from its upstream at a newer commit and record the commit here: either copy the directory by hand, or run the upstream's installer in a scratch dir (e.g. `npx skills add <repo>`), copy only the skills listed here out of it, and delete what the installer left behind (.agents/, skills-lock.json, symlinks in .claude/skills/). The selection is deliberate: an installer that adds a whole catalog brings skills this project does not use, and every skill description costs context in every session.",
   "sources": {
     "cloudflare": {
       "repo": "https://github.com/cloudflare/skills.git",
       "ref": "main",
-      "commit": "d924cd8f59e75e08fd3dd52843bb2776de35c77e",
-      "synced_at": "2026-09-06T20:41:18Z",
+      "commit": "b052c32bab7dd493513260228a36c88294f343f1",
+      "synced_at": "2026-09-09T00:25:50Z",
       "license": "Apache-2.0",
       "official": true,
       "skills": [
@@ -16,8 +16,17 @@
         {
           "name": "workers-best-practices",
           "path": "skills/workers-best-practices"
+        },
+        {
+          "name": "durable-objects",
+          "path": "skills/durable-objects"
+        },
+        {
+          "name": "agents-sdk",
+          "path": "skills/agents-sdk"
         }
-      ]
+      ],
+      "note": "Upstream publishes 14 skills; only these four are vendored. wrangler and workers-best-practices back the Workers convention in the constitution's stack table; durable-objects and agents-sdk are kept as reference for Workers primitives Devolada does not use yet and are deliberately NOT in that table — they name no convention, so no task is required to load them. Deliberately left out: cloudflare (product chooser), cloudflare-one, cloudflare-one-migrations, cloudflare-email-service, nextjs-on-cloudflare, sandbox-stable, sandbox-next, sandbox-migrate-to-next, turnstile-spin, web-perf."
     },
     "hono": {
       "repo": "https://github.com/honojs/skills.git",

@@ -45,7 +45,7 @@ sequential — do not parallelise it.
 - [ ] T007 Extend the `@theme inline` block in `packages/ui/src/styles/index.css` with the mappings from `contracts/design-tokens.md`: `--z-index-*` for the six positions, `--transition-duration-*` for the four durations, `--ease-default` plus the `--ease-in` / `--ease-out` overrides, and `--animate-breath`. Note in a comment that the theme keys are Tailwind's names, not ours, and that both are required (research R1)
 - [ ] T008 Bind `--default-transition-duration: var(--duration-fast)` and `--default-transition-timing-function: var(--easing-default)` in the same `@theme inline` block in `packages/ui/src/styles/index.css`, with a comment recording that this is what makes a bare `transition-colors` obey the tokens (research R2) (depends on T007)
 - [ ] T009 Add `@keyframes breath` to `packages/ui/src/styles/index.css` animating opacity only — `50% { opacity: var(--opacity-breath) }` — with a comment stating that no transform may ever enter these keyframes, because the reduced-motion exception depends on it (depends on T006, T007)
-- [ ] T010 Amend the `prefers-reduced-motion` block in `packages/ui/src/styles/index.css`: keep the blanket flattening and add one exception re-enabling animation for `[data-motion="breath"]`, citing `design-foundations D13` and constitution VI (depends on T009)
+- [ ] T010 Amend the `prefers-reduced-motion` block in `packages/ui/src/styles/index.css`: keep the blanket flattening and add one exception re-enabling animation for `[data-motion="breath"]`, citing `design-foundations D13` and constitution VI. **The exception MUST carry `!important` on `animation-duration` and `animation-iteration-count`, and MUST come after the blanket rule.** The blanket rule uses `!important`, which beats specificity — without it the breath silently stays frozen and every visual check still "passes" because a frozen screen and a working one look identical in a screenshot (depends on T009)
 
 **Checkpoint**: values exist and reach the utilities. `pnpm --filter @devolada/ui build` succeeds and `z-modal`, `duration-slow`, `ease-default` and `animate-breath` resolve.
 
@@ -60,14 +60,14 @@ arrives it fades in, the same way for a confirmation and a refusal.
 whether the page is still working; then let the outcome land and ask whether it
 was noticed. Needs no part of US2 or US3.
 
-- [ ] T011 [P] [US1] Create the `Pending` atom in `packages/ui/src/components/pending.tsx` per `contracts/components.md`: props `active`, `label`, `children`; sets `data-motion="breath"` and `animate-breath` only while active; applies no transform; honours the ~200ms flash threshold and a minimum visible duration (FR-014)
+- [ ] T011 [P] [US1] Create the `Pending` atom in `packages/ui/src/components/pending.tsx` per `contracts/components.md`: props `active`, `label`, `announce`, `children`; sets `data-motion="breath"` and `animate-breath` only while active; announces `label` itself only when `announce` is true, so a caller that already owns a live region passes `announce={false}` and no state is ever read out twice; applies no transform; honours the ~200ms flash threshold and a minimum visible duration (FR-014)
 - [ ] T012 [P] [US1] Create the `Reveal` wrapper in `packages/ui/src/components/reveal.tsx`: fades its children in over `--duration-slow` with `--easing-default`, no scale, no translate, identical for good and bad news (FR-012)
 - [ ] T013 [US1] Export `Pending` and `Reveal` from `packages/ui/src/index.ts` (depends on T011, T012)
 - [ ] T014 [P] [US1] Component test in `packages/ui/src/components/pending.test.tsx` citing `design-foundations US1`: the breath attribute is present while active and absent when idle, no transform utility is applied, the label is available to assistive technology, and a process shorter than the flash threshold renders nothing
 - [ ] T015 [P] [US1] Component test in `packages/ui/src/components/reveal.test.tsx` citing `design-foundations US1`: children are rendered, no transform utility is applied, and the same treatment is used regardless of the outcome's tone
-- [ ] T016 [US1] Wrap the verification state in `apps/pago/src/features/pago/PaymentPage.tsx` (the pending branch around lines 604–626) with `Pending`, passing the wording that already exists as `label` and reusing the `aria-live="polite"` region at line 584 rather than adding a second one (depends on T013)
+- [ ] T016 [US1] Wrap the verification state in `apps/pago/src/features/pago/PaymentPage.tsx` (the pending branch around lines 604–626) with `Pending`, passing `announce={false}` so the `aria-live="polite"` region already at line 584 stays the single announcer, and passing the existing wording as `label` for the attribute only (depends on T013)
 - [ ] T017 [US1] Wrap the outcome — the release `Alert` and its refusal counterpart — in `Reveal` in `apps/pago/src/features/pago/PaymentPage.tsx`, without touching the staged waiting copy or its schedule (depends on T013)
-- [ ] T018 [US1] Add `tests/e2e/motion.spec.ts` citing `design-foundations US1`: with `prefers-reduced-motion: reduce` no element animates transform anywhere in either surface, the pending screen still carries the breath, and the outcome still appears
+- [ ] T018 [US1] Add `tests/e2e/motion.spec.ts` citing `design-foundations US1`: with `prefers-reduced-motion: reduce` no element animates transform anywhere in either surface, the outcome still appears, and — the assertion that catches T010 going wrong — the breath's **computed** `animation-duration` is the token's value and not `0.01ms`. Asserting the class or the attribute is not enough; only the computed value proves the cascade resolved the way it was meant to
 - [ ] T019 [US1] Replace the T003 candidate panel in `packages/ui/src/playground/Showcase.tsx` with a permanent `Pending` and `Reveal` demonstration (depends on T011, T012)
 
 **Checkpoint**: User Story 1 is complete and demonstrable on its own.
@@ -103,13 +103,14 @@ where the order says and dims the page identically.
 renders unchanged against the T002 baseline.
 
 - [ ] T028 [US3] Extend the recipe in `packages/ui/src/components/button.tsx` to the contract in `contracts/components.md`: sizes `compact` (40px), `standard` (48px, default), `decisive` (64px, full width); variants `primary`, `secondary`, `ghost`, `destructive`, `link`. Keep the disabled-is-a-different-fill rule both current files document, and delete the file's own `duration-150` while here
-- [ ] T029 [US3] Extend `packages/ui/src/components/input.tsx` with the `compact` size, keeping the `Field` wrapper and the deliberately darker `--color-border-input` edge
-- [ ] T030 [P] [US3] Component test in `packages/ui/src/components/button.test.tsx` citing `design-foundations US3`: all five variants and three sizes render, `decisive` keeps its full width, and disabled changes fill rather than opacity
-- [ ] T031 [P] [US3] Component test in `packages/ui/src/components/input.test.tsx` citing `design-foundations US3`: both sizes render and the field keeps its label, hint and error wiring
-- [ ] T032 [US3] Re-point every back-office import of the local button to `@devolada/ui`, mapping `default`→`primary` and `outline`→`secondary` at each call site (depends on T028)
-- [ ] T033 [US3] Re-point every back-office import of the local input to `@devolada/ui` (depends on T029)
-- [ ] T034 [US3] Delete `apps/admin/src/components/ui/button.tsx` and `apps/admin/src/components/ui/input.tsx`, then confirm nothing imports them (depends on T032, T033)
-- [ ] T035 [US3] Re-run the review captures and diff against the T002 baseline; the back office must render unchanged, and the charge path's decisive action must be unchanged in size (depends on T034)
+- [ ] T029 [US3] Update the payer's surface for the renamed sizes in `apps/pago/src/features/pago/PaymentPage.tsx`: `size="critical"` at lines 225, 286 and 1253 becomes `decisive`, and any reliance on the old `md` default becomes `standard`. This is a compile break the moment T028 lands, so it ships in the same change, not after it. `StatusBadge`'s own `size="md"` is a different prop and is left alone (depends on T028)
+- [ ] T030 [US3] Extend `packages/ui/src/components/input.tsx` with the `compact` size, keeping the `Field` wrapper and the deliberately darker `--color-border-input` edge
+- [ ] T031 [P] [US3] Component test in `packages/ui/src/components/button.test.tsx` citing `design-foundations US3`: all five variants and three sizes render, `decisive` keeps its full width, and disabled changes fill rather than opacity
+- [ ] T032 [P] [US3] Component test in `packages/ui/src/components/input.test.tsx` citing `design-foundations US3`: both sizes render and the field keeps its label, hint and error wiring
+- [ ] T033 [US3] Re-point every back-office import of the local button to `@devolada/ui`, mapping `default`→`primary` and `outline`→`secondary` at each call site (depends on T028)
+- [ ] T034 [US3] Re-point every back-office import of the local input to `@devolada/ui` (depends on T030)
+- [ ] T035 [US3] Delete `apps/admin/src/components/ui/button.tsx` and `apps/admin/src/components/ui/input.tsx`, then confirm nothing imports them (depends on T033, T034)
+- [ ] T036 [US3] Re-run the review captures and diff against the T002 baseline; the back office must render unchanged, and the charge path's decisive action must be unchanged in size (depends on T035)
 
 **Checkpoint**: User Story 3 is complete; no duplicate atom definition remains.
 
@@ -124,16 +125,16 @@ After T008 the two theme defaults carry our tokens, so every remaining
 `duration-150` is redundant: these are **deletions**, and each one must leave the
 rendering identical.
 
-- [ ] T036 [P] Delete `duration-150` in `apps/admin/src/components/ui/tabs.tsx`, `calendar.tsx` and `switch.tsx` (two occurrences in switch)
-- [ ] T037 [P] Delete `duration-150` in `apps/admin/src/features/cobros/CobrosScreen.tsx` and `apps/admin/src/features/feed/FeedScreen.tsx` (two occurrences each)
-- [ ] T038 [P] Delete `duration-150` in `apps/pago/src/features/pago/PaymentPage.tsx` (four occurrences)
-- [ ] T039 [P] Delete `duration-150` in `packages/ui/src/playground/Showcase.tsx`
-- [ ] T040 Verify the debt's own checks against the tree: `grep -rn "duration-[0-9]" apps packages --include="*.tsx" | grep -v node_modules` prints nothing, and `grep -n "var(--duration-" packages/ui/src/styles/index.css` prints the mapping (depends on T036–T039)
-- [ ] T041 Confirm the values now govern (SC-008): temporarily change `--duration-slow` in `packages/ui/src/styles/tokens.css`, observe the outcome reveal change, and revert
-- [ ] T042 Close the register entry with `/speckit-debt-pay unmapped-motion-tokens` (depends on T040)
-- [ ] T043 Run the standing gates: `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `pnpm e2e` — all green, with no new warning
-- [ ] T044 Record the chosen breath pair and any deviation from the plan in `.specify/design/foundations.md`, and confirm every non-obvious rule added by this feature cites `design-foundations D<n>` (constitution I)
-- [ ] T045 Walk `quickstart.md` end to end as a final check
+- [ ] T037 [P] Delete `duration-150` in `apps/admin/src/components/ui/tabs.tsx`, `calendar.tsx` and `switch.tsx` (two occurrences in switch)
+- [ ] T038 [P] Delete `duration-150` in `apps/admin/src/features/cobros/CobrosScreen.tsx` and `apps/admin/src/features/feed/FeedScreen.tsx` (two occurrences each)
+- [ ] T039 [P] Delete `duration-150` in `apps/pago/src/features/pago/PaymentPage.tsx` (four occurrences)
+- [ ] T040 [P] Delete `duration-150` in `packages/ui/src/playground/Showcase.tsx`
+- [ ] T041 Verify the debt's own checks against the tree: `grep -rn "duration-[0-9]" apps packages --include="*.tsx" | grep -v node_modules` prints nothing, and `grep -n "var(--duration-" packages/ui/src/styles/index.css` prints the mapping (depends on T037–T040)
+- [ ] T042 Confirm the values now govern (SC-008): temporarily change `--duration-slow` in `packages/ui/src/styles/tokens.css`, observe the outcome reveal change, and revert
+- [ ] T043 Close the register entry with `/speckit-debt-pay unmapped-motion-tokens` (depends on T041)
+- [ ] T044 Run the standing gates: `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `pnpm e2e` — all green, with no new warning
+- [ ] T045 Record the chosen breath pair and any deviation from the plan in `.specify/design/foundations.md`, and confirm every non-obvious rule added by this feature cites `design-foundations D<n>` (constitution I)
+- [ ] T046 Walk `quickstart.md` end to end as a final check
 
 ---
 
@@ -147,22 +148,22 @@ rendering identical.
   `index.css`.
 - **User Stories (Phases 3–5)**: all depend on Phase 2 only. They touch disjoint
   files and can run in parallel or in priority order.
-- **Cross-cutting (Phase 6)**: T036–T039 depend on T008; T042 depends on the
-  whole debt sweep; T043–T045 depend on every story you intend to ship.
+- **Cross-cutting (Phase 6)**: T037–T040 depend on T008; T043 depends on the
+  whole debt sweep; T044–T046 depend on every story you intend to ship.
 
 ### User Story Dependencies
 
 - **US1 (P1)**: after Phase 2. Independent.
 - **US2 (P2)**: after Phase 2. Independent. Touches only back-office primitives.
-- **US3 (P3)**: after Phase 2. Independent, but T035 needs the T002 baseline, so
+- **US3 (P3)**: after Phase 2. Independent, but T036 needs the T002 baseline, so
   do not skip T002 even when starting with US3.
 
 ### Parallel Opportunities
 
 - Phase 3: T011 ∥ T012, then T014 ∥ T015.
 - Phase 4: T020 ∥ T021 ∥ T022 ∥ T023 ∥ T024 — five different files, no shared state.
-- Phase 5: T030 ∥ T031.
-- Phase 6: T036 ∥ T037 ∥ T038 ∥ T039.
+- Phase 5: T031 ∥ T032.
+- Phase 6: T037 ∥ T038 ∥ T039 ∥ T040.
 - Across phases: US1, US2 and US3 can be worked simultaneously once Phase 2 lands.
 
 ---
@@ -198,7 +199,7 @@ Task: "select.tsx → z-dropdown"
 4. + US3 → one definition per atom.
 5. + Phase 6 → the debt is paid and the register closed.
 
-Each increment leaves the tree green: the gates in T043 are the standing ones,
+Each increment leaves the tree green: the gates in T044 are the standing ones,
 not new to this feature.
 
 ---

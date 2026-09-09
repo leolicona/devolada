@@ -134,11 +134,30 @@
   --shadow-lg: 0 8px 24px rgb(28 25 23 / 0.1);
   --shadow-focus: 0 0 0 3px rgb(15 118 110 / 0.35);
 
+  /* ---------- Stacking: named positions, ten apart (design-foundations D8) ----------
+     Every overlapping surface takes its place from this scale. A raw z-index
+     in a component is drift: the number alone says nothing about what it is
+     meant to sit above. Ten apart so a position can be slipped between two
+     without renumbering the scale. */
+  --z-base: 0;        /* page content */
+  --z-sticky: 10;     /* pinned headers, summary bars */
+  --z-dropdown: 20;   /* menus, popovers, comboboxes */
+  --z-overlay: 30;    /* the dimming behind a modal surface */
+  --z-modal: 40;      /* dialogs, sheets, confirmations */
+  --z-toast: 50;      /* transient notices, above everything */
+
   /* ---------- Motion: minimal and purposeful ---------- */
   --duration-instant: 50ms;
   --duration-fast: 150ms;    /* hover, button press */
   --duration-normal: 250ms;  /* state transitions */
   --duration-slow: 400ms;    /* charge result reveal */
+
+  /* The waiting breath (design-foundations D10, D16). Candidate A from
+     research R3: present without insisting, one step quieter than the
+     skeleton's own pulse, because a waiting *page* must not read as busy as
+     loading *content*. Opacity only — see @keyframes breath in index.css. */
+  --duration-breath: 2400ms;
+  --opacity-breath: 0.7;
 
   --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-in: cubic-bezier(0.4, 0, 1, 1);

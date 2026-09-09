@@ -96,6 +96,55 @@
   --text-3xl: var(--font-size-3xl);
   --text-4xl: var(--font-size-4xl);
   --text-amount: var(--font-size-amount);
+
+  /* Stacking: z-base … z-toast (design-foundations D8).
+     The theme key is Tailwind's name, not ours — the `z-*` utility resolves
+     from `--z-index-*`. Both names are required: ours carries the value,
+     Tailwind's is the bridge. Dropping either silently yields no utility. */
+  --z-index-base: var(--z-base);
+  --z-index-sticky: var(--z-sticky);
+  --z-index-dropdown: var(--z-dropdown);
+  --z-index-overlay: var(--z-overlay);
+  --z-index-modal: var(--z-modal);
+  --z-index-toast: var(--z-toast);
+
+  /* Motion: duration-instant … duration-slow, ease-default.
+     Same rule as above — `duration-*` resolves from `--transition-duration-*`.
+     Until this existed the motion scale governed nothing: editing a duration
+     token changed no pixel, and every component wrote its own literal. */
+  --transition-duration-instant: var(--duration-instant);
+  --transition-duration-fast: var(--duration-fast);
+  --transition-duration-normal: var(--duration-normal);
+  --transition-duration-slow: var(--duration-slow);
+
+  --ease-default: var(--easing-default);
+  /* These two override names Tailwind already defines. Our curves are
+     byte-identical to its own (research R2), so nothing moves on screen; the
+     point is that the curve is pinned to tokens.css and not to a dependency
+     that may revise its defaults. */
+  --ease-in: var(--easing-in);
+  --ease-out: var(--easing-out);
+
+  --animate-breath: breath var(--duration-breath) var(--easing-default) infinite;
+
+  /* What makes a bare `transition-colors` obey the design system (research
+     R2). Tailwind themes these two defaults; without binding them, every
+     unqualified transition falls back to its 150ms rather than ours — the
+     same number today, but ours by accident, not by rule. */
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--easing-default);
+}
+
+/* The waiting breath (design-foundations D10, D13, D16).
+   OPACITY ONLY. No transform may ever enter these keyframes — not a scale,
+   not a translate, not a rotation. The reduced-motion exception below
+   re-enables this animation by name, and that exception is only defensible
+   because nothing here moves. A transform added later would smuggle motion
+   past a person's explicit request for less of it. */
+@keyframes breath {
+  50% {
+    opacity: var(--opacity-breath);
+  }
 }
 
 @layer base {
@@ -130,6 +179,24 @@
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+    }
+
+    /* The one exception (design-foundations D13, D16; constitution VI).
+       Reduced motion means no translation, scale or rotation — it does not
+       mean no feedback. A frozen waiting screen reads as a dead one, and the
+       payer is waiting on money. The breath is opacity only, which is not a
+       vestibular trigger, so it keeps running unchanged.
+
+       BOTH `!important`s are load-bearing, and this rule MUST stay after the
+       blanket one. The blanket rule is `!important`, which beats specificity
+       outright; drop either keyword here and the breath silently stays
+       frozen while every screenshot check still passes — a frozen pending
+       screen and a working one are pixel-identical in a still image. That is
+       why tests/e2e/motion.spec.ts asserts the *computed* animation-duration
+       and not the class. */
+    [data-motion="breath"] {
+      animation-duration: var(--duration-breath) !important;
+      animation-iteration-count: infinite !important;
     }
   }
 }

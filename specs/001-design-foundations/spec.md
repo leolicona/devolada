@@ -174,10 +174,17 @@ screen in the back office renders unchanged.
   widths with no horizontal scrolling.
 - **FR-017**: The feedback vocabulary MUST NOT read the elapsed time or the
   attempt count of any process; a pending state is pending, whatever its age.
-- **FR-018**: The shared button definition MUST cover
-  [NEEDS CLARIFICATION: the two variants only the back office renders today (a destructive action and an inline text-link action) — are they part of the one shared definition, or do they stay back-office-only?]
-- **FR-019**: The permitted low-amplitude change under reduced motion MUST be
-  [NEEDS CLARIFICATION: how far and how slow — an agreed pair of values, or left to the implementer's judgement at review time?]
+- **FR-020**: No screen in either surface may carry a literal duration value.
+  The fifteen that exist today MUST be replaced by the shared motion values as
+  part of this feature.
+- **FR-018**: The shared button definition MUST include the two variants only
+  the back office renders today — a destructive action and an inline
+  text-link action — so that no surface is left keeping a definition of its own.
+- **FR-019**: The change permitted under reduced motion MUST be perceptible as
+  continuing activity and yet subtle enough that a person who asked for less
+  motion is not drawn to look at it. How far it travels and how slowly are
+  chosen by comparing candidates on screen in both themes, not assumed in
+  advance.
 
 ### Key Entities
 
@@ -212,6 +219,8 @@ screen in the back office renders unchanged.
   in the product; removing the former duplicate changes no screen's appearance.
 - **SC-008**: A change to any single motion value in the shared set visibly
   changes what renders, in both surfaces.
+- **SC-012**: A count of literal duration values written into screens is zero,
+  across both surfaces.
 - **SC-009**: A pending state is announced in words to assistive technology on
   every screen that can be pending.
 - **SC-010**: Every text and background pair passes the accessibility contrast
@@ -231,14 +240,13 @@ screen in the back office renders unchanged.
   running for roughly a fifth of a second, and once shown it stays visible long
   enough to be read rather than vanishing the instant the answer lands. Chosen
   as a common interface default because the description did not specify one.
-- **Existing duration literals are debt, not scope.** Fifteen hand-written
-  duration values already in the product are registered as technical debt
-  (`unmapped-motion-tokens`) and are paid separately. This feature makes the
-  motion values reachable (FR-006) and requires new work to consume them, but
-  SC-008 is satisfied by the values governing what this feature adds — the
-  count of pre-existing literals reaching zero belongs to the debt entry.
-  *This is a deliberate narrowing of the "no literal duration value anywhere"
-  criterion in the feature description, to match the decision already recorded.*
+- **The registered duration debt is paid inside this feature.** Fifteen
+  hand-written duration values already in the product are registered as
+  technical debt (`unmapped-motion-tokens`). This feature both makes the motion
+  values reachable (FR-006) and replaces those fifteen (FR-020), because it
+  already has to touch the place where they live and because the product
+  otherwise keeps contradicting its own rule in fifteen places. The debt entry
+  stays open until its own checks confirm the replacement.
 - **The reduced-motion rule is amended, not obeyed as it stands.** The product
   currently flattens every animation when reduced motion is requested. FR-013
   requires carving out a permitted low-amplitude exception; the blanket rule
@@ -262,5 +270,3 @@ screen in the back office renders unchanged.
 - Marketing pages and illustration.
 - The internal construction of surfaces only the back office renders — their
   stacking and dimming are in scope, their anatomy is not.
-- Migrating the fifteen pre-existing duration literals; they are registered
-  debt and are paid on their own schedule.

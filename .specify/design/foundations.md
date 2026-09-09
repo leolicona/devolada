@@ -63,7 +63,7 @@ are restated as the standing record.
 | D12 | **The outcome cross-fades in**, calm, at `--duration-slow` (400ms) — the duration already reserved for exactly this. No celebration: the customer's money is confirmed, not applauded. Applies to the rejection too. | Developer |
 | D13 | **Reduced motion means no translation, scale or rotation — never no feedback.** An opacity-only breath at low amplitude is permitted, because a frozen waiting screen reads as a dead one. This **amends the blanket rule** at `index.css:127-134`, which today flattens every animation to `0.01ms`. | Developer (agent had suggested keeping the blanket rule and moving the signal into text; overruled) |
 | D14 | The vocabulary is **named and covers every feedback state** — waiting, resolving, entering and leaving, retrying — and applies to both surfaces: uploading a receipt, copying a CLABE, saving in admin, validating the transfer. | Developer |
-| D15 | Motion tokens get **mapped to utilities and new literals forbidden**; the 15 existing `duration-150` are **debt**, registered with `/speckit-debt-log` and paid separately. | Developer |
+| D15 | Motion tokens get **mapped to utilities and new literals forbidden**. The 15 existing `duration-150` were registered as the debt `unmapped-motion-tokens`. **Superseded 2026-09-09**: the debt is paid *inside* the design-foundations feature (spec FR-020), not on its own schedule — the feature already touches the file where it lives, and the alternative leaves the tree contradicting Principle VI in 15 places. The register entry stays open until its checks pass. | Developer |
 
 ## 3. Principles for `/speckit-constitution`
 

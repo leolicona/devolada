@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -45,13 +45,23 @@ Two failures found and fixed in place:
    the feature description plus the one this spec introduces (the pre-existing
    duration literals, which are registered debt).
 
-### Open
+### Iteration 2 — 2026-09-09
 
-- **[NEEDS CLARIFICATION] markers: 2 remaining** — FR-018 (do the two
-  back-office-only button variants join the single shared definition?) and
-  FR-019 (the amplitude and period of the change permitted under reduced
-  motion). Both are carried forward from `.specify/design/foundations.md` §6,
-  where they were logged as open when the foundations were recorded. Neither
-  has a defensible default: FR-018 changes the scope of User Story 3, and
-  FR-019 is the difference between a calm signal and a distracting one for the
-  people who asked for less motion.
+Both markers resolved by the developer; validation re-run and all 16 items
+pass.
+
+- **FR-018** — the two back-office-only variants (destructive, inline text
+  link) join the single shared button definition. User Story 3 now closes with
+  no wrapper left behind in the back office.
+- **FR-019** — the amplitude and period permitted under reduced motion are
+  chosen by on-screen comparison during planning rather than fixed here. The
+  spec holds the bar qualitatively (perceptible as activity, not attention
+  seeking) and SC-004 remains the measurable outcome.
+- **Scope change**: the registered debt `unmapped-motion-tokens` is now paid
+  inside this feature. FR-020 and SC-012 were added, the narrowing assumption
+  was replaced, and the exclusion was removed from *Out of Scope*. The debt
+  entry itself is untouched and stays open until `/speckit-debt-pay` verifies
+  its own checks against the tree.
+
+**Status: ready for `/speckit-plan`.** `/speckit-clarify` is not needed — no
+question remains open in the spec.

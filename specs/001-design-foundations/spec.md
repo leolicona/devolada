@@ -184,9 +184,9 @@ screen in the back office renders unchanged.
   text-link action — so that no surface is left keeping a definition of its own.
 - **FR-019**: The change permitted under reduced motion MUST be perceptible as
   continuing activity and yet subtle enough that a person who asked for less
-  motion is not drawn to look at it. How far it travels and how slowly are
-  chosen by comparing candidates on screen in both themes, not assumed in
-  advance.
+  motion is not drawn to look at it. How far it changes and how slowly MUST be
+  confirmed on screen in both themes before merge — the starting pair may be
+  chosen in advance, but shipping it unseen does not satisfy this requirement.
 
 ### Key Entities
 

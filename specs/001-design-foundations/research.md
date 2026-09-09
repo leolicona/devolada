@@ -87,10 +87,15 @@ left at the call site to drift.
 
 ## R3 — How far and how slowly may a pending screen breathe under reduced motion?
 
-**Decision**: The breath is an **opacity-only** animation. Ship candidate **A**
-(`opacity: 1 → 0.7`, 2.4s, `--easing-default`, infinite) as the starting point
-and settle the final pair by comparing the three candidates below on screen in
-both themes, as FR-019 requires. Under `prefers-reduced-motion`, the same
+**Decision**: The breath is an **opacity-only** animation, and the pair is
+**candidate A** — `opacity: 1 → 0.7`, 2.4s, `--easing-default`, infinite
+(developer decision, 2026-09-09, superseding this section's original
+"settle it in a playground panel first"). FR-019's requirement that the pair be
+judged by eye stands, but it is answered on the real pending screen at T047,
+where the animation sits beside the copy it accompanies, instead of in a
+three-swatch comparison that gated every other task. The values are two tokens:
+if T047 rejects them, that is a one-line edit, which is why gating on them
+up front bought nothing. Under `prefers-reduced-motion`, the same
 animation runs unchanged — that is the whole point of choosing opacity.
 
 | Candidate | Amplitude | Period | Reads as |
@@ -109,8 +114,13 @@ used by the skeleton; starting one step gentler than the skeleton keeps the
 pending *page* quieter than pending *content*, which is the right hierarchy.
 
 **Alternatives considered**:
-- *Fixing the pair here, unseen* — rejected by FR-019 itself: the difference
-  between calm and distracting is not decidable in a document.
+- *Never looking at all* — still rejected. FR-019 is right that the difference
+  between calm and distracting is not decidable in a document; what changed is
+  only *when* and *where* the looking happens, not *whether*.
+- *The three-candidate playground panel, up front* — rejected 2026-09-09 as
+  cost without a matching risk. It compared the candidates against each other,
+  which is not the question; the question is how one of them reads next to the
+  waiting copy on a phone.
 - *A separate, quieter animation under reduced motion* — two animations to keep
   in agreement, and the reduced one would be the one nobody reviews. Rejected;
   one animation that is already safe is better than two that must be kept safe.

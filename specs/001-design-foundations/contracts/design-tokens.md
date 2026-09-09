@@ -64,9 +64,21 @@ the default.
 
 | Token | Value | Purpose |
 | --- | --- | --- |
-| `--duration-breath` | `2400ms` | The period of the pending animation (research R3, candidate A — settled by on-screen comparison before merge) |
+| `--duration-breath` | `2400ms` | The period of the pending animation (research R3, candidate A) |
 | `--opacity-breath` | `0.7` | The floor the breath descends to |
 | `--animate-breath` | `breath var(--duration-breath) var(--easing-default) infinite` | Theme key `--animate-breath`, utility `animate-breath` |
+
+**The pair is settled: candidate A, `1 → 0.70` over `2.4s`** (developer decision,
+2026-09-09). Candidate B is Tailwind's own `animate-pulse`, which the skeleton
+already uses — the waiting *page* must stay quieter than loading *content*, or
+the hierarchy inverts. Candidate C's 15% swing at 3s disappears on a bright
+phone screen outdoors, which is where the payer is standing, and an unseen
+signal is the exact failure this feature exists to prevent. A sits one step
+below the skeleton: present without insisting.
+
+T047 confirms this on the real pending screen before merge and may move either
+number. That is a one-line edit here and in `tokens.css`; no component, test or
+contract depends on the values, only on the names.
 
 Keyframes `breath` animate **opacity only**: `50% { opacity: var(--opacity-breath) }`.
 No transform of any kind may enter these keyframes — that is the property the

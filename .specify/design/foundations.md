@@ -64,6 +64,7 @@ are restated as the standing record.
 | D13 | **Reduced motion means no translation, scale or rotation — never no feedback.** An opacity-only breath at low amplitude is permitted, because a frozen waiting screen reads as a dead one. This **amends the blanket rule** at `index.css:127-134`, which today flattens every animation to `0.01ms`. | Developer (agent had suggested keeping the blanket rule and moving the signal into text; overruled) |
 | D14 | The vocabulary is **named and covers every feedback state** — waiting, resolving, entering and leaving, retrying — and applies to both surfaces: uploading a receipt, copying a CLABE, saving in admin, validating the transfer. | Developer |
 | D15 | Motion tokens get **mapped to utilities and new literals forbidden**. The 15 existing `duration-150` were registered as the debt `unmapped-motion-tokens`. **Superseded 2026-09-09**: the debt is paid *inside* the design-foundations feature (spec FR-020), not on its own schedule — the feature already touches the file where it lives, and the alternative leaves the tree contradicting Principle VI in 15 places. The register entry stays open until its checks pass. | Developer |
+| D16 | **The breath is candidate A — opacity `1 → 0.70` over `2.4s`, `--easing-default`, infinite.** Chosen 2026-09-09 without a comparison panel: B is the skeleton's own `animate-pulse`, and a waiting *page* must stay quieter than loading *content*; C's 15% swing at 3s vanishes on a bright phone screen outdoors, and an unseen signal is the failure this feature exists to prevent. The pair is still confirmed by eye before merge (spec FR-019, task T047) — but on the real pending screen, beside the copy it accompanies, not against the other two candidates. Two token values: if the confirmation rejects them it is a one-line edit, which is why gating the feature on deciding them first was withdrawn. | Developer |
 
 ## 3. Principles for `/speckit-constitution`
 
@@ -185,8 +186,9 @@ primitives only the back office renders.
   The charge PWA renders neither today.
 - `[NEEDS CLARIFICATION: do the admin-only primitives eventually move to packages/ui, or is the app the permanent home — move/permanent?]`
   D6 settles today's boundary, not the destination.
-- `[NEEDS CLARIFICATION: the breath's amplitude and period — a measured pair, or left to the implementer's eye?]`
-  D13 permits opacity under reduced motion but names no numbers, and the
-  difference between calm and distracting is exactly those two values.
+- ~~`[NEEDS CLARIFICATION: the breath's amplitude and period — a measured pair,
+  or left to the implementer's eye?]`~~ **Settled 2026-09-09 by D16**: the pair
+  is candidate A, `1 → 0.70` over `2.4s`, confirmed on the real pending screen
+  at T047 rather than in a playground comparison.
 - Table density for the admin was raised and declined (D8). It stays live the
   first time a table screen is specified.

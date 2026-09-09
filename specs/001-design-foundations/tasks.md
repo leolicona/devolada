@@ -22,13 +22,21 @@ demonstrated on its own.
 
 ## Phase 1: Setup
 
-**Purpose**: get a baseline to compare against, and settle the one value the
-plan deliberately left to the eye.
+**Purpose**: get a baseline to compare against.
 
 - [ ] T001 Install workspace dependencies with `pnpm install` at the repository root
 - [ ] T002 Capture the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.config.ts` and keep the output, so User Story 3 can prove the back office renders unchanged
-- [ ] T003 [P] Add a breath-candidate panel to `packages/ui/src/playground/Showcase.tsx` rendering research R3's three candidates (1→0.70 at 2.4s, 1→0.50 at 2.0s, 1→0.85 at 3.0s) side by side
-- [ ] T004 Run `pnpm playground`, compare the three candidates in both themes at a phone-sized viewport, choose one, and record the chosen amplitude and period in `specs/001-design-foundations/contracts/design-tokens.md` §3 (depends on T003; this is FR-019 and blocks merge, not just T006)
+
+> **T003 and T004 were withdrawn on 2026-09-09.** They built a three-candidate
+> panel in the playground and gated every other task on a comparison session
+> there. The breath pair is two numbers in a token: changing it later is a
+> one-line edit to `tokens.css`, so gating the whole feature on deciding it
+> first bought nothing. Candidate A (`1 → 0.70`, `2.4s`) is settled in
+> `contracts/design-tokens.md` §3 and the looking moved to T047, where it
+> happens on the real pending screen with the real copy beside it — a better
+> test than three swatches out of context. The IDs are left as a gap rather
+> than renumbered, so every cross-reference in this file and in the analysis
+> still points where it did.
 
 ---
 
@@ -41,7 +49,7 @@ share one file and T007–T010 share another, so this phase is deliberately
 sequential — do not parallelise it.
 
 - [ ] T005 Add the stacking scale to `packages/ui/src/styles/tokens.css` in `:root` — `--z-base: 0`, `--z-sticky: 10`, `--z-dropdown: 20`, `--z-overlay: 30`, `--z-modal: 40`, `--z-toast: 50`, with a comment citing `design-foundations D8` and noting the ten-step spacing
-- [ ] T006 Add `--duration-breath` and `--opacity-breath` to `packages/ui/src/styles/tokens.css` using the pair chosen in T004, citing `design-foundations D10` (depends on T004, T005)
+- [ ] T006 Add `--duration-breath` and `--opacity-breath` to `packages/ui/src/styles/tokens.css` using the pair settled in `contracts/design-tokens.md` §3 — research R3 candidate A, `2400ms` and `0.7` — citing `design-foundations D10`. T047 confirms the pair on screen and may change these two values; nothing else moves if it does (depends on T005)
 - [ ] T007 Extend the `@theme inline` block in `packages/ui/src/styles/index.css` with the mappings from `contracts/design-tokens.md`: `--z-index-*` for the six positions, `--transition-duration-*` for the four durations, `--ease-default` plus the `--ease-in` / `--ease-out` overrides, and `--animate-breath`. Note in a comment that the theme keys are Tailwind's names, not ours, and that both are required (research R1)
 - [ ] T008 Bind `--default-transition-duration: var(--duration-fast)` and `--default-transition-timing-function: var(--easing-default)` in the same `@theme inline` block in `packages/ui/src/styles/index.css`, with a comment recording that this is what makes a bare `transition-colors` obey the tokens (research R2) (depends on T007)
 - [ ] T009 Add `@keyframes breath` to `packages/ui/src/styles/index.css` animating opacity only — `50% { opacity: var(--opacity-breath) }` — with a comment stating that no transform may ever enter these keyframes, because the reduced-motion exception depends on it (depends on T006, T007)
@@ -68,7 +76,7 @@ was noticed. Needs no part of US2 or US3.
 - [ ] T016 [US1] Wrap the verification state in `apps/pago/src/features/pago/PaymentPage.tsx` (the pending branch around lines 604–626) with `Pending`, passing `announce={false}` so the `aria-live="polite"` region already at line 584 stays the single announcer, and passing the existing wording as `label` for the attribute only (depends on T013)
 - [ ] T017 [US1] Wrap the outcome — the release `Alert` and its refusal counterpart — in `Reveal` in `apps/pago/src/features/pago/PaymentPage.tsx`, without touching the staged waiting copy or its schedule (depends on T013)
 - [ ] T018 [US1] Add `tests/e2e/motion.spec.ts` citing `design-foundations US1`: with `prefers-reduced-motion: reduce` no element animates transform anywhere in either surface, the outcome still appears, and — the assertion that catches T010 going wrong — the breath's **computed** `animation-duration` is the token's value and not `0.01ms`. Asserting the class or the attribute is not enough; only the computed value proves the cascade resolved the way it was meant to
-- [ ] T019 [US1] Replace the T003 candidate panel in `packages/ui/src/playground/Showcase.tsx` with a permanent `Pending` and `Reveal` demonstration (depends on T011, T012)
+- [ ] T019 [US1] Add a permanent `Pending` and `Reveal` demonstration to `packages/ui/src/playground/Showcase.tsx` (depends on T011, T012)
 
 **Checkpoint**: User Story 1 is complete and demonstrable on its own.
 
@@ -133,8 +141,9 @@ rendering identical.
 - [ ] T042 Confirm the values now govern (SC-008): temporarily change `--duration-slow` in `packages/ui/src/styles/tokens.css`, observe the outcome reveal change, and revert
 - [ ] T043 Close the register entry with `/speckit-debt-pay unmapped-motion-tokens` (depends on T041)
 - [ ] T044 Run the standing gates: `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `pnpm e2e` — all green, with no new warning
-- [ ] T045 Record the chosen breath pair and any deviation from the plan in `.specify/design/foundations.md`, and confirm every non-obvious rule added by this feature cites `design-foundations D<n>` (constitution I)
+- [ ] T045 Record the breath pair as confirmed by T047, and any deviation from the plan, in `.specify/design/foundations.md`, and confirm every non-obvious rule added by this feature cites `design-foundations D<n>` (constitution I)
 - [ ] T046 Walk `quickstart.md` end to end as a final check
+- [ ] T047 Settle the breath on screen (FR-019, research R3): with a validation pending on the payer's page, look at the breath in **both** themes at a phone-sized viewport, once with reduced motion on and once off. Judge it as the payer does — against the waiting copy, not against the other candidates. Too insistent or too faint means editing `--opacity-breath` and `--duration-breath` in `packages/ui/src/styles/tokens.css`, nothing else. Record the final pair in `contracts/design-tokens.md` §3 and `.specify/design/foundations.md`. **This is a merge gate**: the pair ships confirmed by eye or it does not ship (depends on T016, T018)
 
 ---
 
@@ -142,7 +151,7 @@ rendering identical.
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: no dependencies. T004 gates T006.
+- **Setup (Phase 1)**: no dependencies, and gates nothing but its own baseline.
 - **Foundational (Phase 2)**: depends on Setup. **Blocks all three stories.**
   Internally sequential — T005–T006 share `tokens.css`, T007–T010 share
   `index.css`.
@@ -185,7 +194,7 @@ Task: "select.tsx → z-dropdown"
 
 ### MVP First (User Story 1 only)
 
-1. Phase 1 Setup — and do not skip T004; the breath's pair is a merge blocker.
+1. Phase 1 Setup.
 2. Phase 2 Foundational.
 3. Phase 3 User Story 1.
 4. **Stop and validate**: quickstart §2, in both themes and with reduced motion.

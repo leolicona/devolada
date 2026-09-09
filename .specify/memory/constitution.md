@@ -1,10 +1,27 @@
 <!--
 Sync Impact Report
 ==================
-Version: 1.1.0 → 1.1.1 (PATCH: the layer documents left the repo, so Governance
-names where they went; no principle changed).
+Version: 1.1.1 → 1.1.2 (PATCH: the bug-log named its location and the gate table
+corrected; no principle changed).
 
-Amended 2026-09-09:
+Amended 2026-09-09 (1.1.2):
+  - The bug-log has a home again. The lite path has required a bug-log entry
+    since 1.0.0, but the register it meant (docs/legacy/BUGS.md) left with the
+    corpus earlier the same day, so the requirement pointed at nothing for the
+    length of a day. It now points at .specify/bugs/<slug>/, written by the
+    Spec Kit bug triage extension installed the same day. This states where an
+    existing obligation is discharged; it does not add one.
+  - The spec-lint row in the gate table still claimed the script proves "code
+    has a spec behind it". That half retired with the corpus on 2026-09-09 and
+    the row was not updated with it; corrected to what the script actually
+    checks. The gate is not weakened by the correction — it was already only
+    checking citations.
+  - Principle VII's citation vocabulary gains the lite-path form (bug: <slug>)
+    alongside US-XNN and <feature-slug> US<n>. A regression test has no user
+    story to cite; without this it would fail the gate for having been born of
+    a bug rather than a feature.
+
+Amended 2026-09-09 (1.1.1):
   - Governance repointed. docs/legacy/ was deleted from this repo and the layer
     documents it held are archived, read-only, in
     leolicona/devoladapago-legacy-documentation. They remain the reference for
@@ -223,11 +240,19 @@ entry (when production was affected) plus a regression test, and no spec. The th
 is exact and MUST NOT be widened: if a business rule or a contract changes, it is a
 spec.
 
+**The bug-log is `.specify/bugs/<slug>/`**, one directory per bug, written by the Spec
+Kit bug triage extension: `/speckit-bug-assess` records the assessment, `/speckit-bug-fix`
+records what changed, `/speckit-bug-test` records the verification. Only `fix` may touch
+source. A verdict MUST NOT be over-claimed — a reproduction that was not run is reported
+as `not-run`, never as verified — and an existing bug directory MUST NOT be overwritten.
+The regression test cites its bug (`bug: <slug>`), which is the lite path's answer to
+Principle VII: a test with no story still says why it exists.
+
 The PR gate MUST stay blocking and MUST NOT be weakened to land a change:
 
 | Gate | What it protects |
 |---|---|
-| `scripts/spec-lint.mjs` | That code has a spec behind it, and that tests cite their story |
+| `scripts/spec-lint.mjs` | That every test cites the story or the bug it proves (Principle VII). Spec coverage itself is Spec Kit's to index under `specs/`, not this script's — it stopped policing that when the corpus left |
 | `scripts/gen-banks.mjs --check` | The bank vocabulary compiled from its measured source |
 | `scripts/contrast-lint.mjs` | Principle VI — tokens and contrast |
 | `pnpm -r typecheck` · `pnpm -r test` · `pnpm -r build` | The rest |
@@ -272,4 +297,4 @@ loss ([migration plan](https://github.com/leolicona/devoladapago-legacy-document
   plan's complexity tracking with the simpler alternative that was rejected; an
   unrecorded violation is a defect.
 
-**Version**: 1.1.1 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-09
+**Version**: 1.1.2 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-09

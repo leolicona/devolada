@@ -205,9 +205,10 @@ Written at T045. Everything here is a deviation from the plan or a fact the
 plan assumed wrongly — the parts that went as written are not repeated.
 
 **The breath pair is candidate A, `1 → 0.70` over `2.4s`** (D16), in
-`tokens.css` as `--opacity-breath` and `--duration-breath`. T047 confirms it on
-the real pending screen; until a person has looked, the pair is settled but not
-confirmed.
+`tokens.css` as `--opacity-breath` and `--duration-breath`. **Confirmed on
+screen by the developer on 2026-09-09** (T047), from the peak/trough captures in
+both themes at a phone width. FR-019 is satisfied: the pair was judged by eye,
+beside the copy it accompanies, before merge.
 
 **The debt `unmapped-motion-tokens` is paid** — verified, all 15 anchors gone,
 `payment.md` records the evidence. D15 said the register entry stays open until

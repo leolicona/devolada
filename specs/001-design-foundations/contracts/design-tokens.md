@@ -76,9 +76,11 @@ phone screen outdoors, which is where the payer is standing, and an unseen
 signal is the exact failure this feature exists to prevent. A sits one step
 below the skeleton: present without insisting.
 
-T047 confirms this on the real pending screen before merge and may move either
-number. That is a one-line edit here and in `tokens.css`; no component, test or
-contract depends on the values, only on the names.
+**Confirmed on screen 2026-09-09 (T047)**, from the peak/trough captures in
+both themes at a phone width — `review-foundations-breath-{peak,trough}-375-*`.
+The pair ships unchanged. Moving it later is still a one-line edit here and in
+`tokens.css`: no component, test or contract depends on the values, only on the
+names.
 
 Keyframes `breath` animate **opacity only**: `50% { opacity: var(--opacity-breath) }`.
 No transform of any kind may enter these keyframes — that is the property the

@@ -146,7 +146,7 @@ export function Showcase() {
               type="button"
               onClick={() => setTheme(value)}
               aria-pressed={theme === value}
-              className={`flex h-9 items-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors duration-150 ${
+              className={`flex h-9 items-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors ${
                 theme === value
                   ? "bg-accent-soft text-link"
                   : "text-ink-soft hover:text-ink"

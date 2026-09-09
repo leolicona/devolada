@@ -809,10 +809,10 @@ export function PaymentPage({ token }: { token: string }) {
                     status.trackingKey && (
                       /* D2: verifying is free, editing is deliberate */
                       <Collapsible>
-                        <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors duration-150 hover:text-ink">
+                        <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
                           Ver los datos enviados
                           <ChevronDown
-                            className="size-5 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                            className="size-5 transition-transform group-data-[state=open]:rotate-180"
                             aria-hidden
                           />
                         </CollapsibleTrigger>
@@ -1259,10 +1259,10 @@ export function PaymentPage({ token }: { token: string }) {
         {/* Beneficiario, banco and concepto are checked once, if at all:
             reachable, not stacked on top of the two that are used (D19) */}
         <Collapsible>
-          <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors duration-150 hover:text-ink">
+          <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
             Ver los demás datos
             <ChevronDown
-              className="size-5 transition-transform duration-150 group-data-[state=open]:rotate-180"
+              className="size-5 transition-transform group-data-[state=open]:rotate-180"
               aria-hidden
             />
           </CollapsibleTrigger>

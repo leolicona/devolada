@@ -209,6 +209,39 @@ test.describe("design-foundations US1: the wait is visible, and reduced motion d
     expect(await runningMovements(page)).toEqual([]);
   });
 
+  /* SC-008: the tokens GOVERN, they are not decoration. Before this feature
+     the motion scale controlled nothing — editing --duration-slow changed no
+     pixel anywhere, because no utility resolved from it and every component
+     wrote its own literal instead. This is the assertion that would have been
+     red for the whole life of the project until now. */
+  test("editing a duration token changes what the screen does", async ({ page }) => {
+    await openWaitingPayer(page);
+    const reveal = page.locator('[data-motion="reveal"]').first();
+
+    await page.route("**/direct-payments/*/status", (route) =>
+      route.fulfill(
+        envelope({
+          status: "confirmed",
+          validationAttempts: 2,
+          nextValidationAt: null,
+          error: null,
+          actionOutcome: "done",
+          folio: "F-1",
+        }),
+      ),
+    );
+    await expect(page.getByText(/tu pago fue registrado/i)).toBeVisible({ timeout: 15_000 });
+
+    const before = await reveal.evaluate((el) => getComputedStyle(el).animationDuration);
+    expect(before).toBe("0.4s");
+
+    await page.evaluate(() =>
+      document.documentElement.style.setProperty("--duration-slow", "2000ms"),
+    );
+    const after = await reveal.evaluate((el) => getComputedStyle(el).animationDuration);
+    expect(after, "the reveal reads its duration from the token, not from a literal").toBe("2s");
+  });
+
   test("the outcome still arrives when the payer asked for less motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openWaitingPayer(page);

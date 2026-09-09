@@ -114,7 +114,7 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
   return (
     <li>
       <Collapsible>
-        <CollapsibleTrigger className="group grid w-full grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 p-4 text-left transition-colors duration-150 hover:bg-muted sm:flex sm:gap-4">
+        <CollapsibleTrigger className="group grid w-full grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 p-4 text-left transition-colors hover:bg-muted sm:flex sm:gap-4">
           <span className="min-w-0 sm:flex-1">
             <span className="block text-sm font-medium">{group.name}</span>
             <span className="block text-sm text-muted-foreground">
@@ -134,7 +134,7 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
           )}
           <Amount cents={group.totalCents} className="shrink-0 text-right text-sm font-semibold sm:w-24" />
           <ChevronDown
-            className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform duration-150 group-data-[state=open]:rotate-180"
+            className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
             aria-hidden
           />
         </CollapsibleTrigger>

@@ -224,7 +224,7 @@ function TransferForm({
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
       <Button
-        size="critical"
+        size="decisive"
         disabled={!valid || busy}
         onClick={() =>
           onSubmit({
@@ -285,7 +285,7 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
           El archivo pesa más de 1 MB. Toma la captura de nuevo o usa los datos de tu transferencia.
         </Alert>
       )}
-      <Button size="critical" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>
+      <Button size="decisive" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>
         <CloudUpload className="size-5" aria-hidden />
         {busy ? "Subiendo…" : "Enviar comprobante"}
       </Button>
@@ -1283,7 +1283,7 @@ export function PaymentPage({ token }: { token: string }) {
           {/* A way forward, not a claim we verify: the payer who already
               transferred yesterday arrives here too, and this is how
               they reach their receipt (D19). */}
-          <Button size="critical" onClick={() => goTo("proof")}>
+          <Button size="decisive" onClick={() => goTo("proof")}>
             Ya hice mi transferencia
           </Button>
           <p className="text-center text-sm text-ink-soft">

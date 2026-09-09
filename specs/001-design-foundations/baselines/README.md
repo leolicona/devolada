@@ -43,6 +43,21 @@ the screenshot to open rather than being left to spot it yourself.
 times the measured noise: high enough that a caret does not cry wolf, low
 enough that a changed colour, border or control size cannot hide under it.
 
+## Two things that differ every run, and are not regressions
+
+Found while running this at T036:
+
+- **Relative times.** `review-admin-links-inicial-*` renders "consultado hace N
+  min" from a fixed stub timestamp against the wall clock. It differs by
+  construction between any two runs, and the gap grows the longer the two are
+  apart. Roughly 1,000 pixels — above the floor, and permanently so.
+- **Hover states.** The mouse stays wherever the last `click()` in the spec put
+  it, so a capture taken after a click can include a hovered control. This is
+  not the suite being wrong; it is the suite photographing a real state. But it
+  makes any control with a hover treatment a moving target.
+
+Both are worth knowing before concluding that a change moved something.
+
 ## What "unchanged" means here
 
 Above the floor is **a question, not a verdict**. Open the pair and look. A

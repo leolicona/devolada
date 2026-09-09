@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Share2, Link as LinkIcon, AlertCircle, Check, WifiOff } from "lucide-react";
-import { Card, ListError, Skeleton, Alert } from "@devolada/ui";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Alert, Button, Card, Input, ListError, Skeleton } from "@devolada/ui";
 import { api, ApiError } from "@/lib/api";
 import { focusReadOptions } from "@/lib/presence";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
@@ -76,8 +74,8 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
           a viewer sees the customer and nothing to press */}
       {canOperate && (
         <div className="col-span-2 flex items-center justify-end gap-2 sm:contents">
-          <Button
-            variant="outline"
+          <Button size="compact"
+            variant="secondary"
             className="shrink-0"
             onClick={() => void handleCopy()}
             title="Copiar enlace"
@@ -102,7 +100,7 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
               </>
             )}
           </Button>
-          <Button
+          <Button size="compact"
             className="shrink-0"
             onClick={() => window.open(row.waLink, "_blank", "noopener,noreferrer")}
           >
@@ -168,7 +166,7 @@ export function LinksScreen() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
           {/* name + autoComplete: without them, phone password managers
               saw a field near the word "usuario" and offered credentials */}
-          <Input
+          <Input size="compact"
             type="search"
             name="roster-search"
             autoComplete="off"
@@ -257,7 +255,7 @@ export function LinksScreen() {
 
         {filtered.length > limit && (
           <div className="mt-4">
-            <Button variant="outline" onClick={() => setLimit((n) => n + PAGE)}>
+            <Button size="compact" variant="secondary" onClick={() => setLimit((n) => n + PAGE)}>
               Mostrar más ({filtered.length - limit} restantes)
             </Button>
           </div>

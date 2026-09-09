@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Plug, PlugZap } from "lucide-react";
-import { Card, ListError, Skeleton } from "@devolada/ui";
+import { Button, Card, ListError, Skeleton } from "@devolada/ui";
 import type { IntegrationsResponse } from "@devolada/api/integrations-schema";
-import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 
 /* The catalog (integrations-hub D1, US-I01): one real card — WispHub —
@@ -56,7 +55,7 @@ export function IntegrationsScreen() {
               </div>
             </div>
             <Link to="/integrations/wisphub">
-              <Button variant={integrations.data.wisphub.configured ? "outline" : "default"}>
+              <Button size="compact" variant={integrations.data.wisphub.configured ? "secondary" : "primary"}>
                 {integrations.data.wisphub.configured ? "Configurar" : "Conectar"}
               </Button>
             </Link>

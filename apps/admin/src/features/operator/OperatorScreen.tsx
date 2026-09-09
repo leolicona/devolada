@@ -1,12 +1,10 @@
-import { Alert, Amount, Card, Skeleton, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, Skeleton, parseMoney } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
 import { BANKS } from "@devolada/api/settings-schema";
 import type { BusinessesListResponse, PlatformBusinessRow, SettingsListResponse } from "@devolada/api/platform-schema";
 import type { CreditEntriesResponse } from "@devolada/api/credit-schema";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -102,7 +100,7 @@ function SettingField({ setting }: { setting: Setting }) {
             </SelectContent>
           </Select>
         ) : (
-          <Input
+          <Input size="compact"
             id={id}
             className={cn("mt-1", setting.type === "clabe" && "font-mono")}
             prefix={isCents ? "$" : undefined}
@@ -120,7 +118,7 @@ function SettingField({ setting }: { setting: Setting }) {
         )}
         {save.error && <p className="mt-1 text-sm font-medium text-error">Valor no válido para esta regla.</p>}
       </div>
-      <Button
+      <Button size="compact"
         aria-label={`Guardar ${KEY_LABELS[setting.key] ?? setting.key}`}
         disabled={!changed || outgoing === null || outgoing === "" || save.isPending}
         onClick={() => outgoing !== null && save.mutate(outgoing)}
@@ -191,7 +189,7 @@ function BusinessDetail({ row, onClose }: { row: PlatformBusinessRow; onClose: (
           <h3 className="text-base font-semibold">{row.name}</h3>
           <p className="text-sm text-ink-soft">{row.email}</p>
         </div>
-        <Button variant="outline" onClick={onClose}>
+        <Button size="compact" variant="secondary" onClick={onClose}>
           Cerrar
         </Button>
       </div>
@@ -209,20 +207,20 @@ function BusinessDetail({ row, onClose }: { row: PlatformBusinessRow; onClose: (
                 <SelectItem value="-">−</SelectItem>
               </SelectContent>
             </Select>
-            <Input aria-label="Monto del ajuste" prefix="$" inputMode="decimal" value={cents} onChange={(e) => setCents(e.target.value)} />
+            <Input size="compact" aria-label="Monto del ajuste" prefix="$" inputMode="decimal" value={cents} onChange={(e) => setCents(e.target.value)} />
           </div>
           <Label htmlFor={`reason-${row.id}`}>Motivo (obligatorio)</Label>
           <Textarea id={`reason-${row.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Por qué, para quien lo lea después" />
           {adjust.error && <p className="text-sm font-medium text-error">No se guardó el ajuste.</p>}
-          <Button disabled={!adjustValid || adjust.isPending} onClick={() => adjust.mutate()}>
+          <Button size="compact" disabled={!adjustValid || adjust.isPending} onClick={() => adjust.mutate()}>
             Registrar ajuste
           </Button>
         </div>
         <div className="space-y-2 rounded-md border border-border p-4">
           <Label htmlFor={`override-${row.id}`}>Tarifa negociada (vacío = global)</Label>
-          <Input id={`override-${row.id}`} prefix="$" inputMode="decimal" value={override} onChange={(e) => setOverride(e.target.value)} />
+          <Input size="compact" id={`override-${row.id}`} prefix="$" inputMode="decimal" value={override} onChange={(e) => setOverride(e.target.value)} />
           {patch.error && <p className="text-sm font-medium text-error">Tarifa fuera de rango.</p>}
-          <Button variant="outline" disabled={patch.isPending} onClick={() => patch.mutate()}>
+          <Button size="compact" variant="secondary" disabled={patch.isPending} onClick={() => patch.mutate()}>
             Guardar tarifa
           </Button>
         </div>
@@ -255,7 +253,7 @@ function BusinessesTab() {
   });
   return (
     <div className="space-y-4">
-      <Input type="search" aria-label="Buscar negocio" placeholder="Nombre o correo del dueño" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Input size="compact" type="search" aria-label="Buscar negocio" placeholder="Nombre o correo del dueño" value={q} onChange={(e) => setQ(e.target.value)} />
       {list.isPending && <Skeleton className="h-24 w-full" />}
       {list.error && <Alert variant="destructive">No pudimos cargar los negocios.</Alert>}
       {open && <BusinessDetail row={open} onClose={() => setOpen(null)} />}

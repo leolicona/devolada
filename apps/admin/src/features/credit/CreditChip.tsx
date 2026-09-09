@@ -1,7 +1,6 @@
-import { Alert, Amount } from "@devolada/ui";
+import { Alert, Amount, Button } from "@devolada/ui";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, CircleDollarSign, PauseCircle, TriangleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { BusinessActor } from "../auth/session";
 
@@ -72,7 +71,7 @@ export function CreditBanner({ credit, canTopUp }: { credit: BusinessActor["cred
       </span>
       {canTopUp && (
         <Link to="/settings/credit" className="block">
-          <Button variant={paused ? "default" : "outline"}>Recargar</Button>
+          <Button size="compact" variant={paused ? "primary" : "secondary"}>Recargar</Button>
         </Link>
       )}
     </Alert>

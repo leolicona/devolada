@@ -180,7 +180,7 @@ export function Showcase() {
       {/* Buttons */}
       <Section title="Botones — 64px el crítico, 48px el estándar">
         <div className="space-y-4">
-          <Button size="critical">Cobrar $415.00</Button>
+          <Button size="decisive">Cobrar $415.00</Button>
           <div className="flex flex-wrap gap-3">
             <Button>Registrar entrega</Button>
             <Button variant="secondary">Ver movimientos</Button>

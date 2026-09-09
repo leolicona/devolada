@@ -2,13 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, TriangleAlert, Check, Link as LinkIcon, Share2, WifiOff } from "lucide-react";
-import { Alert, Amount, Card, ListError, Skeleton } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, ListError, Skeleton } from "@devolada/ui";
 import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import type { PulseResponse } from "@devolada/api/payments-schema";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { roleCan } from "@devolada/api/role-matrix";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -143,7 +141,7 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
         <CollapsibleContent>
           {canOperate && linkUrl && (
             <div className="flex flex-wrap items-center gap-2 border-t border-line-soft bg-muted/50 px-4 pt-3">
-              <Button variant="outline" aria-live="polite" onClick={() => void copyLink()}>
+              <Button size="compact" variant="secondary" aria-live="polite" onClick={() => void copyLink()}>
                 {copied === null ? (
                   <>
                     <LinkIcon className="size-4" aria-hidden /> Copiar link
@@ -157,7 +155,7 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
                 )}
               </Button>
               {waLink && (
-                <Button onClick={() => window.open(waLink, "_blank", "noopener,noreferrer")}>
+                <Button size="compact" onClick={() => window.open(waLink, "_blank", "noopener,noreferrer")}>
                   <Share2 className="size-4" aria-hidden /> WhatsApp
                 </Button>
               )}
@@ -248,7 +246,7 @@ export function CobrosScreen() {
         <Card className="mt-4 p-6">
           <p className="text-sm">Conecta WispHub para ver tus cobros.</p>
           <Link to="/settings/direct-payment" className="mt-3 block">
-            <Button variant="outline">Ir a Configuración</Button>
+            <Button size="compact" variant="secondary">Ir a Configuración</Button>
           </Link>
         </Card>
       </main>
@@ -321,7 +319,7 @@ export function CobrosScreen() {
                 </TabsTrigger>
               ))}
             </TabsList>
-            <Input
+            <Input size="compact"
               value={q}
               onChange={(e) => { setQ(e.target.value); setPages(1); }}
               placeholder="Buscar por nombre o usuario"
@@ -349,7 +347,7 @@ export function CobrosScreen() {
                 </Card>
               )}
               {visible.length > shown.length && (
-                <Button variant="outline" className="mt-3" onClick={() => setPages((p) => p + 1)}>
+                <Button size="compact" variant="secondary" className="mt-3" onClick={() => setPages((p) => p + 1)}>
                   Mostrar más ({visible.length - shown.length} restantes)
                 </Button>
               )}

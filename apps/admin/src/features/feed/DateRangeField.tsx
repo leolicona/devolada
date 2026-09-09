@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { Button } from "@devolada/ui";
 import { CalendarDays } from "lucide-react";
 import type { DateRange } from "react-day-picker";
-import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -71,7 +71,7 @@ function RangeBody({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Rangos rápidos">
         {presetsFor(today).map((p) => (
-          <Button key={p.label} type="button" variant="outline" className="h-11 sm:h-9" onClick={() => onPreset(p)}>
+          <Button size="compact" key={p.label} type="button" variant="secondary" className="h-11 sm:h-9" onClick={() => onPreset(p)}>
             {p.label}
           </Button>
         ))}
@@ -89,10 +89,10 @@ function RangeBody({
           {preview ?? "Elige un día o un rango."}
         </p>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" className="h-11 sm:h-10" onClick={onClear}>
+          <Button size="compact" type="button" variant="secondary" className="h-11 sm:h-10" onClick={onClear}>
             Limpiar
           </Button>
-          <Button type="button" className="h-11 sm:h-10" onClick={onApply}>
+          <Button size="compact" type="button" className="h-11 sm:h-10" onClick={onApply}>
             Aplicar
           </Button>
         </div>
@@ -144,7 +144,7 @@ export function DateRangeField({ from, to, onChange, timezone, todayMs }: Props)
     <>
       <Sheet open={sheetOpen} onOpenChange={open(setSheetOpen)}>
         <SheetTrigger asChild>
-          <Button type="button" variant="outline" className="h-11 sm:hidden">
+          <Button size="compact" type="button" variant="secondary" className="h-11 sm:hidden">
             {trigger}
           </Button>
         </SheetTrigger>
@@ -155,7 +155,7 @@ export function DateRangeField({ from, to, onChange, timezone, todayMs }: Props)
       </Sheet>
       <Popover open={popoverOpen} onOpenChange={open(setPopoverOpen)}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="hidden sm:inline-flex">
+          <Button size="compact" type="button" variant="secondary" className="hidden sm:inline-flex">
             {trigger}
           </Button>
         </PopoverTrigger>

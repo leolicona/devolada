@@ -2,15 +2,13 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Card, ListError, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
+import { Button, Card, Input, ListError, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
 import type {
   IntegrationsResponse,
   WisphubIntegration,
   WisphubPatchRequest,
   WispHubTestResponse,
 } from "@devolada/api/integrations-schema";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -77,7 +75,7 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
       </p>
       <div>
         <Label htmlFor="wisphub-key">Nueva llave</Label>
-        <Input
+        <Input size="compact"
           id="wisphub-key"
           className="mt-1 font-mono"
           value={key}
@@ -90,11 +88,11 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={test.isPending} onClick={() => test.mutate(key.trim() || undefined)}>
+        <Button size="compact" variant="secondary" disabled={test.isPending} onClick={() => test.mutate(key.trim() || undefined)}>
           <KeyRound className="size-4" aria-hidden />
           {test.isPending ? "Probando…" : "Probar conexión"}
         </Button>
-        <Button
+        <Button size="compact"
           disabled={save.isPending || key.trim().length < 8}
           onClick={() => save.mutate({ wisphubApiKey: key.trim() })}
         >
@@ -207,7 +205,7 @@ function MappingCard({ wisphub }: { wisphub: WisphubIntegration }) {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="map-percent">Porcentaje mínimo del adeudo</Label>
-                <Input
+                <Input size="compact"
                   id="map-percent"
                   inputMode="numeric"
                   className="mt-1"
@@ -220,7 +218,7 @@ function MappingCard({ wisphub }: { wisphub: WisphubIntegration }) {
               </div>
               <div>
                 <Label htmlFor="map-floor">Mínimo en pesos</Label>
-                <Input
+                <Input size="compact"
                   id="map-floor"
                   prefix="$"
                   inputMode="decimal"
@@ -251,7 +249,7 @@ function MappingCard({ wisphub }: { wisphub: WisphubIntegration }) {
           El porcentaje debe ser un número entero entre 0 y 100, y el mínimo un monto válido.
         </p>
       )}
-      <Button
+      <Button size="compact"
         disabled={!valid || save.isPending}
         onClick={() =>
           save.mutate({

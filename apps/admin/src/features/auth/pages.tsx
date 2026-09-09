@@ -1,10 +1,8 @@
-import { Alert } from "@devolada/ui";
+import { Alert, Button, Input } from "@devolada/ui";
 import { useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { authClient, passkeysSupported } from "@/lib/auth-client";
@@ -121,22 +119,22 @@ export function LoginPage() {
       >
         <div>
           <Label htmlFor="email">Correo</Label>
-          <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div>
           <Label htmlFor="password">Contraseña</Label>
-          <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input size="compact" id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {submit.error && <Alert variant="destructive">{submit.error}</Alert>}
-        <Button type="submit" size="lg" className="w-full" disabled={submit.busy}>
+        <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
           {submit.busy ? "Entrando…" : "Entrar"}
         </Button>
         {/* US-S07: one-touch sign-in for devices with an enrolled passkey */}
         {passkeysSupported() && (
           <Button
             type="button"
-            variant="outline"
-            size="lg"
+            variant="secondary"
+            size="standard"
             className="w-full"
             onClick={async () => {
               const { error } = await authClient.signIn.passkey();
@@ -200,7 +198,7 @@ export function SignupPage() {
       >
         <div>
           <Label htmlFor="name">Tu nombre</Label>
-          <Input
+          <Input size="compact"
             id="name"
             autoComplete="name"
             value={name}
@@ -213,7 +211,7 @@ export function SignupPage() {
         </div>
         <div>
           <Label htmlFor="email">Correo</Label>
-          <Input
+          <Input size="compact"
             id="email"
             type="email"
             autoComplete="email"
@@ -227,7 +225,7 @@ export function SignupPage() {
         </div>
         <div>
           <Label htmlFor="password">Contraseña</Label>
-          <Input
+          <Input size="compact"
             id="password"
             type="password"
             autoComplete="new-password"
@@ -246,7 +244,7 @@ export function SignupPage() {
           )}
         </div>
         {submit.error && <Alert variant="destructive">{submit.error}</Alert>}
-        <Button type="submit" size="lg" className="w-full" disabled={submit.busy}>
+        <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
           {submit.busy ? "Creando…" : "Crear cuenta"}
         </Button>
         <p className="text-center text-sm">
@@ -304,12 +302,12 @@ export function VerifyEmailPage() {
         {!given && (
           <div>
             <Label htmlFor="email">Correo</Label>
-            <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
         )}
         <div>
           <Label htmlFor="code">Código</Label>
-          <Input
+          <Input size="compact"
             id="code"
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -319,11 +317,11 @@ export function VerifyEmailPage() {
           />
         </div>
         {confirm.error && <Alert variant="destructive">{confirm.error}</Alert>}
-        <Button type="submit" size="lg" className="w-full" disabled={confirm.busy || code.length < 6}>
+        <Button type="submit" size="standard" className="w-full" disabled={confirm.busy || code.length < 6}>
           {confirm.busy ? "Confirmando…" : "Confirmar"}
         </Button>
         <p className="text-center text-sm">
-          <Button
+          <Button size="compact"
             variant="link"
             disabled={!EMAIL_SHAPE.test(address)}
             onClick={() => {
@@ -408,10 +406,10 @@ export function RecoverPage() {
         >
           <div>
             <Label htmlFor="email">Correo</Label>
-            <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
-          <Button type="submit" size="lg" className="w-full" disabled={ask.busy}>
+          <Button type="submit" size="standard" className="w-full" disabled={ask.busy}>
             {ask.busy ? "Enviando…" : "Enviar código"}
           </Button>
           {backToLogin}
@@ -428,7 +426,7 @@ export function RecoverPage() {
           <Alert>Si existe una cuenta con {email}, le enviamos un código.</Alert>
           <div>
             <Label htmlFor="code">Código</Label>
-            <Input
+            <Input size="compact"
               id="code"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -439,21 +437,21 @@ export function RecoverPage() {
           </div>
           <div>
             <Label htmlFor="password">Nueva contraseña</Label>
-            <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input size="compact" id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="confirm">Repite la contraseña</Label>
-            <Input id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            <Input size="compact" id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </div>
           {reset.error && <Alert variant="destructive">{reset.error}</Alert>}
           {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
-          <Button type="submit" size="lg" className="w-full" disabled={reset.busy}>
+          <Button type="submit" size="standard" className="w-full" disabled={reset.busy}>
             {reset.busy ? "Guardando…" : "Guardar contraseña"}
           </Button>
           <p className="text-center text-sm">
             {/* The same confirmation the verify banner gives: a resend that
                 says nothing looks like a button that did nothing. */}
-            <Button
+            <Button size="compact"
               variant="link"
               disabled={ask.busy}
               onClick={() => {

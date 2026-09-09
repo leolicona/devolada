@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
+import { Button } from "@devolada/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { logout } from "./session";
 
 /* A door out for every screen that holds a session but no shell —
@@ -20,7 +20,7 @@ export function SignOutLink({ email }: { email?: string }) {
   return (
     <p className="mt-6 flex flex-wrap items-center justify-center gap-x-2 text-sm text-ink-soft">
       {email && <span className="truncate">Entraste como {email}.</span>}
-      <Button variant="link" className="gap-1" onClick={() => void onLogout()}>
+      <Button size="compact" variant="link" className="gap-1" onClick={() => void onLogout()}>
         <LogOut className="size-4" aria-hidden />
         Cerrar sesión
       </Button>

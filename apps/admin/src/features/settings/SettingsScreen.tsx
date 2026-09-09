@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Card, Skeleton, parseMoney } from "@devolada/ui";
+import { Button, Card, Input, Skeleton, parseMoney } from "@devolada/ui";
 import type { SettingsPatchRequest, SettingsResponse } from "@devolada/api/settings-schema";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
@@ -10,8 +10,6 @@ import { useSession } from "../auth/session";
 import { SubPage } from "../account/AccountHub";
 import { bankForClabe } from "@devolada/api/clabe";
 import type { Bank } from "@devolada/api/settings-schema";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -105,7 +103,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
         <div className="sm:col-span-2">
           <Label htmlFor="spei-clabe">CLABE</Label>
           {canEditClabe ? (
-            <Input
+            <Input size="compact"
               id="spei-clabe"
               className="mt-1 font-mono"
               inputMode="numeric"
@@ -174,7 +172,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
         </div>
         <div>
           <Label htmlFor="spei-beneficiary">Nombre del beneficiario (opcional)</Label>
-          <Input
+          <Input size="compact"
             id="spei-beneficiary"
             className="mt-1"
             value={beneficiary}
@@ -188,7 +186,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
         <div>
           <Label htmlFor="spei-fee">Cargo por servicio SPEI</Label>
           {/* design-review D8: money fields carry the sign */}
-          <Input
+          <Input size="compact"
             id="spei-fee"
             prefix="$"
             inputMode="decimal"
@@ -205,7 +203,7 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
         </div>
       </div>
 
-      <Button
+      <Button size="compact"
         disabled={!valid || save.isPending}
         onClick={() =>
           save.mutate({
@@ -253,7 +251,7 @@ function PolicyCard({ settings }: { settings: SettingsResponse }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="policy-tolerance">Tolerancia</Label>
-          <Input
+          <Input size="compact"
             id="policy-tolerance"
             prefix="$"
             inputMode="decimal"
@@ -290,7 +288,7 @@ function PolicyCard({ settings }: { settings: SettingsResponse }) {
           La tolerancia debe ser un monto entre $0.00 y $100.00.
         </p>
       )}
-      <Button
+      <Button size="compact"
         disabled={!valid || save.isPending}
         onClick={() => save.mutate({ toleranceCents: tolCents!, overTreatment: treatment })}
       >
@@ -357,7 +355,7 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
         </div>
       </div>
 
-      <Button
+      <Button size="compact"
         disabled={!changed || save.isPending}
         onClick={() =>
           save.mutate({

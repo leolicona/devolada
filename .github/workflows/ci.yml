@@ -19,10 +19,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Spec-driven enforcement (golden rule)
+      - name: Story citations on tests (constitution VII)
         run: node scripts/spec-lint.mjs
 
-      - name: Bank vocabulary in step with the docs
+      - name: Bank vocabulary in step with scripts/banks.data.md
         run: node scripts/gen-banks.mjs --check
       - name: Contrast and token law (docs/polish/dark-and-contrast.spec.md)
         run: node scripts/contrast-lint.mjs

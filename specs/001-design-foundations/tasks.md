@@ -24,7 +24,7 @@ demonstrated on its own.
 
 **Purpose**: get a baseline to compare against.
 
-- [ ] T001 Install workspace dependencies with `pnpm install` at the repository root
+- [X] T001 Install workspace dependencies with `pnpm install` at the repository root
 - [ ] T002 Capture the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.config.ts` and keep the output, so User Story 3 can prove the back office renders unchanged
 
 > **T003 and T004 were withdrawn on 2026-09-09.** They built a three-candidate

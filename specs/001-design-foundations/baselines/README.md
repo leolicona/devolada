@@ -1,48 +1,62 @@
-# T002 — the pre-change review baseline
+# The design-review baseline, and how to compare against it
 
-Captured **2026-09-09** from `2cb051d` (before any source
-change in this feature) by `playwright.review.config.ts`:
-**136 tests passed in 7.7m, 49 captures** written to `.design/screenshots/`.
+## What T002 got wrong, and the correction
 
-`T002-review-capture.sha256` is the manifest. The PNGs themselves are **not**
-committed — `.design/` was tracked once and deliberately dropped in `5dc5f5d`;
-these images are regenerated, not reviewed in git.
+T002 captured the pre-change review baseline and recorded it as a **sha256
+manifest**, on the stated assumption that the review suite is deterministic.
 
-## What this is for
+**It is not.** Two runs of *identical* code produce different bytes for the
+same capture: measured at 73 pixels out of 1,024,000 — 0.007% — on
+`review-admin-links-inicial-1280.png`. A caret, a focus ring, a glyph's
+antialiasing. Small, but never zero.
 
-T036 re-runs the same captures after User Story 3 renames the control sizes and
-proves the back office renders unchanged. The manifest is how that comparison
-survives losing the working directory.
+A checksum calls that "changed". Run against the manifest after Phase 3 and 4,
+it flagged 21 files, including back-office screens that no change in this
+feature touches. A reviewer who is told everything changed learns nothing and
+stops looking — which is exactly the failure mode of a check that is too
+strict, and worse than having no check at all.
 
-## How to use it at T036
+The manifest is deleted. The comparison is now a **pixel diff with a floor**:
+`scripts/review-diff.mjs`.
+
+## How to compare at T036
 
 ```bash
-pnpm exec playwright test --config playwright.review.config.ts
-cd .design/screenshots && sha256sum *.png | sort -k2 \
-  | diff - ../../specs/001-design-foundations/baselines/T002-review-capture.sha256
+# 1. The baseline: the same captures from the commit before this feature.
+git worktree add /tmp/baseline <commit-before-the-feature>
+cd /tmp/baseline && pnpm install && \
+  pnpm exec playwright test --config playwright.review.config.ts
+cp -r .design/screenshots /tmp/baseline-shots
+
+# 2. The current captures.
+cd - && pnpm exec playwright test --config playwright.review.config.ts
+
+# 3. The diff.
+node scripts/review-diff.mjs /tmp/baseline-shots .design/screenshots
 ```
 
-**No output means nothing moved** — that is the pass, and it is exact.
+Anything above the floor is printed with its pixel count, its worst channel
+delta, and **the bounding box of the difference** — so you know which corner of
+the screenshot to open rather than being left to spot it yourself.
 
-A differing hash is **a question, not a failure**. These are full-page
-screenshots, so sub-pixel antialiasing or a hair of layout timing can shift
-bytes without shifting anything a person would see. Open the pair and look
-before concluding the rename broke something.
+`--max <ratio>` moves the floor. The default is `0.0005` (0.05%), about seven
+times the measured noise: high enough that a caret does not cry wolf, low
+enough that a changed colour, border or control size cannot hide under it.
 
-## If the captures are gone
+## What "unchanged" means here
 
-Regenerate them from `main` — the run is deterministic (both apps are built
-static bundles, the API is stubbed per test), so a re-capture on the same
-commit reproduces the same manifest.
+Above the floor is **a question, not a verdict**. Open the pair and look. A
+real change in this feature — a renamed control size that shifts a button's
+height, a dimming that got darker — moves thousands of pixels in a compact
+box, not seventy scattered ones.
 
 ## Environment note
 
-This container provisions Chromium 141 at Playwright revision 1194, while
-`@playwright/test` 1.62.1 expects 1234 and refuses to launch without it. The
-baseline was taken through an uncommitted `playwright.review.local.config.ts`
-that sets `launchOptions.executablePath` to `/opt/pw-browsers/chromium`.
+This container provisions Chromium 141 at Playwright revision 1194 while
+`@playwright/test` 1.62.1 expects 1234 and refuses to launch. The captures were
+taken through an uncommitted `playwright.review.local.config.ts` that sets
+`launchOptions.executablePath` to `/opt/pw-browsers/chromium`.
 
-That skew does not affect what T036 measures — baseline and re-capture run on
-the same binary, and the comparison is between them, never against a golden
-image. But **a manifest is only comparable to a run on the same browser build**.
-Regenerating on a different Chromium invalidates these hashes wholesale.
+Baseline and comparison must run on the **same browser build**. A different
+Chromium changes text rasterisation everywhere at once, which no floor can tell
+apart from a real regression.

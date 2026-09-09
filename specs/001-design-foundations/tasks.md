@@ -25,7 +25,7 @@ demonstrated on its own.
 **Purpose**: get a baseline to compare against.
 
 - [X] T001 Install workspace dependencies with `pnpm install` at the repository root
-- [X] T002 Capture the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.config.ts` and keep the output, so User Story 3 can prove the back office renders unchanged — 136 passed, 49 captures, manifest at `baselines/T002-review-capture.sha256` (see `baselines/README.md` for how T036 compares against it)
+- [X] T002 Capture the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.config.ts` and keep the output, so User Story 3 can prove the back office renders unchanged — 136 passed, 49 captures, **the sha256 manifest this task first produced was wrong and has been deleted** — the suite is not byte-deterministic (73 px of 1,024,000 differ between two identical runs), so a checksum flags every file and teaches a reviewer nothing. Replaced by `scripts/review-diff.mjs`, a pixel diff with a floor; see `baselines/README.md`
 
 > **T003 and T004 were withdrawn on 2026-09-09.** They built a three-candidate
 > panel in the playground and gated every other task on a comparison session
@@ -90,14 +90,14 @@ surface, in both themes.
 **Independent Test**: open every overlapping surface in both themes; each sits
 where the order says and dims the page identically.
 
-- [ ] T020 [P] [US2] In `apps/admin/src/components/ui/dialog.tsx`, replace `z-50` with `z-overlay` on the overlay and `z-modal` on the content, and `bg-black/50` with `bg-overlay`
-- [ ] T021 [P] [US2] In `apps/admin/src/components/ui/alert-dialog.tsx`, the same substitution, dropping `bg-ink/40`
-- [ ] T022 [P] [US2] In `apps/admin/src/components/ui/sheet.tsx`, the same substitution, dropping `bg-black/50`
-- [ ] T023 [P] [US2] In `apps/admin/src/components/ui/popover.tsx`, replace `z-50` with `z-dropdown`
-- [ ] T024 [P] [US2] In `apps/admin/src/components/ui/select.tsx`, replace `z-50` with `z-dropdown`
-- [ ] T025 [US2] Sweep for survivors: `grep -rn "z-\[\|z-[0-9]" apps packages --include="*.tsx" | grep -v node_modules` must print nothing (FR-002, SC-005) (depends on T020–T024)
-- [ ] T026 [US2] Add `tests/design/review-foundations.spec.ts` citing `design-foundations US2`: capture dialog, sheet and confirmation in both themes so the three dimmings can be compared as images (SC-006)
-- [ ] T027 [US2] Add a scenario to `tests/design/review-foundations.spec.ts` opening a confirmation from an open sheet and capturing it, proving the order resolves rather than depending on which was written last (depends on T026)
+- [X] T020 [P] [US2] In `apps/admin/src/components/ui/dialog.tsx`, replace `z-50` with `z-overlay` on the overlay and `z-modal` on the content, and `bg-black/50` with `bg-overlay`
+- [X] T021 [P] [US2] In `apps/admin/src/components/ui/alert-dialog.tsx`, the same substitution, dropping `bg-ink/40`
+- [X] T022 [P] [US2] In `apps/admin/src/components/ui/sheet.tsx`, the same substitution, dropping `bg-black/50`
+- [X] T023 [P] [US2] In `apps/admin/src/components/ui/popover.tsx`, replace `z-50` with `z-dropdown`
+- [X] T024 [P] [US2] In `apps/admin/src/components/ui/select.tsx`, replace `z-50` with `z-dropdown`
+- [X] T025 [US2] Sweep for survivors: `grep -rn "z-\[\|z-[0-9]" apps packages --include="*.tsx" | grep -v node_modules` must print nothing (FR-002, SC-005) (depends on T020–T024)
+- [X] T026 [US2] Add `tests/design/review-foundations.spec.ts` citing `design-foundations US2`: capture dialog, sheet and confirmation in both themes so the three dimmings can be compared as images (SC-006)
+- [X] T027 [US2] **Could not be captured as written** — the product has no confirmation inside a sheet; the only sheet holds a calendar, and inventing a screen to photograph would prove nothing about the product. What the picture was for is that the order *resolves* rather than falling out of portal order, and that is a number, not an image: `tests/design/review-foundations.spec.ts` now reads the computed `z-index` of the modal (40) and its dimming (30) off the live DOM, and checks the dimming resolves to `--color-surface-overlay` rather than a hand-mixed black. Verified by mutation: putting `z-50` back turns it red (depends on T026)
 
 **Checkpoint**: User Story 2 is complete and verifiable from the captures alone.
 
@@ -118,7 +118,7 @@ renders unchanged against the T002 baseline.
 - [ ] T033 [US3] Re-point every back-office import of the local button to `@devolada/ui`, mapping `default`→`primary` and `outline`→`secondary` at each call site (depends on T028)
 - [ ] T034 [US3] Re-point every back-office import of the local input to `@devolada/ui` (depends on T030)
 - [ ] T035 [US3] Delete `apps/admin/src/components/ui/button.tsx` and `apps/admin/src/components/ui/input.tsx`, then confirm nothing imports them (depends on T033, T034)
-- [ ] T036 [US3] Re-run the review captures and diff against the T002 baseline following `baselines/README.md`; the back office must render unchanged, and the charge path's decisive action must be unchanged in size (depends on T035)
+- [ ] T036 [US3] Re-run the review captures and diff against a baseline rebuilt from the pre-feature commit with `scripts/review-diff.mjs`, following `baselines/README.md`; the back office must render unchanged, and the charge path's decisive action must be unchanged in size (depends on T035)
 
 **Checkpoint**: User Story 3 is complete; no duplicate atom definition remains.
 

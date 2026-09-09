@@ -1,0 +1,1 @@
+../../../.specify/extensions/debt/.specify-dev/agent-commands/claude/speckit-debt-review/SKILL.md

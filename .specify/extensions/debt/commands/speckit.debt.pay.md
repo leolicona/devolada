@@ -1,0 +1,121 @@
+---
+description: "Verify a debt is gone from the code and close its entry with the evidence"
+---
+
+# Pay a Technical Debt
+
+Close a debt entry — but only against evidence. This command **does not write the fix**: paying a
+debt is an ordinary change and goes through the project's normal flow (a spec, a task, a PR).
+What this command does is check that the exit condition in the entry is genuinely satisfied by the
+code as it stands, and then record how that was established.
+
+The separation is the point. A register that closes entries because someone said the work was done
+is a register that lies within a quarter.
+
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+Expect `slug=<slug>` (or a bare slug-like token) naming the entry to close. Optionally a note about
+what paid it — a PR number, a spec directory, a commit.
+
+If no slug is given:
+
+- **Interactive mode**: list the open entries and ask which one. Wait for the answer.
+- **Automated mode**: stop. Do not guess which debt was paid.
+
+Set `DEBT_SLUG` and `DEBT_DIR = .specify/debt/<DEBT_SLUG>`.
+
+## Prerequisites
+
+- `DEBT_DIR/debt.md` must exist. If it does not, say so and list the slugs that do — do not create one.
+- If its front matter already says `status: paid`, report that it is already closed, show the
+  existing `DEBT_DIR/payment.md`, and stop.
+- Read the entry in full: the anchors under *Where it lives*, and the exit condition and trigger
+  under *Paying it*. Those are the criteria. Do not substitute your own.
+
+## Execution
+
+1. **Check each anchor**
+   - Look for every anchor listed in the entry. Record each as `gone`, `present`, `moved` (with the
+     new location), or `unverifiable`.
+   - An anchor that merely `moved` has not been paid — the debt travelled.
+
+2. **Check the exit condition**
+   - Re-read *Paying it* and check each thing it asks for against the tree: the change described,
+     the files it said would be touched, and the confirmation it named.
+   - Where the entry named a test as the confirmation, **run it** using the project's own test
+     command and record the result verbatim. Where it named something not runnable here — a query
+     plan, a production metric, a load profile — say so rather than substituting a proxy.
+
+3. **Reach a verdict.** Choose the weakest one the evidence supports:
+   - `verified` — every anchor is gone and the exit condition was checked and holds. If the entry
+     named a test, that test was actually run and passed.
+   - `partial` — some anchors are gone, or the exit condition holds only in part. Name exactly what
+     remains, with anchors.
+   - `not-run` — the exit condition could not be checked here (no runnable test, needs production
+     data, needs a human). Name the datum or step required.
+
+   **A verdict is never over-claimed.** A test that was not executed is `not-run`, never `verified`,
+   no matter how obviously it would pass. If the evidence is mixed, the verdict is the weaker one.
+
+4. **Write the payment record**
+
+   Write `DEBT_DIR/payment.md` (replacing an earlier `partial` or `not-run` record from a previous
+   attempt — a payment record describes the latest attempt, and the verdict says how far it got):
+
+   ```markdown
+   # Debt Payment: <short title>
+
+   - **Slug**: <DEBT_SLUG>
+   - **Checked**: <ISO 8601 date>
+   - **Verdict**: verified | partial | not-run
+   - **Paid by**: <PR, spec directory, commit, or "unknown">
+
+   ## Anchors
+
+   - `path/to/file.ts:42` — gone
+   - `path/to/other.ts::fn` — moved to `path/to/new.ts::fn`
+
+   ## Exit condition
+
+   <Quote the exit condition from the entry, then say what was checked and what was found.>
+
+   ## Evidence
+
+   <Commands run and their output, verbatim and trimmed to what matters. Name the test file and the
+   assertion that covers the debt. If nothing was run, say so and why.>
+
+   ## What remains
+
+   <For `partial` and `not-run` only: exactly what is still outstanding, with anchors. Omit for
+   `verified`.>
+   ```
+
+5. **Close the entry — only on `verified`**
+   - Set `status: paid` and add `paid: <ISO 8601 date>` to the front matter of `DEBT_DIR/debt.md`.
+     **Those two fields are the only permitted edit to `debt.md`** — the body is the historical
+     record of the trade and stays as written.
+   - On `partial` or `not-run`, leave `status: open` untouched. The payment record stands as the
+     account of the attempt.
+
+6. **Report back**
+   - The verdict on its own line.
+   - The path `.specify/debt/<DEBT_SLUG>/payment.md`.
+   - Whether the entry was closed, and if not, precisely what is still outstanding and who or what
+     can settle it.
+
+## Guardrails
+
+- **Never write source code.** This command reads the tree, may run the project's tests, and writes
+  only inside `.specify/debt/<slug>/`. If the debt is still there, the fix goes through the project's
+  normal flow — start it at `__SPECKIT_COMMAND_SPECIFY__` when it needs a design, or at the project's
+  lite path when it does not.
+- **Never close an entry on anything but `verified`.**
+- **Never rewrite the body of `debt.md`.** Only `status` and `paid` may change, and only here.
+- **Never substitute a proxy for the confirmation the entry named.** If the entry asked for a
+  benchmark and no benchmark exists, that is `not-run` — not a `verified` backed by a reading of
+  the code.
+- **Never invent the payer.** If it is not clear what paid the debt, write `unknown`.

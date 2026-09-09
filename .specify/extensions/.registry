@@ -16,6 +16,22 @@
       },
       "registered_skills": [],
       "installed_at": "2026-09-09T15:10:22.953337+00:00"
+    },
+    "debt": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:e3da3a5e66e91c25535bcc3fb3a03109538f98048d6ab0784afa3f10666c3502",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.debt.log",
+          "speckit.debt.review",
+          "speckit.debt.pay"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-09-09T16:06:12.311652+00:00"
     }
   }
 }

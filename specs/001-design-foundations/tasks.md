@@ -25,7 +25,7 @@ demonstrated on its own.
 **Purpose**: get a baseline to compare against.
 
 - [X] T001 Install workspace dependencies with `pnpm install` at the repository root
-- [ ] T002 Capture the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.config.ts` and keep the output, so User Story 3 can prove the back office renders unchanged
+- [X] T002 Capture the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.config.ts` and keep the output, so User Story 3 can prove the back office renders unchanged — 136 passed, 49 captures, manifest at `baselines/T002-review-capture.sha256` (see `baselines/README.md` for how T036 compares against it)
 
 > **T003 and T004 were withdrawn on 2026-09-09.** They built a three-candidate
 > panel in the playground and gated every other task on a comparison session
@@ -118,7 +118,7 @@ renders unchanged against the T002 baseline.
 - [ ] T033 [US3] Re-point every back-office import of the local button to `@devolada/ui`, mapping `default`→`primary` and `outline`→`secondary` at each call site (depends on T028)
 - [ ] T034 [US3] Re-point every back-office import of the local input to `@devolada/ui` (depends on T030)
 - [ ] T035 [US3] Delete `apps/admin/src/components/ui/button.tsx` and `apps/admin/src/components/ui/input.tsx`, then confirm nothing imports them (depends on T033, T034)
-- [ ] T036 [US3] Re-run the review captures and diff against the T002 baseline; the back office must render unchanged, and the charge path's decisive action must be unchanged in size (depends on T035)
+- [ ] T036 [US3] Re-run the review captures and diff against the T002 baseline following `baselines/README.md`; the back office must render unchanged, and the charge path's decisive action must be unchanged in size (depends on T035)
 
 **Checkpoint**: User Story 3 is complete; no duplicate atom definition remains.
 

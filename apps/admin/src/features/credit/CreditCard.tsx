@@ -1,12 +1,10 @@
-import { Alert, Amount, Card, ListError, Skeleton, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, ListError, Skeleton, parseMoney } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
 import { BANKS } from "@devolada/api/settings-schema";
 import type { Bank } from "@devolada/api/settings-schema";
 import type { CreditEntriesResponse, CreditResponse, TopUpItem, TopUpsResponse } from "@devolada/api/credit-schema";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
@@ -45,8 +43,8 @@ function StepMark({ step }: { step: keyof typeof STEP_COPY }) {
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [done, setDone] = useState(false);
   return (
-    <Button
-      variant="outline"
+    <Button size="compact"
+      variant="secondary"
       className="shrink-0"
       aria-label={`Copiar ${label}`}
       onClick={() => {
@@ -102,10 +100,10 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
       }}
     >
       <div className="flex gap-2" role="tablist" aria-label="Cómo comprobar">
-        <Button type="button" role="tab" aria-selected={door === "transfer"} variant={door === "transfer" ? "default" : "outline"} onClick={() => setDoor("transfer")}>
+        <Button size="compact" type="button" role="tab" aria-selected={door === "transfer"} variant={door === "transfer" ? "primary" : "secondary"} onClick={() => setDoor("transfer")}>
           Datos de la transferencia
         </Button>
-        <Button type="button" role="tab" aria-selected={door === "receipt"} variant={door === "receipt" ? "default" : "outline"} onClick={() => setDoor("receipt")}>
+        <Button size="compact" type="button" role="tab" aria-selected={door === "receipt"} variant={door === "receipt" ? "primary" : "secondary"} onClick={() => setDoor("receipt")}>
           Subir comprobante
         </Button>
       </div>
@@ -114,7 +112,7 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label htmlFor="topup-key">Clave de rastreo</Label>
-            <Input id="topup-key" className="mt-1 font-mono" value={trackingKey} onChange={(e) => setTrackingKey(e.target.value)} autoComplete="off" />
+            <Input size="compact" id="topup-key" className="mt-1 font-mono" value={trackingKey} onChange={(e) => setTrackingKey(e.target.value)} autoComplete="off" />
           </div>
           <div>
             <Label htmlFor="topup-bank">Banco desde el que transferiste</Label>
@@ -133,11 +131,11 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
           </div>
           <div>
             <Label htmlFor="topup-date">Fecha</Label>
-            <Input id="topup-date" type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input size="compact" id="topup-date" type="date" className="mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="topup-amount">Monto transferido</Label>
-            <Input id="topup-amount" prefix="$" inputMode="decimal" className="mt-1" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <Input size="compact" id="topup-amount" prefix="$" inputMode="decimal" className="mt-1" value={amount} onChange={(e) => setAmount(e.target.value)} />
             {belowMin && (
               <p className="mt-1 text-sm font-medium text-error">
                 El mínimo es <Amount cents={credit.minTopUpCents} />.
@@ -148,7 +146,7 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
       ) : (
         <div>
           <Label htmlFor="topup-file">Comprobante (imagen o PDF, hasta 1 MB)</Label>
-          <Input id="topup-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="mt-1" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <Input size="compact" id="topup-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="mt-1" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </div>
       )}
 
@@ -161,7 +159,7 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
               : "No pudimos registrar la recarga. Intenta de nuevo."}
         </Alert>
       )}
-      <Button type="submit" disabled={submit.isPending || (door === "transfer" ? !transferValid : file === null)}>
+      <Button size="compact" type="submit" disabled={submit.isPending || (door === "transfer" ? !transferValid : file === null)}>
         {submit.isPending ? "Validando…" : "Validar recarga"}
       </Button>
     </form>
@@ -266,7 +264,7 @@ export function CreditCard() {
               <Alert variant="warning">Las recargas aún no están disponibles: la plataforma no ha configurado su cuenta.</Alert>
             )
           ) : (
-            <Button onClick={() => setRecharging(true)}>Recargar</Button>
+            <Button size="compact" onClick={() => setRecharging(true)}>Recargar</Button>
           )}
 
           {entries.data && (

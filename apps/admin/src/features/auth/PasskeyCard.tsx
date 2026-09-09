@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
-import { Alert, Card } from "@devolada/ui";
-import { Button } from "@/components/ui/button";
+import { Alert, Button, Card } from "@devolada/ui";
 import { authClient, passkeysSupported } from "@/lib/auth-client";
 import { baGet, baPost } from "@/lib/api";
 
@@ -55,8 +54,8 @@ export function PasskeyCard() {
                     .join(" · ")}
                 </span>
               </span>
-              <Button
-                variant="outline"
+              <Button size="compact"
+                variant="secondary"
                 aria-label={`Quitar ${p.name?.trim() || "llave de acceso"}`}
                 onClick={async () => {
                   setRemoveError(false);
@@ -87,8 +86,8 @@ export function PasskeyCard() {
         {state === "done" ? (
           <Alert variant="success">Listo. Este dispositivo ya puede entrar con huella o rostro.</Alert>
         ) : (
-          <Button
-            variant="outline"
+          <Button size="compact"
+            variant="secondary"
             disabled={state === "busy"}
             onClick={async () => {
               setState("busy");

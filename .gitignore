@@ -14,3 +14,10 @@ dist-passkey/
 
 # Claude Code
 .claude/settings.local.json
+
+# Design-review captures: local output of playwright.review.config.ts, and the
+# throwaway config used to point it at a preprovisioned browser. Tracked once,
+# dropped in 5dc5f5d; never re-add — the images are regenerated, not reviewed
+# in git.
+.design/
+playwright.*.local.config.ts

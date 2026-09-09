@@ -1,8 +1,7 @@
-import { Alert, Card, ListError, Skeleton } from "@devolada/ui";
+import { Alert, Button, Card, ListError, Skeleton } from "@devolada/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Building2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import type { ApiError } from "@/lib/api";
 import { AccessLayout } from "../auth/AccessLayout";
 import { SignOutLink } from "../auth/SignOutLink";
@@ -41,7 +40,7 @@ export function ChooseBusinessScreen({ reason }: { reason: "choose" | "revoked" 
           {orgs.data.map((org) => (
             <li key={org.id}>
               <Card className="p-0">
-                <Button
+                <Button size="compact"
                   variant="ghost"
                   className="h-auto w-full justify-start gap-3 px-4 py-3 text-left"
                   onClick={() => void choose(org.id)}

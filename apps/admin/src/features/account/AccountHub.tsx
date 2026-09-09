@@ -1,10 +1,9 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Amount, Card } from "@devolada/ui";
+import { Amount, Button, Card } from "@devolada/ui";
 import { ChevronLeft, ChevronRight, Eye, Fingerprint, Landmark, LogOut, Plug, SlidersHorizontal, Users, type LucideIcon } from "lucide-react";
 import { roleCan } from "@devolada/api/role-matrix";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { logout, useSession, type BusinessActor } from "../auth/session";
 import { ROLE_LABELS } from "../auth/roles";
@@ -182,7 +181,7 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
       <RailGroup id="hub-cuenta" title="Tu cuenta" rows={cuenta} />
 
       {/* BUG-016: the one door out, for every role, at every width */}
-      <Button variant="outline" className="mt-6 w-full justify-start" onClick={() => void onSignOut()}>
+      <Button size="compact" variant="secondary" className="mt-6 w-full justify-start" onClick={() => void onSignOut()}>
         <LogOut className="size-4" aria-hidden />
         Cerrar sesión
       </Button>

@@ -9,6 +9,8 @@ import {
   cn,
   Field,
   Input,
+  Pending,
+  Reveal,
   Skeleton,
   StatusBadge,
 } from "@devolada/ui";
@@ -222,7 +224,7 @@ function TransferForm({
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
       <Button
-        size="critical"
+        size="decisive"
         disabled={!valid || busy}
         onClick={() =>
           onSubmit({
@@ -283,7 +285,7 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
           El archivo pesa más de 1 MB. Toma la captura de nuevo o usa los datos de tu transferencia.
         </Alert>
       )}
-      <Button size="critical" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>
+      <Button size="decisive" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>
         <CloudUpload className="size-5" aria-hidden />
         {busy ? "Subiendo…" : "Enviar comprobante"}
       </Button>
@@ -609,18 +611,47 @@ export function PaymentPage({ token }: { token: string }) {
                    rides a success Alert (icon + text, the color law),
                    while the badge stays "Verificando pago": the status
                    is still Banxico's; the good news is the service. */
-                return release ? (
-                  <Alert variant="success" layout="icon">
-                    {release.kind === "protect" ? <ShieldCheck aria-hidden /> : <Wifi aria-hidden />}
-                    {release.kind === "protect"
-                      ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
-                      : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
-                  </Alert>
-                ) : (
-                  <p className="text-sm text-ink-soft">
-                    Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes
-                    dejar esta página abierta.
-                  </p>
+                /* design-foundations US1: this calm region is what breathes.
+                   The wait can be six hours, and a still page is
+                   indistinguishable from a dead one — including when the
+                   release has already landed, because Banxico's answer is
+                   still outstanding.
+
+                   announce={false}: the Card above is already
+                   aria-live="polite" (line 584). A second announcer would
+                   read the state out twice.
+
+                   The escalated states below are deliberately outside this
+                   wrapper: a form the payer is filling in must not pulse
+                   under their hands. */
+                return (
+                  <Pending
+                    active
+                    announce={false}
+                    label="Estamos verificando tu transferencia."
+                  >
+                    {release ? (
+                      /* The release is news that arrives mid-wait, so it
+                         fades in like any other outcome (FR-012). */
+                      <Reveal>
+                        <Alert variant="success" layout="icon">
+                          {release.kind === "protect" ? (
+                            <ShieldCheck aria-hidden />
+                          ) : (
+                            <Wifi aria-hidden />
+                          )}
+                          {release.kind === "protect"
+                            ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
+                            : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
+                        </Alert>
+                      </Reveal>
+                    ) : (
+                      <p className="text-sm text-ink-soft">
+                        Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes
+                        dejar esta página abierta.
+                      </p>
+                    )}
+                  </Pending>
                 );
               }
 
@@ -778,10 +809,10 @@ export function PaymentPage({ token }: { token: string }) {
                     status.trackingKey && (
                       /* D2: verifying is free, editing is deliberate */
                       <Collapsible>
-                        <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors duration-150 hover:text-ink">
+                        <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
                           Ver los datos enviados
                           <ChevronDown
-                            className="size-5 transition-transform duration-150 group-data-[state=open]:rotate-180"
+                            className="size-5 transition-transform group-data-[state=open]:rotate-180"
                             aria-hidden
                           />
                         </CollapsibleTrigger>
@@ -840,7 +871,7 @@ export function PaymentPage({ token }: { token: string }) {
         )}
 
         {status.status === "confirmed" && (
-          <>
+          <Reveal className="space-y-4">
             <StatusBadge status="paymentConfirmed" size="md" />
             <p className="text-sm text-ink-soft">
               {"actionOutcome" in status && status.actionOutcome === "done"
@@ -850,7 +881,7 @@ export function PaymentPage({ token }: { token: string }) {
             {"folio" in status && status.folio && (
               <p className="font-mono text-sm text-ink-soft">Folio {status.folio}</p>
             )}
-          </>
+          </Reveal>
         )}
 
         {/* partial-payment D7: brutally honest, and in pesos. The payer is
@@ -858,7 +889,7 @@ export function PaymentPage({ token }: { token: string }) {
             rest does — never a percentage, and never a green tick over a
             service that is still cut. */}
         {status.status === "partial" && (
-          <>
+          <Reveal className="space-y-4">
             <StatusBadge status="paymentPartial" size="md" />
             <p className="text-sm text-ink-soft">
               {"receivedCents" in status && status.receivedCents != null ? (
@@ -908,21 +939,23 @@ export function PaymentPage({ token }: { token: string }) {
             >
               Ver los datos para transferir
             </Button>
-          </>
+          </Reveal>
         )}
 
         {status.status === "queued_for_credit" && (
           /* prepaid-credit D9: the business's fault, never the payer's —
              no "error", no hidden CLABE, no countdown. Calm, like D12's
              family; the poll above brings the payer back on its own. */
-          <Alert variant="warning" layout="icon">
-            Este negocio pausó la validación de pagos. Tu comprobante quedó guardado y se revisará
-            en cuanto la reactiven. No tienes que hacer nada más.
-          </Alert>
+          <Reveal>
+            <Alert variant="warning" layout="icon">
+              Este negocio pausó la validación de pagos. Tu comprobante quedó guardado y se revisará
+              en cuanto la reactiven. No tienes que hacer nada más.
+            </Alert>
+          </Reveal>
         )}
 
         {status.status === "invalid" && (
-          <>
+          <Reveal className="space-y-4">
             <StatusBadge status="paymentInvalid" size="md" />
             <p className="text-sm text-ink-soft">
               {status.error
@@ -932,11 +965,11 @@ export function PaymentPage({ token }: { token: string }) {
             <Button variant="secondary" onClick={retry}>
               Intentar de nuevo
             </Button>
-          </>
+          </Reveal>
         )}
 
         {status.status === "expired" && (
-          <>
+          <Reveal className="space-y-4">
             <StatusBadge status="paymentExpired" size="md" />
             {/* D17: "no pudimos verificarlo" is a statement about us, not
                 an accusation about the payer — and when we know which
@@ -981,17 +1014,17 @@ export function PaymentPage({ token }: { token: string }) {
                 {pay.isPending ? "Enviando…" : "Reintentar ahora"}
               </Button>
             )}
-          </>
+          </Reveal>
         )}
 
         {status.status === "unapplied" && (
-          <>
+          <Reveal className="space-y-4">
             <StatusBadge status="unapplied" size="md" />
             <p className="text-sm text-ink-soft">
               Tu transferencia fue validada, pero tu cuenta ya estaba al corriente. Tu proveedor te
               contactará para resolverlo.
             </p>
-          </>
+          </Reveal>
         )}
       </Card>
     );
@@ -1226,10 +1259,10 @@ export function PaymentPage({ token }: { token: string }) {
         {/* Beneficiario, banco and concepto are checked once, if at all:
             reachable, not stacked on top of the two that are used (D19) */}
         <Collapsible>
-          <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors duration-150 hover:text-ink">
+          <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
             Ver los demás datos
             <ChevronDown
-              className="size-5 transition-transform duration-150 group-data-[state=open]:rotate-180"
+              className="size-5 transition-transform group-data-[state=open]:rotate-180"
               aria-hidden
             />
           </CollapsibleTrigger>
@@ -1250,7 +1283,7 @@ export function PaymentPage({ token }: { token: string }) {
           {/* A way forward, not a claim we verify: the payer who already
               transferred yesterday arrives here too, and this is how
               they reach their receipt (D19). */}
-          <Button size="critical" onClick={() => goTo("proof")}>
+          <Button size="decisive" onClick={() => goTo("proof")}>
             Ya hice mi transferencia
           </Button>
           <p className="text-center text-sm text-ink-soft">

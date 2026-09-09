@@ -1,4 +1,4 @@
-import { Alert } from "@devolada/ui";
+import { Alert, Button } from "@devolada/ui";
 import { useEffect, useRef } from "react";
 import { Link, Navigate, Outlet, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -13,7 +13,6 @@ import {
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
 import { api } from "@/lib/api";
@@ -66,7 +65,7 @@ function SuspendedScreen() {
         <div className="flex flex-wrap justify-center gap-2">
           {support.data.whatsapp && (
             <a href={`https://wa.me/${support.data.whatsapp}`} target="_blank" rel="noopener noreferrer" className="inline-flex">
-              <Button variant="outline">
+              <Button size="compact" variant="secondary">
                 <MessageCircle className="size-4" aria-hidden />
                 WhatsApp
               </Button>
@@ -74,7 +73,7 @@ function SuspendedScreen() {
           )}
           {support.data.email && (
             <a href={`mailto:${support.data.email}`} className="inline-flex">
-              <Button variant="outline">
+              <Button size="compact" variant="secondary">
                 <Mail className="size-4" aria-hidden />
                 {support.data.email}
               </Button>
@@ -238,7 +237,7 @@ export function Shell() {
             </span>
             {roleCan(actor.role, "clabe", "update") && (
               <Link to="/settings/direct-payment" hash="spei" className="block">
-                <Button variant="outline">Configurar</Button>
+                <Button size="compact" variant="secondary">Configurar</Button>
               </Link>
             )}
           </Alert>
@@ -254,7 +253,7 @@ export function Shell() {
               Conecta el sistema con el que cobras. Sin una integración no hay Cobros que validar.
             </span>
             <Link to="/integrations" className="block">
-              <Button variant="outline">Ver integraciones</Button>
+              <Button size="compact" variant="secondary">Ver integraciones</Button>
             </Link>
           </Alert>
         )}

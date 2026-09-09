@@ -64,12 +64,27 @@ One definition, replacing `apps/admin/src/components/ui/button.tsx`.
   files independently document, and it survives the merge.
 - `decisive` keeps today's size and full width.
 - `compact` is not used on the payer's surface (data-model: Control size).
+- **`ghost` takes a `hover:bg-well` fill.** The two recipes disagreed here — the
+  back office had it, the payer's page did not — and one had to win. The hover
+  fill wins because a text-only button otherwise gives a pointer nothing to
+  aim at. It is the single place where this merge changes the payer's surface,
+  and it changes only the hover state; nothing at rest moves.
 
 ## `Input` / `Field` (merged)
 
 One definition, replacing `apps/admin/src/components/ui/input.tsx`. Keeps the
-shared version's `Field` wrapper (label, hint, error) and the 48px standard
-height, gaining `compact` for the back office.
+shared version's `Field` wrapper and the 48px standard height, gaining
+`compact` (40px) for the back office.
+
+> Corrected 2026-09-09: this contract said the `Field` wrapper carries "label,
+> hint, error". It carries a label and nothing else — hint and error live in
+> the callers. The wrapper was not extended to match the sentence; the sentence
+> was corrected to match the wrapper, because nothing asked for the other two.
+
+**Sizes**: `compact` (40px, text-sm, back office) · `standard` (48px, default).
+The size moves the field's height, its type scale, its padding and the gap for
+a leading icon together — a gap that did not shrink with the field would put
+the text under the icon at 40px.
 
 **Guarantee**: the input border stays `--color-border-input`, the one border
 deliberately darker than the card edge so a control is findable (WCAG 1.4.11) —

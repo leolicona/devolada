@@ -1,10 +1,8 @@
-import { Alert } from "@devolada/ui";
+import { Alert, Button, Input } from "@devolada/ui";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InvitationPreviewResponse } from "@devolada/api/businesses-schema";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { AccessLayout } from "../auth/AccessLayout";
@@ -127,7 +125,7 @@ export function AcceptInvitationScreen() {
       <AccessLayout title={title} description={`La invitación es para ${inv.email}.`}>
         <div className="space-y-3">
           <Alert variant="destructive">Entraste como {user.data.email}, y esta invitación fue enviada a otro correo.</Alert>
-          <Button size="lg" variant="outline" className="w-full" onClick={() => void switchAccount()}>
+          <Button size="standard" variant="secondary" className="w-full" onClick={() => void switchAccount()}>
             Entrar con el correo invitado
           </Button>
           <p className="text-center text-sm">
@@ -191,12 +189,12 @@ export function AcceptInvitationScreen() {
         {!inv.hasAccount && (
           <div>
             <Label htmlFor="name">Tu nombre</Label>
-            <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input size="compact" id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
         )}
         <div>
           <Label htmlFor="password">{inv.hasAccount ? "Contraseña" : "Crea tu contraseña"}</Label>
-          <Input
+          <Input size="compact"
             id="password"
             type="password"
             autoComplete={inv.hasAccount ? "current-password" : "new-password"}
@@ -211,7 +209,7 @@ export function AcceptInvitationScreen() {
           )}
         </div>
         {error && <Alert variant="destructive">{error}</Alert>}
-        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+        <Button type="submit" size="standard" className="w-full" disabled={busy}>
           {busy ? "Entrando…" : inv.hasAccount ? "Entrar" : "Crear cuenta y entrar"}
         </Button>
         {inv.hasAccount && (

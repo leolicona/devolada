@@ -20,13 +20,13 @@ export function SheetContent({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Content>) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-overlay bg-overlay" />
       <DialogPrimitive.Content
         className={cn(
           /* docked to the bottom, capped so the list behind stays a
              visible context; the safe area keeps the buttons above a
              phone's home indicator */
-          "fixed inset-x-0 bottom-0 z-50 max-h-[90dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg",
+          "fixed inset-x-0 bottom-0 z-modal max-h-[90dvh] overflow-y-auto rounded-t-2xl border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg",
           className,
         )}
         {...props}

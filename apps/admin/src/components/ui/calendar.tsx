@@ -34,7 +34,7 @@ export function Calendar({ className, classNames, ...props }: DayPickerProps) {
         weekday: cn(cell, "text-center text-xs font-normal capitalize text-muted-foreground"),
         week: "mt-1 flex",
         day: cn(cell, "relative p-0 text-center text-sm"),
-        day_button: cn(cell, "rounded-full font-normal transition-colors duration-150 hover:bg-muted"),
+        day_button: cn(cell, "rounded-full font-normal transition-colors hover:bg-muted"),
         /* the library marks every day of a range `selected`, so the strong
            fill lives on the ends only; the band is the cell behind, round
            on its outer side — a one-day range is both ends and comes out

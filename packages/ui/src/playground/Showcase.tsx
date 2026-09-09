@@ -2,7 +2,8 @@ import { useEffect, useState, type ComponentType } from "react";
 import { Monitor, Moon, Search, Sun } from "lucide-react";
 import { Button } from "../components/button";
 import { Field, Input } from "../components/input";
-import { AmountBreakdown, StatusBadge, Amount, type Status } from "../index";
+import { AmountBreakdown, StatusBadge, Amount, Pending, Reveal, type Status } from "../index";
+import { Alert } from "../components/alert";
 
 /* Living catalog of tokens and shared atoms. Visible strings are real
    product copy and therefore stay in es-MX. */
@@ -80,6 +81,43 @@ const ledgerEntries = [
   },
 ];
 
+/* design-foundations US1. The two feedback states side by side, driven by a
+   real toggle rather than a still frame: the breath only means anything in
+   motion, and the reveal only means anything on arrival.
+
+   Toggle the OS "reduce motion" setting with this open — the breath must keep
+   running (opacity is not a vestibular trigger) while nothing on the page
+   translates, scales or rotates. */
+function FeedbackDemo() {
+  const [waiting, setWaiting] = useState(true);
+
+  return (
+    <div className="space-y-4">
+      <Button variant="secondary" onClick={() => setWaiting((w) => !w)}>
+        {waiting ? "Que llegue la respuesta" : "Volver a esperar"}
+      </Button>
+
+      <Pending active={waiting} label="Estamos verificando tu transferencia.">
+        <div className="rounded-md border border-line bg-card p-4">
+          <StatusBadge status="validating" size="md" />
+          <p className="mt-3 text-sm text-ink-soft">
+            Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar esta
+            página abierta.
+          </p>
+        </div>
+      </Pending>
+
+      {!waiting && (
+        <Reveal>
+          <Alert variant="success" layout="icon">
+            Tu pago fue registrado. Tu servicio ya está activo.
+          </Alert>
+        </Reveal>
+      )}
+    </div>
+  );
+}
+
 export function Showcase() {
   const { theme, setTheme } = useTheme();
 
@@ -108,7 +146,7 @@ export function Showcase() {
               type="button"
               onClick={() => setTheme(value)}
               aria-pressed={theme === value}
-              className={`flex h-9 items-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors duration-150 ${
+              className={`flex h-9 items-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors ${
                 theme === value
                   ? "bg-accent-soft text-link"
                   : "text-ink-soft hover:text-ink"
@@ -142,7 +180,7 @@ export function Showcase() {
       {/* Buttons */}
       <Section title="Botones — 64px el crítico, 48px el estándar">
         <div className="space-y-4">
-          <Button size="critical">Cobrar $415.00</Button>
+          <Button size="decisive">Cobrar $415.00</Button>
           <div className="flex flex-wrap gap-3">
             <Button>Registrar entrega</Button>
             <Button variant="secondary">Ver movimientos</Button>
@@ -229,6 +267,10 @@ export function Showcase() {
             </div>
           ))}
         </div>
+      </Section>
+
+      <Section title="Espera y desenlace">
+        <FeedbackDemo />
       </Section>
 
       <footer className="border-t border-line pt-6 text-sm text-ink-soft">

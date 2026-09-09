@@ -1,9 +1,7 @@
-import { Alert } from "@devolada/ui";
+import { Alert, Button, Input } from "@devolada/ui";
 import { useState } from "react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AccessLayout } from "../auth/AccessLayout";
 import { SignOutLink } from "../auth/SignOutLink";
@@ -68,7 +66,7 @@ export function NewBusinessScreen() {
         >
           <div>
             <Label htmlFor="business-name">Nombre del negocio</Label>
-            <Input
+            <Input size="compact"
               id="business-name"
               autoFocus
               value={name}
@@ -77,7 +75,7 @@ export function NewBusinessScreen() {
             />
           </div>
           {error && <Alert variant="destructive">{error}</Alert>}
-          <Button type="submit" size="lg" className="w-full" disabled={name.trim().length < 2 || busy}>
+          <Button type="submit" size="standard" className="w-full" disabled={name.trim().length < 2 || busy}>
             {busy ? "Creando…" : "Crear negocio"}
           </Button>
         </form>
@@ -87,10 +85,10 @@ export function NewBusinessScreen() {
             Tus clientes te pagan por transferencia a tu propia cuenta. Configura la CLABE donde
             quieres recibirlas y comparte tu primer link.
           </p>
-          <Button size="lg" className="w-full" onClick={() => void navigate({ to: "/settings/direct-payment", hash: "spei" })}>
+          <Button size="standard" className="w-full" onClick={() => void navigate({ to: "/settings/direct-payment", hash: "spei" })}>
             Configurar mi CLABE
           </Button>
-          <Button size="lg" variant="outline" className="w-full" onClick={() => void navigate({ to: "/" })}>
+          <Button size="standard" variant="secondary" className="w-full" onClick={() => void navigate({ to: "/" })}>
             Ir a Pagos
           </Button>
         </div>

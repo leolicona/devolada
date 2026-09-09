@@ -1,10 +1,8 @@
-import { Alert, ListError, Skeleton } from "@devolada/ui";
+import { Alert, Button, Input, ListError, Skeleton } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MembersResponse } from "@devolada/api/businesses-schema";
 import { ROLE_RANK, type Role } from "@devolada/api/role-matrix";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -140,7 +138,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
                       </Select>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="outline" className="shrink-0">
+                          <Button size="compact" variant="secondary" className="shrink-0">
                             Quitar
                           </Button>
                         </AlertDialogTrigger>
@@ -183,15 +181,15 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
+                      <Button size="compact"
+                        variant="secondary"
                         className="shrink-0"
                         disabled={resend.isPending}
                         onClick={() => resend.mutate(p.id)}
                       >
                         Reenviar
                       </Button>
-                      <Button
+                      <Button size="compact"
                         variant="ghost"
                         className="shrink-0"
                         disabled={cancel.isPending}
@@ -227,7 +225,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
             >
               <div>
                 <Label htmlFor="invite-email">Invitar por correo</Label>
-                <Input
+                <Input size="compact"
                   id="invite-email"
                   type="email"
                   className="mt-1"
@@ -251,7 +249,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
                   </SelectContent>
                 </Select>
               </div>
-              <Button type="submit" disabled={!emailValid || !inviteRole || invite.isPending}>
+              <Button size="compact" type="submit" disabled={!emailValid || !inviteRole || invite.isPending}>
                 {invite.isPending ? "Enviando…" : "Invitar"}
               </Button>
             </form>

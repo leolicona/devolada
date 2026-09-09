@@ -5,7 +5,9 @@ import {
   Alert,
   Amount,
   AmountBreakdown,
+  Button,
   Card,
+  Input,
   ListError,
   Skeleton,
   StatusBadge,
@@ -14,10 +16,8 @@ import {
 } from "@devolada/ui";
 import type { FeedCharge, FeedResponse, ProofResponse, RetryResponse } from "@devolada/api/payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
-import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { formatTime } from "@/lib/datetime";
@@ -126,7 +126,7 @@ function ProofDialog({ charge }: { charge: FeedCharge }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Ver comprobante</Button>
+        <Button size="compact" variant="secondary">Ver comprobante</Button>
       </DialogTrigger>
       <DialogContent aria-describedby={undefined}>
         <DialogTitle>Comprobante · {charge.customerName}</DialogTitle>
@@ -239,7 +239,7 @@ function ChargeRow({
         {/* US-P03: on a phone the row becomes a card. Squeezed into one
             line at 360px, the flex-1 name collapsed to nothing and the
             feed showed the amount without saying who paid it. */}
-        <CollapsibleTrigger className="group grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2 p-4 text-left transition-colors duration-150 hover:bg-muted sm:flex sm:gap-4">
+        <CollapsibleTrigger className="group grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2 p-4 text-left transition-colors hover:bg-muted sm:flex sm:gap-4">
           <span className="shrink-0 text-sm tabular-nums text-muted-foreground sm:w-12">
             {at(charge.createdAt)}
           </span>
@@ -262,7 +262,7 @@ function ChargeRow({
             )}
           </span>
           <ChevronDown
-            className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform duration-150 group-data-[state=open]:rotate-180"
+            className="size-4 shrink-0 justify-self-end text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
             aria-hidden
           />
         </CollapsibleTrigger>
@@ -356,14 +356,14 @@ function ChargeRow({
                 {/* D5: promised to operators by the role matrix since
                     phase 2; kept until now only by waiting */}
                 {canOperate && charge.actionOutcome === "failed" && (
-                  <Button disabled={retry.isPending} onClick={() => retry.mutate()}>
+                  <Button size="compact" disabled={retry.isPending} onClick={() => retry.mutate()}>
                     {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
                   </Button>
                 )}
                 {/* D5: only observation rows — `withheld` offers nothing;
                     the threshold is the owner's law */}
                 {canOperate && charge.actionOutcome === "observation" && (
-                  <Button disabled={execute.isPending} onClick={() => execute.mutate()}>
+                  <Button size="compact" disabled={execute.isPending} onClick={() => execute.mutate()}>
                     {execute.isPending ? "Ejecutando…" : "Ejecutar ahora"}
                   </Button>
                 )}
@@ -467,7 +467,7 @@ export function FeedScreen() {
             <TriangleAlert className="size-4 shrink-0" aria-hidden />
             {failedCount} {failedCount === 1 ? "pago fallido necesita" : "pagos fallidos necesitan"} tu atención.
           </span>
-          <Button variant="outline" onClick={() => setStatus("failed")}>
+          <Button size="compact" variant="secondary" onClick={() => setStatus("failed")}>
             Verlos
           </Button>
         </Alert>
@@ -509,7 +509,7 @@ export function FeedScreen() {
               when a wide range makes it wide. */}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="min-w-48 flex-1 sm:max-w-sm">
-              <Input
+              <Input size="compact"
                 id="feed-q"
                 type="search"
                 icon={Search}
@@ -584,7 +584,7 @@ export function FeedScreen() {
 
       {feed.hasNextPage && !feed.isError && (
         <div className="mt-4 pb-6">
-          <Button variant="outline" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
+          <Button size="compact" variant="secondary" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
             {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
           </Button>
         </div>

@@ -40,7 +40,7 @@ export function SelectContent({
         position="popper"
         sideOffset={4}
         className={cn(
-          "z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg",
+          "z-dropdown min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg",
           className,
         )}
         {...props}

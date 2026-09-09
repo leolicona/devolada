@@ -53,7 +53,15 @@ pnpm exec playwright test --config playwright.review.config.ts
 Review the captures for dialog, sheet and confirmation in both themes:
 
 - The dimming is identical across all three, per theme → **SC-006**, FR-003.
-- A confirmation opened from a sheet lands in front of it → FR-001.
+  The three overlays carry the same `bg-overlay`, and nothing anywhere still
+  hand-mixes one: `grep -rn "bg-black/\|bg-ink/" apps packages --include="*.tsx"`
+  prints nothing.
+- ~~A confirmation opened from a sheet lands in front of it → FR-001.~~
+  **Not checkable, and not a gap** (T027): the product has no confirmation
+  inside a sheet — the only sheet holds a calendar. The order is asserted as
+  numbers instead, in `tests/design/review-foundations.spec.ts`: the modal
+  surface computes to `z-index: 40` and its dimming to `30`, so the order
+  resolves from the scale rather than from which Radix portal mounted last.
 - No surface declares its own stacking value:
 
 ```bash

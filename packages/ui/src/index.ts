@@ -23,3 +23,8 @@ export {
   type CardProps,
 } from "./components/card";
 export { Skeleton } from "./components/skeleton";
+
+/* The feedback vocabulary (design-foundations US1). `waiting` and `resolving`
+   ship here; `entering`, `leaving` and `retrying` are 002's. */
+export { Pending, type PendingProps } from "./components/pending";
+export { Reveal, type RevealProps } from "./components/reveal";

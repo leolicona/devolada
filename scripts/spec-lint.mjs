@@ -1,21 +1,18 @@
 #!/usr/bin/env node
-/* Golden-rule enforcement (docs/legacy/SPEC.md):
-   1. Every docs/<domain>/<feature>.spec.md must be referenced in SPEC.md's index.
-      Scoped to the legacy corpus: a feature specified with Spec Kit lives in
-      specs/NNN-slug/ and is indexed by Spec Kit itself, not by SPEC.md.
-   2. Test files must cite user stories. Warning-only until the test
-      infrastructure lands; becomes an error when TD-005 is paid. */
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+/* Constitution VII: a test cites the user story it proves, so spec coverage
+   can be traced with grep. Warning-only until the test infrastructure lands;
+   becomes an error when TD-005 is paid.
+
+   The other half of this gate — every <feature>.spec.md registered in an
+   index — retired with the legacy corpus on 2026-09-09. It policed
+   docs/legacy/SPEC.md, and a feature specified with Spec Kit is indexed by
+   Spec Kit itself under specs/NNN-slug/, not by a hand-kept index. The corpus
+   it used to enforce now lives in leolicona/devoladapago-legacy-documentation,
+   read-only; the golden rule for anything rebuilt is Spec Kit's to enforce. */
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
-/* Spec Kit migration (docs/spec-kit-migration.eval.md): the corpus lives under
-   docs/legacy/ until PR3 rebuilds it. The golden rule follows it there so the
-   archive cannot rot while it is still the source PR3 reads. Delete this
-   branch — and the directory — when legacy is emptied in the final PR. */
-const legacyDir = join(root, "docs", "legacy");
-const docsDir = existsSync(legacyDir) ? legacyDir : join(root, "docs");
-const docsLabel = relative(root, docsDir);
 
 function walk(dir, filter, acc = []) {
   for (const name of readdirSync(dir)) {
@@ -24,17 +21,6 @@ function walk(dir, filter, acc = []) {
     else if (filter(name)) acc.push(path);
   }
   return acc;
-}
-
-const spec = readFileSync(join(docsDir, "SPEC.md"), "utf8");
-const specFiles = walk(docsDir, (n) => n.endsWith(".spec.md"));
-
-const orphans = specFiles.filter((path) => !spec.includes(relative(docsDir, path)));
-
-if (orphans.length) {
-  console.error(`✘ Specs not registered in ${docsLabel}/SPEC.md (golden rule):`);
-  for (const o of orphans) console.error(`  - ${relative(root, o)}`);
-  process.exit(1);
 }
 
 const tests = ["apps", "packages"]
@@ -49,11 +35,12 @@ const tests = ["apps", "packages"]
     }
   });
 
-/* Constitution VII: a citation must identify its story globally. Spec Kit numbers
-   stories per feature (US1, US2), so the new form carries the feature slug with it
+/* A citation must identify its story globally. Spec Kit numbers stories per
+   feature (US1, US2), so the new form carries the feature slug with it
    ("direct-payment US1: ..."); a bare US1 is not a citation. A feature not yet
-   rebuilt keeps its legacy US-XNN, so both forms are accepted while the migration
-   runs. Drop the legacy branch when the last domain lands. */
+   rebuilt keeps the US-XNN it carries in the archive, so both forms are
+   accepted while the migration runs. Drop the legacy branch when the last
+   domain lands. */
 const STORY_CITATION = /US-[A-Z]\d{2}|[a-z][a-z0-9-]*\s+US\d+\b/;
 
 const withoutStory = tests.filter((t) => !STORY_CITATION.test(readFileSync(t, "utf8")));
@@ -64,6 +51,4 @@ if (withoutStory.length) {
   for (const t of withoutStory) console.warn(`  - ${relative(root, t)}`);
 }
 
-console.log(
-  `✔ spec-lint: ${specFiles.length} specs registered under ${docsLabel}, ${tests.length} test files checked`,
-);
+console.log(`✔ spec-lint: ${tests.length} test files checked`);

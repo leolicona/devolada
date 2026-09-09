@@ -1,10 +1,18 @@
 <!--
 Sync Impact Report
 ==================
-Version: 1.0.0 → 1.1.0 (MINOR: materially expanded guidance — the stack is now
-decided here, and each convention names the skill that carries it).
+Version: 1.1.0 → 1.1.1 (PATCH: the layer documents left the repo, so Governance
+names where they went; no principle changed).
 
-Added:
+Amended 2026-09-09:
+  - Governance repointed. docs/legacy/ was deleted from this repo and the layer
+    documents it held are archived, read-only, in
+    leolicona/devoladapago-legacy-documentation. They remain the reference for
+    detail this constitution does not state, and folding that detail in here is
+    still owed — the deletion did not do it, it only moved the files, so the
+    obligation below is now the only thing tracking it.
+
+Added in 1.1.0:
   - "Stack conventions" under Stack and runtime boundaries: seven conventions
     (Hono, Drizzle on D1, Wrangler, React + Vite, shadcn, Vitest + Playwright,
     pnpm) stated as MUSTs, each naming the skill under .claude/skills/ that holds
@@ -25,12 +33,14 @@ stay unmodified by decision (CLAUDE.md, 2026-09-08).
 Deferred (carried from 1.0.0, still open):
   - TODO(INTEGRATOR_TERM): the glossary still has no row for the API integrator
     (docs/BRIEF.md §7.3). Principle V governs the term once it exists.
-  - Drift for PR3, not patched here: docs/legacy/ARCHITECTURE.md still says
-    "ispId" (renamed to businessId by the pivot) and names Agnostic Auth (retired
-    for Better Auth). This document states the current truth.
-  - PR3 must fold the layer documents' content into this constitution before PR4
-    deletes docs/legacy/, or the precedence rule in Governance will point at files
-    that no longer exist.
+  - Drift in the archived ARCHITECTURE.md, never patched: it still says "ispId"
+    (renamed to businessId by the pivot) and names Agnostic Auth (retired for
+    Better Auth). This document states the current truth; the archive is frozen
+    with the drift in it.
+  - The layer documents' content still MUST be folded into this constitution.
+    The 2026-09-09 deletion moved them out of the repo without folding them in,
+    so Governance now points at an external archive instead of at files that no
+    longer exist — the obligation stands, and this is what tracks it.
 -->
 
 # Devolada Constitution
@@ -237,16 +247,20 @@ The PR gate MUST stay blocking and MUST NOT be weakened to land a change:
 **This constitution is the governing document.** Where it speaks, it is the final word;
 a practice that contradicts it is a defect, not a precedent.
 
-Detail it does not state lives in the layer documents under `docs/legacy/`
-([ARCHITECTURE](../../docs/legacy/ARCHITECTURE.md),
-[FRONTEND](../../docs/legacy/FRONTEND.md),
-[TESTING](../../docs/legacy/TESTING.md),
-[CICD](../../docs/legacy/CICD.md),
-[integrations](../../docs/legacy/integrations/)), which remain the reference — and,
-for anything not yet rebuilt, remain enforced by `spec-lint`. That arrangement is
-temporary by construction: the migration deletes `docs/legacy/`, so any law still
-living only there MUST be folded into this document before it goes
-([migration plan](../../docs/spec-kit-migration.eval.md)).
+Detail it does not state lives in the layer documents, which left this repo on
+2026-09-09 and are archived, read-only, in
+[`leolicona/devoladapago-legacy-documentation`](https://github.com/leolicona/devoladapago-legacy-documentation):
+[ARCHITECTURE](https://github.com/leolicona/devoladapago-legacy-documentation/blob/main/ARCHITECTURE.md),
+[FRONTEND](https://github.com/leolicona/devoladapago-legacy-documentation/blob/main/FRONTEND.md),
+[TESTING](https://github.com/leolicona/devoladapago-legacy-documentation/blob/main/TESTING.md),
+[CICD](https://github.com/leolicona/devoladapago-legacy-documentation/blob/main/CICD.md),
+[integrations](https://github.com/leolicona/devoladapago-legacy-documentation/tree/main/integrations).
+They remain the reference for that detail, but nothing enforces them any more:
+`spec-lint` stopped checking the corpus when the corpus went, and an archive is
+not amended. Any law still living only there MUST be folded into this document
+— the deletion moved the files without folding them, so this obligation is
+older than it looks and is now the only thing standing between a law and its
+loss ([migration plan](https://github.com/leolicona/devoladapago-legacy-documentation/blob/main/spec-kit-migration.eval.md)).
 
 - **Amendments** MUST arrive in their own PR, stating what changed and why, and MUST
   NOT ride along inside a feature PR.
@@ -258,4 +272,4 @@ living only there MUST be folded into this document before it goes
   plan's complexity tracking with the simpler alternative that was rejected; an
   unrecorded violation is a defect.
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-08
+**Version**: 1.1.1 | **Ratified**: 2026-09-08 | **Last Amended**: 2026-09-09

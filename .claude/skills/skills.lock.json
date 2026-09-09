@@ -122,6 +122,21 @@
           "path": "plugins/drizzle-orm-d1/skills/drizzle-orm-d1"
         }
       ]
+    },
+    "leolicona": {
+      "repo": "https://github.com/leolicona/agents-skills.git",
+      "ref": "main",
+      "commit": "0041f4d6875474c146882eae5e8f2d4bc78fca8b",
+      "synced_at": "2026-09-09T17:01:48Z",
+      "license": "MIT",
+      "official": false,
+      "skills": [
+        {
+          "name": "project-brief",
+          "path": "skills/project-brief"
+        }
+      ],
+      "note": "Own catalog. The package name is @leolicona/agent-skills but it is NOT published to npm, so `npx @leolicona/agent-skills` returns 404: run the CLI from a clone instead (`node bin/cli.mjs add project-brief --target claude --dir <project>`). Installed with --target claude, which writes only .claude/skills/<skill>/ and leaves no .agents/ mirror, symlinks or lockfile of its own. Of the two skills in the catalog only project-brief is vendored; tech-feasibility is deliberately left out. project-brief names no stack convention, so no task is required to load it: it is the discovery step that produces the brief feeding /speckit-constitution and /speckit-specify."
     }
   }
 }

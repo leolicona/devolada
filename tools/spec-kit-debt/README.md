@@ -27,7 +27,7 @@ other work. If the register could also perform the fix, the two would blur, and 
 closing because the model believed the work was done rather than because the tree showed it.
 
 So the register only ever reads code and writes inside `.specify/debt/`. `debt.pay` reaches a verdict
-of `verified`, `partial` or `not-run`, and **only `verified` closes an entry**. A test that was not
+of `verified`, `partial`, `unpaid` or `not-run`, and **only `verified` closes an entry**. A test that was not
 executed is `not-run`, however obvious its result — the same discipline the `bug` extension applies to
 its verifications.
 

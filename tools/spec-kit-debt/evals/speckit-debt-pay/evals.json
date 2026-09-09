@@ -4,10 +4,10 @@
     {
       "id": 1,
       "prompt": "slug=<an open entry whose anchors are still in the code> — I think we paid this one, close it",
-      "expected_output": "The anchors are still present, so the verdict is partial or not-run, payment.md records the attempt, and debt.md keeps status: open.",
+      "expected_output": "The anchors are still present and the exit condition does not hold, so the verdict is unpaid, payment.md records the attempt with 'Paid by: not paid', and debt.md keeps status: open.",
       "files": [],
       "expectations": [
-        "The verdict is partial or not-run, never verified, while any anchor is still present",
+        "The verdict is unpaid — never verified, and not partial or not-run when the exit condition was actually checked and simply does not hold",
         "payment.md is written with sections Anchors, Exit condition, Evidence and What remains",
         "debt.md still says status: open and its body is byte-for-byte unchanged",
         "If the entry names a test as its confirmation, that test was actually run and its output is quoted under Evidence",

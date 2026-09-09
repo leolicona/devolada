@@ -45,6 +45,9 @@ Each debt gets its own directory under `.specify/debt/<slug>/`. Resolve the slug
 
 Name the debt, not the fix: `n-plus-one-invoices`, not `add-index`. The name outlives the plan.
 
+Interactive means a human can answer in this session. A subagent, a hook or a scheduled run is
+automated — and every "ask" below has an automated branch, so nothing waits on nobody.
+
 After resolution, set `DEBT_SLUG` and `DEBT_DIR = .specify/debt/<DEBT_SLUG>`.
 
 ## Prerequisites
@@ -73,8 +76,9 @@ If it is neither, say so plainly and record nothing.
    - What was chosen, and what was given up. If the user knows why (a deadline, an unknown, a
      dependency that was not ready yet), capture it verbatim — the reason is the part that decays
      fastest from memory.
-   - Classify the kind: `deliberate` (taken knowingly) or `inadvertent` (found later). Do not guess;
-     if it is unclear, ask in interactive mode, and use `inadvertent` in automated mode.
+   - Classify the kind: `deliberate` when the code or its history records the trade being taken
+     knowingly — a comment, a commit message, a decision record; `inadvertent` otherwise. This is
+     read from the tree, not guessed.
 
 2. **Anchor it in the code**
    - Search the codebase for the files, functions, symbols or patterns the description points at.
@@ -83,6 +87,10 @@ If it is neither, say so plainly and record nothing.
      one. If nothing can be located, stop rather than write a vague one: ask where it lives in
      interactive mode; in automated mode, report that no anchor was found and record nothing.
    - Prefer symbol anchors over line numbers where a symbol exists: lines move, names mostly do not.
+     Where there is no symbol — a top-level statement, a config line — quote the line verbatim next
+     to the number, so the anchor can be found again after it moves.
+   - When the description and the code disagree — a file it names does not say what it claims — the
+     code wins for anchors, and the discrepancy goes in *Notes*: recorded as found, not as described.
 
 3. **Price the interest**
    - What does this cost while it stays unpaid? Be specific and observable: "every new payment
@@ -94,7 +102,10 @@ If it is neither, say so plainly and record nothing.
 4. **Define the exit condition**
    - What does "paid" mean, concretely enough that someone else could verify it? Name the change,
      the files it would touch, and how a reader would confirm afterwards that the debt is gone
-     (a test, a query plan, the absence of a pattern).
+     (a test, a query plan, the absence of a pattern). The confirmation has to be checkable on the
+     tree as it is — a command, a grep, a test that exists — because `/speckit-debt-pay`
+     will run it and may not edit source to do so. If proving it needs a deliberately broken input,
+     point at a fixture or a test that supplies one.
    - Give a **trigger**: the condition that turns this from tolerable into urgent — a scale, a
      feature that would have to build on it, a date, a dependency upgrade. A debt with no trigger
      is never scheduled by anyone.

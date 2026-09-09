@@ -15,7 +15,8 @@ All notable changes to this extension are documented here. The format follows
   `.specify/debt/review.md`, classifying each as `still-open`, `drifted`, `likely-paid`, `grown` or
   `malformed`. Reports drift; changes nothing.
 - `speckit.debt.pay` — verifies the entry's own exit condition against the code, records the evidence
-  in `payment.md`, and closes the entry only on a `verified` verdict.
+  in `payment.md` with a verdict of `verified`, `partial`, `unpaid` or `not-run`, and closes the entry
+  only on `verified`.
 
 ### Notes
 

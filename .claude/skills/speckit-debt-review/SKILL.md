@@ -36,6 +36,9 @@ Optional. Interpret as:
   `severity`, `effort`, `opened`). Skip entries whose `status` is `paid` unless a slug names one
   explicitly. An entry whose front matter cannot be parsed is reported as `malformed` and skipped —
   never rewritten.
+- Note two things per entry that the front matter does not carry: a `[NEEDS CLARIFICATION]` marker
+  anywhere in the body, and a `payment.md` beside an open entry — an earlier attempt to pay it that
+  did not reach `verified`, with its verdict and date. Both go in the summary's Note column.
 
 ## Execution
 
@@ -59,7 +62,9 @@ For each entry under review:
      This is a **recommendation, not a closure**: only `/speckit-debt-pay` closes an entry,
      because closing it requires verifying the exit condition rather than merely noticing the code moved.
    - `grown` — the pattern the entry describes now appears in more places than the entry lists.
-     Record how many and where; this is the single most useful thing a review produces.
+     Record how many and where; this is the single most useful thing a review produces. For a debt
+     that is a practice rather than a code pattern — a gate that only warns, a manual step — `grown`
+     means more places now follow the practice.
    - `malformed` — front matter unreadable.
 
 3. **Check the trigger**
@@ -85,7 +90,7 @@ For each entry under review:
    | --- | --- | --- | --- | --- |
    | <slug> | high | still-open | not fired | — |
    | <slug> | medium | grown | fired | now in 6 files, entry lists 2 |
-   | <slug> | low | likely-paid | n/a | anchors gone; run debt.pay to confirm |
+   | <slug> | low | likely-paid | n/a | anchors gone; confirm with `/speckit-debt-pay` |
 
    ## Details
 
@@ -98,9 +103,11 @@ For each entry under review:
 
    **Trigger**: <fired | not fired | unknown: needs production data — <what is needed>>
 
+   **Spread**: <unchanged | the same pattern in <n> more places: <where>>
+
    **What changed since `opened`**: <one or two sentences, or "nothing".>
 
-   **Recommended action**: <run debt.pay | amend the entry: … | leave as is>
+   **Recommended action**: <confirm with `/speckit-debt-pay` | amend the entry: … | leave as is>
 
    ## Recommended next steps
 

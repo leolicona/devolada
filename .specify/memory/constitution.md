@@ -1,23 +1,35 @@
 <!--
 Sync Impact Report
-- Version change: (none) → 1.0.0 — initial constitution, inferred from the
-  working tree on 2026-09-09 (apps/, packages/, tests/, scripts/, .github/,
-  .specify/). No commit history or deleted file was consulted.
-- Modified principles: none (initial).
-- Added sections: Core Principles (I–VIII), Technology Stack & Constraints,
-  Development Workflow & Quality Gates, Governance.
-- Removed sections: none.
-- Numbering kept deliberately: VII is "every test cites its story" because
-  scripts/spec-lint.mjs and .github/workflows/ci.yml already refer to it as
-  "constitution VII"; VI is "visual foundations" because the
-  web-design-guidelines overlay this project may adopt refers to Principle VI.
+- Version change: 1.0.0 → 1.1.0 — MINOR: six rules added to an existing
+  principle, none removed or redefined, no renumbering.
+- Modified principles: VI. Visual Foundations (NON-NEGOTIABLE) — extended with
+  the layering scale, the single dimming treatment, packages/ui as the one
+  definition of a shared atom (compact 40px / standard 48px / decisive 64px),
+  and the feedback motion vocabulary (waiting breathes, the outcome
+  cross-fades, motion never carries state alone nor escalates). The existing
+  "prefers-reduced-motion honoured" bullet is now given its meaning rather than
+  replaced: translation, scale and rotation go; an opacity-only breath at low
+  amplitude stays, so a working screen never reads as frozen.
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Source: .specify/design/foundations.md, runs 1 and 2 (2026-09-09), decisions
+  D5–D15. The gaps those rules close are documented there and are NOT yet
+  fixed in code — the amendment leads the implementation on purpose.
+- Numbering kept deliberately (carried from v1.0.0): VII is "every test cites
+  its story" because scripts/spec-lint.mjs and .github/workflows/ci.yml refer
+  to it as "constitution VII"; VI is "visual foundations" because the
+  web-design-guidelines overlay refers to Principle VI.
 - Templates: .specify/templates/plan-template.md ✅ (Constitution Check is
-  filled at plan time from this file; no placeholder change needed);
-  spec-template.md ✅; tasks-template.md ✅ (its [Story] labels are the
-  citations Principle VII expects); checklist-template.md ✅.
-- Follow-up TODOs: none in this document. Related code gate: spec-lint runs
-  warning-only until the debt it names (TD-005) is paid — register it with
-  /speckit-debt-log so the register knows.
+  filled at plan time from this file); spec-template.md ✅; tasks-template.md
+  ✅; checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(TD-005): still open from v1.0.0 — spec-lint runs warning-only until the
+  debt it names is registered with /speckit-debt-log; .specify/debt/ does not
+  yet exist.
+  TODO(MOTION-DEBT): the 15 hand-written `duration-150` literals (foundations
+  D15) are debt to register before the design-foundations feature runs.
+  TODO(BREATH-AMPLITUDE): the amplitude and period of the permitted
+  opacity breath are undecided (foundations §6); until they are, "low
+  amplitude" is a judgement call, not a measurement.
 -->
 
 # Devolada Constitution
@@ -149,6 +161,25 @@ filter is missing. One matrix, checked by area, is auditable with grep.
   "cobro"; auth emails carry codes, never links. Fonts are self-hosted
   (Archivo Variable, JetBrains Mono for folios and keys); no external font
   requests.
+- Stacking order is semantic and tokenised: every overlapping surface takes its
+  position from the layering scale in `tokens.css`. No raw z-index in a
+  component, and no new layer without a name.
+- One dimming treatment: every modal surface — dialog, sheet, confirmation —
+  renders the same backdrop from `--color-surface-overlay`. A hand-mixed
+  translucent black or ink is drift, in either theme.
+- `packages/ui` is the single definition of any atom both surfaces render; a
+  duplicate recipe in an app is drift. Sizes are declared, not improvised:
+  compact (40px, desktop admin), standard (48px touch), decisive (64px).
+  Primitives only one surface uses may live in that app, but consume the shared
+  tokens and never redefine a value.
+- Feedback has a named motion vocabulary: waiting breathes, the outcome
+  cross-fades, nothing spins or bounces on the payer's page. Duration and
+  easing come from tokens — a literal duration in a component is drift.
+- Motion never carries state on its own, and it never escalates: when a wait
+  grows, the copy says so and the animation does not.
+- Reduced motion removes translation, scale and rotation — never the feedback
+  itself. An opacity-only breath at low amplitude is the permitted floor, so a
+  screen that is still working never reads as frozen.
 
 Rationale: the customer proofreads a CLABE and an amount on a phone in a bank
 app's shadow. Every rule here is one way that reading goes wrong.
@@ -252,4 +283,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-09
+**Version**: 1.1.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-09

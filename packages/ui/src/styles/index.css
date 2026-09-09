@@ -126,6 +126,7 @@
   --ease-out: var(--easing-out);
 
   --animate-breath: breath var(--duration-breath) var(--easing-default) infinite;
+  --animate-reveal: reveal var(--duration-slow) var(--easing-default) both;
 
   /* What makes a bare `transition-colors` obey the design system (research
      R2). Tailwind themes these two defaults; without binding them, every
@@ -144,6 +145,17 @@
 @keyframes breath {
   50% {
     opacity: var(--opacity-breath);
+  }
+}
+
+/* The outcome's cross-fade (design-foundations D12).
+   OPACITY ONLY, for the same reason as the breath, and `both` so the element
+   starts invisible instead of flashing at full strength for one frame before
+   the animation takes hold. Identical for a confirmation and a refusal —
+   the motion carries no tone. */
+@keyframes reveal {
+  from {
+    opacity: 0;
   }
 }
 
@@ -197,6 +209,17 @@
     [data-motion="breath"] {
       animation-duration: var(--duration-breath) !important;
       animation-iteration-count: infinite !important;
+    }
+
+    /* The outcome still cross-fades. Opacity is not a vestibular trigger, and
+       an answer about someone's money appearing with no transition at all is
+       the feedback being removed, not the motion.
+
+       Deliberately NOT given an iteration count: the blanket rule already
+       pins it to 1, which is what a reveal wants. Copying the breath's
+       `infinite` here would loop the outcome fading in forever. */
+    [data-motion="reveal"] {
+      animation-duration: var(--duration-slow) !important;
     }
   }
 }

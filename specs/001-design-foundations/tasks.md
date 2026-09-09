@@ -223,3 +223,17 @@ not new to this feature.
   first would change every transition in the product to the browser default.
 - Commit per task or per logical group; stop at any checkpoint to validate a
   story on its own.
+
+---
+
+## Phase 7: Convergence
+
+Appended by `/speckit-converge` on 2026-09-09, after the feature was merged. These
+are gaps between what the spec asks for and what the code does — not new scope.
+
+- [ ] T048 Announce the two waits that reach no screen reader, per SC-009 (partial). The payer's page has one live region — the `Card` at `apps/pago/src/features/pago/PaymentPage.tsx:586`, spanning 586–1029. `ReceiptForm` (rendered at 1309) and `TransferForm` (rendered at 1165) sit outside it, so "Subiendo…" and "Enviando…" change on screen and are announced to nobody. Give each its own polite region, or pass `announce` on a `Pending` that owns it — but never a second announcer inside the Card's range
+- [ ] T049 Give the upload and the submit the named vocabulary, per FR-008 and constitution VI (partial). Both are pending states whose only signal is a disabled button with different wording, which is exactly the "recognisable as pending without reading any wording" FR-008 refuses to rely on. Constitution VI says waiting breathes; on these two screens it does not. `Pending`'s flash threshold already handles the case where an upload finishes in a blink, so wrapping them costs nothing when the wait is short. Note this is where a slow connection hurts most — an upload with no signal is when a payer taps again
+- [ ] T050 Add `--animate-reveal`, `@keyframes reveal` and the `[data-motion="reveal"]` reduced-motion carve-out to `specs/001-design-foundations/contracts/design-tokens.md` §3, per the plan's rule that the contract is the name and its meaning (partial). They live in `packages/ui/src/styles/index.css:129,156,221` and are consumed by `Reveal`, but a reader of the contract would not know they exist — which is how the first dead-token finding happened
+- [ ] T051 Assert the payer's page at 768 and 1280, per SC-011 and FR-016 (partial). `tests/e2e/responsive.spec.ts` imports `ADMIN` only and `tests/e2e/pago.spec.ts` checks no sideways scroll at 360 alone, so the payer has no assertion at two of the three reference widths. This feature wrapped its outcome branches in new elements with their own spacing, which is precisely the change that shifts layout at a width nobody looks at
+- [ ] T052 Extend the reduced-motion check in `tests/e2e/motion.spec.ts` to transitions, per SC-004 (partial). `runningMovements` reads `animationName` and the keyframes behind it, so a transform carried by a *transition* rather than an animation is invisible to it. The blanket rule flattens `transition-duration` as well, so the behaviour holds today — but nothing would catch a rule that escaped it. The payer's page already has two transform transitions (the collapsible chevrons at `PaymentPage.tsx:815,1265`)
+- [ ] T053 Record `scripts/review-diff.mjs` in `plan.md`'s source tree, or remove it (unrequested). It exists because T002's own checksum mechanism was wrong, it is referenced by `baselines/README.md` and T036, and it is the only thing that can answer "did the back office render unchanged" — but the plan names no `scripts/` entry, so a reader of the plan alone would not know why the repo has it

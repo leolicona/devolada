@@ -1,0 +1,7 @@
+# Development-only files, kept out of the copy that lands in a consuming
+# project's .specify/extensions/debt/.
+.gitignore
+__pycache__/
+*.pyc
+.DS_Store
+evals/

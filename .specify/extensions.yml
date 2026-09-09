@@ -1,5 +1,6 @@
 installed:
 - bug
+- debt
 settings:
   auto_execute_hooks: true
 hooks: {}

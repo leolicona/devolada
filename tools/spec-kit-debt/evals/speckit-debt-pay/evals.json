@@ -1,0 +1,28 @@
+{
+  "skill_name": "speckit-debt-pay",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "slug=<an open entry whose anchors are still in the code> — I think we paid this one, close it",
+      "expected_output": "The anchors are still present and the exit condition does not hold, so the verdict is unpaid, payment.md records the attempt with 'Paid by: not paid', and debt.md keeps status: open.",
+      "files": [],
+      "expectations": [
+        "The verdict is unpaid — never verified, and not partial or not-run when the exit condition was actually checked and simply does not hold",
+        "payment.md is written with sections Anchors, Exit condition, Evidence and What remains",
+        "debt.md still says status: open and its body is byte-for-byte unchanged",
+        "If the entry names a test as its confirmation, that test was actually run and its output is quoted under Evidence",
+        "No source file is modified; git status shows changes only under .specify/debt/"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "we removed the duplicated provider code, mark the debt as paid",
+      "expected_output": "No slug given and nobody to ask: the skill stops and lists the open slugs instead of guessing which debt was paid.",
+      "files": [],
+      "expectations": [
+        "The skill does not pick a slug on its own; it lists the open entries and stops",
+        "No payment.md is written and no status changes"
+      ]
+    }
+  ]
+}

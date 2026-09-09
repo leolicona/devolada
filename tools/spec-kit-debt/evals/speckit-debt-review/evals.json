@@ -1,0 +1,30 @@
+{
+  "skill_name": "speckit-debt-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "before we plan the cleanup sprint, is our tech debt register still accurate?",
+      "expected_output": "Assumes at least one open entry exists under .specify/debt/. Writes .specify/debt/review.md with a summary table and per-entry details; touches nothing else.",
+      "files": [],
+      "expectations": [
+        ".specify/debt/review.md is written and is the only file created or modified",
+        "The summary table has the columns Slug, Severity, Verdict, Trigger, Note",
+        "Every verdict is one of still-open, drifted, likely-paid, grown, malformed",
+        "Every anchor is classified as present, moved, gone or unverifiable, and a moved anchor names its new location",
+        "A trigger that depends on production data is reported as unknown, not as fired",
+        "No debt.md is edited and no entry's status changes",
+        "No file outside .specify/debt/ is modified"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "review the debt register",
+      "expected_output": "With no .specify/debt/ directory (or no entries) the skill reports that the register is empty and writes nothing.",
+      "files": [],
+      "expectations": [
+        "When .specify/debt/ has no entries the reply says the register is empty",
+        "No review.md is written and no directory is created"
+      ]
+    }
+  ]
+}

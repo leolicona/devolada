@@ -1,0 +1,42 @@
+{
+  "skill_name": "speckit-debt-log",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "scripts/spec-lint.mjs only WARNS when a test file has no cited story; it was meant to fail CI. CLAUDE.md and the constitution both say it becomes an error 'once TD-005 is paid', but TD-005 lived in a TECH_DEBT.md that moved to an archive repo, so nothing here tracks it anymore. Log this as technical debt.",
+      "expected_output": "One new directory .specify/debt/<slug>/ containing debt.md, a slug the skill generated itself (no human to ask), and a report line 'Slug: <slug>'. Nothing else in the tree changes.",
+      "files": [],
+      "expectations": [
+        "Exactly one new directory is created under .specify/debt/ and it contains debt.md",
+        "debt.md starts with YAML front matter carrying slug, status: open, kind, severity, effort and opened",
+        "The 'Where it lives' section lists at least one anchor that exists in the repository (scripts/spec-lint.mjs or a symbol in it)",
+        "The 'Interest' section states an observable cost (what happens in CI or to tests), not an adjective",
+        "The 'Paying it' section names a concrete change and ends with a 'Trigger' line",
+        "The skill did not ask a question and did not stall: it generated the slug and said so",
+        "git status shows no modified file outside .specify/debt/",
+        "The final report contains a line of the form 'Slug: <slug>'"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "the whole apps/admin dashboard is kind of a mess honestly, can you note that down as tech debt",
+      "expected_output": "The skill refuses to write a vague entry: it either asks (interactive) or, with nobody to ask, reports that no anchor could be located and records nothing.",
+      "files": [],
+      "expectations": [
+        "No directory is created under .specify/debt/ for an entry with no concrete anchor",
+        "The reply says that an entry needs at least one anchor in the code and asks (or reports) where the debt lives",
+        "No file outside .specify/debt/ is modified"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "log tech debt: the payment page shows the wrong amount when the invoice has a discount, it displays the pre-discount total",
+      "expected_output": "The skill recognises broken behavior as a bug, not debt, redirects to the bug workflow, and records nothing.",
+      "files": [],
+      "expectations": [
+        "No directory is created under .specify/debt/",
+        "The reply names this as a bug and points to the bug workflow (speckit-bug-assess) rather than logging it as debt"
+      ]
+    }
+  ]
+}

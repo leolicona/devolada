@@ -125,7 +125,18 @@ apps/pago/src/
 tests/
 ├── e2e/motion.spec.ts             # + reduced motion, breath present, no transform
 └── design/review-foundations.spec.ts  # + screenshots: 3 modal surfaces, both themes
+
+scripts/
+└── review-diff.mjs                # + compares two runs of the review captures
 ```
+
+**One entry was added during implementation** (recorded 2026-09-09, converge
+F6): `scripts/review-diff.mjs`. T002 recorded the review baseline as a checksum
+on the assumption that the capture suite is byte-deterministic. It is not — two
+runs of identical code differ by about 73 pixels in a million — so the checksum
+reported twenty-one unchanged screens as changed, which is worse than no check
+at all. The script measures how much moved and where instead, and it is what
+answers T036's question about whether the back office still renders the same.
 
 **Structure Decision**: the monorepo's existing split is the plan. Everything
 shared lands in `packages/ui` (constitution VI: it is the single definition of

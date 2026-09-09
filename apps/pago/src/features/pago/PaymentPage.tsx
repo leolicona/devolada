@@ -128,6 +128,12 @@ function TransferForm({
   draft,
   amountCents,
   submitLabel = "Verificar mi pago",
+  /* design-foundations US1 (converge F1): whether this form owns the
+     announcement of its own wait. False on the instance rendered inside the
+     status Card, which is already aria-live="polite" — a second announcer
+     there reads the state out twice. True everywhere else, because outside
+     that Card nothing announces at all. */
+  announce = true,
 }: {
   onSubmit: (t: {
     trackingKey: string;
@@ -136,6 +142,7 @@ function TransferForm({
     amountCents: number;
   }) => void;
   busy: boolean;
+  announce?: boolean;
   /* D18: what the reader proposed. Every field is editable and none is
      trusted — the payer is the one who confirms, and a field the gate
      did not pass arrives here empty rather than pre-filled with
@@ -223,21 +230,30 @@ function TransferForm({
       <Field label="Fecha de la transferencia">
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
-      <Button
-        size="decisive"
-        disabled={!valid || busy}
-        onClick={() =>
-          onSubmit({
-            trackingKey: trackingKey.trim(),
-            senderBank: senderBank.trim(),
-            date,
-            amountCents: Math.round(Number.parseFloat(amount) * 100),
-          })
-        }
-      >
-        <ShieldCheck className="size-5" aria-hidden />
-        {busy ? "Enviando…" : submitLabel}
-      </Button>
+      {/* design-foundations US1 (converge F2): the send is a wait like any
+          other. Before this it was carried by a greyed-out button and a
+          changed word — which is the one thing FR-008 refuses to rely on,
+          because it makes the payer read to find out whether the app is
+          alive. Pending's flash threshold means a fast connection still sees
+          nothing; a slow one, which is when someone taps twice, sees the
+          screen working. */}
+      <Pending active={busy} announce={announce} label="Estamos enviando tus datos.">
+        <Button
+          size="decisive"
+          disabled={!valid || busy}
+          onClick={() =>
+            onSubmit({
+              trackingKey: trackingKey.trim(),
+              senderBank: senderBank.trim(),
+              date,
+              amountCents: Math.round(Number.parseFloat(amount) * 100),
+            })
+          }
+        >
+          <ShieldCheck className="size-5" aria-hidden />
+          {busy ? "Enviando…" : submitLabel}
+        </Button>
+      </Pending>
     </div>
   );
 }
@@ -285,10 +301,16 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
           El archivo pesa más de 1 MB. Toma la captura de nuevo o usa los datos de tu transferencia.
         </Alert>
       )}
-      <Button size="decisive" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>
-        <CloudUpload className="size-5" aria-hidden />
-        {busy ? "Subiendo…" : "Enviar comprobante"}
-      </Button>
+      {/* design-foundations US1 (converge F1, F2). This form only ever renders
+          outside the status Card, so it owns its own announcement. The upload
+          is where a weak mobile connection hurts most: silence here is what
+          makes a payer send the same proof twice. */}
+      <Pending active={busy} label="Estamos subiendo tu comprobante.">
+        <Button size="decisive" disabled={!file || tooBig || busy} onClick={() => file && onSubmit(file)}>
+          <CloudUpload className="size-5" aria-hidden />
+          {busy ? "Subiendo…" : "Enviar comprobante"}
+        </Button>
+      </Pending>
     </div>
   );
 }
@@ -778,6 +800,8 @@ export function PaymentPage({ token }: { token: string }) {
                        resolves first wins (D3). */
                     <TransferForm
                       busy={busy}
+                      /* The Card above is already aria-live="polite" */
+                      announce={false}
                       /* reading-check D4: a disputed field arrives EMPTY
                          — there is no neutral reading to pre-fill when
                          the machines disagree, and a pre-filled clave

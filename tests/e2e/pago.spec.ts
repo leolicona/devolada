@@ -99,3 +99,81 @@ test.describe("US-D01: the two steps hold at the phone floor (D19)", () => {
     await expectNoHorizontalScroll(page);
   });
 });
+
+/* design-foundations US1 (converge F4). The payer had no width coverage above
+   360: this file checked the phone floor and tests/e2e/responsive.spec.ts
+   imports ADMIN only. That was survivable until 001 wrapped every outcome
+   branch in a Reveal carrying its own spacing — changing the DOM inside the
+   status Card is exactly the edit that shifts layout at a width nobody looks
+   at. FRONTEND floor 360, designed at 375, and the two widths above it. */
+const WIDTHS = [
+  { name: "375 (design width)", width: 375, height: 812 },
+  { name: "768 (tablet)", width: 768, height: 1024 },
+  { name: "1280 (desktop)", width: 1280, height: 900 },
+] as const;
+
+const envelope = (data: unknown) => ({
+  status: 200,
+  contentType: "application/json",
+  body: JSON.stringify({ success: true, data }),
+});
+
+/* Park the payer on the validating screen: the one 001 rebuilt. */
+async function openWaiting(page: Page) {
+  await stubPagoApi(page);
+  await page.route("**/direct-payments/links/*/read", (route) =>
+    route.fulfill(
+      envelope({
+        source: "reader",
+        isReceipt: true,
+        amountCents: 51400,
+        trackingKey: longTrackingKey,
+        senderBank: "STP",
+        date: "2026-08-19",
+        receiptStatus: "Aceptada",
+        gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+      }),
+    ),
+  );
+  await page.route("**/direct-payments/links/*/pay", (route) =>
+    route.fulfill(envelope({ directPaymentId: "dp-1", status: "validating", error: null })),
+  );
+  await page.route("**/direct-payments/*/status", (route) =>
+    route.fulfill(
+      envelope({
+        status: "validating",
+        validationAttempts: 1,
+        nextValidationAt: null,
+        error: null,
+        receiptStatus: "Aceptada",
+      }),
+    ),
+  );
+  await page.goto(`${PAGO}/p/tok123`);
+  await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "cep.png",
+    mimeType: "image/png",
+    buffer: Buffer.alloc(120),
+  });
+  await page.getByRole("button", { name: /enviar comprobante/i }).click();
+  await expect(page.getByText(/estamos verificando tu transferencia/i)).toBeVisible();
+}
+
+test.describe("design-foundations US1: the payer's page holds at all three widths", () => {
+  for (const size of WIDTHS) {
+    test(`the transfer step does not scroll sideways at ${size.name}`, async ({ page }) => {
+      await stubPagoApi(page);
+      await page.setViewportSize({ width: size.width, height: size.height });
+      await page.goto(`${PAGO}/p/tok123`);
+      await page.getByRole("heading", { name: /haz tu transferencia/i }).waitFor();
+      await expectNoHorizontalScroll(page);
+    });
+
+    test(`the waiting screen does not scroll sideways at ${size.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: size.width, height: size.height });
+      await openWaiting(page);
+      await expectNoHorizontalScroll(page);
+    });
+  }
+});

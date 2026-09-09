@@ -86,6 +86,43 @@ Keyframes `breath` animate **opacity only**: `50% { opacity: var(--opacity-breat
 No transform of any kind may enter these keyframes — that is the property the
 reduced-motion exception rests on (FR-013).
 
+## 3b. The outcome's cross-fade (new)
+
+Added during implementation and **recorded here 2026-09-09 (converge F3)**: it
+shipped in `index.css` without ever reaching this contract, which is precisely
+how a token becomes invisible to the next reader. The contract is the name and
+its meaning; a name that lives only in a stylesheet has neither.
+
+| Token | Value | Purpose |
+| --- | --- | --- |
+| `--animate-reveal` | `reveal var(--duration-slow) var(--easing-default) both` | Theme key `--animate-reveal`, utility `animate-reveal` |
+
+Keyframes `reveal` animate **opacity only**: `from { opacity: 0 }`. `both` as the
+fill mode, so the element starts invisible instead of flashing at full strength
+for one frame before the animation takes hold.
+
+Both `breath` and `reveal` are re-enabled by name under
+`prefers-reduced-motion`, and that carve-out is only defensible while neither
+moves — see §7.
+
+## 3c. The reduced-motion carve-out (contract, not decoration)
+
+Two rules in `index.css`, inside the existing `@media (prefers-reduced-motion:
+reduce)` block and **after** the blanket flattening:
+
+| Selector | Declares | Why |
+| --- | --- | --- |
+| `[data-motion="breath"]` | `animation-duration: var(--duration-breath) !important`, `animation-iteration-count: infinite !important` | The wait must not read as frozen |
+| `[data-motion="reveal"]` | `animation-duration: var(--duration-slow) !important` | The answer must not appear with no transition at all |
+
+`reveal` deliberately declares **no** iteration count: the blanket rule already
+pins it to 1, and copying the breath's `infinite` would loop the outcome fading
+in forever.
+
+Both `!important`s on the breath are load-bearing. The blanket rule is itself
+`!important`, which beats specificity, so dropping either keyword leaves the
+breath silently frozen while every screenshot check still passes.
+
 ## 4. Dimming (existing token, newly used)
 
 `--color-surface-overlay` and its utility `bg-overlay` already exist, with a

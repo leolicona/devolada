@@ -20,7 +20,7 @@
     "debt": {
       "version": "1.0.0",
       "source": "local",
-      "manifest_hash": "sha256:e3da3a5e66e91c25535bcc3fb3a03109538f98048d6ab0784afa3f10666c3502",
+      "manifest_hash": "sha256:59a0049481c8d620f64bb81dbe6e2c8930d7acce9b88dd51334475e1d211d4e4",
       "enabled": true,
       "priority": 10,
       "registered_commands": {
@@ -31,7 +31,7 @@
         ]
       },
       "registered_skills": [],
-      "installed_at": "2026-09-09T16:06:12.311652+00:00"
+      "installed_at": "2026-09-09T16:24:44.231063+00:00"
     }
   }
 }

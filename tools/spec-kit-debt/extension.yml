@@ -4,7 +4,7 @@ extension:
   id: debt
   name: "Technical Debt Register"
   version: "1.0.0"
-  description: "Record, review and retire technical debt as per-item entries under .specify/debt/<slug>/"
+  description: "Record, review and pay down technical debt, one entry per debt under .specify/debt/<slug>/"
   author: leolicona
   repository: https://github.com/leolicona/devolada
   homepage: https://github.com/leolicona/devolada/tree/main/tools/spec-kit-debt
@@ -16,7 +16,7 @@ provides:
   commands:
     - name: speckit.debt.log
       file: commands/speckit.debt.log.md
-      description: "Record a technical debt item as an entry under .specify/debt/<slug>/"
+      description: "Record a technical debt as an entry under .specify/debt/<slug>/"
     - name: speckit.debt.review
       file: commands/speckit.debt.review.md
       description: "Check the register against the codebase and report which debts are still real, already gone, or grown"

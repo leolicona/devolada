@@ -1,5 +1,6 @@
 ---
-description: "Record a technical debt item as an entry under .specify/debt/<slug>/"
+description: "Record a technical debt as an entry under .specify/debt/<slug>/ — where it lives in the code, what it costs while unpaid, and what paying it looks like. Use when the user wants to log, register, note or track technical debt, a shortcut, a hack, a TODO or FIXME worth remembering, a 'we will fix it later', or anything deliberately left imperfect — and right after an implementation took a shortcut worth writing down. Reads code, never writes it."
+argument-hint: "[description of the debt] [slug=<kebab-case>]"
 ---
 
 # Log Technical Debt
@@ -7,7 +8,7 @@ description: "Record a technical debt item as an entry under .specify/debt/<slug
 Record a shortcut the codebase is now carrying — deliberate or discovered — as a single entry at
 `.specify/debt/<slug>/debt.md`. An entry is only worth writing if it says three things a future reader
 cannot reconstruct on their own: **where the debt physically is**, **what it costs to keep**, and
-**what paying it looks like**. A note that says "this module is messy" is not an entry; it is a mood.
+**what paying it looks like**.
 
 `__SPECKIT_COMMAND_DEBT_REVIEW__` re-checks these entries against the code, and
 `__SPECKIT_COMMAND_DEBT_PAY__` closes them.
@@ -35,7 +36,7 @@ Each debt gets its own directory under `.specify/debt/<slug>/`. Resolve the slug
 2. **Interactive mode** (a human is driving): ask for one and wait. Offer a 2–4 word kebab-case
    candidate derived from the description as the default.
 3. **Automated mode** (nobody to ask): generate a 2–4 word kebab-case slug from the description. It
-   **MUST** be unique — if `.specify/debt/<slug>/` exists, append the shortest disambiguating suffix
+   has to be unique: if `.specify/debt/<slug>/` exists, append the shortest disambiguating suffix
    (`-2`, `-3`, …) or a short ISO-style date (`-20260909`). Never overwrite an existing entry.
 
 Name the debt, not the fix: `n-plus-one-invoices`, not `add-index`. The name outlives the plan.
@@ -60,7 +61,7 @@ rule out the two things it is often confused with, and redirect instead of recor
 - **Work that was never done** → an unbuilt feature is a backlog item, not debt. Debt requires
   something already in the tree that is carrying the cost.
 
-If the item is neither, say so plainly and record nothing.
+If it is neither, say so plainly and record nothing.
 
 ## Execution
 
@@ -74,8 +75,9 @@ If the item is neither, say so plainly and record nothing.
 2. **Anchor it in the code**
    - Search the codebase for the files, functions, symbols or patterns the description points at.
    - Record concrete anchors as `path/to/file.ts:42` or `path/to/file.ts::functionName`, each with a
-     one-line reason. An entry with no anchor cannot be reviewed later, so an entry **MUST** carry at
-     least one — if nothing can be located, stop and ask where it lives rather than writing a vague one.
+     one-line reason. An entry with no anchor can never be reviewed, so every entry carries at least
+     one. If nothing can be located, stop rather than write a vague one: ask where it lives in
+     interactive mode; in automated mode, report that no anchor was found and record nothing.
    - Prefer symbol anchors over line numbers where a symbol exists: lines move, names mostly do not.
 
 3. **Price the interest**
@@ -85,7 +87,7 @@ If the item is neither, say so plainly and record nothing.
    - Assign a severity (`critical`, `high`, `medium`, `low`) from that cost, not from how ugly the
      code looks. Severity is about the bill, not the aesthetics.
 
-4. **Define the exit**
+4. **Define the exit condition**
    - What does "paid" mean, concretely enough that someone else could verify it? Name the change,
      the files it would touch, and how a reader would confirm afterwards that the debt is gone
      (a test, a query plan, the absence of a pattern).

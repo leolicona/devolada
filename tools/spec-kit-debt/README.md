@@ -11,7 +11,7 @@ It gives you three commands and one directory per debt:
 ├── review.md                     # written by debt.review — a snapshot of now
 └── n-plus-one-invoices/
     ├── debt.md                   # written by debt.log   — the entry
-    └── payment.md                # written by debt.pay   — how it was settled
+    └── payment.md                # written by debt.pay   — how it was paid
 ```
 
 | Command | What it does | Touches source? |
@@ -52,17 +52,36 @@ places than the entry lists) is the finding that usually justifies the whole exe
 
 ## Install
 
-From a Spec Kit project:
+From a Spec Kit project, install it the way a published extension is installed — from a release-shaped
+archive. Until the extension has its own repository and release, build the archive locally and serve
+it over localhost (the CLI accepts `https://` and localhost `http://` only):
 
 ```sh
-specify extension add --dev /path/to/spec-kit-debt
+# from the repository root
+d=$(mktemp -d) && cp -r tools/spec-kit-debt "$d/spec-kit-debt-1.0.0" \
+  && (cd "$d" && python3 -c "import shutil; shutil.make_archive('spec-kit-debt-1.0.0','zip','.','spec-kit-debt-1.0.0')") \
+  && (python3 -m http.server 8765 --bind 127.0.0.1 --directory "$d" & sleep 1 \
+      && specify extension add debt --from http://localhost:8765/spec-kit-debt-1.0.0.zip; kill %1)
 specify extension list
 ```
+
+`specify extension add --dev tools/spec-kit-debt` also works and is the right tool while **editing** the
+extension — it refreshes on every reinstall — but it registers the agent skills as **symlinks into a
+generated cache** (`.specify/extensions/debt/.specify-dev/`) rather than as files. That cache is build
+output and is not committed, so a dev install must not be what lands in git: on a fresh clone the
+symlinks would point at nothing and the skills would silently not exist. Iterate with `--dev`, then
+reinstall from the archive before committing.
 
 With the Claude integration the commands register as the skills `speckit-debt-log`,
 `speckit-debt-review` and `speckit-debt-pay`, invoked as `/speckit-debt-log` and so on. Other agents
 get their own invocation syntax — the command bodies use Spec Kit's agent-neutral
 `__SPECKIT_COMMAND_*__` tokens rather than hard-coded slash commands.
+
+Each command declares an `argument-hint` in its frontmatter (the autocomplete hint Claude Code shows
+after `/speckit-debt-log`). Spec Kit 1.0.x carries that key into a generated skill only on one of its
+two skill-rendering paths, and a dev install of an extension takes the other, so the hint is absent
+from the generated `SKILL.md` today. It costs nothing to keep declared: a Spec Kit release that
+unifies the two paths will pick it up without a change here.
 
 To remove it:
 
@@ -127,9 +146,19 @@ spec-kit-debt/
 ├── extension.yml
 ├── README.md
 ├── CHANGELOG.md
+├── .extensionignore              # what stays out of the installed copy: evals/, .gitignore
 ├── .gitignore
-└── commands/
-    ├── speckit.debt.log.md
-    ├── speckit.debt.review.md
-    └── speckit.debt.pay.md
+├── commands/
+│   ├── speckit.debt.log.md
+│   ├── speckit.debt.review.md
+│   └── speckit.debt.pay.md
+└── evals/                        # one evals.json per skill: realistic prompts + verifiable expectations
+    ├── speckit-debt-log/
+    ├── speckit-debt-review/
+    └── speckit-debt-pay/
 ```
+
+The `evals/` cases are the skill-authoring practice of testing a skill against real prompts rather than
+reading it: each file lists what a user would actually type and what the skill is expected to do —
+including the refusals (a vague "this is messy" gets no entry; a bug is redirected; a `pay` with no
+slug and nobody to ask stops instead of guessing).

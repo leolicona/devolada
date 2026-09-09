@@ -1,5 +1,6 @@
 ---
-description: "Check the register against the codebase and report which debts are still real, already gone, or grown"
+description: "Re-check every open technical debt entry under .specify/debt/ against the current codebase and write a snapshot to .specify/debt/review.md — which debts are still there, moved, already gone, or have spread. Use when the user asks what technical debt exists, how much there is, whether the debt register is still accurate or stale, what to pay first, or before planning a cleanup, refactor or maintenance sprint. Reads code only; changes no entry."
+argument-hint: "[slug=<slug>] [--severity <level>]"
 ---
 
 # Review the Debt Register

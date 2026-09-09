@@ -1,5 +1,6 @@
 ---
-description: "Verify a debt is gone from the code and close its entry with the evidence"
+description: "Close a technical debt entry under .specify/debt/<slug>/ only after verifying against the code that its exit condition is met, recording the evidence in payment.md with a verdict of verified, partial or not-run. Use when the user says a debt was paid, fixed, resolved, cleaned up or removed and wants the register updated, or after a refactor or cleanup PR lands. Does not write the fix itself — that goes through the normal spec or lite-path flow."
+argument-hint: "slug=<slug> [paid by <PR | spec | commit>]"
 ---
 
 # Pay a Technical Debt
@@ -9,8 +10,8 @@ debt is an ordinary change and goes through the project's normal flow (a spec, a
 What this command does is check that the exit condition in the entry is genuinely satisfied by the
 code as it stands, and then record how that was established.
 
-The separation is the point. A register that closes entries because someone said the work was done
-is a register that lies within a quarter.
+A register that closes entries because someone said the work was done is a register that lies
+within a quarter.
 
 ## User Input
 
@@ -105,7 +106,7 @@ Set `DEBT_SLUG` and `DEBT_DIR = .specify/debt/<DEBT_SLUG>`.
    - The verdict on its own line.
    - The path `.specify/debt/<DEBT_SLUG>/payment.md`.
    - Whether the entry was closed, and if not, precisely what is still outstanding and who or what
-     can settle it.
+     can pay it.
 
 ## Guardrails
 

@@ -148,9 +148,11 @@ screen in the back office renders unchanged.
   surfaces.
 - **FR-006**: The shared value set MUST make its motion values reachable to the
   screens that consume it, so that changing a motion value changes what renders.
-- **FR-007**: The product MUST define a named vocabulary of feedback states
-  covering waiting, resolving, entering, leaving and retrying, available to
-  both surfaces and to any future screen.
+- **FR-007**: The product MUST define a named vocabulary of feedback states —
+  waiting, resolving, entering, leaving and retrying — available to both
+  surfaces and to any future screen. **This feature implements `waiting` and
+  `resolving`**; the remaining three are named here so the vocabulary is closed,
+  and are built by `002-feedback-vocabulary-rollout`.
 - **FR-008**: While a process is pending, the screen MUST carry a calm,
   continuous signal that work is in progress, recognisable as pending without
   reading any wording.
@@ -182,9 +184,9 @@ screen in the back office renders unchanged.
   text-link action — so that no surface is left keeping a definition of its own.
 - **FR-019**: The change permitted under reduced motion MUST be perceptible as
   continuing activity and yet subtle enough that a person who asked for less
-  motion is not drawn to look at it. How far it travels and how slowly are
-  chosen by comparing candidates on screen in both themes, not assumed in
-  advance.
+  motion is not drawn to look at it. How far it changes and how slowly MUST be
+  confirmed on screen in both themes before merge — the starting pair may be
+  chosen in advance, but shipping it unseen does not satisfy this requirement.
 
 ### Key Entities
 
@@ -222,7 +224,8 @@ screen in the back office renders unchanged.
 - **SC-012**: A count of literal duration values written into screens is zero,
   across both surfaces.
 - **SC-009**: A pending state is announced in words to assistive technology on
-  every screen that can be pending.
+  every screen **on the payer's surface** that can be pending. The back office's
+  pending screens are `002-feedback-vocabulary-rollout`'s to cover.
 - **SC-010**: Every text and background pair passes the accessibility contrast
   floor in both themes — the standing measurement stays green.
 - **SC-011**: Every screen renders at the three reference widths with no
@@ -270,3 +273,8 @@ screen in the back office renders unchanged.
 - Marketing pages and illustration.
 - The internal construction of surfaces only the back office renders — their
   stacking and dimming are in scope, their anatomy is not.
+- Implementing the `entering`, `leaving` and `retrying` states, and applying the
+  vocabulary to the back office's pending screens. Both belong to
+  `002-feedback-vocabulary-rollout` — raised as gaps G2 and G3 by
+  `/speckit-analyze` and resolved by splitting rather than by widening this
+  feature.

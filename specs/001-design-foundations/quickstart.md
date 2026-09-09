@@ -15,24 +15,7 @@ pnpm install
 Chromium is already provisioned for Playwright in this environment; do not run
 `playwright install`.
 
-## 1. Settle the breath before anything else (research R3, FR-019)
-
-The amplitude and period are chosen by looking, not by reading. This is a
-blocker for merge, not a nicety.
-
-```bash
-pnpm playground          # packages/ui dev server
-```
-
-Compare the three candidates from [research.md](./research.md) §R3 side by side,
-in **both** themes, on a phone-sized viewport. Pick the pair that a person who
-asked for less motion would not look at twice, and record the choice in
-`contracts/design-tokens.md` §3.
-
-**Correct**: one pair chosen and written down. Shipping candidate A unexamined
-does not satisfy FR-019.
-
-## 2. The payer's wait (User Story 1)
+## 1. The payer's wait (User Story 1)
 
 ```bash
 pnpm --filter @devolada/pago dev
@@ -43,6 +26,14 @@ With a validation pending:
 - Cover the wording. The page still reads as working → **SC-001**.
 - Leave it pending and compare against a screenshot taken minutes earlier. The
   signal is identical → **SC-002**, FR-010.
+- **Settle the breath here** (FR-019, research R3, task T047). The shipped pair
+  is candidate A — `1 → 0.70` over `2.4s`. Look at it in both themes at a
+  phone-sized viewport, once with reduced motion on and once off, and judge it
+  against the waiting copy beside it rather than against the other candidates.
+  Too insistent or too faint → change `--opacity-breath` and
+  `--duration-breath` in `tokens.css` and record the new pair in
+  `contracts/design-tokens.md` §3. **This remains a merge gate**: the pair
+  ships confirmed by eye, on this screen, or it does not ship.
 - Let the outcome land. It arrives over roughly four tenths of a second, with no
   bounce, no scale → **SC-003**, FR-012.
 - Trigger a refusal. The motion is the same as for a confirmation → FR-012.
@@ -53,7 +44,7 @@ and repeat:
 - Nothing translates, scales or rotates anywhere → **SC-004**, FR-013.
 - The pending screen still does not read as frozen → FR-013.
 
-## 3. Overlapping surfaces (User Story 2)
+## 2. Overlapping surfaces (User Story 2)
 
 ```bash
 pnpm exec playwright test --config playwright.review.config.ts
@@ -71,7 +62,7 @@ grep -rn "z-\[\|z-[0-9]" apps packages --include="*.tsx" | grep -v node_modules
 
 **Correct**: no output → **SC-005**, FR-002.
 
-## 4. One button, one field (User Story 3)
+## 3. One button, one field (User Story 3)
 
 ```bash
 pnpm --filter @devolada/admin typecheck
@@ -85,7 +76,7 @@ pnpm --filter @devolada/admin test
 - The charge path's decisive action is unchanged in size → User Story 3,
   scenario 4.
 
-## 5. The debt is paid (FR-020, SC-012)
+## 4. The debt is paid (FR-020, SC-012)
 
 The two checks from `.specify/debt/unmapped-motion-tokens/debt.md`:
 
@@ -102,7 +93,7 @@ Also confirm the values now govern → **SC-008**: change `--duration-slow` in
 `tokens.css` to something absurd (2000ms), reload, watch the outcome crawl,
 change it back.
 
-## 6. Standing gates (must stay green)
+## 5. Standing gates (must stay green)
 
 ```bash
 node scripts/spec-lint.mjs        # every new test cites its story (constitution VII)

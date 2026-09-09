@@ -10,15 +10,17 @@ The `waiting` feedback state. Wraps or marks the region that is pending.
 | --- | --- | --- |
 | `active` | `boolean` | Whether the region is pending. Nothing else — no elapsed time, no attempt count (FR-017) |
 | `label` | `string` | The state in words, for assistive technology (FR-011) |
+| `announce` | `boolean` | Whether `Pending` owns the announcement. `false` when the caller already has a live region |
 | `children` | `ReactNode` | The region that breathes |
 
 **Guarantees**
 
 - Renders `data-motion="breath"` and the `animate-breath` utility while
   `active`; neither when idle.
-- Announces `label` through a polite live region **or** defers to one the caller
-  already owns — the payer's page has one at `PaymentPage.tsx:584` and must not
-  gain a second (FR-011, spec Assumptions).
+- Announces `label` through its own polite live region when `announce` is true,
+  and stays silent when it is false. The choice is a prop, not a guess: the
+  payer's page already owns a live region at `PaymentPage.tsx:584` and must not
+  gain a second, so it passes `announce={false}` (FR-011, spec Assumptions).
 - Does not appear before the flash threshold (~200ms) and, once shown, stays
   long enough to be read (FR-014).
 - Applies no transform, ever. The reduced-motion exception is only sound while

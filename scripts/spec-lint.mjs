@@ -40,13 +40,21 @@ const tests = ["apps", "packages"]
    ("direct-payment US1: ..."); a bare US1 is not a citation. A feature not yet
    rebuilt keeps the US-XNN it carries in the archive, so both forms are
    accepted while the migration runs. Drop the legacy branch when the last
-   domain lands. */
-const STORY_CITATION = /US-[A-Z]\d{2}|[a-z][a-z0-9-]*\s+US\d+\b/;
+   domain lands.
+
+   A regression test from the lite path has no story to cite — it exists
+   because of a bug, and the bug is the thing worth tracing to. It cites its
+   bug slug instead ("bug: login-timeout"), which resolves to the triage
+   directory .specify/bugs/<slug>/ that the Spec Kit bug extension writes. The
+   slug is checked for shape here, not for existence: a test outlives the
+   directory it came from, and a gate that stats the filesystem would fail an
+   old test for a tidy-up it had no part in. */
+const STORY_CITATION = /US-[A-Z]\d{2}|[a-z][a-z0-9-]*\s+US\d+\b|\b[Bb]ug:\s*[a-z0-9][a-z0-9-]*/;
 
 const withoutStory = tests.filter((t) => !STORY_CITATION.test(readFileSync(t, "utf8")));
 if (withoutStory.length) {
   console.warn(
-    "⚠ Tests without a cited story (US-XNN, or <feature-slug> US<n>) — becomes an error once TD-005 is paid:",
+    "⚠ Tests without a cited story (US-XNN, <feature-slug> US<n>, or bug: <slug>) — becomes an error once TD-005 is paid:",
   );
   for (const t of withoutStory) console.warn(`  - ${relative(root, t)}`);
 }

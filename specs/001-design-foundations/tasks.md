@@ -133,17 +133,17 @@ After T008 the two theme defaults carry our tokens, so every remaining
 `duration-150` is redundant: these are **deletions**, and each one must leave the
 rendering identical.
 
-- [ ] T037 [P] Delete `duration-150` in `apps/admin/src/components/ui/tabs.tsx`, `calendar.tsx` and `switch.tsx` (two occurrences in switch)
-- [ ] T038 [P] Delete `duration-150` in `apps/admin/src/features/cobros/CobrosScreen.tsx` and `apps/admin/src/features/feed/FeedScreen.tsx` (two occurrences each)
-- [ ] T039 [P] Delete `duration-150` in `apps/pago/src/features/pago/PaymentPage.tsx` (four occurrences)
-- [ ] T040 [P] Delete `duration-150` in `packages/ui/src/playground/Showcase.tsx`
-- [ ] T041 Verify the debt's own checks against the tree: `grep -rn "duration-[0-9]" apps packages --include="*.tsx" | grep -v node_modules` prints nothing, and `grep -n "var(--duration-" packages/ui/src/styles/index.css` prints the mapping (depends on T037–T040)
-- [ ] T042 Confirm the values now govern (SC-008): temporarily change `--duration-slow` in `packages/ui/src/styles/tokens.css`, observe the outcome reveal change, and revert
-- [ ] T043 Close the register entry with `/speckit-debt-pay unmapped-motion-tokens` (depends on T041)
-- [ ] T044 Run the standing gates: `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `pnpm e2e` — all green, with no new warning
-- [ ] T045 Record the breath pair as confirmed by T047, and any deviation from the plan, in `.specify/design/foundations.md`, and confirm every non-obvious rule added by this feature cites `design-foundations D<n>` (constitution I)
-- [ ] T046 Walk `quickstart.md` end to end as a final check
-- [ ] T047 Settle the breath on screen (FR-019, research R3): with a validation pending on the payer's page, look at the breath in **both** themes at a phone-sized viewport, once with reduced motion on and once off. Judge it as the payer does — against the waiting copy, not against the other candidates. Too insistent or too faint means editing `--opacity-breath` and `--duration-breath` in `packages/ui/src/styles/tokens.css`, nothing else. Record the final pair in `contracts/design-tokens.md` §3 and `.specify/design/foundations.md`. **This is a merge gate**: the pair ships confirmed by eye or it does not ship (depends on T016, T018)
+- [X] T037 [P] Delete `duration-150` in `apps/admin/src/components/ui/tabs.tsx`, `calendar.tsx` and `switch.tsx` (two occurrences in switch)
+- [X] T038 [P] Delete `duration-150` in `apps/admin/src/features/cobros/CobrosScreen.tsx` and `apps/admin/src/features/feed/FeedScreen.tsx` (two occurrences each)
+- [X] T039 [P] Delete `duration-150` in `apps/pago/src/features/pago/PaymentPage.tsx` (four occurrences)
+- [X] T040 [P] Delete `duration-150` in `packages/ui/src/playground/Showcase.tsx`
+- [X] T041 Verify the debt's own checks against the tree: `grep -rn "duration-[0-9]" apps packages --include="*.tsx" | grep -v node_modules` prints nothing, and `grep -n "var(--duration-" packages/ui/src/styles/index.css` prints the mapping (depends on T037–T040)
+- [X] T042 Confirm the values now govern (SC-008) — done as a **permanent assertion** rather than a manual edit-and-revert, in `tests/e2e/motion.spec.ts`: the reveal's computed `animation-duration` reads `0.4s`, setting `--duration-slow` to `2000ms` at runtime makes it `2s`. A check that stays true is worth more than one done once
+- [X] T043 Close the register entry with `/speckit-debt-pay unmapped-motion-tokens` (depends on T041)
+- [X] T044 Run the standing gates: `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `pnpm e2e` — all green, with no new warning
+- [X] T045 Record the breath pair as confirmed by T047, and any deviation from the plan, in `.specify/design/foundations.md`, and confirm every non-obvious rule added by this feature cites `design-foundations D<n>` (constitution I)
+- [X] T046 Walk `quickstart.md` end to end as a final check — found one stale instruction: §2 still asked a reviewer to open a confirmation from a sheet, which T027 established the product has no screen for. Corrected to point at the numeric stacking assertion instead
+- [ ] T047 **WAITING ON A PERSON** — the evidence is captured, the judgement is not mine to make. `review-foundations-breath-{peak,trough}-375-{light,dark}.png` show the two ends of the amplitude side by side. Settle the breath on screen (FR-019, research R3): with a validation pending on the payer's page, look at the breath in **both** themes at a phone-sized viewport, once with reduced motion on and once off. Judge it as the payer does — against the waiting copy, not against the other candidates. Too insistent or too faint means editing `--opacity-breath` and `--duration-breath` in `packages/ui/src/styles/tokens.css`, nothing else. Record the final pair in `contracts/design-tokens.md` §3 and `.specify/design/foundations.md`. **This is a merge gate**: the pair ships confirmed by eye or it does not ship (depends on T016, T018)
 
 ---
 

@@ -1,10 +1,11 @@
 ---
 slug: unmapped-motion-tokens
-status: open
+status: paid
 kind: inadvertent
 severity: medium
 effort: hours
 opened: 2026-09-09
+paid: 2026-09-09
 ---
 
 # Technical Debt: the motion scale governs nothing

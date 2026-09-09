@@ -1,6 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
-import { businessActor, feed, cobros, integrationsHub, linksRoster } from "../e2e/stubs";
+import { PAGO } from "../../playwright.config";
+import {
+  businessActor,
+  feed,
+  cobros,
+  integrationsHub,
+  linksRoster,
+  proofReading,
+  stubPagoApi,
+} from "../e2e/stubs";
 
 /* design-foundations US2 — the three modal surfaces, photographed so their
    dimming can be compared as images rather than argued about.
@@ -166,3 +175,93 @@ test("foundations-stacking: every surface sits where the scale says", async ({ p
     layers.expected,
   );
 });
+
+/* design-foundations US1, T047 — the breath, for a person to settle.
+
+   A still image cannot show a 2.4s animation, so these freeze it at its two
+   ends: full strength, and the 0.70 floor it descends to. Put the pair side by
+   side and you are looking at the whole amplitude, which is the thing being
+   judged — is this present without insisting, next to the copy it accompanies,
+   on a phone?
+
+   Changing the answer means two numbers in tokens.css. Nothing else moves. */
+for (const phase of ["peak", "trough"] as const) {
+  for (const theme of ["light", "dark"] as const) {
+    test(`foundations-breath-${phase} 375 ${theme}`, async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await page.emulateMedia({ colorScheme: theme });
+      await stubPagoApi(page);
+      await page.route("**/direct-payments/links/*/read", (route) =>
+        route.fulfill(
+          envelope({
+            ...proofReading,
+            senderBank: "STP",
+            gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+          }),
+        ),
+      );
+      await page.route("**/direct-payments/links/*/pay", (route) =>
+        route.fulfill(envelope({ directPaymentId: "dp-1", status: "validating", error: null })),
+      );
+      await page.route("**/direct-payments/*/status", (route) =>
+        route.fulfill(
+          envelope({
+            status: "validating",
+            validationAttempts: 1,
+            nextValidationAt: null,
+            error: null,
+            receiptStatus: "Aceptada",
+          }),
+        ),
+      );
+
+      await page.goto(`${PAGO}/p/tok-breath`);
+      await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "cep.png",
+        mimeType: "image/png",
+        buffer: Buffer.alloc(120),
+      });
+      await page.getByRole("button", { name: /enviar comprobante/i }).click();
+      await expect(page.getByText(/estamos verificando tu transferencia/i)).toBeVisible();
+
+      const breathing = page.locator('[data-motion="breath"]');
+      await expect(breathing).toBeVisible();
+
+      /* Read the floor from the token, so these captures follow it if it moves. */
+      const floor = await page.evaluate(() =>
+        Number(
+          getComputedStyle(document.documentElement).getPropertyValue("--opacity-breath").trim(),
+        ),
+      );
+      expect(floor, "--opacity-breath must be readable, or the trough is a guess").toBeGreaterThan(0);
+      const phaseOpacity = phase === "peak" ? 1 : floor;
+      /* Pin the opacity instead of freezing the animation.
+
+         Two earlier attempts failed quietly. A negative animation-delay does
+         not reposition an already-paused animation, so both frames came out
+         identical. Pausing through the Web Animations API does move
+         getComputedStyle — the assertion below passed — but an opacity
+         animation runs on the compositor, and the captured frame did not
+         follow: the two images still differed by a channel delta of 2 where
+         0.70 of grey on white is a delta of about 35.
+
+         So the animation is removed and the value set outright. The question
+         being asked is what 0.70 LOOKS like beside this copy, and that
+         question does not need the animation running to answer. */
+      await breathing.evaluate((el, target) => {
+        el.style.animation = "none";
+        el.style.opacity = String(target);
+      }, phaseOpacity);
+      /* The mouse is wherever the last click left it; park it so a hover
+         treatment cannot creep into the capture (baselines/README.md). */
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(200);
+
+      const opacity = await breathing.evaluate((el) => getComputedStyle(el).opacity);
+      expect(Number(opacity)).toBeCloseTo(phaseOpacity, 2);
+
+      await page.screenshot({ path: `${OUT}/review-foundations-breath-${phase}-375-${theme}.png` });
+    });
+  }
+}

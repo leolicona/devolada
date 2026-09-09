@@ -182,8 +182,12 @@ primitives only the back office renders.
 
 ## 6. Open questions
 
-- `[NEEDS CLARIFICATION: do destructive and link belong in the shared Button, or stay admin-only variants — shared/admin-only?]`
-  The charge PWA renders neither today.
+- ~~`[NEEDS CLARIFICATION: do destructive and link belong in the shared Button,
+  or stay admin-only variants — shared/admin-only?]`~~ **Settled 2026-09-09 in
+  the merge (T028)**: shared. Leaving them behind would have meant either a
+  second recipe for the back office — the thing this feature exists to remove —
+  or deleting two variants it uses. The payer's page renders neither, and
+  carrying an unused variant in a shared atom costs nothing.
 - `[NEEDS CLARIFICATION: do the admin-only primitives eventually move to packages/ui, or is the app the permanent home — move/permanent?]`
   D6 settles today's boundary, not the destination.
 - ~~`[NEEDS CLARIFICATION: the breath's amplitude and period — a measured pair,
@@ -192,3 +196,57 @@ primitives only the back office renders.
   at T047 rather than in a playground comparison.
 - Table density for the admin was raised and declined (D8). It stays live the
   first time a table screen is specified.
+
+---
+
+## 7. What the implementation found (2026-09-09)
+
+Written at T045. Everything here is a deviation from the plan or a fact the
+plan assumed wrongly — the parts that went as written are not repeated.
+
+**The breath pair is candidate A, `1 → 0.70` over `2.4s`** (D16), in
+`tokens.css` as `--opacity-breath` and `--duration-breath`. T047 confirms it on
+the real pending screen; until a person has looked, the pair is settled but not
+confirmed.
+
+**The debt `unmapped-motion-tokens` is paid** — verified, all 15 anchors gone,
+`payment.md` records the evidence. D15 said the register entry stays open until
+its checks pass; they pass.
+
+**Three tasks could not be done as written.**
+
+- T003/T004 (the three-candidate playground panel, gating everything) were
+  withdrawn: the pair is two token values, reversible in one line, and gating a
+  feature on a decision that cheap bought nothing. The looking moved to T047,
+  where it happens beside the copy it accompanies.
+- T027 asked for a capture of a confirmation opened from an open sheet. The
+  product has no such screen — the only sheet holds a calendar. What the picture
+  was for is a number, not an image, so the resolved `z-index` is now asserted
+  from the live DOM instead.
+- T014/T015/T031/T032 named co-located test paths. Every one of this repo's ~30
+  test files lives in a package-level `test/`; the tasks were wrong, not the
+  repo.
+
+**Two things the plan assumed wrongly.**
+
+- *The review suite is deterministic.* It is not: two runs of identical code
+  differ by ~73 px in 1,024,000. T002's sha256 manifest was deleted and replaced
+  by `scripts/review-diff.mjs`, a pixel diff with a floor. Two permanent sources
+  of difference are now documented — a relative-time label, and hover states
+  left behind by the spec's last click.
+- *A hover-only change is invisible in a static capture.* It is not, for the
+  same reason: the mouse stays where it was clicked.
+
+**One deliberate visual change, on the payer's surface.** The two Button recipes
+disagreed about `ghost`: the back office painted a hover fill, the payer's page
+did not. The fill won — a text-only button otherwise gives a pointer nothing to
+aim at — so ghost buttons on the payer's page now respond to hover. Nothing at
+rest moved. Recorded in `contracts/components.md`.
+
+**One cascade trap worth remembering.** The reduced-motion carve-out needs
+`!important` on both properties and must follow the blanket rule, because the
+blanket rule is itself `!important` and beats specificity. Without it the breath
+freezes silently and every screenshot check still passes, since a frozen pending
+screen and a working one are pixel-identical. `tests/e2e/motion.spec.ts` asserts
+the *computed* duration for exactly this reason; asserting the class proves
+nothing about how the cascade resolved.

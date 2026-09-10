@@ -26,8 +26,7 @@ export function IntegrationsScreen() {
       {integrations.error && (
         <ListError
           what="tus integraciones"
-          onRetry={() => void integrations.refetch()}
-          retrying={integrations.isRefetching}
+          onRetry={() => integrations.refetch()}
           className="mt-4"
         />
       )}

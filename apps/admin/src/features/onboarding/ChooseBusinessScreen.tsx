@@ -32,7 +32,7 @@ export function ChooseBusinessScreen({ reason }: { reason: "choose" | "revoked" 
         <Alert variant="warning">Ya no formas parte del negocio en el que estabas. Elige otro.</Alert>
       )}
       {orgs.error && (
-        <ListError what="tus negocios" onRetry={() => void orgs.refetch()} retrying={orgs.isRefetching} />
+        <ListError what="tus negocios" onRetry={() => orgs.refetch()} />
       )}
       {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
           holds the space while the threshold runs; `isPending` is the first

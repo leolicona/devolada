@@ -281,8 +281,7 @@ export function CobrosScreen() {
       {query.error && !query.data && (
         <ListError
           what="tus cobros en WispHub"
-          onRetry={() => void query.refetch()}
-          retrying={query.isRefetching}
+          onRetry={() => query.refetch()}
           className="mt-4"
         />
       )}

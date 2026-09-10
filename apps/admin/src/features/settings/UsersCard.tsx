@@ -86,8 +86,7 @@ export function UsersCard({ role, selfUserId }: { role: Role; selfUserId: string
       {members.error && (
         <ListError
           what="los usuarios"
-          onRetry={() => void members.refetch()}
-          retrying={members.isRefetching}
+          onRetry={() => members.refetch()}
           className="mt-4"
         />
       )}

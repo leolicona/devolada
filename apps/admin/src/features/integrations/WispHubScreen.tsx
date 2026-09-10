@@ -359,8 +359,7 @@ export function WispHubScreen() {
       {integrations.error && (
         <ListError
           what="la integración"
-          onRetry={() => void integrations.refetch()}
-          retrying={integrations.isRefetching}
+          onRetry={() => integrations.refetch()}
           className="mt-4"
         />
       )}

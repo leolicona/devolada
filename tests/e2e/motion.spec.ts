@@ -613,3 +613,121 @@ test.describe("feedback-vocabulary-rollout US2: surfaces arrive and leave the sa
     });
   }
 });
+
+/* feedback-vocabulary-rollout US3 — one waiting movement, no exceptions. */
+
+/* Every animation name actually in use on the page right now. Names, not
+   classes: a class assertion cannot tell whether the rule reached the element,
+   and that is the whole failure mode this file exists for. */
+async function animationNames(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const names = new Set<string>();
+    for (const el of Array.from(document.querySelectorAll("*"))) {
+      const n = getComputedStyle(el).animationName;
+      if (n && n !== "none") for (const part of n.split(",")) names.add(part.trim());
+    }
+    return Array.from(names);
+  });
+}
+
+test.describe("feedback-vocabulary-rollout US3: nothing spins, and nothing pulses", () => {
+  test("the check itself notices a rotation, before it is trusted to find none", async ({
+    page,
+  }) => {
+    /* The instrument comes first. An absence check returns nothing when the
+       page is clean AND when the check is broken, and 001 shipped four that
+       were green for the second reason. */
+    await stubAdminApi(page);
+    await page.goto(ADMIN);
+    await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible({ timeout: 15_000 });
+
+    await withProbe(page, { animation: "spin 1s linear infinite" }, async () => {
+      expect(await animationNames(page)).toContain("spin");
+    });
+    /* And it is gone once the probe is, so the probe cannot leak into the real
+       assertions below. */
+    expect(await animationNames(page)).not.toContain("spin");
+  });
+
+  test("no element in the back office is running spin or pulse, mid-retry included", async ({
+    page,
+  }) => {
+    /* Driving an actual retry is the whole point. The first version of this
+       test loaded the page and asserted on a screen where no retry was
+       running — so restoring `animate-spin` on ListError's icon left it GREEN,
+       because that class only appears while retrying. An absence check that
+       never visits the state it guards is worse than no check: it reports
+       safety it has not looked for. */
+    await stubAdminApi(page);
+
+    /* Fail every attempt until the test says otherwise, not just the first:
+       TanStack retries a failed query three times on its own before the error
+       ever reaches the screen. */
+    let failing = true;
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/payments/feed*", async (route) => {
+      if (route.request().resourceType() === "document") return route.fallback();
+      if (failing) {
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ success: false, error: { code: "UNAVAILABLE" } }),
+        });
+      }
+      await held;
+      return route.fulfill(envelope(feed));
+    });
+
+    await page.goto(ADMIN);
+    const retry = page.getByRole("button", { name: /reintentar/i }).first();
+    await expect(retry).toBeVisible({ timeout: 30_000 });
+
+    failing = false;
+    await retry.click();
+
+    /* What actually happens here is US3's first acceptance scenario, observed:
+       the retry puts the query back into its first-load state, the failure
+       notice unmounts, and the screen shows the SAME pending treatment a first
+       attempt shows. There is no retry-specific state to look different,
+       because `retrying` has no treatment of its own (D8) — that is the
+       guarantee, not an accident of this screen.
+
+       The ListError-specific regression (its icon spinning again) is caught by
+       packages/ui/test/list-error.test.tsx, which keeps the component mounted
+       through the wait; that test's mutation is recorded there. */
+    await expect(page.locator('[data-motion="breath"]').first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /reintentar/i })).toHaveCount(0);
+
+    const names = await animationNames(page);
+    /* Both were in this product until this feature: `animate-pulse` on every
+       Skeleton, `animate-spin` on this very icon. Neither came from tokens.css
+       and neither survived reduced motion — the pulse froze, the spin vanished.
+
+       Verified by mutation: restore `animate-spin` on ListError's icon and this
+       turns red. */
+    expect(names).not.toContain("spin");
+    expect(names).not.toContain("pulse");
+    /* The retry breathes instead, which is US3 in one assertion: it waits the
+       way a first attempt waits. */
+    expect(names).toContain("breath");
+    release();
+  });
+
+  test("nor on the payer's page", async ({ page }) => {
+    await openWaitingPayer(page);
+    /* Wait for the breath to actually start. Reading straight after the page
+       settles samples the region during the flash threshold, when nothing is
+       animating yet — the assertion below would then pass on an empty set for
+       the wrong reason, which is what the `toContain("breath")` guard is here
+       to prevent. It caught exactly that on the first run. */
+    await expect(page.locator('[data-motion="breath"]')).toBeVisible();
+
+    const names = await animationNames(page);
+    expect(names).not.toContain("spin");
+    expect(names).not.toContain("pulse");
+    /* And the one movement that IS allowed is present, so this is not a page
+       with no animation at all passing by default. */
+    expect(names).toContain("breath");
+  });
+});

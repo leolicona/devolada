@@ -207,8 +207,7 @@ export function LinksScreen() {
       {roster.isError && !roster.data && !isConfigError && (
         <ListError
           what="los links"
-          onRetry={() => void roster.refetch()}
-          retrying={roster.isRefetching}
+          onRetry={() => roster.refetch()}
           className="mt-6"
         />
       )}

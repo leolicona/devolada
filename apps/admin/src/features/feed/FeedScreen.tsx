@@ -543,8 +543,7 @@ export function FeedScreen() {
       {failedFirstLoad && (
         <ListError
           what="los pagos"
-          onRetry={() => void feed.refetch()}
-          retrying={feed.isRefetching}
+          onRetry={() => feed.refetch()}
           className="mt-4"
         />
       )}
@@ -593,17 +592,22 @@ export function FeedScreen() {
       {feed.isError && feed.data && (
         <ListError
           what="más pagos"
-          onRetry={() => void feed.fetchNextPage()}
-          retrying={feed.isFetchingNextPage}
+          onRetry={() => feed.fetchNextPage()}
           className="mt-4"
         />
       )}
 
       {feed.hasNextPage && !feed.isError && (
         <div className="mt-4 pb-6">
-          <Button size="compact" variant="secondary" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
-            {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4. "Cargar más" is a click, so its
+              wait is one the operator is having — unlike the refetch on window
+              focus that used to drive the retry button. It gets the same
+              treatment every started action gets. */}
+          <Pending active={feed.isFetchingNextPage} label="Cargando más pagos.">
+            <Button size="compact" variant="secondary" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
+              {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
+            </Button>
+          </Pending>
         </div>
       )}
         </TabsContent>

@@ -142,17 +142,17 @@ switch tabs and come back: the button must not read "Cargando…".
 
 **Depends on US1** for `Pending`, and touches eight of the same feature files.
 
-- [ ] T036 [US3] Rewrite `packages/ui/src/components/list-error.tsx` per [contracts/components.md](./contracts/components.md): delete the `retrying` prop, widen `onRetry` to `() => void | Promise<unknown>`, hold the waiting state internally from the click until the returned promise settles, and delete `animate-spin` from the icon. The word "Cargando…" is untouched. Cite D3, D10, and record in the comment why the prop is deleted rather than fixed at the call sites.
-- [ ] T037 [P] [US3] `apps/admin/src/features/cobros/CobrosScreen.tsx:285` — drop `retrying=`, let `onRetry` return the promise.
-- [ ] T038 [P] [US3] `apps/admin/src/features/credit/CreditCard.tsx:210` — likewise.
-- [ ] T039 [P] [US3] `apps/admin/src/features/feed/FeedScreen.tsx:541` and `:580` — two call sites; `:580` passes `isFetchingNextPage`, which **is** operator-initiated, so check what it should become rather than deleting it by pattern.
-- [ ] T040 [P] [US3] `apps/admin/src/features/integrations/IntegrationsScreen.tsx:31` — likewise.
-- [ ] T041 [P] [US3] `apps/admin/src/features/integrations/WispHubScreen.tsx:340` — likewise.
-- [ ] T042 [P] [US3] `apps/admin/src/features/links/LinksScreen.tsx:211` — likewise.
-- [ ] T043 [P] [US3] `apps/admin/src/features/onboarding/ChooseBusinessScreen.tsx:36` — likewise; drop the `void` operator so the promise reaches `ListError`.
-- [ ] T044 [P] [US3] `apps/admin/src/features/settings/UsersCard.tsx:91` — likewise.
-- [ ] T045 [US3] Unit-test in a new `packages/ui/test/list-error.test.tsx` that the waiting state starts on the click and ends when the promise settles, that a rejected promise still ends it, and that nothing rotates. Cite `feedback-vocabulary-rollout US3`.
-- [ ] T046 [US3] In `tests/e2e/motion.spec.ts`, assert no computed `animation-name` of `spin` or `pulse` exists anywhere on either surface (SC-013). **Verify by mutation**: restore `animate-spin` on one element and confirm this test turns red — otherwise it is an absence check that proves nothing, exactly the class of green-but-empty test T004 exists to prevent.
+- [X] T036 [US3] Rewrite `packages/ui/src/components/list-error.tsx` per [contracts/components.md](./contracts/components.md): delete the `retrying` prop, widen `onRetry` to `() => void | Promise<unknown>`, hold the waiting state internally from the click until the returned promise settles, and delete `animate-spin` from the icon. The word "Cargando…" is untouched. Cite D3, D10, and record in the comment why the prop is deleted rather than fixed at the call sites.
+- [X] T037 [P] [US3] `apps/admin/src/features/cobros/CobrosScreen.tsx:285` — drop `retrying=`, let `onRetry` return the promise.
+- [X] T038 [P] [US3] `apps/admin/src/features/credit/CreditCard.tsx:210` — likewise.
+- [X] T039 [P] [US3] `apps/admin/src/features/feed/FeedScreen.tsx:541` and `:580` — two call sites; `:580` passes `isFetchingNextPage`, which **is** operator-initiated, so check what it should become rather than deleting it by pattern.
+- [X] T040 [P] [US3] `apps/admin/src/features/integrations/IntegrationsScreen.tsx:31` — likewise.
+- [X] T041 [P] [US3] `apps/admin/src/features/integrations/WispHubScreen.tsx:340` — likewise.
+- [X] T042 [P] [US3] `apps/admin/src/features/links/LinksScreen.tsx:211` — likewise.
+- [X] T043 [P] [US3] `apps/admin/src/features/onboarding/ChooseBusinessScreen.tsx:36` — likewise; drop the `void` operator so the promise reaches `ListError`.
+- [X] T044 [P] [US3] `apps/admin/src/features/settings/UsersCard.tsx:91` — likewise.
+- [X] T045 [US3] Unit-test in a new `packages/ui/test/list-error.test.tsx` that the waiting state starts on the click and ends when the promise settles, that a rejected promise still ends it, and that nothing rotates. Cite `feedback-vocabulary-rollout US3`.
+- [X] T046 [US3] In `tests/e2e/motion.spec.ts`, assert no computed `animation-name` of `spin` or `pulse` exists anywhere on either surface (SC-013). **Verify by mutation**: restore `animate-spin` on one element and confirm this test turns red — otherwise it is an absence check that proves nothing, exactly the class of green-but-empty test T004 exists to prevent.
 
 **Checkpoint**: one waiting movement in the product, and no signal without a click.
 

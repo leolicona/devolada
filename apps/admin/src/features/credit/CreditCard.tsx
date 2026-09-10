@@ -210,8 +210,7 @@ export function CreditCard() {
       {credit.error && (
         <ListError
           what="tu saldo"
-          onRetry={() => void credit.refetch()}
-          retrying={credit.isRefetching}
+          onRetry={() => credit.refetch()}
           className="mt-4"
         />
       )}

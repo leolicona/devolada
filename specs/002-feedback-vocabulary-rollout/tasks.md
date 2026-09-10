@@ -118,15 +118,15 @@ departs identically, and opening the same one twice is indistinguishable.
 **Parallel with US1, US3 and US4** — it touches only `index.css` and
 `apps/admin/src/components/ui/`, which no other story opens.
 
-- [ ] T027 [US2] Add `--animate-enter` and `--animate-leave` to the `@theme inline` block and the `enter` / `leave` keyframes to `packages/ui/src/styles/index.css`, exactly as [contracts/motion.md](./contracts/motion.md) specifies. Opacity only — no transform may enter either keyframe. Leave the reduced-motion exception **untouched** and say why in the comment (D9). Cite D9.
-- [ ] T028 [P] [US2] `apps/admin/src/components/ui/dialog.tsx` — replace the inert `data-[state=open]:animate-in data-[state=open]:fade-in-0` on the overlay with the real pair, and add the pair to the content. Note in the comment that those utilities came from `tailwindcss-animate`, which this repo does not install, so they emitted nothing (research R5).
-- [ ] T029 [P] [US2] `apps/admin/src/components/ui/alert-dialog.tsx` — add the pair to content and backdrop.
-- [ ] T030 [P] [US2] `apps/admin/src/components/ui/sheet.tsx` — likewise.
-- [ ] T031 [P] [US2] `apps/admin/src/components/ui/popover.tsx` — likewise.
-- [ ] T032 [P] [US2] `apps/admin/src/components/ui/select.tsx` — likewise.
-- [ ] T033 [US2] In `tests/e2e/motion.spec.ts`, assert computed `animation-name` is `enter` on open and `leave` on close for all five surfaces and their backdrops, and that computed `transform` stays `none` throughout, in both themes (FR-006, SC-006). Cite `feedback-vocabulary-rollout US2`.
-- [ ] T034 [US2] In `tests/e2e/motion.spec.ts`, assert the closing node is **gone** after the departure, and again under `prefers-reduced-motion: reduce` where the keyframe is flattened to 0.01ms. Radix keeps a closing node mounted until `animationend`; a keyframe that never ends leaves a dialog in the DOM forever — invisible in a screenshot, fatal in use. Cite `feedback-vocabulary-rollout US2`.
-- [ ] T035 [US2] Add back-office surface captures to a new `tests/design/review-feedback.spec.ts`, both themes, so the arrival is reviewable by eye and by `scripts/review-diff.mjs`. Cite `feedback-vocabulary-rollout US2`.
+- [X] T027 [US2] Add `--animate-enter` and `--animate-leave` to the `@theme inline` block and the `enter` / `leave` keyframes to `packages/ui/src/styles/index.css`, exactly as [contracts/motion.md](./contracts/motion.md) specifies. Opacity only — no transform may enter either keyframe. Leave the reduced-motion exception **untouched** and say why in the comment (D9). Cite D9.
+- [X] T028 [P] [US2] `apps/admin/src/components/ui/dialog.tsx` — replace the inert `data-[state=open]:animate-in data-[state=open]:fade-in-0` on the overlay with the real pair, and add the pair to the content. Note in the comment that those utilities came from `tailwindcss-animate`, which this repo does not install, so they emitted nothing (research R5).
+- [X] T029 [P] [US2] `apps/admin/src/components/ui/alert-dialog.tsx` — add the pair to content and backdrop.
+- [X] T030 [P] [US2] `apps/admin/src/components/ui/sheet.tsx` — likewise.
+- [X] T031 [P] [US2] `apps/admin/src/components/ui/popover.tsx` — likewise.
+- [X] T032 [P] [US2] `apps/admin/src/components/ui/select.tsx` — likewise.
+- [X] T033 [US2] In `tests/e2e/motion.spec.ts`, assert computed `animation-name` is `enter` on open and `leave` on close for all five surfaces and their backdrops, and that computed `transform` stays `none` throughout, in both themes (FR-006, SC-006). Cite `feedback-vocabulary-rollout US2`.
+- [X] T034 [US2] In `tests/e2e/motion.spec.ts`, assert the closing node is **gone** after the departure, and again under `prefers-reduced-motion: reduce` where the keyframe is flattened to 0.01ms. Radix keeps a closing node mounted until `animationend`; a keyframe that never ends leaves a dialog in the DOM forever — invisible in a screenshot, fatal in use. Cite `feedback-vocabulary-rollout US2`.
+- [X] T035 [US2] Add back-office surface captures to a new `tests/design/review-feedback.spec.ts`, both themes, so the arrival is reviewable by eye and by `scripts/review-diff.mjs`. Cite `feedback-vocabulary-rollout US2`.
 
 **Checkpoint**: every overlapping surface arrives and departs one way, and none of them slide.
 

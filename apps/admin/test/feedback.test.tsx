@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { delay } from "msw";
+import { delay, http } from "msw";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { businessActor, handlers, ok, server } from "./msw";
@@ -38,7 +38,9 @@ describe("feedback-vocabulary-rollout US1: one wait, one voice", () => {
   it("names what is loading, in one region, while the screen loads", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
-      handlers.members(async () => {
+      /* Raw http, not the typed `handlers.members` helper: that one declares a
+         synchronous resolver, and a wait cannot be observed without one. */
+      http.get("/businesses/members", async () => {
         await delay(400);
         return ok(members);
       }),
@@ -82,7 +84,7 @@ describe("feedback-vocabulary-rollout US1: one wait, one voice", () => {
       /* A pending invitation gives the screen a plain button whose only signal
          until now was being disabled with its word changed. */
       handlers.members(() => ok({ ...members, pending: [invitation] })),
-      handlers.resendInvitation(async () => {
+      http.post("/businesses/invitations/:id/resend", async () => {
         await delay(400);
         return ok({ id: "inv-1" });
       }),

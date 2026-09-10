@@ -175,6 +175,36 @@ async function withProbe(
   }
 }
 
+/* What a named set of keyframes actually animates. The same question
+   carveOutProperties asks of `breath` and `reveal`, asked of any name — it is
+   how "opacity only" is checked at the source rather than inferred from a
+   screenshot. */
+async function keyframeProperties(page: Page, names: string[]): Promise<Record<string, string[]>> {
+  return page.evaluate((wanted) => {
+    const out: Record<string, string[]> = {};
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (const rule of Array.from(rules)) {
+        if (rule.constructor.name !== "CSSKeyframesRule") continue;
+        const frames = rule as CSSKeyframesRule;
+        if (!wanted.includes(frames.name)) continue;
+        const props = new Set<string>();
+        for (const frame of Array.from(frames.cssRules)) {
+          const style = (frame as CSSKeyframeRule).style;
+          for (let i = 0; i < style.length; i++) props.add(style[i]);
+        }
+        out[frames.name] = Array.from(props);
+      }
+    }
+    return out;
+  }, names);
+}
+
 /* The properties our own two carve-out animations touch. This is the
    invariant the reduced-motion exception rests on: it re-enables `breath`
    and `reveal` by name, and that is only defensible while neither moves. */
@@ -403,4 +433,183 @@ test.describe("design-foundations US1: the wait is visible, and reduced motion d
        remove the answer. */
     await expect(page.locator('[data-motion="reveal"]')).toBeVisible();
   });
+});
+
+/* feedback-vocabulary-rollout US2 — arriving and departing.
+
+   Three things a simulated DOM cannot answer, and one trap.
+
+   The trap is `transform`. The dialog centres itself with -translate-x-1/2, so
+   its computed transform is never "none" and asserting that would fail on a
+   surface that is behaving perfectly. What FR-006 forbids is a transform that
+   MOVES during the arrival, which is what runningMovements() above already
+   measures: it reads the keyframes each running animation touches.
+
+   The load-bearing assertion is the departure. Radix keeps a closing node
+   mounted until `animationend`; a keyframe that never ends leaves a dialog in
+   the DOM forever — invisible in a still screenshot and fatal in use. */
+
+const members = {
+  members: [
+    { id: "m-owner", userId: "user-1", name: "Leo", email: "demo@devolada.app", role: "owner", createdAt: 1 },
+    { id: "m-op", userId: "user-2", name: "Ana", email: "ana@wifiplus.mx", role: "operator", createdAt: 2 },
+  ],
+  invitations: [],
+  grantable: ["admin", "operator", "viewer"],
+};
+
+const proof = {
+  folio: "DV-FEED01",
+  proofMode: "transfer",
+  cep: null,
+  imageUrl: null,
+};
+
+async function stubSurfaces(page: Page) {
+  await stubAdminApi(page);
+  await page.route("**/businesses/members", (route) =>
+    route.request().resourceType() === "document" ? route.fallback() : route.fulfill(envelope(members)),
+  );
+  await page.route("**/payments/*/proof", (route) =>
+    route.request().resourceType() === "document" ? route.fallback() : route.fulfill(envelope(proof)),
+  );
+}
+
+type Surface = {
+  name: string;
+  width: number;
+  url: string;
+  ready: string;
+  role: "dialog" | "alertdialog";
+  open: (page: Page) => Promise<void>;
+  close: (page: Page) => Promise<void>;
+};
+
+const SURFACES: Surface[] = [
+  {
+    name: "dialog",
+    width: 1280,
+    url: ADMIN,
+    ready: "Janely Guadalupe Reyes",
+    role: "dialog",
+    open: async (page) => {
+      await page.getByRole("button", { name: /Janely Guadalupe Reyes/ }).first().click();
+      await page.getByRole("button", { name: "Ver comprobante" }).first().click();
+    },
+    close: async (page) => page.getByRole("button", { name: "Cerrar" }).first().click(),
+  },
+  {
+    name: "sheet",
+    width: 375,
+    url: ADMIN,
+    ready: "Janely Guadalupe Reyes",
+    role: "dialog",
+    open: async (page) => page.getByRole("button", { name: "Fechas" }).click(),
+    close: async (page) => page.getByRole("button", { name: "Cerrar" }).first().click(),
+  },
+  {
+    name: "alert dialog",
+    width: 1280,
+    url: `${ADMIN}/settings/users`,
+    ready: "Ana",
+    role: "alertdialog",
+    open: async (page) => page.getByRole("button", { name: "Quitar" }).first().click(),
+    close: async (page) => page.getByRole("button", { name: "Cancelar" }).first().click(),
+  },
+];
+
+/* Every element the surface's arrival is supposed to move: the panel and the
+   backdrop that dims behind it. They carry the same pair so the two never
+   separate mid-flight. */
+async function arrivalAnimations(page: Page, role: string): Promise<string[]> {
+  return page.evaluate((r) => {
+    const panel = document.querySelector(`[role="${r}"]`);
+    const names: string[] = [];
+    for (const el of Array.from(document.querySelectorAll("body *"))) {
+      const s = getComputedStyle(el);
+      if (s.animationName === "none") continue;
+      const isPanel = el === panel;
+      const isBackdrop = s.position === "fixed" && s.inset === "0px";
+      if (isPanel || isBackdrop) names.push(s.animationName);
+    }
+    return names;
+  }, role);
+}
+
+test.describe("feedback-vocabulary-rollout US2: surfaces arrive and leave the same way", () => {
+  for (const surface of SURFACES) {
+    test(`the ${surface.name} fades in, and moves nothing while it does`, async ({ page }) => {
+      await page.setViewportSize({ width: surface.width, height: surface.width < 500 ? 812 : 800 });
+      await stubSurfaces(page);
+      await page.goto(surface.url);
+      await expect(page.getByText(surface.ready).first()).toBeVisible({ timeout: 15_000 });
+
+      await surface.open(page);
+      await expect(page.getByRole(surface.role)).toBeVisible();
+
+      const names = await arrivalAnimations(page, surface.role);
+      /* Not "no animation is a movement" — that would pass on a surface with no
+         animation at all, which is what FR-007 exists to catch. */
+      expect(names.length).toBeGreaterThan(0);
+      expect(new Set(names)).toEqual(new Set(["enter"]));
+
+      /* Scoped to the keyframes this surface actually runs, NOT to the page.
+         A page-wide movement check fails here for an honest reason that has
+         nothing to do with FR-006: the charge row is a Collapsible and its
+         chevron rotates 180° on expand, which is a pre-existing transition and
+         is correctly flattened under reduced motion. What FR-006 forbids is a
+         transform inside the arrival itself. */
+      const props = await keyframeProperties(page, ["enter", "leave"]);
+      expect(Object.keys(props).sort()).toEqual(["enter", "leave"]);
+      expect(props.enter).toEqual(["opacity"]);
+      expect(props.leave).toEqual(["opacity"]);
+    });
+
+    test(`the ${surface.name} fades out, and is really gone afterwards`, async ({ page }) => {
+      await page.setViewportSize({ width: surface.width, height: surface.width < 500 ? 812 : 800 });
+      await stubSurfaces(page);
+      await page.goto(surface.url);
+      await expect(page.getByText(surface.ready).first()).toBeVisible({ timeout: 15_000 });
+
+      await surface.open(page);
+      const panel = page.getByRole(surface.role);
+      await expect(panel).toBeVisible();
+
+      await surface.close(page);
+      /* It does not vanish in the same tick: Radix holds the node while the
+         leave keyframe runs (US2 scenario 2). */
+      expect(await panel.count()).toBe(1);
+      /* And it does leave. A departure that never ends is the failure mode a
+         screenshot cannot see. */
+      await expect(panel).toHaveCount(0, { timeout: 3_000 });
+    });
+
+    test(`the ${surface.name} still unmounts when the operator asked for less motion`, async ({
+      page,
+    }) => {
+      /* enter and leave are deliberately NOT carved out of the reduced-motion
+         rule (D9), so both are flattened to 0.01ms here. Flattened is not
+         removed: `animationend` still fires, so Radix still unmounts. If that
+         ever stopped being true, a dialog would stay in the DOM for exactly the
+         people least able to work around it. */
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.setViewportSize({ width: surface.width, height: surface.width < 500 ? 812 : 800 });
+      await stubSurfaces(page);
+      await page.goto(surface.url);
+      await expect(page.getByText(surface.ready).first()).toBeVisible({ timeout: 15_000 });
+
+      await surface.open(page);
+      const panel = page.getByRole(surface.role);
+      await expect(panel).toBeVisible();
+      /* Flattened, as intended — this is the assertion that would catch someone
+         "helpfully" adding enter/leave to the carve-out. */
+      const duration = await panel.evaluate((el) => getComputedStyle(el).animationDuration);
+      expect(duration).toBe("1e-05s");
+
+      await surface.close(page);
+      await expect(panel).toHaveCount(0, { timeout: 3_000 });
+      /* And nothing moved on the way out, for anyone. */
+      expect(await runningMovements(page)).toEqual([]);
+    });
+  }
 });

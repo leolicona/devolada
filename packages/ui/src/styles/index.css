@@ -128,6 +128,16 @@
   --animate-breath: breath var(--duration-breath) var(--easing-default) infinite;
   --animate-reveal: reveal var(--duration-slow) var(--easing-default) both;
 
+  /* Arriving and departing (feedback-vocabulary-rollout D9, FR-005). One
+     definition each, shared by every surface that overlaps the page — no
+     surface writes its own duration or curve, and no new token is introduced:
+     both durations already exist in tokens.css.
+
+     Leaving is faster than arriving on purpose. Nobody wants to wait to
+     dismiss something, and a 250ms fade-out reads as the dialog resisting. */
+  --animate-enter: enter var(--duration-normal) var(--easing-default) both;
+  --animate-leave: leave var(--duration-fast) var(--easing-default) both;
+
   /* What makes a bare `transition-colors` obey the design system (research
      R2). Tailwind themes these two defaults; without binding them, every
      unqualified transition falls back to its 150ms rather than ours — the
@@ -155,6 +165,32 @@
    the motion carries no tone. */
 @keyframes reveal {
   from {
+    opacity: 0;
+  }
+}
+
+/* Arriving and departing (feedback-vocabulary-rollout D9).
+   OPACITY ONLY, the same law the breath and the reveal keep. A surface that
+   slid or grew would break FR-006 outright, and it would also make the
+   reduced-motion decision below indefensible.
+
+   These two are deliberately NOT added to the exception in the
+   prefers-reduced-motion block. The breath is carved out because a frozen
+   waiting screen reads as a dead one and the person is waiting on money; an
+   arrival is not that, and instant is a fine answer for a dialog. Widening the
+   exception without that reason would weaken the argument for the part that
+   needs it. Flattened to 0.01ms the animation still ENDS, so Radix still
+   unmounts the closing node — that is asserted in tests/e2e/motion.spec.ts,
+   because a surface that never unmounts is invisible in a screenshot and fatal
+   in use. */
+@keyframes enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes leave {
+  to {
     opacity: 0;
   }
 }

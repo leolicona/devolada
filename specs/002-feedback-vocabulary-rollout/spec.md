@@ -29,6 +29,12 @@
   way. The turning icon is removed rather than hidden from one surface, leaving
   one waiting movement in the product with no exception to remember. The word
   "Cargando…" is untouched. (FR-008, SC-013)
+- Q: How many times should a screen reader hear about a wait on a screen that is
+  pending in more than one place at once? → A: Once each, split by who started
+  it. A screen's load is announced by the screen, naming what is loading; an
+  action the operator started is announced at the control they used. A pending
+  region nested inside one that already announces stays silent — the pattern
+  `001-design-foundations` proved on the payer's page. (FR-002, SC-002)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -150,7 +156,8 @@ confirm each one names a context. Needs nothing from the other three stories.
 ### Edge Cases
 
 - **A screen that is pending in two places at once.** A list loading while a
-  setting saves must not read as one large indeterminate page.
+  setting saves must not read as one large indeterminate page, and must not
+  speak twice: the load belongs to the screen, the save belongs to its button.
 - **A surface that closes while its content is still pending.** The departure
   must not be blocked waiting for an answer nobody will see.
 - **A pending state that resolves during the arrival of its own surface.** The
@@ -178,7 +185,10 @@ confirm each one names a context. Needs nothing from the other three stories.
   a refetch when the tab regains focus, a background poll — MUST NOT show one.
   A signal belongs to a wait somebody is having.
 - **FR-002**: Every pending state in the back office MUST be stated in words to
-  assistive technology.
+  assistive technology, and stated once. A screen's load is announced by the
+  screen, naming what is loading; an action the operator started is announced at
+  the control they used. A pending region nested inside one that already
+  announces MUST stay silent.
 - **FR-003**: A region whose content has a known shape MUST show that shape while
   pending; a region without one MUST show the shared pending treatment. The two
   MUST NOT be applied to the same region at once. Either way the movement is the
@@ -236,8 +246,8 @@ confirm each one names a context. Needs nothing from the other three stories.
 - **SC-001**: The count of operator-initiated waits in the back office that show
   no pending treatment is zero — a screen's first load and a started action
   count alike.
-- **SC-002**: The count of pending states not stated in words is zero, across
-  both surfaces.
+- **SC-002**: The count of pending states not stated in words is zero across
+  both surfaces, and so is the count of waits announced more than once.
 - **SC-003**: Shown any pending back-office screen for five seconds with the
   wording covered, a person can say it is still working.
 - **SC-004**: Opening the same surface twice produces two arrivals a reviewer

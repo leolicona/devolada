@@ -10,6 +10,16 @@
 
 **Amended 2026-09-10**: "include finding I2 in feature 002 — align `StatusBadge` with the new size vocabulary." I2 is the inconsistency the same analysis found in the shared components: `001-design-foundations` gave every control one way to ask for a size, and the status badge kept its own. Added here as User Story 4.
 
+## Clarifications
+
+### Session 2026-09-10
+
+- Q: Which waits in the back office must show the pending treatment — only a
+  screen loading its data, or also every action the operator starts and waits
+  for? → A: Both. A screen's first load, plus every action the operator starts
+  and then waits for (save, delete, invite, retry). A refresh the operator did
+  not start stays silent. (FR-001, SC-001, SC-011)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - The operator can tell when the back office is working (Priority: P1)
@@ -144,13 +154,19 @@ confirm each one names a context. Needs nothing from the other three stories.
   flicker.
 - **The same status shown on both surfaces.** A badge takes its size from the
   surface it sits on, never from the status it reports.
+- **A background refresh while the operator is reading.** The screen stays
+  still. A wait nobody started never becomes a signal, however long it runs.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Every back-office screen that can be pending MUST carry the shared
-  pending treatment defined by `001-design-foundations`.
+- **FR-001**: Every wait the operator is having MUST carry the shared pending
+  treatment defined by `001-design-foundations` — a screen loading its data for
+  the first time, and every action the operator starts and then waits for: a
+  save, a delete, an invitation, a retry. A refresh the operator did not start —
+  a refetch when the tab regains focus, a background poll — MUST NOT show one.
+  A signal belongs to a wait somebody is having.
 - **FR-002**: Every pending state in the back office MUST be stated in words to
   assistive technology.
 - **FR-003**: A region whose content has a known shape MUST show that shape while
@@ -197,8 +213,9 @@ confirm each one names a context. Needs nothing from the other three stories.
 
 ### Measurable Outcomes
 
-- **SC-001**: The count of back-office screens that can be pending but show no
-  pending treatment is zero.
+- **SC-001**: The count of operator-initiated waits in the back office that show
+  no pending treatment is zero — a screen's first load and a started action
+  count alike.
 - **SC-002**: The count of pending states not stated in words is zero, across
   both surfaces.
 - **SC-003**: Shown any pending back-office screen for five seconds with the
@@ -217,6 +234,8 @@ confirm each one names a context. Needs nothing from the other three stories.
   members of the shared vocabulary is zero, across both surfaces.
 - **SC-010**: Every screen that shows a status renders identically before and
   after this feature, compared image against image.
+- **SC-011**: The count of pending treatments that appear during a refresh the
+  operator did not start is zero.
 
 ## Assumptions
 

@@ -83,9 +83,14 @@ export function ListError({ what, onRetry, className }: ListErrorProps) {
       <Pending active={retrying} announce={false} label={`Reintentando cargar ${what}.`} className="shrink-0">
         <Button
           variant="secondary"
+          /* A screen names a size; it never states a height
+             (feedback-vocabulary-rollout D11). This read `h-10 px-4 text-sm`,
+             which is `compact` spelled out in literals — the same defect as a
+             component inventing its own size name, one level down. */
+          size="compact"
           onClick={() => void retry()}
           disabled={retrying}
-          className="h-10 shrink-0 px-4 text-sm"
+          className="shrink-0"
         >
           {/* Nothing rotates (feedback-vocabulary-rollout D3). A retry waits
               the way every started action waits: the region breathes. A

@@ -613,7 +613,7 @@ export function PaymentPage({ token }: { token: string }) {
 
         {status.status === "validating" && (
           <>
-            <StatusBadge status="validating" size="md" />
+            <StatusBadge status="validating" size="standard" />
             {(() => {
               const notFound = status.error === "TRANSFER_NOT_FOUND";
               /* D18: the receipt's own Estatus is the one discriminator
@@ -896,7 +896,7 @@ export function PaymentPage({ token }: { token: string }) {
 
         {status.status === "confirmed" && (
           <Reveal className="space-y-4">
-            <StatusBadge status="paymentConfirmed" size="md" />
+            <StatusBadge status="paymentConfirmed" size="standard" />
             <p className="text-sm text-ink-soft">
               {"actionOutcome" in status && status.actionOutcome === "done"
                 ? "Tu pago fue registrado. Tu servicio ya está activo."
@@ -914,7 +914,7 @@ export function PaymentPage({ token }: { token: string }) {
             service that is still cut. */}
         {status.status === "partial" && (
           <Reveal className="space-y-4">
-            <StatusBadge status="paymentPartial" size="md" />
+            <StatusBadge status="paymentPartial" size="standard" />
             <p className="text-sm text-ink-soft">
               {"receivedCents" in status && status.receivedCents != null ? (
                 <>
@@ -980,7 +980,7 @@ export function PaymentPage({ token }: { token: string }) {
 
         {status.status === "invalid" && (
           <Reveal className="space-y-4">
-            <StatusBadge status="paymentInvalid" size="md" />
+            <StatusBadge status="paymentInvalid" size="standard" />
             <p className="text-sm text-ink-soft">
               {status.error
                 ? payErrorCopy(status.error)
@@ -994,7 +994,7 @@ export function PaymentPage({ token }: { token: string }) {
 
         {status.status === "expired" && (
           <Reveal className="space-y-4">
-            <StatusBadge status="paymentExpired" size="md" />
+            <StatusBadge status="paymentExpired" size="standard" />
             {/* D17: "no pudimos verificarlo" is a statement about us, not
                 an accusation about the payer — and when we know which
                 wall we hit, we say which. reading-check D6: an agreed
@@ -1043,7 +1043,7 @@ export function PaymentPage({ token }: { token: string }) {
 
         {status.status === "unapplied" && (
           <Reveal className="space-y-4">
-            <StatusBadge status="unapplied" size="md" />
+            <StatusBadge status="unapplied" size="standard" />
             <p className="text-sm text-ink-soft">
               Tu transferencia fue validada, pero tu cuenta ya estaba al corriente. Tu proveedor te
               contactará para resolverlo.

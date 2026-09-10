@@ -167,15 +167,30 @@ each names a context; compare the badges before and after and see no difference.
 
 **Touches `list-error.tsx`, so it follows US3** rather than running beside it.
 
-- [ ] T047 [US4] Rename `StatusBadge`'s sizes in `packages/ui/src/components/status-badge.tsx`: `sm` → `compact`, `md` → `standard`. Values unchanged; no `decisive`. Update the prop comment to name contexts rather than surfaces. Cite D11 and FR-013.
-- [ ] T048 [P] [US4] `apps/pago/src/features/pago/PaymentPage.tsx` — 6 call sites at lines 616, 899, 917, 983, 997, 1046: `size="md"` → `size="standard"`. Nothing else in this file changes and nothing the payer sees changes.
-- [ ] T049 [P] [US4] `packages/ui/src/playground/Showcase.tsx` — 3 call sites at lines 102, 201, 202: `size="md"` → `size="standard"`.
-- [ ] T050 [US4] In `packages/ui/src/components/list-error.tsx`, replace the retry button's `className="h-10 shrink-0 px-4 text-sm"` with `size="compact"` plus whatever layout classes remain. A screen names a size; it never states a height (research R8, data-model *Control size*).
-- [ ] T051 [P] [US4] Unit-test in a new `packages/ui/test/status-badge.test.tsx` that both names render, that the default is `compact`, and that the emitted classes for `compact`/`standard` match today's `sm`/`md` exactly (FR-012). Cite `feedback-vocabulary-rollout US4`.
-- [ ] T052 [US4] Run `pnpm -r --if-present typecheck` and confirm zero call sites were missed. This is US4 scenario 4's instrument: a size name outside the vocabulary must be rejected before the screen can ship.
-- [ ] T053 [US4] Re-run the review captures and `node scripts/review-diff.mjs` against T001's baseline. Every screen showing a status must be unchanged (SC-010). Investigate any diff above the script's threshold before proceeding — the suite is not byte-deterministic, so read the reported count and bounding box, not just the verdict.
+- [X] T047 [US4] Rename `StatusBadge`'s sizes in `packages/ui/src/components/status-badge.tsx`: `sm` → `compact`, `md` → `standard`. Values unchanged; no `decisive`. Update the prop comment to name contexts rather than surfaces. Cite D11 and FR-013.
+- [X] T048 [P] [US4] `apps/pago/src/features/pago/PaymentPage.tsx` — 6 call sites at lines 616, 899, 917, 983, 997, 1046: `size="md"` → `size="standard"`. Nothing else in this file changes and nothing the payer sees changes.
+- [X] T049 [P] [US4] `packages/ui/src/playground/Showcase.tsx` — 3 call sites at lines 102, 201, 202: `size="md"` → `size="standard"`.
+- [X] T050 [US4] In `packages/ui/src/components/list-error.tsx`, replace the retry button's `className="h-10 shrink-0 px-4 text-sm"` with `size="compact"` plus whatever layout classes remain. A screen names a size; it never states a height (research R8, data-model *Control size*).
+- [X] T051 [P] [US4] Unit-test in a new `packages/ui/test/status-badge.test.tsx` that both names render, that the default is `compact`, and that the emitted classes for `compact`/`standard` match today's `sm`/`md` exactly (FR-012). Cite `feedback-vocabulary-rollout US4`.
+- [X] T052 [US4] Run `pnpm -r --if-present typecheck` and confirm zero call sites were missed. This is US4 scenario 4's instrument: a size name outside the vocabulary must be rejected before the screen can ship.
+- [X] T053 [US4] Re-run the review captures and `node scripts/review-diff.mjs` against T001's baseline. Every screen showing a status must be unchanged (SC-010). Investigate any diff above the script's threshold before proceeding — the suite is not byte-deterministic, so read the reported count and bounding box, not just the verdict.
 
 **Checkpoint**: one size vocabulary, and the product looks exactly as it did.
+
+**T053 result (2026-09-10)**: 59 captures compared against T001's baseline, 13
+beyond the 0.05% floor. A control run — the review suite twice over identical
+code — reproduced 9 of those 13, so they are run-to-run variance, not this
+feature: three payer captures whose breath phase is a coin toss (max delta 2–4),
+and six whose text carries a clock (`pago-espera-larga` renders an hour derived
+from `Date.now()`, `admin-links-inicial` renders "consultado hace…").
+
+The five that ARE this feature's: `review-foundations-dialog-1280` and
+`-confirmation-1280`, both themes, and `review-pago-verificando-base-375`. Max
+delta 2–3 out of 255, inside the box the surface itself occupies — the
+compositing cost of giving those surfaces an animation, which is the point of
+US2. Nothing visible moved.
+
+**No capture showing a StatusBadge changed at all**, which is SC-010.
 
 ---
 

@@ -19,6 +19,11 @@
   for? → A: Both. A screen's first load, plus every action the operator starts
   and then waits for (save, delete, invite, retry). A refresh the operator did
   not start stays silent. (FR-001, SC-001, SC-011)
+- Q: Should the placeholder shape keep its own pulse, or breathe like everything
+  else that waits? → A: It breathes. One waiting movement exists in the product,
+  built from tokens, and the placeholder inherits the reduced-motion exception
+  that keeps waiting alive — closing a live defect where it freezes today.
+  (FR-003, FR-004, FR-014, SC-012)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -171,8 +176,12 @@ confirm each one names a context. Needs nothing from the other three stories.
   assistive technology.
 - **FR-003**: A region whose content has a known shape MUST show that shape while
   pending; a region without one MUST show the shared pending treatment. The two
-  MUST NOT be applied to the same region at once.
-- **FR-004**: No screen may invent its own pending treatment.
+  MUST NOT be applied to the same region at once. Either way the movement is the
+  same one: a placeholder shape breathes at the shared rhythm rather than
+  carrying a rhythm of its own.
+- **FR-004**: Neither a screen nor a component may invent its own pending
+  treatment. Exactly one waiting movement exists in the product, and its
+  duration and easing come from tokens.
 - **FR-005**: Arriving and departing MUST each have exactly one definition,
   shared by every surface in both surfaces of the product.
 - **FR-006**: Arriving and departing MUST change visibility only. Nothing may
@@ -197,6 +206,10 @@ confirm each one names a context. Needs nothing from the other three stories.
 - **FR-013**: A component MUST offer only the sizes it actually serves. A member
   of the vocabulary that has no context in that component is left out, not
   filled in for symmetry.
+- **FR-014**: Under reduced motion every pending treatment MUST keep moving. A
+  pending region that freezes is a defect, not a concession — a frozen waiting
+  screen reads as a dead one. This closes a live gap rather than describing the
+  status quo: the placeholder shape freezes today.
 
 ### Key Entities
 
@@ -236,6 +249,8 @@ confirm each one names a context. Needs nothing from the other three stories.
   after this feature, compared image against image.
 - **SC-011**: The count of pending treatments that appear during a refresh the
   operator did not start is zero.
+- **SC-012**: With reduced motion requested, the count of pending regions that
+  stop moving is zero.
 
 ## Assumptions
 
@@ -254,6 +269,10 @@ confirm each one names a context. Needs nothing from the other three stories.
   larger change and is not required by anything here.
 - **The staged waiting copy is untouched**, as in `001-design-foundations`. This
   feature adds no wording and changes none.
+- **The placeholder shape gets calmer.** Adopting the shared rhythm makes its
+  dip shallower than today's and a little slower. That is accepted: one waiting
+  movement across the product is worth more than the extra contrast, and the
+  shape itself already says "pending" before any movement does.
 - **Aligning the badge means renaming, not resizing.** The vocabulary names
   contexts, and the badge already serves the right two — the dense back office
   and the payer's touch surface. Only its words were wrong. Giving it the

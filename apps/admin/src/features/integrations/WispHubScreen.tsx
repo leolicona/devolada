@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Button, Card, Input, ListError, Skeleton, formatMoney, parseMoney } from "@devolada/ui";
+import { Button, Card, formatMoney, Input, ListError, parseMoney, Pending, Skeleton } from "@devolada/ui";
 import type {
   IntegrationsResponse,
   WisphubIntegration,
@@ -88,16 +88,26 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button size="compact" variant="secondary" disabled={test.isPending} onClick={() => test.mutate(key.trim() || undefined)}>
-          <KeyRound className="size-4" aria-hidden />
-          {test.isPending ? "Probando…" : "Probar conexión"}
-        </Button>
-        <Button size="compact"
-          disabled={save.isPending || key.trim().length < 8}
-          onClick={() => save.mutate({ wisphubApiKey: key.trim() })}
-        >
-          {save.isPending ? "Guardando…" : "Guardar llave"}
-        </Button>
+        {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+        <Pending active={test.isPending} label="Probando la conexión.">
+          <Button size="compact" variant="secondary" disabled={test.isPending} onClick={() => test.mutate(key.trim() || undefined)}>
+            <KeyRound className="size-4" aria-hidden />
+            {test.isPending ? "Probando…" : "Probar conexión"}
+          </Button>
+        </Pending>
+        {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+        <Pending active={save.isPending} label="Guardando la llave.">
+          <Button size="compact"
+            disabled={save.isPending || key.trim().length < 8}
+            onClick={() => save.mutate({ wisphubApiKey: key.trim() })}
+          >
+            {save.isPending ? "Guardando…" : "Guardar llave"}
+          </Button>
+        </Pending>
       </div>
       {result && (
         <p
@@ -249,20 +259,25 @@ function MappingCard({ wisphub }: { wisphub: WisphubIntegration }) {
           El porcentaje debe ser un número entero entre 0 y 100, y el mínimo un monto válido.
         </p>
       )}
-      <Button size="compact"
-        disabled={!valid || save.isPending}
-        onClick={() =>
-          save.mutate({
-            exactAction: exact,
-            shortAction: short,
-            overAction: over,
-            thresholdPercent: pct!,
-            floorCents: floorCents!,
-          })
-        }
-      >
-        {save.isPending ? "Guardando…" : "Guardar mapeo"}
-      </Button>
+      {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+      <Pending active={save.isPending} label="Guardando la integración.">
+        <Button size="compact"
+          disabled={!valid || save.isPending}
+          onClick={() =>
+            save.mutate({
+              exactAction: exact,
+              shortAction: short,
+              overAction: over,
+              thresholdPercent: pct!,
+              floorCents: floorCents!,
+            })
+          }
+        >
+          {save.isPending ? "Guardando…" : "Guardar mapeo"}
+        </Button>
+      </Pending>
       {save.isSuccess && !save.isPending && (
         <p role="status" className="text-sm font-medium text-success">
           Guardado.
@@ -287,12 +302,21 @@ function SwitchesCard({ wisphub }: { wisphub: WisphubIntegration }) {
             mano, y cada fila de Pagos te dice qué habría hecho.
           </p>
         </div>
-        <Switch
-          id="actions-enabled"
-          checked={wisphub.actionsEnabled}
-          disabled={save.isPending}
-          onCheckedChange={(v) => save.mutate({ actionsEnabled: v })}
-        />
+        {/* feedback-vocabulary-rollout D1/D4. Both switches share one save
+            mutation, so `save.isPending` alone would breathe on both when the
+            operator toggled one — three controls claiming a wait that belongs
+            to a single one. `variables` names the switch that was hit. */}
+        <Pending
+          active={save.isPending && save.variables?.actionsEnabled !== undefined}
+          label="Guardando la ejecución automática."
+        >
+          <Switch
+            id="actions-enabled"
+            checked={wisphub.actionsEnabled}
+            disabled={save.isPending}
+            onCheckedChange={(v) => save.mutate({ actionsEnabled: v })}
+          />
+        </Pending>
       </div>
       <div className="flex items-start justify-between gap-4 rounded-md border border-border px-4 py-3">
         <div>
@@ -303,12 +327,17 @@ function SwitchesCard({ wisphub }: { wisphub: WisphubIntegration }) {
             transferencia. En modo observación esta protección también se pausa.
           </p>
         </div>
-        <Switch
-          id="provisional-release"
-          checked={wisphub.provisionalReleaseEnabled}
-          disabled={save.isPending}
-          onCheckedChange={(v) => save.mutate({ provisionalReleaseEnabled: v })}
-        />
+        <Pending
+          active={save.isPending && save.variables?.provisionalReleaseEnabled !== undefined}
+          label="Guardando la protección del servicio."
+        >
+          <Switch
+            id="provisional-release"
+            checked={wisphub.provisionalReleaseEnabled}
+            disabled={save.isPending}
+            onCheckedChange={(v) => save.mutate({ provisionalReleaseEnabled: v })}
+          />
+        </Pending>
       </div>
     </SectionCard>
   );
@@ -327,27 +356,34 @@ export function WispHubScreen() {
       </Link>
       <h1 className="mt-2 text-xl font-semibold">WispHub</h1>
 
-      {integrations.isPending && (
-        <div className="mt-4 space-y-4">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      )}
       {integrations.error && (
         <ListError
           what="la integración"
-          onRetry={() => void integrations.refetch()}
-          retrying={integrations.isRefetching}
+          onRetry={() => integrations.refetch()}
           className="mt-4"
         />
       )}
-      {integrations.data && (
-        <div className="mt-4 space-y-4 pb-8">
-          <KeyCard wisphub={integrations.data.wisphub} />
-          <MappingCard key={JSON.stringify(integrations.data.wisphub.mapping)} wisphub={integrations.data.wisphub} />
-          <SwitchesCard wisphub={integrations.data.wisphub} />
-        </div>
-      )}
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending
+        active={integrations.isPending}
+        label="Cargando la integración"
+        shape={
+          <div className="mt-4 space-y-4">
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        }
+      >
+        {integrations.data && (
+          <div className="mt-4 space-y-4 pb-8">
+            <KeyCard wisphub={integrations.data.wisphub} />
+            <MappingCard key={JSON.stringify(integrations.data.wisphub.mapping)} wisphub={integrations.data.wisphub} />
+            <SwitchesCard wisphub={integrations.data.wisphub} />
+          </div>
+        )}
+      </Pending>
     </main>
   );
 }

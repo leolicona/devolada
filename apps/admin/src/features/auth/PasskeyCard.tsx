@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
-import { Alert, Button, Card } from "@devolada/ui";
+import { Alert, Button, Card, Pending, Skeleton } from "@devolada/ui";
 import { authClient, passkeysSupported } from "@/lib/auth-client";
 import { baGet, baPost } from "@/lib/api";
 
@@ -42,6 +42,15 @@ export function PasskeyCard() {
         sincroniza tus llaves, también servirá en tus otros dispositivos.
       </p>
 
+      {/* feedback-vocabulary-rollout D1/D5/D7, SC-001. Until now this card
+          rendered `passkeys.data && …` and nothing else, so while the list
+          loaded it showed no list, no empty state and no signal — not a weak
+          pending state, an absent one. */}
+      <Pending
+        active={passkeys.isPending}
+        label="Cargando tus dispositivos"
+        shape={<Skeleton className="mt-4 h-16 w-full" />}
+      >
       {passkeys.data && passkeys.data.length > 0 && (
         <ul aria-label="Dispositivos con acceso" className="mt-4 divide-y divide-border rounded-md border border-border">
           {passkeys.data.map((p) => (
@@ -76,6 +85,7 @@ export function PasskeyCard() {
       {passkeys.data && passkeys.data.length === 0 && (
         <p className="mt-4 text-sm text-muted-foreground">Ningún dispositivo tiene acceso con huella o rostro todavía.</p>
       )}
+      </Pending>
       {removeError && (
         <Alert variant="destructive" className="mt-3">
           No pudimos quitar esa llave. Intenta de nuevo.
@@ -83,22 +93,31 @@ export function PasskeyCard() {
       )}
 
       <div className="mt-4 space-y-3">
+        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+            is still a wait the operator is having — the earlier sweeps keyed on
+            `isPending` and could not see these (converge F1/F2).
+
+            The comment sits ABOVE the ternary, not inside its branch: that slot
+            is an expression position, where a JSX comment is a syntax error.
+            Second time in this feature. */}
         {state === "done" ? (
           <Alert variant="success">Listo. Este dispositivo ya puede entrar con huella o rostro.</Alert>
         ) : (
-          <Button size="compact"
-            variant="secondary"
-            disabled={state === "busy"}
-            onClick={async () => {
-              setState("busy");
-              const result = await authClient.passkey.addPasskey();
-              setState(result?.error ? "error" : "done");
-              if (!result?.error) refresh();
-            }}
-          >
-            <Fingerprint className="size-5" aria-hidden />
-            {state === "busy" ? "Esperando a tu dispositivo…" : "Activar en este dispositivo"}
-          </Button>
+          <Pending active={state === "busy"} label="Esperando a tu dispositivo.">
+            <Button size="compact"
+              variant="secondary"
+              disabled={state === "busy"}
+              onClick={async () => {
+                setState("busy");
+                const result = await authClient.passkey.addPasskey();
+                setState(result?.error ? "error" : "done");
+                if (!result?.error) refresh();
+              }}
+            >
+              <Fingerprint className="size-5" aria-hidden />
+              {state === "busy" ? "Esperando a tu dispositivo…" : "Activar en este dispositivo"}
+            </Button>
+          </Pending>
         )}
         {state === "error" && (
           <Alert variant="destructive">

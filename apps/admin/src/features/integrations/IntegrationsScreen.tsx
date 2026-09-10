@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Plug, PlugZap } from "lucide-react";
-import { Button, Card, ListError, Skeleton } from "@devolada/ui";
+import { Button, Card, ListError, Pending, Skeleton } from "@devolada/ui";
 import type { IntegrationsResponse } from "@devolada/api/integrations-schema";
 import { api, ApiError } from "@/lib/api";
 
@@ -23,60 +23,69 @@ export function IntegrationsScreen() {
         ejecutar.
       </p>
 
-      {integrations.isPending && <Skeleton className="mt-4 h-32 w-full" />}
       {integrations.error && (
         <ListError
           what="tus integraciones"
-          onRetry={() => void integrations.refetch()}
-          retrying={integrations.isRefetching}
+          onRetry={() => integrations.refetch()}
           className="mt-4"
         />
       )}
 
-      {integrations.data && (
-        <div className="mt-4 space-y-4 pb-8">
-          <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
-            <div className="flex items-center gap-4">
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending
+        active={integrations.isPending}
+        label="Cargando tus integraciones"
+        shape={
+          <Skeleton className="mt-4 h-32 w-full" />
+        }
+      >
+        {integrations.data && (
+          <div className="mt-4 space-y-4 pb-8">
+            <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+              <div className="flex items-center gap-4">
+                <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
+                  <PlugZap className="size-6 text-foreground" aria-hidden />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold">WispHub</h2>
+                  {/* status: icon + text, never color alone */}
+                  {integrations.data.wisphub.configured ? (
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+                      <PlugZap className="size-4" aria-hidden /> Conectada
+                    </p>
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                      <Plug className="size-4" aria-hidden /> Sin conectar
+                    </p>
+                  )}
+                </div>
+              </div>
+              <Link to="/integrations/wisphub">
+                <Button size="compact" variant={integrations.data.wisphub.configured ? "secondary" : "primary"}>
+                  {integrations.data.wisphub.configured ? "Configurar" : "Conectar"}
+                </Button>
+              </Link>
+            </Card>
+
+            {/* D17's backlog, visible and honest: no door yet */}
+            {/* muted tokens do the dimming — stacking opacity on top put
+                this text at the app's contrast floor (design review fase 5) */}
+            <Card className="flex items-center gap-4 p-6">
               <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
-                <PlugZap className="size-6 text-foreground" aria-hidden />
+                <Plug className="size-6 text-muted-foreground" aria-hidden />
               </span>
               <div>
-                <h2 className="text-base font-semibold">WispHub</h2>
-                {/* status: icon + text, never color alone */}
-                {integrations.data.wisphub.configured ? (
-                  <p className="flex items-center gap-1.5 text-sm font-medium text-success">
-                    <PlugZap className="size-4" aria-hidden /> Conectada
-                  </p>
-                ) : (
-                  <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                    <Plug className="size-4" aria-hidden /> Sin conectar
-                  </p>
-                )}
+                <h2 className="text-base font-semibold text-muted-foreground">Integración genérica</h2>
+                <p className="text-sm text-muted-foreground">
+                  API de Cobros + webhook firmado — en el futuro.
+                </p>
               </div>
-            </div>
-            <Link to="/integrations/wisphub">
-              <Button size="compact" variant={integrations.data.wisphub.configured ? "secondary" : "primary"}>
-                {integrations.data.wisphub.configured ? "Configurar" : "Conectar"}
-              </Button>
-            </Link>
-          </Card>
-
-          {/* D17's backlog, visible and honest: no door yet */}
-          {/* muted tokens do the dimming — stacking opacity on top put
-              this text at the app's contrast floor (design review fase 5) */}
-          <Card className="flex items-center gap-4 p-6">
-            <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
-              <Plug className="size-6 text-muted-foreground" aria-hidden />
-            </span>
-            <div>
-              <h2 className="text-base font-semibold text-muted-foreground">Integración genérica</h2>
-              <p className="text-sm text-muted-foreground">
-                API de Cobros + webhook firmado — en el futuro.
-              </p>
-            </div>
-          </Card>
-        </div>
-      )}
+            </Card>
+          </div>
+        )}
+      </Pending>
     </main>
   );
 }

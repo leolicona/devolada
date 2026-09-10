@@ -1,19 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Search, TriangleAlert } from "lucide-react";
-import {
-  Alert,
-  Amount,
-  AmountBreakdown,
-  Button,
-  Card,
-  Input,
-  ListError,
-  Skeleton,
-  StatusBadge,
-  formatMoney,
-  type Status,
-} from "@devolada/ui";
+import { Alert, Amount, AmountBreakdown, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge, type Status } from "@devolada/ui";
 import type { FeedCharge, FeedResponse, ProofResponse, RetryResponse } from "@devolada/api/payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -130,7 +118,6 @@ function ProofDialog({ charge }: { charge: FeedCharge }) {
       </DialogTrigger>
       <DialogContent aria-describedby={undefined}>
         <DialogTitle>Comprobante · {charge.customerName}</DialogTitle>
-        {proof.isPending && <Skeleton className="h-24 w-full" />}
         {proof.error && (
           <Alert variant="destructive">
             No pudimos cargar el comprobante.{" "}
@@ -139,54 +126,65 @@ function ProofDialog({ charge }: { charge: FeedCharge }) {
             </button>
           </Alert>
         )}
-        {proof.data && (
-          <div className="space-y-4">
-            {proof.data.cep ? (
-              <dl className="grid gap-2 text-sm">
-                {line(
-                  "Clave de rastreo",
-                  proof.data.cep.trackingKey ? (
-                    <span className="font-mono">{proof.data.cep.trackingKey}</span>
-                  ) : (
-                    "—"
-                  ),
-                )}
-                {line("Monto", <Amount cents={proof.data.cep.amountCents} />)}
-                {line("Fecha", proof.data.cep.date ? fmtCepDate(proof.data.cep.date) : null)}
-                {line("Banco emisor", proof.data.cep.senderBank)}
-                {line("Ordenante", proof.data.cep.senderName)}
-                {line("Beneficiario", proof.data.cep.beneficiaryName)}
-              </dl>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Banxico aún no confirma esta transferencia; el CEP aparecerá aquí cuando responda.
-              </p>
-            )}
-            {proof.data.imageUrl ? (
-              <figure className="space-y-2">
-                <img
-                  src={proof.data.imageUrl}
-                  alt="Comprobante enviado por el cliente"
-                  className="max-h-96 w-full rounded-md border border-border object-contain"
-                />
-                <a
-                  className="text-sm underline"
-                  href={proof.data.imageUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Abrir en otra pestaña
-                </a>
-              </figure>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {proof.data.proofMode === "transfer"
-                  ? "El cliente capturó los datos a mano; no envió imagen."
-                  : "Sin imagen guardada."}
-              </p>
-            )}
-          </div>
-        )}
+        {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+        <Pending
+          active={proof.isPending}
+          label="Cargando el comprobante"
+          shape={
+            <Skeleton className="h-24 w-full" />
+          }
+        >
+          {proof.data && (
+            <div className="space-y-4">
+              {proof.data.cep ? (
+                <dl className="grid gap-2 text-sm">
+                  {line(
+                    "Clave de rastreo",
+                    proof.data.cep.trackingKey ? (
+                      <span className="font-mono">{proof.data.cep.trackingKey}</span>
+                    ) : (
+                      "—"
+                    ),
+                  )}
+                  {line("Monto", <Amount cents={proof.data.cep.amountCents} />)}
+                  {line("Fecha", proof.data.cep.date ? fmtCepDate(proof.data.cep.date) : null)}
+                  {line("Banco emisor", proof.data.cep.senderBank)}
+                  {line("Ordenante", proof.data.cep.senderName)}
+                  {line("Beneficiario", proof.data.cep.beneficiaryName)}
+                </dl>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Banxico aún no confirma esta transferencia; el CEP aparecerá aquí cuando responda.
+                </p>
+              )}
+              {proof.data.imageUrl ? (
+                <figure className="space-y-2">
+                  <img
+                    src={proof.data.imageUrl}
+                    alt="Comprobante enviado por el cliente"
+                    className="max-h-96 w-full rounded-md border border-border object-contain"
+                  />
+                  <a
+                    className="text-sm underline"
+                    href={proof.data.imageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Abrir en otra pestaña
+                  </a>
+                </figure>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {proof.data.proofMode === "transfer"
+                    ? "El cliente capturó los datos a mano; no envió imagen."
+                    : "Sin imagen guardada."}
+                </p>
+              )}
+            </div>
+          )}
+        </Pending>
       </DialogContent>
     </Dialog>
   );
@@ -355,17 +353,25 @@ function ChargeRow({
                 {showsMoney && <ProofDialog charge={charge} />}
                 {/* D5: promised to operators by the role matrix since
                     phase 2; kept until now only by waiting */}
+                {/* feedback-vocabulary-rollout D1/D4: an action the operator started
+                    is announced at the control they used. Disabled plus a changed
+                    word is not a signal — it is silent to a screen reader and easy
+                    to miss. */}
                 {canOperate && charge.actionOutcome === "failed" && (
-                  <Button size="compact" disabled={retry.isPending} onClick={() => retry.mutate()}>
-                    {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
-                  </Button>
+                  <Pending active={retry.isPending} label="Reintentando la reconexión.">
+                    <Button size="compact" disabled={retry.isPending} onClick={() => retry.mutate()}>
+                      {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
+                    </Button>
+                  </Pending>
                 )}
                 {/* D5: only observation rows — `withheld` offers nothing;
                     the threshold is the owner's law */}
                 {canOperate && charge.actionOutcome === "observation" && (
-                  <Button size="compact" disabled={execute.isPending} onClick={() => execute.mutate()}>
-                    {execute.isPending ? "Ejecutando…" : "Ejecutar ahora"}
-                  </Button>
+                  <Pending active={execute.isPending} label="Ejecutando la reconexión.">
+                    <Button size="compact" disabled={execute.isPending} onClick={() => execute.mutate()}>
+                      {execute.isPending ? "Ejecutando…" : "Ejecutar ahora"}
+                    </Button>
+                  </Pending>
                 )}
               </div>
             </div>
@@ -537,14 +543,23 @@ export function FeedScreen() {
       {failedFirstLoad && (
         <ListError
           what="los pagos"
-          onRetry={() => void feed.refetch()}
-          retrying={feed.isRefetching}
+          onRetry={() => feed.refetch()}
           className="mt-4"
         />
       )}
 
-      {feed.isPending && !feed.isError && <FeedSkeleton />}
+      {/* feedback-vocabulary-rollout D1/D5/D7. The shape holds the space while
+          the threshold runs, and the region breathes once past it.
 
+          The announcement is not a duplicate of the list's own aria-live
+          (design-review D9): that one reads the rows when they arrive, this one
+          says the screen is loading while there are none. They speak in
+          sequence, never over each other. */}
+      <Pending
+        active={feed.isPending && !feed.isError}
+        label="Cargando los pagos"
+        shape={<FeedSkeleton />}
+      >
       {rows.length === 0 && !feed.isPending && !feed.isError && (
         <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
           {hasFilters ? (
@@ -572,21 +587,27 @@ export function FeedScreen() {
           </ul>
         </Card>
       )}
+      </Pending>
 
       {feed.isError && feed.data && (
         <ListError
           what="más pagos"
-          onRetry={() => void feed.fetchNextPage()}
-          retrying={feed.isFetchingNextPage}
+          onRetry={() => feed.fetchNextPage()}
           className="mt-4"
         />
       )}
 
       {feed.hasNextPage && !feed.isError && (
         <div className="mt-4 pb-6">
-          <Button size="compact" variant="secondary" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
-            {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4. "Cargar más" is a click, so its
+              wait is one the operator is having — unlike the refetch on window
+              focus that used to drive the retry button. It gets the same
+              treatment every started action gets. */}
+          <Pending active={feed.isFetchingNextPage} label="Cargando más pagos.">
+            <Button size="compact" variant="secondary" disabled={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
+              {feed.isFetchingNextPage ? "Cargando…" : "Cargar más"}
+            </Button>
+          </Pending>
         </div>
       )}
         </TabsContent>

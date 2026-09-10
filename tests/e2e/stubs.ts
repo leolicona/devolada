@@ -148,6 +148,35 @@ export const linksRoster = {
   readAt: at,
 };
 
+/* Holds one endpoint open until the test lets it go (feedback-vocabulary-rollout
+   US1, D5).
+
+   A pending state cannot be observed if the answer is already there: the
+   assertion races the response and passes for whichever reason it happens to
+   win. This makes the browser really wait while the check runs.
+
+   Register it AFTER stubAdminApi — Playwright checks route handlers in reverse
+   order of registration, so the later one wins for the same pattern.
+
+   Returns the release. A test that forgets to call it still finishes; the route
+   is torn down with the page. */
+export async function holdApiRoute(
+  page: Page,
+  pattern: string,
+  data: unknown,
+): Promise<() => void> {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(pattern, async (route) => {
+    if (route.request().resourceType() === "document") return route.fallback();
+    await held;
+    return route.fulfill(envelope(data));
+  });
+  return release;
+}
+
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
   await apiRoute(page, "**/payments/feed*", feed);

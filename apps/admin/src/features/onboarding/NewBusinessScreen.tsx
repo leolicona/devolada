@@ -1,4 +1,4 @@
-import { Alert, Button, Input } from "@devolada/ui";
+import { Alert, Button, Input, Pending } from "@devolada/ui";
 import { useState } from "react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,11 +23,23 @@ export function NewBusinessScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* feedback-vocabulary-rollout D1/D5. The word used to appear the instant the
+     request left, so a session check answered from cache flashed a full screen
+     of "Cargando…" and took it away again — the flicker the threshold exists to
+     prevent. It rides as the shape so nothing shows until the wait is real. */
   if (user.isPending) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-background">
-        <p className="text-sm text-ink-soft">Cargando…</p>
-      </main>
+      <Pending
+        active
+        label="Cargando tu sesión."
+        shape={
+          <main className="flex min-h-dvh items-center justify-center bg-background">
+            <p className="text-sm text-ink-soft">Cargando…</p>
+          </main>
+        }
+      >
+        {null}
+      </Pending>
     );
   }
   if (!user.data) return <Navigate to="/login" />;
@@ -75,9 +87,14 @@ export function NewBusinessScreen() {
             />
           </div>
           {error && <Alert variant="destructive">{error}</Alert>}
-          <Button type="submit" size="standard" className="w-full" disabled={name.trim().length < 2 || busy}>
-            {busy ? "Creando…" : "Crear negocio"}
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+              is still a wait the operator is having — the earlier sweeps keyed on
+              `isPending` and could not see these (converge F1/F2). */}
+          <Pending active={busy} label="Creando tu negocio.">
+            <Button type="submit" size="standard" className="w-full" disabled={name.trim().length < 2 || busy}>
+              {busy ? "Creando…" : "Crear negocio"}
+            </Button>
+          </Pending>
         </form>
       ) : (
         <div className="space-y-4">

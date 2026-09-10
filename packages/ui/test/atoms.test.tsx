@@ -76,4 +76,15 @@ describe("US-P01, US-P04: the Alert primitive carries meaning, not just a recipe
 
     expect(container.firstChild).toHaveAttribute("aria-hidden", "true");
   });
+
+  /* feedback-vocabulary-rollout US1 */
+  it("Skeleton carries no animation of its own — the region that owns the wait breathes", () => {
+    const { container } = render(<Skeleton className="h-4 w-40" />);
+
+    /* Not merely "not animate-pulse". Any animation here would be a second
+       waiting rhythm, and the last one froze under reduced motion because it
+       matched no `data-motion` selector (feedback-vocabulary-rollout D2, D6). */
+    expect((container.firstChild as HTMLElement).className).not.toMatch(/\banimate-/);
+    expect(container.firstChild).not.toHaveAttribute("data-motion");
+  });
 });

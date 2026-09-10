@@ -99,7 +99,7 @@ function FeedbackDemo() {
 
       <Pending active={waiting} label="Estamos verificando tu transferencia.">
         <div className="rounded-md border border-line bg-card p-4">
-          <StatusBadge status="validating" size="md" />
+          <StatusBadge status="validating" size="standard" />
           <p className="mt-3 text-sm text-ink-soft">
             Estamos verificando tu transferencia. Esto puede tomar unos minutos; puedes dejar esta
             página abierta.
@@ -198,8 +198,8 @@ export function Showcase() {
             ))}
           </div>
           <div className="flex flex-wrap gap-3">
-            <StatusBadge status="reconnected" size="md" />
-            <StatusBadge status="queued" size="md" />
+            <StatusBadge status="reconnected" size="standard" />
+            <StatusBadge status="queued" size="standard" />
           </div>
         </div>
       </Section>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Button, Card, Input, Skeleton, parseMoney } from "@devolada/ui";
+import { Button, Card, Input, Pending, Skeleton, parseMoney } from "@devolada/ui";
 import type { SettingsPatchRequest, SettingsResponse } from "@devolada/api/settings-schema";
 import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
@@ -203,20 +203,25 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
         </div>
       </div>
 
-      <Button size="compact"
-        disabled={!valid || save.isPending}
-        onClick={() =>
-          save.mutate({
-            ...(canEditClabe ? { speiClabe: clabe.trim() } : {}),
-            speiBank: bank === "" ? null : bank,
-            /* D5: empty clears — the API takes ≥3 chars or null */
-            speiBeneficiaryName: beneficiary.trim() === "" ? null : beneficiary.trim(),
-            speiServiceFeeCents: feeCents!,
-          })
-        }
-      >
-        {save.isPending ? "Guardando…" : "Guardar pago directo"}
-      </Button>
+      {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+      <Pending active={save.isPending} label="Guardando el pago directo.">
+        <Button size="compact"
+          disabled={!valid || save.isPending}
+          onClick={() =>
+            save.mutate({
+              ...(canEditClabe ? { speiClabe: clabe.trim() } : {}),
+              speiBank: bank === "" ? null : bank,
+              /* D5: empty clears — the API takes ≥3 chars or null */
+              speiBeneficiaryName: beneficiary.trim() === "" ? null : beneficiary.trim(),
+              speiServiceFeeCents: feeCents!,
+            })
+          }
+        >
+          {save.isPending ? "Guardando…" : "Guardar pago directo"}
+        </Button>
+      </Pending>
       {save.isSuccess && !save.isPending && (
         <p role="status" className="text-sm font-medium text-success">
           Guardado.
@@ -288,12 +293,17 @@ function PolicyCard({ settings }: { settings: SettingsResponse }) {
           La tolerancia debe ser un monto entre $0.00 y $100.00.
         </p>
       )}
-      <Button size="compact"
-        disabled={!valid || save.isPending}
-        onClick={() => save.mutate({ toleranceCents: tolCents!, overTreatment: treatment })}
-      >
-        {save.isPending ? "Guardando…" : "Guardar política"}
-      </Button>
+      {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+      <Pending active={save.isPending} label="Guardando la política.">
+        <Button size="compact"
+          disabled={!valid || save.isPending}
+          onClick={() => save.mutate({ toleranceCents: tolCents!, overTreatment: treatment })}
+        >
+          {save.isPending ? "Guardando…" : "Guardar política"}
+        </Button>
+      </Pending>
       {save.isSuccess && !save.isPending && (
         <p role="status" className="text-sm font-medium text-success">
           Guardado.
@@ -355,17 +365,22 @@ function DisplayCard({ settings }: { settings: SettingsResponse }) {
         </div>
       </div>
 
-      <Button size="compact"
-        disabled={!changed || save.isPending}
-        onClick={() =>
-          save.mutate({
-            timezone: timezone as SettingsPatchRequest["timezone"],
-            timeFormat: timeFormat as SettingsPatchRequest["timeFormat"],
-          })
-        }
-      >
-        {save.isPending ? "Guardando…" : "Guardar zona y formato"}
-      </Button>
+      {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+      <Pending active={save.isPending} label="Guardando la zona y el formato.">
+        <Button size="compact"
+          disabled={!changed || save.isPending}
+          onClick={() =>
+            save.mutate({
+              timezone: timezone as SettingsPatchRequest["timezone"],
+              timeFormat: timeFormat as SettingsPatchRequest["timeFormat"],
+            })
+          }
+        >
+          {save.isPending ? "Guardando…" : "Guardar zona y formato"}
+        </Button>
+      </Pending>
     </SectionCard>
   );
 }
@@ -415,13 +430,21 @@ export function DirectPaymentSettingsScreen() {
 
   return (
     <SubPage title="Pago directo y conciliación">
-      {isPending && <CardsSkeleton count={2} />}
-      {data && (
-        <div className="mt-4 space-y-4">
-          <SpeiCard settings={data} canEditClabe={canClabe} />
-          <PolicyCard settings={data} />
-        </div>
-      )}
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending
+        active={isPending}
+        label="Cargando la configuración de pago directo"
+        shape={<CardsSkeleton count={2} />}
+      >
+        {data && (
+          <div className="mt-4 space-y-4">
+            <SpeiCard settings={data} canEditClabe={canClabe} />
+            <PolicyCard settings={data} />
+          </div>
+        )}
+      </Pending>
     </SubPage>
   );
 }
@@ -432,12 +455,16 @@ export function PreferencesScreen() {
 
   return (
     <SubPage title="Preferencias">
-      {isPending && <CardsSkeleton count={1} />}
-      {data && (
-        <div className="mt-4 space-y-4">
-          <DisplayCard settings={data} />
-        </div>
-      )}
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending active={isPending} label="Cargando tus preferencias" shape={<CardsSkeleton count={1} />}>
+        {data && (
+          <div className="mt-4 space-y-4">
+            <DisplayCard settings={data} />
+          </div>
+        )}
+      </Pending>
     </SubPage>
   );
 }

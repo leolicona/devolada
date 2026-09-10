@@ -1,4 +1,4 @@
-import { Alert, Amount, Button, Card, Input, ListError, Skeleton, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, ListError, parseMoney, Pending, Skeleton } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
@@ -159,9 +159,14 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
               : "No pudimos registrar la recarga. Intenta de nuevo."}
         </Alert>
       )}
-      <Button size="compact" type="submit" disabled={submit.isPending || (door === "transfer" ? !transferValid : file === null)}>
-        {submit.isPending ? "Validando…" : "Validar recarga"}
-      </Button>
+      {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+      <Pending active={submit.isPending} label="Enviando tu recarga.">
+        <Button size="compact" type="submit" disabled={submit.isPending || (door === "transfer" ? !transferValid : file === null)}>
+          {submit.isPending ? "Validando…" : "Validar recarga"}
+        </Button>
+      </Pending>
     </form>
   );
 }
@@ -202,88 +207,97 @@ export function CreditCard() {
   return (
     <Card className="p-6">
       <h2 className="text-base font-semibold">Saldo y recargas</h2>
-      {credit.isPending && <Skeleton className="mt-4 h-10 w-48" />}
       {credit.error && (
         <ListError
           what="tu saldo"
-          onRetry={() => void credit.refetch()}
-          retrying={credit.isRefetching}
+          onRetry={() => credit.refetch()}
           className="mt-4"
         />
       )}
-      {credit.data && (
-        <div className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <Amount cents={credit.data.balanceCents} className="text-3xl font-semibold" />
-            {/* The step is one status with one representation: the same
-                label + icon the chip carries (prepaid-credit D7). It read
-                as colour + text here, which is the shape the FRONTEND law
-                exists to forbid. */}
-            <StepMark step={credit.data.step} />
-            <span className="text-sm text-ink-soft">
-              Cada validación cuesta <Amount cents={credit.data.feeCents} />.
-            </span>
-          </div>
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending
+        active={credit.isPending}
+        label="Cargando tu saldo"
+        shape={
+          <Skeleton className="mt-4 h-10 w-48" />
+        }
+      >
+        {credit.data && (
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <Amount cents={credit.data.balanceCents} className="text-3xl font-semibold" />
+              {/* The step is one status with one representation: the same
+                  label + icon the chip carries (prepaid-credit D7). It read
+                  as colour + text here, which is the shape the FRONTEND law
+                  exists to forbid. */}
+              <StepMark step={credit.data.step} />
+              <span className="text-sm text-ink-soft">
+                Cada validación cuesta <Amount cents={credit.data.feeCents} />.
+              </span>
+            </div>
 
-          {inFlight ? (
-            <TopUpWait topUp={inFlight} />
-          ) : recharging ? (
-            credit.data.topUp ? (
-              <div className="space-y-4 rounded-md border border-border bg-well p-4">
-                <p className="text-sm">
-                  Transfiere lo que quieras (mínimo <Amount cents={credit.data.minTopUpCents} />) a la cuenta de Devolada y luego
-                  compruébalo aquí.
-                </p>
-                <dl className="grid gap-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <dt className="w-24 text-ink-soft">CLABE</dt>
-                    <dd className="font-mono">{credit.data.topUp.clabe}</dd>
-                    <CopyButton value={credit.data.topUp.clabe} label="CLABE" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <dt className="w-24 text-ink-soft">Banco</dt>
-                    <dd>{credit.data.topUp.bank}</dd>
-                  </div>
-                  {credit.data.topUp.beneficiary && (
+            {inFlight ? (
+              <TopUpWait topUp={inFlight} />
+            ) : recharging ? (
+              credit.data.topUp ? (
+                <div className="space-y-4 rounded-md border border-border bg-well p-4">
+                  <p className="text-sm">
+                    Transfiere lo que quieras (mínimo <Amount cents={credit.data.minTopUpCents} />) a la cuenta de Devolada y luego
+                    compruébalo aquí.
+                  </p>
+                  <dl className="grid gap-2 text-sm">
                     <div className="flex items-center gap-2">
-                      <dt className="w-24 text-ink-soft">Beneficiario</dt>
-                      <dd>{credit.data.topUp.beneficiary}</dd>
+                      <dt className="w-24 text-ink-soft">CLABE</dt>
+                      <dd className="font-mono">{credit.data.topUp.clabe}</dd>
+                      <CopyButton value={credit.data.topUp.clabe} label="CLABE" />
                     </div>
-                  )}
-                </dl>
-                <TopUpForm
-                  credit={credit.data}
-                  onDone={(t) => {
-                    setRecharging(false);
-                    refresh();
-                    if (t.status === "credited") setRecharging(false);
-                  }}
-                />
-              </div>
+                    <div className="flex items-center gap-2">
+                      <dt className="w-24 text-ink-soft">Banco</dt>
+                      <dd>{credit.data.topUp.bank}</dd>
+                    </div>
+                    {credit.data.topUp.beneficiary && (
+                      <div className="flex items-center gap-2">
+                        <dt className="w-24 text-ink-soft">Beneficiario</dt>
+                        <dd>{credit.data.topUp.beneficiary}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  <TopUpForm
+                    credit={credit.data}
+                    onDone={(t) => {
+                      setRecharging(false);
+                      refresh();
+                      if (t.status === "credited") setRecharging(false);
+                    }}
+                  />
+                </div>
+              ) : (
+                <Alert variant="warning">Las recargas aún no están disponibles: la plataforma no ha configurado su cuenta.</Alert>
+              )
             ) : (
-              <Alert variant="warning">Las recargas aún no están disponibles: la plataforma no ha configurado su cuenta.</Alert>
-            )
-          ) : (
-            <Button size="compact" onClick={() => setRecharging(true)}>Recargar</Button>
-          )}
+              <Button size="compact" onClick={() => setRecharging(true)}>Recargar</Button>
+            )}
 
-          {entries.data && (
-            <ul className="divide-y divide-line-soft" aria-label="Movimientos de saldo">
-              {entries.data.entries.length === 0 && <li className="py-3 text-sm text-ink-soft">Aquí aparecerá cada validación y recarga.</li>}
-              {entries.data.entries.map((e) => (
-                <li key={e.id} className="flex items-baseline gap-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1">
-                    {ENTRY_LABELS[e.kind]}
-                    {e.reason && <span className="ml-2 text-ink-soft">· {e.reason}</span>}
-                  </span>
-                  <span className="shrink-0 text-ink-soft">{formatTime(e.createdAt, timeFormat, timezone)}</span>
-                  <span className="shrink-0 font-medium">{e.cents > 0 ? "+" : ""}<Amount cents={e.cents} /></span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+            {entries.data && (
+              <ul className="divide-y divide-line-soft" aria-label="Movimientos de saldo">
+                {entries.data.entries.length === 0 && <li className="py-3 text-sm text-ink-soft">Aquí aparecerá cada validación y recarga.</li>}
+                {entries.data.entries.map((e) => (
+                  <li key={e.id} className="flex items-baseline gap-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1">
+                      {ENTRY_LABELS[e.kind]}
+                      {e.reason && <span className="ml-2 text-ink-soft">· {e.reason}</span>}
+                    </span>
+                    <span className="shrink-0 text-ink-soft">{formatTime(e.createdAt, timeFormat, timezone)}</span>
+                    <span className="shrink-0 font-medium">{e.cents > 0 ? "+" : ""}<Amount cents={e.cents} /></span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </Pending>
     </Card>
   );
 }

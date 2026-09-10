@@ -1,12 +1,45 @@
 # Feature Specification: feedback-vocabulary-rollout
 
-**Feature Branch**: `claude/new-session-1cpf5p`
+**Feature Branch**: `claude/002-feedback-vocabulary-rollout`
 
 **Created**: 2026-09-09
 
 **Status**: Draft
 
 **Input**: User description: "resolver G2 y G3" — the two coverage gaps `/speckit-analyze` found in `001-design-foundations`: three of the five named feedback states have no implementation, and the pending announcement reaches only one of the product's two surfaces.
+
+**Amended 2026-09-10**: "include finding I2 in feature 002 — align `StatusBadge` with the new size vocabulary." I2 is the inconsistency the same analysis found in the shared components: `001-design-foundations` gave every control one way to ask for a size, and the status badge kept its own. Added here as User Story 4.
+
+## Clarifications
+
+### Session 2026-09-10
+
+- Q: Which waits in the back office must show the pending treatment — only a
+  screen loading its data, or also every action the operator starts and waits
+  for? → A: Both. A screen's first load, plus every action the operator starts
+  and then waits for (save, delete, invite, retry). A refresh the operator did
+  not start stays silent. (FR-001, SC-001, SC-011)
+- Q: Should the placeholder shape keep its own pulse, or breathe like everything
+  else that waits? → A: It breathes. One waiting movement exists in the product,
+  built from tokens, and the placeholder inherits the reduced-motion exception
+  that keeps waiting alive — closing a live defect where it freezes today.
+  (FR-003, FR-004, FR-014, SC-012)
+- Q: When the operator clicks "Reintentar", should the icon keep spinning, or
+  should the retry wait the way every other action does? → A: It waits the same
+  way. The turning icon is removed rather than hidden from one surface, leaving
+  one waiting movement in the product with no exception to remember. The word
+  "Cargando…" is untouched. (FR-008, SC-013)
+- Q: How many times should a screen reader hear about a wait on a screen that is
+  pending in more than one place at once? → A: Once each, split by who started
+  it. A screen's load is announced by the screen, naming what is loading; an
+  action the operator started is announced at the control they used. A pending
+  region nested inside one that already announces stays silent — the pattern
+  `001-design-foundations` proved on the payer's page. (FR-002, SC-002)
+- Q: Should a back-office wait that finishes very fast show nothing at all, the
+  way the payer's page already works? → A: Yes. One flash threshold governs the
+  whole product, the placeholder shape included, and a region below it holds the
+  space its content will take so nothing jumps. Two timings for "when does a
+  wait become visible" is the same drift as two rhythms. (FR-015, SC-014)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -93,10 +126,43 @@ state against the first. They are indistinguishable.
 
 ---
 
+### User Story 4 - One name for a size, everywhere (Priority: P4)
+
+`001-design-foundations` gave the product a single way to ask for a size: a
+screen names the context it serves — the dense back office, a thumb, the one
+committing action — and never states a height. The button speaks it and the text
+field speaks it. The status badge, which is the product's only representation of
+an outcome, still asks for `sm` or `md`.
+
+**Why this priority**: nothing is broken today, so it waits behind the three
+stories that fix something. It belongs in this feature all the same. This
+feature's subject is the back office speaking one feedback language, and a
+status is feedback — a badge that names its size differently from the button
+beside it is the same drift, one component further along.
+
+**Independent Test**: read every place in the product that asks for a size and
+confirm each one names a context. Needs nothing from the other three stories.
+
+**Acceptance Scenarios**:
+
+1. **Given** any screen that shows a status, **When** it asks for a size,
+   **Then** it names a context from the shared vocabulary.
+2. **Given** the shared components read together, **When** their sizes are
+   listed, **Then** no component declares a size name of its own.
+3. **Given** a screen showing a status before this story and after it,
+   **When** the two are compared, **Then** they are identical: the names
+   changed and nothing anyone sees did.
+4. **Given** a size name the vocabulary does not contain, **When** a screen
+   tries to use it, **Then** the attempt is rejected before that screen can
+   ship.
+
+---
+
 ### Edge Cases
 
 - **A screen that is pending in two places at once.** A list loading while a
-  setting saves must not read as one large indeterminate page.
+  setting saves must not read as one large indeterminate page, and must not
+  speak twice: the load belongs to the screen, the save belongs to its button.
 - **A surface that closes while its content is still pending.** The departure
   must not be blocked waiting for an answer nobody will see.
 - **A pending state that resolves during the arrival of its own surface.** The
@@ -108,19 +174,34 @@ state against the first. They are indistinguishable.
 - **Reduced motion with a surface that both arrives and is pending.** Two
   visibility changes at once must stay legible rather than compounding into a
   flicker.
+- **The same status shown on both surfaces.** A badge takes its size from the
+  surface it sits on, never from the status it reports.
+- **A background refresh while the operator is reading.** The screen stays
+  still. A wait nobody started never becomes a signal, however long it runs.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Every back-office screen that can be pending MUST carry the shared
-  pending treatment defined by `001-design-foundations`.
+- **FR-001**: Every wait the operator is having MUST carry the shared pending
+  treatment defined by `001-design-foundations` — a screen loading its data for
+  the first time, and every action the operator starts and then waits for: a
+  save, a delete, an invitation, a retry. A refresh the operator did not start —
+  a refetch when the tab regains focus, a background poll — MUST NOT show one.
+  A signal belongs to a wait somebody is having.
 - **FR-002**: Every pending state in the back office MUST be stated in words to
-  assistive technology.
+  assistive technology, and stated once. A screen's load is announced by the
+  screen, naming what is loading; an action the operator started is announced at
+  the control they used. A pending region nested inside one that already
+  announces MUST stay silent.
 - **FR-003**: A region whose content has a known shape MUST show that shape while
   pending; a region without one MUST show the shared pending treatment. The two
-  MUST NOT be applied to the same region at once.
-- **FR-004**: No screen may invent its own pending treatment.
+  MUST NOT be applied to the same region at once. Either way the movement is the
+  same one: a placeholder shape breathes at the shared rhythm rather than
+  carrying a rhythm of its own.
+- **FR-004**: Neither a screen nor a component may invent its own pending
+  treatment. Exactly one waiting movement exists in the product, and its
+  duration and easing come from tokens.
 - **FR-005**: Arriving and departing MUST each have exactly one definition,
   shared by every surface in both surfaces of the product.
 - **FR-006**: Arriving and departing MUST change visibility only. Nothing may
@@ -129,12 +210,33 @@ state against the first. They are indistinguishable.
   effect MUST either be given a working one or have it removed. An inert
   decoration MUST NOT survive this feature.
 - **FR-008**: Retrying MUST render exactly as waiting does, with no residue of
-  the failure that preceded it.
+  the failure that preceded it and no movement of its own. Nothing rotates: the
+  turning icon on the retry control is removed outright, not merely kept off the
+  payer's surface. The wording it sits beside does not change.
 - **FR-009**: This feature MUST NOT introduce a new stacking position, a new
   colour, a new duration or any literal value; it consumes what
   `001-design-foundations` established.
 - **FR-010**: The pending treatment MUST NOT read elapsed time or attempt count
   anywhere it is applied, exactly as on the payer's surface.
+- **FR-011**: Every shared component that offers a size MUST name it from the
+  control-size vocabulary `001-design-foundations` defined. No component may
+  declare a size name of its own.
+- **FR-012**: A component takes the vocabulary's names, not its heights. A
+  status is read, never aimed at, so it carries no touch-target obligation and
+  keeps the dimensions it has today. Adopting the vocabulary MUST NOT change
+  what anyone sees.
+- **FR-013**: A component MUST offer only the sizes it actually serves. A member
+  of the vocabulary that has no context in that component is left out, not
+  filled in for symmetry.
+- **FR-014**: Under reduced motion every pending treatment MUST keep moving. A
+  pending region that freezes is a defect, not a concession — a frozen waiting
+  screen reads as a dead one. This closes a live gap rather than describing the
+  status quo: the placeholder shape freezes today.
+- **FR-015**: A pending treatment MUST NOT appear before the flash threshold
+  `001-design-foundations` set, and once shown MUST stay long enough to be read.
+  This governs a placeholder shape exactly as it governs the generic signal.
+  While a region is still below the threshold it MUST hold the space its content
+  will occupy, so nothing jumps when the shape arrives.
 
 ### Key Entities
 
@@ -142,15 +244,20 @@ state against the first. They are indistinguishable.
   defined — `waiting`, `resolving`, `entering`, `leaving`, `retrying`. That
   feature implements the first two. **This feature implements the remaining
   three and applies all five to the back office.** No sixth state is added.
+- **Control size**: the named contexts `001-design-foundations` defined —
+  `compact` for the dense back office, `standard` for touch, `decisive` for the
+  charge path's committing action. A screen names one; it never states a height.
+  This feature adds no fourth. It finishes applying the three.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: The count of back-office screens that can be pending but show no
-  pending treatment is zero.
-- **SC-002**: The count of pending states not stated in words is zero, across
-  both surfaces.
+- **SC-001**: The count of operator-initiated waits in the back office that show
+  no pending treatment is zero — a screen's first load and a started action
+  count alike.
+- **SC-002**: The count of pending states not stated in words is zero across
+  both surfaces, and so is the count of waits announced more than once.
 - **SC-003**: Shown any pending back-office screen for five seconds with the
   wording covered, a person can say it is still working.
 - **SC-004**: Opening the same surface twice produces two arrivals a reviewer
@@ -163,6 +270,35 @@ state against the first. They are indistinguishable.
   when compared side by side.
 - **SC-008**: The count of literal colour, size, spacing, stacking and duration
   values introduced by this feature is zero.
+- **SC-009**: The count of size names used **on a control or a status** that are
+  not members of the shared vocabulary is zero, across both surfaces.
+
+> Narrowed 2026-09-10, on the convergence finding that the code satisfies FR-011
+> and fails this. `Avatar` declares `xs` / `sm` / `lg`; it is app-local, so
+> FR-011 — which binds *shared* components — holds, while this criterion, which
+> said "anywhere in the product", did not.
+>
+> The criterion was the thing that overreached. The entity it measures is named
+> **Control size** in the data model, with a height column and a touch-target
+> rule, and an avatar is neither a control nor a status: nothing is aimed at it
+> and nothing is read from it. Forcing it into the vocabulary would mean either
+> calling a 24px nav glyph `compact` — a name that means 40px and "the dense
+> back office" — or adding a fourth member, which FR-013 and Out of Scope both
+> refuse. Either would make the vocabulary mean less, which is the drift that
+> raised this story in the first place.
+>
+> `Avatar`'s own `text-[10px]` / `text-[11px]` literals are real and belong to
+> the `no-literal-gate` debt, not here.
+- **SC-010**: Every screen that shows a status renders identically before and
+  after this feature, compared image against image.
+- **SC-011**: The count of pending treatments that appear during a refresh the
+  operator did not start is zero.
+- **SC-012**: With reduced motion requested, the count of pending regions that
+  stop moving is zero.
+- **SC-013**: The count of elements that rotate, spin or bounce is zero, across
+  both surfaces.
+- **SC-014**: A back-office wait that resolves faster than the threshold shows
+  nothing at all, and the layout does not shift while it resolves.
 
 ## Assumptions
 
@@ -181,6 +317,20 @@ state against the first. They are indistinguishable.
   larger change and is not required by anything here.
 - **The staged waiting copy is untouched**, as in `001-design-foundations`. This
   feature adds no wording and changes none.
+- **The placeholder shape gets calmer.** Adopting the shared rhythm makes its
+  dip shallower than today's and a little slower. That is accepted: one waiting
+  movement across the product is worth more than the extra contrast, and the
+  shape itself already says "pending" before any movement does.
+- **Aligning the badge means renaming, not resizing.** The vocabulary names
+  contexts, and the badge already serves the right two — the dense back office
+  and the payer's touch surface. Only its words were wrong. Giving it the
+  vocabulary's heights as well would grow every badge sitting in a table row,
+  a visual change nothing here asks for.
+- **The rename reaches the payer's call sites and changes nothing there.** Six
+  places on the payer's page pass the old name today. They must pass the new one
+  or two vocabularies stay alive, which is the drift itself. This is the single
+  part of the feature that edits a file outside the back office, and it edits a
+  word rather than a pixel.
 
 ## Out of Scope
 
@@ -192,3 +342,7 @@ state against the first. They are indistinguishable.
 - New pending states, or any sixth member of the feedback vocabulary.
 - Loading performance itself: this feature changes how waiting looks, never how
   long it lasts.
+- Any change to what a status badge looks like, which statuses exist, or how
+  they are worded in Spanish.
+- A fourth control size, or extending an existing one to a component that has no
+  context for it.

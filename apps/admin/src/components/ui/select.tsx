@@ -8,6 +8,13 @@ import { cn } from "@/lib/utils";
 export const Select = SelectPrimitive.Root;
 export const SelectValue = SelectPrimitive.Value;
 
+/* feedback-vocabulary-rollout D9, FR-005/FR-006. Arriving and departing have
+   one definition each, in packages/ui/src/styles/index.css, and this surface
+   consumes it — no duration, curve or keyframe of its own.
+
+   The backdrop carries the same pair as the content so the two never separate
+   mid-flight. Opacity only: a surface that slid would break FR-006 and would
+   also make the reduced-motion decision behind these keyframes indefensible. */
 export function SelectTrigger({
   className,
   children,
@@ -41,6 +48,7 @@ export function SelectContent({
         sideOffset={4}
         className={cn(
           "z-dropdown min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg",
+          "data-[state=open]:animate-enter data-[state=closed]:animate-leave",
           className,
         )}
         {...props}

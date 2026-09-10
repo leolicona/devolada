@@ -111,19 +111,32 @@ const statuses: Record<
   registered: { tone: "success", icon: ClipboardCheck, label: "Registrado" },
 };
 
+/* The shared control-size vocabulary (feedback-vocabulary-rollout D11,
+   design-foundations data model: Control size). A screen names the context it
+   serves and never states a height.
+
+   The NAMES, not the heights. `compact` on a button is 40px because a pointer
+   has to land on it; a badge is read and never aimed at, so it carries no
+   touch-target obligation and keeps the dimensions it has always had. Renaming
+   these changed no pixel — the review captures are the proof.
+
+   No `decisive`. A badge has no committing-action context, and a member of the
+   vocabulary with nowhere to go is left out rather than filled in for
+   symmetry (FR-013). */
 const sizes = {
-  sm: { badge: "gap-1.5 px-3 py-1 text-sm", icon: "size-4" },
-  md: { badge: "gap-2 px-4 py-1.5 text-base", icon: "size-5" },
+  compact: { badge: "gap-1.5 px-3 py-1 text-sm", icon: "size-4" },
+  standard: { badge: "gap-2 px-4 py-1.5 text-base", icon: "size-5" },
 } as const;
 
 export interface StatusBadgeProps {
   status: Status;
-  /* sm for admin tables and lists; md for the store counter */
+  /* `compact` for the dense back office — tables, lists, rows.
+     `standard` for touch: the payer's surface and the store counter. */
   size?: keyof typeof sizes;
   className?: string;
 }
 
-export function StatusBadge({ status, size = "sm", className = "" }: StatusBadgeProps) {
+export function StatusBadge({ status, size = "compact", className = "" }: StatusBadgeProps) {
   const { tone, icon: Icon, label } = statuses[status];
   const s = sizes[size];
   return (

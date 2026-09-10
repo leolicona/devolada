@@ -1,4 +1,4 @@
-import { Alert, Button, Input } from "@devolada/ui";
+import { Alert, Button, Input, Pending } from "@devolada/ui";
 import { useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -126,9 +126,14 @@ export function LoginPage() {
           <Input size="compact" id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {submit.error && <Alert variant="destructive">{submit.error}</Alert>}
-        <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
-          {submit.busy ? "Entrando…" : "Entrar"}
-        </Button>
+        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+            is still a wait the operator is having — the earlier sweeps keyed on
+            `isPending` and could not see these (converge F1/F2). */}
+        <Pending active={submit.busy} label="Entrando a tu cuenta.">
+          <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
+            {submit.busy ? "Entrando…" : "Entrar"}
+          </Button>
+        </Pending>
         {/* US-S07: one-touch sign-in for devices with an enrolled passkey */}
         {passkeysSupported() && (
           <Button
@@ -244,9 +249,14 @@ export function SignupPage() {
           )}
         </div>
         {submit.error && <Alert variant="destructive">{submit.error}</Alert>}
-        <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
-          {submit.busy ? "Creando…" : "Crear cuenta"}
-        </Button>
+        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+            is still a wait the operator is having — the earlier sweeps keyed on
+            `isPending` and could not see these (converge F1/F2). */}
+        <Pending active={submit.busy} label="Creando tu cuenta.">
+          <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
+            {submit.busy ? "Creando…" : "Crear cuenta"}
+          </Button>
+        </Pending>
         <p className="text-center text-sm">
           <Link to="/login" search={{ next }} className="text-link hover:underline">
             Ya tengo cuenta
@@ -317,9 +327,14 @@ export function VerifyEmailPage() {
           />
         </div>
         {confirm.error && <Alert variant="destructive">{confirm.error}</Alert>}
-        <Button type="submit" size="standard" className="w-full" disabled={confirm.busy || code.length < 6}>
-          {confirm.busy ? "Confirmando…" : "Confirmar"}
-        </Button>
+        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+            is still a wait the operator is having — the earlier sweeps keyed on
+            `isPending` and could not see these (converge F1/F2). */}
+        <Pending active={confirm.busy} label="Confirmando tu correo.">
+          <Button type="submit" size="standard" className="w-full" disabled={confirm.busy || code.length < 6}>
+            {confirm.busy ? "Confirmando…" : "Confirmar"}
+          </Button>
+        </Pending>
         <p className="text-center text-sm">
           <Button size="compact"
             variant="link"
@@ -409,9 +424,14 @@ export function RecoverPage() {
             <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
-          <Button type="submit" size="standard" className="w-full" disabled={ask.busy}>
-            {ask.busy ? "Enviando…" : "Enviar código"}
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+              is still a wait the operator is having — the earlier sweeps keyed on
+              `isPending` and could not see these (converge F1/F2). */}
+          <Pending active={ask.busy} label="Enviando el código.">
+            <Button type="submit" size="standard" className="w-full" disabled={ask.busy}>
+              {ask.busy ? "Enviando…" : "Enviar código"}
+            </Button>
+          </Pending>
           {backToLogin}
         </form>
       ) : (
@@ -445,22 +465,33 @@ export function RecoverPage() {
           </div>
           {reset.error && <Alert variant="destructive">{reset.error}</Alert>}
           {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
-          <Button type="submit" size="standard" className="w-full" disabled={reset.busy}>
-            {reset.busy ? "Guardando…" : "Guardar contraseña"}
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+              is still a wait the operator is having — the earlier sweeps keyed on
+              `isPending` and could not see these (converge F1/F2). */}
+          <Pending active={reset.busy} label="Guardando tu contraseña.">
+            <Button type="submit" size="standard" className="w-full" disabled={reset.busy}>
+              {reset.busy ? "Guardando…" : "Guardar contraseña"}
+            </Button>
+          </Pending>
           <p className="text-center text-sm">
             {/* The same confirmation the verify banner gives: a resend that
                 says nothing looks like a button that did nothing. */}
-            <Button size="compact"
-              variant="link"
-              disabled={ask.busy}
-              onClick={() => {
-                setResent(true);
-                void ask.run();
-              }}
-            >
-              {resent ? "Código reenviado" : "Reenviar código"}
-            </Button>
+            {/* feedback-vocabulary-rollout D1/D4. The label flips optimistically
+                to "Código reenviado" the moment it is clicked, so the operator
+                is not left guessing — but the request is still in flight after
+                that, and the breath is what says so. */}
+            <Pending active={ask.busy} label="Reenviando el código." className="inline-block">
+              <Button size="compact"
+                variant="link"
+                disabled={ask.busy}
+                onClick={() => {
+                  setResent(true);
+                  void ask.run();
+                }}
+              >
+                {resent ? "Código reenviado" : "Reenviar código"}
+              </Button>
+            </Pending>
           </p>
           {backToLogin}
         </form>

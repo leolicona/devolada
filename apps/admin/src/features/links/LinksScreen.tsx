@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Share2, Link as LinkIcon, AlertCircle, Check, WifiOff } from "lucide-react";
-import { Alert, Button, Card, Input, ListError, Skeleton } from "@devolada/ui";
+import { Alert, Button, Card, Input, ListError, Pending, Skeleton } from "@devolada/ui";
 import { api, ApiError } from "@/lib/api";
 import { focusReadOptions } from "@/lib/presence";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
@@ -207,26 +207,35 @@ export function LinksScreen() {
       {roster.isError && !roster.data && !isConfigError && (
         <ListError
           what="los links"
-          onRetry={() => void roster.refetch()}
-          retrying={roster.isRefetching}
+          onRetry={() => roster.refetch()}
           className="mt-6"
         />
       )}
 
-      {roster.isPending && !roster.isError && (
-        <Card className="mt-6 p-4">
-          {[0, 1, 2].map((k) => (
-            <div key={k} className="flex items-center gap-4 py-3">
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-44" />
-                <Skeleton className="h-3 w-32" />
-              </div>
-              <Skeleton className="h-9 w-28 rounded-md" />
-            </div>
-          ))}
-        </Card>
-      )}
+      {/* feedback-vocabulary-rollout D1/D5/D7. The shape holds the space while
+          the threshold runs; the region breathes once past it.
 
+          Note where this sits: OUTSIDE the aria-live div below, not inside it.
+          Nesting a role="status" within another live region is how one state
+          gets read out twice (D4). The live region announces the list when it
+          arrives; this announces the wait before it does. */}
+      <Pending
+        active={roster.isPending && !roster.isError}
+        label="Cargando tus clientes"
+        shape={
+          <Card className="mt-6 p-4">
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="flex items-center gap-4 py-3">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+                <Skeleton className="h-9 w-28 rounded-md" />
+              </div>
+            ))}
+          </Card>
+        }
+      >
       <div aria-live="polite">
         {roster.data && !roster.data.complete && (
           <Alert variant="warning" className="mt-6">
@@ -261,6 +270,7 @@ export function LinksScreen() {
           </div>
         )}
       </div>
+      </Pending>
     </main>
   );
 }

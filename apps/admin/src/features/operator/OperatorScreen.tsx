@@ -1,4 +1,4 @@
-import { Alert, Amount, Button, Card, Input, Skeleton, parseMoney } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, parseMoney, Pending, Skeleton } from "@devolada/ui";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
@@ -118,13 +118,18 @@ function SettingField({ setting }: { setting: Setting }) {
         )}
         {save.error && <p className="mt-1 text-sm font-medium text-error">Valor no válido para esta regla.</p>}
       </div>
-      <Button size="compact"
-        aria-label={`Guardar ${KEY_LABELS[setting.key] ?? setting.key}`}
-        disabled={!changed || outgoing === null || outgoing === "" || save.isPending}
-        onClick={() => outgoing !== null && save.mutate(outgoing)}
-      >
-        {save.isPending ? "Guardando…" : "Guardar"}
-      </Button>
+      {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+      <Pending active={save.isPending} label="Guardando la regla.">
+        <Button size="compact"
+          aria-label={`Guardar ${KEY_LABELS[setting.key] ?? setting.key}`}
+          disabled={!changed || outgoing === null || outgoing === "" || save.isPending}
+          onClick={() => outgoing !== null && save.mutate(outgoing)}
+        >
+          {save.isPending ? "Guardando…" : "Guardar"}
+        </Button>
+      </Pending>
     </div>
   );
 }
@@ -212,17 +217,27 @@ function BusinessDetail({ row, onClose }: { row: PlatformBusinessRow; onClose: (
           <Label htmlFor={`reason-${row.id}`}>Motivo (obligatorio)</Label>
           <Textarea id={`reason-${row.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Por qué, para quien lo lea después" />
           {adjust.error && <p className="text-sm font-medium text-error">No se guardó el ajuste.</p>}
-          <Button size="compact" disabled={!adjustValid || adjust.isPending} onClick={() => adjust.mutate()}>
-            Registrar ajuste
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+          <Pending active={adjust.isPending} label="Aplicando el ajuste.">
+            <Button size="compact" disabled={!adjustValid || adjust.isPending} onClick={() => adjust.mutate()}>
+              Registrar ajuste
+            </Button>
+          </Pending>
         </div>
         <div className="space-y-2 rounded-md border border-border p-4">
           <Label htmlFor={`override-${row.id}`}>Tarifa negociada (vacío = global)</Label>
           <Input size="compact" id={`override-${row.id}`} prefix="$" inputMode="decimal" value={override} onChange={(e) => setOverride(e.target.value)} />
           {patch.error && <p className="text-sm font-medium text-error">Tarifa fuera de rango.</p>}
-          <Button size="compact" variant="secondary" disabled={patch.isPending} onClick={() => patch.mutate()}>
-            Guardar tarifa
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
+          announced at the control they used. Disabled plus a changed word is
+          not a signal — it is silent to a screen reader and easy to miss. */}
+          <Pending active={patch.isPending} label="Guardando el negocio.">
+            <Button size="compact" variant="secondary" disabled={patch.isPending} onClick={() => patch.mutate()}>
+              Guardar tarifa
+            </Button>
+          </Pending>
         </div>
       </div>
 
@@ -254,44 +269,54 @@ function BusinessesTab() {
   return (
     <div className="space-y-4">
       <Input size="compact" type="search" aria-label="Buscar negocio" placeholder="Nombre o correo del dueño" value={q} onChange={(e) => setQ(e.target.value)} />
-      {list.isPending && <Skeleton className="h-24 w-full" />}
       {list.error && <Alert variant="destructive">No pudimos cargar los negocios.</Alert>}
       {open && <BusinessDetail row={open} onClose={() => setOpen(null)} />}
-      {list.data && (
-        <Card className="p-0">
-          <ul className="divide-y divide-line-soft">
-            {list.data.businesses.length === 0 && <li className="p-4 text-sm text-ink-soft">Sin negocios con ese nombre o correo.</li>}
-            {list.data.businesses.map((b) => {
-              const step = STEP_COPY[b.step];
-              const Icon = step.icon;
-              return (
-                <li key={b.id}>
-                  <button type="button" className="flex w-full items-center gap-4 p-4 text-left hover:bg-muted" onClick={() => setOpen(b)}>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium">{b.name}</span>
-                      <span className="block text-sm text-ink-soft">{b.email}</span>
-                    </span>
-                    <span className={cn("flex items-center gap-1 text-sm", step.tone)}>
-                      <Icon className="size-4" aria-hidden />
-                      {step.label}
-                    </span>
-                    <Amount cents={b.balanceCents} className="w-24 text-right text-sm font-semibold" />
-                    {/* design-review 2026-09-01 (should fix): the override
-                        was a bare asterisk — a riddle three months later.
-                        The effective fee shows, worded. */}
-                    <span className="w-24 text-right text-sm text-ink-soft">
-                      <Amount cents={b.feeOverrideCents ?? b.feeCents} />
-                      {b.feeOverrideCents !== null && (
-                        <span className="block text-xs">negociada</span>
-                      )}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending
+        active={list.isPending}
+        label="Cargando los negocios"
+        shape={
+          <Skeleton className="h-24 w-full" />
+        }
+      >
+        {list.data && (
+          <Card className="p-0">
+            <ul className="divide-y divide-line-soft">
+              {list.data.businesses.length === 0 && <li className="p-4 text-sm text-ink-soft">Sin negocios con ese nombre o correo.</li>}
+              {list.data.businesses.map((b) => {
+                const step = STEP_COPY[b.step];
+                const Icon = step.icon;
+                return (
+                  <li key={b.id}>
+                    <button type="button" className="flex w-full items-center gap-4 p-4 text-left hover:bg-muted" onClick={() => setOpen(b)}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium">{b.name}</span>
+                        <span className="block text-sm text-ink-soft">{b.email}</span>
+                      </span>
+                      <span className={cn("flex items-center gap-1 text-sm", step.tone)}>
+                        <Icon className="size-4" aria-hidden />
+                        {step.label}
+                      </span>
+                      <Amount cents={b.balanceCents} className="w-24 text-right text-sm font-semibold" />
+                      {/* design-review 2026-09-01 (should fix): the override
+                          was a bare asterisk — a riddle three months later.
+                          The effective fee shows, worded. */}
+                      <span className="w-24 text-right text-sm text-ink-soft">
+                        <Amount cents={b.feeOverrideCents ?? b.feeCents} />
+                        {b.feeOverrideCents !== null && (
+                          <span className="block text-xs">negociada</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        )}
+      </Pending>
     </div>
   );
 }

@@ -98,10 +98,10 @@ For each of T009–T018: pass the existing skeleton block as `shape`, give the r
 
 ### Story tests
 
-- [ ] T023 [US1] In a new `tests/e2e/feedback.spec.ts`, prove a wait below the threshold shows nothing and shifts no layout: hold the stub from T003 open briefly, release before the threshold, and assert the region never painted and the bounding box of the following element never moved. Cite `feedback-vocabulary-rollout US1`.
-- [ ] T024 [US1] In `tests/e2e/feedback.spec.ts`, prove a background refresh stays silent: load a screen, trigger a refetch the operator did not start, assert no pending treatment appears (SC-011). Cite `feedback-vocabulary-rollout US1`.
-- [ ] T025 [US1] In `tests/e2e/motion.spec.ts`, prove no pending region freezes under reduced motion: with `prefers-reduced-motion: reduce`, a loading back-office region reports computed `animation-duration` of `2.4s`, not `1e-05s` (SC-012, FR-014). **Verify by mutation**: remove the region's `data-motion` and confirm this test turns red.
-- [ ] T026 [US1] Component-test in `apps/admin/test/` that a screen with a load and an action pending at once announces each once and not twice (SC-002, D4). Cite `feedback-vocabulary-rollout US1`.
+- [X] T023 [US1] In a new `tests/e2e/feedback.spec.ts`, prove a wait below the threshold shows nothing and shifts no layout: hold the stub from T003 open briefly, release before the threshold, and assert the region never painted and the bounding box of the following element never moved. Cite `feedback-vocabulary-rollout US1`.
+- [X] T024 [US1] In `tests/e2e/feedback.spec.ts`, prove a background refresh stays silent: load a screen, trigger a refetch the operator did not start, assert no pending treatment appears (SC-011). Cite `feedback-vocabulary-rollout US1`.
+- [X] T025 [US1] In `tests/e2e/motion.spec.ts`, prove no pending region freezes under reduced motion: with `prefers-reduced-motion: reduce`, a loading back-office region reports computed `animation-duration` of `2.4s`, not `1e-05s` (SC-012, FR-014). **Verify by mutation**: remove the region's `data-motion` and confirm this test turns red.
+- [X] T026 [US1] Component-test in `apps/admin/test/` that a screen with a load and an action pending at once announces each once and not twice (SC-002, D4). Cite `feedback-vocabulary-rollout US1`.
 
 **Checkpoint**: the back office shows and says every wait it is having, and says nothing about the waits it is not.
 

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
-import { proofReading, stubAdminApi, stubPagoApi } from "./stubs";
+import { feed, holdApiRoute, proofReading, stubAdminApi, stubPagoApi } from "./stubs";
 
 /* design-foundations US1 — the questions a simulated DOM cannot answer.
 
@@ -231,6 +231,37 @@ test.describe("design-foundations US1: the wait is visible, and reduced motion d
        still rendering exactly as it does when it works. */
     expect(computed.duration).toBe("2.4s");
     expect(computed.iterations).toBe("infinite");
+  });
+
+  /* feedback-vocabulary-rollout US1 */
+  test("a back-office wait keeps breathing under reduced motion too (FR-014, SC-012)", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubAdminApi(page);
+    const release = await holdApiRoute(page, "**/payments/feed*", feed);
+
+    await page.goto(ADMIN);
+    const breathing = page.locator('[data-motion="breath"]').first();
+    await expect(breathing).toBeVisible();
+
+    const computed = await breathing.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { name: s.animationName, duration: s.animationDuration };
+    });
+
+    /* This is the defect the feature closes, not a description of what already
+       worked. Until now the back office's pending shapes carried Tailwind's
+       `animate-pulse`, which matched neither `[data-motion="breath"]` nor
+       `[data-motion="reveal"]`, so the blanket rule flattened it and every
+       loading screen froze into a dead grey block for anyone who asked for
+       less motion.
+
+       Verified by mutation: put `animate-pulse` back on Skeleton and take the
+       breath off the region, and this reads "1e-05s". */
+    expect(computed.name).toBe("breath");
+    expect(computed.duration).toBe("2.4s");
+    release();
   });
 
   test("the carve-out animations move nothing, which is what makes the carve-out sound", async ({

@@ -93,22 +93,31 @@ export function PasskeyCard() {
       )}
 
       <div className="mt-4 space-y-3">
+        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+            is still a wait the operator is having — the earlier sweeps keyed on
+            `isPending` and could not see these (converge F1/F2).
+
+            The comment sits ABOVE the ternary, not inside its branch: that slot
+            is an expression position, where a JSX comment is a syntax error.
+            Second time in this feature. */}
         {state === "done" ? (
           <Alert variant="success">Listo. Este dispositivo ya puede entrar con huella o rostro.</Alert>
         ) : (
-          <Button size="compact"
-            variant="secondary"
-            disabled={state === "busy"}
-            onClick={async () => {
-              setState("busy");
-              const result = await authClient.passkey.addPasskey();
-              setState(result?.error ? "error" : "done");
-              if (!result?.error) refresh();
-            }}
-          >
-            <Fingerprint className="size-5" aria-hidden />
-            {state === "busy" ? "Esperando a tu dispositivo…" : "Activar en este dispositivo"}
-          </Button>
+          <Pending active={state === "busy"} label="Esperando a tu dispositivo.">
+            <Button size="compact"
+              variant="secondary"
+              disabled={state === "busy"}
+              onClick={async () => {
+                setState("busy");
+                const result = await authClient.passkey.addPasskey();
+                setState(result?.error ? "error" : "done");
+                if (!result?.error) refresh();
+              }}
+            >
+              <Fingerprint className="size-5" aria-hidden />
+              {state === "busy" ? "Esperando a tu dispositivo…" : "Activar en este dispositivo"}
+            </Button>
+          </Pending>
         )}
         {state === "error" && (
           <Alert variant="destructive">

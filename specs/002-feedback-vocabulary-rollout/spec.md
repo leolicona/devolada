@@ -270,8 +270,25 @@ confirm each one names a context. Needs nothing from the other three stories.
   when compared side by side.
 - **SC-008**: The count of literal colour, size, spacing, stacking and duration
   values introduced by this feature is zero.
-- **SC-009**: The count of size names used anywhere in the product that are not
-  members of the shared vocabulary is zero, across both surfaces.
+- **SC-009**: The count of size names used **on a control or a status** that are
+  not members of the shared vocabulary is zero, across both surfaces.
+
+> Narrowed 2026-09-10, on the convergence finding that the code satisfies FR-011
+> and fails this. `Avatar` declares `xs` / `sm` / `lg`; it is app-local, so
+> FR-011 — which binds *shared* components — holds, while this criterion, which
+> said "anywhere in the product", did not.
+>
+> The criterion was the thing that overreached. The entity it measures is named
+> **Control size** in the data model, with a height column and a touch-target
+> rule, and an avatar is neither a control nor a status: nothing is aimed at it
+> and nothing is read from it. Forcing it into the vocabulary would mean either
+> calling a 24px nav glyph `compact` — a name that means 40px and "the dense
+> back office" — or adding a fourth member, which FR-013 and Out of Scope both
+> refuse. Either would make the vocabulary mean less, which is the drift that
+> raised this story in the first place.
+>
+> `Avatar`'s own `text-[10px]` / `text-[11px]` literals are real and belong to
+> the `no-literal-gate` debt, not here.
 - **SC-010**: Every screen that shows a status renders identically before and
   after this feature, compared image against image.
 - **SC-011**: The count of pending treatments that appear during a refresh the

@@ -80,6 +80,7 @@ pnpm --filter @devolada/api test:watch        # api / consta only
 node scripts/spec-lint.mjs                    # story citations (constitution VII)
 node scripts/contrast-lint.mjs                # measures tokens.css in both themes
 node scripts/gen-banks.mjs [--check]          # regenerate / verify the bank constants
+node scripts/pending-lint.mjs                # every in-progress label sits inside a <Pending>
 
 pnpm e2e                                      # Playwright + axe, built previews, stubbed API
 pnpm e2e:ui                                   # same, headed
@@ -93,7 +94,8 @@ demo ISP (`demo@devolada.app` / `devolada123`). `/dev/*` 404s unless
 suffixed copies).
 
 CI order on every PR — none of it may be skipped or quarantined to get green:
-`spec-lint`, `gen-banks --check`, `contrast-lint`, typecheck, tests, build.
+`spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`, typecheck,
+tests, build.
 **Never deploy from a local machine.** Merge to `main` deploys dev (the browser
 and passkey layers gate it); a `v*` tag deploys prod behind an approval gate.
 

@@ -26,6 +26,8 @@ jobs:
         run: node scripts/gen-banks.mjs --check
       - name: Contrast and token law (docs/polish/dark-and-contrast.spec.md)
         run: node scripts/contrast-lint.mjs
+      - name: Every wait that says so shows so (feedback-vocabulary-rollout SC-001)
+        run: node scripts/pending-lint.mjs
       - name: Typecheck
         run: pnpm -r --if-present typecheck
       - name: Tests

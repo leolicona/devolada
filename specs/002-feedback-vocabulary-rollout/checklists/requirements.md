@@ -91,3 +91,21 @@ Two decisions were settled as assumptions instead of questions:
 
 **Status: ready for `/speckit-plan`** — `001-design-foundations` has now shipped
 (PR #195, merged into `main`), so this spec's first assumption is satisfied.
+
+### Iteration 3 — 2026-09-10 (post-convergence)
+
+One criterion changed after implementation, recorded here because the checklist
+is where a spec edit made late is easiest to miss.
+
+**SC-009 was narrowed** from "size names used anywhere in the product" to "size
+names used on a control or a status". `/speckit-converge` found the code
+satisfying FR-011 and failing SC-009 — `Avatar` declares `xs` / `sm` / `lg` and
+is app-local, so FR-011's "shared component" scope never reached it. The
+criterion was written broader than the requirement it measures, and broader than
+the entity it names: the data model calls it **Control size**, with heights and
+a touch-target rule, and an avatar is neither aimed at nor read as status. The
+alternative — renaming a 24px nav glyph `compact` — would have made the
+vocabulary mean less.
+
+All 16 items re-checked against the amended spec; all 16 still pass. "Success
+criteria are measurable" now measures something the product actually governs.

@@ -87,9 +87,14 @@ export function NewBusinessScreen() {
             />
           </div>
           {error && <Alert variant="destructive">{error}</Alert>}
-          <Button type="submit" size="standard" className="w-full" disabled={name.trim().length < 2 || busy}>
-            {busy ? "Creando…" : "Crear negocio"}
-          </Button>
+          {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+              is still a wait the operator is having — the earlier sweeps keyed on
+              `isPending` and could not see these (converge F1/F2). */}
+          <Pending active={busy} label="Creando tu negocio.">
+            <Button type="submit" size="standard" className="w-full" disabled={name.trim().length < 2 || busy}>
+              {busy ? "Creando…" : "Crear negocio"}
+            </Button>
+          </Pending>
         </form>
       ) : (
         <div className="space-y-4">

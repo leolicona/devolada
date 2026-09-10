@@ -1018,7 +1018,18 @@ export function PaymentPage({ token }: { token: string }) {
                     ? payErrorCopy(status.error)
                     : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
             </p>
+            {/* feedback-vocabulary-rollout D1/D4 — a gap `001-design-foundations`
+                left, found by scripts/pending-lint.mjs. This button said
+                "Enviando…" and showed nothing else: the payer, on a phone, on
+                the screen that just told them Banxico did not publish their
+                transfer, re-sending proof of money they already moved. The
+                worst place in the product to leave a wait silent.
+
+                announce={false} because the Card at line 608 is already
+                aria-live="polite" — the same reason the submit inside it
+                passes false. */}
             {status.retryAvailable && status.trackingKey && status.senderBank && (
+              <Pending active={pay.isPending} announce={false} label="Enviando tus datos.">
               <Button
                 variant="secondary"
                 disabled={pay.isPending}
@@ -1037,6 +1048,7 @@ export function PaymentPage({ token }: { token: string }) {
               >
                 {pay.isPending ? "Enviando…" : "Reintentar ahora"}
               </Button>
+              </Pending>
             )}
           </Reveal>
         )}

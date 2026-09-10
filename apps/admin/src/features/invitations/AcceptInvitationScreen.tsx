@@ -221,9 +221,14 @@ export function AcceptInvitationScreen() {
           )}
         </div>
         {error && <Alert variant="destructive">{error}</Alert>}
-        <Button type="submit" size="standard" className="w-full" disabled={busy}>
-          {busy ? "Entrando…" : inv.hasAccount ? "Entrar" : "Crear cuenta y entrar"}
-        </Button>
+        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
+            is still a wait the operator is having — the earlier sweeps keyed on
+            `isPending` and could not see these (converge F1/F2). */}
+        <Pending active={busy} label="Entrando al negocio.">
+          <Button type="submit" size="standard" className="w-full" disabled={busy}>
+            {busy ? "Entrando…" : inv.hasAccount ? "Entrar" : "Crear cuenta y entrar"}
+          </Button>
+        </Pending>
         {inv.hasAccount && (
           <p className="text-center text-sm">
             <Link to="/recover" className="text-link hover:underline">

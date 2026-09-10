@@ -293,11 +293,47 @@ search, so the undercount was inherited rather than noticed — and T019 and T02
 were written against *files* rather than against *controls*, which is how they
 were marked done with the wrong half of each treated.
 
-- [ ] T059 [P] [US1] Wrap the two controls T019 and T020 actually named, per FR-001 (partial): the submit in `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx:224` and in `apps/admin/src/features/onboarding/NewBusinessScreen.tsx:90`. Both still carry only `disabled={busy}` and a changed word; only their full-screen session gates were treated. Give each a `Pending` at the control, with an es-MX label, per D1/D4.
-- [ ] T060 [US1] Wrap the six started actions in `apps/admin/src/features/auth/pages.tsx` per FR-001, FR-002 (missing): lines 129 (log in), 247 (create account), 320 (confirm), 412 (send code), 448 (save password) and 456 (resend). Each drives a local `busy` flag and shows nothing but a greyed button. The log-in screen matters most: a hang there is the same complaint that opened this feature, met before the operator has any other signal to read.
-- [ ] T061 [P] [US1] Wrap the passkey ceremony button in `apps/admin/src/features/auth/PasskeyCard.tsx:101` per FR-001, FR-002 (missing). "Esperando a tu dispositivo…" is a wait on hardware that can take many seconds, and it is the longest of the nine.
-- [ ] T062 [P] [US4] Resolve `apps/admin/src/features/account/Avatar.tsx:15-18` against SC-009 (partial). It declares `xs` / `sm` / `lg`; call sites are `AccountHub.tsx:167` and `Shell.tsx:136`. FR-011 binds *shared* components and this one is app-local, so FR-011 holds while SC-009 — which counts size names "anywhere in the product" — does not. Decide which is right and make code and spec agree; do not leave the gap silent. Note the component also carries `text-[10px]` / `text-[11px]`, which belongs to the `no-literal-gate` debt rather than to this task.
-- [ ] T063 [US1] Add an instrument for SC-001 (missing): nothing counts operator-initiated waits that show no pending treatment, which is why F1 and F2 survived a full implementation pass. A component-level or browser-level check that finds a control whose word changes while it is disabled and which has no `Pending` above it would have caught all nine. Verify it by mutation — remove one `Pending` and confirm it turns red — or it joins the checks this feature already found green and empty.
+- [X] T059 [P] [US1] Wrap the two controls T019 and T020 actually named, per FR-001 (partial): the submit in `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx:224` and in `apps/admin/src/features/onboarding/NewBusinessScreen.tsx:90`. Both still carry only `disabled={busy}` and a changed word; only their full-screen session gates were treated. Give each a `Pending` at the control, with an es-MX label, per D1/D4.
+- [X] T060 [US1] Wrap the six started actions in `apps/admin/src/features/auth/pages.tsx` per FR-001, FR-002 (missing): lines 129 (log in), 247 (create account), 320 (confirm), 412 (send code), 448 (save password) and 456 (resend). Each drives a local `busy` flag and shows nothing but a greyed button. The log-in screen matters most: a hang there is the same complaint that opened this feature, met before the operator has any other signal to read.
+- [X] T061 [P] [US1] Wrap the passkey ceremony button in `apps/admin/src/features/auth/PasskeyCard.tsx:101` per FR-001, FR-002 (missing). "Esperando a tu dispositivo…" is a wait on hardware that can take many seconds, and it is the longest of the nine.
+- [X] T062 [P] [US4] Resolve `apps/admin/src/features/account/Avatar.tsx:15-18` against SC-009 (partial). It declares `xs` / `sm` / `lg`; call sites are `AccountHub.tsx:167` and `Shell.tsx:136`. FR-011 binds *shared* components and this one is app-local, so FR-011 holds while SC-009 — which counts size names "anywhere in the product" — does not. Decide which is right and make code and spec agree; do not leave the gap silent. Note the component also carries `text-[10px]` / `text-[11px]`, which belongs to the `no-literal-gate` debt rather than to this task.
+- [X] T063 [US1] Add an instrument for SC-001 (missing): nothing counts operator-initiated waits that show no pending treatment, which is why F1 and F2 survived a full implementation pass. A component-level or browser-level check that finds a control whose word changes while it is disabled and which has no `Pending` above it would have caught all nine. Verify it by mutation — remove one `Pending` and confirm it turns red — or it joins the checks this feature already found green and empty.
+
+### Phase 8 result (2026-09-10)
+
+All nine controls wrapped, and the instrument built and wired into CI.
+
+**The instrument found a tenth, and it was on the payer's page.**
+`PaymentPage.tsx` — the "Reintentar ahora" button on the screen that has just
+told the payer Banxico did not publish their transfer — said "Enviando…" and
+showed nothing else. A gap `001-design-foundations` left, on a phone, at the
+moment someone is re-sending proof of money they already moved. It is the worst
+place in the product to leave a wait silent, and no sweep in either feature had
+looked there. Fixed with `announce={false}`, since the status Card is already a
+live region.
+
+`scripts/pending-lint.mjs` keys on the product's own copy convention rather than
+on any React idiom: an in-progress label is a Spanish present participle before
+an ellipsis ("Guardando…", "Subiendo…"), which is a claim the screen makes to
+the person reading it. Every such string must sit inside a `<Pending>` block —
+ranges, not "the file contains one", so a file with one covered wait and one
+bare wait fails. Comments are blanked first, or it flags the very documentation
+that describes it. Verified by mutation: unwrap the log-in control and it turns
+red at the right line.
+
+**SC-009 was narrowed rather than Avatar renamed** (T062). The criterion said
+"anywhere in the product" while FR-011 binds shared components and the data
+model calls the entity **Control size**. An avatar is neither aimed at nor read
+as status; calling a 24px nav glyph `compact` — a name that means 40px — would
+have made the vocabulary mean less. The spec now says "on a control or a
+status", with the reasoning inline, and the checklist carries an Iteration 3
+note so a late spec edit is not easy to miss.
+
+Two false-positive classes the linter had on its first run, both fixed before it
+was trusted: prose in comments, and its own shape-prop ranges.
+
+Gates after: all seven green, now eight with `pending-lint` between
+`contrast-lint` and typecheck — 594 unit tests, 51 browser tests, 3 builds.
 
 ### What was clean
 

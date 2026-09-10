@@ -24,6 +24,11 @@
   built from tokens, and the placeholder inherits the reduced-motion exception
   that keeps waiting alive — closing a live defect where it freezes today.
   (FR-003, FR-004, FR-014, SC-012)
+- Q: When the operator clicks "Reintentar", should the icon keep spinning, or
+  should the retry wait the way every other action does? → A: It waits the same
+  way. The turning icon is removed rather than hidden from one surface, leaving
+  one waiting movement in the product with no exception to remember. The word
+  "Cargando…" is untouched. (FR-008, SC-013)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -190,7 +195,9 @@ confirm each one names a context. Needs nothing from the other three stories.
   effect MUST either be given a working one or have it removed. An inert
   decoration MUST NOT survive this feature.
 - **FR-008**: Retrying MUST render exactly as waiting does, with no residue of
-  the failure that preceded it.
+  the failure that preceded it and no movement of its own. Nothing rotates: the
+  turning icon on the retry control is removed outright, not merely kept off the
+  payer's surface. The wording it sits beside does not change.
 - **FR-009**: This feature MUST NOT introduce a new stacking position, a new
   colour, a new duration or any literal value; it consumes what
   `001-design-foundations` established.
@@ -251,6 +258,8 @@ confirm each one names a context. Needs nothing from the other three stories.
   operator did not start is zero.
 - **SC-012**: With reduced motion requested, the count of pending regions that
   stop moving is zero.
+- **SC-013**: The count of elements that rotate, spin or bounce is zero, across
+  both surfaces.
 
 ## Assumptions
 

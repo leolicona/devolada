@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, TriangleAlert, Check, Link as LinkIcon, Share2, WifiOff } from "lucide-react";
-import { Alert, Amount, Button, Card, Input, ListError, Skeleton } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, ListError, Pending, Skeleton } from "@devolada/ui";
 import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import type { PulseResponse } from "@devolada/api/payments-schema";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -295,20 +295,27 @@ export function CobrosScreen() {
         </Alert>
       )}
 
-      {query.isPending && (
-        <Card className="mt-4 p-4">
-          {[0, 1, 2].map((k) => (
-            <div key={k} className="flex items-center gap-4 py-3">
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-3 w-28" />
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The
+          shape holds the space while the threshold runs, the region breathes
+          once past it, and `isPending` is the FIRST load — never a refetch,
+          which is a wait the operator did not start. */}
+      <Pending
+        active={query.isPending}
+        label="Cargando tus cobros"
+        shape={
+          <Card className="mt-4 p-4">
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="flex items-center gap-4 py-3">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+                <Skeleton className="h-4 w-16" />
               </div>
-              <Skeleton className="h-4 w-16" />
-            </div>
-          ))}
-        </Card>
-      )}
-
+            ))}
+          </Card>
+        }
+      >
       {query.data && (
         <Tabs value={filter} onValueChange={(v) => { setFilter(v); setPages(1); }} className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -355,6 +362,7 @@ export function CobrosScreen() {
           ))}
         </Tabs>
       )}
+      </Pending>
     </main>
   );
 }

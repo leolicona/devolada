@@ -1,4 +1,4 @@
-import { Alert, Button, Input } from "@devolada/ui";
+import { Alert, Button, Input, Pending } from "@devolada/ui";
 import { useState } from "react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,11 +23,23 @@ export function NewBusinessScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* feedback-vocabulary-rollout D1/D5. The word used to appear the instant the
+     request left, so a session check answered from cache flashed a full screen
+     of "Cargando…" and took it away again — the flicker the threshold exists to
+     prevent. It rides as the shape so nothing shows until the wait is real. */
   if (user.isPending) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-background">
-        <p className="text-sm text-ink-soft">Cargando…</p>
-      </main>
+      <Pending
+        active
+        label="Cargando tu sesión."
+        shape={
+          <main className="flex min-h-dvh items-center justify-center bg-background">
+            <p className="text-sm text-ink-soft">Cargando…</p>
+          </main>
+        }
+      >
+        {null}
+      </Pending>
     );
   }
   if (!user.data) return <Navigate to="/login" />;

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, ListError, Skeleton } from "@devolada/ui";
+import { Alert, Button, Card, ListError, Pending, Skeleton } from "@devolada/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Building2 } from "lucide-react";
@@ -31,28 +31,38 @@ export function ChooseBusinessScreen({ reason }: { reason: "choose" | "revoked" 
       {reason === "revoked" && (
         <Alert variant="warning">Ya no formas parte del negocio en el que estabas. Elige otro.</Alert>
       )}
-      {orgs.isPending && <Skeleton className="h-24 w-full" />}
       {orgs.error && (
         <ListError what="tus negocios" onRetry={() => void orgs.refetch()} retrying={orgs.isRefetching} />
       )}
-      {orgs.data && (
-        <ul className="space-y-2">
-          {orgs.data.map((org) => (
-            <li key={org.id}>
-              <Card className="p-0">
-                <Button size="compact"
-                  variant="ghost"
-                  className="h-auto w-full justify-start gap-3 px-4 py-3 text-left"
-                  onClick={() => void choose(org.id)}
-                >
-                  <Building2 className="size-4 shrink-0" aria-hidden />
-                  <span className="truncate">{org.name}</span>
-                </Button>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* feedback-vocabulary-rollout D1/D5/D7: the region owns the wait. The shape
+          holds the space while the threshold runs; `isPending` is the first
+          load, never a refetch the operator did not start. */}
+      <Pending
+        active={orgs.isPending}
+        label="Cargando tus negocios"
+        shape={
+          <Skeleton className="h-24 w-full" />
+        }
+      >
+        {orgs.data && (
+          <ul className="space-y-2">
+            {orgs.data.map((org) => (
+              <li key={org.id}>
+                <Card className="p-0">
+                  <Button size="compact"
+                    variant="ghost"
+                    className="h-auto w-full justify-start gap-3 px-4 py-3 text-left"
+                    onClick={() => void choose(org.id)}
+                  >
+                    <Building2 className="size-4 shrink-0" aria-hidden />
+                    <span className="truncate">{org.name}</span>
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Pending>
       <p className="text-center text-sm">
         <Link to="/nuevo-negocio" className="text-link hover:underline">
           Crear negocio

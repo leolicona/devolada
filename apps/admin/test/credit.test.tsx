@@ -77,10 +77,16 @@ describe("US-B04: the chip and the banners — label and icon per step, never co
 /* The amount is its own element, so the strip is found by its landmark
    and read as a whole */
 const findStrip = async () => {
-  const all = await screen.findAllByRole("status");
-  const strip = all.find((el) => el.textContent?.includes("Saldo bajo"));
-  if (!strip) throw new Error("no strip");
-  return strip;
+  /* Waits for THIS status, not for the first one to appear. The shell's
+     session gate now owns a live region of its own while it loads
+     (feedback-vocabulary-rollout D1/D4), so resolving on "any status" and then
+     filtering would race it and find an empty one. */
+  let strip: HTMLElement | undefined;
+  await waitFor(() => {
+    strip = screen.queryAllByRole("status").find((el) => el.textContent?.includes("Saldo bajo"));
+    if (!strip) throw new Error("no strip");
+  });
+  return strip!;
 };
 const stripShown = () => screen.queryAllByRole("status").some((el) => el.textContent?.includes("Saldo bajo"));
 

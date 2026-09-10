@@ -1,4 +1,4 @@
-import { Alert, Button, Input } from "@devolada/ui";
+import { Alert, Button, Input, Pending } from "@devolada/ui";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -80,11 +80,23 @@ export function AcceptInvitationScreen() {
     }
   }
 
+  /* feedback-vocabulary-rollout D1/D5. The word used to appear the instant the
+     request left, so a session check answered from cache flashed a full screen
+     of "Cargando…" and took it away again — the flicker the threshold exists to
+     prevent. It rides as the shape so nothing shows until the wait is real. */
   if (user.isPending || preview.isPending) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-background">
-        <p className="text-sm text-ink-soft">Cargando…</p>
-      </main>
+      <Pending
+        active
+        label="Cargando la invitación."
+        shape={
+          <main className="flex min-h-dvh items-center justify-center bg-background">
+            <p className="text-sm text-ink-soft">Cargando…</p>
+          </main>
+        }
+      >
+        {null}
+      </Pending>
     );
   }
 

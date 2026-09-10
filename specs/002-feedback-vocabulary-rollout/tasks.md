@@ -66,35 +66,35 @@ confirm nothing appears. Needs nothing from US2, US3 or US4.
 
 ### Shared atoms
 
-- [ ] T005 [US1] Add the optional `shape` prop to `packages/ui/src/components/pending.tsx` per [contracts/components.md](./contracts/components.md): below the threshold the shape is laid out but not painted (`visibility: hidden`) so the space is held; past it the shape paints, the region breathes and the label is announced, all on the same schedule. `FLASH_THRESHOLD_MS` and `MINIMUM_VISIBLE_MS` stay the single pair of constants. Cite D5, D7.
-- [ ] T006 [P] [US1] Remove `animate-pulse` from `packages/ui/src/components/skeleton.tsx`. Keep `aria-hidden`, the token fill and the rounding. Cite D2, D6, and note in the comment that the movement now belongs to the region — including why: `animate-pulse` matched no `data-motion` selector, so the blanket reduced-motion rule froze every skeleton.
+- [X] T005 [US1] Add the optional `shape` prop to `packages/ui/src/components/pending.tsx` per [contracts/components.md](./contracts/components.md): below the threshold the shape is laid out but not painted (`visibility: hidden`) so the space is held; past it the shape paints, the region breathes and the label is announced, all on the same schedule. `FLASH_THRESHOLD_MS` and `MINIMUM_VISIBLE_MS` stay the single pair of constants. Cite D5, D7.
+- [X] T006 [P] [US1] Remove `animate-pulse` from `packages/ui/src/components/skeleton.tsx`. Keep `aria-hidden`, the token fill and the rounding. Cite D2, D6, and note in the comment that the movement now belongs to the region — including why: `animate-pulse` matched no `data-motion` selector, so the blanket reduced-motion rule froze every skeleton.
 
 ### Tests for the atoms
 
-- [ ] T007 [P] [US1] Unit-test the `shape` path in `packages/ui/test/pending.test.tsx` with fake timers: nothing painted before the threshold, the shape's box still occupying space, paint + breath + announcement starting together, and a wait that resolves early leaving no trace. Cite `feedback-vocabulary-rollout US1`.
-- [ ] T008 [P] [US1] Unit-test in `packages/ui/test/atoms.test.tsx` that `Skeleton` carries no animation utility of its own and stays `aria-hidden`. Cite `feedback-vocabulary-rollout US1`.
+- [X] T007 [P] [US1] Unit-test the `shape` path in `packages/ui/test/pending.test.tsx` with fake timers: nothing painted before the threshold, the shape's box still occupying space, paint + breath + announcement starting together, and a wait that resolves early leaving no trace. Cite `feedback-vocabulary-rollout US1`.
+- [X] T008 [P] [US1] Unit-test in `packages/ui/test/atoms.test.tsx` that `Skeleton` carries no animation utility of its own and stays `aria-hidden`. Cite `feedback-vocabulary-rollout US1`.
 
 ### Screens with a known content shape (wrap the load; the skeletons become the `shape`)
 
-- [ ] T009 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/cobros/CobrosScreen.tsx` (3 skeletons), per the shared rule below.
-- [ ] T010 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/credit/CreditCard.tsx` (1 skeleton, 3 pending actions), per the shared rule below.
-- [ ] T011 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/feed/FeedScreen.tsx` (6 skeletons, 7 pending sites), per the shared rule below.
-- [ ] T012 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/integrations/IntegrationsScreen.tsx` (1 skeleton), per the shared rule below.
-- [ ] T013 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/integrations/WispHubScreen.tsx` (2 skeletons, 10 pending sites), per the shared rule below.
-- [ ] T014 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/links/LinksScreen.tsx` (3 skeletons), per the shared rule below.
-- [ ] T015 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/onboarding/ChooseBusinessScreen.tsx` (1 skeleton), per the shared rule below.
-- [ ] T016 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/operator/OperatorScreen.tsx` (2 skeletons, 6 pending sites), per the shared rule below.
-- [ ] T017 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/settings/SettingsScreen.tsx` (3 skeletons, 12 pending sites), per the shared rule below.
-- [ ] T018 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/settings/UsersCard.tsx` (1 skeleton, 7 pending sites), per the shared rule below.
+- [X] T009 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/cobros/CobrosScreen.tsx` (3 skeletons), per the shared rule below.
+- [X] T010 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/credit/CreditCard.tsx` (1 skeleton, 3 pending actions), per the shared rule below.
+- [X] T011 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/feed/FeedScreen.tsx` (6 skeletons, 7 pending sites), per the shared rule below.
+- [X] T012 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/integrations/IntegrationsScreen.tsx` (1 skeleton), per the shared rule below.
+- [X] T013 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/integrations/WispHubScreen.tsx` (2 skeletons, 10 pending sites), per the shared rule below.
+- [X] T014 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/links/LinksScreen.tsx` (3 skeletons), per the shared rule below.
+- [X] T015 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/onboarding/ChooseBusinessScreen.tsx` (1 skeleton), per the shared rule below.
+- [X] T016 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/operator/OperatorScreen.tsx` (2 skeletons, 6 pending sites), per the shared rule below.
+- [X] T017 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/settings/SettingsScreen.tsx` (3 skeletons, 12 pending sites), per the shared rule below.
+- [X] T018 [P] [US1] Wrap the load and every started action in `apps/admin/src/features/settings/UsersCard.tsx` (1 skeleton, 7 pending sites), per the shared rule below.
 
 For each of T009–T018: pass the existing skeleton block as `shape`, give the region a label naming what loads in es-MX ("Cargando los cobros"), and drive `active` from the query's first load — never from a refetch (D1). Wrap each started action in its own `Pending` at the control the operator used, with `announce` on the action and the screen's own region keeping its single announcement (D4). Add no wording beyond the region labels.
 
 ### Screens with no shape to promise (the bare breath)
 
-- [ ] T019 [P] [US1] Wrap the accept control in `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx` — a started action with no shape to promise, so it takes the bare breath.
-- [ ] T020 [P] [US1] Wrap the create control in `apps/admin/src/features/onboarding/NewBusinessScreen.tsx` — likewise, the bare breath.
-- [ ] T021 [P] [US1] Audit the 3 pending sites in `apps/admin/src/features/shell/Shell.tsx` and treat only those that are waits the operator is having; leave the rest silent (D1).
-- [ ] T022 [P] [US1] Give the load a region and a label in `apps/admin/src/features/auth/PasskeyCard.tsx`. It renders `passkeys.data && …` only, so while loading it shows **nothing at all** — no list, no empty state, no signal. SC-001's clearest instance.
+- [X] T019 [P] [US1] Wrap the accept control in `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx` — a started action with no shape to promise, so it takes the bare breath.
+- [X] T020 [P] [US1] Wrap the create control in `apps/admin/src/features/onboarding/NewBusinessScreen.tsx` — likewise, the bare breath.
+- [X] T021 [P] [US1] Audit the 3 pending sites in `apps/admin/src/features/shell/Shell.tsx` and treat only those that are waits the operator is having; leave the rest silent (D1).
+- [X] T022 [P] [US1] Give the load a region and a label in `apps/admin/src/features/auth/PasskeyCard.tsx`. It renders `passkeys.data && …` only, so while loading it shows **nothing at all** — no list, no empty state, no signal. SC-001's clearest instance.
 
 ### Story tests
 

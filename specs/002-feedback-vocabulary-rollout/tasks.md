@@ -275,3 +275,39 @@ never renders, and two capture techniques that photographed the wrong frame.
 Three tasks here (T004, T025, T046) exist because of that, and each one says how
 to break the code and confirm the test notices. A green absence check is worth
 nothing until it has been seen to fail.
+
+---
+
+## Phase 8: Convergence
+
+**Assessed 2026-09-10** against `spec.md`, `plan.md` and `tasks.md`, with the
+constitution as governing constraint. 15 functional requirements, 14 success
+criteria, 15 acceptance scenarios, 11 plan decisions and 8 principles checked.
+Four findings, none CRITICAL.
+
+**The shape of the miss, because it explains all of F1 and F2.** Every sweep in
+the plan and in this task list keyed on `isPending`, `Skeleton` or `ListError`.
+A control whose wait lives in a local `useState` boolean matches none of those
+greps. The plan's "18 buttons" figure and its 15-file list both came from that
+search, so the undercount was inherited rather than noticed — and T019 and T020
+were written against *files* rather than against *controls*, which is how they
+were marked done with the wrong half of each treated.
+
+- [ ] T059 [P] [US1] Wrap the two controls T019 and T020 actually named, per FR-001 (partial): the submit in `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx:224` and in `apps/admin/src/features/onboarding/NewBusinessScreen.tsx:90`. Both still carry only `disabled={busy}` and a changed word; only their full-screen session gates were treated. Give each a `Pending` at the control, with an es-MX label, per D1/D4.
+- [ ] T060 [US1] Wrap the six started actions in `apps/admin/src/features/auth/pages.tsx` per FR-001, FR-002 (missing): lines 129 (log in), 247 (create account), 320 (confirm), 412 (send code), 448 (save password) and 456 (resend). Each drives a local `busy` flag and shows nothing but a greyed button. The log-in screen matters most: a hang there is the same complaint that opened this feature, met before the operator has any other signal to read.
+- [ ] T061 [P] [US1] Wrap the passkey ceremony button in `apps/admin/src/features/auth/PasskeyCard.tsx:101` per FR-001, FR-002 (missing). "Esperando a tu dispositivo…" is a wait on hardware that can take many seconds, and it is the longest of the nine.
+- [ ] T062 [P] [US4] Resolve `apps/admin/src/features/account/Avatar.tsx:15-18` against SC-009 (partial). It declares `xs` / `sm` / `lg`; call sites are `AccountHub.tsx:167` and `Shell.tsx:136`. FR-011 binds *shared* components and this one is app-local, so FR-011 holds while SC-009 — which counts size names "anywhere in the product" — does not. Decide which is right and make code and spec agree; do not leave the gap silent. Note the component also carries `text-[10px]` / `text-[11px]`, which belongs to the `no-literal-gate` debt rather than to this task.
+- [ ] T063 [US1] Add an instrument for SC-001 (missing): nothing counts operator-initiated waits that show no pending treatment, which is why F1 and F2 survived a full implementation pass. A component-level or browser-level check that finds a control whose word changes while it is disabled and which has no `Pending` above it would have caught all nine. Verify it by mutation — remove one `Pending` and confirm it turns red — or it joins the checks this feature already found green and empty.
+
+### What was clean
+
+FR-003 through FR-010 and FR-012 through FR-015 hold on the tree: no animation
+outside `breath`, `reveal`, `enter` and `leave`; no duration, height or z-index
+literal in any component; no `Pending` carrying both a shape and bare skeletons;
+all five overlay surfaces on one arrival pair and one departure pair.
+
+One `unrequested` addition, surfaced without a task: `.specify/debt/no-literal-gate/`.
+T057 named only the `StatusBadge` debt; the second entry came from analyze
+finding C1 and carries its own justification. The screen-reader pass remains
+unverified and is recorded under T055 — evidence, not code, so not a finding
+here.

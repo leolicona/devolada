@@ -196,11 +196,34 @@ US2. Nothing visible moved.
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T054 Run every gate in CI order and record the results: `node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm e2e`. None may be skipped or quarantined to get green.
-- [ ] T055 Walk the three by-hand checks in [quickstart.md](./quickstart.md), including the two that exist to catch a signal that must **not** appear: the tab-switch on a loaded screen, and the tab-switch on a failed one.
-- [ ] T056 Correct [contracts/components.md](./contracts/components.md) and [contracts/motion.md](./contracts/motion.md) wherever implementation proved a sentence wrong. Correct the contract to match the code only when nothing asked for the other reading — and say so inline, as 001's `Field` wrapper note does.
-- [ ] T057 Log the `StatusBadge` class-composition defect with `/speckit-debt-log`: it concatenates strings instead of merging through `cn`, so a caller's `className` silently loses to whichever rule the stylesheet emits last. Found during this feature's research (R8), deliberately not fixed by it.
-- [ ] T058 Update `.specify/design/foundations.md` to record that the vocabulary is fully built: five names, four treatments, and `retrying` implemented as `waiting` on purpose (D8).
+- [X] T054 Run every gate in CI order and record the results: `node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm e2e`. None may be skipped or quarantined to get green.
+- [X] T055 Walk the three by-hand checks in [quickstart.md](./quickstart.md), including the two that exist to catch a signal that must **not** appear: the tab-switch on a loaded screen, and the tab-switch on a failed one.
+- [X] T056 Correct [contracts/components.md](./contracts/components.md) and [contracts/motion.md](./contracts/motion.md) wherever implementation proved a sentence wrong. Correct the contract to match the code only when nothing asked for the other reading — and say so inline, as 001's `Field` wrapper note does.
+- [X] T057 Log the `StatusBadge` class-composition defect with `/speckit-debt-log`: it concatenates strings instead of merging through `cn`, so a caller's `className` silently loses to whichever rule the stylesheet emits last. Found during this feature's research (R8), deliberately not fixed by it.
+- [X] T058 Update `.specify/design/foundations.md` to record that the vocabulary is fully built: five names, four treatments, and `retrying` implemented as `waiting` on purpose (D8).
+
+---
+
+**T054 result (2026-09-10)**: all seven gates green, in CI order — spec-lint 52
+files, gen-banks in step, contrast-lint 34 pairs, 5 typechecks, 594 unit tests
+across 52 files, 51 browser tests, 3 builds. None skipped, none quarantined.
+
+**T055 result (2026-09-10)**: two of the three by-hand checks were driven in a
+real browser and their evidence read.
+
+- *A failure left on screen, then a tab switch* — the button reads
+  "Reintentar", not "Cargando…". This is research R6's bug, confirmed gone at
+  the surface rather than only in the unit test.
+- *A pending back-office screen with the wording covered* — captured at 1280 and
+  read: three placeholder rows in the shape of charge rows, no wording, nothing
+  turning. Recognisably pending (SC-003).
+
+**Not done, and it matters**: the screen-reader pass. FR-002 and SC-002 are
+asserted by `apps/admin/test/feedback.test.tsx` (one live region, naming what
+loads, gone when idle) and by axe in the browser layer, but nobody has listened
+to these screens with an actual screen reader. That is a real gap in the
+evidence, not a formality — the ownership rule was written from reading the DOM,
+and a live region can be structurally correct and still read badly.
 
 ---
 

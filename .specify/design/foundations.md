@@ -251,3 +251,46 @@ freezes silently and every screenshot check still passes, since a frozen pending
 screen and a working one are pixel-identical. `tests/e2e/motion.spec.ts` asserts
 the *computed* duration for exactly this reason; asserting the class proves
 nothing about how the cascade resolved.
+
+## 8. What `002-feedback-vocabulary-rollout` finished (2026-09-10)
+
+D14 named five feedback states. The vocabulary is now fully built, and it has
+**five names and four treatments**:
+
+| State | Treatment |
+| --- | --- |
+| `waiting` | the breath — `Pending`, opacity only, `--duration-breath` |
+| `resolving` | the cross-fade — `Reveal`, `--duration-slow` |
+| `entering` | `--animate-enter`, `--duration-normal`, opacity only |
+| `leaving` | `--animate-leave`, `--duration-fast`, opacity only |
+| `retrying` | **`waiting`, unchanged — no treatment of its own** |
+
+`retrying` having nothing separate is the decision, not an omission
+(`feedback-vocabulary-rollout` D8). US3 asks that a retry be indistinguishable
+from a first attempt; the strongest way to guarantee that is for there to be
+nothing to distinguish. A `retrying` treatment that merely happens to look like
+`waiting` today is one refactor away from looking different.
+
+Three things D10–D13 assumed turned out not to hold in the code, and were fixed:
+
+- **D10 said the waiting pulse was "the existing Skeleton".** It was — Tailwind's
+  `animate-pulse`, a 2s dip to 50% on a curve of its own, none of it from
+  `tokens.css`. Beside the 2.4s breath that is two waiting rhythms an operator
+  could meet on one screen. The skeleton stopped animating; the region that owns
+  the wait breathes once around all of its bars.
+- **D13's carve-out was narrower than D13's intent.** It re-enables
+  `[data-motion="breath"]` and `[data-motion="reveal"]` by name, and
+  `animate-pulse` matched neither — so every skeleton in the back office froze
+  for anyone who asked for less motion, which is precisely the dead waiting
+  screen D13 exists to prevent. Covered now by the region's breath.
+- **"No spinner on the payer's page" was true, and one import away from false.**
+  `ListError` spun its retry icon a full turn a second. All ten of its call sites
+  are in the back office today, so the letter of D10 held — but it is a shared
+  atom in `packages/ui`. The spinner is gone outright rather than kept off one
+  surface.
+
+`enter` and `leave` are deliberately **not** added to D13's exception. The breath
+is carved out because a frozen waiting screen reads as a dead one and the payer
+is waiting on money; an arrival is not that, and instant is a fine answer for a
+dialog. Widening the exception without that reason would weaken the argument for
+the part that needs it.

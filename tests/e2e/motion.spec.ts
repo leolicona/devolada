@@ -480,7 +480,7 @@ type Surface = {
   width: number;
   url: string;
   ready: string;
-  role: "dialog" | "alertdialog";
+  role: "dialog" | "alertdialog" | "listbox";
   open: (page: Page) => Promise<void>;
   close: (page: Page) => Promise<void>;
 };
@@ -515,6 +515,26 @@ const SURFACES: Surface[] = [
     role: "alertdialog",
     open: async (page) => page.getByRole("button", { name: "Quitar" }).first().click(),
     close: async (page) => page.getByRole("button", { name: "Cancelar" }).first().click(),
+  },
+  {
+    /* At 1280 "Fechas" is a Popover; the same control becomes a Sheet on a
+       phone, which is why the sheet above opens the same way at 375. */
+    name: "popover",
+    width: 1280,
+    url: ADMIN,
+    ready: "Janely Guadalupe Reyes",
+    role: "dialog",
+    open: async (page) => page.getByRole("button", { name: "Fechas" }).click(),
+    close: async (page) => page.keyboard.press("Escape"),
+  },
+  {
+    name: "select",
+    width: 1280,
+    url: `${ADMIN}/settings/users`,
+    ready: "Ana",
+    role: "listbox",
+    open: async (page) => page.getByRole("combobox", { name: /Rol de Ana/ }).click(),
+    close: async (page) => page.keyboard.press("Escape"),
   },
 ];
 

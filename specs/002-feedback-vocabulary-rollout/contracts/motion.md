@@ -80,6 +80,23 @@ the way `tests/e2e/motion.spec.ts` already asserts the breath.
 
 ## 5. What a test must measure
 
+> Two rows below were corrected on 2026-09-10, both because the first version
+> would have passed while proving nothing.
+>
+> **"computed `transform` is `none`"** is wrong, and wrong in the direction that
+> hides a defect: the dialog centres itself with `-translate-x-1/2`, so its
+> transform is never `none` and the assertion fails on a surface behaving
+> perfectly. Worse, a page-wide version of it fails for a reason unrelated to
+> FR-006 — the charge row is a Collapsible whose chevron rotates on expand. What
+> FR-006 forbids is a transform *inside the arrival*, so the check reads the
+> keyframes at the source.
+>
+> **The `pulse`/`spin` check must visit the state it guards.** The first version
+> loaded a page where no retry was running; restoring `animate-spin` on
+> ListError's icon left it green, because that class only exists while retrying.
+> An absence check that never enters the state it names reports a safety it has
+> not looked for.
+
 Every assertion here is on **computed style**, never on a class name. The trap
 `001-design-foundations` documented still holds: the blanket reduced-motion rule
 is `!important`, so a rule that loses to it fails silently while every class
@@ -89,7 +106,7 @@ assertion and every screenshot stays green.
 | --- | --- |
 | A surface fades in | computed `animation-name` on open is `enter` |
 | A surface fades out and leaves | `animation-name` is `leave` on close, and the node is gone afterwards |
-| Nothing moves | computed `transform` is `none` throughout, in both themes |
+| Nothing moves | the `enter` and `leave` keyframes animate `opacity` and nothing else, read from the stylesheet |
 | The breath survives reduced motion | computed `animation-duration` is `2.4s`, not `1e-05s` |
 | Enter and leave do not survive it | computed `animation-duration` is `1e-05s` |
-| One waiting movement exists | no computed `animation-name` of `pulse` or `spin` anywhere |
+| One waiting movement exists | no computed `animation-name` of `pulse` or `spin` anywhere, **while a retry is actually running** |

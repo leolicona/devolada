@@ -63,9 +63,15 @@ so a list of 23 shapes runs one animation, not 23
 constitution VI amends it — translation, scale and rotation go, an opacity
 breath stays; no new token value; no literal duration, colour, size or z-index
 
-**Scale/Scope**: 5 overlay surfaces, 4 shared atoms, 10 back-office feature files
+**Scale/Scope**: 5 overlay surfaces, 4 shared atoms, 15 back-office feature files
 carrying 23 placeholder shapes and 9 failure notices, 18 buttons whose only
 pending signal today is being disabled, 9 badge call sites to rename
+
+> Corrected 2026-09-10 (analyze finding I1): this said 10 feature files, counting
+> only those that render a placeholder shape. Task generation found five more —
+> three full-screen session gates, one invitation screen, and `PasskeyCard.tsx`,
+> which rendered `passkeys.data && …` and nothing else, so while loading it
+> showed no list, no empty state and no signal at all.
 
 ## Decisions
 
@@ -154,7 +160,7 @@ apps/admin/src/
 │   ├── sheet.tsx                  # ~ likewise
 │   ├── popover.tsx                # ~ likewise
 │   └── select.tsx                 # ~ likewise
-└── features/                      # ~ 10 files: Pending around each load and each
+└── features/                      # ~ 15 files: Pending around each load and each
                                    #   started action; 9 ListError call sites drop
                                    #   `retrying`; 18 buttons gain a real signal
 

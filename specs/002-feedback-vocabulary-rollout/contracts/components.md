@@ -13,7 +13,7 @@ its absence is today's behaviour exactly.
 | `active` | `boolean` | unchanged |
 | `label` | `string` | unchanged |
 | `announce` | `boolean` | unchanged |
-| `shape` | `ReactNode` | **new**. The placeholder this region promises while it waits |
+| `shape` | `ReactNode` | **new**. What the region shows while it waits, in place of its content |
 | `children` | `ReactNode` | unchanged |
 
 **Guarantees**
@@ -21,11 +21,27 @@ its absence is today's behaviour exactly.
 - Without `shape`: children render immediately and only the signal waits out the
   threshold. This is what the payer's submit button needs — the button must stay
   on screen and usable while the region waits.
+
+> Corrected 2026-09-10: this contract called `shape` "the placeholder this
+> region promises", which is one of its two uses and not the general one. The
+> three full-screen session gates pass a centred "Cargando…" — not a placeholder
+> for any content, just the thing to show while waiting, and it rides as `shape`
+> for the same reason a skeleton does: so it does not appear before the
+> threshold. The sentence was corrected to match the code, because nothing asked
+> for the narrower reading.
 - With `shape`: the shape replaces the children while `active`. Below the
   threshold it is laid out but not painted (`visibility: hidden`), so the space
   is held and nothing jumps when it appears (FR-015).
 - The breath, the paint and the announcement start on the same schedule. A
   region never breathes silently, and never speaks while invisible.
+- **The live region exists only while there is a wait to speak about.**
+  Corrected 2026-09-10, during implementation: it used to render always, empty
+  when idle, which squatted a `role="status"` for the life of the screen. On the
+  charge feed and the client roster — screens that already own one —
+  `findByRole("status")` then reached the empty one instead of the note the
+  operator needed. The aria-live technique is unaffected: `active` mounts the
+  region and its text arrives a threshold later, so it is never inserted with
+  its content in the same tick.
 - One movement per region. The shape does not animate on its own (research R1).
 - The threshold and the minimum visible time stay where they are, as the single
   pair of constants in `pending.tsx`. This prop exists so there is one of them,
@@ -60,6 +76,14 @@ at once" (FR-003) a property of the code rather than a rule to remember.
   returns. A retry is running when the operator clicked, and at no other time.
 - The turning icon is gone (FR-008). The retry waits the way every other action
   waits: the region breathes, the word stays "Cargando…".
+- Its `Pending` passes `announce={false}`. `variant="destructive"` gives the
+  Alert `role="alert"`, an assertive live region, so the button's own word
+  changing is already announced; a polite `role="status"` nested inside it would
+  read the same state twice (FR-002).
+- A retry that fails again is caught, not left to escape. `await onRetry()` sat
+  in `try`/`finally` with no `catch` in the first implementation, so an ordinary
+  second failure became an unhandled rejection — added 2026-09-10 after the full
+  test run failed on it with every test passing.
 - The button names a size (`compact`) instead of stating a height. The
   `h-10 px-4 text-sm` literal goes with the prop.
 
@@ -107,6 +131,9 @@ data-[state=open]:animate-enter data-[state=closed]:animate-leave
   treatment or removed; this one gets the working treatment.
 - Nothing translates, scales or rotates. A surface that slides would break FR-006
   and would make the reduced-motion decision in the motion contract indefensible.
+- All five are asserted, not just the three with a `role="dialog"`: the popover
+  reports `dialog` and the select reports `listbox`, and both join the same
+  table-driven test in `tests/e2e/motion.spec.ts`.
 
 ## What this contract does not touch
 

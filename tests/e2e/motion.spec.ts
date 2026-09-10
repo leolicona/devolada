@@ -93,7 +93,8 @@ async function runningMovements(page: Page): Promise<string[]> {
       }
     }
 
-    const MOVEMENT = /^(transform|translate|scale|rotate|perspective)/;
+    const MOVEMENT = /^(transform|translate|scale|rotate|perspective)$/;
+    const MOVEMENT_PREFIX = /^(transform|translate|scale|rotate|perspective)/;
     /* What the blanket rule's `0.01ms` comes back as. getComputedStyle
        normalises it to seconds in exponent form, so the literal string
        "0.01ms" never appears and a set without "1e-05s" would silently match
@@ -103,19 +104,38 @@ async function runningMovements(page: Page): Promise<string[]> {
 
     for (const el of Array.from(document.querySelectorAll("*"))) {
       const style = getComputedStyle(el);
-      if (style.animationName === "none") continue;
-      const names = style.animationName.split(",").map((n) => n.trim());
-      const durations = style.animationDuration.split(",").map((d) => d.trim());
+      const describe = () =>
+        `<${el.tagName.toLowerCase()} class="${el.getAttribute("class") ?? ""}">`;
 
-      names.forEach((name, i) => {
-        const props = animates[name];
-        if (!props?.some((prop) => MOVEMENT.test(prop))) return;
-        const duration = durations[i] ?? durations[0];
-        if (FLAT.has(duration)) return;
-        offenders.push(
-          `<${el.tagName.toLowerCase()} class="${el.getAttribute("class") ?? ""}"> runs ${name} for ${duration}`,
-        );
-      });
+      /* Animations. */
+      if (style.animationName !== "none") {
+        const names = style.animationName.split(",").map((n) => n.trim());
+        const durations = style.animationDuration.split(",").map((d) => d.trim());
+        names.forEach((name, i) => {
+          const props = animates[name];
+          if (!props?.some((prop) => MOVEMENT_PREFIX.test(prop))) return;
+          const duration = durations[i] ?? durations[0];
+          if (FLAT.has(duration)) return;
+          offenders.push(`${describe()} runs ${name} for ${duration}`);
+        });
+      }
+
+      /* Transitions (converge F5). The first version of this check read
+         animations only, so a transform carried by a TRANSITION was invisible
+         to it — and the payer's page has two, on the collapsible chevrons.
+         The blanket rule flattens transition-duration as well, so nothing is
+         expected here; what was missing was anything that would notice if a
+         rule ever escaped it. */
+      if (style.transitionProperty !== "none" && style.transitionProperty !== "") {
+        const props = style.transitionProperty.split(",").map((p) => p.trim());
+        const durations = style.transitionDuration.split(",").map((d) => d.trim());
+        props.forEach((prop, i) => {
+          if (prop !== "all" && !MOVEMENT.test(prop)) return;
+          const duration = durations[i] ?? durations[0];
+          if (!duration || FLAT.has(duration)) return;
+          offenders.push(`${describe()} transitions ${prop} over ${duration}`);
+        });
+      }
     }
     return offenders;
   });
@@ -197,6 +217,27 @@ test.describe("design-foundations US1: the wait is visible, and reduced motion d
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openWaitingPayer(page);
 
+    /* Prove the instrument before trusting its silence.
+
+       This check reports nothing on a page with no movement AND on a page
+       where the check itself is broken, and those look identical from here.
+       So: plant something that genuinely escapes the blanket rule — an
+       !important duration is exactly the shape of a rule that would slip past
+       it — confirm it is caught, then remove it. Without this, the transition
+       branch below was dead code for one commit and nothing said so. */
+    await page.evaluate(() => {
+      const probe = document.createElement("div");
+      probe.id = "movement-probe";
+      probe.style.setProperty("transition-property", "transform", "important");
+      probe.style.setProperty("transition-duration", "300ms", "important");
+      document.body.appendChild(probe);
+    });
+    expect(
+      await runningMovements(page),
+      "the movement check no longer detects a moving element",
+    ).toHaveLength(1);
+    await page.evaluate(() => document.getElementById("movement-probe")?.remove());
+
     expect(await runningMovements(page)).toEqual([]);
   });
 
@@ -207,6 +248,37 @@ test.describe("design-foundations US1: the wait is visible, and reduced motion d
     await expect(page.getByText("Janely Guadalupe Reyes").first()).toBeVisible();
 
     expect(await runningMovements(page)).toEqual([]);
+  });
+
+  /* design-foundations US1 (converge F1, F2). The upload and the submit are
+     waits too, and until now the only sign either was happening was a greyed
+     button whose word changed — announced to nobody, since both forms render
+     outside the status Card's live region.
+
+     The route is held open on purpose: a stubbed upload returns instantly, and
+     an instant upload correctly shows nothing (FR-014). What needs proving is
+     the slow connection, which is the case that matters. */
+  test("the upload wait is both visible and spoken", async ({ page }) => {
+    await stubPagoApi(page);
+    await page.route("**/direct-payments/links/*/proof", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await route.fulfill(envelope({ proofId: "link-1/proof-1" }));
+    });
+
+    await page.goto(`${PAGO}/p/tok123`);
+    await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "cep.png",
+      mimeType: "image/png",
+      buffer: Buffer.alloc(120),
+    });
+    await page.getByRole("button", { name: /enviar comprobante/i }).click();
+
+    /* Seen without reading (FR-008) … */
+    await expect(page.locator('[data-motion="breath"]')).toBeVisible();
+    /* … and available as words to someone who cannot see it (FR-011, SC-009).
+       This form owns its own region: nothing else on the screen announces. */
+    await expect(page.getByRole("status")).toHaveText(/subiendo tu comprobante/i);
   });
 
   /* SC-008: the tokens GOVERN, they are not decoration. Before this feature

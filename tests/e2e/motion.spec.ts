@@ -141,6 +141,40 @@ async function runningMovements(page: Page): Promise<string[]> {
   });
 }
 
+/* Prove the instrument before trusting its silence
+   (feedback-vocabulary-rollout US1/US2/US3).
+
+   An absence check returns nothing for two very different reasons: the page is
+   clean, or the check is broken. From the result alone they are identical, and
+   `001-design-foundations` shipped four checks that were green for the second
+   reason — an end-state assertion that held with the threshold at zero, a
+   constant set that matched no real value, a branch testing a case the page
+   never renders, and two capture techniques that photographed the wrong frame.
+
+   So: plant something that WOULD violate the claim, confirm the check sees it,
+   then take it away. `decls` are applied with `!important` so no stylesheet can
+   quietly win against the probe and make the proof itself a no-op. */
+async function withProbe(
+  page: Page,
+  decls: Record<string, string>,
+  run: () => Promise<void>,
+): Promise<void> {
+  await page.evaluate((applied) => {
+    const probe = document.createElement("div");
+    probe.id = "instrument-probe";
+    probe.textContent = "probe";
+    for (const [prop, value] of Object.entries(applied)) {
+      probe.style.setProperty(prop, value, "important");
+    }
+    document.body.appendChild(probe);
+  }, decls);
+  try {
+    await run();
+  } finally {
+    await page.evaluate(() => document.getElementById("instrument-probe")?.remove());
+  }
+}
+
 /* The properties our own two carve-out animations touch. This is the
    invariant the reduced-motion exception rests on: it re-enables `breath`
    and `reveal` by name, and that is only defensible while neither moves. */

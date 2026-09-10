@@ -37,8 +37,8 @@ decisions from research.
 **Purpose**: know what the product looked like before anything moved, and prove
 the instruments work on this branch.
 
-- [ ] T001 [P] Record the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.local.config.ts` and keep the output under `tests/design/.baseline-002/` (git-ignored). SC-010 and every "nothing else moved" claim compare against this; captured after the fact it proves nothing.
-- [ ] T002 [P] Run `pnpm e2e`, `pnpm -r --if-present test`, `pnpm -r --if-present typecheck`, `node scripts/contrast-lint.mjs` and `node scripts/spec-lint.mjs` on this branch and record the results in the task notes. A gate that was already red must be known before the first edit, not discovered at the end.
+- [X] T001 [P] Record the pre-change review baseline: run `pnpm exec playwright test --config playwright.review.local.config.ts` and keep the output under `tests/design/.baseline-002/` (git-ignored). SC-010 and every "nothing else moved" claim compare against this; captured after the fact it proves nothing.
+- [X] T002 [P] Run `pnpm e2e`, `pnpm -r --if-present test`, `pnpm -r --if-present typecheck`, `node scripts/contrast-lint.mjs` and `node scripts/spec-lint.mjs` on this branch and record the results in the task notes. A gate that was already red must be known before the first edit, not discovered at the end.
 
 ---
 
@@ -49,8 +49,8 @@ product behaviour.
 
 **⚠️ CRITICAL**: T003 and T004 land before any story's test is written.
 
-- [ ] T003 Add a stub in `tests/e2e/stubs.ts` that holds an admin API response open until released, so a back-office pending state can be observed at all. Without it every pending assertion races the response and passes for the wrong reason.
-- [ ] T004 Add a self-proving probe to `tests/e2e/motion.spec.ts`, in the shape the file already uses: before asserting an absence, plant an element that would violate the claim, confirm the check catches it, then remove it. 001 shipped a check that was green because it looked for something the page never renders; an empty result from a healthy page and an empty result from a broken instrument are identical.
+- [X] T003 Add a stub in `tests/e2e/stubs.ts` that holds an admin API response open until released, so a back-office pending state can be observed at all. Without it every pending assertion races the response and passes for the wrong reason.
+- [X] T004 Add a self-proving probe to `tests/e2e/motion.spec.ts`, in the shape the file already uses: before asserting an absence, plant an element that would violate the claim, confirm the check catches it, then remove it. 001 shipped a check that was green because it looked for something the page never renders; an empty result from a healthy page and an empty result from a broken instrument are identical.
 
 ---
 

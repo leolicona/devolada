@@ -1,12 +1,14 @@
 # Feature Specification: feedback-vocabulary-rollout
 
-**Feature Branch**: `claude/new-session-1cpf5p`
+**Feature Branch**: `claude/002-feedback-vocabulary-rollout`
 
 **Created**: 2026-09-09
 
 **Status**: Draft
 
 **Input**: User description: "resolver G2 y G3" — the two coverage gaps `/speckit-analyze` found in `001-design-foundations`: three of the five named feedback states have no implementation, and the pending announcement reaches only one of the product's two surfaces.
+
+**Amended 2026-09-10**: "include finding I2 in feature 002 — align `StatusBadge` with the new size vocabulary." I2 is the inconsistency the same analysis found in the shared components: `001-design-foundations` gave every control one way to ask for a size, and the status badge kept its own. Added here as User Story 4.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -93,6 +95,38 @@ state against the first. They are indistinguishable.
 
 ---
 
+### User Story 4 - One name for a size, everywhere (Priority: P4)
+
+`001-design-foundations` gave the product a single way to ask for a size: a
+screen names the context it serves — the dense back office, a thumb, the one
+committing action — and never states a height. The button speaks it and the text
+field speaks it. The status badge, which is the product's only representation of
+an outcome, still asks for `sm` or `md`.
+
+**Why this priority**: nothing is broken today, so it waits behind the three
+stories that fix something. It belongs in this feature all the same. This
+feature's subject is the back office speaking one feedback language, and a
+status is feedback — a badge that names its size differently from the button
+beside it is the same drift, one component further along.
+
+**Independent Test**: read every place in the product that asks for a size and
+confirm each one names a context. Needs nothing from the other three stories.
+
+**Acceptance Scenarios**:
+
+1. **Given** any screen that shows a status, **When** it asks for a size,
+   **Then** it names a context from the shared vocabulary.
+2. **Given** the shared components read together, **When** their sizes are
+   listed, **Then** no component declares a size name of its own.
+3. **Given** a screen showing a status before this story and after it,
+   **When** the two are compared, **Then** they are identical: the names
+   changed and nothing anyone sees did.
+4. **Given** a size name the vocabulary does not contain, **When** a screen
+   tries to use it, **Then** the attempt is rejected before that screen can
+   ship.
+
+---
+
 ### Edge Cases
 
 - **A screen that is pending in two places at once.** A list loading while a
@@ -108,6 +142,8 @@ state against the first. They are indistinguishable.
 - **Reduced motion with a surface that both arrives and is pending.** Two
   visibility changes at once must stay legible rather than compounding into a
   flicker.
+- **The same status shown on both surfaces.** A badge takes its size from the
+  surface it sits on, never from the status it reports.
 
 ## Requirements *(mandatory)*
 
@@ -135,6 +171,16 @@ state against the first. They are indistinguishable.
   `001-design-foundations` established.
 - **FR-010**: The pending treatment MUST NOT read elapsed time or attempt count
   anywhere it is applied, exactly as on the payer's surface.
+- **FR-011**: Every shared component that offers a size MUST name it from the
+  control-size vocabulary `001-design-foundations` defined. No component may
+  declare a size name of its own.
+- **FR-012**: A component takes the vocabulary's names, not its heights. A
+  status is read, never aimed at, so it carries no touch-target obligation and
+  keeps the dimensions it has today. Adopting the vocabulary MUST NOT change
+  what anyone sees.
+- **FR-013**: A component MUST offer only the sizes it actually serves. A member
+  of the vocabulary that has no context in that component is left out, not
+  filled in for symmetry.
 
 ### Key Entities
 
@@ -142,6 +188,10 @@ state against the first. They are indistinguishable.
   defined — `waiting`, `resolving`, `entering`, `leaving`, `retrying`. That
   feature implements the first two. **This feature implements the remaining
   three and applies all five to the back office.** No sixth state is added.
+- **Control size**: the named contexts `001-design-foundations` defined —
+  `compact` for the dense back office, `standard` for touch, `decisive` for the
+  charge path's committing action. A screen names one; it never states a height.
+  This feature adds no fourth. It finishes applying the three.
 
 ## Success Criteria *(mandatory)*
 
@@ -163,6 +213,10 @@ state against the first. They are indistinguishable.
   when compared side by side.
 - **SC-008**: The count of literal colour, size, spacing, stacking and duration
   values introduced by this feature is zero.
+- **SC-009**: The count of size names used anywhere in the product that are not
+  members of the shared vocabulary is zero, across both surfaces.
+- **SC-010**: Every screen that shows a status renders identically before and
+  after this feature, compared image against image.
 
 ## Assumptions
 
@@ -181,6 +235,16 @@ state against the first. They are indistinguishable.
   larger change and is not required by anything here.
 - **The staged waiting copy is untouched**, as in `001-design-foundations`. This
   feature adds no wording and changes none.
+- **Aligning the badge means renaming, not resizing.** The vocabulary names
+  contexts, and the badge already serves the right two — the dense back office
+  and the payer's touch surface. Only its words were wrong. Giving it the
+  vocabulary's heights as well would grow every badge sitting in a table row,
+  a visual change nothing here asks for.
+- **The rename reaches the payer's call sites and changes nothing there.** Six
+  places on the payer's page pass the old name today. They must pass the new one
+  or two vocabularies stay alive, which is the drift itself. This is the single
+  part of the feature that edits a file outside the back office, and it edits a
+  word rather than a pixel.
 
 ## Out of Scope
 
@@ -192,3 +256,7 @@ state against the first. They are indistinguishable.
 - New pending states, or any sixth member of the feedback vocabulary.
 - Loading performance itself: this feature changes how waiting looks, never how
   long it lasts.
+- Any change to what a status badge looks like, which statuses exist, or how
+  they are worded in Spanish.
+- A fourth control size, or extending an existing one to a component that has no
+  context for it.

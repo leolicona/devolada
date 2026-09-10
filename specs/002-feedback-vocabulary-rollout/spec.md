@@ -35,6 +35,11 @@
   action the operator started is announced at the control they used. A pending
   region nested inside one that already announces stays silent — the pattern
   `001-design-foundations` proved on the payer's page. (FR-002, SC-002)
+- Q: Should a back-office wait that finishes very fast show nothing at all, the
+  way the payer's page already works? → A: Yes. One flash threshold governs the
+  whole product, the placeholder shape included, and a region below it holds the
+  space its content will take so nothing jumps. Two timings for "when does a
+  wait become visible" is the same drift as two rhythms. (FR-015, SC-014)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -227,6 +232,11 @@ confirm each one names a context. Needs nothing from the other three stories.
   pending region that freezes is a defect, not a concession — a frozen waiting
   screen reads as a dead one. This closes a live gap rather than describing the
   status quo: the placeholder shape freezes today.
+- **FR-015**: A pending treatment MUST NOT appear before the flash threshold
+  `001-design-foundations` set, and once shown MUST stay long enough to be read.
+  This governs a placeholder shape exactly as it governs the generic signal.
+  While a region is still below the threshold it MUST hold the space its content
+  will occupy, so nothing jumps when the shape arrives.
 
 ### Key Entities
 
@@ -270,6 +280,8 @@ confirm each one names a context. Needs nothing from the other three stories.
   stop moving is zero.
 - **SC-013**: The count of elements that rotate, spin or bounce is zero, across
   both surfaces.
+- **SC-014**: A back-office wait that resolves faster than the threshold shows
+  nothing at all, and the layout does not shift while it resolves.
 
 ## Assumptions
 

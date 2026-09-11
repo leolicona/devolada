@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -33,34 +33,54 @@
 
 ### Iteration 1 — 2026-09-11
 
-Three [NEEDS CLARIFICATION] markers remain, carried as FR-027, FR-028 and
-FR-029. Each is a scope fork with no defensible default:
+Three [NEEDS CLARIFICATION] markers were raised rather than guessed, each a scope
+fork with no defensible default: the link's lifecycle, who may consume the API,
+and whether an API payment also drives the WispHub action.
 
-- **Q1 (FR-027) — link lifecycle.** Today's link is permanent and one per
-  WispHub customer (`payment_links` is uniquely indexed on business +
-  `customer_usuario`). An API link that carries an amount cannot inherit that
-  shape unchanged, and the two candidate shapes lead to different data, different
-  idempotency rules and a different answer to "the payer never paid".
-- **Q2 (FR-028) — who may consume it.** The constitution opens with "Devolada
-  lets a Mexican ISP collect its customers' payments by SPEI". Serving companies
-  that never use the panel widens that definition, and widening it is an
-  amendment the developer makes, not an assumption the spec makes.
-- **Q3 (FR-029) — WispHub on an API link.** Both readings are coherent: the API
-  owns the outcome and only announces, or the API is a superset of the panel and
-  can also drive the configured WispHub action. The choice decides whether this
-  feature touches the WispHub action path at all.
-
-Fixed during this iteration, before validation passed:
+Fixed before validation in this iteration:
 
 - Success criteria rewritten to user-facing outcomes — an earlier draft measured
   response times and delivery latency as system internals rather than as what the
   caller experiences (SC-002, SC-003).
-- Scope boundary made explicit in Assumptions: multiple receiving addresses,
-  per-event subscriptions and event replay are out, so "notifications" cannot be
-  read as an unbounded eventing platform.
-- A `Dependencies` section was added; the template folds dependencies into
+- Scope boundary made explicit in Assumptions, so "notifications" cannot be read
+  as an unbounded eventing platform.
+- A `Dependencies` section added; the template folds dependencies into
   Assumptions, and this feature's dependency on the existing Consta path is load
   bearing enough to name on its own.
 
-All other items pass. The three markers are presented to the developer as Q1–Q3
-rather than guessed, per the "ask for decisions, not approvals" rule.
+### Iteration 2 — 2026-09-11 (clarifications answered)
+
+All three markers resolved by the developer; recorded in the spec's
+`Clarifications` section and folded into requirements. The checklist now passes
+in full. What each answer changed:
+
+- **Q1 → both link kinds.** FR-027 settled; FR-030 – FR-033 added for re-pricing,
+  closing and expiry, payer-invisibility of the kind, and uniqueness of a
+  reusable link. Two new acceptance scenarios and two new edge cases cover the
+  seams the second kind opens: a payment landing seconds before a deadline, and a
+  re-price while a payer has the page open.
+- **Q2 → any company in Mexico.** FR-028 settled; FR-034 – FR-036 added for test
+  mode and the published reference; SC-010 and SC-011 added. This is the answer
+  with reach beyond the feature, so a `Constitution Impact` section was added
+  rather than leaving the conflict for `/speckit-analyze` to find as CRITICAL —
+  the constitution's own rule is that the plan proposes the amendment and does
+  not route around it.
+- **Q3 → announce only.** FR-029 and FR-037 settled. This is the answer that
+  *removes* work: the feature does not touch the WispHub action path at all, and
+  says so as a requirement so no later reading re-opens it.
+- **Webhooks named.** The developer confirmed the delivery mechanism, so US2 is
+  titled by it and FR-038 – FR-041 cover what a webhook needs to be depended on:
+  a destination that protects the message, secret rotation with no loss, an
+  orderable verdict moment, and re-sending a failed delivery once an endpoint is
+  fixed.
+
+### Deliberately not settled here
+
+- **Identity checks for non-ISP businesses.** Named in Assumptions as a decision
+  to take on its own evidence. It is not a gap in this spec: the API's behaviour
+  is fully specified either way, because Devolada never holds the money.
+- **Self-service developer onboarding.** Out of scope and said so. A company that
+  will live entirely in the API still signs up once in the panel.
+- **Numbering.** FR-027 – FR-029 keep the numbers they held while open, so the
+  clarifications and this checklist still point at the same requirements. New
+  work appends from FR-030.

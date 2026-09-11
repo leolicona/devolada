@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-11
 
-**Status**: Draft — 3 open questions
+**Status**: Draft — clarified, ready for `/speckit-plan`
 
 **Input**: User description: "We are going to develop an API that allows other services to generate payment links to send to customers, verify customer payments directly from their own platforms, receive automated notifications once transfers are validated, and view the history of received transfers. The goal is to automate customer collections without manual intervention, reconcile bank transfers in real time, and streamline customer support."
 
@@ -18,13 +18,51 @@ human still watches it.
 
 This feature gives that whole loop to the business's own software. Its system
 asks for a link, sends it however it already talks to its customers, and is told
-the moment Banxico confirms the transfer. Nobody opens Devolada to collect, and
-nobody opens Devolada to find out whether a customer paid.
+by webhook the moment Banxico confirms the transfer. Nobody opens Devolada to
+collect, and nobody opens Devolada to find out whether a customer paid.
 
-The money never changes hands differently: the payer still transfers to the
-business's CLABE, Consta still validates it against Banxico, and Devolada still
-holds no money at any point. What is new is who does the asking and who gets
-told.
+It also widens who Devolada is for. Until now the product assumed the business
+runs an internet service and that WispHub is where the outcome lands. From this
+feature on, **the business is any company in Mexico that collects by SPEI** — a
+gym, a school, a software company — and **WispHub is one integration among
+several**, not the reason the product exists. The API never mentions a
+subscriber, a service or a router.
+
+The money never changes hands differently: the payer transfers to the
+**business's own CLABE**, Consta validates it against Banxico, and Devolada holds
+no money at any moment. That is what keeps the widening affordable — Devolada is
+not becoming a place where money sits. What is new is who does the asking and who
+gets told.
+
+## Clarifications
+
+### Session 2026-09-11
+
+- Q: Is an API payment link permanent per customer, or one link per charge? →
+  **A: Both, chosen by the caller.** A *reusable* link belongs to a customer
+  reference, stays open forever and is re-priced for each new charge — the shape
+  that already works for recurring service. A *one-time* link carries one amount,
+  closes when it is paid and expires on a deadline — the shape a single invoice
+  needs. The payer cannot tell them apart; the kind is the caller's bookkeeping.
+  (FR-027, FR-030 – FR-033)
+- Q: Who may consume the API — existing Devolada businesses, or any company? →
+  **A: Any company in Mexico that wants to collect by SPEI.** Devolada becomes a
+  collections platform and WispHub becomes one integration among several. This
+  amends the constitution's opening sentence, adds a test mode a developer can
+  integrate against without moving real money, and forbids any ISP vocabulary in
+  the API surface. (FR-028, FR-034 – FR-036, and *Constitution Impact* below)
+- Q: Does a confirmed payment on an API link also run the WispHub action? →
+  **A: No. Announce only.** Devolada performs no registration, no reconnection
+  and no payment promise for an API payment, whatever the business configured for
+  its panel links. The webhook is the outcome, and the caller's system decides
+  what to do with it. Panel links keep their WispHub behaviour untouched.
+  (FR-029, FR-037)
+- Q: How are the automated notifications delivered? → **A: Webhooks.** Devolada
+  calls an address the business registers, signs the message so the caller can
+  prove it came from Devolada, retries a failed delivery on a widening schedule,
+  and gives every message an identity so a repeat is recognisable. Not email, not
+  polling-only — polling exists as the safety net underneath (US3), never as the
+  mechanism. (FR-012 – FR-018, FR-038 – FR-041)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -36,8 +74,12 @@ owes money, it asks Devolada for a payment link with its own customer reference
 and the amount. It gets back a link it can put in its own WhatsApp message, its
 own portal, or its own invoice email.
 
-The payer's experience does not change at all: the same page, the same CLABE,
-the same concept, the same es-MX copy.
+It chooses the kind of link it needs. A company billing the same customer every
+month asks for a **reusable** link once and re-prices it each cycle. A company
+sending one invoice asks for a **one-time** link that closes when it is paid.
+
+The payer's experience does not change at all, and does not differ between the
+two kinds: the same page, the same CLABE, the same es-MX copy.
 
 **Why this priority**: it is the one that removes the manual step the feature
 exists to remove. A business that can only do this much already stops copying
@@ -45,48 +87,64 @@ links by hand — it can still watch outcomes in the panel while the rest arrive
 
 **Independent Test**: issue a credential in the panel, call the API with a
 customer reference and an amount, open the returned link in a browser, and see
-the right amount and the business's own CLABE. Needs nothing from the other
-stories.
+the right amount and the business's own CLABE. Repeat for both link kinds. Needs
+nothing from the other stories.
 
 **Acceptance Scenarios**:
 
 1. **Given** a business with a credential and a configured CLABE, **When** its
-   system asks for a link for customer reference `CLI-4471` owing $499.00 MXN,
-   **Then** it receives a link, and opening that link shows a payment page
-   asking for that amount against that business's CLABE.
-2. **Given** the same business, **When** it asks a second time for the same
-   customer reference with the same amount and its own idempotency key, **Then**
-   it receives the same link rather than a second one.
-3. **Given** a business whose CLABE is not configured, **When** its system asks
+   system asks for a reusable link for customer reference `CLI-4471` owing
+   $499.00 MXN, **Then** it receives a link, and opening that link shows a
+   payment page asking for that amount against that business's CLABE.
+2. **Given** that reusable link, **When** the caller re-prices it to $520.00 next
+   month, **Then** the same link now asks for $520.00, and a payer who kept the
+   old message still sees the current amount.
+3. **Given** a one-time link for $1,200.00 with a deadline, **When** the payer
+   pays it, **Then** the link closes and a second payer opening it meets a clear
+   es-MX explanation rather than a broken page or a zero.
+4. **Given** a one-time link whose deadline has passed, **When** anyone opens it,
+   **Then** it says so in es-MX and offers no CLABE to transfer to.
+5. **Given** the same business, **When** it asks twice for a reusable link for
+   `CLI-4471`, **Then** it receives the same link both times rather than a second
+   one.
+6. **Given** any create request repeated with the same caller-supplied
+   idempotency key, **When** the first one already succeeded, **Then** the second
+   returns that same result and creates nothing new.
+7. **Given** a business whose CLABE is not configured, **When** its system asks
    for a link, **Then** the request is refused with a reason the developer can
    act on, and no link that would show an empty CLABE is created.
-4. **Given** a business without a credential, **When** a request arrives with no
+8. **Given** a business without a credential, **When** a request arrives with no
    or an unknown credential, **Then** it is refused and nothing about the
    business is revealed.
-5. **Given** a credential belonging to business A, **When** it asks for a link
+9. **Given** a credential belonging to business A, **When** it asks for a link
    using a customer reference that exists in business B, **Then** a link is
    created for business A only, and nothing of business B is read or returned.
+10. **Given** a company that is not an ISP, **When** it reads any request,
+    answer or error the API produces, **Then** nothing names a subscriber, a
+    service, a router or WispHub.
 
 ---
 
-### User Story 2 - The caller is told the moment the transfer is validated (Priority: P2)
+### User Story 2 - The webhook tells the caller the transfer was validated (Priority: P2)
 
 The business registers one address where Devolada should announce outcomes. When
 a payment reaches its verdict, Devolada calls that address with what happened:
 which customer reference, how much arrived, whether it matched what was asked,
 and the folio. The caller's system does the rest on its own — marks the invoice
-paid, restores the service, thanks the customer — without anybody watching.
+paid, opens the gym door, thanks the customer — without anybody watching.
 
-An announcement that fails is retried. An announcement that keeps failing is
-never lost: it stays readable, and the business can see that its endpoint is the
-thing that is broken.
+The message is signed, so the caller can prove it came from Devolada. It carries
+its own identity, so a repeat is recognisable. A delivery that fails is retried
+on a widening schedule, and one that keeps failing is never lost: it stays
+readable, the business can see in the panel that its own endpoint is the thing
+that is broken, and it can ask for the delivery again once it is fixed.
 
 **Why this priority**: this is what "without manual intervention" means. US1
-still requires someone to ask "did they pay?"; this closes the loop.
+still requires someone to ask "did they pay?"; the webhook closes the loop.
 
 **Independent Test**: register a receiving address, drive one payment to a
-confirmed verdict, and assert the announcement arrives with the payment's facts,
-carries proof it came from Devolada, and is retried when the address answers with
+confirmed verdict, and assert the webhook arrives with the payment's facts,
+carries verifiable proof of origin, and is retried when the address answers with
 an error.
 
 **Acceptance Scenarios**:
@@ -95,21 +153,30 @@ an error.
    on an API-created link is confirmed, **Then** the address is called within
    seconds with the customer reference, the amount that arrived, the amount that
    was asked, the match result, the folio, and the moment of the verdict.
-2. **Given** the same announcement, **When** the caller checks it, **Then** it
+2. **Given** the delivered message, **When** the caller checks it, **Then** it
    can prove the message came from Devolada and was not altered, and can tell
    whether it has already seen this exact event.
 3. **Given** a receiving address that answers with an error, **When** Devolada
-   announces, **Then** it retries on a widening schedule, and stops after the
+   delivers, **Then** it retries on a widening schedule, and stops after the
    schedule is spent with the failure visible to the business.
 4. **Given** a receiving address that never answers in time, **When** the
-   announcement times out, **Then** the payment's own record is unaffected — the
+   delivery times out, **Then** the payment's own record is unaffected — the
    money stays confirmed and the payer sees success.
-5. **Given** a payment that ends in a verdict other than confirmed (it arrived
+5. **Given** a business that has fixed its endpoint after a run of failures,
+   **When** it asks for a failed delivery to be sent again, **Then** it is
+   delivered, carrying the same event identity as the attempts that failed.
+6. **Given** a payment that ends in a verdict other than confirmed (it arrived
    short, it arrived against no debt, it was never validated), **Then** the
    caller is told about that outcome too, named so its system can tell the
    difference.
-6. **Given** a business with no receiving address registered, **When** a payment
-   is confirmed, **Then** nothing is announced and nothing fails.
+7. **Given** a business rotating the secret that proves origin, **When** the
+   rotation happens between two payments, **Then** no delivery is lost and the
+   caller can verify both the message before and the message after.
+8. **Given** a business with no receiving address registered, **When** a payment
+   is confirmed, **Then** nothing is delivered and nothing fails.
+9. **Given** a confirmed payment on an API link for a business that has WispHub
+   connected, **When** the verdict lands, **Then** the webhook is sent and
+   **nothing at all** is written to WispHub.
 
 ---
 
@@ -120,13 +187,11 @@ after a restart — needs to know whether a specific customer paid. It asks
 Devolada by its own customer reference or by the payment's identifier and gets
 the current state in one answer.
 
-This is also the safety net under US2: an announcement that was missed while the
-caller's platform was down is never a hole, because the state can always be
-asked for.
+This is the safety net under US2: a webhook missed while the caller's platform
+was down is never a hole, because the state can always be asked for.
 
 **Why this priority**: it makes support answerable without leaving the tool the
-agent already has open, and it is what makes the notification path safe to
-depend on.
+agent already has open, and it is what makes the webhook safe to depend on.
 
 **Independent Test**: create a link, drive a payment through each of its states,
 and at every step ask the API for its state and get the truth.
@@ -189,22 +254,32 @@ exactly once across the pages, in a stable order.
 - **The payer pays twice.** Two transfers against one link are two payments with
   two identifiers, each announced on its own. A caller must never see the second
   as a repeat of the first.
-- **The same announcement arrives twice.** A retry after a delivery that
-  actually landed is possible. Every announcement carries an identity the caller
-  can use to recognise a repeat, so a customer is never credited twice.
-- **The caller asks for the same link twice.** Asking again for a link that is
-  still open returns the link that already exists, never a second one — so a
-  retried request after a network failure cannot leave two links chasing one
-  customer.
-- **The receiving address is slow or down.** The announcement waits, retries and
-  eventually gives up; the payment itself is never held back, never rejected,
-  and never re-validated because of it.
+- **The same webhook arrives twice.** A retry after a delivery that actually
+  landed is possible. Every message carries an identity the caller can use to
+  recognise a repeat, so a customer is never credited twice.
+- **A payer pays a one-time link seconds before it expires.** The money is real
+  and the payment is honoured; a deadline closes the link to *new* payers, it
+  never voids a transfer already on its way. Money that lands after the link
+  closed is unapplied, not lost.
+- **A reusable link is re-priced while a payer has the page open.** The payer
+  sees the current amount from the moment the change lands. A transfer already
+  sent against the old amount is reconciled against what was asked at the time.
+- **The caller asks for the same link twice.** A reusable link is unique per
+  customer reference — asking again returns the one that exists. Any request
+  repeated with the same idempotency key returns the first result. A retried
+  request after a network failure can never leave two links chasing one customer.
+- **The receiving address is slow or down.** The webhook waits, retries and
+  eventually gives up; the payment itself is never held back, never rejected, and
+  never re-validated because of it.
 - **The credential is revoked while links are live.** The API stops answering
   immediately. Links already in a customer's hands keep working — the business
   asked for that money and the payer must not meet a dead page.
 - **A transfer arrives that matches no link at all.** The money is real and
   already in the business's account. It appears in the history as unapplied, and
-  the caller is told so it can be chased, rather than discovered a month later.
+  the caller is told, so it can be chased rather than discovered a month later.
+- **A test-mode payment reaches a business's real reconciliation.** It must not.
+  Test records live apart from real ones everywhere they could be counted: the
+  history, the panel totals, the fees.
 - **An amount of zero or a negative amount.** Refused at creation, with a reason.
 - **A customer reference the caller made up on the spot.** Accepted — the
   reference is the caller's to define, and Devolada never validates it against
@@ -212,7 +287,6 @@ exactly once across the pages, in a stable order.
 - **The caller floods the API.** Requests are limited per business, and hitting
   the limit is answered in a way that tells the developer to slow down rather
   than looking like an outage.
-- **The payer never pays.** Covered by the answer to Q1 below.
 
 ## Requirements *(mandatory)*
 
@@ -252,25 +326,25 @@ exactly once across the pages, in a stable order.
   panel and in the data, from one created by a person, so the business can tell
   which of its channels is collecting.
 
-**Announcing outcomes**
+**Announcing outcomes by webhook**
 
-- **FR-012**: A business MUST be able to register one address to receive
-  outcome announcements, and to change or remove it.
+- **FR-012**: A business MUST be able to register one address to receive outcome
+  webhooks, and to change or remove it.
 - **FR-013**: The system MUST announce every payment verdict on an API-created
   link — confirmed, short, arriving against no debt, or never validated — naming
   the outcome so the caller's system can branch on it.
-- **FR-014**: Every announcement MUST carry the customer reference, the payment
+- **FR-014**: Every webhook MUST carry the customer reference, the payment
   identifier, the amount asked, the amount received, the match result, the folio
   when there is one, the verdict moment, and its own event identity.
-- **FR-015**: Every announcement MUST carry proof of origin that the caller can
-  verify without trusting the network.
-- **FR-016**: A failed announcement MUST be retried on a widening schedule, and
-  MUST stop after a bounded number of attempts, leaving the failure visible to
-  the business.
-- **FR-017**: No announcement, however slow or however broken its destination,
-  may change, delay or reverse the payment's own verdict.
-- **FR-018**: A business MUST be able to see, in the panel, that announcements
-  are failing and why — an endpoint the business broke is the business's to fix.
+- **FR-015**: Every webhook MUST carry proof of origin that the caller can verify
+  without trusting the network.
+- **FR-016**: A failed delivery MUST be retried on a widening schedule, and MUST
+  stop after a bounded number of attempts, leaving the failure visible to the
+  business.
+- **FR-017**: No webhook, however slow or however broken its destination, may
+  change, delay or reverse the payment's own verdict.
+- **FR-018**: A business MUST be able to see, in the panel, that deliveries are
+  failing and why — an endpoint the business broke is the business's to fix.
 
 **Asking and reading**
 
@@ -292,38 +366,78 @@ exactly once across the pages, in a stable order.
 - **FR-025**: Every failure MUST be answered with a stable, machine-readable
   reason a developer can branch on, and a caller MUST be able to tell "retry
   this" from "fix your request".
-- **FR-026**: The system MUST keep a record of every announcement attempt and
-  its result, so a disagreement between the two systems can be settled.
+- **FR-026**: The system MUST keep a record of every webhook attempt and its
+  result, so a disagreement between the two systems can be settled.
 
-**Open questions**
+**Link lifecycle** *(Q1 → both kinds)*
 
-- **FR-027**: A payment link created through the API MUST
-  [NEEDS CLARIFICATION: Q1 — be a permanent link per customer reference, reusable
-  for every future charge, or a one-time link for one charge that closes when it
-  is paid or when it expires?]
-- **FR-028**: The API MUST be available to
-  [NEEDS CLARIFICATION: Q2 — businesses already onboarded to Devolada only, or
-  also to companies that never use the panel and exist purely as API consumers?]
-- **FR-029**: When a business has WispHub connected and a payment on an
-  API-created link is confirmed, the system MUST
-  [NEEDS CLARIFICATION: Q3 — announce only and never touch WispHub, or also run
-  the configured WispHub action when the caller supplies the WispHub customer?]
+- **FR-027**: A caller MUST choose, at creation, between a **reusable** link tied
+  to its customer reference that never expires, and a **one-time** link that
+  carries one amount, closes when it is paid, and expires on a deadline.
+- **FR-030**: A caller MUST be able to change the amount on a reusable link, and
+  the payer's page MUST show the new amount from the moment the change lands.
+- **FR-031**: A closed or expired one-time link MUST refuse new payments and MUST
+  explain itself to the payer in es-MX — never a broken page, never a zero
+  amount, never a CLABE that would invite a transfer nobody will apply.
+- **FR-032**: Both kinds MUST be indistinguishable to the payer: same page, same
+  CLABE, same copy. The kind is the caller's bookkeeping.
+- **FR-033**: A reusable link MUST be unique per business and customer reference;
+  asking for one that exists MUST return it rather than create a second.
+
+**Any business, not only ISPs** *(Q2 → open platform)*
+
+- **FR-028**: The API MUST serve any business collecting by SPEI in Mexico and
+  MUST NOT assume the caller operates an internet service. No request, answer,
+  webhook or error message may require or imply a subscriber, a service, a router
+  or WispHub.
+- **FR-034**: A developer MUST be able to exercise the whole flow — create a
+  link, reach a confirmed verdict, receive the webhook — in a clearly marked test
+  mode, without moving real money and without a real bank transfer.
+- **FR-035**: Test-mode records MUST never appear in a business's real history,
+  real reconciliation, real panel totals or real fees.
+- **FR-036**: A published reference MUST document every request, every answer,
+  every error reason and the webhook contract — including how to verify origin
+  and how to recognise a repeat — and MUST be readable by a developer who has
+  never heard of WispHub.
+
+**WispHub stays out of it** *(Q3 → announce only)*
+
+- **FR-029**: A payment on an API-created link MUST NOT trigger any WispHub
+  action. Devolada performs no registration, no reconnection and no payment
+  promise for it, whatever the business has configured. The webhook is the
+  outcome.
+- **FR-037**: A business that has WispHub connected MUST keep its panel links and
+  their WispHub behaviour completely unchanged by this feature.
+
+**What a webhook needs to be trustworthy**
+
+- **FR-038**: The system MUST refuse a receiving address that cannot protect the
+  message in transit.
+- **FR-039**: A business MUST be able to rotate the secret that proves origin
+  without losing a single delivery.
+- **FR-040**: Every webhook MUST carry the moment of its verdict, so a caller
+  that receives two messages out of order can still tell which is newer.
+- **FR-041**: A business MUST be able to ask for a failed delivery to be sent
+  again once its endpoint is fixed, and the re-sent message MUST carry the same
+  event identity as the attempts that failed.
 
 ### Key Entities
 
 - **API credential**: proves a request belongs to one business. Issued in the
-  panel, shown once, revocable, never shared between businesses.
+  panel, shown once, revocable, never shared between businesses. Carries whether
+  it acts in real or test mode.
 - **Caller customer reference**: the caller's own identifier for the person who
-  owes money. Devolada stores it, echoes it back on every answer and
-  announcement, and never interprets it.
+  owes money. Devolada stores it, echoes it back on every answer and webhook, and
+  never interprets it.
 - **API payment link**: a link created by the caller rather than by a person,
   carrying the amount to collect and the caller's reference instead of a WispHub
-  customer.
+  customer. Reusable or one-time; a one-time link also carries its deadline and
+  whether it is still open.
 - **Payment**: unchanged from today — one transfer and its whole life, from proof
   to verdict. Gains the caller's reference when it came in through an API link.
-- **Outcome announcement**: one attempt to tell the caller about one verdict,
-  with its own identity, its proof of origin, its attempt count and its result.
-- **Receiving address**: where a business wants its announcements sent, with the
+- **Webhook delivery**: one attempt to tell the caller about one verdict, with
+  its own event identity, its proof of origin, its attempt count and its result.
+- **Receiving address**: where a business wants its webhooks sent, with the
   secret used to prove they came from Devolada.
 
 ## Success Criteria *(mandatory)*
@@ -340,25 +454,75 @@ exactly once across the pages, in a stable order.
 - **SC-004**: A developer who has never seen Devolada goes from credential to a
   first working payment link in under **30 minutes** using the published
   reference alone.
-- **SC-005**: Across 1,000 announcements including forced retries, a caller that
-  follows the documented duplicate check credits **zero** customers twice.
+- **SC-005**: Across 1,000 webhook deliveries including forced retries, a caller
+  that follows the documented duplicate check credits **zero** customers twice.
 - **SC-006**: A month of received transfers reconciles against the business's own
   books with **100%** of validated transfers accounted for, unapplied money
   included.
 - **SC-007**: **Zero** requests ever return data belonging to another business,
   under every tested combination of credential and identifier.
 - **SC-008**: A receiving address that is down for an hour and then recovers
-  loses **zero** outcomes: every one is either delivered by retry or readable
-  afterwards.
+  loses **zero** outcomes: every one is either delivered by retry, or re-sent on
+  request, or readable afterwards.
 - **SC-009**: A business whose endpoint is failing learns it from the panel
   without contacting support.
+- **SC-010**: A developer completes the entire flow — link, payment, verdict,
+  webhook — in test mode with **zero pesos** moved and **zero** test records
+  reaching any real total.
+- **SC-011**: A company that does not run an internet service integrates end to
+  end without encountering a single ISP term in any request, answer, webhook,
+  error or page of the reference.
+
+## Constitution Impact
+
+Answer Q2 widens the product beyond what the constitution currently says, so this
+feature cannot be planned without naming the amendment. The constitution's own
+governance rule applies: *"When a principle blocks a feature, the feature's plan
+says so and proposes the amendment; it does not route around it."*
+
+- **The opening sentence** — "Devolada lets a Mexican ISP (the *business*, or
+  Negocio) collect its customers' payments by SPEI, validate the transfer through
+  Consta, and act on it in the ISP's own system" — no longer describes the
+  product. The business is any company collecting by SPEI; acting in the
+  business's own system is one thing that can follow a verdict, not the
+  definition.
+- **Principle V (Tenant Isolation)** gains a second kind of actor. Today an actor
+  is a person resolved from a Better Auth membership; the API's actor is a
+  credential. The rule that every query filters by the actor's business is
+  unchanged and now carries more weight.
+- **Principle VIII (Absent configuration degrades)** already covers the WispHub
+  key being unset. Under Q2 that is no longer a degraded state to warn about — it
+  is the normal state of most businesses. What "unset" means needs restating, not
+  re-deciding.
+- **Nothing else moves.** The money law, the one-contract rule, the test layers,
+  the visual foundations and the citation rules apply to this feature exactly as
+  written.
+
+**What Q2 does *not* cost, measured against the code on 2026-09-11**: the
+`businesses` table holds no ISP-specific column — name, contact email, timezone,
+CLABE, bank, beneficiary, fee, tolerance, Consta key. The WispHub key already
+moved out to its own `integrations` table with a `provider` enum. A gym fits the
+existing tenant shape without a schema change. The ISP assumption survives in one
+load-bearing place: `payment_links` requires a WispHub customer on every row. That
+is this feature's real work, and `/speckit-plan` owns how it is done.
 
 ## Assumptions
 
-- The API serves businesses that already collect through Devolada's existing
-  SPEI channel: the payer transfers to the **business's own CLABE**, Consta
-  validates against Banxico, and Devolada holds no money at any moment. This
-  feature changes who asks and who is told — never where the money goes.
+- The API serves businesses that collect through Devolada's existing SPEI
+  channel: the payer transfers to the **business's own CLABE**, Consta validates
+  against Banxico, and Devolada holds no money at any moment. This feature
+  changes who asks and who is told — never where the money goes. It is also what
+  keeps Q2 affordable: opening to any company does not make Devolada a place
+  where other people's money sits.
+- A business account still comes into being through Devolada's existing signup.
+  The API never creates a business. A company that will live entirely in the API
+  still visits the panel once, to sign up, set its CLABE and take its credential.
+  Self-service onboarding designed for developers is a later feature, not this
+  one.
+- Whatever identity checks Devolada performs at signup today are what a new
+  business meets. Opening to companies outside the ISP world may justify more,
+  and that is a decision to take on its own evidence — this spec neither assumes
+  nor designs it.
 - The payer's page is unchanged. A link created by the API opens the same page,
   with the same copy, the same accessibility floor and the same mobile-first
   rules as one created by a person.
@@ -370,25 +534,24 @@ exactly once across the pages, in a stable order.
   caller should do when a payment falls short — it reports the match and lets the
   caller act.
 - One receiving address per business is enough for the first version. Multiple
-  addresses, per-event subscriptions and event replay are deliberately out of
-  scope.
-- Announcements are outbound only. Devolada never accepts an inbound call that
-  moves money or changes a verdict.
+  addresses, per-event subscriptions, and replaying arbitrary history are
+  deliberately out of scope. Re-sending a *failed* delivery is in scope (FR-041);
+  it is what makes a fixed endpoint recoverable.
+- Webhooks are outbound only. Devolada never accepts an inbound call that moves
+  money or changes a verdict.
 - The panel remains the business's own surface: everything the API can do, a
   person can still see, and credential and endpoint health live there rather than
   in a separate developer console.
-- Reading a published reference is how a developer integrates. A sandbox that
-  simulates a Banxico-validated transfer is valuable but is not assumed here —
-  it is a scope decision that follows from Q2.
-- Existing WispHub-backed links, the panel's own link list and everything that
-  collects today keep working untouched. This feature adds a channel; it
-  replaces nothing.
+- Everything that collects today keeps working untouched: WispHub-backed links,
+  the panel's link list, the reconnection queue. This feature adds a channel; it
+  replaces nothing and removes nothing.
 
 ## Dependencies
 
 - The existing SPEI validation path (Consta → Banxico) and the business's
   validation credential. Without it a business cannot collect at all, by API or
   by hand.
-- The business's CLABE and bank, already configured today.
+- The business's CLABE, bank and beneficiary name, already configured today.
 - The existing payment record and its verdict vocabulary. The API reports those
   outcomes; it does not invent a second set of names for them.
+- The constitution amendment named above, proposed by this feature's plan.

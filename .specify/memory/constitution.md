@@ -1,5 +1,46 @@
 <!--
-Sync Impact Report
+Sync Impact Report (v1.2.0, 2026-09-12)
+- Version change: 1.1.0 → 1.2.0 — MINOR: the Purpose paragraph widens who the
+  product is for, and Principle III gains one rule. No principle removed or
+  redefined, no renumbering.
+- Source: /speckit-analyze findings C1 and H2 on feature
+  003-automated-collections-api. Governance requires a blocked feature's plan to
+  propose the amendment rather than route around it; both texts below were
+  written by the developer and are recorded verbatim.
+- Purpose (finding C1): "Devolada lets a Mexican ISP (the *business*, or
+  Negocio) collect its customers' payments by SPEI, validate the transfer
+  through Consta, and act on it in the ISP's own system" → "Devolada lets
+  Mexican businesses collect payments by SPEI, with dedicated downstream
+  automation for ISPs."
+  What this decides, beyond the wording: the business is no longer assumed to
+  run an internet service, and acting in the business's own system is one thing
+  that can follow a verdict rather than the definition of the product. ISPs keep
+  a named place — the WispHub automation is "dedicated", not legacy.
+  What it does NOT change: the money never touches Devolada. The payer transfers
+  to the business's own CLABE and Consta validates against Banxico. That is what
+  makes the widening affordable, and no principle here grants Devolada custody
+  of anyone's money.
+- Modified principles: III. One Contract, Pure Routers — the envelope bullet is
+  split in two. The base envelope is now stated without an inline exception, and
+  a second bullet carries the developer's verbatim addition permitting optional
+  `retryable` (and `message`, per the shape given) on server-to-server contracts
+  under `/v1/*`. `apps/consta` stops being a named exception and becomes an
+  instance of the rule; browser-facing routes are explicitly barred from both
+  properties, so es-MX product copy is never replaced by a provider's message.
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Code impact: `apps/consta` already answers with `retryable` and needs no
+  change. Nothing in the tree sends `message` today — the property is permitted
+  for `/v1/*`, not required, and no existing response shape moves.
+- Templates: plan-template.md ✅ (Constitution Check is filled at plan time from
+  this file); spec-template.md ✅; tasks-template.md ✅; checklist-template.md
+  ✅. No placeholder change needed.
+- Carried from v1.1.0, still open: the Purpose amendment does not settle who may
+  be admitted as a business, or whether identity is checked before one can
+  collect. The developer deliberately left that open on 2026-09-12;
+  `businesses.status` already gates the money path, so a policy can arrive later
+  without a migration.
+
+Sync Impact Report (v1.1.0)
 - Version change: 1.0.0 → 1.1.0 — MINOR: six rules added to an existing
   principle, none removed or redefined, no renumbering.
 - Modified principles: VI. Visual Foundations (NON-NEGOTIABLE) — extended with
@@ -34,10 +75,9 @@ Sync Impact Report
 
 # Devolada Constitution
 
-Devolada lets a Mexican ISP (the *business*, or Negocio) collect its customers'
-payments by SPEI, validate the transfer through Consta, and act on it in the
-ISP's own system. It is built by one developer working with AI agents; that
-developer decides. Ask for decisions, not approvals.
+Devolada lets Mexican businesses collect payments by SPEI, with dedicated
+downstream automation for ISPs. It is built by one developer working with AI
+agents; that developer decides. Ask for decisions, not approvals.
 
 ## Core Principles
 
@@ -82,9 +122,17 @@ law removes the class of error rather than testing for it.
   (`./<area>-schema`), imported by the admin and the payment page for types,
   and used by MSW handlers and Playwright stubs to validate every fixture.
 - Responses wear one envelope: `{ success: true, data }` or
-  `{ success: false, error: { code } }` with `UPPER_SNAKE` codes (Consta adds
-  `retryable`). Better Auth's own endpoints are the only exemption and the
-  clients know it (`baPost`).
+  `{ success: false, error: { code } }` with `UPPER_SNAKE` codes. Better Auth's
+  own endpoints are the only exemption and the clients know it (`baPost`).
+- Server-to-server API contracts extend that error object, and only they do:
+  allow the optional boolean property `retryable` in the standard error envelope
+  (`error: { code, message, retryable }`) exclusively for server-to-server API
+  contracts (`/v1/*`), enabling programmatic clients to determine whether to
+  automatically retry following network failures or 5xx errors. `apps/consta`
+  already answers this way and is governed by this rule rather than by an
+  exception of its own. A browser-facing route MUST NOT carry either property:
+  its client ships with the code list and its copy is es-MX product copy, never
+  a provider's `message`.
 - A vocabulary that must agree in several places (the bank list) is generated
   from one documented source (`scripts/gen-banks.mjs`) and CI fails when a copy
   drifts (`--check`). Hand-transcribed duplicates are forbidden.
@@ -283,4 +331,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-09
+**Version**: 1.2.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-12

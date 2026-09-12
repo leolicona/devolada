@@ -22,15 +22,25 @@ Sync Impact Report (v1.2.0, 2026-09-12)
   of anyone's money.
 - Modified principles: III. One Contract, Pure Routers — the envelope bullet is
   split in two. The base envelope is now stated without an inline exception, and
-  a second bullet carries the developer's verbatim addition permitting optional
-  `retryable` (and `message`, per the shape given) on server-to-server contracts
-  under `/v1/*`. `apps/consta` stops being a named exception and becomes an
-  instance of the rule; browser-facing routes are explicitly barred from both
-  properties, so es-MX product copy is never replaced by a provider's message.
+  a second bullet permits an optional `message` and an optional boolean
+  `retryable` on any surface whose callers are programs rather than browsers.
+  `apps/consta` stops being a named exception and becomes an instance of the
+  rule; browser-facing routes are explicitly barred from both properties, so
+  es-MX product copy is never replaced by a provider's message.
+  The test is program-vs-browser, not internal-vs-external, and the distinction
+  is load bearing: `apps/consta` is internal — consumed directly by the
+  `apps/api` Worker, exposed to nothing else — while `/v1/*` is deliberately
+  reachable by other companies' systems. Both answer programs, so both qualify.
+  Scoping the grant to internal services would have excluded `/v1/*`, the
+  surface it was written for; scoping it to the path `/v1/*` would have excluded
+  `apps/consta`, which mounts at `/validate`, `/extract`, `/banks` and
+  `/admin/keys` and already sends `retryable` from eight places. It also
+  survives the Environments row's own expectation that Consta may one day have
+  an external consumer: on this test, that day amends nothing.
 - Added sections: none. Removed sections: none. Renamed principles: none.
 - Code impact: `apps/consta` already answers with `retryable` and needs no
-  change. Nothing in the tree sends `message` today — the property is permitted
-  for `/v1/*`, not required, and no existing response shape moves.
+  change. Nothing in the tree sends `message` today — the property is permitted,
+  never required, and no existing response shape moves.
 - Templates: plan-template.md ✅ (Constitution Check is filled at plan time from
   this file); spec-template.md ✅; tasks-template.md ✅; checklist-template.md
   ✅. No placeholder change needed.
@@ -124,15 +134,16 @@ law removes the class of error rather than testing for it.
 - Responses wear one envelope: `{ success: true, data }` or
   `{ success: false, error: { code } }` with `UPPER_SNAKE` codes. Better Auth's
   own endpoints are the only exemption and the clients know it (`baPost`).
-- Server-to-server API contracts extend that error object, and only they do:
-  allow the optional boolean property `retryable` in the standard error envelope
-  (`error: { code, message, retryable }`) exclusively for server-to-server API
-  contracts (`/v1/*`), enabling programmatic clients to determine whether to
-  automatically retry following network failures or 5xx errors. `apps/consta`
-  already answers this way and is governed by this rule rather than by an
-  exception of its own. A browser-facing route MUST NOT carry either property:
-  its client ships with the code list and its copy is es-MX product copy, never
-  a provider's `message`.
+- A surface whose callers are programs rather than browsers may extend that
+  error object, and only such a surface may: it MAY carry an optional `message`
+  and an optional boolean `retryable` (`error: { code, message, retryable }`),
+  so a programmatic client can tell a failure worth retrying from one worth
+  fixing. Two surfaces qualify today: `apps/consta`, an internal service with
+  no external exposure, consumed directly by the `apps/api` Worker and nothing
+  else; and the `/v1/*` contracts in `apps/api`, which serve other companies'
+  systems. Neither property is ever required. A browser-facing route MUST NOT
+  carry either: its client ships with the code list, and its words are es-MX
+  product copy, never a provider's `message`.
 - A vocabulary that must agree in several places (the bank list) is generated
   from one documented source (`scripts/gen-banks.mjs`) and CI fails when a copy
   drifts (`--check`). Hand-transcribed duplicates are forbidden.

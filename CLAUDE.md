@@ -62,11 +62,10 @@ re-specify anything you rebuild.
 ```sh
 pnpm install                                  # pnpm 10 workspace, Node 22
 pnpm playground                               # packages/ui tokens + atoms showcase (5173)
-pnpm --filter @devolada/api dev               # product API: wrangler + local D1 (8787)
-pnpm --filter @devolada/consta dev            # Consta validation Worker + its own D1 (8788)
+pnpm --filter @devolada/api dev               # product API + the validation engine: wrangler + local D1 (8787)
 pnpm --filter @devolada/admin dev             # ISP panel (5174)
 pnpm --filter @devolada/pago dev              # public payment page (5175)
-pnpm --filter @devolada/consta sandbox        # apiCEP mock, for Consta without a provider token
+pnpm --filter @devolada/api sandbox           # apiCEP mock (8789), for validating without a provider token
 
 pnpm --filter @devolada/api db:generate       # drizzle migration from src/db/schema.ts
 pnpm --filter @devolada/api db:migrate:local  # apply migrations to the local D1
@@ -75,7 +74,7 @@ pnpm -r --if-present typecheck                # every workspace
 pnpm -r --if-present test                     # every workspace
 pnpm --filter @devolada/api test -- test/direct-payment.test.ts   # one file
 pnpm --filter @devolada/admin test -- -t "revoked membership"     # one test by name
-pnpm --filter @devolada/api test:watch        # api / consta only
+pnpm --filter @devolada/api test:watch        # api only
 
 node scripts/spec-lint.mjs                    # story citations (constitution VII)
 node scripts/contrast-lint.mjs                # measures tokens.css in both themes
@@ -103,10 +102,10 @@ and passkey layers gate it); a `v*` tag deploys prod behind an approval gate.
 
 ```
 apps/api      Hono 4 + Drizzle + zod on Workers/D1 — the only party that talks
-              to WispHub, Consta and Resend; hosts Better Auth; runs the
-              every-minute cron sweeps
-apps/consta   SPEI validation engine: own Worker, own D1, API-key auth,
-              server-to-server (no CORS). Wraps apiCEP → Banxico
+              to WispHub, apiCEP and Resend; hosts Better Auth; runs the
+              every-minute cron sweeps; hosts the SPEI validation engine
+              (Consta) as a module at `src/consta/`, reachable only
+              in-process and attributed by `business_id`
 apps/pago     public payment page, no session, mobile-first (assets Worker)
 apps/admin    ISP panel, desktop-first, TanStack Router + Query (assets Worker)
 packages/ui   design tokens + the atoms both frontends render
@@ -130,7 +129,7 @@ Invariants worth knowing before you touch anything:
   decimals convert by string parsing (`decimalToCents`), never `× 100`.
   Timestamps are ms; "today" belongs to the business timezone, not the browser.
 - **One envelope**: `{ success: true, data }` / `{ success: false, error: { code } }`
-  with `UPPER_SNAKE` codes (Consta adds `retryable`). Better Auth's own
+  with `UPPER_SNAKE` codes. Better Auth's own
   endpoints are the single exemption, and the clients know it (`baPost`).
 - **Tenant isolation**: every business table carries `business_id` and every
   query filters by the actor's business. The actor is resolved per request in
@@ -148,16 +147,15 @@ Invariants worth knowing before you touch anything:
   Every one of those words was chosen against a specific wrong reading — read
   the comment in `apps/api/src/db/schema.ts` before renaming one.
 - **Sweeps ride one trigger**: the every-minute cron in `apps/api/src/index.ts`
-  (`waitUntil`) runs re-validation, the reconnection queue, top-ups and the
-  Consta key backfill. New periodic work joins it rather than adding a trigger,
+  (`waitUntil`) runs re-validation, the reconnection queue and top-ups. New
+  periodic work joins it rather than adding a trigger,
   and speaks only when it did something.
 - **Absent config degrades, never breaks**: every binding in `env.ts` carries a
-  comment saying what "unset" means (no Consta key → the SPEI channel says it is
-  unavailable; no Resend key → the OTP is logged). `BETTER_AUTH_SECRET` is the
+  comment saying what "unset" means (no provider credential → the SPEI channel
+  says it is unavailable; no Resend key → the OTP is logged). `BETTER_AUTH_SECRET` is the
   one exception — CI refuses to finish a deploy without it.
-- **Generated, never hand-edited**: `apps/consta/src/provider/banks.ts` and
-  `apps/api/src/direct-payments/banks.ts` come from `scripts/banks.data.md` via
-  `gen-banks.mjs`; CI fails on drift.
+- **Generated, never hand-edited**: `apps/api/src/direct-payments/banks.ts`
+  comes from `scripts/banks.data.md` via `gen-banks.mjs`; CI fails on drift.
 
 ## UI
 
@@ -182,7 +180,7 @@ so a working screen never reads as frozen.
 
 Four layers, each answering only what it can (constitution IV):
 
-- **API / Consta** (`apps/*/test/`) run in workerd via
+- **API** (`apps/api/test/`, the engine's own suite under `test/consta/`) run in workerd via
   `@cloudflare/vitest-pool-workers` against a real local D1 — migrations applied
   per test, isolated storage, **no database mocks**. Providers are intercepted at
   the network edge with `fetchMock` at their real origin, and

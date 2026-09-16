@@ -32,6 +32,13 @@ One row per provider call that returned an answer, billed failures included
 **Indexes**: `(business_id, created_at)`, `(business_id, customer_ref)` —
 the engine's two indexes, re-keyed.
 
+> Noted at implementation (T053): the index names are
+> `validations_business_idx` and `validations_customer_idx` (the engine's
+> were `validations_key_idx` / `validations_customer_idx`); the
+> extractions index is `extractions_business_idx`. Migration
+> `0028_consta_api_merge.sql` — two `CREATE TABLE`, three `CREATE INDEX`,
+> nothing else.
+
 **Reads, and who may see what** (constitution V, research R3):
 
 | Read | Scope | Returns |

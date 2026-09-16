@@ -103,13 +103,15 @@ class ConstaError extends Error {
   code:
     | "PROVIDER_NOT_CONFIGURED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_RATE_LIMITED"
     | "PROVIDER_AUTH_FAILED" | "REQUEST_REJECTED" | "RECEIPT_UNREADABLE"
+    | "RECEIPT_INCOMPLETE"
     | "READER_UNAVAILABLE" | "READER_UNREADABLE"
     | "PROOF_NOT_FOUND" | "PROOF_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE";
   retryable: boolean;
-  retryAfter?: string | null;
-  hint?: string | null;
-  missingFields?: string[] | null;
-  issues?: { path: string; message: string }[];
+  retryAfter: string | null;
+  hint: string | null;
+  missingFields: string[] | null;
+  issues: { path: string; message: string }[] | null;
+  reading: Record<string, unknown> | null;
 }
 ```
 
@@ -117,6 +119,18 @@ The class keeps its name so the three callers' `e instanceof ConstaError`
 keeps compiling. `retryable` is carried and **not yet acted on**: every
 caller does `retryLater(e.code)` as today (research R5). `PROOF_NOT_FOUND` is
 new — the key named no object in the bucket — and is not retryable.
+
+> Corrected at implementation (T053). The list above said eleven codes;
+> the engine has twelve: `RECEIPT_INCOMPLETE` is the engine's own gate
+> refusal (proof-extraction D4 — a reading that passed the reader but not
+> the gate), which the service answered as a 422 and the plan's count
+> missed. It is not retryable and rides the schedule like every other
+> failure (FR-011). The optional fields are `null`, never absent, on the
+> class; and `reading` carries what the reader saw on the two receipt
+> refusals, where the service put it in the envelope. The class lives in
+> `consta/failure.ts` and is re-exported from `consta/index.ts`, so the
+> two functions that throw it need not import the facade that imports
+> them; the public surface is the one this contract names.
 
 ## `engine.extract({ proofKey }) → Promise<ConstaReading>`
 

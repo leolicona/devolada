@@ -26,9 +26,17 @@ export default defineWorkersConfig(async () => {
                  it at a local WispHub clone would send their provider
                  calls there instead of to the interceptor, failing the
                  suite on their machine alone. The tests mock this
-                 origin. (Consta's base is passed per-test, not from the
-                 environment, so it needs no pin.) */
+                 origin. */
               WISPHUB_BASE_URL: "https://api.wisphub.net/api",
+              /* Same rule for the validation engine's provider
+                 (consta-api-merge D12, constitution IV): a developer
+                 running the apiCEP sandbox has
+                 APICEP_BASE_URL=http://localhost:8789 in .dev.vars, and
+                 without the pin every provider test would go there. The
+                 token must be *present* — the channel is available in
+                 tests — and the value never reaches a real host. */
+              APICEP_BASE_URL: "https://api.apicep.cloud",
+              APICEP_TOKEN: "test-apicep-token",
               /* Same rule for the email provider: .dev.vars carries a real
                  key on a developer's machine, and without this pin every
                  seeded signup's OTP reached Resend for real (measured

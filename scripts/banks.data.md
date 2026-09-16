@@ -1,9 +1,10 @@
 # apiCEP bank vocabulary — generator input
 
 Read by [`gen-banks.mjs`](gen-banks.mjs), which regenerates
-`apps/consta/src/provider/banks.ts` and `apps/api/src/direct-payments/banks.ts`
-from it. Edit this file and re-run the script; never edit the two constants by
-hand — `node scripts/gen-banks.mjs --check` fails CI when they drift.
+`apps/api/src/direct-payments/banks.ts` from it (one constant since
+consta-api-merge D14 — the engine imports the API's). Edit this file and
+re-run the script; never edit the constant by hand —
+`node scripts/gen-banks.mjs --check` fails CI when it drifts.
 
 The parser takes every backticked name between the first entry of the list
 below and the paragraph that closes it, so the two have to stay adjacent and

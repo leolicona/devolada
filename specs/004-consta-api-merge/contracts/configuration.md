@@ -55,6 +55,15 @@ it does for WispHub. `AI` is not bound in tests; a test that needs the reader
 passes `{ ...env, AI: aiReturning(reading) }` as the engine's `env`, exactly
 as the Consta suite does today.
 
+> Corrected at implementation (T053). "Not bound" needed an act:
+> `wrangler.jsonc` now declares the `ai` binding for the deployed Worker,
+> and vitest-pool-workers reads that config, so miniflare handed the suite
+> an `AI` object that would have called Cloudflare for real (measured: an
+> empty proxy object, `typeof env.AI === "object"`). `test/setup.ts`
+> deletes it from `env` before any test runs, citing constitution IV; the
+> sentence above holds because of that line. The passkey layer boots
+> `wrangler dev --local` with the same binding and starts fine (T038).
+
 ## CI (`ci.yml`)
 
 Unchanged in shape. `pnpm -r` stops visiting `apps/consta` because the
@@ -92,11 +101,16 @@ order, each step failing the job if it fails:
 
 1. `wrangler d1 export devolada-consta-db-dev --remote --output consta-dev.sql`
    → uploaded as artifact `consta-dev-final-export`, retention 90 days.
-2. `wrangler delete --name devolada-consta-dev` (the custom domain
-   `consta.dev.devoladapago.com` is released with the Worker). CI is
-   non-interactive; the task that writes this workflow verifies on its dry
-   run that wrangler 4 proceeds without a prompt there, and adds the flag it
-   needs if it does not.
+2. `wrangler delete --name devolada-consta-dev --skip-confirmation` (the
+   custom domain `consta.dev.devoladapago.com` is released with the
+   Worker). CI is non-interactive; the task that writes this workflow
+   verifies on its dry run that wrangler 4 proceeds without a prompt
+   there, and adds the flag it needs if it does not.
+
+   > Corrected at implementation (T053): wrangler 4's `delete` prompts
+   > for confirmation and offers `-y, --skip-confirmation` (read from
+   > `wrangler delete --help`); the workflow passes it rather than wait
+   > for the dry run to find out.
 3. `wrangler d1 delete devolada-consta-db-dev -y`.
 
 Run once by the creator after the dev deploy that stops calling Consta has

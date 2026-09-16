@@ -1,0 +1,66 @@
+# One-shot retirement of the standalone Consta Worker and its database
+# (consta-api-merge D13, FR-013). The validation engine is a module of
+# apps/api now; the Worker at consta.dev.devoladapago.com answers nobody
+# and its D1 holds only the creator's own test transfers (spec Q2: the
+# record starts empty in the API, and nothing is carried across).
+#
+# Run ONCE, from the Actions tab, after the dev deploy that stopped
+# calling Consta has finished (tasks T050): first with dry_run true — it
+# proves the export and the credentials and deletes nothing — then with
+# dry_run false. The export lands as a workflow artifact and is kept
+# unread. "Never deploy from a local machine" covers deletes too: the
+# act stays in CI's log, behind the same credentials the deploy uses.
+#
+# `wrangler delete` is non-interactive here and passes the Worker's name
+# explicitly — the working directory is apps/api, the only wrangler left
+# in the tree, and its own config must not decide what is deleted.
+# Delete this file in the follow-up PR once it has run (D13: the tree
+# carries no dead job; git keeps the record).
+name: Retire Consta (one-shot)
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Export only — delete nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: retire-consta
+  cancel-in-progress: false
+
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Export the Consta dev database (kept unread)
+        working-directory: apps/api
+        run: pnpm exec wrangler d1 export devolada-consta-db-dev --remote --output consta-dev.sql
+      - uses: actions/upload-artifact@v4
+        with:
+          name: consta-dev-final-export
+          path: apps/api/consta-dev.sql
+          retention-days: 90
+          if-no-files-found: error
+      - name: Delete the Consta dev Worker
+        if: ${{ !inputs.dry_run }}
+        working-directory: apps/api
+        run: pnpm exec wrangler delete --name devolada-consta-dev --skip-confirmation
+      - name: Delete the Consta dev database
+        if: ${{ !inputs.dry_run }}
+        working-directory: apps/api
+        run: pnpm exec wrangler d1 delete devolada-consta-db-dev -y
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        run: echo "Dry run — the export is archived; run again with dry_run=false to delete the Worker and the database."

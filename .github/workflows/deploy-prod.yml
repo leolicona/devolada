@@ -67,8 +67,7 @@ jobs:
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          CUSTOMER_REF_SECRET: ${{ secrets.CUSTOMER_REF_SECRET }}
-          CONSTA_ISSUER_TOKEN: ${{ secrets.CONSTA_ISSUER_TOKEN }}
+          APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
           PLATFORM_OPERATOR_EMAILS: ${{ secrets.PLATFORM_OPERATOR_EMAILS }}
         run: |
           if [ -z "$BETTER_AUTH_SECRET" ]; then
@@ -83,10 +82,6 @@ jobs:
           else
             printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env prod
           fi
-          # provisional-release D4, and see the note in deploy-dev.yml:
-          # unset means no payer history is collected — silent, and the
-          # lost month cannot be recovered later. Must stay STABLE:
-          # rotating it orphans every ref written under the old value.
           # operator-panel D2: who may open /operador and write the
           # platform's rules. Unset means nobody can — the platform still
           # runs on its birth values (operator-panel D1).
@@ -95,26 +90,138 @@ jobs:
           else
             printf '%s' "$PLATFORM_OPERATOR_EMAILS" | pnpm exec wrangler secret put PLATFORM_OPERATOR_EMAILS --env prod
           fi
-          if [ -z "$CUSTOMER_REF_SECRET" ]; then
-            echo "::warning::No CUSTOMER_REF_SECRET in the production environment — payer history is NOT accumulating in Consta (provisional-release D4, BUG-010)."
+          # consta-api-merge D9: the validation engine deploys with the API,
+          # and whether production validates is decided by this one secret
+          # (constitution VIII). This feature makes production ABLE to
+          # validate and does not plant the credential — spending real
+          # credits on real transfers is a separate decision (spec Q3).
+          # Absent, the channel is unavailable and says so; the day the
+          # secret is added to the production environment, the next deploy
+          # plants it and nothing else changes.
+          if [ -z "$APICEP_TOKEN" ]; then
+            echo "::warning::No APICEP_TOKEN in the production environment — the SPEI channel stays unavailable (consta-api-merge: switching production on is a separate decision)."
           else
-            printf '%s' "$CUSTOMER_REF_SECRET" | pnpm exec wrangler secret put CUSTOMER_REF_SECRET --env prod
+            printf '%s' "$APICEP_TOKEN" | pnpm exec wrangler secret put APICEP_TOKEN --env prod
           fi
-          # payments-and-classes D7: Consta has no prod env yet, so today
-          # this only arms the api's side of the issue-only door.
-          if [ -z "$CONSTA_ISSUER_TOKEN" ]; then
-            echo "::warning::No CONSTA_ISSUER_TOKEN in the prod environment — businesses get no per-business Consta key (payments-and-classes D7)."
-          else
-            printf '%s' "$CONSTA_ISSUER_TOKEN" | pnpm exec wrangler secret put CONSTA_ISSUER_TOKEN --env prod
+      # A secret that exists is not a secret that works. On 2026-08-18 this
+      # step ran green while planting a token apiCEP answered 401 to, and the
+      # failure then hid for six hours: Consta maps a provider 401 to
+      # PROVIDER_ERROR, the api maps that to retryable, and direct payments
+      # sat in `validating` showing the customer "Verificando tu pago" until
+      # they expired. Same lesson as TD-011, one level down — there the
+      # evidence was a skipped step going green, here it is a step that
+      # succeeds with a value nothing validated.
+      #
+      # consta-api-merge D9: the credential lives on the API now (the engine
+      # is a module of it), so the probe moved here, right after the sync
+      # that planted it. Its body is measured knowledge and is unchanged.
+      #
+      # The probe is free: an empty body is rejected before apiCEP touches
+      # Banxico, so no credit is spent. It separates the only two answers
+      # that decide anything — 401 is our credential, 400 is apiCEP telling
+      # us the credential was fine and only the body was wrong. Anything
+      # else is the provider having a bad day, which must not block a deploy.
+      #
+      # The URL matches the adapter's DEFAULT_BASE_URL: the prod env sets no
+      # APICEP_BASE_URL, so this is the host the deployed Worker will use.
+      # Exits 0 with a warning while the secret is absent — which is this
+      # feature's own after-state for production (consta-api-merge D9).
+      - name: Verify the provider credential
+        env:
+          APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
+        run: |
+          # CICD D6. apiCEP answers 401 for five different reasons and the
+          # HTTP code alone cannot tell them apart, so this reads the body.
+          # All five measured 2026-08-19:
+          #
+          #   no header / no "Bearer " prefix  Missing or invalid Authorization header
+          #   leading whitespace in the value  Invalid API key format. Must start with sk_live_
+          #   apicep_ shape, not recognised    Invalid or revoked API token
+          #   sk_live_ shape, not recognised   API key not found
+          #   trailing whitespace              tolerated — apiCEP trims it (HTTP 400, auth fine)
+          #
+          # The first version of this step reported every 401 as "revoked",
+          # which sent a debugging session after the wrong cause.
+          if [ -z "$APICEP_TOKEN" ]; then
+            echo "::warning::No APICEP_TOKEN to verify; the sync step already warned. Production is able to validate and not switched on."
+            exit 0
           fi
+
+          # A fingerprint, not the secret: enough to answer "is this the same
+          # value as the one that works locally?" without printing either.
+          #   printf '%s' "$TOKEN" | shasum -a 256 | cut -c1-12
+          echo "APICEP_TOKEN: ${#APICEP_TOKEN} chars, sha256 $(printf '%s' "$APICEP_TOKEN" | sha256sum | cut -c1-12)"
+
+          # Shape before network, because two of these never reach a verdict
+          # a human would read correctly.
+          if [ "$APICEP_TOKEN" != "$(printf '%s' "$APICEP_TOKEN" | tr -d '\n\r')" ]; then
+            echo "::error::APICEP_TOKEN contains a newline or carriage return. In the Worker that builds an invalid Authorization header, fetch throws, and Consta answers 500 — retryable all the way down, i.e. the same six-hour silence by another road. Re-add the secret with no trailing line break."
+            exit 1
+          fi
+          case "$APICEP_TOKEN" in
+            [!\ \	]*) ;;
+            *) echo "::error::APICEP_TOKEN starts with a space or a tab. Measured: apiCEP answers 401 'Invalid API key format'. Re-add the secret with no leading whitespace."; exit 1 ;;
+          esac
+
+          call() {
+            curl -s -o /tmp/apicep-probe.txt -w '%{http_code}' --max-time 30 \
+              -X POST https://api.apicep.cloud/validate-transfer \
+              -H "Authorization: Bearer $APICEP_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d '{}'
+          }
+          code=$(call); body=$(cat /tmp/apicep-probe.txt)
+
+          # "Missing or invalid Authorization header" means apiCEP did not see
+          # a header we know curl sent. Observed once by hand, and a retry
+          # succeeded — so it is treated as a flake worth one more try rather
+          # than as grounds to fail a deploy.
+          case "$body" in
+            *"Missing or invalid Authorization header"*)
+              echo "::warning::apiCEP did not see the Authorization header. Retrying once."
+              sleep 3
+              code=$(call); body=$(cat /tmp/apicep-probe.txt)
+              ;;
+          esac
+
+          case "$code" in
+            400)
+              echo "apiCEP accepted the credential (HTTP 400 on an empty body, as expected)."
+              ;;
+            401)
+              case "$body" in
+                *"Invalid or revoked API token"*)
+                  echo "::error::apiCEP rejected APICEP_TOKEN: the token is revoked or was never valid. Its shape is right, so this is the value itself. Mint one at app.apicep.cloud and update the production environment secret."
+                  ;;
+                *"API key not found"*)
+                  echo "::error::APICEP_TOKEN looks like an sk_live_ key and apiCEP does not know it. This repo runs on an apicep_ token (docs/integrations/apicep.md, Auth) — check the secret holds the right kind."
+                  ;;
+                *"Invalid API key format"*)
+                  echo "::error::apiCEP could not parse APICEP_TOKEN. Measured cause: leading whitespace inside the secret. The shape check above should have caught it, so inspect the value byte for byte."
+                  ;;
+                *"Missing or invalid Authorization header"*)
+                  echo "::error::apiCEP twice failed to see an Authorization header this step did send. Either apiCEP's auth layer is down, or the secret is empty in a way \$APICEP_TOKEN did not reveal. The fingerprint above says which."
+                  ;;
+                *)
+                  echo "::error::apiCEP answered 401 with an unrecognised body: $body"
+                  ;;
+              esac
+              echo "::error::The engine will answer PROVIDER_AUTH_FAILED on every attempt, and direct payments will sit in 'validating' until they expire."
+              exit 1
+              ;;
+            *)
+              echo "::warning::Unexpected HTTP $code from apiCEP — the credential could not be verified, so the deploy is not blocked. Body: $body"
+              ;;
+          esac
       - name: Build admin (prod API baked in)
         working-directory: apps/admin
         run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build
       - name: Deploy prod admin
         working-directory: apps/admin
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../admin/wrangler.jsonc --env prod
-      # The page deploys; the channel stays "unavailable" until Consta has
-      # a prod env (direct-payment spec: no CONSTA_BASE_URL in prod vars).
+      # The page deploys; the channel stays "unavailable" until APICEP_TOKEN
+      # is planted in the production environment — no code change needed
+      # then (consta-api-merge, spec Q3).
       - name: Build payment page (prod API baked in)
         working-directory: apps/pago
         run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build

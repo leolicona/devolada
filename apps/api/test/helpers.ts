@@ -23,6 +23,47 @@ import type { Bindings } from "../src/env";
 
 export const PASSWORD = "devolada123";
 
+/* In-memory R2 for the proof bucket: real R2 writes trip
+   vitest-pool-workers' isolated storage (its snapshotter rejects the
+   bucket's sqlite WAL files). D1 stays real — the "no database mocks"
+   rule is about D1; the blob store is an implementation detail behind
+   four calls. Shared by the payment suites and the engine's own
+   (consta-api-merge D12): the engine reads proofs from this bucket now
+   (D7), so a test that uploads one and validates it goes through the
+   same double end to end. */
+export function fakeProofs(): R2Bucket {
+  const store = new Map<string, { data: unknown; contentType?: string; uploaded: Date }>();
+  return {
+    async put(key: string, value: unknown, opts?: R2PutOptions) {
+      const meta = (opts?.httpMetadata as { contentType?: string } | undefined)?.contentType;
+      store.set(key, { data: value, contentType: meta, uploaded: new Date() });
+      return {} as R2Object;
+    },
+    async head(key: string) {
+      return store.has(key) ? ({} as R2Object) : null;
+    },
+    /* Enough of the real shape for the upload budget: prefix filter and
+       an `uploaded` date per object (direct-payment D13) */
+    async list(opts?: R2ListOptions) {
+      const prefix = opts?.prefix ?? "";
+      return {
+        objects: [...store.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, o]) => ({ key, uploaded: o.uploaded }) as R2Object),
+        truncated: false,
+      } as unknown as R2Objects;
+    },
+    async get(key: string) {
+      const object = store.get(key);
+      if (!object) return null;
+      return {
+        body: new Blob([object.data as BlobPart]).stream(),
+        httpMetadata: { contentType: object.contentType },
+      } as unknown as R2ObjectBody;
+    },
+  } as unknown as R2Bucket;
+}
+
 /* The Hono app, not the worker default export (which also carries
    the cron `scheduled` handler). */
 export const app = async () => (await import("../src/index")).app;

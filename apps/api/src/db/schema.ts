@@ -77,11 +77,15 @@ export const businesses = sqliteTable("businesses", {
   overTreatment: text("over_treatment", { enum: ["flag", "credit"] })
     .notNull()
     .default("flag"),
-  /* payments-and-classes D7 (pivot D20): the business's own Consta key,
-     issued at birth through the issue-only door and stored in the row
-     like the WispHub key — same trust as the other tenant credential.
-     Null = issuer was down at birth; the backfill sweep fills it and the
-     platform's key covers the gap. */
+  /* Retired in place (consta-api-merge D11). It held the business's own
+     Consta key (payments-and-classes D7) while the validation engine was
+     a separate service; the engine is a module of this API now and
+     attributes every row by `business_id`, so this column is never read
+     and never written. It stays declared, not dropped, because the
+     per-PR preview applies migrations to the live dev database while the
+     deployed Worker keeps serving — a DROP COLUMN here would break that
+     Worker's SELECT for the life of the PR (research R10). The drop is
+     registered as debt `retired-consta-key-column`. */
   constaApiKey: text("consta_api_key"),
   createdAt: createdAt(),
 });
@@ -505,4 +509,135 @@ export const creditEntries = sqliteTable(
       .on(t.grantedToUserId)
       .where(sql`kind = 'welcome_bonus'`),
   ],
+);
+
+/* The SPEI validation engine's record (consta-api-merge D1, D3): the two
+   tables Consta kept in its own database while it was a separate service,
+   now beside the payment they describe. `business_id` replaces the
+   engine's `api_key_id` — the business is the tenant identity; there is
+   no per-business credential for the engine any more. */
+
+/* Append-only log (validation spec D6, amended by D15): one row per
+   request that reached the provider and got any response back, non-2xx
+   included — apiCEP bills a credit for a request it rejects with 400
+   (measured 2026-08-19), so a log of successes was not a billing record.
+   Never UPDATE/DELETE — billing is a SUM over this table. */
+export const validations = sqliteTable(
+  "validations",
+  {
+    id: id(),
+    /* consta-api-merge D3: who the call was made for. NULL is the
+       platform's own top-up (prepaid-credit D6) — the one caller that
+       never had a business key and still needs none. Every per-business
+       read filters on it; the trust block can never fuse a platform row
+       into a tenant's chains. */
+    businessId: text("business_id").references(() => businesses.id),
+    mode: text("mode", { enum: ["transfer", "receipt"] }).notNull(),
+    /* NULL = the call failed before any verdict existed (D15). Rows that
+       carry a verdict stay selectable with `status IS NOT NULL`. */
+    status: text("status", { enum: ["valid", "pending", "invalid"] }),
+    /* D11: which kind of `invalid`. NULL for every other verdict — and the
+       column that will finally say how often `not_found` is a real payment
+       we could not see rather than a claim we should refuse. */
+    reason: text("reason", { enum: ["contradicted", "not_found"] }),
+    alreadyValidated: integer("already_validated", { mode: "boolean" }).notNull().default(false),
+    /* What was claimed/extracted, for audit and support */
+    trackingKey: text("tracking_key"),
+    /* proof-extraction D13: kept so the pair (bank, clave) accumulates on
+       the transfer door too. Per-bank clave shape is derived only from
+       rows Banxico confirmed (`status = 'valid'`), never from claims. */
+    senderBank: text("sender_bank"),
+    referenceNumber: text("reference_number"),
+    amountCents: integer("amount_cents"),
+    transferDate: text("transfer_date"),
+    /* learned-retry D2: the receiving side of the transfer, from the
+       caller's own `beneficiary.bank`. The request always carried it and
+       this table dropped it (measured 2026-08-27) — it is what the
+       receiver and pair cells of the latency ladder group over. NULL on
+       receipt-door calls matched against a candidate list, and on every
+       row written before the column existed. */
+    beneficiaryBank: text("beneficiary_bank"),
+    /* Provider breadcrumbs: their id and raw CEP status ("EN PROCESO"…) */
+    providerValidationId: text("provider_validation_id"),
+    cepStatus: text("cep_status"),
+    /* D14 — what the call cost and how long it took. From response
+       headers, which ride 200s only, so NULL is normal on failures.
+       `provider_ms` is the instrument that will say whether a faceless
+       `invalid` ever reached Banxico (1–2 s early fail vs 6–7 s lookup);
+       `quota_remaining` makes the 800-per-period plan visible before the
+       429 does. */
+    providerHttpStatus: integer("provider_http_status"),
+    providerMs: integer("provider_ms"),
+    quotaRemaining: integer("quota_remaining"),
+    /* trust-layer D1/D7 — history refs. Sending `customer_ref` is the
+       opt-in for history collection; `payment_ref` chains the attempts of
+       one payment. Never interpreted, never joined against anything but
+       themselves, and stored on failed rows too: the log stays faithful.
+       Every trust number is a SUM over these at request time — no
+       aggregate tables, ever.
+       consta-api-merge D5: `customer_ref` is the link's own customer
+       identity, undisguised — the usuario for a panel link, the caller's
+       reference for an API link — because the row now sits in the same
+       database as the link, three tables away; the HMAC that hid it on
+       the wire retired with the wire (research R4). NULL on top-ups. */
+    customerRef: text("customer_ref"),
+    paymentRef: text("payment_ref"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("validations_business_idx").on(t.businessId, t.createdAt),
+    index("validations_customer_idx").on(t.businessId, t.customerRef),
+  ],
+);
+
+/* D8 — Consta stores the reading, never the image.
+
+   The SHA-256 ties this record to whatever the integrator still holds,
+   without Consta accumulating other people's customers' bank receipts:
+   names, partial CLABEs and amounts are the integrator's data under the
+   integrator's retention policy, not ours.
+
+   D9 — a refusal at the edge lands here too, with `validationId` null and
+   no provider call behind it. Nothing this feature refuses is refused
+   silently, because the refusal rate is the number the feature exists to
+   drive down. (validation.spec.md D15 will fold billed-but-failed
+   provider calls into `validations`; these never reached a provider, so
+   they are a different fact and live in a different table.) */
+export const extractions = sqliteTable(
+  "extractions",
+  {
+    id: id(),
+    /* consta-api-merge D3: as on `validations` — NULL is the platform's
+       own top-up (prepaid-credit D6) */
+    businessId: text("business_id").references(() => businesses.id),
+    /* Which reader saw the file — the routing decision of D2, recorded so
+       a caller (and we) can tell the two paths apart after the fact */
+    source: text("source", { enum: ["reader", "provider-ocr"] }).notNull(),
+    outcome: text("outcome", {
+      enum: ["passed", "gated", "not_a_receipt", "unreadable", "refused", "routed"],
+    }).notNull(),
+    model: text("model"),
+    /* Never the bytes themselves (D8) */
+    proofSha256: text("proof_sha256"),
+    mediaType: text("media_type"),
+    byteSize: integer("byte_size"),
+    /* What was read. Reported, never authoritative — D3 */
+    trackingKey: text("tracking_key"),
+    senderBank: text("sender_bank"),
+    amountCents: integer("amount_cents"),
+    transferDate: text("transfer_date"),
+    receiptStatus: text("receipt_status"),
+    gateTrackingKey: text("gate_tracking_key"),
+    gateSenderBank: text("gate_sender_bank"),
+    /* D15/D16: the soft signals, recorded so their false-alarm rate is a
+       query and not a guess — `shape` is a verdict on the reading, and
+       `suggested_bank` is what the payer was offered to confirm */
+    shape: text("shape", { enum: ["ok", "mismatch", "unknown"] }),
+    suggestedBank: text("suggested_bank"),
+    rawOutput: text("raw_output"),
+    /* Set only when the reading went on to buy a provider call */
+    validationId: text("validation_id").references(() => validations.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("extractions_business_idx").on(t.businessId, t.createdAt)],
 );

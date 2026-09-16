@@ -8,10 +8,11 @@
    status code will ever say the picker was wrong, so this list is the only
    thing standing between a real payment and a silent false rejection.
 
-   direct-payment spec D16. Devolada holds its own copy rather than calling
-   Consta for a static list: the payer's form needs it at page load, and a
-   network hop to render a dropdown would be a new way for the page to fail.
-   BUG-007 is what this closes. */
+   direct-payment spec D16, Consta validation spec D12. One constant for the
+   payer's form, the engine's request guard and its reader (consta-api-merge
+   D14): the form needs it at page load, and the guard is what turns a
+   silent false rejection into a fixable refusal. BUG-007 is what this
+   closes. */
 
 export const BANKS = [
   "ACTINVER",

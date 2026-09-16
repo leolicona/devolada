@@ -9,7 +9,6 @@ import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
 import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
-import { backfillConstaKeys } from "./consta/issuer";
 import { paymentsRoute } from "./routes/payments";
 import { paymentRequestsRoute } from "./routes/payment-requests";
 import { integrationsRoute } from "./routes/integrations";
@@ -65,11 +64,15 @@ app.onError((err, c) => {
 /* The Hono app itself, for tests and for the worker below */
 export { app };
 
-/* The worker is the API plus the every-minute sweeps: the reconnection
-   queue (reconnection-queue spec D2) and the direct-payment
-   re-validations, which ride the same trigger (direct-payment spec D7 —
-   no new Worker trigger). `waitUntil` keeps them alive past the
-   handler's return. */
+/* The worker is the API plus the every-minute sweeps, all on one
+   trigger (direct-payment spec D7 — no new Worker trigger): the
+   reconnection queue (reconnection-queue spec D2), the queued-for-credit
+   release followed by the direct-payment re-validations, and the top-up
+   sweep. `waitUntil` keeps them alive past the handler's return.
+   consta-api-merge FR-014: the Consta key backfill that rode here
+   (payments-and-classes D7) left with the keys — the engine is a module
+   of this Worker and attributes by `business_id` (D3); the payer refs it
+   collects need no secret either (D5). */
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
@@ -93,14 +96,6 @@ export default {
     ctx.waitUntil(
       sweepTopUps(env).then((report) => {
         if (report.claimed) console.log("top-up sweep:", JSON.stringify(report));
-      }),
-    );
-    /* payments-and-classes D7: the backfill — any business without its
-       own Consta key gets one. A no-op SELECT almost every minute; the
-       sweep only speaks when it minted something. */
-    ctx.waitUntil(
-      backfillConstaKeys(env).then((issued) => {
-        if (issued) console.log("consta key backfill:", issued);
       }),
     );
   },

@@ -2,9 +2,8 @@ import { and, asc, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { businesses, creditEntries, payments, topUps } from "../db/schema";
-import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
+import { consta, ConstaError, type ConstaRequest } from "../consta";
 import { nextValidationSlot, suggestedSlot } from "../direct-payments/schedule";
-import { signedProofUrl } from "../direct-payments/proofs";
 import { getSetting } from "../platform/settings";
 import { creditSummary } from "./index";
 
@@ -12,8 +11,9 @@ import { creditSummary } from "./index";
    transaction: the business pays, the platform receives. It reuses the
    payment lifecycle's machinery (Consta's two doors, D7's schedule, the
    lease discipline) against the PLATFORM's account from the operator's
-   settings, with the platform's key — never a business's — and is billed
-   to nobody. On a valid CEP the CEP's amount is credited. */
+   settings, under the platform's own attribution — never a business's
+   (consta-api-merge D3: a NULL owner on the engine's row) — and is
+   billed to nobody. On a valid CEP the CEP's amount is credited. */
 
 type DB = DrizzleD1Database<Record<string, unknown>>;
 export type TopUp = typeof topUps.$inferSelect;
@@ -36,7 +36,7 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
     );
   };
 
-  if (!env.CONSTA_BASE_URL || !env.CONSTA_API_KEY) return retryLater("CONSTA_NOT_CONFIGURED");
+  if (!env.APICEP_TOKEN) return retryLater("PROVIDER_NOT_CONFIGURED");
   const [clabe, bank, name] = await Promise.all([
     getSetting(db, "topup_clabe"),
     getSetting(db, "topup_bank"),
@@ -58,7 +58,7 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
             beneficiary,
           },
         }
-      : { receiptUrl: await signedProofUrl(env, topUp.proofKey ?? "", now), beneficiary };
+      : { receipt: { proofKey: topUp.proofKey ?? "" }, beneficiary };
 
   /* Same carve-out as direct-payment D8: a prior attempt may have set the
      provider's replay flag; the counter is written before the call. */
@@ -69,11 +69,11 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
   let verdict;
   try {
     /* prepaid-credit D6 / payments-and-classes D7: a top-up is the
-       platform's own transaction, so it ALWAYS travels under the
-       platform's key — never the business's. */
-    verdict = await new Consta(env.CONSTA_BASE_URL, env.CONSTA_API_KEY).validate(request);
+       platform's own transaction, so it ALWAYS validates under the
+       platform — never the business (consta-api-merge D3: NULL owner). */
+    verdict = await consta(env, db, { platform: true }).validate(request);
   } catch (e) {
-    const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
+    const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
     console.error("top-up validation failed:", code);
     return retryLater(code);
   }

@@ -139,12 +139,10 @@ describe("US-R01: the section reads WispHub live", () => {
 });
 
 describe("US-R04: the payer's link lists the open Cobros that make the total", () => {
-  /* Consta config is env (secret + var); the test carries it itself,
-     same as direct-payment.test.ts */
+  /* The provider credential comes pinned from vitest.config.ts
+     (consta-api-merge D12), so the channel is available here */
   const testEnv = {
     ...env,
-    CONSTA_BASE_URL: "https://consta.test",
-    CONSTA_API_KEY: "ck_test",
   } as typeof env & Bindings;
 
   it("scenario 8: oldest first, from the read the page already pays for", async () => {

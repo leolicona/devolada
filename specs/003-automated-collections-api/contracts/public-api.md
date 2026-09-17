@@ -21,8 +21,12 @@ the Playwright stubs validate against the same definition.
 - **Idempotency**: any POST accepts `Idempotency-Key`; repeating it replays the
   first response (FR-008).
 - **Limit**: 120 requests per minute per business, every endpoint counted
-  together (FR-024, D13). Past it, `RATE_LIMITED` with a `Retry-After` header
-  in seconds — the rest of the current minute.
+  together and real and test credentials sharing the one budget (FR-024,
+  D13). Past it, `RATE_LIMITED` with a `Retry-After` header in seconds — the
+  rest of the current minute.
+- **Words**: the spec's *receiving address* is this contract's *endpoint*
+  (the URL the business registers) and the data model's `api_webhooks` row;
+  *destination* in the tasks means the same thing.
 
 ---
 
@@ -41,7 +45,8 @@ Create a link (US1).
 }
 ```
 
-Answers `{ id, url, customerRef, askCents, mode, expiresAt, state, isTest }`.
+Answers `{ id, url, customerRef, askCents, mode, expiresAt, state, isTest, notices }`
+— `notices` is an array, empty unless a platform condition applies (below).
 
 `state` is `open | paid | expired` (derived, see data-model).
 

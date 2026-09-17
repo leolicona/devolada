@@ -148,9 +148,10 @@ feature* unavailable. That still holds — it just turns out WispHub's feature i
 the panel's live-debt link, not the SPEI channel. This is a restatement, not an
 amendment.
 
-**Where it lands**: `validation.ts:77` (the predicate), `validation.ts:530` (the
-refusal), and `getLinkStatus` / `submitPayment` in
-`routes/direct-payments/handler.ts`.
+**Where it lands**: the `speiAvailable` predicate in `validation.ts`, the
+`if (!integration?.apiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base)`
+guard in `runValidation` (cited by expression — line numbers moved with 004),
+and `getLinkStatus` / `submitPayment` in `routes/direct-payments/handler.ts`.
 
 ---
 
@@ -312,8 +313,9 @@ knew a secret, not that *this message* is unaltered).
 ## D11 — API credentials mirror Consta's key pattern exactly
 
 **Decision**: `dk_<32 hex>`, SHA-256 stored, plaintext returned once, revoked by
-timestamp — the pattern in `apps/consta/src/auth/api-key.ts`, with the row
-carrying `business_id` and `is_test`.
+timestamp — the pattern of the engine's former `apps/consta/src/auth/api-key.ts`
+(deleted by 004; read it in git history before #200, and the rule now lives in
+constitution Principle V), with the row carrying `business_id` and `is_test`.
 
 **Rationale**: it is already written, already tested and already the posture the
 constitution settled for tenant credentials (Principle V: "Consta keys are stored
@@ -366,7 +368,9 @@ business**, every `/v1` endpoint counted together (set by the developer,
 2026-09-17). The refusal is `RATE_LIMITED` with `Retry-After` in seconds — the
 rest of the current minute — so a caller can tell a limit from an outage
 (FR-024). Two a second is far above what a billing run needs and far below
-what a looping integration would cost the platform.
+what a looping integration would cost the platform. A test credential shares
+its business's budget rather than owning one: the limit protects the platform
+from one business's traffic, and test traffic is that business's traffic.
 
 **Rationale**: the repo's existing budgets (`HOURLY_ATTEMPT_BUDGET`,
 `UPLOAD_HOURLY_BUDGET`) count rows in D1 over a window, so this is the house

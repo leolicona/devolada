@@ -77,7 +77,7 @@ generalisation, used as intended).
 
 ## New: `api_credentials`
 
-Mirrors `apps/consta/src/db/schema.ts`'s key table (D11).
+Mirrors the engine's former key table (`apps/consta/src/db/schema.ts`, deleted by 004 — read it in git history before #200) (D11).
 
 | column | type | notes |
 | --- | --- | --- |

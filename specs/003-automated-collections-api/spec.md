@@ -216,10 +216,11 @@ that is broken, and it can ask for the delivery again once it is fixed.
 **Why this priority**: this is what "without manual intervention" means. US1
 still requires someone to ask "did they pay?"; the webhook closes the loop.
 
-**Independent Test**: register a receiving address, drive one payment to a
-confirmed verdict, and assert the webhook arrives with the payment's facts,
-carries verifiable proof of origin, and is retried when the address answers with
-an error.
+**Independent Test**: register a receiving address, submit a proof on an API
+link and drive that payment to a confirmed verdict, and assert two webhooks
+arrive — the accepted proof first, then the verdict with the payment's facts —
+each carrying verifiable proof of origin, and that a delivery is retried when
+the address answers with an error.
 
 **Acceptance Scenarios**:
 
@@ -693,9 +694,11 @@ is this feature's real work, and `/speckit-plan` owns how it is done.
 
 ## Dependencies
 
-- The existing SPEI validation path (Consta → Banxico) and the business's
-  validation credential. Without it a business cannot collect at all, by API or
-  by hand.
+- The existing SPEI validation path (Consta → Banxico) and the environment's
+  provider token. Without the token Devolada validates nothing for anyone and
+  says so — a notice on a created link, the channel-unavailable state on the
+  payer's page, a platform notice in the panel (FR-009) — while the business's
+  own configuration and links stay intact.
 - The business's CLABE, bank and beneficiary name, already configured today.
 - The existing payment record and its verdict vocabulary. The API reports those
   outcomes; it does not invent a second set of names for them.

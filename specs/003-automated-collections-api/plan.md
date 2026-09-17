@@ -124,7 +124,7 @@ apps/api/src/
 │   ├── sign.ts                      # ES256 with kid; keys from WEBHOOK_SIGNING_KEYS (D10)
 │   └── queue.ts                     # the sweep (D8)
 ├── direct-payments/
-│   ├── validation.ts                # CHANGED — channel/ask gates (D5), the seam (D7)
+│   ├── validation.ts                # CHANGED — the three gates (D5), the seam (D7)
 │   └── links.ts                     # NEW — link state, open/paid/expired
 ├── routes/direct-payments/handler.ts  # CHANGED — panel vs api ask (D5, D6)
 ├── db/schema.ts                     # CHANGED — see data-model.md
@@ -204,9 +204,8 @@ Phase 1 carries the only migration. Phases 2–6 are additive.
   `businesses.status` gate on every `/v1` write, the same gate the payer's page
   already enforces (D15). Choosing a policy later costs a screen and an endpoint,
   not a migration.
-- **FR-022's wording** — research D16 narrows "a transfer that arrived but
-  matched no link" to "a validated transfer that was not applied", because
-  Devolada has no bank feed and learns of a transfer only when a payer submits
-  its proof. The spec should be amended to match rather than promise
-  reconciliation against the business's bank account. Raised, not edited
-  silently.
+- **FR-022's wording** — settled on 2026-09-17: the spec now promises only
+  what Devolada validated, names the two causes of "unapplied", requires the
+  reference to say the history is not a bank feed, and moves the manual
+  operations around an orphan deposit to an independent feature (research
+  D16, T072 done).

@@ -8,6 +8,21 @@
 
 **Input**: User description: "PDFs cannot be read by vision models in the first step, so they skip the generation of the initial draft and delegate their extraction directly to the provider's OCR later in the flow. Think of simple solutions so that the PDF flow goes through the validations of an image." — widened in the same session: direct consultation and image consultation cost the same credit, so the first paid call should carry both readings and contrast them on the clave de rastreo and the amount, with the shape rules as the tiebreaker and the payer asked only for the field actually in doubt.
 
+## Clarifications
+
+### Session 2026-09-17
+
+- Q: How does a PDF get the edge reading — text extracted at the edge, or
+  the PDF rendered to a picture on the payer's phone? → A: Text at the edge
+  (Option A). The payer's page stays lightweight on a phone, and the reading
+  reuses the reader that already exists instead of adding a rendering
+  library or a rendering service. (D1, FR-001, US3)
+- Q: What happens to a scanned PDF that yields no text? → A: It falls through
+  to the provider's own reading silently. The payer is not asked for
+  anything and sees no difference; the provider reads the file as it does
+  today. Payer friction is the cost being avoided. (D1, FR-002, US3
+  scenario 3)
+
 ## Decisions taken in session (2026-09-17)
 
 Recorded here so the plan and the code can cite them as `two-eyes-receipt D<n>`.
@@ -18,9 +33,12 @@ Recorded here so the plan and the code can cite them as `two-eyes-receipt D<n>`.
   result goes through the same gate, the same shape rules, the same draft and
   the same flow as an image. Nothing new is installed. A scanned PDF with no
   text yields an empty reading on our side and follows the flow like an image
-  our reader could not read. Rendering the PDF to a picture, on the payer's
-  phone or at the edge, was considered and set aside: it adds a heavy library
-  to a mobile-first page, or a paid rendering service, for the same outcome.
+  our reader could not read, silently: no question to the payer, no visible
+  difference. Rendering the PDF to a picture, on the payer's phone or at the
+  edge, was considered and set aside: it adds a heavy library to a
+  mobile-first page, or a paid rendering service, for the same outcome, and
+  it would not reuse the reader pipeline that already exists. Confirmed by
+  the product creator as "Option A".
 - **D2 — The reader judges legibility, and only two verdicts block.** The
   reader says whether the file is a receipt, and whether it is fully legible,
   partly legible, or not legible at all. "Not a receipt" and "not legible at
@@ -374,8 +392,9 @@ a credit is countable. Needs Story 1.
   rules and the same draft as a picture's reading (D1).
 - **FR-002**: A PDF from which no text can be extracted, or whose text step
   fails, MUST produce an empty reading on our side and continue through the
-  flow; it MUST NOT be refused for that reason and MUST NOT spend a credit
-  for the reading (D1).
+  flow to the provider's own reading silently: it MUST NOT be refused for
+  that reason, MUST NOT ask the payer for anything, MUST NOT show the payer
+  any difference, and MUST NOT spend a credit for the reading (D1).
 - **FR-003**: The reader MUST report, for every file, whether it is a
   receipt and whether it is fully legible, partly legible, or not legible at
   all (D2).

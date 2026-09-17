@@ -39,3 +39,6 @@
 - Two things the plan's research must verify before design, both named in
   Assumptions: whether the platform's PDF-to-text conversion is free of
   charge, and whether it reads scanned pages.
+- Re-validated 2026-09-17 after the Clarifications session (Option A
+  confirmed, silent fall-through for scanned PDFs confirmed): every item
+  still passes; no marker introduced.

@@ -233,7 +233,7 @@ with the row's own word (FR-013, research D17).
     "customerRef": "CLI-4471",
     "askedCents": 49900,
     "claimedCents": 49900,      // what the receipt or the typed form says — a claim, not money
-    "proofDoor": "receipt",     // "receipt" (image) | "transfer" (typed details)
+    "proofDoor": "transfer",    // the row's proof_mode: "transfer" = the customer confirmed or typed the details (an image may be attached) | "receipt" = the image alone, the CEP fills the fields
     "receivedCents": null,      // absent until the verdict
     "match": null,
     "folio": null,

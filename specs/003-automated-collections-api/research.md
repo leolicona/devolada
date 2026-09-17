@@ -456,7 +456,13 @@ payment with its own events. One rule, no list of exceptions to maintain.
 
 **What the early message carries**: `claimedCents` — the amount on the
 receipt or in the typed form, the row's existing `claimed_amount_cents` — and
-`proofDoor`. `receivedCents`, `match` and `folio` are `null`, not guessed,
+`proofDoor`, the row's `proof_mode` as the code defines it: `transfer` when
+the customer confirmed or typed the details (the reader's draft, corrected
+or not, with the image attached), `receipt` when the image alone was
+submitted and the CEP fills the fields. The event fires when the row is
+born, which is when the customer submits — never at upload or at the
+reader's draft, because no payment exists yet and the reader cannot refuse
+anyone. `receivedCents`, `match` and `folio` are `null`, not guessed,
 until the verdict. The name is the safeguard: a caller reading `claimedCents`
 as money received has misread a word the reference defines in one line
 (FR-036), and the verdict message is the only one that carries an amount

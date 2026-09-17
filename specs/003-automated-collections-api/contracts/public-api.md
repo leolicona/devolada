@@ -49,9 +49,18 @@ Asking again for a **reusable** link with the same `customerRef` returns the
 existing one (FR-033) — not an error, and not a second link.
 
 Refusals: `VALIDATION_ERROR` (bad amount, one-time without a deadline),
-`CHANNEL_UNAVAILABLE` with which piece is missing — CLABE, bank or validation
-credential (FR-009), `BUSINESS_SUSPENDED`, `AUTHENTICATION_ERROR`,
+`CHANNEL_UNAVAILABLE` with which piece the **business** has not configured —
+`clabe` or `bank` (FR-009), `BUSINESS_SUSPENDED`, `AUTHENTICATION_ERROR`,
 `RATE_LIMITED`.
+
+**Not a refusal**: when the business is configured but Devolada's own
+transfer validation is unavailable (no provider token in this environment),
+the link is still created and the answer carries
+`notices: [{ code: "VALIDATION_UNAVAILABLE" }]` beside the link — honest,
+retry-free, nothing for the caller to fix (FR-009, clarified 2026-09-17). The
+payer's page shows its channel-unavailable state meanwhile, and the panel
+shows a platform notice. `GET /v1/payment-links/:id` carries the same
+`notices` while the condition lasts, and an empty array otherwise.
 
 ## `PATCH /v1/payment-links/:id`
 
@@ -297,7 +306,7 @@ and from the validation fee (FR-035).
 | `VALIDATION_ERROR` | no | the request is wrong; the message says which field |
 | `NOT_FOUND` | no | does not exist, or is not yours |
 | `LINK_CLOSED` | no | the link was paid or expired |
-| `CHANNEL_UNAVAILABLE` | no | the business cannot collect yet; names what is missing |
+| `CHANNEL_UNAVAILABLE` | no | the business has not configured its CLABE or bank; names which. Never a platform condition — that is a `notices` entry on a success |
 | `BUSINESS_SUSPENDED` | no | |
 | `INSECURE_URL` | no | the webhook destination cannot protect the message |
 | `RATE_LIMITED` | **yes** | more than 120 requests this minute; `Retry-After` says how many seconds to wait |

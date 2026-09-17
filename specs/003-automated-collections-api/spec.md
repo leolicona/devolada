@@ -102,6 +102,15 @@ gets told.
   → **A: The verdict's delivery only.** Pre-verdict deliveries never touch
   that outcome; their failures are visible in the delivery record and on the
   panel's health line, where endpoint trouble belongs. (FR-026)
+- Q: When a business's system asks for a link and Devolada cannot validate
+  transfers because the platform's own provider token is missing, what should
+  the caller be told? → **A: Do not refuse; tell the truth.** The link is
+  created, because the business did nothing wrong and the money path is
+  theirs. The answer carries a notice that validation is temporarily
+  unavailable on Devolada's side, the payer's page says the channel is
+  unavailable as it does today, and the panel shows it as a platform notice.
+  Only what the business can fix — CLABE or bank — is still a refusal that
+  names the missing piece. (FR-009, US1 scenarios 7 and 12)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -166,6 +175,13 @@ nothing from the other stories.
     both appear in the same list, each marked with its channel as icon and
     text, the API row shows the caller's reference, searching for that
     reference finds it, and nothing on the API row mentions WispHub.
+12. **Given** a business with its CLABE and bank configured, **When** its
+    system asks for a link while Devolada's own transfer validation is
+    unavailable, **Then** the link is created and returned with a notice
+    saying validation is temporarily unavailable on Devolada's side, the
+    payer's page says the channel is unavailable, and the panel shows the
+    same as a platform notice — nothing tells the business to fix a setting
+    it does not have.
 
 ---
 
@@ -380,9 +396,15 @@ exactly once across the pages, in a stable order.
 - **FR-008**: Repeating a create request with the same caller-supplied
   idempotency key MUST return the link the first request created, never a second
   link.
-- **FR-009**: The system MUST refuse to create a link when the business cannot
-  actually collect — no CLABE, no validation credential — and MUST say which of
-  those is missing.
+- **FR-009**: The system MUST refuse to create a link when the business has
+  not configured what only it can configure — its CLABE or its bank — and MUST
+  say which is missing. When the business is configured but Devolada's own
+  transfer validation is unavailable (the platform's provider token is
+  absent), the system MUST still create the link and MUST say so honestly: a
+  notice on the answer that validation is temporarily unavailable on
+  Devolada's side, the channel-unavailable state on the payer's page, and a
+  platform notice in the panel. A platform condition is never presented to the
+  business as a setting of its own.
 - **FR-010**: Amounts MUST be exchanged as whole cents, and an amount that is not
   a positive whole number of cents MUST be refused.
 - **FR-011**: A link created through the API MUST be distinguishable, in the

@@ -117,13 +117,26 @@ SQLite supports partial unique indexes and Drizzle exposes `.where()` on them.
 
 ## D5 — The channel gate splits from the WispHub gate
 
-**Decision**: `speiAvailable()` becomes two predicates.
+**Decision**: `speiAvailable()` becomes three predicates (the third split out
+on 2026-09-17, clarification on FR-009).
 
 ```
-channelAvailable(env, business)        CLABE + known bank + Consta reachable
+businessConfigured(business)           CLABE + known bank — the business's to fix;
+                                       the only cause of CHANNEL_UNAVAILABLE
+validationAvailable(env)               the environment's provider token — a platform
+                                       condition: a `VALIDATION_UNAVAILABLE` notice on
+                                       a created link, the channel-unavailable state on
+                                       the payer's page, a platform notice in the panel;
+                                       never a refusal of a link
 askAvailable(link, integration)        panel link → needs the WispHub key
                                        api link   → needs nothing more
 ```
+
+Why the third is not a refusal: after `004-consta-api-merge` the provider
+credential is planted per environment, not per business. Refusing a link for
+it would tell a developer to fix a setting they do not have, and would punish
+the business for Devolada's own outage. The link is theirs; the honesty is
+ours.
 
 **Rationale**: this is the whole of Q2 in one change. Today "no WispHub key"
 means "this business cannot collect", which was true when every business was an

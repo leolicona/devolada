@@ -16,6 +16,8 @@ import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
 import { supportRoute } from "./routes/support";
 import { v1Route } from "./routes/v1";
+import { wellKnownRoute } from "./routes/v1/well-known";
+import { sweepWebhookDeliveries } from "./webhooks/queue";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -56,6 +58,10 @@ app.route("/support", supportRoute);
 /* The public collections API (automated-collections-api D1): server-to-server,
    no CORS, versioned because outside callers now depend on its shape. */
 app.route("/v1", v1Route);
+/* automated-collections-api D10: the webhook signing keys, public and
+   cacheable, on the path RFC 8615 gives them — outside /v1 and its
+   credential, and through CORS like any public read. */
+app.route("/.well-known", wellKnownRoute);
 
 /* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {
@@ -99,6 +105,14 @@ export default {
         .then(() => sweepDirectPayments(env))
         .then((report) => {
           if (report.claimed) console.log("direct-payment sweep:", JSON.stringify(report));
+        })
+        /* automated-collections-api D8: the webhook retries ride the
+           same trigger, chained after the verdicts that produce them so
+           a verdict reached by the sweep is delivered this same minute
+           (SC-002). Speaks only when it did something. */
+        .then(() => sweepWebhookDeliveries(env))
+        .then((report) => {
+          if (report.claimed) console.log("webhook sweep:", JSON.stringify(report));
         }),
     );
     ctx.waitUntil(

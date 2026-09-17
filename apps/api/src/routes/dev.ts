@@ -8,6 +8,7 @@ import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
 import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
 import { releaseQueuedForCredit, sweepTopUps } from "../credit/topups";
+import { sweepWebhookDeliveries } from "../webhooks/queue";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
    Seeds a demo ISP to verify login with curl. */
@@ -31,7 +32,9 @@ dev.post("/direct-payment-sweep", async (c) => {
   const released = await releaseQueuedForCredit(c.env);
   const report = await sweepDirectPayments(c.env);
   const topUps = await sweepTopUps(c.env);
-  return c.json({ success: true, data: { ...report, released, topUps, validating: await validatingCount(c.env) } });
+  /* automated-collections-api D8: the webhook retries, chained as in the cron */
+  const webhooks = await sweepWebhookDeliveries(c.env);
+  return c.json({ success: true, data: { ...report, released, topUps, webhooks, validating: await validatingCount(c.env) } });
 });
 
 /* The journey e2e (tests/passkey/identity-journey.spec.ts) reads what

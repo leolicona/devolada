@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, ArrowLeft, Check, Copy, KeyRound, ShieldAlert, TriangleAlert } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, Copy, KeyRound, ShieldAlert, TriangleAlert, Webhook } from "lucide-react";
 import { Alert, Button, Card, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
 import type {
   ApiCredential,
@@ -284,6 +284,25 @@ export function ApiScreen() {
             )}
 
             {issued ? <IssuedKey issued={issued} onDismiss={() => setIssued(null)} /> : <IssueCard onIssued={setIssued} />}
+
+            {/* automated-collections-api US2 (FR-018): where the business
+                sees its deliveries landing — or not */}
+            <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+              <div className="flex items-center gap-4">
+                <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
+                  <Webhook className="size-6 text-foreground" aria-hidden />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold">Webhook</h2>
+                  <p className="text-sm text-muted-foreground">Los avisos que Devolada envía a tu sistema, y si están llegando.</p>
+                </div>
+              </div>
+              <Link to="/integrations/api/webhook">
+                <Button size="compact" variant="secondary">
+                  Ver entregas
+                </Button>
+              </Link>
+            </Card>
 
             <Card>
               <h2 className="px-4 pt-4 text-base font-semibold">Tus llaves</h2>

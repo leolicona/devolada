@@ -224,8 +224,20 @@ function ChargeRow({
      badge keeps the action-specific es-MX word, from the ledger's last
      dispatch — "Reconectado" under register_and_reconnect, "Registrado"
      under register_only. */
-  const badge: Status =
-    charge.actionOutcome === "done"
+  /* automated-collections-api D8/FR-026: an API payment's outcome is its
+     verdict webhook's delivery, so the badge speaks the webhook's words
+     — never "Reconectado" for a message the business's own system
+     accepted. The same column, two vocabularies, the row says which. */
+  const viaApi = charge.source === "api";
+  const badge: Status = viaApi
+    ? charge.actionOutcome === "done"
+      ? "deliveryDelivered"
+      : charge.actionOutcome === "queued"
+        ? "deliveryPending"
+        : charge.actionOutcome === "failed"
+          ? "deliveryFailed"
+          : (lifecycleBadge[charge.status] ?? "validating")
+    : charge.actionOutcome === "done"
       ? charge.dispatchedAction === "register_only"
         ? "registered"
         : "reconnected"
@@ -327,7 +339,9 @@ function ChargeRow({
                   {hypothesisCopy(charge.observedAction)}
                 </p>
               ) : (
-                <p className="mt-1">Intentos de reconexión: {charge.actionAttempts}</p>
+                <p className="mt-1">
+                  {viaApi ? "Intentos de aviso al sistema" : "Intentos de reconexión"}: {charge.actionAttempts}
+                </p>
               )}
               {charge.actionError && <p className="mt-1 text-error">{reasonFor(charge.actionError)}</p>}
               {charge.actionDoneAt && (
@@ -358,9 +372,9 @@ function ChargeRow({
                     word is not a signal — it is silent to a screen reader and easy
                     to miss. */}
                 {canOperate && charge.actionOutcome === "failed" && (
-                  <Pending active={retry.isPending} label="Reintentando la reconexión.">
+                  <Pending active={retry.isPending} label={viaApi ? "Reenviando el aviso." : "Reintentando la reconexión."}>
                     <Button size="compact" disabled={retry.isPending} onClick={() => retry.mutate()}>
-                      {retry.isPending ? "Reintentando…" : "Reintentar reconexión"}
+                      {retry.isPending ? (viaApi ? "Reenviando…" : "Reintentando…") : viaApi ? "Reenviar aviso" : "Reintentar reconexión"}
                     </Button>
                   </Pending>
                 )}

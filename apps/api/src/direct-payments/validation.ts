@@ -28,6 +28,7 @@ import {
   releaseEvidenceFor,
 } from "./provisional";
 import { isApiLink, isPanelLink, type ApiLink } from "./links";
+import { enqueueAndDeliver, type Defer } from "../webhooks/queue";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -205,7 +206,22 @@ export async function runValidation(
      switch read from here; null = not connected */
   integration: Integration | null,
   now: Date,
+  /* automated-collections-api D8: where the first webhook attempt may
+     run past this call's return (`ctx.waitUntil`). The sweep passes
+     none — its verdicts are picked up by the webhook sweep chained
+     after it the same minute. */
+  opts: { defer?: Defer } = {},
 ): Promise<DirectPayment> {
+  /* automated-collections-api D7/D17 (FR-013): every status an API
+     link's payment enters is announced to the business's endpoint —
+     here, in the one write every terminal outcome of this attempt
+     passes through, so `expired`, `invalid` and the API half's own
+     verdicts all announce without a list of call sites to keep in
+     step. Compared against the last status seen, so one attempt
+     announces each state once; a write that keeps the status (a
+     retry with a later slot) announces nothing. A panel payment's
+     outcome is WispHub's and never reaches here. */
+  let announced = payment.status;
   const update = async (
     values: Partial<typeof payments.$inferInsert>,
   ): Promise<DirectPayment> => {
@@ -217,6 +233,10 @@ export async function runValidation(
     /* prepaid-credit D2: the fee keys on the terminal verdict, once per
        payment — idempotent in the book, so every path may call it */
     await debitValidationFee(env, db, row);
+    if (isApiLink(link) && row.status !== announced) {
+      announced = row.status;
+      await enqueueAndDeliver(env, db, { payment: row, link, now }, opts.defer);
+    }
     return row;
   };
 
@@ -523,17 +543,28 @@ export async function runValidation(
   {
     const rideKey = payment.trackingKey ?? cep?.trackingKey;
     if (rideKey) {
-      await db
-        .update(payments)
-        .set({ status: "superseded", nextValidationAt: null })
-        .where(
-          and(
-            eq(payments.paymentLinkId, payment.paymentLinkId),
-            eq(payments.trackingKey, rideKey),
-            eq(payments.status, "expired"),
-            ne(payments.id, payment.id),
-          ),
-        );
+      const expiredRides = and(
+        eq(payments.paymentLinkId, payment.paymentLinkId),
+        eq(payments.trackingKey, rideKey),
+        eq(payments.status, "expired"),
+        ne(payments.id, payment.id),
+      );
+      if (isApiLink(link)) {
+        /* automated-collections-api D17: a caller that heard `expired`
+           deserves to hear the row was superseded — one row at a time,
+           so each gets its own event. */
+        const rides = await db.select().from(payments).where(expiredRides);
+        for (const ride of rides) {
+          const [row] = await db
+            .update(payments)
+            .set({ status: "superseded", nextValidationAt: null })
+            .where(eq(payments.id, ride.id))
+            .returning();
+          await enqueueAndDeliver(env, db, { payment: row, link, now }, opts.defer);
+        }
+      } else {
+        await db.update(payments).set({ status: "superseded", nextValidationAt: null }).where(expiredRides);
+      }
     }
   }
 
@@ -580,9 +611,11 @@ export async function runValidation(
      API link for a gym has no integration row at all, so `integration`
      is `null` on its path. The API half settles against `asked_cents`
      with the business's tolerance and constructs no WispHub client
-     (FR-029 holds structurally). US2 (T046) adds the webhook enqueue at
-     the same spot and sets `action_outcome` from its delivery; until
-     then the verdict lands whole and the outcome stays null. */
+     (FR-029 holds structurally). Its verdict is announced by `update`
+     above (D8/D17), and `action_outcome` is written by that delivery —
+     `queued` while it is retried, `done` when accepted, `failed` when
+     the schedule is spent (FR-026); with no address registered nothing
+     is sent and the outcome stays null. */
   if (isApiLink(link)) {
     return settleApiPayment(db, update, payment, link, business, cep ?? null, base, now);
   }
@@ -793,7 +826,10 @@ export async function runValidation(
    Closing the link: a `confirmed` verdict closes a one-time link
    (FR-027 "closes when it is paid"). A `partial` leaves it open so the
    payer can complete it — the caller sees `partial` and closes it
-   through PATCH if it would rather not. */
+   through PATCH if it would rather not.
+
+   The verdict written through `update` is what enqueues the webhook
+   (D8): this function never touches the queue itself. */
 async function settleApiPayment(
   db: DB,
   update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,

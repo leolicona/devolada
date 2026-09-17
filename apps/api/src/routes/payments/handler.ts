@@ -16,6 +16,11 @@ import { WispHub } from "../../wisphub/client";
 import { attemptReconnection } from "../../wisphub/reconnection";
 import { pendingVersion } from "../../wisphub/cache";
 import { firstAttemptSchedule } from "../../reconnection/queue";
+import { webhookDeliveries } from "../../db/schema";
+import { attemptDelivery, requeueDelivery } from "../../webhooks/queue";
+import { isVerdictEvent } from "../../webhooks/events";
+import type { WebhookEventType } from "../v1/webhook/schema";
+import { deferOf } from "../defer";
 import { signedProofUrl } from "../../direct-payments/proofs";
 import type { ProofResponse, PulseResponse } from "./schema";
 
@@ -105,7 +110,7 @@ export async function listPaymentFeed(
      revises charge-feed.spec.md (business-and-memberships D6); with the
      store network gone it is always null. */
   const rows = await db
-    .select({ charge: payments, linkUsuario: paymentLinks.customerUsuario })
+    .select({ charge: payments, linkUsuario: paymentLinks.customerUsuario, linkSource: paymentLinks.source })
     .from(payments)
     .innerJoin(paymentLinks, eq(paymentLinks.id, payments.paymentLinkId))
     .where(and(...filters))
@@ -155,7 +160,7 @@ export async function listPaymentFeed(
     success: true,
     data: {
       /* payments-and-classes D6: the feed answers `payments` */
-      payments: page.map(({ charge, linkUsuario }) => {
+      payments: page.map(({ charge, linkUsuario, linkSource }) => {
         const receivedCents = charge.receivedCents ?? charge.amountCents;
         const askedCents =
           charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
@@ -163,6 +168,7 @@ export async function listPaymentFeed(
           id: charge.id,
           folio: charge.folio ?? "",
           channel: charge.channel,
+          source: linkSource,
           status: charge.status,
           actionOutcome: charge.actionOutcome,
           reconciliationClass: charge.reconciliationClass,
@@ -339,6 +345,34 @@ export async function retryAction(c: Ctx, id: string) {
     return c.json({ success: false, error: { code: "NOT_RETRYABLE" } }, 409);
   }
   const now = new Date();
+
+  /* automated-collections-api D8/FR-029: an API payment's mapped action
+     IS its verdict's webhook, so "Reintentar" on one re-sends that
+     delivery (FR-041 from the panel) — same event id, same body — and
+     never queues it for WispHub, whatever the business has connected.
+     The row says which kind it is: an API payment carries the caller's
+     reference and no WispHub customer. */
+  if (row.customerRef !== null && row.wisphubCustomerId === null) {
+    const [delivery] = await db
+      .select()
+      .from(webhookDeliveries)
+      .where(and(eq(webhookDeliveries.paymentId, row.id), eq(webhookDeliveries.status, "failed")))
+      .orderBy(desc(webhookDeliveries.createdAt));
+    if (!delivery || !isVerdictEvent(delivery.eventType as WebhookEventType)) {
+      return c.json({ success: false, error: { code: "NOT_RETRYABLE" } }, 409);
+    }
+    const requeued = await requeueDelivery(db, delivery, now);
+    const defer = deferOf(c);
+    if (defer) {
+      defer(
+        attemptDelivery(c.env, db, requeued, now).catch((e) => {
+          console.error(`webhook re-send ${requeued.id} failed:`, e);
+        }),
+      );
+    }
+    return c.json({ success: true, data: { actionOutcome: "queued" as const, nextAttemptAt: now.getTime() } });
+  }
+
   /* integrations-hub D6: the operator's retry is a NEW dispatch
      decision — its own ledger row, acked by the sweep's terminal. */
   const integration = await integrationOf(db, actor.id);

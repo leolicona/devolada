@@ -37,6 +37,8 @@ import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { integrationOf } from "../../integrations/store";
 import { consta, ConstaError } from "../../consta";
+import { enqueueAndDeliver } from "../../webhooks/queue";
+import { deferOf } from "../defer";
 import type { DirectPayment } from "../../direct-payments/validation";
 import { publicPaymentError, type LinksRosterResponse, type LinkStatusResponse, type PayRequest } from "./schema";
 
@@ -547,6 +549,10 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     supersedesId: superseded?.id ?? null,
     ...ask.customer,
     askedCents: ask.askedCents,
+    /* automated-collections-api D12: a payment on a test link is a test
+       payment — the webhook says so, and the fee and the panel's reads
+       key on it (T064, T065). A panel link is never a test link. */
+    isTest: link.isTest,
     /* The row is born owned by the sweep (D7). The inline attempt
        below is an optimisation, not the mechanism: if it never
        finishes — a worker evicted, a provider that stalls past its
@@ -674,10 +680,27 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     }
   }
 
+  /* automated-collections-api D17 (FR-013): the row is born, so the
+     business's endpoint hears it — `validating` or `queued_for_credit`,
+     the row's own word, through either door. Fired here and never at
+     upload or at the reader's draft, because no payment exists before
+     the customer submits. A row this submission closed is announced
+     `superseded` first: a caller that heard it was validating deserves
+     to hear it is not any more. The first attempt runs under
+     `waitUntil`; the payer's answer never waits on it (FR-017). */
+  const defer = deferOf(c);
+  if (isApiLink(link)) {
+    if (payment.supersedesId) {
+      const [closed] = await db.select().from(payments).where(eq(payments.id, payment.supersedesId));
+      if (closed?.status === "superseded") await enqueueAndDeliver(c.env, db, { payment: closed, link, now }, defer);
+    }
+    await enqueueAndDeliver(c.env, db, { payment, link, now }, defer);
+  }
+
   /* Inline attempt, then the sweep takes over (D7) — the same split as
      charge recording and reconnection. A queued row waits for the
      release (D8): nothing runs, nothing is spent. */
-  const row = paused ? payment : await runValidation(c.env, db, payment, link, business, integration, now);
+  const row = paused ? payment : await runValidation(c.env, db, payment, link, business, integration, now, { defer });
   return c.json(
     {
       success: true,

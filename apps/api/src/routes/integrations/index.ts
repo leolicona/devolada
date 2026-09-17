@@ -6,6 +6,7 @@ import { issueCredentialRequest, wisphubPatchRequest, wisphubTestRequest } from 
 import {
   getApiIntegration,
   getIntegrations,
+  getWebhookIntegration,
   issueApiCredential,
   patchWisphub,
   revokeApiCredential,
@@ -58,3 +59,9 @@ integrationsRoute.post(
   requireArea("integrations", "manage"),
   (c) => revokeApiCredential(c, c.req.param("id")),
 );
+
+/* automated-collections-api US2 (FR-018): the webhook's health, read
+   from the same area — a delivery failing is an integration failing. */
+integrationsRoute.get("/webhook", requireSession, requireArea("integrations", "manage"), (c) => {
+  return getWebhookIntegration(c);
+});

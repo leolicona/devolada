@@ -61,6 +61,22 @@ export type Bindings = {
   EXTRACTION_MODEL?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
+  /* automated-collections-api D10: the platform's webhook signing keys —
+     a JSON array of private JWKs (EC P-256), each with a `kid` and an
+     optional `retiredAt` (ISO 8601 or ms). The one without `retiredAt`
+     signs; the retired ones stay published in /.well-known/jwks.json for
+     7 days so a delivery signed before the change still verifies
+     (FR-039). A Worker secret, never a D1 row. Unset → outcomes are still
+     recorded and deliveries still enqueued, but none is attempted: each
+     row reads SIGNING_KEY_MISSING, the sweep warns once per run, the
+     panel says signing is not configured and the key set is empty
+     (constitution VIII). Tests pin a fixed pair in vitest.config.ts. */
+  WEBHOOK_SIGNING_KEYS?: string;
+  /* automated-collections-api D8 (FR-016): how long one delivery waits
+     for a 2xx, in ms. Unset → 10 s, the number the spec carries. Exists
+     so tests can make a mock destination hang cheaply, exactly like
+     APICEP_DEADLINE_MS; no wrangler environment sets it. */
+  WEBHOOK_DELIVERY_TIMEOUT_MS?: string;
   /* operator-panel D2: comma-separated emails of the platform operators.
      Never grantable from a screen; changing it is a deploy. */
   PLATFORM_OPERATOR_EMAILS?: string;

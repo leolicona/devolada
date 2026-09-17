@@ -331,7 +331,12 @@ export const payments = sqliteTable(
        mapped action completed (WispHub v1: reconnected, or registered
        under `register_only`); `withheld` = deliberately not restored
        (partial D13); `observation` = the gate held the action back and
-       the business executes by hand (integrations-hub D4/D5). */
+       the business executes by hand (integrations-hub D4/D5).
+       automated-collections-api D8/FR-026: an API payment's mapped
+       action is its VERDICT's webhook — `queued` while it is retried,
+       `done` when the endpoint accepted it, `failed` when the schedule
+       is spent; null when no address is registered. Deliveries of
+       earlier states never write this column. */
     actionOutcome: text("action_outcome", {
       enum: ["queued", "done", "withheld", "failed", "observation"],
     }),

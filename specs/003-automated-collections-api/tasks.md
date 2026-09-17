@@ -30,9 +30,9 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 **Purpose**: unblock the work the repo's law blocks, then scaffold the new area.
 
 - [x] T001 **Done on `main`** — the constitution's opening sentence was amended via `/speckit-constitution` as v1.2.0 on 2026-09-12 (PR #197, landed through #199), with the developer's wording *"Devolada lets Mexican businesses collect payments by SPEI, with dedicated downstream automation for ISPs"*, and v1.3.0 (PR #200) followed on 2026-09-16 with the Principle V credential rule D11 relies on. Both Sync Impact Reports are in `.specify/memory/constitution.md`. Nothing below was blocked by Governance any more once this branch merged `main` on 2026-09-17; before implementing, confirm `.specify/memory/constitution.md` still reads version 1.3.0 or later
-- [ ] T002 Add the `./v1-schema` export to `apps/api/package.json` so the panel and the stubs import the contract from one place (constitution III)
-- [ ] T003 Create the pure router skeleton in `apps/api/src/routes/v1/index.ts` and mount it in `apps/api/src/index.ts`, **excluded from the CORS allow-list** — `/v1` is server-to-server (research D1)
-- [ ] T004 [P] Pin the webhook test destination origin and a fixed `WEBHOOK_SIGNING_KEYS` test key pair in `apps/api/vitest.config.ts`, beside the existing WispHub and Resend pins, so a developer's `.dev.vars` can never redirect a delivery out of the suite or swap the key the tests verify against (constitution IV, research D10)
+- [X] T002 Add the `./v1-schema` export to `apps/api/package.json` so the panel and the stubs import the contract from one place (constitution III)
+- [X] T003 Create the pure router skeleton in `apps/api/src/routes/v1/index.ts` and mount it in `apps/api/src/index.ts`, **excluded from the CORS allow-list** — `/v1` is server-to-server (research D1)
+- [X] T004 [P] Pin the webhook test destination origin and a fixed `WEBHOOK_SIGNING_KEYS` test key pair in `apps/api/vitest.config.ts`, beside the existing WispHub and Resend pins, so a developer's `.dev.vars` can never redirect a delivery out of the suite or swap the key the tests verify against (constitution IV, research D10)
 
 ---
 

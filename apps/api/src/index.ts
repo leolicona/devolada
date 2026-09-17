@@ -15,14 +15,18 @@ import { integrationsRoute } from "./routes/integrations";
 import { directPaymentsRoute } from "./routes/direct-payments";
 import { dev } from "./routes/dev";
 import { supportRoute } from "./routes/support";
+import { v1Route } from "./routes/v1";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /* CORS allow-list (TD-007): only the listed frontend origins may call
    with credentials. An entry starting with "*" is a suffix pattern —
    it admits the per-PR preview URLs.
-   Requests without an Origin header (curl) pass by. */
+   Requests without an Origin header (curl) pass by.
+   /v1 is excluded (automated-collections-api D1): it is server-to-server,
+   a browser calling it with a secret key is a mistake, not a use case. */
 app.use("*", (c, next) => {
+  if (c.req.path === "/v1" || c.req.path.startsWith("/v1/")) return next();
   const allowed = (c.env.ALLOWED_ORIGINS ?? "").split(",").filter(Boolean);
   const isAllowed = (origin: string) =>
     allowed.some((entry) =>
@@ -48,6 +52,10 @@ app.route("/credit", creditRoute);
 app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
 app.route("/support", supportRoute);
+
+/* The public collections API (automated-collections-api D1): server-to-server,
+   no CORS, versioned because outside callers now depend on its shape. */
+app.route("/v1", v1Route);
 
 /* Seed routes exist in development only */
 app.use("/dev/*", async (c, next) => {

@@ -88,8 +88,15 @@ gets told.
   absent until the verdict, and the published reference says in one line that
   nothing before the verdict is money. (FR-014, FR-036, US2 scenario 10, edge
   case "the business credits a claim")
-
-## User Scenarios & Testing *(mandatory)*
+- Q: Where should a link created through the API appear in the panel, so the
+  business can tell which channel is collecting? → **A: On the same links
+  screen as the panel's own links, one list per business.** Separation is by
+  business, through the switcher the panel already has — a person who runs a
+  school and a gym switches business, never channel. Within one business every
+  link lives in the same list, marked with its channel as icon + text
+  ("Panel" / "API"), an API row showing the caller's reference where a panel
+  row shows the usuario, and search covering that reference. WispHub-specific
+  copy appears only on panel rows. (FR-011, US1 scenario 11)
 
 ### User Story 1 - The caller's own system creates the payment link (Priority: P1)
 
@@ -147,6 +154,11 @@ nothing from the other stories.
 10. **Given** a company that is not an ISP, **When** it reads any request,
     answer or error the API produces, **Then** nothing names a subscriber, a
     service, a router or WispHub.
+11. **Given** a business with one link created in the panel and one created
+    through the API, **When** a person opens the panel's links screen, **Then**
+    both appear in the same list, each marked with its channel as icon and
+    text, the API row shows the caller's reference, searching for that
+    reference finds it, and nothing on the API row mentions WispHub.
 
 ---
 
@@ -368,7 +380,13 @@ exactly once across the pages, in a stable order.
   a positive whole number of cents MUST be refused.
 - **FR-011**: A link created through the API MUST be distinguishable, in the
   panel and in the data, from one created by a person, so the business can tell
-  which of its channels is collecting.
+  which of its channels is collecting. In the panel this means the same links
+  screen, one list per business: every row carries its channel as icon + text
+  ("Panel" / "API"), an API row shows the caller's reference in the place a
+  panel row shows the usuario, search covers that reference, and copy that
+  names WispHub appears only on panel rows. A person running more than one
+  business separates them with the panel's existing business switcher, never
+  by channel.
 
 **Announcing outcomes by webhook**
 

@@ -73,6 +73,16 @@ around it"*), this plan proposes:
 > own system is one thing that can follow — through an integration Devolada
 > drives, or through a webhook the business's own software acts on.
 
+**Landed** (2026-09-16): the amendment is on `main`. Constitution v1.2.0 (PR
+#197, merged through #199) adopted the developer's own wording — *"Devolada
+lets Mexican businesses collect payments by SPEI, with dedicated downstream
+automation for ISPs"* — and split Principle III's envelope bullet so `message`
+and `retryable` are permitted on program-facing surfaces, which is the first
+row of Complexity Tracking. v1.3.0 (PR #200, `004-consta-api-merge`) then
+generalised the credential rule D11 relies on into Principle V and restated
+Principle VIII around "no provider credential". The conflict is closed; T001
+records it.
+
 Run `/speckit-constitution` with that wording before `/speckit-implement`; it is
 a MINOR amendment (guidance widened, no principle removed or redefined).
 
@@ -177,7 +187,7 @@ Phase 1 carries the only migration. Phases 2–6 are additive.
 | `retryable` added to the envelope on `/v1` | FR-025: an outside caller must distinguish "retry this" from "fix your request". A code list alone cannot say which is which, and every caller would hard-code its own guess | Codes only — rejected because each consumer would then invent its own retry policy from our error names, which is the drift the one-contract rule exists to stop. The constitution already grants this to Consta for the same reason; the amendment should say "server-to-server surfaces", not "Consta" |
 | Migration is not purely additive: two columns relax `NOT NULL` | An API link has no WispHub customer, and those columns are `NOT NULL` today (`payment_links`) | Writing a sentinel into a `NOT NULL` column — rejected because `customer_usuario` is surfaced to the payer as `reference`, so the sentinel would reach a customer's screen, and because a value meaning "not applicable" while claiming to be an identifier is the exact lie the comment discipline exists to prevent. A second table — rejected in D2: it forks the token space, the payer path and the payment foreign key |
 | A second kind of actor: a credential, not a membership | The caller is software, not a person. It has no role and never passes through `requireArea` | Minting a service user with a membership — rejected because it would put a fake person in the organization, appear in the members list, and make the role matrix answer questions about an actor that has no screens. Isolation is unchanged: a credential resolves to exactly one business and every query filters by it |
-| The constitution's opening sentence must change | The spec's Q2 widens the product past what it says | Routing around it — forbidden by Governance, and it would leave the repo's law disagreeing with its code, which the constitution calls not an option |
+| The constitution's opening sentence must change | The spec's Q2 widens the product past what it says | Routing around it — forbidden by Governance, and it would leave the repo's law disagreeing with its code, which the constitution calls not an option. **Resolved**: landed as v1.2.0 on 2026-09-12 (see Constitution Check) |
 
 ## Open, carried forward
 

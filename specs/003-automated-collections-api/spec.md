@@ -331,8 +331,9 @@ exactly once across the pages, in a stable order.
 - **FR-012**: A business MUST be able to register one address to receive outcome
   webhooks, and to change or remove it.
 - **FR-013**: The system MUST announce every payment verdict on an API-created
-  link — confirmed, short, arriving against no debt, or never validated — naming
-  the outcome so the caller's system can branch on it.
+  link — confirmed, partial, arriving against no debt, never validated, or
+  superseded by a corrected attempt — naming the outcome with the payment
+  record's own status word so the caller's system can branch on it.
 - **FR-014**: Every webhook MUST carry the customer reference, the payment
   identifier, the amount asked, the amount received, the match result, the folio
   when there is one, the verdict moment, and its own event identity.

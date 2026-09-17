@@ -123,7 +123,7 @@ The queue is the row (D8), exactly as the reconnection queue is the payment row.
 | `business_id` | text → businesses | |
 | `payment_id` | text → payments, null | null is possible for a future event that is not about one payment |
 | `event_id` | text, unique | what the caller uses to recognise a repeat — FR-014 |
-| `event_type` | text | `payment.confirmed`, `payment.short`, `payment.unapplied`, `payment.invalid`, `payment.expired` |
+| `event_type` | text | `payment.<status>` for each terminal `payments.status`: `confirmed`, `partial`, `unapplied`, `invalid`, `expired`, `superseded` — the row's own word, never a synonym (D17) |
 | `payload` | text | the body, rendered once at enqueue and never re-rendered — D9 |
 | `status` | `pending` \| `delivered` \| `failed` | |
 | `attempts` | integer, default 0 | |

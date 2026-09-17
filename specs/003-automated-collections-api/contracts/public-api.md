@@ -76,7 +76,7 @@ The verify path (US3).
 {
   "id": "pay_…",
   "customerRef": "CLI-4471",
-  "status": "confirmed",       // validating | confirmed | short | unapplied | invalid | expired
+  "status": "confirmed",       // the payment row's own word — see the table below
   "askedCents": 49900,
   "receivedCents": 49900,
   "match": "exact",            // exact | short | over — null while validating
@@ -86,6 +86,24 @@ The verify path (US3).
   "isTest": false
 }
 ```
+
+**`status` is the payment row's own vocabulary** (research D17). The API
+invents no second set of names: every value below is a value of
+`payments.status` in `apps/api/src/db/schema.ts`, with the meaning the schema
+comment gives it. `match` is a different axis — the reconciliation class
+(`exact | short | over`, `classes.ts`) — and `short` belongs there, never in
+`status`.
+
+| `status` | terminal | announced by webhook | meaning for the caller |
+| --- | --- | --- | --- |
+| `validating` | no | no | the proof is with Banxico; ask again or wait for the webhook |
+| `queued_for_credit` | no | no | the business's validation credit is paused; nothing is asked of Banxico until a top-up lifts it, and the payment then continues as `validating`. Readable here so the caller can see why nothing has arrived |
+| `confirmed` | yes | `payment.confirmed` | the money arrived and covered the ask (`match` is `exact` or `over`) |
+| `partial` | yes | `payment.partial` | the money arrived but fell short of the ask (`match` is `short`); the business's to decide |
+| `unapplied` | yes | `payment.unapplied` | validated, but settled nothing — the link had closed, or the ask was zero (D16) |
+| `invalid` | yes | `payment.invalid` | Banxico found no such transfer, or it was already used |
+| `expired` | yes | `payment.expired` | validation gave up: the transfer was never found in time |
+| `superseded` | yes | `payment.superseded` | a silent attempt whose reading the payer then corrected; the corrected attempt is a new payment with its own id and its own verdict. Not an error — Devolada was the one that read it wrong |
 
 A `customerRef` with nothing received answers `{ payments: [] }` — an empty
 list, never `NOT_FOUND` (FR-019, US3 scenario 3).
@@ -169,8 +187,11 @@ own tolerance.
 }
 ```
 
-**Types**: `payment.confirmed`, `payment.short`, `payment.unapplied`,
-`payment.invalid`, `payment.expired` (FR-013 — every verdict, named).
+**Types**: `payment.confirmed`, `payment.partial`, `payment.unapplied`,
+`payment.invalid`, `payment.expired`, `payment.superseded` — one per terminal
+`status`, named with the same word (FR-013 — every verdict, named; research
+D17). The two non-terminal states, `validating` and `queued_for_credit`, are
+never announced: a webhook says what happened, and nothing has yet.
 
 **What a caller must do**
 
@@ -195,6 +216,9 @@ Consta, and fires the real webhook.
 ```jsonc
 { "to": "confirmed", "receivedCents": 49900 }
 ```
+
+`to` accepts any terminal `status` from the table above, so a developer can
+rehearse every webhook type, `payment.superseded` included.
 
 A real credential calling it gets `NOT_FOUND` — the route does not exist for it.
 Test records are readable through the API and are excluded from every real total

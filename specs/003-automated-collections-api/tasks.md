@@ -29,7 +29,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 **Purpose**: unblock the work the repo's law blocks, then scaffold the new area.
 
-- [ ] T001 Amend the constitution's opening sentence via `/speckit-constitution`, using the wording proposed in `specs/003-automated-collections-api/plan.md` (Constitution Check). Governance forbids routing around it, so nothing below may merge first. MINOR bump, Sync Impact Report updated in `.specify/memory/constitution.md`
+- [x] T001 **Done on `main`** — the constitution's opening sentence was amended via `/speckit-constitution` as v1.2.0 on 2026-09-12 (PR #197, landed through #199), with the developer's wording *"Devolada lets Mexican businesses collect payments by SPEI, with dedicated downstream automation for ISPs"*, and v1.3.0 (PR #200) followed on 2026-09-16 with the Principle V credential rule D11 relies on. Both Sync Impact Reports are in `.specify/memory/constitution.md`. Nothing below was blocked by Governance any more once this branch merged `main` on 2026-09-17; before implementing, confirm `.specify/memory/constitution.md` still reads version 1.3.0 or later
 - [ ] T002 Add the `./v1-schema` export to `apps/api/package.json` so the panel and the stubs import the contract from one place (constitution III)
 - [ ] T003 Create the pure router skeleton in `apps/api/src/routes/v1/index.ts` and mount it in `apps/api/src/index.ts`, **excluded from the CORS allow-list** — `/v1` is server-to-server (research D1)
 - [ ] T004 [P] Pin the webhook test destination origin in `apps/api/vitest.config.ts`, beside the existing WispHub and Resend pins, so a developer's `.dev.vars` can never redirect a delivery out of the suite (constitution IV)
@@ -61,7 +61,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 ### The gate split — the load-bearing change
 
 - [ ] T017 Split `speiAvailable()` in `apps/api/src/direct-payments/validation.ts` into `channelAvailable(env, business)` (CLABE + known bank + Consta) and `askAvailable(link, integration)` (a panel link needs the WispHub key, an API link does not), citing `automated-collections-api D5` and restating what "no WispHub key" now means
-- [ ] T018 Update the WispHub refusal at `apps/api/src/direct-payments/validation.ts:530` so `WISPHUB_NOT_CONFIGURED` can only be reached by a panel link
+- [ ] T018 Keep the WispHub refusal in `apps/api/src/direct-payments/validation.ts` (`if (!integration?.apiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base)`) a **hard return** that only a panel link can reach — the API branch of T046 returns before it. Never rewrite it as a condition on `link.source`: it is the narrowing that keeps every later read of `integration` (`thresholdPercent`, `actionForClass`, the `actionsEnabled` observation gate) non-null (research D7)
 - [ ] T019 Update the three other call sites of the old predicate in `apps/api/src/routes/direct-payments/handler.ts` (`getLinkStatus`, `submitPayment`) to use the split gates
 - [ ] T020 Implement link state derivation — `open` / `paid` / `expired` — in `apps/api/src/direct-payments/links.ts`, deriving from `closed_at` and `expires_at` per `data-model.md` rather than storing a fourth column
 - [ ] T021 Write `apps/api/test/collections-api-channel.test.ts` (`automated-collections-api US1`) proving a business with **no WispHub integration row at all** passes `channelAvailable` and can hold a link, and that a panel link without the WispHub key still degrades exactly as it does today
@@ -109,7 +109,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Tests for User Story 2
 
-- [ ] T037 [P] [US2] Write `apps/api/test/collections-api-webhook.test.ts` (`automated-collections-api US2`) covering spec scenarios 1, 2, 6, 8: every verdict type is announced and named, the body carries all of FR-014's facts, the signature verifies against the raw body, the event id identifies a repeat, and no address registered means nothing is sent and nothing fails
+- [ ] T037 [P] [US2] Write `apps/api/test/collections-api-webhook.test.ts` (`automated-collections-api US2`) covering spec scenarios 1, 2, 6, 8: every terminal status is announced as `payment.<status>` with the row's own word (`partial`, never `short`; `superseded` included), `validating` and `queued_for_credit` are never announced, the body carries all of FR-014's facts, the signature verifies against the raw body, the event id identifies a repeat, and no address registered means nothing is sent and nothing fails. Run the whole file against a business that has **no integration row at all**, so the seam of T046 is proven to reach every verdict with `integration === null` (research D7)
 - [ ] T038 [P] [US2] Add retry coverage to `apps/api/test/collections-api-webhook.test.ts` for scenarios 3 and 5: a non-2xx widens the wait through `[1, 5, 15, 60, 240]`, the schedule ends in `failed`, and a re-send delivers the same event id and the same body
 - [ ] T039 [P] [US2] Add scenario 4 and 7 coverage to `apps/api/test/collections-api-webhook.test.ts`: a destination that never answers leaves the payment confirmed and the payer's success untouched (FR-017), and a rotation window signs with both secrets so either verifies
 - [ ] T040 [P] [US2] Write the FR-029 proof in `apps/api/test/collections-api-no-wisphub.test.ts` (`automated-collections-api US2`): a business with WispHub connected **and actions enabled** pays an API link, and `fetchMock`'s `assertNoPendingInterceptors` proves not one WispHub call was made
@@ -117,11 +117,11 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Implementation for User Story 2
 
-- [ ] T042 [P] [US2] Implement the event payload in `apps/api/src/webhooks/events.ts` — rendered once at enqueue and stored, never re-rendered (research D9) — with the five event types of `contracts/public-api.md`
+- [ ] T042 [P] [US2] Implement the event payload in `apps/api/src/webhooks/events.ts` — rendered once at enqueue and stored, never re-rendered (research D9) — with the six event types of `contracts/public-api.md` — `payment.<status>` for each terminal `payments.status` (research D17)
 - [ ] T043 [P] [US2] Implement signing in `apps/api/src/webhooks/sign.ts`: `HMAC-SHA256(secret, "<timestamp>.<raw body>")` in hex, one signature per live secret during a rotation window, reusing the WebCrypto shape of `apps/api/src/consta/refs.ts` (research D10)
 - [ ] T044 [US2] Implement `enqueueDelivery` and the sweep `sweepWebhookDeliveries` in `apps/api/src/webhooks/queue.ts`: lease first, the same five waits as `reconnection/queue.ts`, terminal `failed` when spent, and speak only when it did something (research D8)
 - [ ] T045 [US2] Mount the sweep on the existing every-minute `scheduled` handler in `apps/api/src/index.ts` with `waitUntil` — **no new trigger** (constitution)
-- [ ] T046 [US2] Implement the validation seam in `apps/api/src/direct-payments/validation.ts`: branch on `link.source` immediately after the tracking key is adopted; the API branch settles against `asked_cents` with the business's tolerance, sets `action_outcome`, enqueues the delivery, and constructs no WispHub client (research D7, FR-029)
+- [ ] T046 [US2] Implement the validation seam in `apps/api/src/direct-payments/validation.ts`: branch on `link.source` immediately after the tracking key is adopted and **before** the `!integration?.apiKey` guard of T018; the API branch settles against `asked_cents` with the business's tolerance, sets `action_outcome`, enqueues the delivery, constructs no WispHub client and reads nothing from `integration`, which is `null` for a business with no integration row (research D7, FR-029). Add a comment at the branch citing `automated-collections-api D7` and saying why the order matters
 - [ ] T047 [US2] Attempt the first delivery inline at the verdict via `waitUntil` in `apps/api/src/direct-payments/validation.ts`, so the payer's verdict never waits on the caller's endpoint (FR-017)
 - [ ] T048 [P] [US2] Define the webhook contract in `apps/api/src/routes/v1/webhook/schema.ts` — register, read, delete, rotate, list deliveries, retry one
 - [ ] T049 [US2] Implement the handler in `apps/api/src/routes/v1/webhook/handler.ts`, refusing a destination that cannot protect the message in transit with `INSECURE_URL` (FR-038)
@@ -204,7 +204,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Phase dependencies
 
-- **Phase 1 (Setup)** — T001 blocks everything by Governance; T002–T004 can follow immediately
+- **Phase 1 (Setup)** — T001 is done on `main` (constitution v1.3.0), so nothing is blocked by Governance; T002–T004 can start immediately
 - **Phase 2 (Foundational)** — depends on Phase 1. **Blocks all user stories.** T005–T009 are strictly sequential (one schema file, one migration); T010–T016 parallelise after; T017–T022 are the gate split and must land together
 - **Phase 3 (US1)** — depends on Phase 2
 - **Phase 4 (US2)** — depends on Phase 2. Testable on its own, but only observable end to end once US1 exists to create the link

@@ -173,6 +173,19 @@ against it with the business's tolerance, set the outcome, enqueue the webhook.
 No WispHub client is constructed, which is how FR-029 is enforced structurally
 rather than by remembering.
 
+**The null guard the seam must keep** (analyze finding, 2026-09-12): the
+function receives `integration: Integration | null`, and every read of it in
+the WispHub half — `thresholdPercent` and `floorCents` at the settlement,
+`actionForClass(integration, klass)`, and the observation gate
+`if (!integration.actionsEnabled)` — is safe today only because the line
+`if (!integration?.apiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base)`
+returns first and narrows the type. An API link for a gym has no integration
+row at all, so `integration` is `null` on that path. Therefore the API branch
+returns **before** that guard, and the guard itself stays a hard return for the
+panel half — it is never softened into a condition on `link.source`, because
+that would let a `null` reach the observation gate. T046 states this, and
+T037 proves it with a business that has no integration row.
+
 **Alternatives rejected**: a separate validation function for API payments
 (duplicates the CEP reconciliation, the hardest and most measured code in the
 repo, and would drift the moment one of them is fixed).
@@ -350,3 +363,44 @@ ship an endpoint a finance person will quietly mistrust.
 
 **Spec follow-up**: FR-022's wording should be amended to "a validated transfer
 that was not applied". Raised with the developer rather than edited silently.
+
+---
+
+## D17 — The API speaks the payment row's status words, all of them
+
+**Decision**: `status` on `/v1/payments` is exactly `payments.status` from
+`apps/api/src/db/schema.ts` — `validating`, `queued_for_credit`, `confirmed`,
+`partial`, `unapplied`, `invalid`, `expired`, `superseded` — and the webhook
+type is `payment.<status>` for each terminal one. The contract's earlier
+`short` status is gone; `short` remains only as a value of `match`, which is
+the reconciliation class (`classes.ts`), a different axis.
+
+**Rationale**: the spec's own dependency says the API reports the existing
+verdict vocabulary and does not invent a second set of names. Each word in
+`payments.status` was chosen against a specific wrong reading (`partial` is not
+`confirmed`, because the payer would see a green tick and no service; not
+`invalid`, because that means "your transfer does not exist"). A synonym on
+the wire would force every integrator to keep a translation table, and the
+first bug report would be a developer asking why the panel says one thing and
+the webhook another.
+
+**Why every word, not the five the contract first listed** (analyze finding,
+2026-09-12): `queued_for_credit` and `superseded` are real states a payment
+reaches today (prepaid-credit D8; the `superseded` comment on `payments.status` in `schema.ts`). A business system that
+asks "did this customer pay?" must never receive a value its integration has
+never heard of, and a `GET /v1/payments?customerRef=` that hides two of the
+eight would show a gap where a row exists.
+
+**Which are announced**: terminal states only. `validating` and
+`queued_for_credit` are waits, and a webhook says what happened; a caller that
+wants to know *why* nothing has arrived reads the status. `superseded` is
+announced because it is terminal: a caller that saw the row while it was
+`validating` deserves to learn the row is closed, and the corrected attempt
+arrives as its own payment with its own event. The cost is one event a caller
+may ignore; the alternative is a row that silently stops changing.
+
+**Alternatives rejected**: a friendlier public synonym with a documented
+mapping (two vocabularies to keep in step forever, for the sake of one word);
+folding `superseded` and `queued_for_credit` into neighbours (`invalid` and
+`validating`) — rejected because each fold tells the caller something false
+about whose fault the wait is.

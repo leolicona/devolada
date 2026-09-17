@@ -1,1 +1,0 @@
-ALTER TABLE `validations` ADD `sender_bank` text;

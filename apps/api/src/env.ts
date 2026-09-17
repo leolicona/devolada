@@ -29,20 +29,31 @@ export type Bindings = {
   WISPHUB_API_KEY?: string;
   /* Points the adapter at a sandbox; unset means the real API */
   WISPHUB_BASE_URL?: string;
-  /* Consta, the SPEI validation service (direct-payment spec). The base
-     is env config, never hardcoded: Consta has no prod env yet by its
-     own decision (consta validation spec D8). Key is a worker secret. */
-  CONSTA_BASE_URL?: string;
-  CONSTA_API_KEY?: string;
-  /* provisional-release D4: secret behind the HMAC that pseudonymises
-     the WispHub usuario before it travels to Consta as `customerRef`.
-     Unset → no refs travel; validation is never blocked by it. */
-  CUSTOMER_REF_SECRET?: string;
-  /* payments-and-classes D7 (pivot D20): opens ONLY POST /admin/keys on
-     Consta — the api mints one key per business at birth and the
-     backfill sweep fills the gaps. Unset → businesses are born without
-     their own key and validate under CONSTA_API_KEY until it lands. */
-  CONSTA_ISSUER_TOKEN?: string;
+  /* The SPEI validation engine (Consta) runs inside this Worker
+     (consta-api-merge D1, D9). What can be absent is the provider's
+     credential, never the engine.
+     APICEP_TOKEN — worker secret (validation spec D2). Unset → the SPEI
+     channel is unavailable: `speiAvailable` is false, the link answers
+     `unavailable` and the page says so; a payment already in flight
+     retries as PROVIDER_NOT_CONFIGURED and rides the schedule. */
+  APICEP_TOKEN?: string;
+  /* Overridable so the local sandbox (`pnpm --filter @devolada/api
+     sandbox`) can stand in for the provider. Unset → the real apiCEP.
+     Tests pin it to the mocked origin (constitution IV). */
+  APICEP_BASE_URL?: string;
+  /* validation spec D16 deadline override, in ms. Unset → 25 s — the one
+     deadline a provider call carries now that engine and caller are one
+     process (consta-api-merge D10). Exists so tests can make a mock hang
+     cheaply. */
+  APICEP_DEADLINE_MS?: string;
+  /* The receipt reader (proof-extraction D1, D5). Unset binding → the
+     image route degrades to the provider's OCR rather than failing: a
+     door that still works beats a door that 500s. */
+  AI?: Ai;
+  /* proof-extraction D5: the reader's model is config, not a literal, so
+     replacing it is a deploy and not a release. Unset → the reader's
+     DEFAULT_MODEL. */
+  EXTRACTION_MODEL?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
   /* operator-panel D2: comma-separated emails of the platform operators.

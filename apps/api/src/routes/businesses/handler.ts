@@ -8,7 +8,6 @@ import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, roleCan, ROLE_RANK, type Role } from "../../auth/roles";
 import { grantWelcomeBonus } from "../../credit";
 import { getNumberSetting, getSetting } from "../../platform/settings";
-import { issueConstaKey } from "../../consta/issuer";
 import type {
   AcceptInvitationNewRequest,
   CreateBusinessRequest,
@@ -75,19 +74,11 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
     throw e;
   }
 
-  /* payments-and-classes D7 (pivot D20): the business is born with its
-     own Consta key, so the evidence the trust shadow accumulates lands
-     in the right chain from day one (D8). An issuer that is down does
-     NOT block the birth — the key is plumbing: the row stays null, the
-     platform's key covers validations, and the backfill sweep fills it. */
-  try {
-    const constaApiKey = await issueConstaKey(c.env, `${business.name} · ${business.id}`);
-    if (constaApiKey) {
-      await db.update(businesses).set({ constaApiKey }).where(eq(businesses.id, business.id));
-    }
-  } catch (e) {
-    console.warn(`consta key issuance failed for ${business.id} — backfill will retry:`, e);
-  }
+  /* consta-api-merge D3: a business is born without an engine key
+     because it needs none — the validation engine is a module of this
+     API and attributes every row by `business_id`, so the trust shadow's
+     evidence lands in the right chain from day one (payments-and-classes
+     D8) with nothing to mint. */
 
   /* prepaid-credit D5: once per user, their first business */
   await grantWelcomeBonus(db, business, session.user.id);

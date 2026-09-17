@@ -12,12 +12,10 @@ import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
    provisional pause. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
-const CONSTA_ORIGIN = "https://consta.test";
+const APICEP_ORIGIN = "https://api.apicep.cloud";
 
 const testEnv = {
   ...env,
-  CONSTA_BASE_URL: CONSTA_ORIGIN,
-  CONSTA_API_KEY: "ck_test",
 } as typeof env & Bindings;
 
 beforeAll(() => {
@@ -29,7 +27,7 @@ afterEach(() => fetchMock.assertNoPendingInterceptors());
 const asBusiness = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
 
 const wh = () => fetchMock.get(WISPHUB_ORIGIN);
-const consta = () => fetchMock.get(CONSTA_ORIGIN);
+const apicep = () => fetchMock.get(APICEP_ORIGIN);
 const json = (body: unknown) => [
   200,
   JSON.stringify(body),
@@ -96,20 +94,22 @@ function mockDispatch(opts: { verify?: boolean; formas?: boolean } = {}) {
   return captured;
 }
 
+/* consta-api-merge D12: apiCEP at its real origin, answering a settled
+   CEP in pesos; the engine turns it into the verdict the lifecycle reads */
 function mockConsta(cepAmountCents: number) {
-  consta()
-    .intercept({ method: "POST", path: "/validate" })
+  apicep()
+    .intercept({ method: "POST", path: "/validate-transfer" })
     .reply(
       ...json({
-        success: true,
-        data: {
-          validationId: "v-1",
-          status: "valid",
-          alreadyValidated: false,
-          cep: {
+        validationId: "v-1",
+        status: "valid",
+        validation: {
+          cepStatus: "LIQUIDADO",
+          cepPreviouslyValidated: false,
+          cepDetails: {
             trackingKey: "TRACK001XYZ",
-            amountCents: cepAmountCents,
-            date: new Date().toISOString().slice(0, 10),
+            amount: cepAmountCents / 100,
+            operationDate: new Date().toISOString().slice(0, 10),
             senderBank: "NUBANK",
             senderName: "JANELY REYES",
             receiverBank: "STP",
@@ -321,9 +321,9 @@ describe("US-I03 scenario 9: observation pauses the provisional release", () => 
     mockPendingInvoices(1);
     /* pending is the strongest pre-valid evidence (provisional D1) —
        with actions on this would call WispHub for the promise */
-    consta()
-      .intercept({ method: "POST", path: "/validate" })
-      .reply(...json({ success: true, data: { validationId: "v-1", status: "pending", alreadyValidated: false } }));
+    apicep()
+      .intercept({ method: "POST", path: "/validate-transfer" })
+      .reply(...json({ validationId: "v-1", status: "pending", validation: { cepPreviouslyValidated: false } }));
 
     expect((await payTransfer()).status).toBe(201);
     const [row] = await db().select().from(payments);

@@ -8,9 +8,9 @@ import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedu
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
 import { historyVouches } from "../src/direct-payments/provisional";
-import { customerRefFor } from "../src/consta/refs";
 import type { Bindings } from "../src/env";
-import { app, seedBusiness } from "./helpers";
+import { app, fakeProofs, seedBusiness } from "./helpers";
+import { aiReturning, PNG, seedValidations } from "./consta/helpers";
 
 /* business-and-memberships D6: a payment that confirmed carries its folio
    on the same row — "the charge" of the old two-table world. */
@@ -19,61 +19,28 @@ async function confirmedRows(db: ReturnType<typeof drizzle>) {
 }
 
 /* docs/legacy/direct-payment/direct-payment.spec.md scenarios 1–12, 16–24
-   (US-D01–US-D04). Consta and WispHub are fetch-mocked respecting
-   their contracts (docs/legacy/consta/validation.spec.md,
-   docs/legacy/integrations/wisphub.md). */
+   (US-D01–US-D04). apiCEP and WispHub are fetch-mocked respecting
+   their contracts (docs/legacy/integrations/apicep.md,
+   docs/legacy/integrations/wisphub.md).
+
+   consta-api-merge D12: until the merge this suite intercepted the
+   standalone Consta Worker at a test origin of its own and answered with
+   the engine's verdict envelope. The engine is product code now, and product code is not
+   mocked (constitution IV) — the provider behind it is, at its real
+   origin. `mockApiCep` keeps the verdict vocabulary the scenarios were
+   written in and answers with what apiCEP would have said to produce
+   it, so the engine's own mapping is what turns the wire into the
+   verdict every assertion names. */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
-const CONSTA_ORIGIN = "https://consta.test";
+const APICEP_ORIGIN = "https://api.apicep.cloud";
 
-/* In-memory R2: real R2 writes trip vitest-pool-workers' isolated
-   storage (its snapshotter rejects the bucket's sqlite WAL files).
-   D1 stays real — the "no database mocks" rule is about D1; the blob
-   store is an implementation detail behind three calls. */
-function fakeProofs(): R2Bucket {
-  const store = new Map<string, { data: unknown; contentType?: string; uploaded: Date }>();
-  return {
-    async put(key: string, value: unknown, opts?: R2PutOptions) {
-      const meta = (opts?.httpMetadata as { contentType?: string } | undefined)?.contentType;
-      store.set(key, { data: value, contentType: meta, uploaded: new Date() });
-      return {} as R2Object;
-    },
-    async head(key: string) {
-      return store.has(key) ? ({} as R2Object) : null;
-    },
-    /* Enough of the real shape for the upload budget: prefix filter and
-       an `uploaded` date per object (D13) */
-    async list(opts?: R2ListOptions) {
-      const prefix = opts?.prefix ?? "";
-      return {
-        objects: [...store.entries()]
-          .filter(([key]) => key.startsWith(prefix))
-          .map(([key, o]) => ({ key, uploaded: o.uploaded }) as R2Object),
-        truncated: false,
-      } as unknown as R2Objects;
-    },
-    async get(key: string) {
-      const object = store.get(key);
-      if (!object) return null;
-      return {
-        body: new Blob([object.data as BlobPart]).stream(),
-        httpMetadata: { contentType: object.contentType },
-      } as unknown as R2ObjectBody;
-    },
-  } as unknown as R2Bucket;
-}
-
-/* Consta config is env (a secret + a var CI injects); tests carry it
-   themselves so the suite never depends on .dev.vars */
+/* The provider credential and origin come pinned from vitest.config.ts
+   (constitution IV); the proof bucket is the in-memory double the
+   engine reads from too (consta-api-merge D7). */
 const testEnv = {
   ...env,
   PROOFS: fakeProofs(),
-  CONSTA_BASE_URL: CONSTA_ORIGIN,
-  CONSTA_API_KEY: "ck_test",
-  /* provisional-release D4: with the secret set, every Consta call in
-     this suite carries the opaque refs — extra fields the older
-     assertions never look at, exactly like production */
-  CUSTOMER_REF_SECRET: "test-ref-secret",
 } as typeof env & Bindings;
 
 beforeAll(() => {
@@ -83,7 +50,7 @@ beforeAll(() => {
 afterEach(() => fetchMock.assertNoPendingInterceptors());
 
 const wh = () => fetchMock.get(WISPHUB_ORIGIN);
-const consta = () => fetchMock.get(CONSTA_ORIGIN);
+const apicep = () => fetchMock.get(APICEP_ORIGIN);
 const json = (body: unknown) => [
   200,
   JSON.stringify(body),
@@ -160,17 +127,20 @@ function mockReconnection(verifyEstado = "Activo", invoiceId = 42, verify = true
   return captured;
 }
 
-type ConstaData = {
+type VerdictData = {
   status?: "valid" | "pending" | "invalid";
   reason?: "contradicted" | "not_found";
   alreadyValidated?: boolean;
   cep?: Record<string, unknown> | undefined;
-  retryAfter?: string;
-  trust?: typeof TRUST_BLOCK;
+  /* proof-extraction D11: what the provider's OCR read, in the engine's
+     cents; travels as apiCEP's `extracted` in pesos */
+  reading?: Record<string, unknown>;
 };
 
-/* trust-layer US-V15: the block exactly as Consta ships it — the D8 wire
-   example, reused verbatim so "as received" means something. */
+/* trust-layer US-V15: the block exactly as the engine ships it — the D8
+   wire example. Since the merge it is the fixture of the pure
+   `historyVouches` unit test alone: the shadow tests below seed the
+   log and assert the block the engine computed (consta-api-merge D12). */
 const TRUST_BLOCK = {
   customerRef: "a".repeat(64),
   sample: { chains: 14, effectiveN: 11.2, halfLifeDays: 90 },
@@ -181,39 +151,76 @@ const TRUST_BLOCK = {
   tenantBaseline: { eventualValidRate: 0.96, chains: 410, effectiveN: 236.5 },
 };
 
-/* Intercepts POST /validate and captures the request body for the
-   assertions on what actually traveled to Consta. */
-function mockConsta(data: ConstaData = {}) {
+const DEFAULT_CEP = {
+  trackingKey: "TRACK001XYZ",
+  amountCents: 51400,
+  date: new Date().toISOString().slice(0, 10),
+  senderBank: "NUBANK",
+  senderName: "JANELY REYES",
+  receiverBank: "STP",
+  beneficiaryName: "WifiPlus SA de CV",
+};
+
+/* The engine's verdict vocabulary in, apiCEP's wire out (research R11):
+     valid            → status "valid" + cepDetails, LIQUIDADO
+     pending          → status "pending"
+     not_found        → status "invalid" with nothing behind it
+     contradicted     → status "invalid" + cepStatus DEVUELTO
+     alreadyValidated → cepPreviouslyValidated true
+   Amounts cross the wire as decimal pesos; the engine turns them back
+   into cents (validation spec D7). */
+function apiCepWire(data: VerdictData): Record<string, unknown> {
+  const cep = "cep" in data ? data.cep : DEFAULT_CEP;
+  const status = data.status ?? "valid";
+  const cepDetails = cep
+    ? {
+        trackingKey: cep.trackingKey,
+        amount: typeof cep.amountCents === "number" ? cep.amountCents / 100 : undefined,
+        operationDate: cep.date,
+        senderBank: cep.senderBank,
+        senderName: cep.senderName,
+        receiverBank: cep.receiverBank,
+        beneficiaryName: cep.beneficiaryName,
+      }
+    : undefined;
+  const cepStatus =
+    status === "valid" ? "LIQUIDADO" : status === "invalid" && data.reason === "contradicted" ? "DEVUELTO" : undefined;
+  const extracted = data.reading
+    ? {
+        trackingKey: data.reading.trackingKey,
+        amount: typeof data.reading.amountCents === "number" ? data.reading.amountCents / 100 : undefined,
+        date: data.reading.date,
+        senderBank: data.reading.senderBank,
+        referenceNumber: data.reading.referenceNumber ?? undefined,
+      }
+    : undefined;
+  return {
+    validationId: "v-1",
+    status,
+    validation: {
+      banxicoConfirmed: status === "valid",
+      cepPreviouslyValidated: data.alreadyValidated ?? false,
+      ...(cepStatus ? { cepStatus } : {}),
+      ...(cepDetails ? { cepDetails } : {}),
+    },
+    ...(extracted ? { extracted } : {}),
+  };
+}
+
+/* Intercepts apiCEP's POST /validate-transfer and captures the request
+   body for the assertions on what actually traveled to the provider. */
+function mockApiCep(data: VerdictData = {}) {
   const captured: { body?: Record<string, unknown> } = {};
-  consta()
+  apicep()
     .intercept({
       method: "POST",
-      path: "/validate",
+      path: "/validate-transfer",
       body: (raw) => {
         captured.body = JSON.parse(String(raw));
         return true;
       },
     })
-    .reply(
-      ...json({
-        success: true,
-        data: {
-          validationId: "v-1",
-          status: "valid",
-          alreadyValidated: false,
-          cep: {
-            trackingKey: "TRACK001XYZ",
-            amountCents: 51400,
-            date: new Date().toISOString().slice(0, 10),
-            senderBank: "NUBANK",
-            senderName: "JANELY REYES",
-            receiverBank: "STP",
-            beneficiaryName: "WifiPlus SA de CV",
-          },
-          ...data,
-        },
-      }),
-    );
+    .reply(...json(apiCepWire(data)));
   return captured;
 }
 
@@ -367,17 +374,18 @@ describe("US-D02: submitting proof", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer();
     expect(res.status).toBe(201);
     const { data } = await res.json();
     expect(data.status).toBe("validating");
 
-    const sent = captured.body!.transfer as Record<string, unknown>;
+    const sent = captured.body!.sender as Record<string, unknown>;
     expect(sent.trackingKey).toBe("TRACK001XYZ");
-    expect(sent.amountCents).toBe(51400);
-    expect(sent.beneficiary).toEqual({
+    /* cents at our edge, decimal pesos at the provider's (Consta D7) */
+    expect(sent.amount).toBe(514);
+    expect(captured.body!.beneficiary).toEqual({
       bank: "STP",
       clabe: SPEI_CONFIG.speiClabe,
       name: SPEI_CONFIG.speiBeneficiaryName,
@@ -387,7 +395,7 @@ describe("US-D02: submitting proof", () => {
     expect(row.proofMode).toBe("transfer");
   });
 
-  it("scenario 5: receipt door — upload lands in R2, Consta gets a signed URL", async () => {
+  it("scenario 5: receipt door — upload lands in R2, the provider gets a signed URL", async () => {
     const { link } = await seedLinkedBusiness();
 
     const form = new FormData();
@@ -404,10 +412,13 @@ describe("US-D02: submitting proof", () => {
 
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
     const res = await payTransfer("tok2345abcdefgh2", { proofId: upload.proofId });
     expect(res.status).toBe(201);
-    expect(String(captured.body!.receiptUrl)).toContain(
+    /* No reader is bound in this suite, so the image takes the
+       provider's own OCR door — through the short-lived link the engine
+       signed for it (D12, consta-api-merge D7) */
+    expect(String(captured.body!.imageUrl)).toContain(
       `/direct-payments/proofs/${upload.proofId}`,
     );
 
@@ -457,7 +468,7 @@ describe("US-D02: submitting proof", () => {
        image types and strand a proof it already accepted */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const res = await payTransfer("tok2345abcdefgh2", { proofId: data.proofId });
     expect(res.status).toBe(201);
   });
@@ -558,7 +569,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer: { ...TRANSFER.transfer, senderBank: "BBVA MEXICO" },
@@ -593,7 +604,7 @@ describe("D16: what cannot validate never reaches the paid provider", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
 
     /* apiCEP's own documented example. A fixed 28 would lock out every bank
        that issues a shorter clave. */
@@ -610,7 +621,7 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     /* pay pre-check + validation debt re-check + reconnection verify */
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta();
+    mockApiCep();
     mockReconnection("Activo");
 
     const res = await payTransfer();
@@ -634,7 +645,7 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta();
+    mockApiCep();
     /* WispHub pays but the service has not flipped yet */
     mockReconnection("Suspendido");
 
@@ -665,7 +676,7 @@ describe("US-D03: a valid transfer becomes a charge and reconnects", () => {
        the invoice, so the page asks for both months at once — 998 + the
        15.00 fee. Asking for one of them would have asked for a number
        that reconnects nobody. */
-    mockConsta({
+    mockApiCep({
       cep: {
         trackingKey: "TRACK001XYZ",
         amountCents: 101300,
@@ -702,7 +713,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer();
     const { data } = await res.json();
@@ -733,12 +744,21 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
         transferDate: "2026-08-17",
         constaStatus: "pending",
         validationAttempts: 1,
+        /* consta-api-merge FR-020 (spec US1 scenario 6): a row the old
+           standalone service validated once — its id is foreign to the
+           `validations` table this API now writes. Nothing follows it;
+           the attempt counter on the row is what makes the next attempt
+           a retry, so the replay carve-out (D8) applies without a data
+           step. */
+        constaValidationId: "v-old-service-0f3a9c",
         nextValidationAt: new Date(now.getTime() - 1000),
         createdAt: new Date(now.getTime() - 2 * 60 * 1000),
       })
       .returning();
 
-    mockConsta();
+    /* the provider's replay flag set by the old service's own call: a
+       retry must not read it as a stranger's validation (D8) */
+    mockApiCep({ alreadyValidated: true });
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -747,6 +767,10 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
     expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
+    /* the new attempt wrote its own local row and the payment now
+       points at it; the foreign id is history, not a join */
+    expect(row.constaValidationId).not.toBe("v-old-service-0f3a9c");
+    expect(row.validationAttempts).toBe(2);
     expect(row.folio).not.toBeNull();
 
     /* US-D03: the page polls the status and sees the green moment */
@@ -780,7 +804,7 @@ describe("US-D04: pending CEPs re-validate, never a false rejection", () => {
       })
       .returning();
 
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.expired).toBe(1);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
@@ -797,7 +821,7 @@ describe("D17: a not-found is not a refusal", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
 
     const res = await payTransfer();
     const { data } = await res.json();
@@ -837,7 +861,7 @@ describe("D17: a not-found is not a refusal", () => {
       })
       .returning();
 
-    mockConsta();
+    mockApiCep();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -875,7 +899,7 @@ describe("D17: a not-found is not a refusal", () => {
       })
       .returning();
 
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.stillValidating).toBe(1);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
@@ -898,7 +922,7 @@ describe("D17: a not-found is not a refusal", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "invalid", reason: "contradicted", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "contradicted", cep: undefined });
 
     const res = await payTransfer();
     const { data } = await res.json();
@@ -911,22 +935,11 @@ describe("D17: a not-found is not a refusal", () => {
     expect(await confirmedRows(db)).toHaveLength(0);
   });
 
-  it("scenario 40: an `invalid` with no reason at all is read as not_found, not as a refusal", async () => {
-    /* Fail toward "we do not know": a Consta that predates D11, or one
-       that grows a third reason, must never be able to turn silence
-       back into an accusation. */
-    await seedLinkedBusiness();
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "invalid", cep: undefined });
-
-    const res = await payTransfer();
-    const { data } = await res.json();
-    expect(data.status).toBe("validating");
-
-    const [row] = await drizzle(env.DB).select().from(payments);
-    expect(row.nextValidationAt).not.toBeNull();
-  });
+  /* "scenario 40: an `invalid` with no reason at all is read as
+     not_found, not as a refusal" — retired (consta-api-merge, research
+     R11): its subject was a Consta predating D11 on the other end of a
+     wire, and there is no wire. The engine's own D11 mapping is proven
+     in test/consta/validate.test.ts (US-V06). */
 });
 
 /* docs/legacy/direct-payment/validation-status-ux.spec.md (US-D12): the late
@@ -974,7 +987,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       validationAttempts: 7,
       createdAt: new Date(now.getTime() - 12.5 * 60 * 60 * 1000),
     });
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
     let report = await sweepDirectPayments(testEnv, now);
     expect(report.expired).toBe(1);
     let [row] = await db.select().from(payments).where(eq(payments.id, first.id));
@@ -1000,7 +1013,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       validationAttempts: 7,
       createdAt: new Date(now.getTime() - 12 * 60 * 60 * 1000 - 30 * 1000),
     });
-    mockConsta();
+    mockApiCep();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -1018,23 +1031,22 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
     const db = drizzle(env.DB);
     const payment = await insertPayment(link, business, now, {
       constaStatus: "pending",
-      lastError: "CONSTA_UNAVAILABLE",
+      lastError: "PROVIDER_UNAVAILABLE",
       validationAttempts: 6,
       createdAt: new Date(now.getTime() - 6 * 60 * 60 * 1000 - 1000),
     });
-    consta().intercept({ method: "POST", path: "/validate" }).reply(
+    apicep().intercept({ method: "POST", path: "/validate-transfer" }).reply(
       503,
-      JSON.stringify({
-        success: false,
-        error: { code: "PROVIDER_UNAVAILABLE", retryable: true },
-      }),
+      JSON.stringify({ error: "Service temporarily unavailable" }),
       { headers: { "Content-Type": "application/json" } },
     );
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.expired).toBe(1);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("expired");
-    expect(row.lastError).toBe("CONSTA_UNAVAILABLE");
+    /* consta-api-merge D6: the engine's own code on the row, never the
+       transport's */
+    expect(row.lastError).toBe("PROVIDER_UNAVAILABLE");
   });
 
   it("scenario 11: the replay flag traced through `supersedesId` is the payer's own retry, not a stranger", async () => {
@@ -1079,7 +1091,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       })
       .returning();
 
-    mockConsta({ alreadyValidated: true });
+    mockApiCep({ alreadyValidated: true });
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -1125,7 +1137,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       })
       .returning();
 
-    mockConsta({ alreadyValidated: true });
+    mockApiCep({ alreadyValidated: true });
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -1175,7 +1187,7 @@ describe("US-D12: the late slot and the own-attempt carve-out", () => {
       })
       .returning();
 
-    mockConsta({ alreadyValidated: true });
+    mockApiCep({ alreadyValidated: true });
     const report = await sweepDirectPayments(testEnv, now);
     expect(report.invalid).toBe(1);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
@@ -1190,7 +1202,7 @@ describe("D8: one transfer pays once", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ alreadyValidated: true });
+    mockApiCep({ alreadyValidated: true });
 
     const res = await payTransfer();
     const { data } = await res.json();
@@ -1203,7 +1215,7 @@ describe("D8: one transfer pays once", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const first = await payTransfer();
     expect(first.status).toBe(201);
     const firstId = (await first.json()).data.directPaymentId;
@@ -1233,7 +1245,7 @@ describe("D8: one transfer pays once", () => {
       });
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     expect((await payTransfer()).status).toBe(201);
 
     /* The same clave from a different payment link: the collision pool
@@ -1251,7 +1263,7 @@ describe("D8: one transfer pays once", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const first = await payTransfer();
     expect(first.status).toBe(201);
     const firstId = (await first.json()).data.directPaymentId;
@@ -1262,7 +1274,7 @@ describe("D8: one transfer pays once", () => {
        while the payer read "no los actualiza"). */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const corrected = await payTransfer("tok2345abcdefgh2", {
       transfer: { ...TRANSFER.transfer, date: "2026-08-18" },
     });
@@ -1290,7 +1302,7 @@ describe("D8: one transfer pays once", () => {
     /* Another customer's live payment owns clave TRACK002ABC */
     mockCustomerLookup([{ ...wisphubCustomer(), id_servicio: 7, usuario: "otro@wifiplus" }], 1);
     mockPendingInvoices([{ id_factura: 43, cliente: { usuario: "otro@wifiplus" }, total: 499 }], 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     expect(
       (
         await payTransfer("tok9876zyxwvut99", {
@@ -1302,7 +1314,7 @@ describe("D8: one transfer pays once", () => {
     /* The payer's own payment, about to be corrected */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const first = await payTransfer();
     const firstId = (await first.json()).data.directPaymentId;
 
@@ -1373,7 +1385,7 @@ describe("D8: one transfer pays once", () => {
       })
       .returning();
 
-    mockConsta({ alreadyValidated: true });
+    mockApiCep({ alreadyValidated: true });
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -1395,9 +1407,9 @@ describe("D8: one transfer pays once", () => {
        once a verdict lands, every path writes a slot and the bug becomes
        invisible. A real validation takes ~15 s, so this window is the
        normal state of things, not an edge case. */
-    consta()
-      .intercept({ method: "POST", path: "/validate" })
-      .reply(...json({ success: true, data: { validationId: "v-1", status: "pending", alreadyValidated: false } }))
+    apicep()
+      .intercept({ method: "POST", path: "/validate-transfer" })
+      .reply(...json(apiCepWire({ status: "pending", cep: undefined })))
       .delay(300);
 
     const inFlight = payTransfer();
@@ -1448,7 +1460,7 @@ describe("D8: one transfer pays once", () => {
       })
       .returning();
 
-    mockConsta({ alreadyValidated: true });
+    mockApiCep({ alreadyValidated: true });
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
@@ -1465,7 +1477,7 @@ describe("D8: one transfer pays once", () => {
     mockPendingInvoices(undefined, 1);
     /* A provider that fails is the closest a test can get to one that
        never answers; both leave through the same catch. */
-    consta().intercept({ path: "/validate", method: "POST" }).reply(502, "{}");
+    apicep().intercept({ path: "/validate-transfer", method: "POST" }).reply(502, "{}");
 
     const res = await payTransfer();
     expect(res.status).toBe(201);
@@ -1492,7 +1504,7 @@ describe("D11: valid is necessary, not sufficient", () => {
        again fresh before deciding what the money settles */
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({
+    mockApiCep({
       cep: {
         trackingKey: "OTHERKEY99",
         amountCents: 100,
@@ -1519,7 +1531,7 @@ describe("D11: valid is necessary, not sufficient", () => {
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    mockConsta({ cep: { trackingKey: "TRACK001XYZ", amountCents: 51400, date: old } });
+    mockApiCep({ cep: { trackingKey: "TRACK001XYZ", amountCents: 51400, date: old } });
 
     const res = await payTransfer();
     const { data } = await res.json();
@@ -1552,7 +1564,7 @@ describe("D14: a validated transfer with nothing left to pay", () => {
       })
       .returning();
 
-    mockConsta();
+    mockApiCep();
     /* debt settled at a store while the CEP was pending */
     mockCustomerLookup([{ ...wisphubCustomer(), estado_facturas: "Pagadas" }], 1);
     mockPendingInvoices([], 1);
@@ -1588,44 +1600,29 @@ describe("D12: proofs are private", () => {
 /* D18: the machine reads, the human confirms, the direct door validates.
    docs/legacy/direct-payment/direct-payment.spec.md scenarios 46–49. */
 describe("D18: reading a proof so a human can confirm it", () => {
-  const READING = {
-    extractionId: "ex-1",
-    source: "reader",
-    isReceipt: true,
-    trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
-    senderBank: "NUBANK",
-    amountCents: 51400,
-    date: "2026-08-19",
-    receiptStatus: "Aceptada",
-    gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+  /* consta-api-merge D7/D12: the reader runs in-process on the bytes in
+     the bucket, so the proof is a real PNG header and the model is
+     stubbed at the binding with what it was measured returning
+     (constitution IV). `/extract` on a Consta origin is gone. */
+  const GOOD_READING = {
+    esComprobante: true,
+    claveDeRastreo: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+    banco: "NUBANK",
+    monto: 514.0,
+    fecha: "2026-08-19",
+    estatus: "Aceptada",
   };
 
-  const mockExtract = (data: Record<string, unknown> = {}, status = 200) => {
-    const captured: { body?: Record<string, unknown> } = {};
-    consta()
-      .intercept({
-        method: "POST",
-        path: "/extract",
-        body: (raw) => {
-          captured.body = JSON.parse(String(raw));
-          return true;
-        },
-      })
-      .reply(...json({ success: true, data: { ...READING, ...data } }, status));
-    return captured;
-  };
-
-  const readProof = async (proofId: string, token = "tok2345abcdefgh2") =>
+  const readProof = async (proofId: string, reading: Record<string, unknown> = GOOD_READING, token = "tok2345abcdefgh2") =>
     (await app()).request(
       `/direct-payments/links/${token}/read`,
       post({ proofId }),
-      testEnv,
+      { ...testEnv, AI: aiReturning(reading) },
     );
 
   it("scenario 46: the reading comes back with no provider credit spent", async () => {
     const { link } = await seedLinkedBusiness();
-    await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
-    const captured = mockExtract();
+    await testEnv.PROOFS.put(`${link.id}/proof-1`, PNG(), { httpMetadata: { contentType: "image/png" } });
 
     const res = await readProof(`${link.id}/proof-1`);
     expect(res.status).toBe(200);
@@ -1636,10 +1633,9 @@ describe("D18: reading a proof so a human can confirm it", () => {
     expect(data.amountCents).toBe(51400);
     expect(data.senderBank).toBe("NUBANK");
     expect(data.source).toBe("reader");
-    /* Consta fetches the image through a signed URL that expires — the
-       bucket is never public (D12) */
-    expect(String(captured.body?.receiptUrl)).toContain("/direct-payments/proofs/");
-    expect(String(captured.body?.receiptUrl)).toContain("sig=");
+    /* The engine reads the bucket directly (consta-api-merge D7); the
+       bucket is never public (D12) and no provider interceptor is armed:
+       a credit spent here would fail this test */
 
     /* Reading is not paying: no `direct_payments` row exists yet */
     expect(await drizzle(env.DB).select().from(payments)).toHaveLength(0);
@@ -1647,14 +1643,14 @@ describe("D18: reading a proof so a human can confirm it", () => {
 
   it("scenario 47: a field the gate refused arrives empty, never as a confirmable guess", async () => {
     const { link } = await seedLinkedBusiness();
-    await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
-    mockExtract({
-      trackingKey: "NU3AGKMP3ASP8QQ4U8J8F0K1E4K",
-      senderBank: null,
-      gate: { trackingKey: "malformed", senderBank: "unknown", amount: "ok" },
+    await testEnv.PROOFS.put(`${link.id}/proof-1`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    /* The clave printed across two lines (BUG-006's shape) and a bank
+       off the vocabulary: the real gate refuses both */
+    const res = await readProof(`${link.id}/proof-1`, {
+      ...GOOD_READING,
+      claveDeRastreo: "NU3AGKMP3ASP8QQ 4U8J8F0K1E4K",
+      banco: "Banco Inventado",
     });
-
-    const res = await readProof(`${link.id}/proof-1`);
     const { data } = await res.json();
     /* A malformed clave is worse than no clave: it looks confirmable,
        and a payer clicking through it spends a paid call to learn
@@ -1681,7 +1677,7 @@ describe("D18: reading a proof so a human can confirm it", () => {
     await testEnv.PROOFS.put(`${link.id}/proof-1`, new Uint8Array(10));
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer("tok2345abcdefgh2", {
       proofId: `${link.id}/proof-1`,
@@ -1691,8 +1687,8 @@ describe("D18: reading a proof so a human can confirm it", () => {
 
     /* The transfer door is what validates — the door that has not missed
        once — and the receipt never reaches the provider at all */
-    expect(captured.body?.transfer).toBeDefined();
-    expect(captured.body?.receiptUrl).toBeUndefined();
+    expect(captured.body?.sender).toBeDefined();
+    expect(captured.body?.imageUrl).toBeUndefined();
 
     const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.proofMode).toBe("transfer");
@@ -1708,7 +1704,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
   async function silentAttempt(transfer: Record<string, string>) {
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer,
       receiptStatus: "Aceptada",
@@ -1750,7 +1746,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
 
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer: { ...READ, trackingKey: "HSBC712057" },
       supersedes: first,
@@ -1799,7 +1795,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
-    mockConsta();
+    mockApiCep();
 
     await payTransfer();
     const [row] = await drizzle(env.DB).select().from(payments);
@@ -1817,15 +1813,15 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer: READ,
       receiptAmountCents: 30000,
     });
     expect(res.status).toBe(201);
-    const sent = captured.body as { transfer: { amountCents: number } };
-    expect(sent.transfer.amountCents).toBe(30000);
+    const sent = captured.body as { sender: { amount: number } };
+    expect(sent.sender.amount).toBe(300);
 
     const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.claimedAmountCents).toBe(30000);
@@ -1835,7 +1831,7 @@ describe("D18: a correction supersedes, an unchanged confirmation costs nothing"
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
 
     /* 49900 + 1500 — the debt this seed produces */
     const res = await payTransfer("tok2345abcdefgh2", {
@@ -1903,7 +1899,7 @@ describe("US-D10: a transfer that falls short", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(shortCep(30000));
+    mockApiCep(shortCep(30000));
     const sent = mockReconnection("Suspendido", 42, false);
 
     const res = await payTransfer("tok2345abcdefgh2", SHORT);
@@ -1932,7 +1928,7 @@ describe("US-D10: a transfer that falls short", () => {
     await seedLinkedBusiness({ reconnectionThresholdPercent: 60 });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(shortCep(30000));
+    mockApiCep(shortCep(30000));
     const sent = mockReconnection("Activo", 42);
 
     const res = await payTransfer("tok2345abcdefgh2", SHORT);
@@ -1947,7 +1943,7 @@ describe("US-D10: a transfer that falls short", () => {
     await seedLinkedBusiness({ reconnectionThresholdPercent: 60, reconnectionFloorCents: 40000 });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(shortCep(30000));
+    mockApiCep(shortCep(30000));
     const sent = mockReconnection("Suspendido", 42, false);
 
     await payTransfer("tok2345abcdefgh2", SHORT);
@@ -1962,7 +1958,7 @@ describe("US-D10: a transfer that falls short", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(shortCep(49900));
+    mockApiCep(shortCep(49900));
     const sent = mockReconnection("Activo", 42);
 
     const res = await payTransfer("tok2345abcdefgh2", SHORT);
@@ -1985,7 +1981,7 @@ describe("US-D10: a transfer that falls short", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(shortCep(60000));
+    mockApiCep(shortCep(60000));
     const sent = mockReconnection("Activo", 42);
 
     const res = await payTransfer("tok2345abcdefgh2", SHORT);
@@ -1998,7 +1994,7 @@ describe("US-D10: a transfer that falls short", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(shortCep(30000));
+    mockApiCep(shortCep(30000));
     mockReconnection("Suspendido", 42, false);
 
     const res = await payTransfer("tok2345abcdefgh2", SHORT);
@@ -2024,7 +2020,7 @@ describe("US-D10 / US-L01: the commission is never forgiven", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({
+    mockApiCep({
       cep: {
         trackingKey: "TRACK001XYZ",
         amountCents: 20000,
@@ -2066,21 +2062,21 @@ describe("US-D13: the amount the payer really sent", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer("tok2345abcdefgh2", TYPED);
     expect(res.status).toBe(201);
     const [payment] = await drizzle(env.DB).select().from(payments);
     expect(payment.claimedAmountCents).toBe(40000);
-    const sent = captured.body as { transfer: { amountCents: number } };
-    expect(sent.transfer.amountCents).toBe(40000);
+    const sent = captured.body as { sender: { amount: number } };
+    expect(sent.sender.amount).toBe(400);
   });
 
   it("scenario 5: only a changed amount supersedes; four equal fields spend nothing", async () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const first = await payTransfer("tok2345abcdefgh2", TYPED);
     expect(first.status).toBe(201);
     const firstId = (await first.json()).data.directPaymentId;
@@ -2094,7 +2090,7 @@ describe("US-D13: the amount the payer really sent", () => {
     /* A new amount changes what Banxico is asked: a real correction */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const edited = await payTransfer("tok2345abcdefgh2", {
       transfer: { ...TYPED.transfer, amountCents: 35000 },
       supersedes: firstId,
@@ -2110,7 +2106,7 @@ describe("US-D13: the amount the payer really sent", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const res = await payTransfer("tok2345abcdefgh2", TYPED);
     const { directPaymentId } = (await res.json()).data;
 
@@ -2127,7 +2123,7 @@ describe("US-D13: the amount the payer really sent", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta(); /* the CEP says 51400 arrived */
+    mockApiCep(); /* the CEP says 51400 arrived */
     mockReconnection("Activo");
 
     const res = await payTransfer("tok2345abcdefgh2", {
@@ -2142,14 +2138,14 @@ describe("US-D13: the amount the payer really sent", () => {
     await seedLinkedBusiness({ speiBeneficiaryName: null });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    const captured = mockConsta();
+    const captured = mockApiCep();
     mockReconnection("Activo");
 
     const res = await payTransfer();
     expect(res.status).toBe(201);
     expect((await res.json()).data.status).toBe("confirmed");
-    const sent = captured.body as { transfer: { beneficiary: Record<string, unknown> } };
-    expect("name" in sent.transfer.beneficiary).toBe(false);
+    const sent = captured.body as { beneficiary: Record<string, unknown> };
+    expect("name" in sent.beneficiary).toBe(false);
 
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
@@ -2208,7 +2204,7 @@ describe("US-D14: the classifier at minute two", () => {
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
-    const captured = mockConsta({
+    const captured = mockApiCep({
       cep: {
         trackingKey: "NU3AREALQKRNKJHK00000000X8P",
         amountCents: 51400,
@@ -2221,10 +2217,12 @@ describe("US-D14: the classifier at minute two", () => {
     });
 
     await sweepDirectPayments(testEnv, now);
+    /* `providerOcr` is the engine's own flag; what the provider sees is
+       the image on its OCR door and no transfer data (proof-extraction
+       D11) */
     const sent = captured.body as Record<string, unknown>;
-    expect(sent.providerOcr).toBe(true);
-    expect(String(sent.receiptUrl)).toContain("proof");
-    expect(sent.transfer).toBeUndefined();
+    expect(String(sent.imageUrl)).toContain("proof");
+    expect(sent.sender).toBeUndefined();
 
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("confirmed");
@@ -2234,7 +2232,7 @@ describe("US-D14: the classifier at minute two", () => {
 
   it("scenario 2: a matching reading writes agreed, and the ride keeps its schedule", async () => {
     const { payment, now, db } = await seedCross();
-    mockConsta({
+    mockApiCep({
       status: "invalid",
       reason: "not_found",
       cep: undefined,
@@ -2257,7 +2255,7 @@ describe("US-D14: the classifier at minute two", () => {
 
   it("scenario 3+5: a differing clave and amount write disputed, with the fields named", async () => {
     const { payment, now, db } = await seedCross();
-    mockConsta({
+    mockApiCep({
       status: "invalid",
       reason: "not_found",
       cep: undefined,
@@ -2280,7 +2278,7 @@ describe("US-D14: the classifier at minute two", () => {
 
   it("scenario 6: a blind cross stays null on the wire — no evidence is the same as no cross", async () => {
     const { payment, now, db } = await seedCross();
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
 
     await sweepDirectPayments(testEnv, now);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
@@ -2294,7 +2292,7 @@ describe("US-D14: the classifier at minute two", () => {
 
   it("scenario 7: a bank-name difference alone raises nothing", async () => {
     const { payment, now, db } = await seedCross();
-    mockConsta({
+    mockApiCep({
       status: "invalid",
       reason: "not_found",
       cep: undefined,
@@ -2314,12 +2312,12 @@ describe("US-D14: the classifier at minute two", () => {
 
   it("scenario 9: a manual-door payment (no image) never crosses", async () => {
     const { payment, now, db } = await seedCross({ proofKey: null });
-    const captured = mockConsta({ status: "pending", cep: undefined });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
 
     await sweepDirectPayments(testEnv, now);
     const sent = captured.body as Record<string, unknown>;
-    expect(sent.transfer).toBeDefined();
-    expect(sent.providerOcr).toBeUndefined();
+    expect(sent.sender).toBeDefined();
+    expect(sent.imageUrl).toBeUndefined();
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.readingCheck).toBeNull();
   });
@@ -2331,7 +2329,7 @@ describe("US-D14: the classifier at minute two", () => {
       validationAttempts: 7,
       createdAt: past,
     });
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
 
     await sweepDirectPayments(testEnv, now);
     const data = await statusOf(payment.id);
@@ -2364,7 +2362,7 @@ describe("US-D15: the provisional release", () => {
     /* one customer+invoices round for the submit, one for the release */
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const promise = mockPromise();
 
     const res = await payTransfer();
@@ -2386,7 +2384,7 @@ describe("US-D15: the provisional release", () => {
     await seedLinkedBusiness();
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer();
     expect(res.status).toBe(201);
@@ -2400,7 +2398,7 @@ describe("US-D15: the provisional release", () => {
     await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({ status: "invalid", reason: "not_found", cep: undefined });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
     mockPromise();
 
     const res = await payTransfer();
@@ -2433,7 +2431,7 @@ describe("US-D15: the provisional release", () => {
 
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     /* no mockPromise: a promise call would leave a pending interceptor */
 
     const res = await payTransfer();
@@ -2451,7 +2449,7 @@ describe("US-D15: the provisional release", () => {
     await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
 
     /* the manual door's editable amount: a $10 claim against a $499 debt */
     const res = await payTransfer("tok2345abcdefgh2", {
@@ -2490,7 +2488,7 @@ describe("US-D15: the provisional release", () => {
     /* the payer claims it next morning; the CEP has published by now */
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta();
+    mockApiCep();
     mockReconnection("Activo");
 
     const res = await payTransfer();
@@ -2546,7 +2544,7 @@ describe("US-D15: the provisional release", () => {
     /* the next attempt with a clean clave rides — but the fast lane is shut */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined });
+    mockApiCep({ status: "pending", cep: undefined });
     const res = await payTransfer("tok2345abcdefgh2", {
       transfer: { ...TRANSFER.transfer, trackingKey: "CLEANKEY99" },
     });
@@ -2561,55 +2559,55 @@ describe("US-D15: the provisional release", () => {
   });
 });
 
-/* provisional-release D4 (US-D15) — the collection half: the opaque refs
-   ride every Consta call from day one, toggle state irrespective, and
-   the recognisable usuario never travels naked. */
-describe("US-D15: the history refs travel always (D4)", () => {
-  it("customerRef is the HMAC of the usuario, paymentRef is the payment id", async () => {
-    await seedLinkedBusiness();
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
-
-    const res = await payTransfer();
-    expect(res.status).toBe(201);
-
-    const [row] = await drizzle(env.DB).select().from(payments);
-    expect(captured.body!.paymentRef).toBe(row.id);
-
-    const ref = String(captured.body!.customerRef);
-    expect(ref).toMatch(/^[0-9a-f]{64}$/);
-    expect(ref).not.toContain("greyes");
-    expect(ref).toBe(await customerRefFor("test-ref-secret", "greyes@wifiplus"));
-  });
-
-  it("without the secret nothing travels and nothing blocks", async () => {
-    await seedLinkedBusiness();
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices(undefined, 1);
-    const captured = mockConsta({ status: "pending", cep: undefined });
-
-    const res = await (await app()).request(
-      "/direct-payments/links/tok2345abcdefgh2/pay",
-      post(TRANSFER),
-      { ...testEnv, CUSTOMER_REF_SECRET: undefined },
-    );
-    expect(res.status).toBe(201);
-    expect(captured.body!.customerRef).toBeUndefined();
-    expect(captured.body!.paymentRef).toBeUndefined();
-  });
-});
+/* provisional-release D4 (US-D15) — the collection half. The two tests
+   here — "customerRef is the HMAC of the usuario, paymentRef is the
+   payment id" and "without the secret nothing travels and nothing
+   blocks" — retired with the HMAC and its secret (consta-api-merge D5):
+   the ref no longer crosses a network, so it is the link's own customer
+   identity, sent on every call. What replaced them is proven in
+   test/consta/attribution.test.ts (consta-api-merge US3). */
 
 /* provisional-release D12 (US-D15) — the shadow only writes: the trust
    block as received lands next to every release evaluation, the release
    decision is byte-identical with and without it, and the graduation
    gate stays inert while K is null. */
 describe("US-D15 D12: the shadow", () => {
+  /* consta-api-merge D12: the block is no longer injected through a
+     mock — the engine computes it from the log, so the log is seeded:
+     three resolved chains of this payer, ten days old, under this
+     business (D3). The engine's answer for that history is what the
+     shadow must store. */
+  const DAY = 24 * 3600 * 1000;
+  async function seedPayerHistory(businessId: string, chains = 3) {
+    await seedValidations(
+      businessId,
+      Array.from({ length: chains }, (_, i) => ({
+        mode: "transfer" as const,
+        status: "valid" as const,
+        trackingKey: `HIST${String(i).padStart(6, "0")}`,
+        customerRef: "greyes@wifiplus",
+        paymentRef: `pay-hist-${i}`,
+        createdAt: new Date(Date.now() - 10 * DAY),
+      })),
+    );
+  }
+  const expectComputedBlock = (snapshot: string | null, chains: number) => {
+    const block = JSON.parse(snapshot!) as typeof TRUST_BLOCK;
+    /* the link's own customer identity, undisguised (D5) */
+    expect(block.customerRef).toBe("greyes@wifiplus");
+    expect(block.sample.chains).toBe(chains);
+    /* a rate over nothing is no measurement, never 0% (trust-layer D3) */
+    expect(block.eventualValidRate).toBe(chains ? 1 : null);
+    expect(block.raw.resolvedValid).toBe(chains);
+    expect(block.tenantBaseline.chains).toBe(chains);
+  };
+
   it("the snapshot lands with the release row, as received", async () => {
-    await seedLinkedBusiness({ provisionalReleaseEnabled: true });
+    const { business } = await seedLinkedBusiness({ provisionalReleaseEnabled: true });
+    await seedPayerHistory(business.id);
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
+    mockApiCep({ status: "pending", cep: undefined });
     mockPromise();
 
     const res = await payTransfer();
@@ -2619,14 +2617,18 @@ describe("US-D15 D12: the shadow", () => {
     expect(row.provisionalReleaseAt).not.toBeNull();
     /* the block bought nothing: the evidence is the verdict's own */
     expect(row.releaseEvidence).toBe("pending");
-    expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST_BLOCK);
+    expectComputedBlock(row.trustSnapshot, 3);
   });
 
-  it("without a block the decision is byte-identical and the shadow records null", async () => {
+  it("with an empty history the decision is byte-identical and the shadow records the empty measurement", async () => {
     await seedLinkedBusiness({ provisionalReleaseEnabled: true });
     mockCustomerLookup([wisphubCustomer()], 2);
     mockPendingInvoices(undefined, 2);
-    mockConsta({ status: "pending", cep: undefined });
+    /* Was "without a block … the shadow records null": the refs travel
+       on every call now (consta-api-merge D5), so a `pending` always
+       carries a block — for a stranger, one of zeros (trust-layer
+       scenario 2). The decision must not move either way. */
+    mockApiCep({ status: "pending", cep: undefined });
     mockPromise();
 
     const res = await payTransfer();
@@ -2636,14 +2638,15 @@ describe("US-D15 D12: the shadow", () => {
     /* same decision as with the block: released, on the same evidence */
     expect(row.provisionalReleaseAt).not.toBeNull();
     expect(row.releaseEvidence).toBe("pending");
-    expect(row.trustSnapshot).toBeNull();
+    expectComputedBlock(row.trustSnapshot, 0);
   });
 
   it("toggle off: the evaluation still writes the shadow and decides nothing", async () => {
-    await seedLinkedBusiness();
+    const { business } = await seedLinkedBusiness();
+    await seedPayerHistory(business.id);
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
-    mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
+    mockApiCep({ status: "pending", cep: undefined });
 
     const res = await payTransfer();
     expect(res.status).toBe(201);
@@ -2651,7 +2654,7 @@ describe("US-D15 D12: the shadow", () => {
     const [row] = await drizzle(env.DB).select().from(payments);
     expect(row.provisionalReleaseAt).toBeNull();
     expect(row.releaseEvidence).toBeNull();
-    expect(JSON.parse(row.trustSnapshot!)).toEqual(TRUST_BLOCK);
+    expectComputedBlock(row.trustSnapshot, 3);
   });
 
   it("a released row keeps the snapshot that bought the decision", async () => {
@@ -2687,7 +2690,8 @@ describe("US-D15 D12: the shadow", () => {
       .returning();
 
     /* the retry's block has moved on; the snapshot must not */
-    mockConsta({ status: "pending", cep: undefined, trust: TRUST_BLOCK });
+    await seedPayerHistory(business.id, 14);
+    mockApiCep({ status: "pending", cep: undefined });
     await sweepDirectPayments(testEnv, now);
 
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
@@ -2709,12 +2713,33 @@ describe("US-D15 D12: the shadow", () => {
   });
 });
 
-/* TD-013 paid: the sweep obeys Consta's learned `retryAfter`
+/* TD-013 paid: the sweep obeys the engine's learned `retryAfter`
    (learned-retry D6, direct-payment D7 amendment). The suggestion rules
    the middle of the schedule; the early skeleton and the horizon never
    move. */
 describe("D7 amended: the learned retryAfter governs the middle", () => {
   const min = (n: number) => n * 60 * 1000;
+
+  /* consta-api-merge D12: the suggestion is no longer injected through
+     a mock — the engine learns it from the log (learned-retry D2–D4),
+     so the log is seeded the way test/consta/learned-retry.test.ts
+     seeds it: thirty transfers of this pair that missed once and
+     confirmed `minutes` later, plus the payment's own prior miss at
+     its `createdAt` so the live anchor (D4 rule 2) is known exactly.
+     Thirty at 22 min → p50 = 22, rounded up to the 25-minute step. */
+  const LEARNED_MINUTES = 25;
+  async function seedLearnedCell(businessId: string, ownKey: string, ownCreatedAt: Date, minutes = 22) {
+    const anchor = Date.now() - 6 * 60 * 60 * 1000;
+    const today = new Date().toISOString().slice(0, 10);
+    const measured = Array.from({ length: 30 }, (_, i) => `LEARN${String(i).padStart(4, "0")}`).flatMap((key) => [
+      { mode: "transfer" as const, status: "invalid" as const, reason: "not_found" as const, trackingKey: key, senderBank: "NUBANK", beneficiaryBank: "STP", createdAt: new Date(anchor) },
+      { mode: "transfer" as const, status: "valid" as const, trackingKey: key, senderBank: "NUBANK", beneficiaryBank: "STP", createdAt: new Date(anchor + minutes * 60_000) },
+    ]);
+    await seedValidations(businessId, [
+      ...measured,
+      { mode: "transfer" as const, status: "invalid" as const, reason: "not_found" as const, trackingKey: ownKey, senderBank: "NUBANK", beneficiaryBank: "STP", amountCents: 51400, transferDate: today, createdAt: ownCreatedAt },
+    ]);
+  }
 
   it("US-D04: a suggestion skips the futile middle slots", () => {
     const createdAt = new Date(Date.now() - min(2));
@@ -2762,7 +2787,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
     const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const createdAt = new Date(now.getTime() - min(2));
-    const suggested = new Date(createdAt.getTime() + min(26));
+    const suggested = new Date(createdAt.getTime() + min(LEARNED_MINUTES));
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(payments)
@@ -2783,12 +2808,8 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
       })
       .returning();
 
-    mockConsta({
-      status: "invalid",
-      reason: "not_found",
-      cep: undefined,
-      retryAfter: suggested.toISOString(),
-    });
+    await seedLearnedCell(business.id, "TRACK001XYZ", createdAt);
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
     await sweepDirectPayments(testEnv, now);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");
@@ -2801,7 +2822,7 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
     const { business, link } = await seedLinkedBusiness();
     const now = new Date();
     const createdAt = new Date(now.getTime() - min(2));
-    const suggested = new Date(createdAt.getTime() + min(26));
+    const suggested = new Date(createdAt.getTime() + min(LEARNED_MINUTES));
     const db = drizzle(env.DB);
     const [payment] = await db
       .insert(payments)
@@ -2822,7 +2843,8 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
       })
       .returning();
 
-    mockConsta({ status: "pending", cep: undefined, retryAfter: suggested.toISOString() });
+    await seedLearnedCell(business.id, "TRACK001XYZ", createdAt);
+    mockApiCep({ status: "pending", cep: undefined });
     await sweepDirectPayments(testEnv, now);
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");

@@ -2,16 +2,18 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { businesses, integrations, paymentLinks, payments } from "../src/db/schema";
+import { businesses, integrations, paymentLinks, payments, validations } from "../src/db/schema";
+import { sweepDirectPayments } from "../src/direct-payments/validation";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 
 /* docs/legacy/reconciliation/payments-and-classes.spec.md scenarios 1–7 and 11
-   (US-R02, US-R03). Consta and WispHub are fetch-mocked respecting their
-   contracts, like the direct-payment suite. */
+   (US-R02, US-R03). apiCEP and WispHub are fetch-mocked respecting their
+   contracts, like the direct-payment suite (consta-api-merge D12: the
+   engine is product code and is not mocked). */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
-const CONSTA_ORIGIN = "https://consta.test";
+const APICEP_ORIGIN = "https://api.apicep.cloud";
 
 /* In-memory R2, same reason as direct-payment.test.ts: real R2 writes
    trip vitest-pool-workers' isolated storage. */
@@ -40,8 +42,6 @@ function fakeProofs(): R2Bucket {
 const testEnv = {
   ...env,
   PROOFS: fakeProofs(),
-  CONSTA_BASE_URL: CONSTA_ORIGIN,
-  CONSTA_API_KEY: "ck_test",
 } as typeof env & Bindings;
 
 beforeAll(() => {
@@ -53,7 +53,7 @@ afterEach(() => fetchMock.assertNoPendingInterceptors());
 const asBusiness = { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } };
 
 const wh = () => fetchMock.get(WISPHUB_ORIGIN);
-const consta = () => fetchMock.get(CONSTA_ORIGIN);
+const apicep = () => fetchMock.get(APICEP_ORIGIN);
 const json = (body: unknown) => [
   200,
   JSON.stringify(body),
@@ -115,19 +115,19 @@ function mockReconnection(verifyEstado = "Activo", invoiceId = 42, formas = true
 }
 
 function mockConsta(cepAmountCents: number, trackingKey = "TRACK001XYZ") {
-  consta()
-    .intercept({ method: "POST", path: "/validate" })
+  apicep()
+    .intercept({ method: "POST", path: "/validate-transfer" })
     .reply(
       ...json({
-        success: true,
-        data: {
-          validationId: "v-1",
-          status: "valid",
-          alreadyValidated: false,
-          cep: {
+        validationId: "v-1",
+        status: "valid",
+        validation: {
+          cepStatus: "LIQUIDADO",
+          cepPreviouslyValidated: false,
+          cepDetails: {
             trackingKey,
-            amountCents: cepAmountCents,
-            date: new Date().toISOString().slice(0, 10),
+            amount: cepAmountCents / 100,
+            operationDate: new Date().toISOString().slice(0, 10),
             senderBank: "NUBANK",
             senderName: "JANELY REYES",
             receiverBank: "STP",
@@ -520,5 +520,95 @@ describe("US-R03 scenario 7: a failed reconnection can be retried by an operator
       env,
     );
     expect(res.status).toBe(403);
+  });
+});
+
+/* payments-and-classes D9, scenario 12 (US-R03). Lived in
+   consta-keys.test.ts until consta-api-merge retired that file with the
+   per-business key (research R11); suspension is not about keys, so the
+   two tests moved here, re-pointed at apiCEP, with the key assertion
+   dropped. */
+describe("D9 scenario 12: a suspended business validates nothing", () => {
+  async function seedSuspendedWithRow() {
+    const business = await seedBusiness({
+      wisphubApiKey: "wh-key-1",
+      speiClabe: "646180157000000004",
+      speiBank: "STP",
+    });
+    const [link] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({
+        businessId: business.id,
+        token: "toksuspend123456",
+        wisphubCustomerId: "6",
+        customerUsuario: "greyes@wifiplus",
+      })
+      .returning();
+    const past = new Date(Date.now() - 60_000);
+    const [row] = await drizzle(env.DB)
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        status: "validating",
+        trackingKey: "TRACKSUSP01",
+        senderBank: "NUBANK",
+        transferDate: "2026-08-17",
+        nextValidationAt: past,
+      })
+      .returning();
+    await drizzle(env.DB)
+      .update(businesses)
+      .set({ status: "suspended" })
+      .where(eq(businesses.id, business.id));
+    return { business, link, row, past };
+  }
+
+  it("the link answers 409 BUSINESS_SUSPENDED on GET and POST", async () => {
+    const { link } = await seedSuspendedWithRow();
+    const get = await (await app()).request(`/direct-payments/links/${link.token}`, {}, testEnv);
+    expect(get.status).toBe(409);
+    expect((await get.json()).error.code).toBe("BUSINESS_SUSPENDED");
+
+    const post = await (await app()).request(
+      `/direct-payments/links/${link.token}/pay`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transfer: { trackingKey: "TRACK002XYZ", senderBank: "NUBANK", date: "2026-08-17" } }),
+      },
+      testEnv,
+    );
+    expect(post.status).toBe(409);
+    expect((await post.json()).error.code).toBe("BUSINESS_SUSPENDED");
+  });
+
+  it("the sweep skips its validating rows with the schedule frozen, and they validate on reactivation", async () => {
+    const { business, row, past } = await seedSuspendedWithRow();
+
+    const frozen = await sweepDirectPayments(testEnv);
+    expect(frozen.claimed).toBe(0);
+    const [untouched] = await drizzle(env.DB).select().from(payments).where(eq(payments.id, row.id));
+    expect(untouched.nextValidationAt?.getTime()).toBe(past.getTime());
+    expect(untouched.validationAttempts).toBe(0);
+
+    /* Reactivation: the row is due again with its old schedule, and the
+       resumed attempt is a real one — attributed to the business, which
+       suspension never changed (consta-api-merge D3). */
+    await drizzle(env.DB).update(businesses).set({ status: "active" }).where(eq(businesses.id, business.id));
+    apicep()
+      .intercept({ method: "POST", path: "/validate-transfer" })
+      .reply(...json({ validationId: "v-2", status: "pending", validation: { cepPreviouslyValidated: false } }));
+
+    const resumed = await sweepDirectPayments(testEnv);
+    expect(resumed.claimed).toBe(1);
+    const [after] = await drizzle(env.DB).select().from(payments).where(eq(payments.id, row.id));
+    expect(after.constaStatus).toBe("pending");
+    const [owned] = await drizzle(env.DB).select().from(validations).where(eq(validations.businessId, business.id));
+    expect(owned.status).toBe("pending");
   });
 });

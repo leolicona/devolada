@@ -19,7 +19,6 @@ import {
   makeProofKey,
   PROOF_MAX_BYTES,
   proofBelongsToLink,
-  signedProofUrl,
   UPLOAD_HOURLY_BUDGET,
   uploadsInLastHour,
   verifyProofUrl,
@@ -27,7 +26,7 @@ import {
 import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { integrationOf } from "../../integrations/store";
-import { Consta, ConstaError } from "../../consta/client";
+import { consta, ConstaError } from "../../consta";
 import type { DirectPayment } from "../../direct-payments/validation";
 import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
 
@@ -603,9 +602,9 @@ export async function uploadProof(c: Ctx, token: string) {
 /* POST /direct-payments/links/:token/read (US-D11, D18)
 
    The machine reads, the human confirms, the direct door validates. This
-   endpoint is the first half: it spends a Workers AI call at Consta and
-   **no provider credit**, and everything it returns is a draft the payer
-   is about to see and can overwrite.
+   endpoint is the first half: it spends a Workers AI call in the engine
+   and **no provider credit**, and everything it returns is a draft the
+   payer is about to see and can overwrite.
 
    Nothing here fails the payment. A reader that is down, a file that is
    a PDF, a clave that did not survive the gate — each comes back as a
@@ -631,20 +630,19 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
   if (!(await c.env.PROOFS.head(proofId))) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
-  if (!c.env.CONSTA_BASE_URL || !c.env.CONSTA_API_KEY) {
-    return c.json({ success: false, error: { code: "CONSTA_UNAVAILABLE" } }, 503);
-  }
-
-  /* payments-and-classes D7: the reading is this business's paid call
-     too — Consta's per-key log stays honest cost telemetry. */
-  const consta = new Consta(c.env.CONSTA_BASE_URL, business.constaApiKey ?? c.env.CONSTA_API_KEY);
+  /* consta-api-merge D3/D7: the reading is this business's call, so the
+     engine's log stays honest cost telemetry; the engine takes the file
+     from the bucket by its key. No provider gate here — the reader needs
+     no credential, and an absent AI binding degrades inside the engine.
+     D6: the 503's code is the engine's; the page never reads it
+     (PaymentPage falls through to the provider's door on any failure). */
   let reading;
   try {
-    reading = await consta.extract(await signedProofUrl(c.env, proofId, now));
+    reading = await consta(c.env, db, { businessId: business.id }).extract({ proofKey: proofId });
   } catch (e) {
-    const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
+    const code = e instanceof ConstaError ? e.code : "READER_UNAVAILABLE";
     console.error("proof reading failed:", code);
-    return c.json({ success: false, error: { code: "CONSTA_UNAVAILABLE" } }, 503);
+    return c.json({ success: false, error: { code: "READER_UNAVAILABLE" } }, 503);
   }
 
   return c.json({
@@ -666,7 +664,7 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
   });
 }
 
-/* GET /direct-payments/proofs/:linkId/:file — how Consta's provider
+/* GET /direct-payments/proofs/:linkId/:file — how the engine's provider
    fetches the image (D12): only with a live HMAC signature. Everything
    else is 404, indistinguishable from a key that never existed. */
 export async function serveProof(c: Ctx, linkId: string, file: string) {

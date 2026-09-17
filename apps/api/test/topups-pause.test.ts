@@ -11,7 +11,7 @@ import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeade
 /* docs/legacy/platform/prepaid-credit.spec.md scenarios 8–12 (US-B05, US-B06):
    the top-up through the platform's own account, and the pause. */
 
-const CONSTA_ORIGIN = "https://consta.test";
+const APICEP_ORIGIN = "https://api.apicep.cloud";
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
 const OPERATOR = "demo@devolada.app";
 
@@ -21,22 +21,50 @@ beforeAll(() => {
 });
 afterEach(() => fetchMock.assertNoPendingInterceptors());
 
+/* The provider credential comes pinned from vitest.config.ts; the engine
+   validates a top-up under the platform's own attribution
+   (consta-api-merge D3), so there is no key to carry here. */
 const testEnv = () =>
   ({
     ...(env as unknown as Bindings),
-    CONSTA_BASE_URL: CONSTA_ORIGIN,
-    CONSTA_API_KEY: "ck_platform",
     PLATFORM_OPERATOR_EMAILS: OPERATOR,
   }) as Bindings;
 
 const jsonReply = (body: unknown) =>
   [200, JSON.stringify(body), { headers: { "Content-Type": "application/json" } }] as const;
 
-function mockConsta(verdict: Record<string, unknown>) {
+/* consta-api-merge D12: the engine is product code and is not mocked;
+   apiCEP is, at its real origin, with the wire that produces the verdict
+   the scenario names (`pending` → status "pending"; a valid CEP →
+   status "valid" + cepDetails in pesos). */
+function mockConsta(verdict: { status: string; cep?: Record<string, unknown> }) {
+  const cep = verdict.cep;
   fetchMock
-    .get(CONSTA_ORIGIN)
-    .intercept({ method: "POST", path: "/validate" })
-    .reply(...jsonReply({ success: true, data: { validationId: "v-1", alreadyValidated: false, ...verdict } }));
+    .get(APICEP_ORIGIN)
+    .intercept({ method: "POST", path: "/validate-transfer" })
+    .reply(
+      ...jsonReply({
+        validationId: "v-1",
+        status: verdict.status,
+        validation: {
+          cepPreviouslyValidated: false,
+          ...(cep
+            ? {
+                cepStatus: "LIQUIDADO",
+                cepDetails: {
+                  trackingKey: cep.trackingKey,
+                  amount: (cep.amountCents as number) / 100,
+                  operationDate: cep.date,
+                  senderBank: cep.senderBank,
+                  senderName: cep.senderName,
+                  receiverBank: cep.receiverBank,
+                  beneficiaryName: cep.beneficiaryName,
+                },
+              }
+            : {}),
+        },
+      }),
+    );
 }
 const validCep = (amountCents: number, trackingKey = "TOPUP0001ABC") => ({
   status: "valid",

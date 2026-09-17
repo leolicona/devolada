@@ -4,8 +4,7 @@ import type { Bindings } from "../env";
 import { payments, businesses, paymentLinks } from "../db/schema";
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
-import { Consta, ConstaError, type ConstaRequest } from "../consta/client";
-import { customerRefFor } from "../consta/refs";
+import { consta, ConstaError, type ConstaRequest } from "../consta";
 import { WispHub, WispHubError } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { settle } from "./partial";
@@ -13,7 +12,6 @@ import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
-import { signedProofUrl } from "./proofs";
 import { classifyPayment } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
 import {
@@ -65,9 +63,11 @@ export function speiBankIsKnown(business: Isp): boolean {
 }
 
 /* D4: the channel exists only when the ISP configured its own account —
-   and when Consta itself is reachable in this environment. A page that
-   shows a CLABE nothing can validate would let customers transfer into
-   the void.
+   and when the engine can reach the provider in this environment. A page
+   that shows a CLABE nothing can validate would let customers transfer
+   into the void. consta-api-merge D9: the engine is local now; what can
+   be absent is the provider's credential, and that alone decides whether
+   an environment validates (constitution VIII).
 
    `speiBank` being non-empty is not enough, and BUG-008 is why: a value
    stored before D16 can be truthy and still outside apiCEP's vocabulary.
@@ -87,8 +87,7 @@ export function speiAvailable(
     business.speiClabe &&
       speiBankIsKnown(business) &&
       integration?.apiKey &&
-      env.CONSTA_BASE_URL &&
-      env.CONSTA_API_KEY,
+      env.APICEP_TOKEN,
   );
 }
 
@@ -210,8 +209,11 @@ export async function runValidation(
     return row;
   };
 
-  if (!env.CONSTA_BASE_URL || !env.CONSTA_API_KEY) {
-    return retryLater("CONSTA_NOT_CONFIGURED");
+  /* consta-api-merge D6: the engine's own code on the row. A payment
+     already in flight when the credential is absent rides the schedule,
+     it never dies for it (FR-009). */
+  if (!env.APICEP_TOKEN) {
+    return retryLater("PROVIDER_NOT_CONFIGURED");
   }
   if (!business.speiClabe || !business.speiBank) {
     /* The ISP un-configured SPEI between submission and this attempt.
@@ -219,10 +221,11 @@ export async function runValidation(
     return retryLater("SPEI_NOT_CONFIGURED");
   }
   if (!speiBankIsKnown(business)) {
-    /* BUG-008: retrying cannot fix the ISP's own configuration, and Consta
-       would refuse it with a 400 the client reads as retryable. Stop here
-       and name it, so the ISP sees a configuration problem rather than a
-       customer seeing "Verificando" for six hours. */
+    /* BUG-008: retrying cannot fix the ISP's own configuration, and the
+       engine's guard would refuse it with a REQUEST_REJECTED the schedule
+       retries anyway. Stop here and name it, so the ISP sees a
+       configuration problem rather than a customer seeing "Verificando"
+       for six hours. */
     return retryLater("SPEI_BANK_UNKNOWN");
   }
 
@@ -252,18 +255,23 @@ export async function runValidation(
   /* provisional-release D4: the refs travel on every call — cross,
      transfer and receipt doors alike — from day one, toggle state
      irrespective. History only accumulates forward, and the month it is
-     not collected is evidence lost. The release rule reads none of it. */
-  const refs = env.CUSTOMER_REF_SECRET
-    ? {
-        customerRef: await customerRefFor(env.CUSTOMER_REF_SECRET, link.customerUsuario),
-        paymentRef: payment.id,
-      }
-    : {};
+     not collected is evidence lost. The release rule reads none of it.
+     consta-api-merge D5: unconditional now. The usuario used to travel
+     as an HMAC under an optional secret because it crossed the network
+     to another service, and the secret's absence once lost a month of
+     history (BUG-010); the validation row sits in this same database
+     now, three tables from the link, so the disguise protected nothing.
+     `customerRef` is the link's own customer identity — its usuario for
+     a panel link (the caller's own reference for an API link, once
+     003-automated-collections-api adds that column). */
+  const refs = { customerRef: link.customerUsuario, paymentRef: payment.id };
 
+  /* consta-api-merge D7: the receipt door names the proof's key in the
+     product's own bucket; the engine reads the bytes itself and signs a
+     short-lived link (D12) only for what the provider must read. */
   const request: ConstaRequest = crossCheck
     ? {
-        /* D12: a short-lived signed URL, never the bucket itself */
-        receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
+        receipt: { proofKey: payment.proofKey ?? "" },
         beneficiary,
         providerOcr: true,
         ...refs,
@@ -289,9 +297,7 @@ export async function runValidation(
           ...refs,
         }
       : {
-          /* D12: what Consta receives is a short-lived signed URL, never
-             the bucket itself */
-          receiptUrl: await signedProofUrl(env, payment.proofKey ?? "", now),
+          receipt: { proofKey: payment.proofKey ?? "" },
           beneficiary,
           ...refs,
         };
@@ -315,15 +321,17 @@ export async function runValidation(
     .where(eq(payments.id, payment.id));
 
   let verdict;
-  /* payments-and-classes D7/D8: the business's own key when it exists —
-     so the refs above accumulate history in the right tenant's chains
-     (trust-layer D2 keys them by (apiKeyId, customerRef)) — and the
-     platform's until the backfill lands one. */
-  const constaKey = business.constaApiKey ?? env.CONSTA_API_KEY;
+  /* consta-api-merge D3: the business is the identity — the refs above
+     accumulate history in this tenant's chains because the engine
+     writes the row under `business_id` (payments-and-classes D7's key
+     per business existed only to reach the same attribution over a
+     wire). D6/FR-011: every engine failure still rides the schedule,
+     whether or not waiting can help; the row keeps the engine's own
+     code so the ISP can see which it was. */
   try {
-    verdict = await new Consta(env.CONSTA_BASE_URL, constaKey).validate(request);
+    verdict = await consta(env, db, { businessId: business.id }).validate(request);
   } catch (e) {
-    const code = e instanceof ConstaError ? e.code : "CONSTA_UNAVAILABLE";
+    const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
     console.error("consta validation failed:", code);
     return retryLater(code);
   }

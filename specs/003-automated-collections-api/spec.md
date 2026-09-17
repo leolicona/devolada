@@ -111,6 +111,17 @@ gets told.
   unavailable as it does today, and the panel shows it as a platform notice.
   Only what the business can fix — CLABE or bank — is still a refusal that
   names the missing piece. (FR-009, US1 scenarios 7 and 12)
+- Q: What should the reconciliation history promise about money that arrived
+  in the business's account but matched no payment link? → **A: Narrow the
+  promise.** Devolada can only reconcile transfers that were explicitly
+  entered and validated before Banxico — by the payer on the payment page, or
+  by the business's own staff uploading the voucher — and the reference says
+  plainly that the history is not a bank feed. Money validated but applied to
+  no link is visible, marked unapplied. The manual operations around it —
+  receiving a voucher by chat, searching or editing a link, reassigning an
+  orphan transfer from the panel — belong to the administrative UI and the
+  customer-service operation, and are an independent feature so this API's
+  scope does not inflate. (FR-022, US4 scenario 4, Assumptions)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -312,9 +323,12 @@ exactly once across the pages, in a stable order.
 3. **Given** a date range expressed in days, **When** the business is in
    `America/Mexico_City`, **Then** "Tuesday" means Tuesday in the business's
    timezone and never the caller's or the server's.
-4. **Given** a transfer that arrived but matched no link, **When** the business
-   pulls its history, **Then** that money is visible too, marked as not applied
-   to any customer, so the books can be squared.
+4. **Given** a transfer that was validated before Banxico but applied to no
+   link — the link had closed, or the ask was zero — **When** the business
+   pulls its history, **Then** that money is visible too, marked as not
+   applied to any customer, so the books can be squared; and a deposit nobody
+   ever entered in Devolada is not in the history, because Devolada never saw
+   it.
 
 ---
 
@@ -353,9 +367,14 @@ exactly once across the pages, in a stable order.
 - **The credential is revoked while links are live.** The API stops answering
   immediately. Links already in a customer's hands keep working — the business
   asked for that money and the payer must not meet a dead page.
-- **A transfer arrives that matches no link at all.** The money is real and
-  already in the business's account. It appears in the history as unapplied, and
-  the caller is told, so it can be chased rather than discovered a month later.
+- **A validated transfer applies to no link.** The money is real and already
+  in the business's account; the link had closed, or the ask was zero. It
+  appears in the history as unapplied, and the caller is told, so it can be
+  chased rather than discovered a month later.
+- **A deposit reaches the business's account and nobody enters it in
+  Devolada.** Devolada has no bank feed and never learns of it. It is absent
+  from the history, and the reference says so; reassigning such an orphan
+  from the panel is a separate feature.
 - **A test-mode payment reaches a business's real reconciliation.** It must not.
   Test records live apart from real ones everywhere they could be counted: the
   history, the panel totals, the fees.
@@ -457,8 +476,12 @@ exactly once across the pages, in a stable order.
   range, in a stable order, in pages, with every payment appearing exactly once
   across the pages.
 - **FR-021**: A date range MUST be interpreted in the business's timezone.
-- **FR-022**: A transfer that matched no link MUST be readable in the history,
-  marked as unapplied.
+- **FR-022**: A transfer that Devolada validated before Banxico but applied to
+  no link — the link had closed, or the ask was zero — MUST be readable in the
+  history, marked as unapplied. The history covers only transfers explicitly
+  entered and validated through Devolada, by the payer or by the business's
+  staff; it is not a feed of the business's bank account, and the published
+  reference MUST say so.
 - **FR-023**: Asking about something that belongs to another business MUST be
   answered as not found.
 
@@ -654,6 +677,11 @@ is this feature's real work, and `/speckit-plan` owns how it is done.
   addresses, per-event subscriptions, and replaying arbitrary history are
   deliberately out of scope. Re-sending a *failed* delivery is in scope (FR-041);
   it is what makes a fixed endpoint recoverable.
+- Reconciliation covers what Devolada validated. Manual customer-service work
+  around a transfer — receiving a voucher by chat, searching or editing a
+  link, reassigning an orphan transfer to a customer from the panel — is
+  administrative UI, specified as an independent feature so this API's scope
+  does not inflate.
 - Webhooks are outbound only. Devolada never accepts an inbound call that moves
   money or changes a verdict.
 - The panel remains the business's own surface: everything the API can do, a

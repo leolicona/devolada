@@ -428,8 +428,11 @@ promises full bank reconciliation — a different product, needing bank
 connectivity Devolada does not have. Better to narrow the promise here than to
 ship an endpoint a finance person will quietly mistrust.
 
-**Spec follow-up**: FR-022's wording should be amended to "a validated transfer
-that was not applied". Raised with the developer rather than edited silently.
+**Spec follow-up**: raised with the developer and settled on 2026-09-17 — FR-022
+now promises only what Devolada validated, names the two causes, and requires
+the reference to say the history is not a bank feed. The manual operations
+around an orphan deposit are an independent feature by the developer's
+decision.
 
 ---
 

@@ -195,7 +195,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 - [ ] T069 [P] Add the payer's closed and expired states to `tests/e2e/contrast.spec.ts` — real contrast in both themes, 360/768/1280, no horizontal scroll (constitution IV and VI)
 - [ ] T070 [P] Extend `apps/api/src/routes/dev.ts` so `/dev/seed` can mint a credential and a test credential for the demo business, making the quickstart runnable in one step
 - [ ] T071 Update `.dev.vars` documentation and `apps/api/src/env.ts` comments for any new binding, each saying what "unset" means (constitution VIII) — `WEBHOOK_SIGNING_KEYS` unset → deliveries are recorded but never attempted, `SIGNING_KEY_MISSING` on the row, empty JWKS (research D10)
-- [ ] T072 Amend FR-022 in `specs/003-automated-collections-api/spec.md` to "a validated transfer that was not applied", per research D16 — raise it with the developer first; the current wording promises bank reconciliation the product cannot do
+- [x] T072 **Done 2026-09-17** — FR-022 amended with the developer in the clarification session, per research D16: the history covers only transfers validated through Devolada, the reference says it is not a bank feed, and the manual operations around an orphan deposit are an independent feature
 - [ ] T073 Run the full gate in order: `node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm e2e`
 - [ ] T074 Walk `specs/003-automated-collections-api/quickstart.md` end to end against a locally running stack and fix anything it gets wrong
 - [ ] T075 Run `/speckit-analyze` and resolve every CRITICAL finding

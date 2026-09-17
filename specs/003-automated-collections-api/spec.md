@@ -64,6 +64,17 @@ gets told.
   polling-only — polling exists as the safety net underneath (US3), never as the
   mechanism. (FR-012 – FR-018, FR-038 – FR-041)
 
+### Session 2026-09-17
+
+- Q: Which rule should decide what the webhook announces: every state a
+  payment enters, or only the start of validation plus the verdict? → **A:
+  Every state the payment enters is announced, named with the payment
+  record's own status word.** First when the customer's receipt is accepted
+  and validation begins (`validating`), `queued_for_credit` if the business's
+  validation credit is paused, then the verdict. One rule, no exceptions, so
+  a state added later fits it instead of breaking an integration.
+  (FR-013, US2 scenario 10)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - The caller's own system creates the payment link (Priority: P1)
@@ -127,11 +138,14 @@ nothing from the other stories.
 
 ### User Story 2 - The webhook tells the caller the transfer was validated (Priority: P2)
 
-The business registers one address where Devolada should announce outcomes. When
-a payment reaches its verdict, Devolada calls that address with what happened:
-which customer reference, how much arrived, whether it matched what was asked,
-and the folio. The caller's system does the rest on its own — marks the invoice
-paid, opens the gym door, thanks the customer — without anybody watching.
+The business registers one address where Devolada should announce what happens
+to a payment. Devolada calls that address every time the payment enters a new
+state: first when the customer's receipt is accepted and validation begins, so
+the caller's system knows a claim exists before the money is proven; then at
+the verdict, with what happened — which customer reference, how much arrived,
+whether it matched what was asked, and the folio. The caller's system does the
+rest on its own — marks the invoice paid, opens the gym door, thanks the
+customer — without anybody watching.
 
 The message is signed, so the caller can prove it came from Devolada. It carries
 its own identity, so a repeat is recognisable. A delivery that fails is retried
@@ -179,6 +193,11 @@ an error.
 9. **Given** a confirmed payment on an API link for a business that has WispHub
    connected, **When** the verdict lands, **Then** the webhook is sent and
    **nothing at all** is written to WispHub.
+10. **Given** a customer who submits a receipt on an API link and the receipt
+    is accepted, **When** validation begins, **Then** the address is called
+    with the `validating` state, the customer reference and the payment
+    identifier, before any verdict exists — and later the verdict arrives as
+    its own message for the same payment identifier.
 
 ---
 
@@ -332,10 +351,13 @@ exactly once across the pages, in a stable order.
 
 - **FR-012**: A business MUST be able to register one address to receive outcome
   webhooks, and to change or remove it.
-- **FR-013**: The system MUST announce every payment verdict on an API-created
-  link — confirmed, partial, arriving against no debt, never validated, or
-  superseded by a corrected attempt — naming the outcome with the payment
-  record's own status word so the caller's system can branch on it.
+- **FR-013**: The system MUST announce every state a payment on an API-created
+  link enters, naming it with the payment record's own status word so the
+  caller's system can branch on it: `validating` when the customer's receipt
+  is accepted and validation begins, `queued_for_credit` when the business's
+  validation credit is paused, and every verdict — confirmed, partial,
+  arriving against no debt, never validated, or superseded by a corrected
+  attempt. One rule, no exceptions.
 - **FR-014**: Every webhook MUST carry the customer reference, the payment
   identifier, the amount asked, the amount received, the match result, the folio
   when there is one, the verdict moment, and its own event identity.

@@ -97,6 +97,13 @@ gets told.
   ("Panel" / "API"), an API row showing the caller's reference where a panel
   row shows the usuario, and search covering that reference. WispHub-specific
   copy appears only on panel rows. (FR-011, US1 scenario 11)
+- Q: Which webhook delivery should a payment's "did the thing after the money
+  happen?" outcome reflect, now that one payment produces several deliveries?
+  → **A: The verdict's delivery only.** Pre-verdict deliveries never touch
+  that outcome; their failures are visible in the delivery record and on the
+  panel's health line, where endpoint trouble belongs. (FR-026)
+
+## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - The caller's own system creates the payment link (Priority: P1)
 
@@ -442,7 +449,10 @@ exactly once across the pages, in a stable order.
   reason a developer can branch on, and a caller MUST be able to tell "retry
   this" from "fix your request".
 - **FR-026**: The system MUST keep a record of every webhook attempt and its
-  result, so a disagreement between the two systems can be settled.
+  result, so a disagreement between the two systems can be settled. A
+  payment's own after-money outcome — done, queued or failed — reflects the
+  verdict's delivery only; a delivery announcing an earlier state that fails
+  is visible in that record and in the panel, never on the payment's outcome.
 
 **Link lifecycle** *(Q1 → both kinds)*
 
@@ -493,8 +503,10 @@ exactly once across the pages, in a stable order.
   single delivery. A retired key MUST stay verifiable for as long as a message
   signed with it can still arrive. The business never holds, stores or rotates
   a signing secret.
-- **FR-040**: Every webhook MUST carry the moment of its verdict, so a caller
-  that receives two messages out of order can still tell which is newer.
+- **FR-040**: Every webhook MUST carry the moment of the state it announces,
+  so a caller that receives two messages for one payment out of order can
+  still tell which is newer. The verdict moment travels on the verdict
+  message; a message before the verdict carries the moment its state began.
 - **FR-041**: A business MUST be able to ask for a failed delivery to be sent
   again once its endpoint is fixed, and the re-sent message MUST carry the same
   event identity as the attempts that failed.

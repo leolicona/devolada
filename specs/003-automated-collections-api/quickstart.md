@@ -10,9 +10,8 @@ match the spec's acceptance scenarios.
 ```sh
 pnpm install
 pnpm --filter @devolada/api db:migrate:local
-pnpm --filter @devolada/api dev            # 8787
-pnpm --filter @devolada/consta dev         # 8788, the validation Worker
-pnpm --filter @devolada/consta sandbox     # apiCEP mock — no provider token needed
+pnpm --filter @devolada/api dev            # 8787 — the API and, inside it, the validation engine
+pnpm --filter @devolada/api sandbox        # 8789, apiCEP mock — no provider token needed
 pnpm --filter @devolada/admin dev          # 5174, to issue the credential
 pnpm --filter @devolada/pago dev           # 5175, the payer's page
 ```

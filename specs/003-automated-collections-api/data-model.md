@@ -65,10 +65,13 @@ production archives a D1 export before migrating.
 | `is_test` | boolean | **new**, not null, default false — D12 |
 
 `action_outcome` gains no new value. An API payment's mapped action *is* the
-webhook, so it reads `done` when the webhook was accepted, `queued` while it is
-being retried, `failed` when the schedule is spent. That keeps one vocabulary for
-"did the thing after the money happen?" across both channels
-(integrations-hub D7's generalisation, used as intended).
+**verdict's** webhook, so it reads `done` when that delivery was accepted,
+`queued` while it is being retried, `failed` when the schedule is spent. The
+deliveries announcing earlier states (`validating`, `queued_for_credit`) never
+write this column: their failures live on `webhook_deliveries` and on the
+panel's health line (clarified 2026-09-17). That keeps one vocabulary for "did
+the thing after the money happen?" across both channels (integrations-hub D7's
+generalisation, used as intended).
 
 ---
 

@@ -7,9 +7,9 @@
 ## Summary
 
 Give the collection loop to the business's own software: it creates a payment
-link through an API, is told by signed webhook the moment Banxico validates the
-transfer, can ask about any payment at any time, and can pull its received
-transfers to reconcile.
+link through an API, is told by signed webhook when a customer's proof is
+accepted and again the moment Banxico validates the transfer, can ask about
+any payment at any time, and can pull its received transfers to reconcile.
 
 The approach rests on one finding from Phase 0. **A business cannot collect by
 SPEI today without a WispHub key** — not because the money needs it, but because
@@ -24,7 +24,7 @@ duplicating it, and add a webhook queue shaped exactly like the reconnection
 queue that already works. The payer's page is not touched at all — an API link
 produces the same `LinkStatusResponse` it already renders.
 
-Full reasoning and alternatives: [research.md](./research.md) (D1–D16).
+Full reasoning and alternatives: [research.md](./research.md) (D1–D17).
 
 ## Technical Context
 
@@ -44,7 +44,7 @@ Full reasoning and alternatives: [research.md](./research.md) (D1–D16).
 
 **Constraints**: no new Worker trigger (constitution); no new stack element; integer cents end to end; the payer's verdict never waits on a webhook (FR-017)
 
-**Scale/Scope**: ~8 new endpoints, 5 new tables, 3 changed tables, 2 panel screens, 1 new payer state. Pilot scale — tens of businesses, thousands of links
+**Scale/Scope**: 9 new endpoints (8 under `/v1`, plus the public JWKS), 5 new tables, 3 changed tables, 2 new panel screens and 1 changed (the links screen serves both channels), 1 new payer state. Pilot scale — tens of businesses, thousands of links
 
 ## Constitution Check
 
@@ -52,7 +52,7 @@ Full reasoning and alternatives: [research.md](./research.md) (D1–D16).
 
 | Principle | Gate | Verdict |
 | --- | --- | --- |
-| **I. Spec-driven, every decision cited** | Spec committed before code; every non-obvious rule cites `automated-collections-api D<n>` | **PASS** — D1–D16 in research.md, each with rationale and rejected alternatives |
+| **I. Spec-driven, every decision cited** | Spec committed before code; every non-obvious rule cites `automated-collections-api D<n>` | **PASS** — D1–D17 in research.md, each with rationale and rejected alternatives |
 | **II. Money law** | Integer cents end to end; no float; business timezone owns "today" | **PASS** — `askCents`, `askedCents`, `receivedCents`; `from`/`to` resolved in the business's timezone (FR-021); no provider decimals enter this feature |
 | **III. One contract, pure routers** | `routes/<area>/{index,handler,schema}.ts`; schema exported and reused; one envelope | **PASS with one extension** — `routes/v1/<area>/…`, exported as `./v1-schema`. The envelope carries `retryable`, as Consta's does; logged below |
 | **IV. Tests on the real runtime** | workerd + real D1, no database mocks; providers intercepted at their real origin | **PASS** — webhook destinations intercepted with `fetchMock`; `assertNoPendingInterceptors` is how "nothing reached WispHub" (FR-029) is proven |
@@ -94,7 +94,7 @@ a MINOR amendment (guidance widened, no principle removed or redefined).
 specs/003-automated-collections-api/
 ├── plan.md              # this file
 ├── spec.md
-├── research.md          # D1–D16
+├── research.md          # D1–D17
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
@@ -130,6 +130,9 @@ apps/api/src/
 ├── db/schema.ts                     # CHANGED — see data-model.md
 └── index.ts                         # CHANGED — mount /v1, exclude from CORS, add the sweep
 
+apps/admin/src/features/links/
+└── LinksScreen.tsx                 # CHANGED — both channels in one list, channel badge, reference search (FR-011)
+
 apps/admin/src/features/integrations/
 ├── ApiScreen.tsx                   # NEW — credentials (FR-001, FR-003, FR-004)
 └── WebhookScreen.tsx               # NEW — address, delivery health, where the keys are (FR-018)
@@ -137,8 +140,11 @@ apps/admin/src/features/integrations/
 apps/pago/                          # UNCHANGED except one new state's copy (D6)
 
 apps/api/test/
+├── collections-api-schema.test.ts  # US1 — the migration's invariants
+├── collections-api-channel.test.ts # US1 — the gate split
 ├── collections-api-links.test.ts   # US1
 ├── collections-api-webhook.test.ts # US2
+├── collections-api-no-wisphub.test.ts # US2 — FR-029 proven by assertNoPendingInterceptors
 ├── collections-api-verify.test.ts  # US3
 ├── collections-api-transfers.test.ts # US4
 └── collections-api-test-mode.test.ts # FR-034, FR-035

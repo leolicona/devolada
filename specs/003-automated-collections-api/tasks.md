@@ -32,7 +32,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 - [x] T001 **Done on `main`** — the constitution's opening sentence was amended via `/speckit-constitution` as v1.2.0 on 2026-09-12 (PR #197, landed through #199), with the developer's wording *"Devolada lets Mexican businesses collect payments by SPEI, with dedicated downstream automation for ISPs"*, and v1.3.0 (PR #200) followed on 2026-09-16 with the Principle V credential rule D11 relies on. Both Sync Impact Reports are in `.specify/memory/constitution.md`. Nothing below was blocked by Governance any more once this branch merged `main` on 2026-09-17; before implementing, confirm `.specify/memory/constitution.md` still reads version 1.3.0 or later
 - [ ] T002 Add the `./v1-schema` export to `apps/api/package.json` so the panel and the stubs import the contract from one place (constitution III)
 - [ ] T003 Create the pure router skeleton in `apps/api/src/routes/v1/index.ts` and mount it in `apps/api/src/index.ts`, **excluded from the CORS allow-list** — `/v1` is server-to-server (research D1)
-- [ ] T004 [P] Pin the webhook test destination origin in `apps/api/vitest.config.ts`, beside the existing WispHub and Resend pins, so a developer's `.dev.vars` can never redirect a delivery out of the suite (constitution IV)
+- [ ] T004 [P] Pin the webhook test destination origin and a fixed `WEBHOOK_SIGNING_KEYS` test key pair in `apps/api/vitest.config.ts`, beside the existing WispHub and Resend pins, so a developer's `.dev.vars` can never redirect a delivery out of the suite or swap the key the tests verify against (constitution IV, research D10)
 
 ---
 
@@ -54,7 +54,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 - [ ] T011 [P] Implement `dk_` key generation, SHA-256 hashing and the key tail in `apps/api/src/api-clients/credentials.ts`, mirroring `apps/consta/src/auth/api-key.ts` and citing `automated-collections-api D11` plus the comment on why ours is hashed while the provider keys are not
 - [ ] T012 [P] Implement credential reads and writes in `apps/api/src/api-clients/store.ts` — issue, list with tails, revoke by timestamp, touch `last_used_at`
 - [ ] T013 Implement `requireApiCredential` in `apps/api/src/routes/v1/middleware.ts`: resolve the credential to exactly one business, refuse missing/unknown/revoked without revealing anything (FR-005), refuse a suspended business (FR, research D15), and set the business and the test flag on the context
-- [ ] T014 [P] Implement the per-business minute-bucket rate limit in `apps/api/src/routes/v1/middleware.ts` over `rate_counters`, answering `RATE_LIMITED` with how long to wait (FR-024, research D13)
+- [ ] T014 [P] Implement the per-business minute-bucket rate limit in `apps/api/src/routes/v1/middleware.ts` over `rate_counters`, refusing the request that takes a business past **120 in a minute** with `RATE_LIMITED` and `Retry-After` in seconds (FR-024, research D13)
 - [ ] T015 [P] Implement idempotency in `apps/api/src/routes/v1/middleware.ts` over `idempotency_keys`, replaying the first stored response verbatim (FR-008, research D14)
 - [ ] T016 [P] Add the `/v1` envelope helper with `retryable` in `apps/api/src/routes/v1/envelope.ts`, and the error-code union from `contracts/public-api.md`, citing the Complexity Tracking entry that justifies the field
 
@@ -111,22 +111,22 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 - [ ] T037 [P] [US2] Write `apps/api/test/collections-api-webhook.test.ts` (`automated-collections-api US2`) covering spec scenarios 1, 2, 6, 8: every terminal status is announced as `payment.<status>` with the row's own word (`partial`, never `short`; `superseded` included), `validating` and `queued_for_credit` are never announced, the body carries all of FR-014's facts, the signature verifies against the raw body, the event id identifies a repeat, and no address registered means nothing is sent and nothing fails. Run the whole file against a business that has **no integration row at all**, so the seam of T046 is proven to reach every verdict with `integration === null` (research D7)
 - [ ] T038 [P] [US2] Add retry coverage to `apps/api/test/collections-api-webhook.test.ts` for scenarios 3 and 5: a non-2xx widens the wait through `[1, 5, 15, 60, 240]`, the schedule ends in `failed`, and a re-send delivers the same event id and the same body
-- [ ] T039 [P] [US2] Add scenario 4 and 7 coverage to `apps/api/test/collections-api-webhook.test.ts`: a destination that never answers leaves the payment confirmed and the payer's success untouched (FR-017), and a rotation window signs with both secrets so either verifies
+- [ ] T039 [P] [US2] Add scenario 4 and 7 coverage to `apps/api/test/collections-api-webhook.test.ts`: a destination that does not answer within **10 seconds** counts as a failed attempt and leaves the payment confirmed and the payer's success untouched (FR-016, FR-017); and retiring the signing key — a second key active, the first `retiredAt` — signs the next delivery with the new `kid`, keeps both in `/.well-known/jwks.json`, and a verifier holding only the JWKS accepts the delivery before and the one after (FR-039, research D10)
 - [ ] T040 [P] [US2] Write the FR-029 proof in `apps/api/test/collections-api-no-wisphub.test.ts` (`automated-collections-api US2`): a business with WispHub connected **and actions enabled** pays an API link, and `fetchMock`'s `assertNoPendingInterceptors` proves not one WispHub call was made
 - [ ] T041 [P] [US2] Write `apps/admin/test/api-webhook.test.tsx` (`automated-collections-api US2`) covering FR-018: a failing endpoint is visible with its reason, status is icon + text and never colour alone, `axe` passes
 
 ### Implementation for User Story 2
 
 - [ ] T042 [P] [US2] Implement the event payload in `apps/api/src/webhooks/events.ts` — rendered once at enqueue and stored, never re-rendered (research D9) — with the six event types of `contracts/public-api.md` — `payment.<status>` for each terminal `payments.status` (research D17)
-- [ ] T043 [P] [US2] Implement signing in `apps/api/src/webhooks/sign.ts`: `HMAC-SHA256(secret, "<timestamp>.<raw body>")` in hex, one signature per live secret during a rotation window, reusing the WebCrypto shape of `apps/api/src/consta/refs.ts` (research D10)
-- [ ] T044 [US2] Implement `enqueueDelivery` and the sweep `sweepWebhookDeliveries` in `apps/api/src/webhooks/queue.ts`: lease first, the same five waits as `reconnection/queue.ts`, terminal `failed` when spent, and speak only when it did something (research D8)
+- [ ] T043 [P] [US2] Implement signing in `apps/api/src/webhooks/sign.ts`: parse `WEBHOOK_SIGNING_KEYS` (JSON array of private JWKs with `kid`, optional `retiredAt`), sign `"<timestamp>.<raw body>"` with the active key as `ES256` via `crypto.subtle.sign("ECDSA", …)`, base64url without padding, and expose `publicKeySet(now)` returning the JWKS with the active key and every key retired less than 7 days ago; with the secret unset, sign refuses with `SIGNING_KEY_MISSING` and the set is empty (research D10, constitution VIII)
+- [ ] T044 [US2] Implement `enqueueDelivery` and the sweep `sweepWebhookDeliveries` in `apps/api/src/webhooks/queue.ts`: lease first, each attempt under `AbortSignal.timeout(10_000)` so no answer in 10 seconds is a failure like any other (FR-016), the same five waits as `reconnection/queue.ts`, terminal `failed` when spent, `SIGNING_KEY_MISSING` left on the row with a warning once per run when the key is unset, and speak only when it did something (research D8, D10)
 - [ ] T045 [US2] Mount the sweep on the existing every-minute `scheduled` handler in `apps/api/src/index.ts` with `waitUntil` — **no new trigger** (constitution)
 - [ ] T046 [US2] Implement the validation seam in `apps/api/src/direct-payments/validation.ts`: branch on `link.source` immediately after the tracking key is adopted and **before** the `!integration?.apiKey` guard of T018; the API branch settles against `asked_cents` with the business's tolerance, sets `action_outcome`, enqueues the delivery, constructs no WispHub client and reads nothing from `integration`, which is `null` for a business with no integration row (research D7, FR-029). Add a comment at the branch citing `automated-collections-api D7` and saying why the order matters
 - [ ] T047 [US2] Attempt the first delivery inline at the verdict via `waitUntil` in `apps/api/src/direct-payments/validation.ts`, so the payer's verdict never waits on the caller's endpoint (FR-017)
-- [ ] T048 [P] [US2] Define the webhook contract in `apps/api/src/routes/v1/webhook/schema.ts` — register, read, delete, rotate, list deliveries, retry one
+- [ ] T048 [P] [US2] Define the webhook contract in `apps/api/src/routes/v1/webhook/schema.ts` — register (answering `{ url, createdAt }`, no secret), read, delete, list deliveries, retry one — and the JWKS shape for `apps/api/src/routes/v1/well-known/`
 - [ ] T049 [US2] Implement the handler in `apps/api/src/routes/v1/webhook/handler.ts`, refusing a destination that cannot protect the message in transit with `INSECURE_URL` (FR-038)
-- [ ] T050 [US2] Wire the pure router in `apps/api/src/routes/v1/webhook/index.ts`
-- [ ] T051 [P] [US2] Build `apps/admin/src/features/integrations/WebhookScreen.tsx`: the address, the secret shown once on rotation, and delivery health as `StatusBadge` with icon and text
+- [ ] T050 [US2] Wire the pure router in `apps/api/src/routes/v1/webhook/index.ts`, and mount `GET /.well-known/jwks.json` from `apps/api/src/routes/v1/well-known/` **outside** `requireApiCredential` and the rate limit — public, no business data, `Cache-Control: public, max-age=300` (research D10)
+- [ ] T051 [P] [US2] Build `apps/admin/src/features/integrations/WebhookScreen.tsx`: the address, delivery health as `StatusBadge` with icon and text, and one line in es-MX pointing to the published key set — there is no secret to show, and "signing not configured" is a visible state (FR-018, research D10)
 - [ ] T052 [US2] Register the screen in `apps/admin/src/router.tsx` and add its MSW handlers to `apps/admin/test/msw.ts`
 
 **Checkpoint**: US1 and US2 both work. Collections are automatic end to end.
@@ -192,7 +192,7 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 - [ ] T068 [P] Add the expiry sweep for `idempotency_keys` and old `rate_counters` buckets to the existing cron in `apps/api/src/index.ts`, riding the same trigger
 - [ ] T069 [P] Add the payer's closed and expired states to `tests/e2e/contrast.spec.ts` — real contrast in both themes, 360/768/1280, no horizontal scroll (constitution IV and VI)
 - [ ] T070 [P] Extend `apps/api/src/routes/dev.ts` so `/dev/seed` can mint a credential and a test credential for the demo business, making the quickstart runnable in one step
-- [ ] T071 Update `.dev.vars` documentation and `apps/api/src/env.ts` comments for any new binding, each saying what "unset" means (constitution VIII)
+- [ ] T071 Update `.dev.vars` documentation and `apps/api/src/env.ts` comments for any new binding, each saying what "unset" means (constitution VIII) — `WEBHOOK_SIGNING_KEYS` unset → deliveries are recorded but never attempted, `SIGNING_KEY_MISSING` on the row, empty JWKS (research D10)
 - [ ] T072 Amend FR-022 in `specs/003-automated-collections-api/spec.md` to "a validated transfer that was not applied", per research D16 — raise it with the developer first; the current wording promises bank reconciliation the product cannot do
 - [ ] T073 Run the full gate in order: `node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm e2e`
 - [ ] T074 Walk `specs/003-automated-collections-api/quickstart.md` end to end against a locally running stack and fix anything it gets wrong
@@ -244,7 +244,7 @@ Task: "apps/admin/test/api-webhook.test.tsx — failing endpoint visible, axe"
 
 # Then the three independent modules:
 Task: "apps/api/src/webhooks/events.ts — payload frozen at enqueue"
-Task: "apps/api/src/webhooks/sign.ts — HMAC, both secrets in rotation"
+Task: "apps/api/src/webhooks/sign.ts — ES256 with kid, JWKS from WEBHOOK_SIGNING_KEYS"
 Task: "apps/api/src/routes/v1/webhook/schema.ts — the contract"
 ```
 

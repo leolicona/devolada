@@ -96,8 +96,9 @@ Expect (scenarios 1, 2):
 
 - the delivery arrives within seconds, carrying `customerRef`, `askedCents`,
   `receivedCents`, `match`, `folio`, `confirmedAt` and `eventId`;
-- `HMAC-SHA256(secret, "<Devolada-Timestamp>.<raw body>")` equals the hex in
-  `Devolada-Signature`;
+- `Devolada-Signature` verifies as `ES256` over
+  `"<Devolada-Timestamp>.<raw body>"` against the key in
+  `GET $API/.well-known/jwks.json` whose `kid` equals `Devolada-Key-Id`;
 - delivering the same event twice is recognisable by `eventId` alone.
 
 **Retries** (scenario 3): make the listener answer 500. Watch the attempt count
@@ -106,12 +107,24 @@ clock in tests rather than waiting five hours by hand. After the schedule is
 spent the delivery is `failed` and the panel's health line says so.
 
 **Re-send** (scenario 5): fix the listener, then
-`POST /v1/webhook/deliveries/:id/retry`. Same `eventId`, same body, same
-signature.
+`POST /v1/webhook/deliveries/:id/retry`. Same `eventId`, same body; the
+signature is fresh, under the key active now.
 
-**Rotation** (scenario 7): `POST /v1/webhook/rotate-secret`, then confirm the
-next delivery carries two `v1=` signatures and that each verifies under one of
-the secrets.
+**Key retirement** (scenario 7): in `.dev.vars`, add a second key to
+`WEBHOOK_SIGNING_KEYS` and give the first one a `retiredAt`. Restart, deliver
+again, and confirm the new delivery names the new `kid`, that the JWKS still
+lists both, and that a listener verifying against the JWKS accepts both the
+old delivery and the new one without having changed anything.
+
+To mint a key for `.dev.vars` (Node 22, no dependency):
+
+```sh
+node -e 'crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]).then(async k=>console.log(JSON.stringify([{...await crypto.subtle.exportKey("jwk",k.privateKey),kid:"dev-1"}])))'
+```
+
+**Timeout** (scenario 4): make the listener sleep 15 seconds before answering.
+The attempt fails at 10, the payment is still `confirmed`, and the payer's
+page still shows success.
 
 **Nothing reaches WispHub** (scenario 9): connect WispHub with actions enabled,
 pay an API link, and assert zero WispHub calls. In the API suite this is the

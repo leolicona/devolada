@@ -212,6 +212,13 @@ both need the attempt history, and FR-017 forbids the payment waiting on it).
 **Backoff**: `[1, 5, 15, 60, 240]` minutes — the same five waits the reconnection
 queue uses, so the product has one retry rhythm rather than two to explain.
 
+**Timeout** (set by the developer, 2026-09-17): an attempt waits **10 seconds**
+for a `2xx`, via `AbortSignal.timeout`, and no answer counts as a failure like
+any other. Ten seconds is generous for an endpoint that only records an event,
+and short enough that one dead destination cannot hold the every-minute sweep
+past its own cadence with the whole schedule in flight. FR-016 carries the
+number.
+
 ---
 
 ## D9 — The payload is frozen when the delivery is enqueued
@@ -222,28 +229,70 @@ queue uses, so the product has one retry rhythm rather than two to explain.
 `integrations/dispatch.ts` — "the policy may move; the record must not". A retry
 four hours later must deliver what the verdict said, not what the row looks like
 now. It also makes FR-041 (re-send after a fixed endpoint) trivially correct: the
-re-sent message is byte-identical, so its signature and event id still hold.
+re-sent message is byte-identical, so its event id still holds; the signature
+is computed at send time with the key active then (D10).
 
 ---
 
-## D10 — Signature: HMAC-SHA256 over `timestamp.body`, both secrets during rotation
+## D10 — Asymmetric signatures: ES256 with a published key set, never a shared secret
 
-**Decision**: each delivery carries the event id, a timestamp, and
-`HMAC-SHA256(secret, "<timestamp>.<raw body>")` in hex. During a rotation window
-the header carries **one signature per live secret**.
+**Decision** (the developer's, 2026-09-17, replacing the HMAC design): every
+delivery is signed with Devolada's **own private key** — ECDSA P-256 with
+SHA-256, `ES256` — over `"<timestamp>.<raw body>"`, and carries the key's
+`kid`. The public keys are published as a JSON Web Key Set at
+`GET /.well-known/jwks.json` on the API origin. One key set for the whole
+platform; the business holds no secret at all.
 
-**Rationale**: the timestamp inside the signed string is what stops a captured
-delivery being replayed later; signing the raw body is what lets the caller
-verify before parsing. The repo already has this exact WebCrypto shape in
-`consta/refs.ts`, so there is one HMAC idiom rather than two.
+**Rationale**: with a shared HMAC secret, anyone who holds it can mint a
+"confirmed" webhook — the business's own staff, a contractor, a compromised
+server, a leaked `.env`. The business's system would credit a customer on a
+message it forged itself, and Devolada could not tell. With a private key
+that never leaves Devolada, proof of origin means what it says. It also
+removes an entire surface: no secret shown once, no per-business rotation
+endpoint, no rotation window to explain, nothing for the panel to hide.
+The JWKS shape is what every JOSE library already reads, and ES256 is the
+algorithm every JWT verifier ships with, so a gym's developer verifies with
+the library they already have rather than with a recipe from our reference.
 
-Two signatures is what makes FR-039 honest: a caller who has updated only one
-side of the rotation still verifies every message, so no delivery is lost to a
-half-finished rotation.
+**Where the private key lives**: the Worker secret `WEBHOOK_SIGNING_KEYS`, a
+JSON array of private JWKs each with a `kid` and an optional `retiredAt`. The
+one without `retiredAt` is active; the others are retired and kept so their
+public halves stay published. Secrets move by `wrangler secret put` after the
+deploy (TD-011), so retiring a key is a deploy, behind the same gate as every
+other secret — which is right for a key whose compromise would touch every
+business at once. Never a D1 row: a private key is not a credential the
+product sends to a provider, and the Principle V rule for those does not
+cover it. Signing uses WebCrypto (`crypto.subtle.sign("ECDSA", …)`), native
+in workerd, no dependency.
 
-**Alternatives rejected**: signing the parsed JSON (key order is not stable, so
-the caller cannot reproduce it); a shared bearer token in a header (proves the
-sender knew a secret, not that *this message* is unaltered).
+**Retiring a key**: add the new key as active and mark the old one retired.
+Devolada signs only with the active key from that moment; a re-send under
+FR-041 is re-signed with it too, same event id, same body (D9). The retired
+key stays in the JWKS for **7 days** after `retiredAt` — the retry schedule
+ends 5 h 21 min after the first attempt, and a caller that caches the set for
+five minutes needs the old `kid` to keep resolving well past that. Seven days
+is the safe margin, chosen here rather than measured; a caller that meets an
+unknown `kid` re-fetches the set once, so even that margin is belt and braces.
+Nothing on the business's side changes, which is what FR-039 now promises.
+
+**What "unset" means** (constitution VIII): with `WEBHOOK_SIGNING_KEYS`
+absent, outcomes are still recorded and deliveries still enqueued, but no
+attempt is made — an unsigned webhook would break FR-015. Each such row
+carries `last_error = SIGNING_KEY_MISSING`, the sweep warns once per run, the
+panel's health line says signing is not configured, and the JWKS answers an
+empty `keys` array. Local dev and the test layer plant a fixed key pair, the
+tests in `vitest.config.ts` so `.dev.vars` can never swap it.
+
+**Alternatives rejected**: HMAC-SHA256 with a per-business secret and two
+signatures during a rotation window (the design this replaces — cheap to
+verify, but the forgery problem above, plus a secret to show once, store,
+rotate and explain); Ed25519 (`EdDSA`) — smaller and faster, but PHP and
+older Java verifiers need an extra library where ES256 needs none, and the
+callers are businesses whose stacks we do not choose; a per-business key pair
+(no benefit — the business verifies, it never signs — and a key set to
+publish per tenant); signing the parsed JSON (key order is not stable, so the
+caller cannot reproduce it); a bearer token in a header (proves the sender
+knew a secret, not that *this message* is unaltered).
 
 ---
 
@@ -299,7 +348,12 @@ a rule to remember at 22 call sites.
 ## D13 — Rate limiting by D1 counters, not a new binding
 
 **Decision**: a `rate_counters` table keyed by business and minute bucket; the
-sweep deletes old buckets.
+sweep deletes old buckets. The budget is **120 requests per minute per
+business**, every `/v1` endpoint counted together (set by the developer,
+2026-09-17). The refusal is `RATE_LIMITED` with `Retry-After` in seconds — the
+rest of the current minute — so a caller can tell a limit from an outage
+(FR-024). Two a second is far above what a billing run needs and far below
+what a looping integration would cost the platform.
 
 **Rationale**: the repo's existing budgets (`HOURLY_ATTEMPT_BUDGET`,
 `UPLOAD_HOURLY_BUDGET`) count rows in D1 over a window, so this is the house

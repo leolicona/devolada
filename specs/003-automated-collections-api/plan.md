@@ -114,13 +114,14 @@ apps/api/src/
 │   ├── payment-links/{index,handler,schema}.ts
 │   ├── payments/{index,handler,schema}.ts       # verify + transfers
 │   ├── webhook/{index,handler,schema}.ts
-│   └── test-mode/{index,handler,schema}.ts      # D12
+│   ├── test-mode/{index,handler,schema}.ts      # D12
+│   └── well-known/{index,handler}.ts            # GET /.well-known/jwks.json, public (D10)
 ├── api-clients/                    # NEW
 │   ├── credentials.ts               # dk_ keys, SHA-256 (D11)
 │   └── store.ts
 ├── webhooks/                       # NEW
 │   ├── events.ts                    # payload rendered once (D9)
-│   ├── sign.ts                      # HMAC-SHA256, both secrets in rotation (D10)
+│   ├── sign.ts                      # ES256 with kid; keys from WEBHOOK_SIGNING_KEYS (D10)
 │   └── queue.ts                     # the sweep (D8)
 ├── direct-payments/
 │   ├── validation.ts                # CHANGED — channel/ask gates (D5), the seam (D7)
@@ -131,7 +132,7 @@ apps/api/src/
 
 apps/admin/src/features/integrations/
 ├── ApiScreen.tsx                   # NEW — credentials (FR-001, FR-003, FR-004)
-└── WebhookScreen.tsx               # NEW — address, rotation, delivery health (FR-018)
+└── WebhookScreen.tsx               # NEW — address, delivery health, where the keys are (FR-018)
 
 apps/pago/                          # UNCHANGED except one new state's copy (D6)
 
@@ -161,7 +162,8 @@ priorities in order.
    payer's page serving an API link and its closed state (D6). Ends with: money
    can be collected through the API, visible in the panel.
 3. **US2, webhooks** — the validation seam (D7), the event payload (D9), signing
-   and rotation (D10), the queue and its sweep (D8), the health screen. Ends
+   and the published key set (D10), the queue and its sweep (D8), the health
+   screen. Ends
    with: the loop closes without a human.
 4. **US3, verify** — payment and customer lookups.
 5. **US4, transfers** — the paged, cursor-stable history.

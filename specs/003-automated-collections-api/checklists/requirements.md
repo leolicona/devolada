@@ -70,9 +70,9 @@ in full. What each answer changed:
   says so as a requirement so no later reading re-opens it.
 - **Webhooks named.** The developer confirmed the delivery mechanism, so US2 is
   titled by it and FR-038 – FR-041 cover what a webhook needs to be depended on:
-  a destination that protects the message, secret rotation with no loss, an
-  orderable verdict moment, and re-sending a failed delivery once an endpoint is
-  fixed.
+  a destination that protects the message, a signing key Devolada can retire
+  with no loss and nothing for the business to do, an orderable verdict
+  moment, and re-sending a failed delivery once an endpoint is fixed.
 
 ### Deliberately not settled here
 

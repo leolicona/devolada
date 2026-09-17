@@ -20,6 +20,9 @@ the Playwright stubs validate against the same definition.
   business's timezone (FR-021).
 - **Idempotency**: any POST accepts `Idempotency-Key`; repeating it replays the
   first response (FR-008).
+- **Limit**: 120 requests per minute per business, every endpoint counted
+  together (FR-024, D13). Past it, `RATE_LIMITED` with a `Retry-After` header
+  in seconds — the rest of the current minute.
 
 ---
 
@@ -133,11 +136,9 @@ Register where outcomes go (FR-012).
 { "url": "https://gym.example/hooks/devolada" }
 ```
 
-Answers `{ url, secret, secretTail, rotatedAt }` — the secret in full **only**
-on the response that creates or rotates it.
-
-`POST /v1/webhook/rotate-secret` opens a rotation window: both secrets sign every
-delivery until the window closes (FR-039).
+Answers `{ url, createdAt }`. There is no secret to copy and nothing to rotate:
+deliveries are signed with Devolada's own key, whose public half is published
+at the JWKS endpoint below (FR-015, FR-039, D10).
 
 `POST /v1/webhook/deliveries/:id/retry` re-sends a failed delivery, same event id
 and same body (FR-041).
@@ -146,6 +147,25 @@ and same body (FR-041).
 
 Refusals: `INSECURE_URL` for anything that cannot protect the message in transit
 (FR-038).
+
+## `GET /.well-known/jwks.json`
+
+Devolada's public signing keys, in the JSON Web Key Set shape every JOSE
+library reads. No credential, no business data, cacheable
+(`Cache-Control: public, max-age=300`).
+
+```jsonc
+{
+  "keys": [
+    { "kty": "EC", "crv": "P-256", "alg": "ES256", "use": "sig",
+      "kid": "2026-09-a", "x": "…", "y": "…" }
+    // a retired key stays listed for 7 days after retirement (D10)
+  ]
+}
+```
+
+One key set for the whole platform, never one per business. Cache it by
+`kid`; when a delivery names a `kid` you do not have, fetch the set again once.
 
 ---
 
@@ -158,13 +178,16 @@ Refusals: `INSECURE_URL` for anything that cannot protect the message in transit
 ```
 Devolada-Event-Id: evt_01J…
 Devolada-Timestamp: 1759999000000
-Devolada-Signature: v1=<hex>, v1=<hex>     // one per live secret during rotation
+Devolada-Key-Id: 2026-09-a                  // the kid in /.well-known/jwks.json
+Devolada-Signature: v1=<base64url>          // ES256 over "<timestamp>.<raw body>"
 Content-Type: application/json
 ```
 
-**Signature**: `HMAC-SHA256(secret, "<timestamp>.<raw body>")`, hex (D10). Verify
-before parsing, compare in constant time, and reject a timestamp older than your
-own tolerance.
+**Signature**: ECDSA P-256 with SHA-256 (`ES256`) over the string
+`"<timestamp>.<raw body>"`, base64url without padding, signature in the raw
+`r || s` form JOSE uses (D10). Verify with the public key whose `kid` matches,
+before parsing the body, and reject a timestamp older than your own tolerance.
+Nothing the business holds can produce this signature.
 
 **Body**
 
@@ -195,12 +218,16 @@ never announced: a webhook says what happened, and nothing has yet.
 
 **What a caller must do**
 
-1. Verify the signature.
+1. Fetch `/.well-known/jwks.json`, pick the key named by `Devolada-Key-Id`,
+   and verify the signature. An unknown `kid` means fetch the set again once;
+   still unknown means reject.
 2. Check `eventId` against what you have already processed. A retry after a
    delivery that actually landed is normal and must not credit a customer twice
    (FR-014, SC-005).
-3. Answer `2xx` quickly. Anything else is retried on
-   `[1, 5, 15, 60, 240]` minutes, then stops and stays readable.
+3. Answer `2xx` within 10 seconds. Anything else, or no answer in time, is
+   retried on `[1, 5, 15, 60, 240]` minutes, then stops and stays readable.
+   A re-send is signed with the key active at that moment, so its `kid` may be
+   newer than the first attempt's; its event id and body are the same.
 4. Order by `createdAt`, not arrival (FR-040).
 
 **What Devolada guarantees**: at least once, never exactly once. A payment's
@@ -237,7 +264,7 @@ and from the validation fee (FR-035).
 | `CHANNEL_UNAVAILABLE` | no | the business cannot collect yet; names what is missing |
 | `BUSINESS_SUSPENDED` | no | |
 | `INSECURE_URL` | no | the webhook destination cannot protect the message |
-| `RATE_LIMITED` | **yes** | slow down; the response says for how long |
+| `RATE_LIMITED` | **yes** | more than 120 requests this minute; `Retry-After` says how many seconds to wait |
 | `INTERNAL_SERVER_ERROR` | **yes** | ours, not yours |
 
 Nothing in this surface names a subscriber, a service, a router or WispHub

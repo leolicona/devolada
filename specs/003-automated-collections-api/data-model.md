@@ -99,17 +99,16 @@ One per business (spec assumption).
 | `id` | text | |
 | `business_id` | text → businesses, unique | |
 | `url` | text | must protect the message in transit — FR-038 |
-| `secret` | text | the live signing secret |
-| `previous_secret` | text, null | valid during the rotation window — FR-039 |
-| `secret_rotated_at` | integer ms, null | when the window opened |
 | `consecutive_failures` | integer, default 0 | what the panel's health line reads — FR-018 |
 | `last_failure_at` | integer ms, null | |
 | `last_success_at` | integer ms, null | |
 | `created_at` | integer ms | |
 
-Both secrets are stored in plain text, not hashed: unlike the credential, Devolada
-must *use* this one to sign. Same posture as the WispHub and Consta keys on the
-business row, and the asymmetry is deliberate (D11).
+**No secret on this row.** Deliveries are signed with Devolada's own private
+key, one set for the platform, held in the Worker secret
+`WEBHOOK_SIGNING_KEYS` and never in a business table (D10). The business has
+nothing to store, nothing that can leak, and nothing to rotate; the row is an
+address and its health.
 
 ---
 
@@ -125,6 +124,7 @@ The queue is the row (D8), exactly as the reconnection queue is the payment row.
 | `event_id` | text, unique | what the caller uses to recognise a repeat — FR-014 |
 | `event_type` | text | `payment.<status>` for each terminal `payments.status`: `confirmed`, `partial`, `unapplied`, `invalid`, `expired`, `superseded` — the row's own word, never a synonym (D17) |
 | `payload` | text | the body, rendered once at enqueue and never re-rendered — D9 |
+| `key_id` | text, null | the `kid` that signed the latest attempt, for settling arguments — FR-026, D10 |
 | `status` | `pending` \| `delivered` \| `failed` | |
 | `attempts` | integer, default 0 | |
 | `next_attempt_at` | integer ms, null | null = terminal, or a lease held by a running sweep |
@@ -138,7 +138,7 @@ The queue is the row (D8), exactly as the reconnection queue is the payment row.
 ```
 pending ──delivered (2xx)──────────────► delivered
    │
-   ├──non-2xx / timeout, waits left───► pending, next_attempt_at = now + backoff
+   ├──non-2xx / no answer in 10 s, waits left──► pending, next_attempt_at = now + backoff
    │
    └──schedule spent─────────────────► failed
                                           │
@@ -172,7 +172,7 @@ same rhythm the reconnection queue already uses (D8).
 | column | type | notes |
 | --- | --- | --- |
 | `business_id` + `bucket` | unique together | `bucket` is the minute, as epoch minutes |
-| `count` | integer | |
+| `count` | integer | the request that takes it past 120 is refused — FR-024, D13 |
 
 Old buckets are deleted by the same sweep that expires idempotency keys (D13).
 

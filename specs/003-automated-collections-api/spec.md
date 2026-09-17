@@ -160,8 +160,8 @@ an error.
    delivers, **Then** it retries on a widening schedule, and stops after the
    schedule is spent with the failure visible to the business.
 4. **Given** a receiving address that never answers in time, **When** the
-   delivery times out, **Then** the payment's own record is unaffected — the
-   money stays confirmed and the payer sees success.
+   delivery times out after 10 seconds, **Then** the payment's own record is
+   unaffected — the money stays confirmed and the payer sees success.
 5. **Given** a business that has fixed its endpoint after a run of failures,
    **When** it asks for a failed delivery to be sent again, **Then** it is
    delivered, carrying the same event identity as the attempts that failed.
@@ -169,9 +169,11 @@ an error.
    short, it arrived against no debt, it was never validated), **Then** the
    caller is told about that outcome too, named so its system can tell the
    difference.
-7. **Given** a business rotating the secret that proves origin, **When** the
-   rotation happens between two payments, **Then** no delivery is lost and the
-   caller can verify both the message before and the message after.
+7. **Given** Devolada retiring the key that signs its webhooks and adopting a
+   new one, **When** the change happens between two payments, **Then** no
+   delivery is lost, the business changes nothing on its side, and a caller
+   that verifies against Devolada's published keys accepts both the message
+   before and the message after.
 8. **Given** a business with no receiving address registered, **When** a payment
    is confirmed, **Then** nothing is delivered and nothing fails.
 9. **Given** a confirmed payment on an API link for a business that has WispHub
@@ -268,9 +270,9 @@ exactly once across the pages, in a stable order.
   customer reference — asking again returns the one that exists. Any request
   repeated with the same idempotency key returns the first result. A retried
   request after a network failure can never leave two links chasing one customer.
-- **The receiving address is slow or down.** The webhook waits, retries and
-  eventually gives up; the payment itself is never held back, never rejected, and
-  never re-validated because of it.
+- **The receiving address is slow or down.** The webhook waits 10 seconds,
+  retries and eventually gives up; the payment itself is never held back, never
+  rejected, and never re-validated because of it.
 - **The credential is revoked while links are live.** The API stops answering
   immediately. Links already in a customer's hands keep working — the business
   asked for that money and the payer must not meet a dead page.
@@ -338,10 +340,13 @@ exactly once across the pages, in a stable order.
   identifier, the amount asked, the amount received, the match result, the folio
   when there is one, the verdict moment, and its own event identity.
 - **FR-015**: Every webhook MUST carry proof of origin that the caller can verify
-  without trusting the network.
-- **FR-016**: A failed delivery MUST be retried on a widening schedule, and MUST
-  stop after a bounded number of attempts, leaving the failure visible to the
-  business.
+  without trusting the network, against a public key Devolada publishes — so
+  nothing the business holds, and nothing that could leak from the business,
+  can forge a message.
+- **FR-016**: A delivery that is not answered with success within 10 seconds
+  MUST count as failed. A failed delivery MUST be retried on a widening
+  schedule, and MUST stop after a bounded number of attempts, leaving the
+  failure visible to the business.
 - **FR-017**: No webhook, however slow or however broken its destination, may
   change, delay or reverse the payment's own verdict.
 - **FR-018**: A business MUST be able to see, in the panel, that deliveries are
@@ -362,8 +367,9 @@ exactly once across the pages, in a stable order.
 
 **Behaviour under load and failure**
 
-- **FR-024**: The API MUST limit how often one business may call it, and MUST
-  make a caller that hits the limit able to tell that from an outage.
+- **FR-024**: The API MUST limit one business to 120 requests per minute, and
+  MUST make a caller that hits the limit able to tell that from an outage and
+  know how long to wait.
 - **FR-025**: Every failure MUST be answered with a stable, machine-readable
   reason a developer can branch on, and a caller MUST be able to tell "retry
   this" from "fix your request".
@@ -414,8 +420,11 @@ exactly once across the pages, in a stable order.
 
 - **FR-038**: The system MUST refuse a receiving address that cannot protect the
   message in transit.
-- **FR-039**: A business MUST be able to rotate the secret that proves origin
-  without losing a single delivery.
+- **FR-039**: Devolada MUST be able to retire the key that signs its webhooks
+  and adopt a new one without the business doing anything and without losing a
+  single delivery. A retired key MUST stay verifiable for as long as a message
+  signed with it can still arrive. The business never holds, stores or rotates
+  a signing secret.
 - **FR-040**: Every webhook MUST carry the moment of its verdict, so a caller
   that receives two messages out of order can still tell which is newer.
 - **FR-041**: A business MUST be able to ask for a failed delivery to be sent
@@ -438,8 +447,13 @@ exactly once across the pages, in a stable order.
   to verdict. Gains the caller's reference when it came in through an API link.
 - **Webhook delivery**: one attempt to tell the caller about one verdict, with
   its own event identity, its proof of origin, its attempt count and its result.
-- **Receiving address**: where a business wants its webhooks sent, with the
-  secret used to prove they came from Devolada.
+- **Receiving address**: where a business wants its webhooks sent. It carries
+  no secret: proof of origin comes from Devolada's own key, not from anything
+  the business holds.
+- **Signing key**: Devolada's, one set for the whole platform, never per
+  business. Its public half is published where any caller can fetch it; its
+  private half never leaves Devolada. Retiring one and adopting the next is a
+  platform action the business does not see.
 
 ## Success Criteria *(mandatory)*
 

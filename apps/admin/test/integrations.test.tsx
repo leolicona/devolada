@@ -23,10 +23,11 @@ const wisphub = (over: Record<string, unknown> = {}) => ({
     provisionalReleaseEnabled: false,
     ...over,
   },
+  api: { activeCredentials: 0 },
 });
 
 describe("US-I01 scenario 1: the catalog", () => {
-  it("reads Sin conectar and offers Conectar; the generic card is a dead teaser", async () => {
+  it("reads Sin conectar and offers Conectar; the API card is live and offers Activar (automated-collections-api US1)", async () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.integrations(() => ok(wisphub({ configured: false, keyTail: null, actionsEnabled: false }))),
@@ -35,8 +36,9 @@ describe("US-I01 scenario 1: the catalog", () => {
 
     expect(await screen.findByText("Sin conectar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Conectar" })).toBeInTheDocument();
-    expect(screen.getByText("Integración genérica")).toBeInTheDocument();
-    expect(screen.getByText(/en el futuro/)).toBeInTheDocument();
+    expect(screen.getByText("API de cobros")).toBeInTheDocument();
+    expect(screen.getByText("Sin activar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar" })).toBeInTheDocument();
   });
 
   it("connected reads Conectada", async () => {

@@ -89,11 +89,51 @@ describe("US-D07: the roster hands every customer their link", () => {
     expect(res.status).toBe(401);
   });
 
-  it("503s when the ISP has no WispHub key", async () => {
-    await seedBusiness();
+  it("without a WispHub key the roster answers the business's API links alone — never a refusal (automated-collections-api FR-011)", async () => {
+    const business = await seedBusiness();
+    await drizzle(env.DB).insert(paymentLinks).values({
+      businessId: business.id,
+      token: "tokapi00000000001",
+      source: "api",
+      customerRef: "CLI-4471",
+      askCents: 49900,
+      label: "Ana Ruiz",
+    });
     const res = await search();
-    expect(res.status).toBe(503);
-    expect((await res.json()).error.code).toBe("WISPHUB_NOT_CONFIGURED");
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.complete).toBe(true);
+    expect(data.results).toEqual([
+      expect.objectContaining({
+        channel: "api",
+        wisphubId: null,
+        usuario: null,
+        customerRef: "CLI-4471",
+        label: "Ana Ruiz",
+        askCents: 49900,
+        linkState: "open",
+        name: "Ana Ruiz",
+        phone: null,
+        url: expect.stringContaining("/p/tokapi00000000001"),
+      }),
+    ]);
+    /* the share text names no service: the business may be a gym */
+    expect(decodeURIComponent(data.results[0].waLink)).not.toMatch(/internet/);
+  });
+
+  it("with WispHub connected, panel and API rows share one list, each marked with its channel; a test link never appears", async () => {
+    const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    await drizzle(env.DB).insert(paymentLinks).values([
+      { businessId: business.id, token: "tokapi00000000001", source: "api", customerRef: "CLI-4471", askCents: 49900 },
+      { businessId: business.id, token: "tokapi00000000002", source: "api", customerRef: "CLI-TEST", askCents: 100, isTest: true },
+    ]);
+    mockList([customer()]);
+    const { data } = await (await search()).json();
+    expect(data.results.map((r: { channel: string; name: string }) => [r.channel, r.name])).toEqual([
+      ["api", "CLI-4471"],
+      ["panel", "Janely"],
+    ]);
+    expect(data.results[1]).toMatchObject({ channel: "panel", wisphubId: 6, usuario: "greyes@wifiplus" });
   });
 });
 

@@ -50,6 +50,7 @@ const integrationsFixture = {
     floorCents: 0,
     provisionalReleaseEnabled: false,
   },
+  api: { activeCredentials: 0 },
 } as const;
 
 const settings = settingsResponse.parse({
@@ -137,7 +138,7 @@ describe("US-P04: the admin passes axe on every section", () => {
       handlers.integrations(() => ok(integrationsFixture)),
     );
     renderApp("/integrations");
-    await screen.findByText("Integración genérica");
+    await screen.findByText("API de cobros");
     await expectNoViolations(document.body);
   });
 

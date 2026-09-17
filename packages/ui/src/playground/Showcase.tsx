@@ -58,6 +58,10 @@ const sampleStatuses: Status[] = [
   "disputed",
   "active",
   "suspended",
+  "channelPanel",
+  "channelApi",
+  "credentialActive",
+  "credentialRevoked",
 ];
 
 const ledgerEntries = [

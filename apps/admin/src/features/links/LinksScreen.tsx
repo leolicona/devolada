@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Share2, Link as LinkIcon, AlertCircle, Check, WifiOff } from "lucide-react";
-import { Alert, Button, Card, Input, ListError, Pending, Skeleton } from "@devolada/ui";
+import { Alert, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
 import { api, ApiError } from "@/lib/api";
 import { focusReadOptions } from "@/lib/presence";
 import type { LinksRosterResponse } from "@devolada/api/direct-payments-schema";
@@ -20,7 +20,14 @@ import { useSession } from "../auth/session";
    return to the tab (30-second floor) and nowhere else — it moves when
    the ISP adds a customer, not by the minute, so it carries no heartbeat
    (D4, amended 2026-09-07); a failed background read keeps the rows
-   with a quiet note. */
+   with a quiet note.
+
+   automated-collections-api FR-011 (US1 scenario 11): the same list
+   serves both channels. Every row carries its channel as icon + text
+   ("Panel" / "API"); an API row shows the caller's reference where a
+   panel row shows the usuario, search covers that reference, and copy
+   naming WispHub renders only on panel rows. A business without WispHub
+   sees its API links alone. */
 
 const STALE_MS = 2 * 60_000;
 const PAGE = 50;
@@ -60,15 +67,35 @@ function LinkRow({ row, canOperate }: { row: Row; canOperate: boolean }) {
     copyTimer.current = setTimeout(() => setCopyResult(null), 2000);
   };
 
+  const isApi = row.channel === "api";
+  /* An API row's second line: the reference (when a label heads the
+     row), the ask, and a closed link's state in words */
+  const apiDetail = isApi
+    ? [
+        row.label ? row.customerRef : null,
+        row.askCents !== undefined ? formatMoney(row.askCents) : null,
+        row.linkState === "paid" ? "link pagado" : row.linkState === "expired" ? "link vencido" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
+
   return (
     <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 p-4 sm:flex">
       <div className="min-w-0 sm:flex-1">
-        <span className="block text-sm font-medium">{row.name || row.usuario}</span>
-        {/* a nameless customer must not read their usuario twice */}
-        <span className="block text-sm text-muted-foreground">
-          {row.name ? row.usuario : "Sin nombre en WispHub"}
-          {row.phone ? ` · ${row.phone}` : ""}
+        <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+          <span>{row.name || row.usuario || row.customerRef}</span>
+          <StatusBadge status={isApi ? "channelApi" : "channelPanel"} />
         </span>
+        {isApi ? (
+          apiDetail && <span className="block text-sm text-muted-foreground">{apiDetail}</span>
+        ) : (
+          /* a nameless customer must not read their usuario twice */
+          <span className="block text-sm text-muted-foreground">
+            {row.name ? row.usuario : "Sin nombre en WispHub"}
+            {row.phone ? ` · ${row.phone}` : ""}
+          </span>
+        )}
       </div>
       {/* business-and-memberships D3: sharing is `payments: operate`;
           a viewer sees the customer and nothing to press */}
@@ -136,19 +163,23 @@ export function LinksScreen() {
     if (!q) return all;
     return all.filter(
       (r) =>
-        norm(r.name).includes(q) || norm(r.usuario).includes(q) || (r.phone ?? "").includes(q),
+        norm(r.name).includes(q) ||
+        norm(r.usuario ?? "").includes(q) ||
+        norm(r.customerRef ?? "").includes(q) ||
+        (r.phone ?? "").includes(q),
     );
   }, [roster.data, q]);
   const visible = filtered.slice(0, limit);
 
-  /* The code, not the status: the roster answers 503 both for a missing
-     key (WISPHUB_NOT_CONFIGURED) and for a provider that stalled
-     (WISPHUB_UNAVAILABLE), and only the first one is "conecta tu llave"
-     (found by presence-freshness scenario 5) */
-  const isConfigError = roster.isError && roster.error?.code === "WISPHUB_NOT_CONFIGURED";
-  /* D9: a background failure with rows on screen is a quiet note, never
-     the error block — that one is for a failure with nothing to show */
-  const staleAfterFailure = roster.isError && !!roster.data && !isConfigError;
+  /* automated-collections-api FR-011: a missing WispHub key is no longer
+     a refusal — the roster answers the API links alone — so the only 503
+     left is a provider that stalled (WISPHUB_UNAVAILABLE). D9: a
+     background failure with rows on screen is a quiet note, never the
+     error block — that one is for a failure with nothing to show */
+  const staleAfterFailure = roster.isError && !!roster.data;
+  /* The empty list reads differently for a business that never connected
+     WispHub: its links come from the API, or from nowhere yet */
+  const wisphubConnected = actor?.integrationConfigured ?? true;
 
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
@@ -184,16 +215,6 @@ export function LinksScreen() {
       {/* No page notice for the missing CLABE: the shell's banner already
           says it one screen above (design review identidad-2, should fix 2) */}
 
-      {isConfigError && (
-        <Alert variant="destructive" layout="icon" className="mt-6">
-          <AlertCircle aria-hidden />
-          <span>
-            <strong>Sin conexión a WispHub.</strong> Conecta tu llave en Integraciones para ver a
-            tus clientes y sus links.
-          </span>
-        </Alert>
-      )}
-
       {staleAfterFailure && (
         <p
           role="status"
@@ -204,7 +225,7 @@ export function LinksScreen() {
         </p>
       )}
 
-      {roster.isError && !roster.data && !isConfigError && (
+      {roster.isError && !roster.data && (
         <ListError
           what="los links"
           onRetry={() => roster.refetch()}
@@ -248,7 +269,9 @@ export function LinksScreen() {
           <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
             {q
               ? `Ningún cliente coincide con "${search.trim()}".`
-              : "WispHub no devolvió clientes todavía."}
+              : wisphubConnected
+                ? "WispHub no devolvió clientes todavía."
+                : "Todavía no hay links de pago. Tu sistema puede crearlos desde la API de cobros, o conecta WispHub en Integraciones."}
           </p>
         )}
 
@@ -256,7 +279,7 @@ export function LinksScreen() {
           <Card className="mt-6">
             <ul className="divide-y divide-line-soft">
               {visible.map((row) => (
-                <LinkRow key={row.usuario} row={row} canOperate={canOperate} />
+                <LinkRow key={row.url} row={row} canOperate={canOperate} />
               ))}
             </ul>
           </Card>

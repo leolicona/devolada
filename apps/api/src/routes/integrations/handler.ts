@@ -3,7 +3,20 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { WispHub, WispHubError } from "../../wisphub/client";
 import { integrationOf, upsertIntegration, type Integration } from "../../integrations/store";
-import type { IntegrationsResponse, WisphubPatchRequest, WispHubTestResponse } from "./schema";
+import {
+  issueCredential,
+  listCredentials,
+  revokeCredential,
+  type CredentialSummary,
+} from "../../api-clients/store";
+import { validationAvailable } from "../../direct-payments/validation";
+import type {
+  ApiCredential,
+  IntegrationsResponse,
+  IssueCredentialRequest,
+  WisphubPatchRequest,
+  WispHubTestResponse,
+} from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -47,11 +60,69 @@ async function testKey(apiKey: string, baseUrl?: string): Promise<WispHubTestRes
   }
 }
 
+/* The panel's view of a credential (FR-003): tail, never hash */
+function toCredential(row: CredentialSummary): ApiCredential {
+  return {
+    id: row.id,
+    name: row.name,
+    keyTail: row.keyTail,
+    isTest: row.isTest,
+    lastUsedAt: row.lastUsedAt?.getTime() ?? null,
+    revokedAt: row.revokedAt?.getTime() ?? null,
+    createdAt: row.createdAt.getTime(),
+  };
+}
+
 export async function getIntegrations(c: Ctx) {
   const ctx = businessGuard(c);
   if ("error" in ctx) return ctx.error;
   const integration = await integrationOf(ctx.db, ctx.actor.id);
-  return c.json({ success: true, data: { wisphub: toWisphub(integration) } });
+  const credentials = await listCredentials(ctx.db, ctx.actor.id);
+  const data: IntegrationsResponse = {
+    wisphub: toWisphub(integration),
+    api: { activeCredentials: credentials.filter((row) => row.revokedAt === null).length },
+  };
+  return c.json({ success: true, data });
+}
+
+/* GET /integrations/api (automated-collections-api US1, FR-001/FR-003):
+   the credentials by tail, and the platform's own validation state as a
+   notice the screen words as Devolada's, never as the business's. */
+export async function getApiIntegration(c: Ctx) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const credentials = await listCredentials(ctx.db, ctx.actor.id);
+  return c.json({
+    success: true,
+    data: { credentials: credentials.map(toCredential), validationAvailable: validationAvailable(c.env) },
+  });
+}
+
+/* POST /integrations/api/credentials: the plaintext exists in this one
+   answer and nowhere else (research D11, constitution V). Issuing is
+   self-service — no help from Devolada (FR-001). */
+export async function issueApiCredential(c: Ctx, body: IssueCredentialRequest) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const { credential, plaintext } = await issueCredential(ctx.db, ctx.actor.id, {
+    name: body.name,
+    isTest: body.isTest ?? false,
+  });
+  return c.json({ success: true, data: { credential: toCredential(credential), key: plaintext } }, 201);
+}
+
+/* POST /integrations/api/credentials/:id/revoke (FR-004): immediate —
+   the middleware reads `revoked_at` on every request, so the next call
+   with this key is refused. A credential of another business, or one
+   already revoked, answers NOT_FOUND; nothing about it is revealed. */
+export async function revokeApiCredential(c: Ctx, id: string) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const revoked = await revokeCredential(ctx.db, ctx.actor.id, id, new Date());
+  if (!revoked) return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  const row = (await listCredentials(ctx.db, ctx.actor.id)).find((credential) => credential.id === id);
+  if (!row) return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  return c.json({ success: true, data: { credential: toCredential(row) } });
 }
 
 export async function patchWisphub(c: Ctx, body: WisphubPatchRequest) {
@@ -80,13 +151,15 @@ export async function patchWisphub(c: Ctx, body: WisphubPatchRequest) {
     ? await upsertIntegration(ctx.db, ctx.actor.id, patch)
     : await integrationOf(ctx.db, ctx.actor.id);
 
-  return c.json({
-    success: true,
-    data: {
-      wisphub: toWisphub(integration),
-      ...(test ? { wisphubTest: { ok: test.ok, code: test.code } } : {}),
-    },
-  });
+  /* The panel replaces its cached GET with this answer, so it carries
+     the same shape — the API card's count included */
+  const credentials = await listCredentials(ctx.db, ctx.actor.id);
+  const data: IntegrationsResponse = {
+    wisphub: toWisphub(integration),
+    api: { activeCredentials: credentials.filter((row) => row.revokedAt === null).length },
+    ...(test ? { wisphubTest: { ok: test.ok, code: test.code } } : {}),
+  };
+  return c.json({ success: true, data });
 }
 
 export async function testWisphubKey(c: Ctx, apiKey?: string) {

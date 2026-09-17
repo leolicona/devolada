@@ -1190,3 +1190,77 @@ describe("US-D01: the page is two steps and remembers the moment", () => {
     expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
   });
 });
+
+/* automated-collections-api US1 (scenarios 1, 3, 4; FR-006, FR-031,
+   FR-032): a link the business's own software created renders the same
+   page from its stored ask, and a closed or expired one-time link
+   explains itself in es-MX with no CLABE to transfer to. */
+describe("automated-collections-api US1: an API link on the payer's page", () => {
+  const apiLink = linkStatusResponse.parse({
+    ispName: "Gimnasio Norte",
+    customerName: "Ana Ruiz",
+    concept: "Mensualidad octubre",
+    status: "debt",
+    invoiceCents: 49900,
+    carriedBalanceCents: 0,
+    serviceFeeCents: 1500,
+    totalCents: 51400,
+    speiClabe: "646180157000000004",
+    speiBank: "STP",
+    reference: "CLI-4471",
+    cobros: [],
+  });
+
+  it("renders the ask, the CLABE, the concept and the caller's reference — the same page as any link", async () => {
+    server.use(handlers.link(() => ok(apiLink)));
+    renderPage();
+    expect(await screen.findByText("Gimnasio Norte")).toBeInTheDocument();
+    expect(screen.getByText("Ana Ruiz")).toBeInTheDocument();
+    expect(screen.getByText("Mensualidad octubre")).toBeInTheDocument();
+    expect(screen.getByText("646180157000000004")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
+    /* the reference rides in the concepto, behind the same fold as every
+       other secondary datum */
+    await userEvent.click(screen.getByRole("button", { name: /ver los demás datos/i }));
+    expect(screen.getByText("CLI-4471")).toBeInTheDocument();
+  });
+
+  it("a paid one-time link says it was used and offers no CLABE", async () => {
+    server.use(
+      handlers.link(() => ok(linkStatusResponse.parse({ ispName: "Gimnasio Norte", status: "closed", closedReason: "paid" }))),
+    );
+    renderPage();
+    expect(await screen.findByText(/este link de pago ya fue utilizado/i)).toBeInTheDocument();
+    expect(screen.queryByText("646180157000000004")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ya hice mi transferencia/i })).not.toBeInTheDocument();
+  });
+
+  it("an expired one-time link says so, with no CLABE and no zero amount", async () => {
+    server.use(
+      handlers.link(() => ok(linkStatusResponse.parse({ ispName: "Gimnasio Norte", status: "closed", closedReason: "expired" }))),
+    );
+    renderPage();
+    expect(await screen.findByText(/este link de pago venció/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\$0\.00/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/total a pagar/i)).not.toBeInTheDocument();
+  });
+
+  it("a confirmed API payment promises no service: the folio, and nothing about a reconnection", { timeout: 15000 }, async () => {
+    server.use(
+      handlers.link(() => ok(apiLink)),
+      handlers.pay(() => ok(payResponse.parse({ directPaymentId: "dp-api", status: "confirmed", error: null }), 201)),
+      handlers.status(() =>
+        ok(directPaymentStatusResponse.parse({ status: "confirmed", folio: "DV-API001", validationAttempts: 1, error: null })),
+      ),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.type(screen.getByLabelText(/clave de rastreo/i), "TRACK001XYZ");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(await screen.findByText("Pago confirmado")).toBeInTheDocument();
+    expect(await screen.findByText(/folio dv-api001/i)).toBeInTheDocument();
+    expect(screen.getByText("Tu pago fue registrado.")).toBeInTheDocument();
+    expect(screen.queryByText(/tu servicio/i)).not.toBeInTheDocument();
+  });
+});

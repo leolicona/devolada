@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { payments, businesses, paymentLinks } from "../db/schema";
@@ -27,7 +27,7 @@ import {
   notifyProvisionalExpiry,
   releaseEvidenceFor,
 } from "./provisional";
-import { isPanelLink } from "./links";
+import { isApiLink, isPanelLink, type ApiLink } from "./links";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -578,16 +578,16 @@ export async function runValidation(
      link's verdict branches HERE, before the WispHub guard that follows:
      that guard is what narrows `integration` for the panel half, and an
      API link for a gym has no integration row at all, so `integration`
-     is `null` on its path. US2 (T046) fills the branch — settle against
-     `asked_cents`, set the outcome, enqueue the webhook, construct no
-     WispHub client. Until it lands nothing creates an API-link payment,
-     so a row here that is not a panel link is an invariant breach and
-     says so loudly rather than riding the schedule into six hours of
-     "Verificando". */
+     is `null` on its path. The API half settles against `asked_cents`
+     with the business's tolerance and constructs no WispHub client
+     (FR-029 holds structurally). US2 (T046) adds the webhook enqueue at
+     the same spot and sets `action_outcome` from its delivery; until
+     then the verdict lands whole and the outcome stays null. */
+  if (isApiLink(link)) {
+    return settleApiPayment(db, update, payment, link, business, cep ?? null, base, now);
+  }
   if (!isPanelLink(link)) {
-    throw new Error(
-      `payment ${payment.id} reached the WispHub half on a ${link.source} link (automated-collections-api D7: the API branch is US2's)`,
-    );
+    throw new Error(`payment ${payment.id} sits on a link that is neither panel nor API (${link.id})`);
   }
 
   /* D14: between submission and confirmation the debt can be settled
@@ -772,6 +772,70 @@ export async function runValidation(
     actionError: attempt.error,
     ...(outcome === "done" ? { actionDoneAt: now } : {}),
   });
+}
+
+/* automated-collections-api D7: the API half of the verdict. Everything
+   the WispHub half does with a debt read, a threshold and a router, this
+   does with one number: what the caller asked at submission. Reads
+   nothing from `integration` — a gym has no integration row at all.
+
+   The yardstick is `asked_cents + service_fee_cents`, the same total the
+   payer's page quoted (payments-and-classes D1/D3), and the class is
+   computed once here against the business's tolerance. `partial` is the
+   row's word for `short` (D17): the money is real and the caller decides
+   what to do about the difference (spec edge case "the payer sends the
+   wrong amount"). `unapplied` when the link had closed meanwhile (D16) —
+   a second transfer against a one-time link another transfer already
+   paid. A deadline that passed after submission is NOT that case: it
+   closes the link to new payers and never voids a transfer already on
+   its way (spec edge case "seconds before it expires").
+
+   Closing the link: a `confirmed` verdict closes a one-time link
+   (FR-027 "closes when it is paid"). A `partial` leaves it open so the
+   payer can complete it — the caller sees `partial` and closes it
+   through PATCH if it would rather not. */
+async function settleApiPayment(
+  db: DB,
+  update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
+  payment: DirectPayment,
+  link: ApiLink,
+  business: Isp,
+  cep: { amountCents?: number | null; senderName?: string | null } | null,
+  base: Partial<typeof payments.$inferInsert>,
+  now: Date,
+): Promise<DirectPayment> {
+  const receivedCents = cep?.amountCents ?? payment.amountCents;
+  /* Rows born before `asked_cents` existed fall back to the link's ask */
+  const askedCents = payment.askedCents ?? link.askCents;
+  const facts = {
+    ...base,
+    receivedCents,
+    cepSenderName: cep?.senderName ?? null,
+    confirmedAt: now,
+    nextValidationAt: null,
+    lastError: null,
+  };
+
+  /* Fresh read: the row given to this attempt may predate a paying
+     transfer that closed the link meanwhile */
+  const [fresh] = await db.select().from(paymentLinks).where(eq(paymentLinks.id, link.id));
+  if (fresh?.closedAt !== null && fresh?.closedAt !== undefined) {
+    return update({ ...facts, status: "unapplied", reconciliationClass: "over" });
+  }
+
+  const klass = classifyPayment({
+    receivedCents,
+    askedCents: askedCents + payment.serviceFeeCents,
+    toleranceCents: business.toleranceCents,
+  });
+  const status = klass === "short" ? "partial" : "confirmed";
+  if (status === "confirmed" && link.mode === "one_time") {
+    await db
+      .update(paymentLinks)
+      .set({ closedAt: now })
+      .where(and(eq(paymentLinks.id, link.id), isNull(paymentLinks.closedAt)));
+  }
+  return update({ ...facts, folio: makeFolio(), status, reconciliationClass: klass });
 }
 
 export type DirectSweepReport = {

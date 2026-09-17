@@ -9,11 +9,14 @@ import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
+  askAvailable,
+  businessConfigured,
   isUniqueViolation,
   runValidation,
-  speiAvailable,
   speiFeeCents,
+  validationAvailable,
 } from "../../direct-payments/validation";
+import { isPanelLink, type PaymentLink } from "../../direct-payments/links";
 import {
   isAcceptedProofType,
   makeProofKey,
@@ -64,8 +67,8 @@ async function ensureLinks(
   /* usuario → the numeric id the row holds today */
   const storedId = new Map<string, string>();
   const readTokens = async (usuarios: string[]) => {
-    /* one parameter is the business id */
-    for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
+    /* one parameter is the business id, one the source */
+    for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
       const rows = await db
         .select({
           customerUsuario: paymentLinks.customerUsuario,
@@ -73,8 +76,17 @@ async function ensureLinks(
           wisphubCustomerId: paymentLinks.wisphubCustomerId,
         })
         .from(paymentLinks)
-        .where(and(eq(paymentLinks.businessId, businessId), inArray(paymentLinks.customerUsuario, part)));
+        .where(
+          and(
+            eq(paymentLinks.businessId, businessId),
+            /* automated-collections-api D3/D4: the usuario namespace is the
+               panel's; an API link never holds one */
+            eq(paymentLinks.source, "panel"),
+            inArray(paymentLinks.customerUsuario, part),
+          ),
+        );
       for (const row of rows) {
+        if (row.customerUsuario === null || row.wisphubCustomerId === null) continue;
         tokens.set(row.customerUsuario, row.token);
         storedId.set(row.customerUsuario, row.wisphubCustomerId);
       }
@@ -83,8 +95,11 @@ async function ensureLinks(
   await readTokens(customers.map((customer) => customer.usuario));
 
   const missing = customers.filter((customer) => !tokens.has(customer.usuario));
-  /* six values per row at most (id and created_at defaults included) */
-  for (const part of chunks(missing, Math.floor(D1_MAX_PARAMS / 6))) {
+  /* nine values per row at most: id and created_at, the four written
+     below, and `source`, `mode`, `is_test` — drizzle sends a column's
+     literal default as a parameter too (automated-collections-api D3;
+     measured 2026-09-17: 150 customers at six per row overran D1's cap) */
+  for (const part of chunks(missing, Math.floor(D1_MAX_PARAMS / 9))) {
     const inserted = await db
       .insert(paymentLinks)
       .values(
@@ -96,10 +111,18 @@ async function ensureLinks(
         })),
       )
       /* Two members listing at once: the first insert wins the usuario,
-         the second reads its token below. */
-      .onConflictDoNothing({ target: [paymentLinks.businessId, paymentLinks.customerUsuario] })
+         the second reads its token below. automated-collections-api D4:
+         the usuario index is partial now, and SQLite matches a named
+         conflict target to a partial index only when the target repeats
+         its WHERE — which drizzle 0.40 cannot emit for DO NOTHING (it
+         places `where` after `do nothing`, a syntax error; measured
+         2026-09-17). An untargeted DO NOTHING covers every unique index
+         on the table, which for a fresh token is the same one. */
+      .onConflictDoNothing()
       .returning({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token });
-    for (const row of inserted) tokens.set(row.customerUsuario, row.token);
+    for (const row of inserted) {
+      if (row.customerUsuario !== null) tokens.set(row.customerUsuario, row.token);
+    }
   }
   const raced = missing.filter((customer) => !tokens.has(customer.usuario)).map((c) => c.usuario);
   if (raced.length) await readTokens(raced);
@@ -156,6 +179,21 @@ function wisphubFailure(c: Ctx, e: unknown) {
   throw e;
 }
 
+/* automated-collections-api D5: the three gates, folded back into the one
+   state the payer's page knows (D4). The split matters to /v1 — which
+   refuses only on the business's own gap and turns the platform's into a
+   notice — not to the payer, who must never see a CLABE nothing can
+   validate, whoever's gap it is. A panel link without the WispHub key
+   degrades exactly as before the split. */
+function channelOpen(
+  env: Bindings,
+  business: typeof businesses.$inferSelect,
+  link: Pick<PaymentLink, "source">,
+  integration: { apiKey: string | null } | null,
+): boolean {
+  return businessConfigured(business) && validationAvailable(env) && askAvailable(link, integration);
+}
+
 /* Only the enumerated codes travel to the customer; internal ones
    (provider down, WispHub down) read as "still validating". */
 function publicError(lastError: string | null) {
@@ -176,11 +214,18 @@ export async function getLinkStatus(c: Ctx, token: string) {
     return c.json({ success: false, error: { code: "BUSINESS_SUSPENDED" } }, 409);
   }
 
-  if (!speiAvailable(c.env, business, integration)) {
+  if (!channelOpen(c.env, business, link, integration)) {
     /* D4: the GET already knows — the page degrades into the store
        network instead of showing a CLABE nothing can validate */
     const data: LinkStatusResponse = { ispName: business.name, status: "unavailable" };
     return c.json({ success: true, data });
+  }
+  if (!isPanelLink(link)) {
+    /* automated-collections-api D6: an API link builds the same
+       LinkStatusResponse from `ask_cents`, with no WispHub client — US1
+       (T030). Nothing creates one before then; reaching here is an
+       invariant breach, not a state to render. */
+    throw new Error(`link ${link.id} is an ${link.source} link; the payer path serves panel links until US1`);
   }
 
   try {
@@ -256,8 +301,14 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
-  if (!speiAvailable(c.env, business, integration)) {
+  if (!channelOpen(c.env, business, link, integration)) {
     return c.json({ success: false, error: { code: "SPEI_NOT_CONFIGURED" } }, 409);
+  }
+  if (!isPanelLink(link)) {
+    /* automated-collections-api D6: an API link's ask is `ask_cents`, and
+       a closed or expired one refuses the submission — US1 (T032). Nothing
+       creates one before then; see getLinkStatus. */
+    throw new Error(`link ${link.id} is an ${link.source} link; the payer path serves panel links until US1`);
   }
   /* prepaid-credit D8: below the cap, what is new waits without spending
      — no provider call, no extraction. The payer did nothing wrong (D9). */
@@ -815,12 +866,16 @@ export async function listLinks(c: Ctx, cursor?: string) {
     .where(
       and(
         eq(paymentLinks.businessId, actor.id),
+        /* automated-collections-api D3: this is the WispHub list, keyed and
+           paged by usuario; API links join the panel through the roster
+           (US1, T076) */
+        eq(paymentLinks.source, "panel"),
         ...(cursor ? [gt(paymentLinks.customerUsuario, cursor)] : []),
       ),
     )
     .orderBy(asc(paymentLinks.customerUsuario))
     .limit(PAGE + 1);
-  const page = rows.slice(0, PAGE);
+  const page = rows.slice(0, PAGE).filter(isPanelLink);
   return c.json({
     success: true,
     data: {
@@ -829,7 +884,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
         usuario: link.customerUsuario,
         url: `${c.env.PAGO_BASE_URL}/p/${link.token}`,
       })),
-      nextCursor: rows.length > PAGE ? page[page.length - 1].customerUsuario : null,
+      nextCursor: rows.length > PAGE ? (page[page.length - 1]?.customerUsuario ?? null) : null,
     },
   });
 }

@@ -81,6 +81,13 @@ gets told.
   `validating`, and the message says which door it came through. The
   business's system cares that a claim exists and is being checked, not how
   the customer entered it. (FR-013, FR-014, US2 scenario 10)
+- Q: Should the early `validating` message carry how much the customer claims
+  to have transferred, before Banxico has confirmed anything? → **A: Yes,
+  under its own name.** The message carries the claimed amount as a claim,
+  never as money received; the amount received, the match and the folio stay
+  absent until the verdict, and the published reference says in one line that
+  nothing before the verdict is money. (FR-014, FR-036, US2 scenario 10, edge
+  case "the business credits a claim")
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -203,9 +210,11 @@ an error.
 10. **Given** a customer who submits a proof on an API link — a receipt image
     or the transfer details typed by hand — and the page accepts it, **When**
     validation begins, **Then** the address is called with the `validating`
-    state, the customer reference, the payment identifier and which door the
-    proof came through, before any verdict exists — and later the verdict
-    arrives as its own message for the same payment identifier.
+    state, the customer reference, the payment identifier, the amount asked,
+    the amount the customer claims to have sent, and which door the proof
+    came through — with no amount received, no match and no folio, because
+    none exists yet — and later the verdict arrives as its own message for
+    the same payment identifier.
 
 ---
 
@@ -283,6 +292,12 @@ exactly once across the pages, in a stable order.
 - **The payer pays twice.** Two transfers against one link are two payments with
   two identifiers, each announced on its own. A caller must never see the second
   as a repeat of the first.
+- **The business credits a claim.** The `validating` message says the customer
+  claims to have sent $500.00; nothing has been proven. A caller that credits
+  the customer on that message has given away the money it was meant to
+  collect. The claim is named so it cannot be read as money received, the
+  verdict message is the only one that carries an amount received, and the
+  reference says so in one line.
 - **The same webhook arrives twice.** A retry after a delivery that actually
   landed is possible. Every message carries an identity the caller can use to
   recognise a repeat, so a customer is never credited twice.
@@ -370,9 +385,10 @@ exactly once across the pages, in a stable order.
 - **FR-014**: Every webhook MUST carry the customer reference, the payment
   identifier, the amount asked, the amount received, the match result, the folio
   when there is one, the verdict moment, and its own event identity. A message
-  announcing a state before the verdict carries what is known so far — the
-  amount received, the match and the folio are absent, not invented — and
-  says which door the proof came through.
+  announcing a state before the verdict carries what is known so far: the
+  amount the customer claims to have sent, named as a claim and never as
+  money received, and which door the proof came through. The amount received,
+  the match and the folio are absent, not invented, until the verdict.
 - **FR-015**: Every webhook MUST carry proof of origin that the caller can verify
   without trusting the network, against a public key Devolada publishes — so
   nothing the business holds, and nothing that could leak from the business,
@@ -437,9 +453,9 @@ exactly once across the pages, in a stable order.
 - **FR-035**: Test-mode records MUST never appear in a business's real history,
   real reconciliation, real panel totals or real fees.
 - **FR-036**: A published reference MUST document every request, every answer,
-  every error reason and the webhook contract — including how to verify origin
-  and how to recognise a repeat — and MUST be readable by a developer who has
-  never heard of WispHub.
+  every error reason and the webhook contract — including how to verify origin,
+  how to recognise a repeat, and that nothing announced before the verdict is
+  money — and MUST be readable by a developer who has never heard of WispHub.
 
 **WispHub stays out of it** *(Q3 → announce only)*
 

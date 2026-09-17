@@ -97,10 +97,13 @@ comment gives it. `match` is a different axis — the reconciliation class
 (`exact | short | over`, `classes.ts`) — and `short` belongs there, never in
 `status`.
 
-| `status` | terminal | announced by webhook | meaning for the caller |
+Every state is announced the moment the payment enters it, as
+`payment.<status>` (FR-013, clarified 2026-09-17).
+
+| `status` | terminal | announced as | meaning for the caller |
 | --- | --- | --- | --- |
-| `validating` | no | no | the proof is with Banxico; ask again or wait for the webhook |
-| `queued_for_credit` | no | no | the business's validation credit is paused; nothing is asked of Banxico until a top-up lifts it, and the payment then continues as `validating`. Readable here so the caller can see why nothing has arrived |
+| `validating` | no | `payment.validating` | the customer's proof was accepted and is with Banxico. A claim exists; nothing is money yet |
+| `queued_for_credit` | no | `payment.queued_for_credit` | the business's validation credit is paused; nothing is asked of Banxico until a top-up lifts it, and the payment then continues as `validating` (announced again). The caller sees why nothing is moving |
 | `confirmed` | yes | `payment.confirmed` | the money arrived and covered the ask (`match` is `exact` or `over`) |
 | `partial` | yes | `payment.partial` | the money arrived but fell short of the ask (`match` is `short`); the business's to decide |
 | `unapplied` | yes | `payment.unapplied` | validated, but settled nothing — the link had closed, or the ask was zero (D16) |
@@ -210,11 +213,38 @@ Nothing the business holds can produce this signature.
 }
 ```
 
-**Types**: `payment.confirmed`, `payment.partial`, `payment.unapplied`,
-`payment.invalid`, `payment.expired`, `payment.superseded` — one per terminal
-`status`, named with the same word (FR-013 — every verdict, named; research
-D17). The two non-terminal states, `validating` and `queued_for_credit`, are
-never announced: a webhook says what happened, and nothing has yet.
+**Types**: `payment.<status>` for every state in the table above —
+`payment.validating`, `payment.queued_for_credit`, `payment.confirmed`,
+`payment.partial`, `payment.unapplied`, `payment.invalid`, `payment.expired`,
+`payment.superseded` — one event each time the payment enters a state, named
+with the row's own word (FR-013, research D17).
+
+**Before the verdict** the body carries what is known so far. A
+`payment.validating` message looks like this:
+
+```jsonc
+{
+  "eventId": "evt_01J…",
+  "type": "payment.validating",
+  "createdAt": 1759998000000,
+  "data": {
+    "paymentId": "pay_…",
+    "paymentLinkId": "lnk_…",
+    "customerRef": "CLI-4471",
+    "askedCents": 49900,
+    "claimedCents": 49900,      // what the receipt or the typed form says — a claim, not money
+    "proofDoor": "receipt",     // "receipt" (image) | "transfer" (typed details)
+    "receivedCents": null,      // absent until the verdict
+    "match": null,
+    "folio": null,
+    "confirmedAt": null,
+    "isTest": false
+  }
+}
+```
+
+`claimedCents` and `proofDoor` ride on every later message for the same
+payment too, so a caller that missed the first one still has them.
 
 **What a caller must do**
 
@@ -228,7 +258,12 @@ never announced: a webhook says what happened, and nothing has yet.
    retried on `[1, 5, 15, 60, 240]` minutes, then stops and stays readable.
    A re-send is signed with the key active at that moment, so its `kid` may be
    newer than the first attempt's; its event id and body are the same.
-4. Order by `createdAt`, not arrival (FR-040).
+4. Order by `createdAt`, not arrival (FR-040). A `payment.validating` retried
+   after its verdict was delivered is normal; the newer `createdAt` wins.
+5. **Nothing before the verdict is money.** `claimedCents` is what the
+   customer says; only a verdict message carries `receivedCents`. Credit a
+   customer on `payment.confirmed` (or `partial`, by your own policy), never
+   on `payment.validating` (FR-036).
 
 **What Devolada guarantees**: at least once, never exactly once. A payment's
 verdict never waits on your endpoint (FR-017).
@@ -244,8 +279,9 @@ Consta, and fires the real webhook.
 { "to": "confirmed", "receivedCents": 49900 }
 ```
 
-`to` accepts any terminal `status` from the table above, so a developer can
-rehearse every webhook type, `payment.superseded` included.
+`to` accepts any status from the table above. Creating a test payment fires
+`payment.validating` like a real one, so a developer can rehearse every
+webhook type, `payment.superseded` included.
 
 A real credential calling it gets `NOT_FOUND` — the route does not exist for it.
 Test records are readable through the API and are excluded from every real total

@@ -92,9 +92,11 @@ Drive a payment to a verdict — either by submitting a proof on the payer's pag
 against the Consta sandbox, or with a test credential and
 `POST /v1/test/payments/:id/advance`.
 
-Expect (scenarios 1, 2):
+Expect (scenarios 1, 2, 10):
 
-- the delivery arrives within seconds, carrying `customerRef`, `askedCents`,
+- a `payment.validating` delivery arrives when the proof is submitted, through
+  either door, carrying `claimedCents` and `proofDoor` and null verdict fields;
+- the verdict delivery arrives within seconds, carrying `customerRef`, `askedCents`,
   `receivedCents`, `match`, `folio`, `confirmedAt` and `eventId`;
 - `Devolada-Signature` verifies as `ES256` over
   `"<Devolada-Timestamp>.<raw body>"` against the key in

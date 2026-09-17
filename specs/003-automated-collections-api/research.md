@@ -445,13 +445,24 @@ asks "did this customer pay?" must never receive a value its integration has
 never heard of, and a `GET /v1/payments?customerRef=` that hides two of the
 eight would show a gap where a row exists.
 
-**Which are announced**: terminal states only. `validating` and
-`queued_for_credit` are waits, and a webhook says what happened; a caller that
-wants to know *why* nothing has arrived reads the status. `superseded` is
-announced because it is terminal: a caller that saw the row while it was
-`validating` deserves to learn the row is closed, and the corrected attempt
-arrives as its own payment with its own event. The cost is one event a caller
-may ignore; the alternative is a row that silently stops changing.
+**Which are announced**: every one, each time the row enters it (the
+developer's decision in the clarification session of 2026-09-17, replacing
+the earlier "terminal only"). The business's system learns that a claim
+exists the moment the customer's proof is accepted — through either door,
+receipt image or typed details — and learns why nothing moves when credit is
+paused. `superseded` is announced because a caller that heard `validating`
+deserves to hear the row is closed; the corrected attempt arrives as its own
+payment with its own events. One rule, no list of exceptions to maintain.
+
+**What the early message carries**: `claimedCents` — the amount on the
+receipt or in the typed form, the row's existing `claimed_amount_cents` — and
+`proofDoor`. `receivedCents`, `match` and `folio` are `null`, not guessed,
+until the verdict. The name is the safeguard: a caller reading `claimedCents`
+as money received has misread a word the reference defines in one line
+(FR-036), and the verdict message is the only one that carries an amount
+received. The support use case ("the customer says they sent $500, did the
+claim arrive?") needs the number; the risk is a naming problem, not a data
+problem.
 
 **Alternatives rejected**: a friendlier public synonym with a documented
 mapping (two vocabularies to keep in step forever, for the sake of one word);

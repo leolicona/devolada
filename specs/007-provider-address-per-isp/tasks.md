@@ -230,3 +230,17 @@ Task: "Give testKey its own resolution path in routes/integrations/handler.ts"  
 - Commit per task or per logical group; every non-obvious rule carries its `provider-address-per-isp D<n>`.
 - Phase 5 may find nothing. That is a pass, not a wasted phase — T032's negative assertion is the only thing that can prove Phase 2 was complete.
 - FR-011 was amended in `spec.md` on 2026-09-18 rather than scheduled as a task here, so no phase implements code the spec contradicts (`/speckit-analyze` finding I1).
+
+---
+
+## Phase 7: Convergence
+
+**Purpose**: what an assessment of the tree against `spec.md`, `plan.md` and
+`tasks.md` found still unbuilt, appended by `/speckit-converge` on 2026-09-18.
+The four `[!] BLOCKED` tasks above are deliberately **not** repeated here —
+none of them is a change to this tree, so none of them is work
+`/speckit-implement` can pick up.
+
+- [ ] T044 [US1] Save the picked installation together with the key in `apps/admin/src/features/integrations/WispHubScreen.tsx` — "Guardar llave" patches `{ wisphubApiKey }` on its own, so an ISP who picks their installation and then saves their key has that key tested against the address they just moved away from and reads "wisphub.net rechazó esta llave" for a key that is perfectly good. That is the exact line this feature exists to stop showing. `wisphubPatchRequest` and `patchWisphub` already accept a key and an installation in one patch and re-test against the one being saved, so this is the screen catching up to its own contract. Carry the confirmation gate with it: a connected business whose key save also moves the installation must still be asked first (T021). Add the component test that presses the two controls in the order an ISP actually uses them. per US1/AC1, FR-009 (partial)
+- [ ] T045 [US2] Test the pairing the ISP is looking at, in `apps/api/src/routes/integrations/schema.ts` and `apps/admin/src/features/integrations/WispHubScreen.tsx` — "Probar conexión" posts `{ apiKey }` only and `wisphubTestRequest` carries no installation, so an ISP correcting a wrong pick is told about the installation they are leaving rather than the one they chose. Add `installation` to `wisphubTestRequest`, send the picker's value, and keep the stored one as the fallback when the request names none. per US1/AC6, SC-004 (partial)
+- [ ] T046 Carry the installation in the provider cache keys in `apps/api/src/wisphub/cache.ts` — `keyFor` carries only `businessId`, so for the ten minutes after a business changes installation the cash payment-method id minted on the OLD one is still served to `registerPayment` on the money path (`wisphub/reconnection.ts`), and the roster and pending lists for thirty seconds. The spec's *Deferred* section names two things an installation change does not protect; this is a third, and unlike those two it is reachable only through the control this feature added. per FR-003, spec *Deferred* (missing)

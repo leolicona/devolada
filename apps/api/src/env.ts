@@ -29,7 +29,15 @@ export type Bindings = {
   /* Dev only: the seed copies this key into the demo ISP row.
      In real use, every ISP stores its own key in businesses.wisphub_api_key. */
   WISPHUB_API_KEY?: string;
-  /* Points the adapter at a sandbox; unset means the real API */
+  /* Which WispHub installation the adapter talks to. WispHub runs more
+     than one, and a tenant's key is valid only on its own: the pilot ISP
+     signs in at wisphub.io, whose API host is a different server than
+     the wisphub.net one this defaults to, so a perfectly good key is
+     rejected against the wrong host. Unset → wisphub.net
+     (`DEFAULT_BASE_URL` in wisphub/client.ts), which is where the demo
+     tenant and the local sandbox live. Platform-wide, so it can name one
+     installation for all tenants at once — the address really belongs on
+     the business's integration row (debt `wisphub-host-is-platform-wide`). */
   WISPHUB_BASE_URL?: string;
   /* The SPEI validation engine (Consta) runs inside this Worker
      (consta-api-merge D1, D9). What can be absent is the provider's

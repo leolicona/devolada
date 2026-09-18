@@ -53,7 +53,7 @@ Retired secrets `CONSTA_API_KEY`, `CONSTA_ISSUER_TOKEN`, `CONSTA_ADMIN_TOKEN`
 | --- | --- | --- | --- |
 | apiCEP | second token for production (D4); note the 800-calls/month pool; one call per release for the probe (D11) | creator, at app.apicep.cloud; fallback: a second account, never a shared token | channel says "no disponible"; nothing validates |
 | Resend | `devoladapago.com` still *verified* after the zone moved on 2026-09-01; the key in `production` | creator, at resend.com | nobody finishes sign-up (D5) |
-| WispHub | nothing at platform level; each ISP pastes its own key, born observing | the ISP, in the panel | verdicts land, no reconnection until actions are on |
+| WispHub | the ISP pastes its own key, born observing — plus, since 2026-09-18, the **installation** it belongs to: `WISPHUB_BASE_URL` in `env.prod.vars` names one host for all tenants (the pilot's `wisphub.io`), because a key is rejected on any other. Per-ISP addressing is debt `wisphub-host-is-platform-wide` | the key: the ISP, in the panel. The host: a deploy | verdicts land, no reconnection until actions are on; a key from another installation never connects |
 
 ## What the agent may and may not do here
 

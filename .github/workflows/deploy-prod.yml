@@ -1,8 +1,14 @@
-# Production via v* tag with approval gate (CICD.md path 3).
+# Production via v* tag (CICD.md path 3); the tag is the approval (production-launch D3).
+# The runbook — pre-flight, release, verification, undo — is
+# specs/006-production-launch/quickstart.md (production-launch).
 name: Deploy Prod
 on:
   push:
     tags: ["v*"]
+  # Re-plant a credential added after launch without a new tag: same gate,
+  # same archive; the code is redeployed unchanged. The click is the
+  # deliberate act, and the environment's policy admits `main` only
+  # (production-launch D3).
   workflow_dispatch:
 
 concurrency:
@@ -10,7 +16,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # production-launch D1: a release is a main commit whose Deploy Dev run
+  # finished green. The browser layer (pnpm e2e) and the passkey ceremony
+  # run only on merge to main (deploy-dev.yml), so this job asks the
+  # repository for that run instead of repeating them — 8–10 minutes and a
+  # chromium install to re-prove a commit that already proved itself, and a
+  # flaky re-run could block a hotfix dev already accepted. Nothing below
+  # starts until this passes — and since the tag is the approval
+  # (production-launch D3, constitution v1.4.0), this gate is what makes
+  # that approval safe: production is never touched on an ungated commit. A
+  # commit that is not on main has no dev run at all and is refused for the
+  # same reason.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The commit's dev deploy finished green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `head_sha` is exact — the run for this commit, on whatever ref
+          # it ran. "Green" means finished and successful; a run still in
+          # progress has no conclusion and does not count.
+          green=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-dev.yml/runs?head_sha=${GITHUB_SHA}&per_page=10" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')
+          if [ "${green:-0}" -eq 0 ]; then
+            echo "::error::No green Deploy Dev run for ${GITHUB_SHA}. Tag a main commit whose dev deploy finished green (production-launch D1)."
+            exit 1
+          fi
+          echo "Deploy Dev is green for ${GITHUB_SHA} (${green} run(s))."
+      - name: The commit is on main
+        run: |
+          git fetch --no-tags origin +main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${GITHUB_SHA} is not on main. A release is a main commit (production-launch D1)."
+            exit 1
+          fi
+          echo "${GITHUB_SHA} is on main."
+
   test:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +74,10 @@ jobs:
       - name: Bank vocabulary in step with the docs
         run: node scripts/gen-banks.mjs --check
       - run: node scripts/contrast-lint.mjs
+      # production-launch D2: the same set ci.yml runs on a PR. A tag's test
+      # job is never a subset of the PR gate.
+      - name: Every wait that says so shows so (feedback-vocabulary-rollout SC-001)
+        run: node scripts/pending-lint.mjs
       - run: pnpm -r --if-present typecheck
       - run: pnpm -r --if-present test
       - run: pnpm -r --if-present build
@@ -31,7 +85,13 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    # Environment with required reviewer: the job pauses here until human approval
+    # production-launch D3: the tag is the approval. There is no reviewer
+    # pause here — GitHub sells that rule only above the Free plan for a
+    # private repository (measured 2026-09-18: HTTP 422), and the creator
+    # chose the push of a v* tag as the deliberate act over paying for the
+    # click. What the environment does hold is the policy "tags v* and
+    # main only", set outside this file; the runbook's pre-flight checks
+    # it is there. The gate job above is what keeps the act safe.
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -44,6 +104,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Empty on the very first release — correct: the archive is the
+      # restore point, and there was nothing to restore to yet.
       - name: D1 prod backup (before migrating)
         working-directory: apps/api
         run: pnpm exec wrangler d1 export devolada-db-prod --remote --output backup-prod.sql
@@ -55,9 +117,14 @@ jobs:
       - name: D1 prod migrations
         working-directory: apps/api
         run: pnpm exec wrangler d1 migrations apply devolada-db-prod --env prod --remote
+      # production-launch D12: each deploy's output is kept so the last step
+      # can say which version went live (FR-009). `shell: bash` sets
+      # `-eo pipefail`, so a failed deploy still fails the step through the
+      # tee.
       - name: Deploy prod API
         working-directory: apps/api
-        run: pnpm exec wrangler deploy --env prod
+        shell: bash
+        run: pnpm exec wrangler deploy --env prod 2>&1 | tee "$RUNNER_TEMP/deploy-api.log"
       # TD-011, and see the note in deploy-dev.yml: after the deploy, never
       # before it.
       # BETTER_AUTH_SECRET is required here, not optional: it signs every
@@ -77,8 +144,13 @@ jobs:
             exit 1
           fi
           printf '%s' "$BETTER_AUTH_SECRET" | pnpm exec wrangler secret put BETTER_AUTH_SECRET --env prod
+          # production-launch D5: sign-up requires a verified email, and
+          # without this key the code is only logged (email/sender.ts). A
+          # plain line scrolled past in a green run; a warning names what
+          # will not work. Not a refusal — constitution VIII keeps
+          # BETTER_AUTH_SECRET as the one.
           if [ -z "$RESEND_API_KEY" ]; then
-            echo "No RESEND_API_KEY in the production environment — skipping (TD-011)."
+            echo "::warning::No RESEND_API_KEY in the production environment — nobody can finish signing up: the verification code is only logged (production-launch D5)."
           else
             printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env prod
           fi
@@ -98,6 +170,9 @@ jobs:
           # Absent, the channel is unavailable and says so; the day the
           # secret is added to the production environment, the next deploy
           # plants it and nothing else changes.
+          # production-launch D4 took that decision: on at launch, with a
+          # token minted for production alone — never dev's, so a dev retry
+          # can never spend a call a real payer depends on.
           if [ -z "$APICEP_TOKEN" ]; then
             echo "::warning::No APICEP_TOKEN in the production environment — the SPEI channel stays unavailable (consta-api-merge: switching production on is a separate decision)."
           else
@@ -116,11 +191,16 @@ jobs:
       # is a module of it), so the probe moved here, right after the sync
       # that planted it. Its body is measured knowledge and is unchanged.
       #
-      # The probe is free: an empty body is rejected before apiCEP touches
-      # Banxico, so no credit is spent. It separates the only two answers
-      # that decide anything — 401 is our credential, 400 is apiCEP telling
-      # us the credential was fine and only the body was wrong. Anything
-      # else is the provider having a bad day, which must not block a deploy.
+      # The probe spends one credit per release (production-launch D11).
+      # An earlier version of this comment called it free, reasoning that an
+      # empty body is rejected before apiCEP touches Banxico; measured
+      # 2026-08-19, a request apiCEP rejects with 400 is billed all the same
+      # (archive docs/integrations/apicep.md). One credit per release is
+      # kept on purpose: the six-hour silence above cost far more. It
+      # separates the only two answers that decide anything — 401 is our
+      # credential, 400 is apiCEP telling us the credential was fine and
+      # only the body was wrong. Anything else is the provider having a bad
+      # day, which must not block a deploy.
       #
       # The URL matches the adapter's DEFAULT_BASE_URL: the prod env sets no
       # APICEP_BASE_URL, so this is the host the deployed Worker will use.
@@ -218,7 +298,8 @@ jobs:
         run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build
       - name: Deploy prod admin
         working-directory: apps/admin
-        run: pnpm --filter @devolada/api exec wrangler deploy --config ../admin/wrangler.jsonc --env prod
+        shell: bash
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../admin/wrangler.jsonc --env prod 2>&1 | tee "$RUNNER_TEMP/deploy-admin.log"
       # The page deploys; the channel stays "unavailable" until APICEP_TOKEN
       # is planted in the production environment — no code change needed
       # then (consta-api-merge, spec Q3).
@@ -227,20 +308,60 @@ jobs:
         run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build
       - name: Deploy prod payment page
         working-directory: apps/pago
-        run: pnpm --filter @devolada/api exec wrangler deploy --config ../pago/wrangler.jsonc --env prod
+        shell: bash
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../pago/wrangler.jsonc --env prod 2>&1 | tee "$RUNNER_TEMP/deploy-pago.log"
+      # production-launch D12 (FR-009): the one place the creator reads after
+      # approving — which version of each service is live and which archive
+      # was taken. The ids are what rollback-prod.yml takes as input, which
+      # is why this runs even when a later step fails: a red smoke needs
+      # them most.
+      - name: What landed
+        if: always()
+        run: |
+          {
+            echo "## What landed — ${{ github.ref_name }}"
+            echo
+            echo "| service | version id |"
+            echo "| --- | --- |"
+            for w in api admin pago; do
+              id=$(grep -o 'Current Version ID: [0-9a-f-]*' "$RUNNER_TEMP/deploy-$w.log" 2>/dev/null | tail -1 | awk '{print $4}')
+              echo "| devolada-$w | ${id:-not deployed in this run} |"
+            done
+            echo
+            echo "Archive before migrating: artifact \`d1-backup-${{ github.ref_name }}\` (kept 30 days)."
+            echo "Undo: Actions → Rollback Prod with the service and the version id (production-launch D7)."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      # production-launch D6: three services, three custom domains, three
+      # certificate races — /health proves only the API. An assets Worker
+      # with single-page-application fallback answers / with 200 and the
+      # shell, so one probe serves all three. Every URL is tried before the
+      # step fails, so one red log names every host that did not answer.
       - name: Smoke test
         run: |
-          URL="${{ vars.PROD_API_URL }}"
-          if [ -z "$URL" ]; then
-            echo "::warning::PROD_API_URL not set; smoke skipped"
-            exit 0
-          fi
-          # Retry up to 5 minutes: the first deploy after a custom-domain
-          # change races certificate issuance (see deploy-dev.yml).
-          for i in $(seq 1 10); do
-            curl -sf "$URL/health" && exit 0
-            echo "health not up yet (attempt $i), waiting 30s"
-            sleep 30
-          done
-          echo "::error::Smoke failed: consider wrangler rollback (CICD.md)"
-          exit 1
+          failed=0
+          probe() {
+            name="$1"; base="$2"; path="$3"
+            if [ -z "$base" ]; then
+              echo "::warning::PROD_${name^^}_URL not set; $name smoke skipped"
+              return 0
+            fi
+            url="$base$path"
+            # Retry up to 5 minutes: the first deploy after a custom-domain
+            # change races certificate issuance (see deploy-dev.yml).
+            for i in $(seq 1 10); do
+              if curl -sf -o /dev/null "$url"; then
+                echo "$name answered: $url"
+                return 0
+              fi
+              echo "$name not up yet (attempt $i), waiting 30s"
+              sleep 30
+            done
+            # production-launch D14: the red log points at the undo that
+            # exists, not at the archive's runbook.
+            echo "::error::$url did not answer in 5 minutes. To return a service to its previous version run Actions → Rollback Prod (production-launch D7)."
+            return 1
+          }
+          probe api   "${{ vars.PROD_API_URL }}"   "/health" || failed=1
+          probe admin "${{ vars.PROD_ADMIN_URL }}" "/"       || failed=1
+          probe pago  "${{ vars.PROD_PAGO_URL }}"  "/"       || failed=1
+          exit $failed

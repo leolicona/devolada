@@ -228,11 +228,26 @@ export async function validate(
          makes apiCEP answer `error`, which is retryable, so the payment
          rides Devolada's whole six-hour schedule at up to seven paid
          calls. It stops here for the price of one Workers AI call. */
-      if (!reading.isReceipt) {
-        await recordExtraction(db, owner, "not_a_receipt", extracted, { signals });
-        throw new ConstaError("RECEIPT_UNREADABLE", false, "the image is not a receipt", {
-          reading: readingPayload(extracted, signals),
-        });
+      /* two-eyes-receipt D2: and its sibling — a picture with a receipt
+         in it that no field can be read from. Narrowly defined on
+         purpose (`reader.ts`): a *partial* legibility goes through with
+         its hole, because a wrongly blocked photo costs the payer a step
+         while a wrongly passed one costs a credit the comparison may
+         still salvage (FR-004, FR-005). */
+      if (!reading.isReceipt || reading.legibility === "none") {
+        await recordExtraction(
+          db,
+          owner,
+          reading.isReceipt ? "illegible" : "not_a_receipt",
+          extracted,
+          { signals },
+        );
+        throw new ConstaError(
+          "RECEIPT_UNREADABLE",
+          false,
+          reading.isReceipt ? "nothing on the receipt could be read" : "the image is not a receipt",
+          { reading: readingPayload(extracted, signals) },
+        );
       }
       /* two-eyes-receipt D3: the reading no longer *becomes* the request.
          It is kept beside it — the file itself is what the provider gets

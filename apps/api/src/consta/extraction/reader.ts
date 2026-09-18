@@ -8,7 +8,20 @@ import type { LoadedProof } from "./proof";
    identical 27-character misread every time, and moondream returned
    `{}`. The model is read from config so replacing it is a deploy.
 
-   The measured output is fenced JSON — ```json … ``` — every time. */
+   The measured output is fenced JSON — ```json … ``` — every time.
+
+   two-eyes-receipt D2: the prompt asks one more question, legibility,
+   and the answer is one of the two things that refuse a file before a
+   provider credit is spent. The bias is deliberate and it is the spec's
+   own (Assumptions): a wrongly blocked photo costs the payer a step, a
+   wrongly passed one costs a credit that the comparison with the
+   provider's reading may still salvage. So `nula` is defined as narrowly
+   as the prompt can say it — *no* field readable at all — and everything
+   else goes through, hole and all.
+
+   D1: the same model reads a PDF, through the text its conversion
+   produces (`pdf-text.ts`). A text reading is asked the same questions
+   minus legibility: there is no photograph to judge (D15). */
 
 export type Reading = {
   isReceipt: boolean;
@@ -47,18 +60,15 @@ export const DEFAULT_MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
    those to apiCEP's spellings is the one job a language model is better
    at than a regex. What it returns is still checked against the list
    (D4) — the prompt asks, the gate enforces. */
-const PROMPT = `This is an image of a Mexican bank transfer receipt (comprobante SPEI).
-
-Read it and reply with ONLY a JSON object and no prose:
-{"esComprobante": <true if this image really is a bank transfer receipt, false otherwise>,
+/* The fields both prompts ask for, so the two can never drift apart */
+const FIELDS = `{"esComprobante": <true if this really is a bank transfer receipt, false otherwise>,
  "claveDeRastreo": "<the value of the 'Clave de rastreo' field, or null if it is absent>",
  "banco": "<the bank the money was sent FROM, or null>",
  "monto": <the amount in pesos as a number, or null>,
  "fecha": "<the operation date as YYYY-MM-DD, or null>",
- "estatus": "<the value of the 'Estatus' field, or null>"}
+ "estatus": "<the value of the 'Estatus' field, or null>"}`;
 
-Rules:
-- "claveDeRastreo" is between 6 and 30 characters of uppercase letters and digits.
+const RULES = `- "claveDeRastreo" is between 6 and 30 characters of uppercase letters and digits.
   Different banks use different lengths. It may be printed across two lines —
   join it with no space and no line break. Copy it exactly; do not guess a
   missing character and do not pad it to a length you expect.
@@ -66,8 +76,38 @@ Rules:
   captured while the transfer is still "En proceso" often has none.
 - "banco" must be one of these exact names, or null if none of them fits:
 ${BANKS.join(", ")}
-- If this image is not a bank transfer receipt, set "esComprobante" to false and
+- If this is not a bank transfer receipt, set "esComprobante" to false and
   every other field to null.`;
+
+const PROMPT = `This is an image of a Mexican bank transfer receipt (comprobante SPEI).
+
+Read it and reply with ONLY a JSON object and no prose:
+${FIELDS.slice(0, -1)},
+ "legibilidad": "<completa | parcial | nula>"}
+
+Rules:
+${RULES}
+- "legibilidad" describes how well you could READ THE IMAGE, not how complete
+  the receipt is:
+  - "nula" ONLY when the image is so blurred, dark, cropped or obscured that you
+    cannot read a single one of the fields above. If you could read even one of
+    them, it is not "nula".
+  - "parcial" when the receipt is readable but at least one of the fields above
+    is blurred, cut off or hidden behind something.
+  - "completa" otherwise — including when a field is simply not printed on this
+    receipt. A field the bank did not print is not a legibility problem.`;
+
+/* D1/D15 — the text variant. Same JSON, same rules, no legibility: text
+   either exists or it does not, and a conversion that yielded text has
+   nothing blurry about it. A PDF whose conversion yields nothing never
+   reaches this prompt at all — it goes to the provider unread (D15). */
+const TEXT_PROMPT = `This is the text extracted from a Mexican bank transfer receipt PDF (comprobante SPEI).
+
+Read it and reply with ONLY a JSON object and no prose:
+${FIELDS}
+
+Rules:
+${RULES}`;
 
 function base64(bytes: Uint8Array): string {
   let s = "";
@@ -110,28 +150,32 @@ export function legibilityOf(v: unknown): Reading["legibility"] {
 }
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+/* `text` reads a PDF's converted text instead of a picture (D1). Both
+   go to the same model with the same JSON shape, so nothing downstream
+   has to know which one it got — except that a text reading never
+   carries a legibility (D15). */
 export async function readProof(
   env: { AI?: Ai; EXTRACTION_MODEL?: string },
   proof: LoadedProof,
+  opts: { text?: string } = {},
 ): Promise<Reading> {
   if (!env.AI) throw new ReaderError("READER_UNAVAILABLE", "no AI binding");
   const model = env.EXTRACTION_MODEL ?? DEFAULT_MODEL;
 
+  const content = opts.text
+    ? [{ type: "text", text: `${TEXT_PROMPT}\n\n---\n${opts.text}` }]
+    : [
+        { type: "text", text: PROMPT },
+        {
+          type: "image_url",
+          image_url: { url: `data:${proof.mediaType};base64,${base64(proof.bytes)}` },
+        },
+      ];
+
   let out: unknown;
   try {
     out = await (env.AI as unknown as { run(m: string, i: unknown): Promise<unknown> }).run(model, {
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: PROMPT },
-            {
-              type: "image_url",
-              image_url: { url: `data:${proof.mediaType};base64,${base64(proof.bytes)}` },
-            },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content }],
       max_tokens: 400,
     });
   } catch (e) {
@@ -144,7 +188,9 @@ export async function readProof(
 
   return {
     isReceipt: parsed.esComprobante !== false,
-    legibility: legibilityOf(parsed.legibilidad),
+    /* D15: a text reading has no photograph to judge, so it is null
+       here whatever the model volunteers — and null reads as `full`. */
+    legibility: opts.text ? null : legibilityOf(parsed.legibilidad),
     trackingKey: str(parsed.claveDeRastreo),
     senderBank: str(parsed.banco),
     amount: num(parsed.monto),

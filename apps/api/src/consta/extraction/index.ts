@@ -1,5 +1,6 @@
 import type { LoadedProof } from "./proof";
 import { readProof, ReaderError, type Reading } from "./reader";
+import { pdfToText } from "./pdf-text";
 import { gateReading, type GatedReading } from "./gate";
 
 export { ProofFetchError, MAX_PROOF_BYTES, loadProof, readProofFromBucket } from "./proof";
@@ -11,6 +12,7 @@ export type { Reading } from "./reader";
 export type { Gate, GatedReading } from "./gate";
 export type { ShapeRule, ShapeVerdict } from "./shape";
 export { DEFAULT_MODEL } from "./reader";
+export { pdfToText } from "./pdf-text";
 
 /* D2 — routing is by what the file *is*, never by whether something failed.
 
@@ -50,7 +52,16 @@ export async function extractProof(
   env: { AI?: Ai; EXTRACTION_MODEL?: string },
   proof: LoadedProof,
 ): Promise<ExtractionResult> {
-  if (proof.kind === "pdf") return { route: "provider-ocr", proof, reason: "no-text" };
+  if (proof.kind === "pdf") {
+    /* two-eyes-receipt D1: text at the edge, then the same model. No
+       binding, no text in the file, or a conversion that threw — all
+       three are "no text", and none of them is an error the payer hears
+       about (D15). The file goes to the provider unread instead. */
+    const text = await pdfToText(env, proof);
+    if (!text) return { route: "provider-ocr", proof, reason: env.AI ? "no-text" : "no-binding" };
+    const reading = await readProof(env, proof, { text });
+    return { route: "reader", proof, reading, gated: gateReading(reading) };
+  }
 
   const reading = await readProof(env, proof);
   return { route: "reader", proof, reading, gated: gateReading(reading) };

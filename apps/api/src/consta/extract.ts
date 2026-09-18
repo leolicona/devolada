@@ -244,8 +244,9 @@ export function readingPayload(
 ): Omit<ConstaReading, "extractionId"> {
   if (result.route === "provider-ocr") {
     /* Nothing here could read the file (two-eyes-receipt D15): no AI
-       binding, a PDF whose text conversion yielded nothing, or a model
-       answer with no JSON in it. It used to mean "a PDF, deliberately
+       binding, a PDF whose text conversion yielded nothing (a scan), or
+       a model answer with no JSON in it. A PDF *with* text takes the
+       reader branch below and answers like a picture (D1). It used to mean "a PDF, deliberately
        not read here" — D1 retired that case by reading PDFs too.
        Saying so is more useful than inventing empty fields, and the
        caller treats it exactly as it treats a reader that is down. */
@@ -312,14 +313,20 @@ export async function extract(
 
   const signals = await shapeSignals(db, result);
   const payload = readingPayload(result, signals);
+  /* two-eyes-receipt D2: `illegible` is recorded here too, so the
+     refusal rate is countable from one table whichever door met it —
+     but this door still throws nobody out (FR-004): it reports what the
+     reader said and the *page* refuses. */
   const outcome: Outcome =
     result.route === "provider-ocr"
       ? "routed"
       : !result.reading.isReceipt
         ? "not_a_receipt"
-        : result.gated.passes
-          ? "passed"
-          : "gated";
+        : result.reading.legibility === "none"
+          ? "illegible"
+          : result.gated.passes
+            ? "passed"
+            : "gated";
 
   const extractionId = await recordExtraction(db, owner, outcome, result, { signals });
   /* No apiCEP call happened on this path at all — that is the contract

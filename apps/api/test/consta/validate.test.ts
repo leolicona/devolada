@@ -12,10 +12,12 @@ import {
   db,
   engineEnv,
   extractions,
+  JPEG,
   NOT_A_FILE,
   PDF,
   PNG,
   putProof,
+  RECEIPT_TEXT,
   seedOwner,
   validations,
 } from "./helpers";
@@ -890,17 +892,23 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
   it("scenario 3: routing follows magic bytes, not the caller's content type", async () => {
     const { key } = await seedOwner();
     /* A PDF served as image/png must still take the PDF route: the route
-       decides which reader sees the file, and a vision model handed a PDF
-       produces confident nonsense. */
+       decides *how* the file is read, and a vision model handed a PDF
+       produces confident nonsense. two-eyes-receipt D1: the PDF route is
+       text-then-read now rather than hand-it-over, so the assertion that
+       changed is the outcome — a reader row, with the media type the
+       bytes actually are — and the magic-byte point is unchanged. */
     await mockProof(PDF(), "image/png");
     mockApiCep(settledResponse, (body) => expectSignedProofUrl(body.imageUrl));
 
-    const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) });
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning(GOOD_READING, undefined, { pdfText: RECEIPT_TEXT }),
+    });
     expect(res.ok).toBe(true);
-    const { data } = res;
-    expect(data.source).toBe("provider-ocr");
     const [row] = await db().select().from(extractions);
     expect(row.mediaType).toBe("application/pdf");
+    expect(row.source).toBe("reader");
+    /* The text prompt read it, not the vision prompt */
+    expect(row.rawOutput).toContain("claveDeRastreo");
   });
 
   it("scenario 4: the gate catches a clave's shape — and cannot catch a plausible misread", async () => {
@@ -1607,5 +1615,256 @@ describe("two-eyes-receipt US1: the comparison", () => {
     expect(c.readingCheck).toBe("agreed");
     expect(c.accepted?.amountCents).toBe(51400);
     expect(c.disputedFields).toEqual([]);
+  });
+});
+
+/* two-eyes-receipt US2 — the gate before spending.
+
+   Exactly two readings refuse a file before a provider credit is spent:
+   it is not a receipt, and nothing on it can be read. Everything else
+   goes through with its hole (FR-005), because a wrongly blocked photo
+   costs the payer a step while a wrongly passed one costs a credit the
+   comparison with the provider may still salvage.
+
+   None of the refusal scenarios registers a provider interceptor. That
+   is the assertion: `fetchMock` runs with net connect disabled, so a
+   request that reached the provider could not answer at all. */
+describe("two-eyes-receipt US2: the gate before spending", () => {
+  it("an image that is not a receipt spends nothing, and the row says which refusal it was", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ esComprobante: false, claveDeRastreo: null, banco: null, monto: null }),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error!.code).toBe("RECEIPT_UNREADABLE");
+    expect(res.error!.retryable).toBe(false);
+
+    expect(await db().select().from(validations)).toHaveLength(0);
+    const [row] = await db().select().from(extractions);
+    expect(row.outcome).toBe("not_a_receipt");
+    /* D10: `validation_id IS NULL` on every refusal row is what makes
+       "refused, and no credit spent" one query */
+    expect(row.validationId).toBeNull();
+  });
+
+  it("a photo nothing can be read from is its own refusal, and costs nothing either", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning({
+        esComprobante: true,
+        legibilidad: "nula",
+        claveDeRastreo: null,
+        banco: null,
+        monto: null,
+      }),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error!.code).toBe("RECEIPT_UNREADABLE");
+
+    expect(await db().select().from(validations)).toHaveLength(0);
+    const [row] = await db().select().from(extractions);
+    /* Countable apart from `not_a_receipt`: the two ask the payer for
+       different things — a different file, or a better photo */
+    expect(row.outcome).toBe("illegible");
+    expect(row.legibility).toBe("none");
+    expect(row.validationId).toBeNull();
+  });
+
+  it("a partly legible photo with a hole in it still buys the paid call (FR-005)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse, (body) => {
+      expectSignedProofUrl(body.imageUrl);
+      expect(body.sender).toBeUndefined();
+    });
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning({ ...GOOD_READING, legibilidad: "parcial", claveDeRastreo: null }),
+    });
+    expect(res.ok).toBe(true);
+    expect(res.data.status).toBe("valid");
+    const [row] = await db().select().from(extractions);
+    expect(row.legibility).toBe("partial");
+    expect(row.outcome).toBe("gated");
+    expect(row.validationId).toBe(res.data.validationId);
+  });
+
+  it("a model answer with no JSON in it is our problem, never the payer's", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep(
+      {
+        validationId: "prov-uuid-unparseable",
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+      },
+      (body) => expectSignedProofUrl(body.imageUrl),
+    );
+
+    /* This used to throw READER_UNREADABLE and the file never reached
+       the provider at all (D15, FR-005) */
+    const res = await postValidate(key, receiptRequest, { AI: aiReturning("I am terribly sorry") });
+    expect(res.ok).toBe(true);
+    expect(res.data.ourReading).toBeNull();
+    expect(res.data.readingCheck).toBe("blind");
+    const [row] = await db().select().from(extractions);
+    expect(row.source).toBe("provider-ocr");
+    expect(row.rawOutput).toBe("unreadable");
+  });
+
+  it("the reading door reports legibility and refuses nobody", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+
+    const partial = await postExtract(key, PROOF_KEY, {
+      AI: aiReturning({ ...GOOD_READING, legibilidad: "parcial" }),
+    });
+    expect(partial.ok).toBe(true);
+    expect(partial.data.legibility).toBe("partial");
+
+    /* Even `none` is reported, not thrown: this endpoint cannot reject
+       anybody (FR-004) — the *page* is what refuses on it */
+    await mockProof(JPEG(), "image/jpeg");
+    const none = await postExtract(key, PROOF_KEY, {
+      AI: aiReturning({ esComprobante: true, legibilidad: "nula", claveDeRastreo: null, banco: null, monto: null }),
+    });
+    expect(none.ok).toBe(true);
+    expect(none.data.legibility).toBe("none");
+    expect(await db().select().from(validations)).toHaveLength(0);
+  });
+});
+
+/* two-eyes-receipt US3 — a PDF read at the edge.
+
+   `toMarkdown` is stubbed on the same binding `run` is: the binding is
+   the one thing a test stands in for (constitution IV), and that covers
+   both of its doors. `pdfText` seeds what the conversion would return —
+   receipt text for a text PDF, the empty string for a scanned one. */
+describe("two-eyes-receipt US3: a PDF read at the edge", () => {
+  it("a text PDF produces the same draft a picture does, and takes the same flow", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PDF(), "application/pdf");
+    const calls: unknown[] = [];
+    const ai = aiReturning(GOOD_READING, calls, { pdfText: RECEIPT_TEXT });
+
+    const draft = await postExtract(key, PROOF_KEY, { AI: ai });
+    expect(draft.ok).toBe(true);
+    /* D1: `reader`, not `provider-ocr` — the payer sees a draft */
+    expect(draft.data.source).toBe("reader");
+    expect(draft.data.trackingKey).toBe("MBAN01002508150012345678");
+    expect(draft.data.senderBank).toBe("BBVA MEXICO");
+    expect(draft.data.amountCents).toBe(51400);
+    /* D15: no photograph to judge */
+    expect(draft.data.legibility).toBeNull();
+
+    const [row] = await db().select().from(extractions);
+    expect(row.source).toBe("reader");
+    expect(row.mediaType).toBe("application/pdf");
+    expect(row.outcome).toBe("passed");
+
+    /* One conversion and one reading, and the reading was of the text:
+       no image part travelled to the model */
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toHaveProperty("toMarkdown");
+    expect(JSON.stringify(calls[1])).toContain("text extracted from a Mexican bank transfer receipt PDF");
+    expect(JSON.stringify(calls[1])).not.toContain("image_url");
+  });
+
+  it("a text PDF goes provider-first with our reading beside it, like any other receipt", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PDF(), "application/pdf");
+    mockApiCep(
+      {
+        validationId: "prov-uuid-pdf",
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+      },
+      (body) => expectSignedProofUrl(body.imageUrl),
+    );
+
+    const res = await postValidate(key, receiptRequest, {
+      AI: aiReturning(GOOD_READING, undefined, { pdfText: RECEIPT_TEXT }),
+    });
+    expect(res.ok).toBe(true);
+    expect(res.data.ourReading).not.toBeNull();
+    /* The provider read nothing off it, we read all of it: the payment
+       carries our reading to the transfer door next (FR-013) */
+    expect(res.data.readingCheck).toBe("blind");
+    expect(res.data.blindSide).toBe("provider");
+    expect(res.data.acceptedFrom).toBe("reader");
+  });
+
+  /* Retired by name: "US-V02, scenario 2: a PDF keeps the provider's OCR
+     door, untouched". Its behaviour is gone by D1 — a PDF is read here
+     now. What was worth keeping from it is below: a PDF with nothing to
+     read still reaches the provider, silently. */
+  it("a scanned PDF continues with an empty reading, and nobody is told (D15)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PDF(), "application/pdf");
+    /* An empty conversion: the file has no text in it */
+    const ai = aiReturning(GOOD_READING, undefined, { pdfText: "" });
+
+    const draft = await postExtract(key, PROOF_KEY, { AI: ai });
+    expect(draft.ok).toBe(true);
+    expect(draft.data.source).toBe("provider-ocr");
+    expect(draft.data.trackingKey).toBeNull();
+    expect(draft.data.isReceipt).toBeNull();
+    expect(draft.data.legibility).toBeNull();
+    const [routed] = await db().select().from(extractions);
+    expect(routed.outcome).toBe("routed");
+    expect(routed.rawOutput).toBe("no-text");
+
+    mockApiCep(
+      {
+        validationId: "prov-uuid-scan",
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+      },
+      (body) => expectSignedProofUrl(body.imageUrl),
+    );
+    const res = await postValidate(key, receiptRequest, { AI: ai });
+    expect(res.ok).toBe(true);
+    /* Never a legibility refusal: legibility is a verdict on a picture
+       the model saw, and it saw none (D15) */
+    expect(res.data.ourReading).toBeNull();
+    expect(res.data.readingCheck).toBe("blind");
+    expect(res.data.blindSide).toBe("both");
+  });
+
+  it("a conversion that throws is the same as one that yields nothing", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PDF(), "application/pdf");
+    const ai = {
+      run: async () => ({ response: "" }),
+      toMarkdown: async () => {
+        throw new Error("conversion exploded");
+      },
+    } as unknown as Ai;
+
+    const draft = await postExtract(key, PROOF_KEY, { AI: ai });
+    expect(draft.ok).toBe(true);
+    expect(draft.data.source).toBe("provider-ocr");
+    const [row] = await db().select().from(extractions);
+    expect(row.outcome).toBe("routed");
+  });
+
+  it("a top-up PDF takes the same path under the platform's NULL owner", async () => {
+    await mockProof(PDF(), "application/pdf");
+    const reading = await consta(
+      testEnv({ AI: aiReturning(GOOD_READING, undefined, { pdfText: RECEIPT_TEXT }) }),
+      db(),
+      { platform: true },
+    ).extract({ proofKey: PROOF_KEY });
+    expect(reading.source).toBe("reader");
+
+    const [row] = await db().select().from(extractions);
+    /* prepaid-credit D6 / consta-api-merge D3: the platform's own
+       transaction owns its rows, and NULL is how that is written */
+    expect(row.businessId).toBeNull();
+    expect(row.mediaType).toBe("application/pdf");
   });
 });

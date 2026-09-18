@@ -108,12 +108,13 @@ CI order on every PR — none of it may be skipped or quarantined to get green:
 `spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`, typecheck,
 tests, build.
 **Never deploy from a local machine.** Merge to `main` deploys dev (the browser
-and passkey layers gate it); a `v*` tag deploys prod behind an approval gate.
-A release is `git tag vX.Y.Z origin/main && git push origin vX.Y.Z` on a commit
-whose Deploy Dev run is green — the tag job checks and refuses otherwise
-(production-launch D1). A rollback is Actions → *Rollback Prod* with the
-service and the version id from the release's summary; it moves code, never
-data (D7). The runbook is `specs/006-production-launch/quickstart.md`.
+and passkey layers gate it); a `v*` tag deploys prod, and **the tag is the
+approval** — there is no reviewer click (production-launch D3). A release is
+`git tag vX.Y.Z origin/main && git push origin vX.Y.Z` on a commit whose
+Deploy Dev run is green — the tag job checks and refuses otherwise (D1). A
+rollback is Actions → *Rollback Prod* with the service and the version id
+from the release's summary; it moves code, never data (D7). The runbook is
+`specs/006-production-launch/quickstart.md`.
 
 ## Architecture
 

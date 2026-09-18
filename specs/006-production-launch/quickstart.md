@@ -19,9 +19,10 @@ Tick every box before pushing `v1.0.0`. Who does what is in
 
 **Repository**
 
-- [ ] `production` environment has required reviewer `leolicona` and the
-      deployment policy `tag v*` + `branch main` (D3). Check:
-      `gh api repos/leolicona/devolada/environments/production --jq '.protection_rules[].reviewers[].reviewer.login'`
+- [x] `production` environment's deployment policy is `tag v*` + `branch main`
+      (D3; done 2026-09-18). There is no reviewer: **the tag is the approval**
+      — pushing it is the deliberate act. Check:
+      `gh api repos/leolicona/devolada/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'`
 - [ ] Secrets in `production`: `BETTER_AUTH_SECRET`, `CLOUDFLARE_API_TOKEN`,
       `RESEND_API_KEY`, `APICEP_TOKEN`, `PLATFORM_OPERATOR_EMAILS`. Check:
       `gh secret list --env production`
@@ -58,10 +59,12 @@ git tag v1.0.0 origin/main
 git push origin v1.0.0
 ```
 
-Then, in GitHub → Actions → *Deploy Prod*:
+**The push is the approval.** There is no second click; what stands between
+the push and production is the gate. Then, in GitHub → Actions → *Deploy
+Prod*:
 
-1. `gate` passes (green dev run found for the commit), `test` passes.
-2. The `deploy` job waits: **Review deployments → production → Approve**.
+1. `gate` passes (green dev run found for the commit, and it is on `main`).
+2. `test` passes; `deploy` runs straight on.
 3. Watch it: `gh run watch` (or the run page).
 
 **What a pass looks like** (read the log top to bottom):
@@ -84,8 +87,8 @@ deploy and the secret step — nobody can hold a session in that window and
 it never recurs.
 
 **Re-planting a credential later** (a secret added after launch): Actions →
-*Deploy Prod* → *Run workflow* on `main`. The same gate, approval, archive
-and probe run; the code is redeployed unchanged; the new secret is planted.
+*Deploy Prod* → *Run workflow* on `main` (the click is the deliberate act).
+The same gate, archive and probe run; the code is redeployed unchanged; the new secret is planted.
 
 ## 2. Verify — the product doing its job, not a health answer
 
@@ -139,7 +142,7 @@ Actions → *Rollback Prod* → *Run workflow*:
 - `worker`: `api`, `admin` or `pago` — one per run
 - `version_id`: from the release's job summary (or a previous run's)
 
-Approve it (same reviewer). **A pass**: the job prints the version now live
+The click is the act; nothing else pauses it. **A pass**: the job prints the version now live
 and it equals the one you asked for. If wrangler declined (it can, across a
 changed secret), the job fails and says so — nothing moved.
 

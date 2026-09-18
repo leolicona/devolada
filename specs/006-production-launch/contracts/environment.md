@@ -12,8 +12,8 @@ in order; this is the reference.
 
 | Item | Value | Set by | Check |
 | --- | --- | --- | --- |
-| required reviewer | `leolicona` | creator (UI) or `gh api` on the creator's word (R3) | `gh api repos/leolicona/devolada/environments/production --jq '.protection_rules[].reviewers[].reviewer.login'` → `leolicona` |
-| deployment policy | custom: tag `v*`, branch `main` | same | `gh api …/environments/production/deployment-branch-policies --jq '.branch_policies[] \| "\(.type) \(.name)"'` → `tag v*`, `branch main` |
+| required reviewer | **none** — the tag is the approval (D3, amended 2026-09-18); GitHub refuses the rule on a private Free-plan repository | — | `gh api repos/leolicona/devolada/environments/production --jq '.protection_rules[].type'` → `branch_policy` only |
+| deployment policy | custom: tag `v*`, branch `main` | agent via `gh api`, on the creator's word (R3) — done 2026-09-18 | `gh api …/environments/production/deployment-branch-policies --jq '.branch_policies[] \| "\(.type) \(.name)"'` → `tag v*`, `branch main` |
 | secret `BETTER_AUTH_SECRET` | present since 2026-08-15 | — | `gh secret list --env production` |
 | secret `CLOUDFLARE_API_TOKEN` | present since 2026-09-01; scopes below | — | same |
 | secret `RESEND_API_KEY` | the Resend key | **creator** — never the agent | same; the release log shows it planted |
@@ -59,7 +59,7 @@ Retired secrets `CONSTA_API_KEY`, `CONSTA_ISSUER_TOKEN`, `CONSTA_ADMIN_TOKEN`
 
 - May: set the two repository variables; delete the retired secrets and set
   `PLATFORM_OPERATOR_EMAILS` **only after the creator says so in chat**;
-  configure the reviewer and the policy via `gh api` on the same word.
+  configure the deployment policy via `gh api` on the same word.
 - May not: see, type or store `RESEND_API_KEY`, `APICEP_TOKEN` or any
   credential. The creator sets those with `gh secret set <NAME> --env production`
   in their own terminal or in the GitHub UI.

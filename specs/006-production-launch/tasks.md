@@ -60,7 +60,7 @@ release (T017). Reference: [contracts/environment.md](./contracts/environment.md
 **⚠️ CRITICAL**: T003 and T006 change persistent configuration and run only
 on the creator's word; T007–T009 are creator-only.
 
-- [ ] T003 **ops, on the creator's word** — Configure the approval gate (D3): `gh api users/leolicona --jq .id`, then `gh api -X PUT repos/leolicona/devolada/environments/production --input -` with `{"reviewers":[{"type":"User","id":<id>}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}`, then two `gh api -X POST repos/leolicona/devolada/environments/production/deployment-branch-policies` calls with `{"name":"v*","type":"tag"}` and `{"name":"main","type":"branch"}`. Check: `gh api repos/leolicona/devolada/environments/production --jq '.protection_rules[].reviewers[].reviewer.login'` → `leolicona`; `…/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'` → `tag v*`, `branch main`.
+- [X] T003 **ops, on the creator's word** — Configure the gate on the environment (D3): `gh api -X PUT repos/leolicona/devolada/environments/production --input -` with `{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}`, then two `gh api -X POST repos/leolicona/devolada/environments/production/deployment-branch-policies` calls with `{"name":"v*","type":"tag"}` and `{"name":"main","type":"branch"}`. Check: `…/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'` → `tag v*`, `branch main`. **Done 2026-09-18.** The required reviewer was attempted first and refused by GitHub (HTTP 422: not on this plan for a private repository); the creator chose the tag as the approval — constitution v1.4.0, spec Clarifications 2026-09-18, research R3.
 - [X] T004 [P] **ops** — Set the two smoke variables (D6): `gh variable set PROD_ADMIN_URL --body https://app.devoladapago.com` and `gh variable set PROD_PAGO_URL --body https://link.devoladapago.com`. Check: `gh variable list` shows both beside `PROD_API_URL`.
 - [ ] T005 [P] **ops, creator-only** — Mint the production apiCEP token (D4) at app.apicep.cloud: a second `apicep_…` token, distinct from dev's; if the account cannot hold two, a second account — never the dev token. Note the pool (800 calls/month) and that each release spends one call (D11). Check: the creator confirms in chat that a distinct token exists; its value is never pasted here.
 - [X] T006 **ops, on the creator's word** — Delete the retired secrets (D13, spec 004 T049): `gh secret delete CONSTA_ISSUER_TOKEN --env production`; `gh secret delete CONSTA_API_KEY --env dev`; `gh secret delete CONSTA_ISSUER_TOKEN --env dev`; `gh secret delete CONSTA_ADMIN_TOKEN --env dev`. Check: `gh secret list --env production` and `--env dev` show no `CONSTA_*` (SC-008 = 0).
@@ -73,10 +73,10 @@ to tag", which waits for the merge.
 
 ---
 
-## Phase 3: User Story 1 — The creator ships a release from a tag, behind an approval (P1) 🎯 MVP
+## Phase 3: User Story 1 — The creator ships a release from a tag, and the tag is the approval (P1) 🎯 MVP
 
 **Goal**: `deploy-prod.yml` refuses an ungated commit, runs the PR loop's
-checks, pauses for the reviewer, warns in consequences, proves three
+checks, runs straight on (the push was the approval), warns in consequences, proves three
 hostnames and states what landed. `deploy-dev.yml` gains the same lint and
 the same warning text. CLAUDE.md names the acts.
 
@@ -99,7 +99,7 @@ after the merge, push `v1.0.0` and read the run against `quickstart.md` §1.
 ### Verification
 
 - [X] T019 [US1] **Prove the refusal (spec US1 scenario 2)**: push this branch, then `gh workflow run deploy-prod.yml --ref claude/production-deployment-b1e0c6` and `gh run watch` — the `gate` job must fail with the D1 error (no Deploy Dev run exists for a branch commit) and `test`/`deploy` must never start. This also proves the edited YAML parses on GitHub. Paste the run URL into the PR description under "Evidence".
-- [ ] T020 [US1] **The release (spec US1 scenarios 1, 3–8)** — after the PR merges and its *Deploy Dev* run is green, **on the creator's word**: `git fetch origin main && git tag v1.0.0 origin/main && git push origin v1.0.0`; the creator approves the `deploy` job in Actions; `gh run watch`. Read the log against `quickstart.md` §1: gate green, `d1-backup-v1.0.0` archived (empty), migrations applied, no `::warning::` in the secrets step, `apiCEP accepted the credential`, three hostnames answered, summary table present. Then `curl -s https://api.devoladapago.com/health`, `curl -sI https://app.devoladapago.com/ | head -1`, `curl -sI https://link.devoladapago.com/ | head -1`. Record the run URL, the three version ids and the archive name — they go into T028.
+- [ ] T020 [US1] **The release (spec US1 scenarios 1, 3–8)** — after the PR merges and its *Deploy Dev* run is green, **on the creator's word** (the push is the approval — D3): `git fetch origin main && git tag v1.0.0 origin/main && git push origin v1.0.0`; `gh run watch`. Read the log against `quickstart.md` §1: gate green, `d1-backup-v1.0.0` archived (empty), migrations applied, no `::warning::` in the secrets step, `apiCEP accepted the credential`, three hostnames answered, summary table present. Then `curl -s https://api.devoladapago.com/health`, `curl -sI https://app.devoladapago.com/ | head -1`, `curl -sI https://link.devoladapago.com/ | head -1`. Record the run URL, the three version ids and the archive name — they go into T028.
 
 **Checkpoint**: production exists, and the way it came to exist can be read
 top to bottom in one log.
@@ -139,7 +139,7 @@ already live — completes, changes nothing, proves the path.
 
 ### Verification
 
-- [ ] T025 [US3] **Rehearsal (spec US3 scenario 3)** — after T020: Actions → *Rollback Prod* → `worker: api`, `version_id: <the API's id from the release summary>`; the creator approves; the job must complete and print `api now serves <that id>`. Check `curl -s https://api.devoladapago.com/health` still answers. A real rollback to a *previous* version (scenario 1) waits for the day a second release exists; the rehearsal proves the path. Record the run URL for T028.
+- [ ] T025 [US3] **Rehearsal (spec US3 scenario 3)** — after T020: Actions → *Rollback Prod* → `worker: api`, `version_id: <the API's id from the release summary>` (the click is the act; no further pause); the job must complete and print `api now serves <that id>`. Check `curl -s https://api.devoladapago.com/health` still answers. A real rollback to a *previous* version (scenario 1) waits for the day a second release exists; the rehearsal proves the path. Record the run URL for T028.
 
 **Checkpoint**: the undo exists, was exercised, and its verification is
 what makes it trustworthy.
@@ -207,7 +207,7 @@ commit's own run.
 ### The launch
 
 4. Phase 2 complete (every pre-flight box ticked).
-5. T020: the tag, the approval, the log. Production exists.
+5. T020: the tag — which is the approval — and the log. Production exists.
 6. Phase 4: the day-one path — the creator's business, the operator
    panel, the first ISP, one real transfer.
 7. T025: the rehearsal. T028: the record.

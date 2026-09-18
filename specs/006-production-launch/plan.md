@@ -1,6 +1,6 @@
 # Implementation Plan: production-launch
 
-**Branch**: `claude/production-deployment-b1e0c6` | **Date**: 2026-09-17 | **Spec**: [spec.md](./spec.md)
+**Branch**: `claude/production-deployment-b1e0c6` | **Date**: 2026-09-17, amended 2026-09-18 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/006-production-launch/spec.md`
 
@@ -9,8 +9,9 @@
 Make the first production release a repeatable act, and make it. The
 pipeline that deploys from a `v*` tag already exists and has never run; what
 this feature adds around it is the gate that ties a tag to a green dev
-deploy, the lint parity with the PR loop, the approval that the workflow's
-comment promises and the environment does not have, warnings that name
+deploy, the lint parity with the PR loop, a deployment policy on the
+environment in place of the reviewer the workflow's comment promised (the
+tag is the approval — amended 2026-09-18), warnings that name
 consequences instead of variables, a smoke that proves all three public
 hostnames, a job summary that says what landed, a rollback job that is
 honest about whether it rolled back, and the runbook that tells one person
@@ -20,13 +21,17 @@ moves.
 Phase 0 read the pipeline, the environments, the account and wrangler's
 bundle rather than assuming them. Three findings shaped the design:
 
-- **The approval gate does not exist.** `deploy-prod.yml` says "the job
-  pauses here until human approval"; the `production` environment has no
-  protection rule. A tag today would deploy without a pause (R3).
+- **The approval gate does not exist — and cannot, on this plan.**
+  `deploy-prod.yml` says "the job pauses here until human approval"; the
+  `production` environment has no protection rule, and GitHub refuses to
+  add a required reviewer to a private repository on the Free plan
+  (measured 2026-09-18). The creator chose the tag as the approval: the
+  deliberate act is the push, and the mechanical gate below is what keeps
+  it safe (R3, constitution v1.4.0).
 - **Nothing ties the tag to the dev gates.** The browser and passkey layers
   run only on merge to `main`; a tag's `test` job is a strict subset of the
   PR gate. The release now asks the repository for the commit's green
-  *Deploy Dev* run before anyone approves (R1, R2).
+  *Deploy Dev* run before it touches production (R1, R2).
 - **`wrangler rollback` can decline silently in CI.** Its second
   confirmation (secrets changed since that version) has no default and
   answers *no* non-interactively, then returns without an error. The
@@ -34,8 +39,8 @@ bundle rather than assuming them. Three findings shaped the design:
   the version asked for (R7).
 
 The rest is operations the pipeline cannot do for itself — three secrets the
-creator plants, one reviewer, two variables, one bucket rule, a second
-provider token — and the day-one path: the creator's own business first, so
+creator plants, one deployment policy, two variables, one bucket rule, a
+second provider token — and the day-one path: the creator's own business first, so
 the operator panel opens and the platform's top-up account exists before any
 ISP runs through its welcome allowance.
 
@@ -48,7 +53,8 @@ the lockfile) for deploy, `d1 export`, `secret put`, `rollback`,
 
 **Primary Dependencies**: `actions/checkout@v4`, `pnpm/action-setup@v4`,
 `actions/setup-node@v4`, `actions/upload-artifact@v4` (already in use);
-GitHub environments (required reviewers, deployment branch/tag policies);
+GitHub environments (deployment branch/tag policies; required reviewers are
+not available to a private repository on the Free plan — R3);
 Cloudflare Workers, D1, R2, Workers AI, the `devoladapago.com` zone; apiCEP
 (`https://api.apicep.cloud`, one billed call per release); Resend
 (`devoladapago.com` verified).
@@ -84,10 +90,10 @@ Workflow); secrets planted after the deploy (TD-011) and the provider
 credential verified by reading the body (constitution VIII); `BETTER_AUTH_SECRET`
 stays the one refusal (VIII); the agent never handles a credential value —
 the creator plants `RESEND_API_KEY` and `APICEP_TOKEN`; persistent
-configuration (reviewer, policy, secret deletion) only on the creator's
+configuration (deployment policy, secret deletion) only on the creator's
 explicit word in chat.
 
-**Scale/Scope**: one developer, one approver, one pilot ISP; first tag
+**Scale/Scope**: one developer, whose tag push is the approval, one pilot ISP; first tag
 `v1.0.0`; 29 migrations replayed on an empty database; three Workers, three
 hostnames, five secrets, five variables.
 
@@ -99,7 +105,7 @@ Code comments cite these as `production-launch D<n>` (constitution I).
 | --- | --- | --- |
 | D1 | The tag is the release, cut only from a `main` commit whose *Deploy Dev* run finished green. A `gate` job asks the repository (REST, `head_sha`) and requires `main` lineage before `test` runs | spec FR-002, research R1 |
 | D2 | The tag runs the PR loop's lint set: `pending-lint` joins `deploy-prod.yml` and `deploy-dev.yml` | spec FR-003, research R2 |
-| D3 | The approval gate is a required reviewer (`leolicona`) on the `production` environment plus a deployment policy of tag `v*` and branch `main`; set via `gh api` on the creator's word | spec FR-004, research R3 |
+| D3 | The tag is the approval: pushing a `v*` tag is the deliberate act; the `production` environment accepts deployments only from tags `v*` and the branch `main` (set via `gh api` on the creator's word). No required reviewer — not available to this private repository on the Free plan (measured 2026-09-18), and GitHub Pro and a third-party pause were declined | spec Clarifications 2026-09-18, FR-004, research R3; constitution v1.4.0 |
 | D4 | Validation is on at launch with a production-only apiCEP token; dev keeps its own | spec Clarifications, FR-016 |
 | D5 | A missing `RESEND_API_KEY` is a `::warning::` that says "nobody can finish signing up"; not a refusal | spec FR-006, research R4 |
 | D6 | The smoke proves `PROD_API_URL/health`, `PROD_ADMIN_URL/`, `PROD_PAGO_URL/`, each with its own wait; two new repository variables; failure names the URL and the undo | spec FR-008, FR-014, research R5 |
@@ -133,14 +139,19 @@ Planned against v1.3.0. One gate per principle.
 `devoladapago.com`; per-PR preview versions" — describes what the first
 release creates. No departure.
 
-**Development Workflow & Quality Gates**: "Production deploys from a `v*`
-tag through the `production` environment's approval gate, with a D1 export
-archived before migrating." This feature makes each clause true: the gate
-exists (D3), the export is archived (kept), and — one clause the text does
-not carry but the CLAUDE.md gloss does — the browser and passkey layers gate
-the release through the dev run the tag must have (D1).
+**Development Workflow & Quality Gates**: planned against v1.3.0's bullet
+("through the `production` environment's approval gate"); on 2026-09-18 the
+gate proved unavailable to this repository and the creator amended the law
+rather than route around it — v1.4.0 reads "the tag is the approval: pushing
+it is the deliberate act, taken on a `main` commit whose dev deploy finished
+green — the release refuses any other commit before it touches production —
+with a D1 export archived before migrating." This feature makes each clause
+true: the refusal (D1), the deployment policy (D3), the archive (kept).
 
-**Post-design re-check (after Phase 1)**: PASS, unchanged. The data model
+**Post-design re-check (after Phase 1)**: PASS, unchanged. **Re-check after
+the 2026-09-18 amendment**: PASS — D3 changed mechanism, not principle; the
+constitution's own bullet was amended first (governance: the feature's plan
+proposes the amendment, it does not route around it). The data model
 adds no table; the contracts describe a pipeline and an environment, not an
 API; the runbook prescribes acts, not code. The one judgement (IV/VII) is
 the one expected before research began and is recorded below.
@@ -183,7 +194,7 @@ apps/ packages/ scripts/       # unchanged — no application code, copy, schema
 ```
 
 Outside the tree, by the runbook (contracts/environment.md): the
-`production` environment's reviewer and policy (D3); secrets
+`production` environment's deployment policy (D3); secrets
 `RESEND_API_KEY`, `APICEP_TOKEN` (creator), `PLATFORM_OPERATOR_EMAILS`;
 variables `PROD_ADMIN_URL`, `PROD_PAGO_URL`; deletion of `CONSTA_*` (D13);
 the R2 lifecycle rule (D10); the second apiCEP token (D4); the Resend domain

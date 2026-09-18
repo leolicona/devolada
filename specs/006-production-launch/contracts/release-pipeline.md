@@ -12,7 +12,7 @@ or a later feature may rely on.
 
 | Trigger | Ref | Use |
 | --- | --- | --- |
-| `push` of a tag `v*` | the tag | a release (D1) |
+| `push` of a tag `v*` | the tag | a release — the push is the approval (D1, D3) |
 | `workflow_dispatch` | the branch it is started from — the environment rule admits `main` only | re-plant a credential added after launch; redeploys the same code (spec edge case) |
 
 ### Jobs, in order
@@ -27,8 +27,9 @@ or a later feature may rely on.
 2. **`test`** (D2) — `needs: gate`. In this order, none skippable:
    `spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`,
    typecheck, test, build.
-3. **`deploy`** — `needs: test`, `environment: production` (pauses for the
-   reviewer, D3), `concurrency: deploy-prod`. Steps and their promises:
+3. **`deploy`** — `needs: test`, `environment: production` (its policy
+   admits tags `v*` and `main` only; there is no reviewer pause — the tag is
+   the approval, D3), `concurrency: deploy-prod`. Steps and their promises:
 
 | Step | Promise |
 | --- | --- |
@@ -45,14 +46,15 @@ or a later feature may rely on.
 
 - Deploy from anywhere but a CI run.
 - Roll back or restore data.
-- Manage bucket policy (D10) or create environments, reviewers or variables.
+- Manage bucket policy (D10) or create environments, policies or variables.
 
 ## `rollback-prod.yml` — Rollback Prod
 
 ### Trigger
 
-`workflow_dispatch` only, `environment: production` (same reviewer),
-`concurrency: deploy-prod` (queues behind a release).
+`workflow_dispatch` only, `environment: production` (same policy: the
+dispatch itself is the deliberate act), `concurrency: deploy-prod` (queues
+behind a release).
 
 | Input | Type | Meaning |
 | --- | --- | --- |

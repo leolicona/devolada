@@ -1,7 +1,8 @@
 # Return one production service to one named version, from CI
 # (production-launch D7). "Never deploy from a local machine" covers the
-# undo too: the act stays in a run's log, behind the same reviewer and the
-# same credentials the release uses.
+# undo too: the act stays in a run's log, on the same environment and with
+# the same credentials the release uses. The click that starts it is the
+# deliberate act — there is no reviewer pause on this repository (D3).
 #
 # What it touches: the live version of ONE Worker — devolada-api,
 # devolada-admin or devolada-pago — chosen by `worker`. What it never

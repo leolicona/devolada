@@ -1,4 +1,4 @@
-# Production via v* tag with approval gate (CICD.md path 3).
+# Production via v* tag (CICD.md path 3); the tag is the approval (production-launch D3).
 # The runbook — pre-flight, release, verification, undo — is
 # specs/006-production-launch/quickstart.md (production-launch).
 name: Deploy Prod
@@ -6,8 +6,9 @@ on:
   push:
     tags: ["v*"]
   # Re-plant a credential added after launch without a new tag: same gate,
-  # same approval, same archive; the code is redeployed unchanged. The
-  # environment's policy admits `main` only (production-launch D3).
+  # same archive; the code is redeployed unchanged. The click is the
+  # deliberate act, and the environment's policy admits `main` only
+  # (production-launch D3).
   workflow_dispatch:
 
 concurrency:
@@ -21,9 +22,11 @@ jobs:
   # repository for that run instead of repeating them — 8–10 minutes and a
   # chromium install to re-prove a commit that already proved itself, and a
   # flaky re-run could block a hotfix dev already accepted. Nothing below
-  # starts until this passes: the reviewer is never asked to approve an
-  # ungated commit. A commit that is not on main has no dev run at all and
-  # is refused for the same reason.
+  # starts until this passes — and since the tag is the approval
+  # (production-launch D3, constitution v1.4.0), this gate is what makes
+  # that approval safe: production is never touched on an ungated commit. A
+  # commit that is not on main has no dev run at all and is refused for the
+  # same reason.
   gate:
     runs-on: ubuntu-latest
     permissions:
@@ -82,10 +85,13 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    # Environment with required reviewer: the job pauses here until human
-    # approval. The reviewer and the "tags v* and main only" policy live on
-    # the environment, not in this file (production-launch D3) — the
-    # runbook's pre-flight checks they are there.
+    # production-launch D3: the tag is the approval. There is no reviewer
+    # pause here — GitHub sells that rule only above the Free plan for a
+    # private repository (measured 2026-09-18: HTTP 422), and the creator
+    # chose the push of a v* tag as the deliberate act over paying for the
+    # click. What the environment does hold is the policy "tags v* and
+    # main only", set outside this file; the runbook's pre-flight checks
+    # it is there. The gate job above is what keeps the act safe.
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

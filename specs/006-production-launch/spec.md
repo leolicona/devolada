@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-17
 
-**Status**: Draft — decisions taken by the product creator in session, ready for `/speckit-plan`
+**Status**: Draft — decisions taken by the product creator in session; amended 2026-09-18 (the tag is the approval)
 
 **Input**: User description: "The creator ships Devolada to production for the first time and can do it again for every release. A release is a `v*` tag cut from a `main` commit whose dev deploy is green; it waits for the creator's approval, archives the production database before migrating, deploys the API, the panel and the payment page under devoladapago.com, plants and verifies the credentials (email, provider, operator), and proves each public hostname answers before it calls itself done. The first business can sign up, verify its email, set its CLABE and WispHub key and collect a validated SPEI payment on day one; the creator's own business is the first row and opens the operator panel to set the platform's top-up account. A bad release is undone from CI, never from a laptop; data is never rolled back automatically."
 
@@ -34,14 +34,28 @@ they were put and answered:
   stranger's worst case is a few pesos of provider credit. Admission policy
   is the next feature, after the pilot ISP is live. (Assumptions, Out of Scope)
 
+### Amended 2026-09-18
+
+- Q: GitHub refused the required-reviewer rule — on a private repository it
+  needs GitHub Pro (measured 2026-09-18: HTTP 422 "Please ensure the billing
+  plan supports the required reviewers protection rule"). The tag-only rule
+  went in; the pause with a name on it did not. How do we get the pause?
+  → A: **The tag is the approval.** Stay on the Free plan; pushing a `v*`
+  tag is the deliberate act, and what keeps it deliberate is mechanical:
+  the release refuses a commit whose dev deploy did not finish green or
+  that is not on `main`, before it touches production. GitHub Pro and a
+  third-party approval action were declined. The constitution's
+  Development Workflow bullet is amended to say so (v1.4.0). (US1, FR-004,
+  SC-001, SC-002)
+
 ## Summary
 
 Production has never been deployed. The pipeline for it exists and is nearly
-whole: a version tag runs the checks, waits for an approval, archives the
-production database, migrates it, deploys the three services, plants the
-credentials, verifies the provider's and probes one address. What is missing
-is everything around that pipeline. The approval it waits for is not
-configured, so today a tag would sail straight through. Three of the
+whole: a version tag runs the checks, archives the production database,
+migrates it, deploys the three services, plants the credentials, verifies
+the provider's and probes one address. What is missing is everything around
+that pipeline. Nothing ties the tag to the gates that run on `main`, so
+today a tag on any commit would sail straight through. Three of the
 credentials it would plant are not there — one of them the email key, without
 which no one can finish signing up, and the pipeline would only mention it in
 passing. The proofs bucket's fifteen-day rule exists as a comment. There is no
@@ -50,10 +64,11 @@ And the runbook that described the whole act left the tree with the archive
 on 2026-09-09; the pipeline still points at it by name.
 
 This feature makes the first release a repeatable act rather than a brave
-one. A release is a tag. It is refused unless the commit it names already
-deployed to dev and passed the gates there. It runs the same checks a pull
-request runs, waits for the creator, archives before it migrates, deploys,
-plants what the environment holds and says out loud what it does not — naming
+one. A release is a tag, and the tag is the approval: pushing it is the
+deliberate act. It is refused unless the commit it names already deployed to
+dev and passed the gates there. It runs the same checks a pull request runs,
+archives before it migrates, deploys, plants what the environment holds and
+says out loud what it does not — naming
 the consequence, not the variable — and proves that each public address
 answers before it calls itself done. A bad release is undone from the same
 place it was made, by naming the version to return to; the data is never
@@ -61,7 +76,7 @@ touched by that act, and the archived export is the restore point a human
 may choose to use.
 
 Around the pipeline, the feature writes down what the first day needs: the
-environment's secrets and its reviewer, the bucket rule, the two provider
+environment's secrets and its deployment policy, the bucket rule, the two provider
 accounts, and then the first business — the creator's own, so the operator
 panel opens and the platform's top-up account gets set before any ISP runs
 through its welcome allowance.
@@ -71,11 +86,12 @@ exists.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - The creator ships a release from a tag, behind an approval (Priority: P1)
+### User Story 1 - The creator ships a release from a tag, and the tag is the approval (Priority: P1)
 
-The creator pushes a version tag on a commit of `main`. The release runs the
-same checks a pull request runs, then stops and waits. The creator approves
-it. The release archives the production database, migrates it, deploys the
+The creator pushes a version tag on a commit of `main` — that push is the
+approval, the one deliberate act. The release first refuses the commit
+unless its dev deploy finished green, then runs the same checks a pull
+request runs, archives the production database, migrates it, deploys the
 API, the panel and the payment page, plants every credential the environment
 holds, verifies the provider's by reading its answer, and then proves that
 each of the three public addresses answers. Only then does it say it is done.
@@ -85,20 +101,21 @@ will not work.
 **Why this priority**: it is the feature. Nothing else here exists until a
 release can be made and repeated.
 
-**Independent Test**: push a tag on a green commit, approve, read the log
-end to end, then open the three addresses. Then push a tag on a commit whose
-dev deploy did not run and watch it refuse before approval. Needs nothing
-from the other two stories.
+**Independent Test**: push a tag on a green commit, read the log end to
+end, then open the three addresses. Then start the release on a commit whose
+dev deploy did not run and watch it refuse before it touches anything. Needs
+nothing from the other two stories.
 
 **Acceptance Scenarios**:
 
 1. **Given** a `main` commit whose dev deploy is green, **When** a version tag
-   is pushed on it, **Then** the checks run, the release waits for the
-   creator's approval, and nothing in production changes before that approval.
+   is pushed on it, **Then** the release proceeds without a further click —
+   the push was the approval — and nothing in production changes before the
+   checks pass.
 2. **Given** a commit whose dev deploy failed or never ran, **When** a version
-   tag is pushed on it, **Then** the release refuses before anyone is asked
-   to approve, and the log names the missing dev run.
-3. **Given** the creator approves, **When** the release runs, **Then** the
+   tag is pushed on it, **Then** the release refuses before it touches
+   production, and the log names the missing dev run.
+3. **Given** the checks passed, **When** the release runs, **Then** the
    production database is exported and archived before the first migration,
    and the archive is retrievable from the run for thirty days.
 4. **Given** the environment holds every credential, **When** the release
@@ -205,9 +222,14 @@ answer as it did before.
   release the API lives for a few seconds with no session secret, before any
   person could have a session. Accepted, and recorded here so it is not
   rediscovered as a mystery.
-- **A tag on a commit that never went to dev.** Refused before approval. A
-  tag on a commit whose dev deploy is still running is treated the same way:
-  green means finished and green.
+- **A tag on a commit that never went to dev.** Refused before production is
+  touched. A tag on a commit whose dev deploy is still running is treated the
+  same way: green means finished and green.
+- **A tag pushed by mistake.** There is no second click to catch it: the tag
+  is the approval. What stands between a mistake and production is the gate
+  (a green dev deploy, on `main`), the checks, and the tag's own name — a
+  `v*` tag is not something one pushes by accident. Chosen on 2026-09-18 over
+  a paid plan and over a third-party pause.
 - **Re-running the release by hand to plant a secret added later.** The
   release can be started from the Actions tab without a new tag; it archives,
   migrates nothing new, redeploys the same code and plants what is now
@@ -245,7 +267,7 @@ answer as it did before.
   from the pipeline's own interface for the case where only a credential
   changed.
 - **FR-002**: A release MUST refuse a commit whose dev deploy has not
-  finished green, before anyone is asked to approve it. The refusal names the
+  finished green, before it touches production. The refusal names the
   commit and the missing or failed dev run. A commit that is not on `main` has
   no dev run and is refused for the same reason.
 - **FR-003**: A release MUST run every check a pull request runs — the
@@ -253,10 +275,12 @@ answer as it did before.
   lint, typecheck, tests and build — and none may be skipped or quarantined
   to get green. The browser and passkey layers are not repeated: they gate
   the dev deploy the release requires (FR-002).
-- **FR-004**: A release MUST wait for the creator's approval before its first
-  act on production. The approval MUST be configured on the production
-  environment as a required reviewer, and that environment MUST accept
-  deployments only from version tags.
+- **FR-004**: The push of the version tag IS the approval: no further click
+  stands between it and production, and none is promised. The production
+  environment MUST accept deployments only from version tags and from the
+  `main` branch (the by-hand re-run of FR-001). A required reviewer is not
+  used — not available to this private repository on its plan, and declined
+  as a paid or third-party substitute (Clarifications, 2026-09-18).
 - **FR-005**: A release MUST export the production database and archive the
   export with the run, retrievable for thirty days, before its first
   migration.
@@ -286,7 +310,7 @@ answer as it did before.
   restores data on its own.
 - **FR-012**: The runbook MUST list, in order, everything the first release
   needs that the pipeline cannot do for itself: the environment's secrets and
-  its reviewer, the address variables, the bucket rule, the credential
+  its deployment policy, the address variables, the bucket rule, the credential
   scopes, the two provider accounts, and the removal of secrets nothing reads
   any more. Each item says who does it and what happens if it is skipped.
 - **FR-013**: Every rule the pipeline gains by this feature MUST cite this
@@ -318,11 +342,11 @@ answer as it did before.
 ### Key Entities
 
 - **Release**: a version tag on a `main` commit whose dev deploy is green.
-  One run of the pipeline, waiting for one approval, producing one archive
-  and one live version of each of the three services.
+  One run of the pipeline — the tag push is its approval — producing one
+  archive and one live version of each of the three services.
 - **Production environment**: the pipeline's store of what production is
-  allowed to receive — its secrets, its address variables, its reviewer, and
-  the rule that only version tags may deploy to it.
+  allowed to receive — its secrets, its address variables, and the rule that
+  only version tags and the `main` branch may deploy to it.
 - **Archive**: the export of the production database taken by a release
   before it migrates. The restore point; kept thirty days with the run.
 - **Version**: what a service is serving at a moment. Every release makes
@@ -337,10 +361,10 @@ answer as it did before.
 ### Measurable Outcomes
 
 - **SC-001**: The first production release completes from tag push to "done"
-  in one run, with no act between the approval and the address proof that a
+  in one run, with no act between the push and the address proof that a
   person performs.
-- **SC-002**: A tag on a commit without a green dev deploy never reaches the
-  approval: count of such tags approved is zero.
+- **SC-002**: A tag on a commit without a green dev deploy never touches
+  production: count of such releases that got past the gate is zero.
 - **SC-003**: The count of checks a release runs equals the count a pull
   request runs.
 - **SC-004**: After a release, each of the three public addresses answers
@@ -376,8 +400,10 @@ answer as it did before.
   a second provider token for production. Should the provider not allow a
   second token on one account, the runbook's fallback is a second account —
   never a shared pool.
-- **A single approver approves their own release.** One developer builds
-  this product; the gate is a pause with a name on it, not a second person.
+- **The tag is the approval.** One developer builds this product, and the
+  pause with a name on it that GitHub sells for private repositories was
+  declined (Clarifications, 2026-09-18). The deliberate act is the push of a
+  `v*` tag; the gate that makes it safe is a green dev deploy on `main`.
 - **The bucket rule is done by hand, once.** The pipeline's credential is
   scoped to deploy, and bucket policy is not a thing a release changes. The
   runbook lists it and the launch checks it.
@@ -403,7 +429,8 @@ answer as it did before.
   next feature.
 - Observability and alerting. Nothing pages anyone today; a release makes
   that no worse and no better. A feature of its own.
-- Automatic data restore, blue/green, canaries, multiple reviewers.
+- Automatic data restore, blue/green, canaries, a required reviewer (paid or
+  third-party).
 - The later phases of `003-automated-collections-api` and all of
   `005-two-eyes-receipt`.
 - Paying `retired-consta-key-column`. Its own trigger is the first migration
@@ -415,9 +442,9 @@ answer as it did before.
 
 ## Dependencies
 
-- The repository's environment features: a required reviewer and a
-  tag-only deployment rule on the production environment; the pipeline's own
-  token to read the dev deploy's status.
+- The repository's environment features: a deployment policy of version
+  tags and `main` on the production environment; the pipeline's own token to
+  read the dev deploy's status.
 - The platform account: the production database and proofs bucket already
   exist; the zone is live; the deploy credential's scopes cover the three
   services, the database, the reader's model and the zone.

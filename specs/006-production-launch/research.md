@@ -71,7 +71,7 @@ if the set drifts again, not worth the diff now).
 
 ---
 
-## R3 — The approval gate is a required reviewer plus a tag-only rule, set through the API on the creator's word
+## R3 — The approval gate: planned as a required reviewer plus a tag-only rule; amended to "the tag is the approval" (2026-09-18)
 
 **Decision**: the GitHub `production` environment gets one required reviewer
 (`leolicona`, user id read with `gh api users/leolicona --jq .id`), a
@@ -106,6 +106,26 @@ starts.
 act is reproducible and its log is in the conversation); a second reviewer
 (rejected — there is no second person); `wait_timer` (rejected — a delay is
 not a decision).
+
+**Amended 2026-09-18 — measured, then decided.** The `PUT` above answered
+HTTP 422: *"Failed to create the environment protection rule. Please ensure
+the billing plan supports the required reviewers protection rule."*
+Required reviewers on a **private** repository need GitHub Pro; this
+repository is private on the Free plan. Retried with the
+`deployment_branch_policy` alone: accepted, and both policies (`tag v*`,
+`branch main`) were added — so a stray branch cannot deploy, but a tag has
+no pause. Three ways to the pause were put to the creator: GitHub Pro
+(~US$4/month, the gate as designed), the tag itself as the approval (a
+constitution amendment), or a third-party approval action (an outside
+dependency in the one job that must not be flaky). **The creator chose the
+tag as the approval.** The decision (D3) now reads: pushing a `v*` tag is
+the deliberate act; what keeps it deliberate is mechanical — R1's gate
+refuses any commit without a green dev deploy or off `main` before
+production is touched; the environment admits only `v*` tags and `main`.
+The constitution's Development Workflow bullet was amended first (v1.4.0),
+per governance: the plan proposes the amendment, it does not route around
+it. Every place in this feature that promised a click — the spec's US1 and
+FR-004, the workflows' comments, the runbook — was rewritten the same day.
 
 ---
 

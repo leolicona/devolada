@@ -22,6 +22,7 @@ import { AcceptInvitationScreen } from "./features/invitations/AcceptInvitationS
 import { OperatorScreen } from "./features/operator/OperatorScreen";
 import { IntegrationsScreen } from "./features/integrations/IntegrationsScreen";
 import { WispHubScreen } from "./features/integrations/WispHubScreen";
+import { ApiScreen } from "./features/integrations/ApiScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -99,6 +100,12 @@ const wisphubRoute = createRoute({
   path: "/integrations/wisphub",
   component: WispHubScreen,
 });
+/* automated-collections-api US1: the API card's detail — credentials */
+const apiIntegrationRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/api",
+  component: ApiScreen,
+});
 
 /* account-hub D4: /settings is the hub (Cuenta); the areas are its
    children. The old anchors are redirected by the index on mount. */
@@ -143,6 +150,7 @@ const routeTree = rootRoute.addChildren([
     linksRoute,
     integrationsRoute,
     wisphubRoute,
+    apiIntegrationRoute,
     settingsRoute.addChildren([
       settingsIndexRoute,
       settingsDirectPaymentRoute,

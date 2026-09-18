@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Plug, PlugZap } from "lucide-react";
+import { Code2, KeyRound, Plug, PlugZap } from "lucide-react";
 import { Button, Card, ListError, Pending, Skeleton } from "@devolada/ui";
 import type { IntegrationsResponse } from "@devolada/api/integrations-schema";
 import { api, ApiError } from "@/lib/api";
 
-/* The catalog (integrations-hub D1, US-I01): one real card — WispHub —
-   and the D17 backlog as a dead second card, so the road to webhooks is
-   visible without pretending it exists. */
+/* The catalog (integrations-hub D1, US-I01): two live cards — WispHub,
+   and the collections API (automated-collections-api US1), the door the
+   business's own software collects through. The D17 teaser this second
+   card replaces promised exactly this. */
 
 export function IntegrationsScreen() {
   const integrations = useQuery<IntegrationsResponse, ApiError>({
@@ -69,19 +70,31 @@ export function IntegrationsScreen() {
               </Link>
             </Card>
 
-            {/* D17's backlog, visible and honest: no door yet */}
-            {/* muted tokens do the dimming — stacking opacity on top put
-                this text at the app's contrast floor (design review fase 5) */}
-            <Card className="flex items-center gap-4 p-6">
-              <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
-                <Plug className="size-6 text-muted-foreground" aria-hidden />
-              </span>
-              <div>
-                <h2 className="text-base font-semibold text-muted-foreground">Integración genérica</h2>
-                <p className="text-sm text-muted-foreground">
-                  API de Cobros + webhook firmado — en el futuro.
-                </p>
+            {/* automated-collections-api US1 (FR-001): the API card. "Activa"
+                the moment one live credential exists — status as icon + text */}
+            <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+              <div className="flex items-center gap-4">
+                <span className="flex size-12 items-center justify-center rounded-md border border-border bg-well">
+                  <Code2 className="size-6 text-foreground" aria-hidden />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold">API de cobros</h2>
+                  {integrations.data.api.activeCredentials > 0 ? (
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-success">
+                      <KeyRound className="size-4" aria-hidden /> Activa
+                    </p>
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                      <Plug className="size-4" aria-hidden /> Sin activar
+                    </p>
+                  )}
+                </div>
               </div>
+              <Link to="/integrations/api">
+                <Button size="compact" variant={integrations.data.api.activeCredentials > 0 ? "secondary" : "primary"}>
+                  {integrations.data.api.activeCredentials > 0 ? "Administrar" : "Activar"}
+                </Button>
+              </Link>
             </Card>
           </div>
         )}

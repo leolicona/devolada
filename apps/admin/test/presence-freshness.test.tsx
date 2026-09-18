@@ -14,6 +14,7 @@ import { FOCUS_FLOOR_MS, HEARTBEAT_MS, PULSE_MS, resetPresenceForTests } from ".
 const roster = (names: string[]) =>
   linksRosterResponse.parse({
     results: names.map((name, i) => ({
+      channel: "panel",
       wisphubId: 100 + i,
       usuario: name.toLowerCase().replace(/\s/g, ""),
       name,

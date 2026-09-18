@@ -46,6 +46,30 @@ export default defineWorkersConfig(async () => {
                  times from one address; the limiter's own test hands the
                  app an env without this pin. */
               AUTH_RATE_LIMIT: "off",
+              /* automated-collections-api D8/D10: every webhook test
+                 registers this fixed origin as its destination and
+                 intercepts it with fetchMock, rather than each file
+                 inventing its own URL — pinned here so a developer's
+                 .dev.vars can never redirect a delivery out of the suite. */
+              WEBHOOK_TEST_DESTINATION_URL: "https://webhook-test.devolada.internal/hook",
+              /* Fixed ES256 test key pair for WEBHOOK_SIGNING_KEYS
+                 (research D10): a JSON array of private JWKs, the shape
+                 `webhooks/sign.ts` parses. Generated once and hardcoded —
+                 not regenerated per run — so a test can hardcode the
+                 `kid` it expects and a developer's .dev.vars can never
+                 swap the key the tests verify signatures against. */
+              WEBHOOK_SIGNING_KEYS: JSON.stringify([
+                {
+                  key_ops: ["sign"],
+                  ext: true,
+                  kty: "EC",
+                  x: "dnEwnkxFCdUTYJR6SmCCSu_ukm7-OzOEx1dKF593rjw",
+                  y: "ySSweX0hnPosuOcJ_cFaAqt-Rzf2V8b2TjTBEUgWnYI",
+                  crv: "P-256",
+                  d: "mhM346PEc7G77U6ndRmb-3ruYU93IfT_7RUQeXNJbGc",
+                  kid: "test-2026-09-17",
+                },
+              ]),
             },
           },
         },

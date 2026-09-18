@@ -39,6 +39,7 @@
     "./platform-schema": "./src/routes/platform/schema.ts",
     "./settings-schema": "./src/routes/settings/schema.ts",
     "./integrations-schema": "./src/routes/integrations/schema.ts",
-    "./direct-payments-schema": "./src/routes/direct-payments/schema.ts"
+    "./direct-payments-schema": "./src/routes/direct-payments/schema.ts",
+    "./v1-schema": "./src/routes/v1/schema.ts"
   }
 }

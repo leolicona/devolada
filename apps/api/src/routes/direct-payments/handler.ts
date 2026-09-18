@@ -9,11 +9,21 @@ import { WispHub, WispHubError } from "../../wisphub/client";
 import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
+  askAvailable,
+  businessConfigured,
   isUniqueViolation,
   runValidation,
-  speiAvailable,
   speiFeeCents,
+  validationAvailable,
 } from "../../direct-payments/validation";
+import {
+  isApiLink,
+  isPanelLink,
+  linkAcceptsPayments,
+  linkState,
+  makeLinkToken,
+  type PaymentLink,
+} from "../../direct-payments/links";
 import {
   isAcceptedProofType,
   makeProofKey,
@@ -28,24 +38,13 @@ import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { integrationOf } from "../../integrations/store";
 import { consta, ConstaError } from "../../consta";
 import type { DirectPayment } from "../../direct-payments/validation";
-import { publicPaymentError, type LinkStatusResponse, type PayRequest } from "./schema";
+import { publicPaymentError, type LinksRosterResponse, type LinkStatusResponse, type PayRequest } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 /* D13: every proof submission costs a paid provider call, on a public
    endpoint. Per link, per hour. */
 const HOURLY_ATTEMPT_BUDGET = 5;
-
-/* Opaque, permanent, non-guessable (D1). 32-char alphabet without
-   confusables; 256 % 32 === 0, so the modulo is unbiased. 16 chars ≈
-   80 bits. */
-function makeLinkToken(): string {
-  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  let out = "";
-  for (const b of bytes) out += alphabet[b % 32];
-  return out;
-}
 
 /* Every customer of the roster has a link (direct-payment D5,
    admin-links-view D5): the usuario is the identity, the numeric id a
@@ -64,8 +63,8 @@ async function ensureLinks(
   /* usuario → the numeric id the row holds today */
   const storedId = new Map<string, string>();
   const readTokens = async (usuarios: string[]) => {
-    /* one parameter is the business id */
-    for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
+    /* one parameter is the business id, one the source */
+    for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
       const rows = await db
         .select({
           customerUsuario: paymentLinks.customerUsuario,
@@ -73,8 +72,17 @@ async function ensureLinks(
           wisphubCustomerId: paymentLinks.wisphubCustomerId,
         })
         .from(paymentLinks)
-        .where(and(eq(paymentLinks.businessId, businessId), inArray(paymentLinks.customerUsuario, part)));
+        .where(
+          and(
+            eq(paymentLinks.businessId, businessId),
+            /* automated-collections-api D3/D4: the usuario namespace is the
+               panel's; an API link never holds one */
+            eq(paymentLinks.source, "panel"),
+            inArray(paymentLinks.customerUsuario, part),
+          ),
+        );
       for (const row of rows) {
+        if (row.customerUsuario === null || row.wisphubCustomerId === null) continue;
         tokens.set(row.customerUsuario, row.token);
         storedId.set(row.customerUsuario, row.wisphubCustomerId);
       }
@@ -83,8 +91,11 @@ async function ensureLinks(
   await readTokens(customers.map((customer) => customer.usuario));
 
   const missing = customers.filter((customer) => !tokens.has(customer.usuario));
-  /* six values per row at most (id and created_at defaults included) */
-  for (const part of chunks(missing, Math.floor(D1_MAX_PARAMS / 6))) {
+  /* nine values per row at most: id and created_at, the four written
+     below, and `source`, `mode`, `is_test` — drizzle sends a column's
+     literal default as a parameter too (automated-collections-api D3;
+     measured 2026-09-17: 150 customers at six per row overran D1's cap) */
+  for (const part of chunks(missing, Math.floor(D1_MAX_PARAMS / 9))) {
     const inserted = await db
       .insert(paymentLinks)
       .values(
@@ -96,10 +107,18 @@ async function ensureLinks(
         })),
       )
       /* Two members listing at once: the first insert wins the usuario,
-         the second reads its token below. */
-      .onConflictDoNothing({ target: [paymentLinks.businessId, paymentLinks.customerUsuario] })
+         the second reads its token below. automated-collections-api D4:
+         the usuario index is partial now, and SQLite matches a named
+         conflict target to a partial index only when the target repeats
+         its WHERE — which drizzle 0.40 cannot emit for DO NOTHING (it
+         places `where` after `do nothing`, a syntax error; measured
+         2026-09-17). An untargeted DO NOTHING covers every unique index
+         on the table, which for a fresh token is the same one. */
+      .onConflictDoNothing()
       .returning({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token });
-    for (const row of inserted) tokens.set(row.customerUsuario, row.token);
+    for (const row of inserted) {
+      if (row.customerUsuario !== null) tokens.set(row.customerUsuario, row.token);
+    }
   }
   const raced = missing.filter((customer) => !tokens.has(customer.usuario)).map((c) => c.usuario);
   if (raced.length) await readTokens(raced);
@@ -156,6 +175,21 @@ function wisphubFailure(c: Ctx, e: unknown) {
   throw e;
 }
 
+/* automated-collections-api D5: the three gates, folded back into the one
+   state the payer's page knows (D4). The split matters to /v1 — which
+   refuses only on the business's own gap and turns the platform's into a
+   notice — not to the payer, who must never see a CLABE nothing can
+   validate, whoever's gap it is. A panel link without the WispHub key
+   degrades exactly as before the split. */
+function channelOpen(
+  env: Bindings,
+  business: typeof businesses.$inferSelect,
+  link: Pick<PaymentLink, "source">,
+  integration: { apiKey: string | null } | null,
+): boolean {
+  return businessConfigured(business) && validationAvailable(env) && askAvailable(link, integration);
+}
+
 /* Only the enumerated codes travel to the customer; internal ones
    (provider down, WispHub down) read as "still validating". */
 function publicError(lastError: string | null) {
@@ -176,11 +210,49 @@ export async function getLinkStatus(c: Ctx, token: string) {
     return c.json({ success: false, error: { code: "BUSINESS_SUSPENDED" } }, 409);
   }
 
-  if (!speiAvailable(c.env, business, integration)) {
+  if (!channelOpen(c.env, business, link, integration)) {
     /* D4: the GET already knows — the page degrades into the store
        network instead of showing a CLABE nothing can validate */
     const data: LinkStatusResponse = { ispName: business.name, status: "unavailable" };
     return c.json({ success: true, data });
+  }
+  if (isApiLink(link)) {
+    /* automated-collections-api D6: an API link builds the SAME
+       LinkStatusResponse from `ask_cents` — no WispHub client, no
+       provider read. FR-032: the payer cannot tell the kinds apart.
+       `label` is the display name the caller chose for the payer; the
+       business name heads the page as it does for every link. */
+    const state = linkState(link, now);
+    if (state !== "open") {
+      /* FR-031: a paid or expired one-time link explains itself and
+         offers no CLABE — a transfer nobody would apply */
+      const data: LinkStatusResponse = { ispName: business.name, status: "closed", closedReason: state };
+      return c.json({ success: true, data });
+    }
+    const serviceFeeCents = speiFeeCents(business);
+    const data: LinkStatusResponse = {
+      ispName: business.name,
+      ...(link.label ? { customerName: link.label } : {}),
+      ...(link.concept ? { concept: link.concept } : {}),
+      status: "debt",
+      invoiceCents: link.askCents,
+      carriedBalanceCents: 0,
+      serviceFeeCents,
+      totalCents: link.askCents + serviceFeeCents,
+      speiClabe: business.speiClabe!,
+      speiBank: business.speiBank!,
+      ...(business.speiBeneficiaryName ? { speiBeneficiaryName: business.speiBeneficiaryName } : {}),
+      /* The caller's own reference in the concepto, so the business
+         recognises the payer in its statement exactly as an ISP does */
+      reference: link.customerRef,
+      cobros: [],
+    };
+    return c.json({ success: true, data });
+  }
+  if (!isPanelLink(link)) {
+    /* One table, two shapes (D3): a row that is neither is a write-path
+       bug, not a state to render */
+    throw new Error(`link ${link.id} is neither a panel nor an API link`);
   }
 
   try {
@@ -256,8 +328,17 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
-  if (!speiAvailable(c.env, business, integration)) {
+  if (!channelOpen(c.env, business, link, integration)) {
     return c.json({ success: false, error: { code: "SPEI_NOT_CONFIGURED" } }, 409);
+  }
+  if (!isApiLink(link) && !isPanelLink(link)) {
+    throw new Error(`link ${link.id} is neither a panel nor an API link`);
+  }
+  /* FR-031: a closed or expired one-time link refuses new payments. The
+     GET already showed no CLABE; this is the guard for a payer who kept
+     the page open past the deadline. A reusable link is always open. */
+  if (isApiLink(link) && !linkAcceptsPayments(link, now)) {
+    return c.json({ success: false, error: { code: "LINK_CLOSED" } }, 409);
   }
   /* prepaid-credit D8: below the cap, what is new waits without spending
      — no provider call, no extraction. The payer did nothing wrong (D9). */
@@ -324,40 +405,100 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     superseded = prior;
   }
 
-  /* The debt at submission time decides the amount the CEP must match
-     (D11, D15). A WispHub failure here is a pre-payment failure:
-     nothing recorded, same posture as the store flow's guard. */
-  let customer;
-  let pending;
-  try {
-    const wisphub = new WispHub(integration!.apiKey!, c.env.WISPHUB_BASE_URL);
-    /* provider-latency D2 together, D3 **fresh**: this read decides the
-       amount the CEP must match (D11/D15), so it never takes the cache. */
-    [customer, pending] = await Promise.all([
-      wisphub.getCustomer(link.customerUsuario),
-      wisphub.pendingInvoices(now),
-    ]);
-  } catch (e) {
-    return wisphubFailure(c, e);
-  }
-  const debt = customer ? debtOf(customer, pending) : NO_DEBT;
-  if (
-    !customer ||
-    (debt.totalCents === 0 &&
-      (pending.complete ||
-        customer.carriedBalanceCents < 0 ||
-        customer.billingStatus === "paid"))
-  ) {
-    return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
-  }
-
   const serviceFeeCents = speiFeeCents(business);
-  /* Same rule as the store path: only D4's truncation fallback falls back
-     to the plan's price. A zero invoice line beside a carried balance is
-     a real number, not a missing one. */
-  const debtUnknown = debt.totalCents === 0;
-  const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
-  const amountCents = ispDebtCents + serviceFeeCents;
+
+  /* Where the ask comes from (automated-collections-api D5/D6). A panel
+     link reads the debt live from WispHub; an API link carries it on the
+     row. Everything after this block — the row, the claim, the inline
+     attempt — is the same for both, which is the point: the money path
+     never needed WispHub. */
+  let ask: {
+    ispDebtCents: number;
+    invoiceCents: number;
+    carriedBalanceCents: number;
+    customer: {
+      wisphubCustomerId: string | null;
+      customerUsuario: string | null;
+      customerRef: string | null;
+      customerName: string;
+      customerZone: string | null;
+      customerPhone: string | null;
+    };
+    /* automated-collections-api D7: what the caller asked, frozen on the
+       payment so a re-price meanwhile never moves the verdict's yardstick.
+       Null on a panel payment, whose ask is read fresh at the verdict. */
+    askedCents: number | null;
+  };
+  if (isApiLink(link)) {
+    ask = {
+      ispDebtCents: link.askCents,
+      invoiceCents: link.askCents,
+      carriedBalanceCents: 0,
+      customer: {
+        wisphubCustomerId: null,
+        customerUsuario: null,
+        customerRef: link.customerRef,
+        /* The feed shows a name on every row; the caller's label, or its
+           reference when it gave none */
+        customerName: link.label ?? link.customerRef,
+        customerZone: null,
+        customerPhone: null,
+      },
+      askedCents: link.askCents,
+    };
+  } else {
+    /* The debt at submission time decides the amount the CEP must match
+       (D11, D15). A WispHub failure here is a pre-payment failure:
+       nothing recorded, same posture as the store flow's guard. */
+    let customer;
+    let pending;
+    try {
+      const wisphub = new WispHub(integration!.apiKey!, c.env.WISPHUB_BASE_URL);
+      /* provider-latency D2 together, D3 **fresh**: this read decides the
+         amount the CEP must match (D11/D15), so it never takes the cache. */
+      [customer, pending] = await Promise.all([
+        wisphub.getCustomer(link.customerUsuario),
+        wisphub.pendingInvoices(now),
+      ]);
+    } catch (e) {
+      return wisphubFailure(c, e);
+    }
+    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+    if (
+      !customer ||
+      (debt.totalCents === 0 &&
+        (pending.complete ||
+          customer.carriedBalanceCents < 0 ||
+          customer.billingStatus === "paid"))
+    ) {
+      return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
+    }
+
+    /* Same rule as the store path: only D4's truncation fallback falls back
+       to the plan's price. A zero invoice line beside a carried balance is
+       a real number, not a missing one. */
+    const debtUnknown = debt.totalCents === 0;
+    const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
+    ask = {
+      ispDebtCents,
+      invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
+      carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+      customer: {
+        wisphubCustomerId: link.wisphubCustomerId,
+        customerUsuario: link.customerUsuario,
+        customerRef: null,
+        /* pilot-UX review: the row is born with its person. The pre-check
+           above already read the customer, so the in-flight row shows a
+           name where every other row does; the confirmation overwrites
+           with its own fresh read, as before. */
+        customerName: customer.name ?? link.customerUsuario,
+        customerZone: customer.zone ?? null,
+        customerPhone: customer.phone ?? null,
+      },
+      askedCents: null,
+    };
+  }
+  const amountCents = ask.ispDebtCents + serviceFeeCents;
 
   /* partial-payment D1 supersedes the refusal that stood here. It read
      the receipt's amount, compared it against the expected total and
@@ -393,8 +534,8 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     paymentLinkId: link.id,
     businessId: business.id,
     amountCents,
-    invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
-    carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+    invoiceCents: ask.invoiceCents,
+    carriedBalanceCents: ask.carriedBalanceCents,
     claimedAmountCents: claimedCents,
     serviceFeeCents,
     proofMode: (body.transfer ? "transfer" : "receipt") as "transfer" | "receipt",
@@ -404,15 +545,8 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     proofKey: body.proofId ?? null,
     receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
     supersedesId: superseded?.id ?? null,
-    /* pilot-UX review: the row is born with its person. The pre-check
-       above already read the customer, so the in-flight row shows a name
-       where every other row does; the confirmation overwrites with its
-       own fresh read, as before. */
-    wisphubCustomerId: link.wisphubCustomerId,
-    customerUsuario: link.customerUsuario,
-    customerName: customer?.name ?? link.customerUsuario,
-    customerZone: customer?.zone ?? null,
-    customerPhone: customer?.phone ?? null,
+    ...ask.customer,
+    askedCents: ask.askedCents,
     /* The row is born owned by the sweep (D7). The inline attempt
        below is an optimisation, not the mechanism: if it never
        finishes — a worker evicted, a provider that stalls past its
@@ -693,9 +827,12 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
   if (!payment) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
-  /* business-and-memberships D6: the reconnection lives on the row */
-  const charge = payment.actionOutcome
-    ? { actionOutcome: payment.actionOutcome, folio: payment.folio ?? "" }
+  /* business-and-memberships D6: the reconnection lives on the row.
+     automated-collections-api D6/D7: an API payment has a folio and, until
+     US2's webhook sets it, no action outcome — the folio travels on its
+     own, the outcome only when there is one. */
+  const charge = payment.folio
+    ? { folio: payment.folio, ...(payment.actionOutcome ? { actionOutcome: payment.actionOutcome } : {}) }
     : null;
   /* provisional-release D7: the expired page offers exactly one manual
      retry per clave — self-selection: the payer who really paid claims
@@ -721,9 +858,7 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
     data: {
       status: payment.status,
       ...(payment.status === "expired" ? { retryAvailable } : {}),
-      ...(charge
-        ? { actionOutcome: charge.actionOutcome, folio: charge.folio }
-        : {}),
+      ...(charge ?? {}),
       /* D7: what arrived, what was owed and what is missing — in money,
          computed here so the page never does arithmetic about a policy
          the payer did not agree to. */
@@ -815,12 +950,16 @@ export async function listLinks(c: Ctx, cursor?: string) {
     .where(
       and(
         eq(paymentLinks.businessId, actor.id),
+        /* automated-collections-api D3: this is the WispHub list, keyed and
+           paged by usuario; API links join the panel through the roster
+           (US1, T076) */
+        eq(paymentLinks.source, "panel"),
         ...(cursor ? [gt(paymentLinks.customerUsuario, cursor)] : []),
       ),
     )
     .orderBy(asc(paymentLinks.customerUsuario))
     .limit(PAGE + 1);
-  const page = rows.slice(0, PAGE);
+  const page = rows.slice(0, PAGE).filter(isPanelLink);
   return c.json({
     success: true,
     data: {
@@ -829,7 +968,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
         usuario: link.customerUsuario,
         url: `${c.env.PAGO_BASE_URL}/p/${link.token}`,
       })),
-      nextCursor: rows.length > PAGE ? page[page.length - 1].customerUsuario : null,
+      nextCursor: rows.length > PAGE ? (page[page.length - 1]?.customerUsuario ?? null) : null,
     },
   });
 }
@@ -855,11 +994,48 @@ export async function linksRoster(c: Ctx) {
   }
   const db = drizzle(c.env.DB);
   const integration = await integrationOf(db, actor.id);
+  const now = new Date();
+  type RosterRow = LinksRosterResponse["results"][number];
+
+  /* automated-collections-api FR-011 (US1 scenario 11): the API's links
+     join the same list, read from the row — no provider, no cache. Test
+     rows never reach the panel (D12); the shared `realOnly` predicate
+     lands with test mode (T065), so the filter is spelled here once. */
+  const apiRows = await db
+    .select()
+    .from(paymentLinks)
+    .where(
+      and(eq(paymentLinks.businessId, actor.id), eq(paymentLinks.source, "api"), eq(paymentLinks.isTest, false)),
+    );
+  const apiResults: RosterRow[] = apiRows.filter(isApiLink).map((link) => {
+    const url = `${c.env.PAGO_BASE_URL}/p/${link.token}`;
+    return {
+      channel: "api",
+      wisphubId: null,
+      usuario: null,
+      customerRef: link.customerRef,
+      label: link.label,
+      askCents: link.askCents,
+      linkState: linkState(link, now),
+      name: link.label ?? link.customerRef,
+      phone: null,
+      url,
+      /* No phone on an API link — the contact picker, and a message that
+         names no service (FR-028 reaches the share text too) */
+      waLink: whatsAppLink(apiShareText(url), null),
+    };
+  });
+
+  /* A business without WispHub still sees its links (FR-011, research
+     D5): the API rows alone, no refusal. A provider that fails keeps its
+     503 — the screen shows the last reading with a quiet note. */
   if (!integration?.apiKey) {
-    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
+    return c.json({
+      success: true,
+      data: { results: sortRoster(apiResults), complete: true, readAt: now.getTime() },
+    });
   }
 
-  const now = new Date();
   let roster;
   try {
     roster = await rosterForDisplay(actor.id, new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL), now);
@@ -871,32 +1047,41 @@ export async function linksRoster(c: Ctx) {
      refreshes the cache — and only the missing links are written. */
   const linkMap = await ensureLinks(db, actor.id, customers);
 
-  const results = customers
-    .flatMap((customer) => {
-      const token = linkMap.get(customer.usuario);
-      /* No token means the insert above skipped this customer; a link to
-         `/p/undefined` is worse than one row missing from the results. */
-      if (!token) return [];
-      const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
-      return [
-        {
-          wisphubId: customer.wisphubId,
-          usuario: customer.usuario,
-          name: customer.name,
-          phone: customer.phone,
-          url,
-          /* The API owns the message and the number (receipt spec D2, D3):
-             `toWhatsAppPhone` puts Mexico's 52 in front and refuses a
-             number it cannot read — wa.me/55… is Brazil. */
-          waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
-        },
-      ];
-    })
-    .sort((a, b) => (a.name || a.usuario).localeCompare(b.name || b.usuario, "es"));
+  const panelResults: RosterRow[] = customers.flatMap((customer) => {
+    const token = linkMap.get(customer.usuario);
+    /* No token means the insert above skipped this customer; a link to
+       `/p/undefined` is worse than one row missing from the results. */
+    if (!token) return [];
+    const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
+    return [
+      {
+        channel: "panel" as const,
+        wisphubId: customer.wisphubId,
+        usuario: customer.usuario,
+        name: customer.name,
+        phone: customer.phone,
+        url,
+        /* The API owns the message and the number (receipt spec D2, D3):
+           `toWhatsAppPhone` puts Mexico's 52 in front and refuses a
+           number it cannot read — wa.me/55… is Brazil. */
+        waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
+      },
+    ];
+  });
 
   return c.json({
     success: true,
     /* presence-freshness D7 (BUG-018): the provider read's time */
-    data: { results, complete: roster.complete, readAt: roster.readAt },
+    data: { results: sortRoster([...panelResults, ...apiResults]), complete: roster.complete, readAt: roster.readAt },
   });
 }
+
+/* One order for both channels: by the name the row shows */
+function sortRoster<T extends { name: string; usuario: string | null; customerRef?: string }>(rows: T[]): T[] {
+  const key = (row: T) => row.name || row.usuario || row.customerRef || "";
+  return rows.sort((a, b) => key(a).localeCompare(key(b), "es"));
+}
+
+/* The share text for an API link names no service: the business may be
+   a gym or a school, and the link may be one-time (FR-028) */
+const apiShareText = (url: string) => `Hola, aquí está tu link de pago:\n\n${url}`;

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { payments, businesses, paymentLinks } from "../db/schema";
@@ -27,6 +27,7 @@ import {
   notifyProvisionalExpiry,
   releaseEvidenceFor,
 } from "./provisional";
+import { isApiLink, isPanelLink, type ApiLink } from "./links";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -58,37 +59,73 @@ export function speiFeeCents(business: Isp): number {
    "nothing can validate" case D4 already refuses to show. */
 const KNOWN_BANKS: ReadonlySet<string> = new Set(BANKS);
 
-export function speiBankIsKnown(business: Isp): boolean {
+export function speiBankIsKnown(business: Pick<Isp, "speiBank">): boolean {
   return Boolean(business.speiBank && KNOWN_BANKS.has(business.speiBank));
 }
 
-/* D4: the channel exists only when the ISP configured its own account —
-   and when the engine can reach the provider in this environment. A page
-   that shows a CLABE nothing can validate would let customers transfer
-   into the void. consta-api-merge D9: the engine is local now; what can
-   be absent is the provider's credential, and that alone decides whether
-   an environment validates (constitution VIII).
+/* The channel gate, split in three (automated-collections-api D5). Until
+   2026-09-17 one predicate, `speiAvailable`, demanded the CLABE, a known
+   bank, the provider token AND the WispHub key — so "no WispHub key" meant
+   "this business cannot collect", which was true while every business was
+   an ISP and is false the moment a gym collects through /v1. The money
+   never needed WispHub: the payer transfers to the business's CLABE and
+   Banxico validates it. WispHub is where a *panel* link's ask comes from,
+   nothing more. Each gate below names who can fix it, because that is
+   what the answer to the caller hangs on:
 
-   `speiBank` being non-empty is not enough, and BUG-008 is why: a value
-   stored before D16 can be truthy and still outside apiCEP's vocabulary.
-   Measured live on dev 2026-08-19 — an ISP held `Klar` where the list says
-   `KLAR`, so every payment to it failed the moment D16 shipped, and failed
-   *retryably*, which is the six-hour silence rather than an honest refusal. */
-export function speiAvailable(
-  env: Bindings,
-  business: Isp,
+     businessConfigured  the business's own — the only cause of
+                         CHANNEL_UNAVAILABLE on /v1
+     validationAvailable the platform's — a VALIDATION_UNAVAILABLE notice
+                         on a created link, never a refusal of it
+     askAvailable        a panel link's — needs the WispHub key; an API
+                         link needs nothing more
+
+   The payer's page still folds all three into one `unavailable` state
+   (D4): a page that shows a CLABE nothing can validate would let
+   customers transfer into the void, whoever's gap it is. */
+
+/* What the business has not configured, or null when it has (FR-009):
+   the CLABE, or a bank outside apiCEP's vocabulary. `speiBank` being
+   non-empty is not enough, and BUG-008 is why: a value stored before D16
+   can be truthy and still outside the list. Measured live on dev
+   2026-08-19 — an ISP held `Klar` where the list says `KLAR`, so every
+   payment to it failed the moment D16 shipped, and failed *retryably*,
+   which is the six-hour silence rather than an honest refusal.
+   claimed-amount D5: the beneficiary name is recommended, never required
+   — apiCEP asks only for clabe + bank, and the gates that demanded the
+   name were all ours. */
+export type ChannelGap = "clabe" | "bank";
+
+export function channelGap(business: Pick<Isp, "speiClabe" | "speiBank">): ChannelGap | null {
+  if (!business.speiClabe) return "clabe";
+  if (!speiBankIsKnown(business)) return "bank";
+  return null;
+}
+
+export function businessConfigured(business: Pick<Isp, "speiClabe" | "speiBank">): boolean {
+  return channelGap(business) === null;
+}
+
+/* consta-api-merge D9: the engine is local; what can be absent is the
+   provider's credential, planted per environment, and that alone decides
+   whether an environment validates (constitution VIII). A platform
+   condition: refusing a link for it would tell a developer to fix a
+   setting they do not have, and punish the business for our outage. */
+export function validationAvailable(env: Pick<Bindings, "APICEP_TOKEN">): boolean {
+  return Boolean(env.APICEP_TOKEN);
+}
+
+/* Where the ask comes from. A panel link reads its debt live from WispHub,
+   so without the key there is no amount to show and the channel is
+   unavailable for *that link*; an API link carries `ask_cents` on the row
+   and asks nothing of any integration. "No WispHub key" now means "no
+   panel links", and nothing else. */
+export function askAvailable(
+  link: Pick<PaymentLink, "source">,
   /* integrations-hub D2: the key lives on the integration row now */
   integration: Pick<Integration, "apiKey"> | null,
 ): boolean {
-  /* claimed-amount D5: the beneficiary name is recommended, never
-     required — apiCEP asks only for clabe + bank, and the gates that
-     demanded the name were all ours. */
-  return Boolean(
-    business.speiClabe &&
-      speiBankIsKnown(business) &&
-      integration?.apiKey &&
-      env.APICEP_TOKEN,
-  );
+  return link.source === "api" || Boolean(integration?.apiKey);
 }
 
 export function isUniqueViolation(e: unknown): boolean {
@@ -262,9 +299,10 @@ export async function runValidation(
      history (BUG-010); the validation row sits in this same database
      now, three tables from the link, so the disguise protected nothing.
      `customerRef` is the link's own customer identity — its usuario for
-     a panel link (the caller's own reference for an API link, once
-     003-automated-collections-api adds that column). */
-  const refs = { customerRef: link.customerUsuario, paymentRef: payment.id };
+     a panel link, the caller's own reference for an API link
+     (automated-collections-api D3). */
+  const customerRef = link.source === "api" ? link.customerRef : link.customerUsuario;
+  const refs = { ...(customerRef ? { customerRef } : {}), paymentRef: payment.id };
 
   /* consta-api-merge D7: the receipt door names the proof's key in the
      product's own bucket; the engine reads the bytes itself and signs a
@@ -533,8 +571,32 @@ export async function runValidation(
     }
   }
 
+  /* automated-collections-api D7: the seam. Read top to bottom this
+     function is two halves — everything above (claim the row, ask the
+     engine, reconcile the CEP, adopt the key) IS the SPEI validation and
+     is identical for both link kinds; everything below is WispHub. An API
+     link's verdict branches HERE, before the WispHub guard that follows:
+     that guard is what narrows `integration` for the panel half, and an
+     API link for a gym has no integration row at all, so `integration`
+     is `null` on its path. The API half settles against `asked_cents`
+     with the business's tolerance and constructs no WispHub client
+     (FR-029 holds structurally). US2 (T046) adds the webhook enqueue at
+     the same spot and sets `action_outcome` from its delivery; until
+     then the verdict lands whole and the outcome stays null. */
+  if (isApiLink(link)) {
+    return settleApiPayment(db, update, payment, link, business, cep ?? null, base, now);
+  }
+  if (!isPanelLink(link)) {
+    throw new Error(`payment ${payment.id} sits on a link that is neither panel nor API (${link.id})`);
+  }
+
   /* D14: between submission and confirmation the debt can be settled
-     elsewhere. Re-check before touching WispHub's money. */
+     elsewhere. Re-check before touching WispHub's money.
+     automated-collections-api D5/D7 (research, "the null guard the seam
+     must keep"): a HARD return, reachable only by a panel link. Never
+     rewrite it as a condition on `link.source` — it is the narrowing
+     that keeps every read of `integration` below (`thresholdPercent`,
+     `actionForClass`, the `actionsEnabled` observation gate) non-null. */
   if (!integration?.apiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base);
   const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
   let customer;
@@ -710,6 +772,70 @@ export async function runValidation(
     actionError: attempt.error,
     ...(outcome === "done" ? { actionDoneAt: now } : {}),
   });
+}
+
+/* automated-collections-api D7: the API half of the verdict. Everything
+   the WispHub half does with a debt read, a threshold and a router, this
+   does with one number: what the caller asked at submission. Reads
+   nothing from `integration` — a gym has no integration row at all.
+
+   The yardstick is `asked_cents + service_fee_cents`, the same total the
+   payer's page quoted (payments-and-classes D1/D3), and the class is
+   computed once here against the business's tolerance. `partial` is the
+   row's word for `short` (D17): the money is real and the caller decides
+   what to do about the difference (spec edge case "the payer sends the
+   wrong amount"). `unapplied` when the link had closed meanwhile (D16) —
+   a second transfer against a one-time link another transfer already
+   paid. A deadline that passed after submission is NOT that case: it
+   closes the link to new payers and never voids a transfer already on
+   its way (spec edge case "seconds before it expires").
+
+   Closing the link: a `confirmed` verdict closes a one-time link
+   (FR-027 "closes when it is paid"). A `partial` leaves it open so the
+   payer can complete it — the caller sees `partial` and closes it
+   through PATCH if it would rather not. */
+async function settleApiPayment(
+  db: DB,
+  update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
+  payment: DirectPayment,
+  link: ApiLink,
+  business: Isp,
+  cep: { amountCents?: number | null; senderName?: string | null } | null,
+  base: Partial<typeof payments.$inferInsert>,
+  now: Date,
+): Promise<DirectPayment> {
+  const receivedCents = cep?.amountCents ?? payment.amountCents;
+  /* Rows born before `asked_cents` existed fall back to the link's ask */
+  const askedCents = payment.askedCents ?? link.askCents;
+  const facts = {
+    ...base,
+    receivedCents,
+    cepSenderName: cep?.senderName ?? null,
+    confirmedAt: now,
+    nextValidationAt: null,
+    lastError: null,
+  };
+
+  /* Fresh read: the row given to this attempt may predate a paying
+     transfer that closed the link meanwhile */
+  const [fresh] = await db.select().from(paymentLinks).where(eq(paymentLinks.id, link.id));
+  if (fresh?.closedAt !== null && fresh?.closedAt !== undefined) {
+    return update({ ...facts, status: "unapplied", reconciliationClass: "over" });
+  }
+
+  const klass = classifyPayment({
+    receivedCents,
+    askedCents: askedCents + payment.serviceFeeCents,
+    toleranceCents: business.toleranceCents,
+  });
+  const status = klass === "short" ? "partial" : "confirmed";
+  if (status === "confirmed" && link.mode === "one_time") {
+    await db
+      .update(paymentLinks)
+      .set({ closedAt: now })
+      .where(and(eq(paymentLinks.id, link.id), isNull(paymentLinks.closedAt)));
+  }
+  return update({ ...facts, folio: makeFolio(), status, reconciliationClass: klass });
 }
 
 export type DirectSweepReport = {

@@ -52,7 +52,9 @@ test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, a
   /* The shell wears the CLABE banner until the SPEI card closes it */
   await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toBeVisible();
   await ownerPage.getByLabel("CLABE").fill("646180157000000004");
-  await expect(ownerPage.getByRole("combobox", { name: "Banco" })).toHaveText(/STP/);
+  /* bug: bank-picker-unreachable — the picker is a combobox now, so the
+     name the CLABE seeded is the field's value, not text beside it. */
+  await expect(ownerPage.getByRole("combobox", { name: "Banco" })).toHaveValue(/STP/);
   await ownerPage.getByRole("button", { name: /guardar pago directo/i }).click();
   await expect(ownerPage.getByText(/guardado|listo|actualizad/i).first()).toBeVisible({ timeout: 10_000 });
   await ownerPage.reload();

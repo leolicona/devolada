@@ -410,7 +410,7 @@ finding, and it is a disagreement between two written statements and the
 code rather than unbuilt work — which constitution I says must not be left
 silent. T002 and T039 stay as they are.
 
-- [ ] T042 [US1] In `apps/api/src/direct-payments/validation.ts`, stop a
+- [X] T042 [US1] In `apps/api/src/direct-payments/validation.ts`, stop a
   later call from downgrading a settled classification. The block at ~line
   514 writes `readingCheck`, `blindSide`, `acceptedFrom` and
   `readingCheckAttempt` from `verdict.*` on **every** provider-first call,
@@ -447,3 +447,26 @@ silent. T002 and T039 stay as they are.
   is an amendment to FR-010 and to that edge case rather than this code —
   but one of the two must move.** Per FR-010 (D20 carve-out), spec edge case
   "a bank whose shape rule graduates", Constitution I (contradicts)
+
+  **Done 2026-09-18.** The product creator chose to make the agreement
+  stick, so FR-010 and the edge case stand as written and the code moved to
+  them. The test came first and failed on the state itself — `expected
+  'disputed' to be 'agreed'` — which settled that the downgrade was real and
+  not a reading of the code: a D20 row whose second slot met a provider OCR
+  one character apart lost its agreement. `validation.ts` now reads
+  `settled = payment.acceptedFrom != null` and, on such a row, writes only
+  the date that arrived (clearing `disputed_fields` with it) while keeping
+  `reading_check`, `blind_side`, `accepted_from` and
+  `reading_check_attempt`. A row that settled nothing keeps classifying on
+  every attempt, so a rule that graduates later can still decide an open
+  dispute; the extraction row still records every call's own comparison
+  (D19). Typecheck caught the one coupling worth naming:
+  `releaseEvidenceFor`'s third parameter is a weak type, so the settled
+  branch restates `readingCheck` rather than leaving it out — which is also
+  the more honest line to read. Scope checked and deliberately not widened:
+  a top-up's `reading_check` flaps the same way, but it has no page, no
+  payer to contradict and no release evidence, and its accepted data is
+  already sticky because `verdict.accepted` null writes nothing. Gates in CI
+  order, all green: spec-lint 63 files, gen-banks 97 banks, contrast-lint 34
+  pairs at AA, pending-lint 27 labels, typecheck in four workspaces, tests
+  **776** (api 489, pago 56, admin 181, ui 50), build.

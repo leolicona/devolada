@@ -1,8 +1,8 @@
 import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
-import { payments, paymentLinks, proofRejections } from "../src/db/schema";
+import { asc, eq } from "drizzle-orm";
+import { extractions, payments, paymentLinks, proofRejections } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
@@ -2467,6 +2467,54 @@ describe("two-eyes-receipt US1: the classifier at minute zero", () => {
     const sent = captured.body as Record<string, unknown>;
     expect(sent.sender).toBeUndefined();
     expect(String(sent.imageUrl)).toContain("proof");
+  });
+  it("scenario 11: a settled agreement is taken once — a later reading may fill the date, never undo it (D20, FR-010)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    /* Neither side reads a date, and they agree on everything else: the
+       D20 row. It keeps the receipt door until the payer supplies the
+       one field, so unlike every other settled row it *does* meet a
+       second comparison. */
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: providerRead({ date: null }),
+    });
+    await sweepDirectPayments(readerEnv({ ...READING, fecha: null }), now);
+
+    let row = await rowOf(db, payment.id);
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.trackingKey).toBe(CLAVE);
+
+    /* The next slot. Our own reading is reused inside the window (D14),
+       so what can differ on a second look is the provider's OCR of the
+       same file — and here it does, reading a clave one character apart
+       with no rule graduated to break the tie. */
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: providerRead({ trackingKey: `${CLAVE.slice(0, -1)}X`, date: null }),
+    });
+    await sweepDirectPayments(readerEnv(), new Date(row.nextValidationAt!.getTime() + 1000));
+
+    row = await rowOf(db, payment.id);
+    /* FR-010: "The agreement still stands." Two machines settled this
+       once, the payer was told so, and a later look at the same file
+       does not take it back — the clock stays retired, the release keeps
+       its evidence, and the question asked stays the one field. */
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.acceptedFrom).toBe("agreed");
+    expect(row.trackingKey).toBe(CLAVE);
+    /* Taken once, at the call that took it (spec edge case) */
+    expect(row.readingCheckAttempt).toBe(1);
+    expect((await statusOf(payment.id)).disputedFields).toEqual(["date"]);
+
+    /* D19: the record still counts what that second call actually saw —
+       the measurement must not be quieted by the row's stability. */
+    const rows = await db.select().from(extractions).orderBy(asc(extractions.createdAt));
+    expect(rows.at(-1)!.readingCheck).toBe("disputed");
+    expect(rows.at(-1)!.providerTrackingKey).toBe(`${CLAVE.slice(0, -1)}X`);
   });
 
   it("scenario 10: the transfer-door retry is the payment's own attempt, never a stranger's (FR-021)", async () => {

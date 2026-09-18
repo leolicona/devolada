@@ -511,7 +511,7 @@ export async function runValidation(
          flow ran: a new-flow row whose inline attempt died classifies at
          attempt 2 as well (FR-018). The D16 shape is what tells the
          flows apart. */
-      const classification = verdict.readingCheck
+      const fresh = verdict.readingCheck
         ? {
             readingCheck: verdict.readingCheck,
             disputedFields: verdict.disputedFields?.length
@@ -536,6 +536,47 @@ export async function runValidation(
         : crossCheck
           ? { ...classifyReading(payment, verdict.reading ?? null), readingCheckAttempt: attempts }
           : {};
+
+      /* two-eyes-receipt D20 + FR-010: a settled classification is taken
+         once, and a later call may only improve it.
+
+         Almost every settled row leaves through the transfer door and
+         never meets a second comparison (D17). D20's is the exception:
+         agreed, accepted, and no date on either reading, so it keeps the
+         receipt door until the payer supplies that one field — and every
+         slot it waits, the provider re-reads the same file. An OCR that
+         came back one character apart used to rewrite `agreed` as
+         `disputed`: it took back what the payer had already been told,
+         dropped the release evidence `releaseEvidenceFor` grants only to
+         an agreement, and swapped the one-field date question for a clave
+         question. FR-010 says the opposite in as many words — "The
+         agreement still stands" — and the spec's edge case for a shape
+         rule graduating mid-flight says the classification is taken once,
+         at the call that took it.
+
+         So the only thing a later call adds to a settled row is the date
+         nobody had read, which retires the last question and sends the
+         next slot through the transfer door. A row that settled nothing
+         keeps classifying on every attempt, which is what lets a rule
+         that graduates later still decide an open dispute; so does the
+         legacy cross, whose caller classifies for itself and leaves
+         `verdict.readingCheck` unset (D16). Either way the reading record
+         stores that call's own comparison (D19) — that is the
+         measurement, and a row holding still must not quiet it. */
+      const settled = payment.acceptedFrom != null;
+      const classification =
+        settled && verdict.readingCheck
+          ? verdict.accepted?.date
+            ? {
+                /* The verdict is restated rather than left out: the row
+                   keeps its own word, and `releaseEvidenceFor` below
+                   reads this call's classification before the row's. */
+                readingCheck: payment.readingCheck,
+                transferDate: verdict.accepted.date,
+                disputedFields: null,
+              }
+            : {}
+          : fresh;
       /* provisional-release D1: an agreed cross or the human's own typed
          data is evidence enough to buy the promise while Banxico thinks */
       const release = await maybeProvisionalRelease(

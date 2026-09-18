@@ -60,13 +60,13 @@ type ConstaVerdict = {
     legibility: "full" | "partial" | "none" | null;
   } | null;
   readingCheck?: "agreed" | "disputed" | "blind";
-  disputedFields?: ("trackingKey" | "amount")[];
+  disputedFields?: ("trackingKey" | "amount" | "date")[];   // "date" = accepted data with no date (D20)
   blindSide?: "provider" | "reader" | "both";
   accepted?: {                               // what the next attempts carry through the transfer door
     trackingKey: string;
     senderBank: Bank;
     amountCents: number;
-    date: string | null;                     // null → the caller asks the payer for the date
+    date: string | null;                     // null → disputedFields carries "date" and the payer is asked for it alone (D20)
   } | null;
   acceptedFrom?: "agreed" | "reader" | "provider";
 };
@@ -92,7 +92,11 @@ provider was blind) on a provider-first call; absent on `valid`, `pending`,
 
 "Fits" is `checkShape(rules, bank, clave) === "ok"`; `unknown` (no rule,
 unresolvable bank) is "no rule". A bank-name or date difference never
-disputes. The date in `accepted` is ours, else theirs, else null.
+disputes. The date in `accepted` is ours, else theirs, else null — and when
+it is null, `disputedFields` carries `"date"` on top of whatever the row
+above says, so the payer is asked for the date alone while the agreement or
+the accepted clave stands (D20). The transfer door is never called with a
+date nobody read.
 
 ### Guarantees
 

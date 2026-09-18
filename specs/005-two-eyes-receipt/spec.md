@@ -23,6 +23,17 @@
   today. Payer friction is the cost being avoided. (D1, FR-002, US3
   scenario 3)
 
+### Amended 2026-09-18
+
+- After `/speckit-analyze` (findings U1, C1, D1, U3): the "no date on
+  either side" edge case now names its mechanism — the date is asked for as
+  a disputed field on its own, while agreement stands (plan D20); US1
+  scenario 11 says the classification is *recorded on the payment and its
+  reading record*, not shown in the back office (no screen shows it today
+  and this feature adds none, as Out of Scope already said); FR-016 is
+  worded as the capability FR-011 relies on; the Assumptions say what
+  happens to a refused top-up.
+
 ## Decisions taken in session (2026-09-17)
 
 Recorded here so the plan and the code can cite them as `two-eyes-receipt D<n>`.
@@ -184,10 +195,12 @@ stories.
 10. **Given** "not found", the provider read no clave, and our reading is
     incomplete too, **When** the verdict is processed, **Then** no further
     credit is spent and the payer is asked for the missing fields.
-11. **Given** a payment marked agreed, disputed or blind, **When** the ISP
-    looks at it in the back office, **Then** the classification and the door
-    that read the file are visible on the payment, as they are for the
-    minute-two cross today.
+11. **Given** a payment marked agreed, disputed or blind, **When** its
+    record is read, **Then** the classification, the side that was blind,
+    where the accepted data came from and the door that read the file are
+    recorded on the payment and on its reading record — as the minute-two
+    cross is recorded today. No screen shows them; that is a feature of its
+    own (Out of Scope).
 12. **Given** a payer who types their transfer data with no picture, **When**
     they submit, **Then** the flow is exactly today's: transfer door, no
     contrast, no second reading.
@@ -346,8 +359,11 @@ a credit is countable. Needs Story 1.
 - **Our reading has a date, the provider's does not, or neither has one.**
   The provider's image door needs no date, so the first call is unaffected.
   The transfer door does need one: the retries carry the date from whichever
-  reading has it, and when neither does, the payer is asked for the date as a
-  missing field, never given today's date silently.
+  reading has it. When neither does, the date joins the fields the payer is
+  asked for, on its own — the agreement or the accepted clave stands, the
+  clock and the release keep their evidence, and the page asks for the one
+  missing field. The transfer door is never called with a date nobody read,
+  and today's date is never used silently (amended 2026-09-18, plan D20).
 - **Our reading's amount is above the debt.** The confirmation screen still
   comes first, before any credit is spent, exactly as today. The provider
   first call happens after the payer confirms.
@@ -445,8 +461,10 @@ a credit is countable. Needs Story 1.
 - **FR-015**: Data the payer typed, whether on the manual door or to resolve
   a dispute, MUST go through the transfer door and MUST NOT be compared
   against any machine reading.
-- **FR-016**: The shape rules MUST be able to judge the provider's clave as
-  well as the product's own and the payer's typed one (D7).
+- **FR-016**: The shape rules MUST accept the provider's clave as an input,
+  with the provider's bank name resolved through the bank vocabulary first,
+  so that FR-011 can judge both claves with the same rule (D7). A bank name
+  the vocabulary cannot resolve counts as "no rule".
 - **FR-017**: Every path, including refusals and empty readings, MUST write
   its reading record with the door that read the file, the legibility
   verdict where one was given, and the classification where one was taken
@@ -553,6 +571,10 @@ a credit is countable. Needs Story 1.
 - **The confirmation screen for an amount above the debt still comes before
   any credit.** The provider-first call happens after the payer confirms, so
   the screen's rule is untouched.
+- **A refused top-up has no one to ask.** A top-up receipt the reader calls
+  "not a receipt" or "not legible" rides the schedule as such a top-up does
+  today: one reader call per slot, no provider credit, and the operator's
+  remedy is a new upload. Nothing changes there (amended 2026-09-18).
 - **No new screen and no new product copy beyond two payer-facing messages:**
   "this does not look like a receipt" and "the picture is not clear enough",
   both es-MX, plus the existing per-field ask for a disputed value.

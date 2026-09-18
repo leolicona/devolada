@@ -46,11 +46,18 @@ Shapes unchanged. Behaviour:
 
 ## `GET /direct-payments/:id/status` — `directPaymentStatusResponse`
 
-Unchanged. `readingCheck` (`agreed` | `disputed`; blind stays null on the
-wire) and `disputedFields` now arrive on the first poll after the first
-call instead of after the minute-two attempt. `trackingKey`, `senderBank`,
-`transferDate`, `claimedAmountCents` carry the accepted data once written
-(D17), so the disputed-field form pre-fills the undisputed fields as today.
+One value added: `disputedFields` may carry `"date"` (D20). `readingCheck`
+(`agreed` | `disputed`; blind stays null on the wire) and `disputedFields`
+now arrive on the first poll after the first call instead of after the
+minute-two attempt. `trackingKey`, `senderBank`, `transferDate`,
+`claimedAmountCents` carry the accepted data once written (D17), so the
+disputed-field form pre-fills the undisputed fields as today.
+
+The page opens the correction form whenever `disputedFields` is non-empty,
+whatever `readingCheck` says: an `agreed` reading with no date is still
+agreed (the clock retires, the release may fire) and still needs one field
+from the payer, the date, which arrives empty in the form as an unread date
+does today (validation-status-ux D6).
 
 ## Copy (es-MX, constitution VI)
 

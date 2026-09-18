@@ -48,6 +48,24 @@ the engine suite and the payer page's upload scenarios assert today's order
 of doors, and every one of them must be rewritten to assert the new one, with
 its citation.
 
+## Vocabulary
+
+Four doors, two on each side, named the same way in every artifact and
+comment:
+
+- **The engine's doors** are what a caller sends: the *transfer door* (a
+  request carrying typed or accepted data) and the *receipt door* (a
+  request carrying a file key).
+- **The provider's doors** are what apiCEP is asked: its *transfer door*
+  (sender data, one lookup) and its *image door* (a signed link to the
+  file, which the provider reads itself — "OCR mode" in the provider's
+  own words).
+
+A receipt-door request reaches the provider's image door first (D3) and its
+transfer door on later attempts once data is accepted (D17). "OCR door",
+"direct mode" and "minute-two cross" in existing comments are rewritten to
+these four names where the code beneath them changes (T037).
+
 ## Technical Context
 
 **Language/Version**: TypeScript 5.7 strict, ESM, `verbatimModuleSyntax`;
@@ -106,7 +124,10 @@ all cited `two-eyes-receipt US<n>`
 ## Decisions
 
 The spec fixes D1–D10. The plan adds the ones below; code comments cite
-all of them as `two-eyes-receipt D<n>` (constitution I).
+all of them as `two-eyes-receipt D<n>` (constitution I). D20 was added on
+2026-09-18 after `/speckit-analyze` (finding U1); findings C1, I1, C2, C3,
+R1, T1, D1, U2 and U3 of the same run were folded into the spec, the data
+model, research R5 and R9, the contracts and the tasks with dated notes.
 
 | # | Decision | Made in |
 | --- | --- | --- |
@@ -120,6 +141,7 @@ all of them as `two-eyes-receipt D<n>` (constitution I).
 | D17 | The retry door is chosen from the row: accepted data present → transfer door; otherwise the receipt door. `proof_mode` keeps meaning "what the payer submitted" | research R4 |
 | D18 | Top-ups take the same engine path; with no human to ask, a top-up the machines cannot decide keeps riding the receipt door as today | research R9 |
 | D19 | The classification and both readings are recorded on the reading record (`extractions`) for every owner, and the payment carries what its page needs; the measurement is one query over one table | research R11 |
+| D20 | A missing date is a disputed field: when the accepted data has no date, `disputedFields` carries `"date"`, the page asks for the date alone, and the transfer door is never called with a date nobody read. Agreement evidence stands meanwhile | `/speckit-analyze` 2026-09-18, finding U1 |
 
 ## Constitution Check
 

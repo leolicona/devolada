@@ -166,6 +166,17 @@ confirmation (claimed-amount D2) becomes two actions: "Enviar así" sends
 (`supersedes only applies to a confirmed transfer`) is unchanged: a
 re-upload is a new attempt by definition.
 
+**The time budget, stated**: the platform bounds work handed to
+`waitUntil` after the response (30 s by the published rule — verify on the
+docs page when T031 lands and write the number into the handler's comment).
+The worst case inside that window is the provider's 25 s deadline plus a
+reused reading (no model call, D14) plus the D1 writes; the typical case is
+6–10 s. When the window is exceeded the verdict is lost, and the design
+already survives that: `validation_attempts` is written before the call
+(the 2026-08-18 rule), so the retry at +2 min is the payment's own and the
+replay carve-out applies (FR-021). T032 asserts a deferred attempt that
+dies leaves the row due at its slot.
+
 **Alternatives considered**: the sweep alone, no inline attempt (rejected:
 +2 min for every payer, where today's fast majority confirms in seconds);
 a queue (rejected: a new binding for what `waitUntil` already does).
@@ -272,7 +283,10 @@ receipt top-up does today. Classification is recorded on the extraction row
 **Rationale**: the engine does the work; the top-up lifecycle only has to
 store three fields it already has columns for. There is no operator-facing
 form for a disputed top-up and the spec adds none; the receipt door is
-today's behaviour and costs nothing new.
+today's behaviour and costs nothing new. The same holds for a top-up the
+reader refuses as "not a receipt" or "not legible": it rides the schedule
+with one reader call per slot and no provider credit, exactly as a
+not-a-receipt top-up does today; the operator's remedy is a new upload.
 
 ---
 

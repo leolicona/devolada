@@ -400,3 +400,50 @@ a Cloudflare login and are tracked there, not re-opened here.
   order, all green: spec-lint 63 files, gen-banks 97 banks, contrast-lint 34
   pairs at AA, pending-lint 27 labels, typecheck in four workspaces, tests
   **775** (api 488, pago 56, admin 181, ui 50), build.
+
+---
+
+## Phase 10: Convergence
+
+**Appended 2026-09-18 by a second `/speckit-converge`**, run after T041. One
+finding, and it is a disagreement between two written statements and the
+code rather than unbuilt work — which constitution I says must not be left
+silent. T002 and T039 stay as they are.
+
+- [ ] T042 [US1] In `apps/api/src/direct-payments/validation.ts`, stop a
+  later call from downgrading a settled classification. The block at ~line
+  514 writes `readingCheck`, `blindSide`, `acceptedFrom` and
+  `readingCheckAttempt` from `verdict.*` on **every** provider-first call,
+  with no guard on what the row already holds (`payment.readingCheck` is
+  read only at ~line 342, and only for the D16 legacy shape). Most rows
+  never reach a second comparison — once something is accepted they take the
+  transfer door (D17). The exception is D20's: `agreed`, accepted data
+  written, no date on either reading, so the row keeps the receipt door
+  until the payer supplies one. Its next slot falls outside the 15-minute
+  reuse window (D14), reads the file again, and re-compares. A second
+  reading that differs — the model is not deterministic, and apiCEP re-OCRs
+  the file on its side too — rewrites `agreed` as `disputed` or `blind`.
+  The row then loses the release evidence `releaseEvidenceFor`
+  (`direct-payments/provisional.ts`) grants only to `agreed`, and the page
+  swaps its one-field date question for a clave question. FR-010 says the
+  opposite in as many words — "The agreement still stands: the clock retires
+  and the release may fire while that one field is outstanding" — and the
+  spec's edge case for a shape rule that graduates mid-flight says the
+  classification "is taken once, at the first call, and recorded". Make a
+  later classification able only to *improve* the row: when the row already
+  holds an `accepted_from`, keep `reading_check`, `blind_side`,
+  `accepted_from` and `reading_check_attempt` as they are, and write only
+  what was missing — the accepted date, and the `disputed_fields` that
+  shrink with it. A row with no `accepted_from` keeps today's behaviour, so
+  a rule that graduates can still settle an undecided dispute. The reading
+  record still stores every call's own comparison unchanged (D19), because
+  that is the measurement and it must count every call. Add to
+  `describe("two-eyes-receipt US1: the classifier at minute zero")` in
+  `apps/api/test/direct-payment.test.ts`, cited `two-eyes-receipt US1`: a
+  D20 row on its second receipt-door slot whose readings now disagree keeps
+  `reading_check = 'agreed'` and its accepted clave, while the extraction
+  row of that second call records `disputed`. **If the product creator
+  prefers the current "the latest reading wins" behaviour instead, the fix
+  is an amendment to FR-010 and to that edge case rather than this code —
+  but one of the two must move.** Per FR-010 (D20 carve-out), spec edge case
+  "a bank whose shape rule graduates", Constitution I (contradicts)

@@ -295,3 +295,9 @@ Each step is deployable and breaks nothing before it.
 - Every non-obvious rule cites its decision as `automated-collections-api D<n>`, and says when a reason was measured
 - Commit per task or per logical group; stop at any checkpoint to validate a story on its own
 - The admissions policy stays open by the developer's decision of 2026-09-12. T013 honours the existing `businesses.status` gate and adds no policy of its own
+
+---
+
+## Phase 9: Convergence
+
+- [X] T083 Extend the scenario 8 block in `apps/api/test/collections-api-links.test.ts` (`automated-collections-api US1`) to prove the second half of the revocation edge case: revoke the credential that created a live link, then open the payer's page for that link and assert it still serves the ask and the CLABE. Today only the API half is proven — a revoked key gets the same empty 401 — while "links already in a customer's hands keep working" rests on structure alone (`payment_links` carries no credential reference; the payer routes are public, `routes/direct-payments/index.ts`). Nothing fails now; the test is what stops a later change from coupling the payer's door to credential state and leaving a payer at a dead page for money the business already asked for (spec Edge Cases) (partial)

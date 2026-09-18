@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,23 +31,34 @@
 
 ## Notes
 
-- Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
+**16 of 16 — ready for `/speckit-plan`.**
 
 ### Iteration 1 — 2026-09-18
 
-Two `[NEEDS CLARIFICATION]` markers remain, both deliberate: each one changes
-scope rather than a detail, and neither has a default safe enough to assume.
+Two `[NEEDS CLARIFICATION]` markers, both scope-sized rather than detail:
+whether an unlisted installation may be self-served, and what becomes of
+stored customer references when a connected business changes installation.
+Everything else passed on the first pass.
 
-1. **FR-005** — whether an ISP on an unlisted installation may self-serve, or
-   whether adding an installation is always a reviewed change. Bears directly
-   on where a live provider credential may be sent, so it is a security
-   question before it is a convenience one.
-2. **FR-010** — what happens to stored customer references when a connected
-   business changes installation. The references are what Devolada registers
-   payments against; getting this wrong registers money against a stranger.
-   Refusing the change and accepting-then-invalidating are both defensible and
-   size the feature differently.
+### Iteration 2 — 2026-09-18
 
-Everything else passed on the first pass. The spec names the provider only as
-"the provider" throughout, carries no column, endpoint or host names, and its
-success criteria are stated as business outcomes.
+Both answered by the creator and recorded under **Clarifications**:
+
+- **Closed list.** No free-text address. An installation Devolada has not
+  vetted is neither selectable nor reachable; adding one is a reviewed change.
+  The cost — an ISP on a new installation waits on Devolada — is carried by
+  FR-006, which requires the screen to say so and show how to ask, rather than
+  leaving an empty choice.
+- **Accept the change and invalidate.** Changing installation re-reads the
+  roster and makes every affected payment link dormant until its match is
+  confirmed. This is the larger of the two options and it grew the feature:
+  User Story 4 was added at P4, and FR-011 through FR-017 now carry dormancy,
+  the payer's message, the survival of the link's address, and the rule that a
+  reference from another installation can never be acted on.
+
+The new story is a genuine slice: without it an ISP can still change
+installation safely — links go dormant and they build new ones — so the
+recovery flow can ship after the rest without leaving money at risk. FR-013
+states that separation explicitly so a plan cannot lose it.
+
+Requirement count grew 13 → 19, success criteria 8 → 10, edge cases 7 → 10.

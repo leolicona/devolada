@@ -1,4 +1,4 @@
-# Bug Fix: the bank picker cannot be scrolled, so most banks are unreachable
+# Bug Fix: the admin's dropdown popup is unbounded, so a long list is unreachable
 
 - **Slug**: bank-picker-unreachable
 - **Fixed**: 2026-09-18
@@ -7,100 +7,83 @@
 
 ## Summary
 
-The shared `SelectContent` never bounded the popup's height, so a long list grew
-past the window with nothing to scroll inside — measured at **3,134px above the
-top of the viewport**, with Radix's scroll lock holding the page still behind
-it. The popup is bounded now, and the bank — 97 names, the one list long enough
-for this to block a configuration — got the control the creator asked for: a
-combobox whose field is its own search box.
+`SelectContent` now bounds the popup by the space Radix has measured for it,
+which is what hands the viewport inside something to scroll within. One change,
+at the one place every dropdown in the ISP panel comes from, so the class of
+defect is closed rather than one instance of it.
 
 ## Changes
 
 | File | Change | Notes |
 |------|--------|-------|
-| `apps/admin/src/components/ui/combobox.tsx` | added | The searchable picker. ARIA 1.2 combobox with a listbox popup; commits only a name from the vocabulary it was given |
-| `apps/admin/src/components/ui/select.tsx` | modified | The defect itself: the popup takes `--radix-select-content-available-height` and the viewport scrolls. Every long Select in the admin is covered |
-| `apps/admin/src/components/ui/popover.tsx` | modified | Exports `PopoverAnchor` — the combobox's field stays a field and keeps the keyboard, so it anchors rather than triggers |
-| `apps/admin/src/lib/banks.ts` | added | `BANK_OPTIONS`: the generated vocabulary sorted once for the three screens that offer it, instead of three copies of the same sort |
-| `apps/admin/src/features/settings/SettingsScreen.tsx` | modified | The ISP's own bank is a combobox |
-| `apps/admin/src/features/credit/CreditCard.tsx` | modified | The top-up's bank, same control |
-| `apps/admin/src/features/operator/OperatorScreen.tsx` | modified | The platform's bank, same control |
-| `packages/ui/src/components/input.tsx` | modified | `InputProps` extends `ComponentProps<"input">` so a `ref` travels with the rest; a second copy of the field recipe to get one would be drift (constitution VI) |
-| `apps/admin/test/bank-picker.test.tsx` | added test | 9 component tests, cited `bug: bank-picker-unreachable` |
-| `tests/e2e/bank-picker.spec.ts` | added test | 3 browser tests — the geometry happy-dom cannot measure |
-| `tests/e2e/stubs.ts` | modified | A `/settings` stub whose CLABE prefix is deliberately unmapped, so the bank has to be picked by hand |
-| `apps/admin/test/identity-round.test.tsx` | modified test | The seeded name is the field's value now, not text beside it |
-| `tests/passkey/identity-journey.spec.ts` | modified test | Same, in the passkey journey |
+| `apps/admin/src/components/ui/select.tsx` | modified | The popup takes `max-h-[var(--radix-select-content-available-height)]`, and says it may scroll. The comment carries the measurement |
+| `tests/e2e/dropdown.spec.ts` | added test | The browser-layer guard, cited `bug: bank-picker-unreachable` |
+| `tests/e2e/stubs.ts` | modified | A `/settings` stub, so a browser test can reach the panel's settings screens |
 
 ## Diff Highlights
 
-The defect, in one class list:
+The defect and its fix, in one class list:
 
 ```diff
 -  "z-dropdown min-w-[var(--radix-select-trigger-width)] overflow-hidden …"
-+  "z-dropdown max-h-[var(--radix-select-content-available-height)] min-w-… overflow-hidden …"
--  <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
-+  <SelectPrimitive.Viewport className="max-h-72 overflow-y-auto">{children}</SelectPrimitive.Viewport>
-```
-
-The rule that keeps the combobox honest — a field that only ever shows a name
-the provider knows:
-
-```ts
-/* Closing always restores the committed name. */
-function close() {
-  setOpen(false);
-  setQuery(value);
-}
++  "z-dropdown max-h-[var(--radix-select-content-available-height)] min-w-… overflow-x-hidden overflow-y-auto …"
 ```
 
 ## Tests Added or Updated
 
-- `apps/admin/test/bank-picker.test.tsx` — the whole vocabulary is offered; typing
-  narrows to the match; the match ignores case and accents (`méxico` → BBVA
-  MEXICO, CITI MEXICO); names that *start* with the query come first; no match
-  says so and commits nothing; a keyboard choice is what gets saved; Escape and
-  leaving the field both restore the committed name; `axe` passes on the open
-  list and the highlighted option is named by `aria-activedescendant`.
-- `tests/e2e/bank-picker.spec.ts` — the popup is inside the window; it really
-  scrolls and VOLKSWAGEN (last in the sorted vocabulary) is reachable; typing
-  reaches SCOTIABANK with no scrolling at all.
+- `tests/e2e/dropdown.spec.ts` — three checks against the workspace switcher,
+  because that is the one dropdown whose length is data rather than code
+  (nothing caps how many businesses a person belongs to):
+  - the popup stays inside the window;
+  - it has a real maximum height, no taller than the window, and the viewport
+    inside it is a scroll container that actually overflows;
+  - the last row is reachable, and reaching it really scrolled something.
+
+  The guard asserts the *rule*, not one long list. The list it was reported on —
+  the bank — becomes a searchable picker under
+  `specs/007-searchable-picker/`, and after that no screen in the panel renders
+  a list whose length is fixed in code and long enough to overflow. A guard
+  written against such a list would quietly stop proving anything.
 
 ## Local Verification
 
-- `node scripts/spec-lint.mjs` → ✔ 64 test files checked
-- `node scripts/gen-banks.mjs --check` → ✔ 97 banks, the constant in step
-- `node scripts/contrast-lint.mjs` → ✔ 34 pairs in both themes at AA
-- `node scripts/pending-lint.mjs` → ✔ 26 labels, every one inside a pending region
-- `pnpm -r --if-present typecheck` → ✔ four workspaces
-- `pnpm -r --if-present test` → ✔ 727 tests (api 436, admin 190, pago 51, ui 50)
-- `pnpm exec playwright test` → ✔ 64 browser tests
-- `pnpm -r --if-present build` → ✔
+- `playwright test tests/e2e/dropdown.spec.ts` → **3 passed**
+- Same spec against the pre-fix `select.tsx` (`git show dc48cf4^:…`) → **3 failed**:
+  popup bottom at 1041px in a 720px window, `max-height: none`, last row at
+  viewport ratio 0. The guard catches the defect it was written for.
+- `pnpm exec playwright test` → 67 passed (the motion suite exercises this same
+  dropdown opening and closing; the arriving/departing vocabulary is unchanged)
+- `pnpm --filter @devolada/admin test` → 190 passed
+- `pnpm --filter @devolada/admin typecheck` → clean
+- Manual: measured the open popup in Chromium — 26 rows in a 720px window gives
+  a 613px content box over a 605px viewport holding 936px of rows, and it
+  scrolls. The same popup unbounded opened at y = −3,134px.
 
 ## Deviations from Assessment
 
-- The assessment left the e2e layer as "tests to add"; the browser spec needed a
-  `/settings` stub that `stubAdminApi` did not have, so `tests/e2e/stubs.ts`
-  grew one. It is a fixture, not a behaviour change.
-- The `axe` run in the component test is scoped to the popup rather than
-  `document.body`, which is this repo's usual scope. Radix portals the popup to
-  the document root, where axe's `region` rule reports **every** overlay in the
-  app for sitting outside the page's landmarks — the date range popover would
-  report the same. The field's own ARIA is asserted directly in the same test,
-  so nothing is waved through.
-- Radix gives its popover content `role="dialog"`. The combobox overrides it to
-  `presentation`: `axe` caught the unnamed dialog, and a dialog wrapping a
-  listbox is what a screen reader would announce instead of the options.
+- **The scroll container is the viewport, not the content.** The assessment said
+  to bound the content "and let the viewport scroll inside it", which is right,
+  but a first pass also capped the viewport at a fixed height. Measuring showed
+  that cap was doing nothing the bound was not already doing: Radix gives the
+  viewport `flex: 1` inside a content box that is `display: flex`, so bounding
+  the content is what bounds the viewport. The fixed cap was removed — an
+  arbitrary number that changes nothing is a rule nobody can verify. The
+  comment in `select.tsx` now states what was measured.
+- **The code landed before this command ran.** The change was first applied in
+  commit `dc48cf4`, during a hand-driven pass that folded this defect together
+  with the searchable picker. The creator asked for the two to be split and for
+  the commands to drive it. This pass re-derived the fix from the narrowed
+  assessment, removed the unverifiable cap, and added the browser guard, which
+  the first pass did not have — it only tested the picker.
+- `tests/e2e/stubs.ts` was not in the assessment's file list. It holds no
+  behaviour, only the fixture a browser test needs to reach a settings screen.
 
 ## Follow-ups
 
-- The picker cannot *clear* a bank once one is committed — neither could the
-  Select it replaces, so this is parity, not a regression. If clearing is ever
-  wanted it is a product decision (what an ISP with no bank means), not a
-  component change.
-- `PREFIX_TO_BANK` maps 34 of the 97 banks (`apps/api/src/direct-payments/clabe.ts`).
-  Widening it would pre-select the bank for more ISPs and make the hand pick
-  rarer still. Separate change, separate decision.
-- The payer's page keeps its native `<select>` (direct-payment D16) — the OS
-  picker on a phone, with type-ahead and momentum scrolling the payer already
-  has configured. It never had this defect.
+- Two test files still cite this bug but now prove the searchable picker:
+  `apps/admin/test/bank-picker.test.tsx` and `tests/e2e/bank-picker.spec.ts`.
+  Their citations move to the feature's stories when
+  `specs/007-searchable-picker/` lands (constitution VII).
+- `PREFIX_TO_BANK` maps 34 of 97 banks
+  (`apps/api/src/direct-payments/clabe.ts`). Widening it would pre-select the
+  bank for more ISPs. Separate change, separate decision.

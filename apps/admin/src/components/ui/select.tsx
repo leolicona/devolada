@@ -47,20 +47,30 @@ export function SelectContent({
         position="popper"
         sideOffset={4}
         className={cn(
-          /* bug: bank-picker-unreachable — the popup MUST be bounded. Radix's
-             viewport is `overflow: hidden auto` inside `flex: 1`, so it can
-             only scroll within a parent whose height is fixed; unbounded, a
-             long list simply grew past the window, and Radix's own scroll
-             lock meant the page behind it could not move either. Everything
-             below the fold was unreachable. The available-height variable is
-             the space the popup actually has after collision handling. */
-          "z-dropdown max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg",
+          /* bug: bank-picker-unreachable — the popup MUST be bounded.
+
+             Radix gives the viewport `overflow: hidden auto` and `flex: 1`,
+             so it scrolls only inside a content box whose height is fixed.
+             Unbounded, the content grew to the full height of its rows, the
+             viewport filled it, nothing scrolled at all, and the popper
+             pushed the whole thing off the top of the window — while Radix's
+             own scroll lock held the page still behind it. Everything below
+             the fold was unreachable.
+
+             `--radix-select-content-available-height` is the space the popup
+             really has after collision handling; bounding by it is what hands
+             the viewport something to scroll inside.
+
+             Measured 2026-09-18, 26 rows in a 720px window: content 613px,
+             viewport 605px over 936px of rows, and it scrolls. Unbounded, the
+             same popup opened at y = −3,134px. */
+          "z-dropdown max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] overflow-x-hidden overflow-y-auto rounded-md border border-border bg-card p-1 shadow-lg",
           "data-[state=open]:animate-enter data-[state=closed]:animate-leave",
           className,
         )}
         {...props}
       >
-        <SelectPrimitive.Viewport className="max-h-72 overflow-y-auto">{children}</SelectPrimitive.Viewport>
+        <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );

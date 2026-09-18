@@ -1,7 +1,10 @@
 import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
-import { resetShapeRules } from "../../src/consta/extraction";
+import { gateReading, resetShapeRules } from "../../src/consta/extraction";
+import { compareReadings, type OurReading, type ProviderReading } from "../../src/consta/extraction/compare";
+import { deriveShapeRules } from "../../src/consta/extraction/shape";
+import type { Reading } from "../../src/consta/extraction/reader";
 import { consta, ConstaError, type ConstaRequest } from "../../src/consta";
 import type { Bindings } from "../../src/env";
 import {
@@ -438,7 +441,15 @@ describe("The failure taxonomy (D9, D14–D16)", () => {
     expect(error.hint).toBe("provide_tracking_key");
   });
 
-  it("US-V06, scenario 13: an unreadable receipt names the missing fields, and never rides a schedule", async () => {
+  /* two-eyes-receipt US1, D12 — rewritten from "US-V06, scenario 13: an
+     unreadable receipt names the missing fields, and never rides a
+     schedule". The provider's own OCR failure used to *throw* on every
+     path; the lifecycle recorded a code, rode the schedule, and nothing
+     ever learned that the provider had been blind. On a provider-first
+     call it is now a `not_found` verdict with a blind classification.
+     The failure itself, with its `missingFields`, survives on the legacy
+     `providerOcr` cross, which the scenario below keeps. */
+  it("two-eyes-receipt US1: the provider's unreadable answer is a blind verdict, and the call is still billed", async () => {
     const { id: keyId, key } = await seedOwner();
     const missing = ["fecha de la operación", "clave de rastreo o número de referencia"];
     mockApiCep({
@@ -448,9 +459,72 @@ describe("The failure taxonomy (D9, D14–D16)", () => {
       missingFields: missing,
     });
 
-    /* No AI binding: the image goes straight to the provider's OCR door,
-       so the provider's own "I could not read this" is what comes back */
+    /* No AI binding either, so neither side read anything: blind on both */
     const res = await postValidate(key, receiptRequest, { AI: undefined });
+    expect(res.ok).toBe(true);
+    const { data } = res;
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("not_found");
+    expect(data.readingCheck).toBe("blind");
+    expect(data.blindSide).toBe("both");
+    expect(data.accepted).toBeNull();
+    expect(data.ourReading).toBeNull();
+
+    /* The OCR ran, so the call was billed and belongs in the log (D15) */
+    const rows = await db().select().from(validations).where(eq(validations.businessId, keyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBeNull();
+    expect(rows[0].mode).toBe("receipt");
+
+    /* D19: a paid call always leaves a reading record, even one that
+       read nothing — and it says why */
+    const [row] = await db().select().from(extractions);
+    expect(row.source).toBe("provider-ocr");
+    expect(row.rawOutput).toBe("no-binding");
+    expect(row.readingCheck).toBe("blind");
+    expect(row.validationId).toBe(rows[0].id);
+  });
+
+  it("two-eyes-receipt US1: our complete reading survives the provider going blind (D12, FR-013)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep({
+      validationId: "prov-uuid-ocr2",
+      status: "error",
+      error: "El OCR no pudo extraer los siguientes datos obligatorios",
+      missingFields: ["clave de rastreo"],
+    });
+
+    const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) });
+    expect(res.ok).toBe(true);
+    const { data } = res;
+    expect(data.readingCheck).toBe("blind");
+    expect(data.blindSide).toBe("provider");
+    expect(data.acceptedFrom).toBe("reader");
+    /* The next attempt takes the transfer door with this, and the payer
+       is never asked to retype what we already read */
+    expect(data.accepted).toEqual({
+      trackingKey: "MBAN01002508150012345678",
+      senderBank: "BBVA MEXICO",
+      amountCents: 51400,
+      date: "2026-08-15",
+    });
+  });
+
+  it("US-V06, scenario 13: the legacy cross still gets the named missing fields, and never rides a schedule", async () => {
+    const { key } = await seedOwner();
+    const missing = ["fecha de la operación", "clave de rastreo o número de referencia"];
+    mockApiCep({
+      validationId: "prov-uuid-ocr3",
+      status: "error",
+      error: "El OCR no pudo extraer los siguientes datos obligatorios",
+      missingFields: missing,
+    });
+
+    /* D16: `providerOcr` is the minute-two cross of a payment born
+       before the cut-over. Its caller holds a reading of its own and
+       classifies for itself, so the failure still travels as a failure. */
+    const res = await postValidate(key, { ...receiptRequest, providerOcr: true }, { AI: undefined });
     expect(res.ok).toBe(false);
     const error = res.error!;
     expect(error.code).toBe("RECEIPT_UNREADABLE");
@@ -459,12 +533,6 @@ describe("The failure taxonomy (D9, D14–D16)", () => {
        the difference between "Verificando tu pago" for six hours and
        "falta la fecha en tu comprobante" in seconds */
     expect(error.missingFields).toEqual(missing);
-
-    /* The OCR ran, so the call was billed and belongs in the log (D15) */
-    const rows = await db().select().from(validations).where(eq(validations.businessId, keyId));
-    expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBeNull();
-    expect(rows[0].mode).toBe("receipt");
   });
 
   it("US-V06, scenario 15: a hung provider is Consta's deadline to report, and an unanswered call is not logged", async () => {
@@ -673,31 +741,150 @@ describe("Refused before a credit is spent (D12, D13)", () => {
    2026-08-19 — fenced JSON, and `esComprobante: false` on an image that
    is not a receipt (5/5). */
 describe("The receipt is read at our edge (proof-extraction)", () => {
-  it("scenario 1, 8: an image is read here and validated through direct mode", async () => {
+  /* two-eyes-receipt US1, D3 — rewritten from "scenario 1, 8: an image
+     is read here and validated through direct mode". The image used to
+     become a clave and buy a transfer-door lookup; the provider's own
+     eyes arrived only on a second credit. Now the file itself goes to
+     the image door on the first credit with our reading beside it. */
+  it("two-eyes-receipt US1: the file goes to the provider's image door, and our reading rides beside it", async () => {
     const { key } = await seedOwner();
     const aiCalls: unknown[] = [];
     await mockProof(PNG(), "image/png");
     mockApiCep(settledResponse, (body) => {
-      /* The image never leaves Consta: what reaches apiCEP is a clave */
-      expect(body.imageUrl).toBeUndefined();
-      const sender = body.sender as Record<string, unknown>;
-      expect(sender.trackingKey).toBe("MBAN01002508150012345678");
-      expect(sender.bank).toBe("BBVA MEXICO");
-      expect(sender.amount).toBe(514);
+      /* The provider reads the file itself, through the short-lived link
+         the engine signed for it (D12, consta-api-merge D7) */
+      expectSignedProofUrl(body.imageUrl);
+      expect(body.sender).toBeUndefined();
     });
 
     const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING, aiCalls) });
     expect(res.ok).toBe(true);
     const { data } = res;
     expect(data.status).toBe("valid");
-    expect(data.source).toBe("reader");
+    /* The credit went to the provider's image door, so that is the
+       source; what *we* read travels separately (D3) */
+    expect(data.source).toBe("provider-ocr");
     expect(data.extractionId).toEqual(expect.any(String));
+    /* One reading, one model call — and it is the same one the page's
+       draft would have made (D14 covers the reuse) */
     expect(aiCalls).toHaveLength(1);
 
-    /* D8: the reading is tied to the paid call it bought */
+    /* D8: the reading is tied to the paid call it bought. It is written
+       after the answer now, so it can carry the comparison too (D19). */
     const [row] = await db().select().from(extractions);
+    expect(row.source).toBe("reader");
     expect(row.outcome).toBe("passed");
     expect(row.validationId).toBe(data.validationId);
+    /* `valid` needs no second opinion: the CEP decided (D5) */
+    expect(row.readingCheck).toBeNull();
+  });
+
+  it("two-eyes-receipt US1: `not_found` carries the classification and the accepted data", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep({
+      validationId: "prov-uuid-nf",
+      status: "invalid",
+      validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+      /* The provider read the same receipt we did — the case the whole
+         feature turns on (measured 2026-08-26: `extracted` survives a
+         faceless `invalid`) */
+      extracted: {
+        trackingKey: "MBAN01002508150012345678",
+        amount: 514.0,
+        date: "2026-08-15",
+        senderBank: "BBVA MEXICO",
+      },
+    });
+
+    const res = await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) });
+    expect(res.ok).toBe(true);
+    const { data } = res;
+    expect(data.status).toBe("invalid");
+    expect(data.reason).toBe("not_found");
+    expect(data.readingCheck).toBe("agreed");
+    expect(data.acceptedFrom).toBe("agreed");
+    expect(data.disputedFields).toEqual([]);
+    expect(data.accepted).toEqual({
+      trackingKey: "MBAN01002508150012345678",
+      senderBank: "BBVA MEXICO",
+      amountCents: 51400,
+      date: "2026-08-15",
+    });
+    expect(data.ourReading).toEqual({
+      trackingKey: "MBAN01002508150012345678",
+      senderBank: "BBVA MEXICO",
+      amountCents: 51400,
+      date: "2026-08-15",
+      legibility: null,
+    });
+
+    /* D19: one row carries both readings and what they settled, for a
+       business payment and a platform top-up alike */
+    const [row] = await db().select().from(extractions);
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.acceptedFrom).toBe("agreed");
+    expect(row.disputedFields).toBeNull();
+    expect(row.providerTrackingKey).toBe("MBAN01002508150012345678");
+    expect(row.providerAmountCents).toBe(51400);
+  });
+
+  it("two-eyes-receipt US1: the draft's reading is reused within 15 minutes, and re-read after (D14)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const calls: unknown[] = [];
+    const ai = aiReturning(GOOD_READING, calls);
+
+    /* The page's draft: `/read` reads the file and records it */
+    const draft = await postExtract(key, PROOF_KEY, { AI: ai });
+    expect(draft.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+
+    /* The paid attempt carries only the file (D13), so without reuse the
+       engine would read the same bytes a second time, ~2.7 s later */
+    mockApiCep(settledResponse);
+    const paid = await postValidate(key, receiptRequest, { AI: ai });
+    expect(paid.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+
+    const rows = await db().select().from(extractions);
+    expect(rows).toHaveLength(2);
+    const reused = rows.find((r) => r.validationId !== null)!;
+    /* The row says which draft it came from, rather than copying a raw
+       answer that was never produced for this call */
+    expect(reused.rawOutput).toContain("reused from extraction");
+    expect(reused.trackingKey).toBe("MBAN01002508150012345678");
+    expect(reused.amountCents).toBe(51400);
+  });
+
+  it("two-eyes-receipt US1: with no AI binding the file still goes to the provider, and a not_found is blind on our side", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(
+      {
+        validationId: "prov-uuid-blindus",
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+        extracted: {
+          trackingKey: "MBAN01002508150012345678",
+          amount: 514.0,
+          date: "2026-08-15",
+          senderBank: "BBVA MEXICO",
+        },
+      },
+      (body) => expectSignedProofUrl(body.imageUrl),
+    );
+
+    /* No bytes are fetched at all on this path — a door that still works
+       beats a door that 502s when the reader is missing (constitution
+       VIII). The payer never blocks, and the provider's reading alone
+       carries the payment forward (FR-005). */
+    const res = await postValidate(key, receiptRequest, { AI: undefined });
+    expect(res.ok).toBe(true);
+    const { data } = res;
+    expect(data.ourReading).toBeNull();
+    expect(data.readingCheck).toBe("blind");
+    expect(data.blindSide).toBe("reader");
+    expect(data.acceptedFrom).toBe("provider");
   });
 
   it("scenario 3: routing follows magic bytes, not the caller's content type", async () => {
@@ -723,14 +910,29 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
        Cyrillic З where a 3 belongs. This is the failure that actually
        happens — receipts print the clave across two lines. */
     await mockProof(PNG(), "image/png");
+    /* two-eyes-receipt D3/FR-005: a hole no longer refuses. It used to
+       throw `RECEIPT_INCOMPLETE` and send the payer to a form before
+       anybody had been asked anything; now it rides to the provider,
+       whose own reading may fill it for free. What the gate said is
+       still recorded, and it is what keeps this misread from arguing
+       with the provider's reading later (D5). */
+    mockApiCep(
+      {
+        validationId: "prov-uuid-gated",
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+      },
+      (body) => expectSignedProofUrl(body.imageUrl),
+    );
     const bad = await postValidate(key, receiptRequest, {
       AI: aiReturning({ ...GOOD_READING, claveDeRastreo: "NU3AGKK16AH58LTOVUQH55PE З0AA" }),
     });
-    expect(bad.ok).toBe(false);
-    const error = bad.error!;
-    expect(error.code).toBe("RECEIPT_INCOMPLETE");
-    expect((error.reading!.gate as Record<string, string>).trackingKey).toBe("malformed");
-    expect(error.retryable).toBe(false);
+    expect(bad.ok).toBe(true);
+    /* The malformed clave is a hole on our side, never a reading: the
+       verdict carries null where the gate refused (D5) */
+    expect((bad.data.ourReading as Record<string, unknown>).trackingKey).toBeNull();
+    expect(bad.data.readingCheck).toBe("blind");
+    expect((await db().select().from(extractions))[0].gateTrackingKey).toBe("malformed");
 
     /* NOT caught, and this test exists to keep us honest about it.
        llama's measured misread of `NU3AGKMP3ASP8QQQ4U8J8F0K1E4K` was
@@ -742,8 +944,14 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
        (D5) checks content, and a misread that survives here comes back
        from apiCEP as `not_found` — which now rides the schedule and
        carries `verify_inputs` rather than calling the payer a liar
-       (validation.spec.md D11, direct-payment D17). */
-    await mockProof(PNG(), "image/png");
+       (validation.spec.md D11, direct-payment D17).
+
+       A different file, deliberately: two readings of the *same* bytes
+       by the same owner inside fifteen minutes are one reading now
+       (D14), so seeding a second stub against the first file would
+       silently re-test the first. Two different receipts have different
+       bytes in life; they need different bytes here too. */
+    await mockProof(PNG(80), "image/png");
     mockApiCep({
       validationId: "prov-uuid-13",
       status: "invalid",
@@ -758,29 +966,47 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.reason).toBe("not_found");
     expect(data.hint).toBe("verify_inputs");
 
-    /* D9: the refusal is recorded and unbilled; the misread is recorded
-       and billed, which is exactly the difference worth measuring */
+    /* Both were recorded and both were billed now (D3): the difference
+       worth measuring moved from "refused vs billed" to what the two
+       readings said about each other, which lives on the same rows. */
     const rows = await db().select().from(extractions).where(eq(extractions.businessId, keyId));
     expect(rows.map((r) => r.outcome).sort()).toEqual(["gated", "passed"]);
-    expect(await db().select().from(validations)).toHaveLength(1);
+    expect(await db().select().from(validations)).toHaveLength(2);
   });
 
-  it("scenario 5: a bank that does not map is asked about, never guessed", async () => {
+  it("scenario 5: a bank that does not map is never guessed — and since D3 it goes to the provider anyway", async () => {
     const { key } = await seedOwner();
     await mockProof(PNG(), "image/png");
+    mockApiCep(
+      {
+        validationId: "prov-uuid-nobank",
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+        /* And the provider's own reading names the bank ours could not,
+           which is exactly the hole it can fill for free (FR-005) */
+        extracted: {
+          trackingKey: "MBAN01002508150012345678",
+          amount: 514.0,
+          date: "2026-08-15",
+          senderBank: "BBVA MEXICO",
+        },
+      },
+      (body) => expectSignedProofUrl(body.imageUrl),
+    );
 
     const res = await postValidate(key, receiptRequest, {
       AI: aiReturning({ ...GOOD_READING, banco: "Banco Inventado" }),
     });
-    expect(res.ok).toBe(false);
-    const error = res.error!;
-    expect(error.code).toBe("RECEIPT_INCOMPLETE");
-    expect((error.reading!.gate as Record<string, string>).senderBank).toBe("unknown");
+    expect(res.ok).toBe(true);
+    const { data } = res;
     /* Never a guess: apiCEP answers a wrong bank `invalid` with no
        cepDetails, which is indistinguishable from a transfer that never
-       happened (validation.spec.md D12) */
-    expect(error.reading!.senderBank).toBeNull();
-    expect(await db().select().from(validations)).toHaveLength(0);
+       happened (validation.spec.md D12). So an unmappable name is null
+       on our side, and the *other* reading supplies it. */
+    expect((data.ourReading as Record<string, unknown>).senderBank).toBeNull();
+    expect((await db().select().from(extractions))[0].gateSenderBank).toBe("unknown");
+    expect(data.readingCheck).toBe("agreed");
+    expect((data.accepted as Record<string, unknown>).senderBank).toBe("BBVA MEXICO");
   });
 
   it("scenario 6: an image with no receipt in it costs one AI call, not seven paid ones", async () => {
@@ -878,10 +1104,14 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     const { key } = await seedOwner();
     await mockProof(PNG(), "image/png");
     /* The reader says $1.00 and Banxico says $514.00. The response must
-       carry Banxico's number — this is the `$1-receipt` hole, and the
-       reading is a search key, never evidence (D3). */
+       carry Banxico's number — this is the `$1-receipt` hole, and a
+       reading is a search key, never evidence (D3). Since
+       two-eyes-receipt D3 the search key is the file itself: the
+       provider reads it and looks the record up, so the $1 no longer
+       travels as `sender.amount` and the principle is unchanged. */
     mockApiCep(settledResponse, (body) => {
-      expect((body.sender as Record<string, unknown>).amount).toBe(1);
+      expectSignedProofUrl(body.imageUrl);
+      expect(body.sender).toBeUndefined();
     });
 
     const res = await postValidate(key, receiptRequest, {
@@ -908,6 +1138,12 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.status).toBe("invalid");
     expect(data.reason).toBe("not_found");
     expect(data.hint).toBe("verify_inputs");
+    /* two-eyes-receipt D5: the provider read nothing off this image, so
+       the verdict is blind on its side — and our flawless reading is
+       what the next attempt carries (FR-013) */
+    expect(data.readingCheck).toBe("blind");
+    expect(data.blindSide).toBe("provider");
+    expect(data.acceptedFrom).toBe("reader");
   });
 
   it("US-V10, scenario 13: every row records the sender bank on both doors (D13)", async () => {
@@ -1080,10 +1316,14 @@ describe("US-V17: the shape rules act (proof-extraction D14–D16)", () => {
     const [extraction] = await db().select().from(extractions);
     expect(extraction.shape).toBe("mismatch");
 
-    /* Image door: the reading rides into the paid call unchanged */
+    /* Image door: the mismatch rides into the paid call as a field and
+       stops nothing (D15). Since two-eyes-receipt D3 what travels is the
+       file, not the clave — so the assertion moved from the request body
+       to the verdict, where the shape verdict always was. */
     await mockProof(PNG(), "image/png");
     mockApiCep(settledResponse, (body) => {
-      expect((body.sender as Record<string, unknown>).trackingKey).toBe(I_AS_ONE);
+      expectSignedProofUrl(body.imageUrl);
+      expect(body.sender).toBeUndefined();
     });
     let res = await postValidate(key, receiptRequest, { AI: aiReturning(aztecaReading(I_AS_ONE)) });
     expect(res.ok).toBe(true);
@@ -1131,5 +1371,241 @@ describe("US-V17: the shape rules act (proof-extraction D14–D16)", () => {
     data = await extractWith(key, aztecaReading(aztecaClave(3), null));
     expect(data.gate.senderBank).toBe("missing");
     expect(data.suggestedBank).toBeUndefined();
+  });
+});
+
+/* two-eyes-receipt US1 — the comparison itself, row by row.
+
+   `compareReadings` is a pure function over (our gated reading, the
+   provider's reading, the shape rules), so these scenarios need no
+   database and no provider: the rules are built from the same ten
+   confirmed claves `loadShapeRules` would derive them from, through the
+   same `deriveShapeRules` it calls. What is under test is the decision
+   table of research R3, not the loading. */
+describe("two-eyes-receipt US1: the comparison", () => {
+  /* Azteca as measured 2026-08-30: 18 digits and a literal trailing I.
+     Ten of one length is what graduates a rule (GRADUATION_SAMPLES). */
+  const aztecaClave = (i: number) => `260831070865${String(690000 + i * 137).padStart(6, "0")}I`;
+  const AZTECA_RULES = deriveShapeRules(
+    Array.from({ length: 10 }, (_, i) => ({ senderBank: "AZTECA", trackingKey: aztecaClave(i) })),
+  );
+  /* Fits the graduated shape; the other one has a digit where the rule
+     wants the literal I — the live misread of 2026-08-30. */
+  const FITS = "260831070865999999I";
+  const MISFITS = "2608310708659999991";
+
+  /* Our side goes through the real gate, so "present" here means exactly
+     what it means in the engine: the field passed (D5). */
+  const ourReading = (over: Partial<Reading> = {}): OurReading => {
+    const reading: Reading = {
+      isReceipt: true,
+      legibility: "full",
+      trackingKey: FITS,
+      senderBank: "AZTECA",
+      amount: 514.0,
+      date: "2026-08-30",
+      status: "Aceptada",
+      raw: "",
+      model: "test",
+      ...over,
+    };
+    return { ...gateReading(reading), date: reading.date, legibility: reading.legibility };
+  };
+
+  const theirReading = (over: Partial<ProviderReading> = {}): ProviderReading => ({
+    trackingKey: FITS,
+    amountCents: 51400,
+    date: "2026-08-30",
+    senderBank: "AZTECA",
+    ...over,
+  });
+
+  it("both read the same clave and the same cents: agreed, and the data is accepted", () => {
+    const c = compareReadings(ourReading(), theirReading(), AZTECA_RULES);
+    expect(c.readingCheck).toBe("agreed");
+    expect(c.disputedFields).toEqual([]);
+    expect(c.blindSide).toBeNull();
+    expect(c.acceptedFrom).toBe("agreed");
+    expect(c.accepted).toEqual({
+      trackingKey: FITS,
+      senderBank: "AZTECA",
+      amountCents: 51400,
+      date: "2026-08-30",
+    });
+  });
+
+  it("they differ and only our clave fits the bank's shape: ours is taken, nobody is asked", () => {
+    const c = compareReadings(
+      ourReading(),
+      theirReading({ trackingKey: MISFITS }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.acceptedFrom).toBe("reader");
+    expect(c.accepted?.trackingKey).toBe(FITS);
+    expect(c.disputedFields).toEqual([]);
+  });
+
+  it("they differ and only theirs fits: theirs is taken, and no field is asked for", () => {
+    const c = compareReadings(
+      ourReading({ trackingKey: MISFITS }),
+      theirReading(),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.acceptedFrom).toBe("provider");
+    expect(c.accepted?.trackingKey).toBe(FITS);
+    expect(c.disputedFields).toEqual([]);
+  });
+
+  it("they differ and the bank has no rule yet: the payer is asked for the clave alone", () => {
+    /* Cold start is the common case (GRADUATION_SAMPLES per bank), and
+       D8 says the ask names the field in doubt and nothing else. */
+    const c = compareReadings(ourReading(), theirReading({ trackingKey: MISFITS }), []);
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.accepted).toBeNull();
+    expect(c.acceptedFrom).toBeNull();
+    expect(c.disputedFields).toEqual(["trackingKey"]);
+  });
+
+  it("they differ and both claves fit the shape: no tiebreak, the payer decides", () => {
+    /* A shape is not a fingerprint — two real claves of one bank fit it
+       by construction, so fitting cannot single one out. */
+    const c = compareReadings(
+      ourReading(),
+      theirReading({ trackingKey: aztecaClave(3) }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.accepted).toBeNull();
+    expect(c.disputedFields).toEqual(["trackingKey"]);
+  });
+
+  it("they differ and neither clave fits: no tiebreak either", () => {
+    const c = compareReadings(
+      ourReading({ trackingKey: MISFITS }),
+      theirReading({ trackingKey: "2608310708659999992" }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.accepted).toBeNull();
+    expect(c.disputedFields).toEqual(["trackingKey"]);
+  });
+
+  it("the amount differs while the clave agrees: only the amount is asked for", () => {
+    const c = compareReadings(ourReading(), theirReading({ amountCents: 9900 }), AZTECA_RULES);
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.disputedFields).toEqual(["amount"]);
+  });
+
+  it("the provider read no clave and ours is complete: blind on their side, ours goes on", () => {
+    const c = compareReadings(
+      ourReading(),
+      theirReading({ trackingKey: null, amountCents: null, senderBank: null, date: null }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("provider");
+    expect(c.acceptedFrom).toBe("reader");
+    expect(c.accepted?.trackingKey).toBe(FITS);
+    expect(c.disputedFields).toEqual([]);
+  });
+
+  it("the provider read no clave and ours has a hole: blind on both sides, the payer is asked", () => {
+    const c = compareReadings(
+      ourReading({ amount: null }),
+      theirReading({ trackingKey: null, amountCents: null, senderBank: null, date: null }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("both");
+    expect(c.accepted).toBeNull();
+    expect(c.disputedFields).toEqual(["amount"]);
+  });
+
+  it("we read nothing and their clave fits: blind on ours, theirs goes on", () => {
+    const c = compareReadings(null, theirReading(), AZTECA_RULES);
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("reader");
+    expect(c.acceptedFrom).toBe("provider");
+    expect(c.accepted?.trackingKey).toBe(FITS);
+  });
+
+  it("we read nothing and their clave contradicts the bank's shape: the payer is asked", () => {
+    const c = compareReadings(null, theirReading({ trackingKey: MISFITS }), AZTECA_RULES);
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("reader");
+    expect(c.accepted).toBeNull();
+    expect(c.disputedFields).toContain("trackingKey");
+  });
+
+  it("we read nothing and the bank has no rule: theirs is taken — cold start is not suspicion", () => {
+    const c = compareReadings(null, theirReading(), []);
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("reader");
+    expect(c.acceptedFrom).toBe("provider");
+    expect(c.accepted?.trackingKey).toBe(FITS);
+  });
+
+  it("neither side read a clave: blind on both, and nothing was accepted", () => {
+    const c = compareReadings(null, null, AZTECA_RULES);
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("both");
+    expect(c.accepted).toBeNull();
+    expect(c.disputedFields).toEqual(["trackingKey", "amount"]);
+  });
+
+  it("a bank-name or date difference never disputes (reading-check D2, kept)", () => {
+    /* Banks spell their own name a dozen ways and print the date in as
+       many formats; neither decides which Banxico record is asked about. */
+    const c = compareReadings(
+      ourReading(),
+      theirReading({ senderBank: "Banco Azteca", date: "30/08/2026" }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("agreed");
+    expect(c.disputedFields).toEqual([]);
+  });
+
+  it("a malformed clave on our side raises no dispute — it is a hole, not a second opinion (D5)", () => {
+    /* Four characters cannot be a clave (the gate's range is 6–30), so
+       the gate calls it malformed and this side simply has no vote. */
+    const c = compareReadings(ourReading({ trackingKey: "AB12" }), theirReading(), AZTECA_RULES);
+    expect(c.readingCheck).toBe("blind");
+    expect(c.blindSide).toBe("reader");
+    expect(c.acceptedFrom).toBe("provider");
+    expect(c.accepted?.trackingKey).toBe(FITS);
+  });
+
+  it("D20: agreement with no date on either side is still agreed, and asks for the date alone", () => {
+    /* The transfer door is never called with a date nobody read, and an
+       agreed reading still retires the clock — so the ask is one field. */
+    const c = compareReadings(
+      ourReading({ date: null }),
+      theirReading({ date: null }),
+      AZTECA_RULES,
+    );
+    expect(c.readingCheck).toBe("agreed");
+    expect(c.acceptedFrom).toBe("agreed");
+    expect(c.accepted?.date).toBeNull();
+    expect(c.disputedFields).toEqual(["date"]);
+  });
+
+  it("D20: the date comes from whichever side read one — ours first", () => {
+    expect(compareReadings(ourReading({ date: null }), theirReading(), AZTECA_RULES).accepted?.date).toBe(
+      "2026-08-30",
+    );
+    expect(
+      compareReadings(ourReading({ date: "2026-08-29" }), theirReading(), AZTECA_RULES).accepted?.date,
+    ).toBe("2026-08-29");
+  });
+
+  it("a hole on our side is filled by theirs rather than asked about (D5)", () => {
+    /* We read the clave but not the amount: nothing disagrees, so the
+       amount simply comes from the reading that has one. */
+    const c = compareReadings(ourReading({ amount: null }), theirReading(), AZTECA_RULES);
+    expect(c.readingCheck).toBe("agreed");
+    expect(c.accepted?.amountCents).toBe(51400);
+    expect(c.disputedFields).toEqual([]);
   });
 });

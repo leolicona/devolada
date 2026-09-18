@@ -4,9 +4,22 @@ import { extractions, validations } from "../db/schema";
 import type { Bindings } from "../env";
 import { apiCepProvider } from "./provider/apicep";
 import { ProviderFailure, type ReceiptInput, type TransferInput } from "./provider/types";
-import { extractProof, readProofFromBucket, type ExtractionResult } from "./extraction";
-import { extractionFailure, readingPayload, recordExtraction, shapeSignals } from "./extract";
+import { extractProof, readProofFromBucket, type ExtractionResult, type LoadedProof } from "./extraction";
+import {
+  extractionFailure,
+  readingPayload,
+  recentReading,
+  recordExtraction,
+  shapeSignals,
+  type ShapeSignals,
+} from "./extract";
 import { checkShape, loadShapeRules, type ShapeVerdict } from "./extraction";
+import {
+  compareReadings,
+  type Classification,
+  type OurReading,
+  type ProviderReading,
+} from "./extraction/compare";
 import type { Bank } from "../direct-payments/banks";
 import { trustBlock } from "./trust/history";
 import { suggestRetryAfter } from "./retry/suggest";
@@ -20,6 +33,34 @@ import { ownerId, type ConstaRequest, type ConstaVerdict, type Owner } from "./i
    a service; a function since consta-api-merge D2, with the same body
    and every decision it carried. The HTTP envelope it answered with
    became the `ConstaError` it throws (D6). */
+
+/* two-eyes-receipt D3: what the engine read, shaped for the verdict.
+   Gated fields only — a field the gate did not pass is null here, so a
+   caller can never mistake our misread for a reading (D5). */
+function ourReadingPayload(ours: OurReading | null): ConstaVerdict["ourReading"] {
+  if (!ours) return null;
+  return {
+    trackingKey: ours.gate.trackingKey === "ok" ? ours.trackingKey : null,
+    senderBank: ours.gate.senderBank === "ok" ? ours.senderBank : null,
+    amountCents: ours.gate.amount === "ok" ? ours.amountCents : null,
+    date: ours.date,
+    legibility: ours.legibility ?? null,
+  };
+}
+
+/* The classification, shaped for the verdict: the contract carries these
+   as optional fields present exactly when a comparison ran (D5), so the
+   nulls that mean "not applicable" on the in-memory result are dropped
+   rather than travelling as explicit nulls. */
+function classificationPayload(c: Classification): Partial<ConstaVerdict> {
+  return {
+    readingCheck: c.readingCheck,
+    disputedFields: c.disputedFields,
+    ...(c.blindSide ? { blindSide: c.blindSide } : {}),
+    accepted: c.accepted,
+    ...(c.acceptedFrom ? { acceptedFrom: c.acceptedFrom } : {}),
+  };
+}
 
 export async function validate(
   env: Bindings,
@@ -57,24 +98,52 @@ export async function validate(
   const businessId = ownerId(owner);
   const now = new Date();
 
-  /* proof-extraction D1/D2: an image is read here and validated through
-     the direct door; a PDF goes to the provider's OCR untouched. Every
-     refusal below spends no credit, which is the entire point — apiCEP
-     cannot tell a caller which field was wrong, because a malformed
-     clave, an unknown bank and a transfer that never happened are the
-     same faceless `invalid` (D11). Here we can, before paying.
+  /* proof-extraction D1/D2, turned around by two-eyes-receipt D3/D11.
 
-     If the reader is unavailable the image falls through to the OCR
-     door rather than failing: a door that still works beats a 502. */
+     The receipt door used to read the file here, gate it, and spend the
+     first credit on the provider's *transfer* door with our reading — so
+     the provider's own eyes arrived only on a second credit a minute
+     later, and only after a "not found". Now the file is read here *and*
+     sent to the provider's image door on the same first credit: the
+     provider's eyes first, ours beside them. When Banxico has nothing
+     yet, both readings exist at minute zero and are compared on the spot
+     (`extraction/compare.ts`), so the payer is asked only when the two
+     machines and the bank's learned clave shape all run out of ways to
+     tell (D5–D8).
+
+     Exactly two things still refuse before a credit is spent (D2, FR-004):
+     the file is not a receipt at all, and the file cannot be read at all.
+     A *hole* no longer refuses (FR-005) — a missing clave used to throw
+     `RECEIPT_INCOMPLETE` and send the payer to a form before anything had
+     been asked of anybody; now it goes to the provider, whose reading may
+     fill it for free. That refusal is what the gate exists for is still
+     true of the two that remain: apiCEP cannot tell a caller which field
+     was wrong, because a malformed clave, an unknown bank and a transfer
+     that never happened are the same faceless `invalid` (D11).
+
+     If the reader is unavailable, or its answer will not parse, the file
+     still goes to the provider with an empty reading on our side, and the
+     reading record says why (D19): a door that still works beats a 502. */
   let extractionId: string | null = null;
-  /* Which door actually read the file (D2). The transfer door has no
-     file and no source; the receipt door always has one, and the PDF
-     route has an extraction row *and* still belongs to the provider. */
+  /* Which door read the file for *this verdict* (D2). The transfer door
+     has no file and no source. Every receipt-door call is `provider-ocr`
+     now, because the provider's image door is where the credit went —
+     what we read rides the verdict separately, as `ourReading` (D3). */
   let source: "reader" | "provider-ocr" | null = body.receipt ? "provider-ocr" : null;
   /* D15: the shape verdict on whatever clave is about to be spent —
      the reader's on the image door, the caller's on the transfer door.
      Null when nothing here read a clave (the provider's OCR route). */
   let shape: ShapeVerdict | null = null;
+  /* two-eyes-receipt D3: our reading, gated, kept aside while the
+     provider reads the same file. Null when nothing here could read it —
+     no binding, a PDF with no text, an answer with no JSON — which is a
+     `blind` classification on our side and never a failure (D15). */
+  let ours: OurReading | null = null;
+  /* The reading record for this call, written once the provider has
+     answered so the classification can ride the same row (D19). */
+  let extracted: ExtractionResult | null = null;
+  let signals: ShapeSignals = { shape: "unknown", suggestedBank: null };
+  let reusedFrom: string | null = null;
 
   /* consta-api-merge D7: the provider gets a short-lived signed link
      (direct-payment D12) only when it must read the file itself — the
@@ -101,24 +170,50 @@ export async function validate(
      caller that already holds a reading wants the provider's eyes, not
      a second pass of the same model. */
   const readable = input.mode === "receipt" && Boolean(body.beneficiary) && !body.providerOcr;
+  /* With no binding nothing here can read anything, so the bytes are not
+     fetched at all — and, importantly, not sniffed either: a file whose
+     magic bytes this engine does not recognise still reaches the
+     provider on this path, exactly as before (constitution VIII, a door
+     that still works). The call is still recorded, without a hash
+     (FR-017, D19): a paid call with no reading record at all would be a
+     hole in the measurement. */
   if (readable && input.mode === "receipt" && env.AI) {
-    let extracted: ExtractionResult;
+    let proof: LoadedProof | null = null;
     try {
-      extracted = await extractProof(env, await readProofFromBucket(env.PROOFS, body.receipt!.proofKey));
+      proof = await readProofFromBucket(env.PROOFS, body.receipt!.proofKey);
+      /* D14: the draft's reading, if the page just made one of this same
+         file for this same owner. Saves the second model call that D13
+         would otherwise cost — the pay now carries the file, not the
+         reading. */
+      const reused = await recentReading(db, owner, proof, now);
+      if (reused) {
+        extracted = reused.result;
+        reusedFrom = reused.id;
+      } else {
+        extracted = await extractProof(env, proof);
+      }
     } catch (err) {
       const failure = extractionFailure(err);
       if (!failure) throw err;
-      if (failure.code === "READER_UNAVAILABLE") {
-        console.error("reader unavailable, falling back to provider OCR");
-        extracted = null as unknown as ExtractionResult;
+      /* D15/FR-005: a reader that is down or answering nonsense is our
+         problem, never the payer's. The file goes to the provider anyway,
+         with no reading of ours beside it, and the reading record says
+         which of the two it was (D19) rather than going missing — a call
+         with no row at all is a hole in the measurement. */
+      if (proof && (failure.code === "READER_UNAVAILABLE" || failure.code === "READER_UNREADABLE")) {
+        console.error(`reader ${failure.code}, going to the provider with no reading of ours`);
+        extracted = {
+          route: "provider-ocr",
+          proof,
+          reason: failure.code === "READER_UNAVAILABLE" ? "no-binding" : "unreadable",
+        };
       } else {
-        await recordExtraction(
-          db,
-          owner,
-          failure.code === "READER_UNREADABLE" ? "unreadable" : "refused",
-          null,
-          { note: `${failure.code}: ${String((err as Error).message)}` },
-        );
+        /* The *file* is unusable — too large, unrecognised bytes, not in
+           the bucket. No provider call can fix that, so it is refused
+           here as it always was, and nothing is billed. */
+        await recordExtraction(db, owner, "refused", null, {
+          note: `${failure.code}: ${String((err as Error).message)}`,
+        });
         throw new ConstaError(failure.code, failure.retryable, String((err as Error).message));
       }
     }
@@ -127,7 +222,7 @@ export async function validate(
       const { reading, gated } = extracted;
       /* D15/D16: computed once, recorded on every outcome, and blocking
          none of them — a mismatch rides into the paid call below */
-      const signals = await shapeSignals(db, extracted);
+      signals = await shapeSignals(db, extracted);
       shape = signals.shape;
       /* The lead case: measured live, an image with no receipt in it
          makes apiCEP answer `error`, which is retryable, so the payment
@@ -139,33 +234,12 @@ export async function validate(
           reading: readingPayload(extracted, signals),
         });
       }
-      if (!gated.passes) {
-        await recordExtraction(db, owner, "gated", extracted, { signals });
-        throw new ConstaError("RECEIPT_INCOMPLETE", false, "the reading did not pass the gate", {
-          reading: readingPayload(extracted, signals),
-        });
-      }
-      extractionId = await recordExtraction(db, owner, "passed", extracted, { signals });
-      source = "reader";
-      /* D3: the reading chose *which* Banxico record to ask about. It
-         never decides whether that record pays a debt — amount and date
-         still come from `cepDetails` alone. */
-      input = {
-        mode: "transfer",
-        date: reading.date ?? new Date().toISOString().slice(0, 10),
-        /* The amount apiCEP needs is a *search criterion*, and the one
-           printed on the receipt is the right one to search with: it is
-           what makes a $1 receipt against a $514 debt come back with a
-           real CEP for $1, which the caller then refuses (direct-payment
-           D11). Sending the caller's expected amount instead would turn
-           that into a faceless `not_found` and a six-hour wait. */
-        amountCents: gated.amountCents!,
-        senderBank: gated.senderBank!,
-        trackingKey: gated.trackingKey!,
-        beneficiary: body.beneficiary!,
-      };
-    } else if (extracted) {
-      extractionId = await recordExtraction(db, owner, "routed", extracted);
+      /* two-eyes-receipt D3: the reading no longer *becomes* the request.
+         It is kept beside it — the file itself is what the provider gets
+         (`input` stays in receipt mode below), and the two readings meet
+         after the answer. A hole rides along rather than refusing: the
+         provider may read what we could not (FR-005). */
+      ours = { ...gated, date: reading.date, legibility: reading.legibility };
     }
   }
 
@@ -181,6 +255,42 @@ export async function validate(
      receipt matched against a candidate list has no single receiver. */
   const beneficiaryBank =
     input.mode === "transfer" ? input.beneficiary.bank : (body.beneficiary?.bank ?? null);
+
+  /* two-eyes-receipt D5/D19: the comparison, and the one reading record
+     this call leaves behind. Written after the provider answers so the
+     row carries both readings and what they settled — one row, one
+     query, for a business payment and a platform top-up alike. */
+  const providerFirst = readable && input.mode === "receipt";
+  const recordCall = async (
+    validationId: string,
+    classification: Classification | null,
+    theirs: ProviderReading | null,
+  ) => {
+    extractionId = await recordExtraction(
+      db,
+      owner,
+      !extracted || extracted.route === "provider-ocr"
+        ? "routed"
+        : extracted.gated.passes
+          ? "passed"
+          : "gated",
+      extracted,
+      {
+        signals,
+        validationId,
+        classification,
+        providerReading: theirs,
+        /* No `extracted` at all means no binding: nothing was fetched,
+           so the row carries no hash — but it exists, it says why, and
+           it links to the call it rode on (D19). */
+        ...(extracted ? {} : { source: "provider-ocr" as const, note: "no-binding" }),
+        /* D14: which draft this reading came from, when it was not read
+           again. A note rather than a column — the pair is an audit
+           trail, not something any query groups by. */
+        ...(reusedFrom ? { note: `reused from extraction ${reusedFrom}` } : {}),
+      },
+    );
+  };
 
   let verdict;
   try {
@@ -218,6 +328,38 @@ export async function validate(
             paymentRef: body.paymentRef ?? null,
           })
           .returning({ id: validations.id });
+
+        /* two-eyes-receipt D12: apiCEP's one named OCR failure
+           (`status: "error"` with `missingFields`) is not a failure of
+           *ours* on a provider-first call — it is the provider saying it
+           read nothing. Before this it threw, the lifecycle recorded a
+           code and rode the schedule, and nothing ever learned that the
+           provider had been blind. Now it is a `not_found` verdict with a
+           blind classification: our reading, if complete, takes the
+           transfer door at the next slot (FR-013); if not, the payer is
+           asked. Semantically honest — the provider found nothing,
+           because it read nothing. The billed row above is written
+           either way (validation spec D15).
+
+           The legacy `providerOcr` cross keeps throwing: its caller has a
+           reading of its own and classifies for itself (D16). */
+        if (providerFirst && err.code === "RECEIPT_UNREADABLE") {
+          const classification = compareReadings(ours, null, await loadShapeRules(db));
+          await recordCall(row.id, classification, null);
+          return {
+            validationId: row.id,
+            ...(source ? { source } : {}),
+            ...(extractionId ? { extractionId } : {}),
+            ...(shape ? { shape } : {}),
+            status: "invalid" as const,
+            reason: "not_found" as const,
+            hint: "verify_inputs" as const,
+            alreadyValidated: false,
+            ourReading: ourReadingPayload(ours),
+            ...classificationPayload(classification),
+          };
+        }
+
         if (extractionId) {
           await db.update(extractions).set({ validationId: row.id }).where(eq(extractions.id, extractionId));
         }
@@ -268,10 +410,27 @@ export async function validate(
     })
     .returning({ id: validations.id });
 
+  /* two-eyes-receipt D5: the comparison, at minute zero.
+
+     It runs on exactly one answer — `not_found`, the faceless `invalid`
+     that means Banxico has nothing under that record *yet*. That is the
+     answer the payer used to wait six hours behind, and the one where a
+     second reading is worth something: `valid` needs no second opinion
+     (the CEP decided), `pending` and `contradicted` are Banxico's own
+     word, and the transfer door read no image at all. */
+  const classification =
+    providerFirst && verdict.status === "invalid" && verdict.reason === "not_found"
+      ? compareReadings(ours, verdict.reading ?? null, await loadShapeRules(db))
+      : null;
+
   /* D8: tie the reading to the paid call it bought, so the audit trail
      runs both ways — from a verdict back to what was read, and from a
-     reading forward to what it cost. */
-  if (extractionId) {
+     reading forward to what it cost. On a provider-first call the row is
+     written here rather than before the call, so it can carry both
+     readings and what they settled on one line (D19). */
+  if (providerFirst) {
+    await recordCall(row.id, classification, verdict.reading ?? null);
+  } else if (extractionId) {
     await db
       .update(extractions)
       .set({ validationId: row.id })
@@ -355,6 +514,12 @@ export async function validate(
        survives failure (measured 2026-08-26), which is exactly when a
        caller comparing readings needs it. */
     ...(verdict.reading ? { reading: verdict.reading } : {}),
+    /* two-eyes-receipt D3: ours beside theirs, on every provider-first
+       call — so a caller can show what was read and the measurement can
+       ask "who was right" (D10). */
+    ...(providerFirst ? { ourReading: ourReadingPayload(ours) } : {}),
+    /* D5–D8: present exactly when the two readings were compared */
+    ...(classification ? classificationPayload(classification) : {}),
     ...(verdict.downloads ? { downloads: verdict.downloads } : {}),
     ...(trust ? { trust } : {}),
   };

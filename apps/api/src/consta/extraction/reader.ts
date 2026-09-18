@@ -12,6 +12,13 @@ import type { LoadedProof } from "./proof";
 
 export type Reading = {
   isReceipt: boolean;
+  /* two-eyes-receipt D2 (R7): how much of the picture the model could
+     read. `none` is the one value that refuses before a credit is spent,
+     beside `isReceipt: false`; `partial` goes to the provider with its
+     hole (FR-005). Null when the model omitted the field, and on a text
+     reading of a PDF, where there is no photograph to judge (D15) —
+     both read as `full`, because the bias is to let files through. */
+  legibility: "full" | "partial" | "none" | null;
   trackingKey: string | null;
   senderBank: string | null;
   /* Reported, never authoritative (D3). Kept because a caller showing a
@@ -91,6 +98,16 @@ export function parseReaderOutput(text: string): Record<string, unknown> {
 }
 
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+/* The prompt asks in Spanish, like every other field, and the type is
+   English like every other identifier. Anything the model invents that is
+   not one of the three words is null — "unreadable" is far too costly a
+   reading to infer from a word we did not ask for (two-eyes-receipt D2). */
+const LEGIBILITY = { completa: "full", parcial: "partial", nula: "none" } as const;
+export function legibilityOf(v: unknown): Reading["legibility"] {
+  const word = typeof v === "string" ? v.trim().toLowerCase() : null;
+  return word && word in LEGIBILITY ? LEGIBILITY[word as keyof typeof LEGIBILITY] : null;
+}
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 export async function readProof(
@@ -127,6 +144,7 @@ export async function readProof(
 
   return {
     isReceipt: parsed.esComprobante !== false,
+    legibility: legibilityOf(parsed.legibilidad),
     trackingKey: str(parsed.claveDeRastreo),
     senderBank: str(parsed.banco),
     amount: num(parsed.monto),

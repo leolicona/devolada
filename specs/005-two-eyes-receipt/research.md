@@ -213,6 +213,34 @@ and whether scanned pages are OCR'd (recalled: not). Both are checked in
 quickstart step 3 against the real binding, and the answer is written into
 `pdf-text.ts`'s header comment with the date, as a measured fact.
 
+**Read 2026-09-18, from the Cloudflare docs MCP index** (the docs site itself
+is still blocked to this environment, so the feature page could not be opened;
+these are the changelog entries the index does carry):
+
+- *Pricing, partial.* The launch entry (2025-03-20, "Markdown conversion in
+  Workers AI") converts a PDF and an image in one call and says "Workers AI
+  models are used automatically to detect and summarize **the image**" — the
+  models are named for the image, not for the PDF, and the same entry's PDF
+  result is the `tokens: 0` this document already cites. The GIF/BMP entry
+  (2026-07-08) describes the image path in full: each image is "passed to an
+  object-detection model", whose output "prompt[s] a vision model that writes
+  a natural-language description". So an *image* conversion runs two models
+  and bills; a *PDF* conversion is not described as running any. This
+  supports the recalled rule but does not confirm it — the pricing page was
+  not reachable.
+- *Scanned pages.* Nothing in the reachable entries says whether an
+  image-only PDF page is OCR'd. Unresolved.
+
+**Still to measure against the real binding** (quickstart step 3): this
+environment has no `wrangler login` and no sample receipts, so the
+`/dev/pdf-text` run could not be made. The design does not wait on it — D15
+makes an empty conversion a silent fall-through either way, and
+`pdf-text.ts` returns null on every failure — but the two numbers stay open:
+the `tokens` a real receipt PDF reports, and whether a scanned PDF yields
+text. Run it on a machine with a Cloudflare login before the feature reaches
+prod and write the answers into `extraction/pdf-text.ts`'s header, which
+carries them today as open questions, not as measured facts.
+
 **Alternatives considered**: rendering the PDF to an image in the browser
 (set aside by the creator, spec Clarifications); a PDF text library in the
 Worker (rejected: a dependency for what the binding already does).

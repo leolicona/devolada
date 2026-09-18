@@ -12,7 +12,10 @@ export const PROOF_URL_TTL_MINUTES = 15;
 /* What the provider can actually read (apiCEP docs, checked 2026-08-18):
    JPEG, PNG, PDF, GIF, WebP, BMP, TIFF, HEIC. PDF matters — several
    Mexican banks hand out the comprobante as one, and rejecting it sent
-   those customers to the manual door for no reason (D12). */
+   those customers to the manual door for no reason (D12). Since
+   two-eyes-receipt D1 this engine reads a PDF too, through the model
+   binding's own text conversion, so the list is no longer "what only
+   the provider can read" — it is what either pair of eyes can. */
 export function isAcceptedProofType(contentType: string): boolean {
   return contentType.startsWith("image/") || contentType === "application/pdf";
 }

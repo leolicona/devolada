@@ -271,8 +271,13 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
           English, on a page that is es-MX by law (D10) — and gives the
           payer a 20px hit area on the one action step 2 exists for.
 
-          PDF too: several banks hand out the comprobante as one, and
-          apiCEP reads it (D12). */}
+          PDF too: several banks hand out the comprobante as one. It is
+          read here like a picture since two-eyes-receipt D1 — turned
+          into text at the edge and read by the same model — so it gets
+          the same draft and the same protections. A scanned PDF, which
+          has no text to extract, is handed to the provider unread and
+          silently (D15): the payer is told nothing, because there is
+          nothing they could do about it. */}
       <label
         htmlFor={inputId}
         className="flex cursor-pointer flex-col items-center gap-2 rounded-sm border border-dashed border-line-input bg-well px-4 py-8 text-center"
@@ -321,6 +326,13 @@ export function PaymentPage({ token }: { token: string }) {
   const [payment, setPayment] = useState<PayResponse | null>(null);
   /* D18: the reading waiting for the payer to confirm it */
   const [draft, setDraft] = useState<{ proofId: string; reading: ProofReading } | null>(null);
+  /* two-eyes-receipt D2: the two readings that stop before a credit is
+     spent — the file is not a receipt, or nothing on it could be read.
+     Everything else goes through (FR-005). It is a message on the upload
+     screen with the picker still open, not a screen of its own: the
+     payer's next move is another photo, and a screen they have to leave
+     first puts a door in front of it. */
+  const [refusal, setRefusal] = useState<"not_receipt" | "illegible" | null>(null);
   /* D18: a correction re-submits, and the image has to travel with it */
   const [proofId, setProofId] = useState<string | null>(null);
   /* D19: which half of the payment this payer is on. Seeded from the
@@ -421,13 +433,28 @@ export function PaymentPage({ token }: { token: string }) {
     },
   });
 
-  /* D18 — the machine reads, the human confirms, the direct door
-     validates. Uploading no longer pays: it produces a draft the payer
-     looks at. Everything that can go wrong on the way here degrades into
-     "the payer fills it in", because the reader is help and never an
-     authority — it cannot reject anybody. */
+  /* D18, turned around by two-eyes-receipt D3/D13 — the machine reads,
+     the provider reads, and the human is asked only for what is in
+     doubt.
+
+     What this mutation sends changed. It used to post the *reading* as
+     `transfer` data whenever the gate passed, which made the row look
+     like a form the payer had filled in and spent the first provider
+     credit on the transfer door. Since D13 a machine reading travels as
+     `proofId` alone: the file goes to the provider's image door with the
+     engine's reading beside it, both are compared at minute zero, and
+     `transfer` in a pay body now means one thing only — the payer edited
+     a form (FR-015).
+
+     So a hole no longer stops here either (FR-005). The gate's verdict
+     is still worth having, but it is the *provider* who may fill the
+     hole for free, and asking the payer first spends their attention on
+     something two machines were about to settle. What still stops here,
+     and only this, is a file that is not a receipt or that cannot be
+     read at all (D2) — see the refusal above, before any upload is even
+     paid for. */
   const upload = useMutation<
-    { proofId: string; reading: ProofReading | null } | PayResponse,
+    { proofId: string; reading: ProofReading | null } | { refusal: "not_receipt" | "illegible" } | PayResponse,
     ApiError,
     File
   >({
@@ -450,28 +477,19 @@ export function PaymentPage({ token }: { token: string }) {
            to the provider's OCR door, which is what shipped before this
            step existed. */
       }
-      if (!reading || reading.source === "provider-ocr") {
-        /* A PDF, or no reading at all — the provider's OCR still takes
-           both, so pay the way we always did */
-        return api<PayResponse>(`/direct-payments/links/${token}/pay`, {
-          method: "POST",
-          body: JSON.stringify({
-            proofId,
-            ...(resubmitOf ? { supersedes: resubmitOf } : {}),
-          }),
-        });
+      /* two-eyes-receipt D2 (FR-004): the two refusals, and only these.
+         `isReceipt: false` is measured — the model answered it five times
+         out of five on a dark UI screenshot (2026-08-19), and that same
+         screenshot makes the provider answer `error`, which is
+         retryable, so the payment used to ride the whole six-hour
+         schedule at up to seven paid calls and end `expired`. Here it
+         costs the payer ten seconds and a second try. `legibility:
+         "none"` is its sibling: a photograph with a receipt in it that
+         no field can be read from. A `partial` legibility is *not* a
+         refusal — it goes to the provider with its hole (FR-005). */
+      if (reading && (reading.isReceipt === false || reading.legibility === "none")) {
+        return { refusal: reading.isReceipt === false ? "not_receipt" : "illegible" } as const;
       }
-      /* D18: a reading that failed the gate is the one case where the
-         payer must be asked *before* anything is spent — there is a
-         visibly empty field and nothing to try. */
-      const gated =
-        reading.isReceipt === false ||
-        reading.gate.trackingKey !== "ok" ||
-        reading.gate.senderBank !== "ok" ||
-        /* validation-status-ux D6: an unread date is a missing field,
-           like clave and banco — never silently today's. */
-        reading.date == null;
-      if (gated) return { proofId, reading };
 
       /* partial-payment D1/D12: the amount printed on the receipt is what
          travels to Banxico, so a transfer that fell short is findable and
@@ -482,6 +500,7 @@ export function PaymentPage({ token }: { token: string }) {
          before anything is spent — informed, not refused. */
       const expected = link.data?.totalCents;
       if (
+        reading &&
         reading.amountCents != null &&
         expected != null &&
         reading.amountCents > expected
@@ -489,30 +508,34 @@ export function PaymentPage({ token }: { token: string }) {
         return { proofId, reading };
       }
 
-      /* The gate passed, so try it silently. If the reading is right —
-         and we have no measurement saying how often it is — nobody is
-         asked anything, which is the whole reason not to put a
-         confirmation in front of every payer. */
+      /* Everything else is sent silently, as the file alone (D13).
+         `source: "provider-ocr"` — nothing here could read it — and a
+         reading with a hole in it take exactly this path now: the
+         provider reads the same file, and whatever the two of them
+         settle on decides whether anybody is asked (D5–D8). If the
+         readings are right, nobody is asked anything, which is the whole
+         reason not to put a confirmation in front of every payer. */
       return api<PayResponse>(`/direct-payments/links/${token}/pay`, {
         method: "POST",
         body: JSON.stringify({
           proofId,
           ...(resubmitOf ? { supersedes: resubmitOf } : {}),
-          transfer: {
-            trackingKey: reading.trackingKey,
-            senderBank: reading.senderBank,
-            /* D6 gated null dates above, so this fallback never fires;
-               it only keeps the shape total for the type. */
-            date: reading.date ?? new Date().toISOString().slice(0, 10),
-          },
-          receiptStatus: reading.receiptStatus ?? undefined,
+          ...(reading?.receiptStatus ? { receiptStatus: reading.receiptStatus } : {}),
           /* partial-payment D12: the reader's amount is the claim on this
              silent path — no human was asked, so nothing outranks it */
-          receiptAmountCents: reading.amountCents ?? undefined,
+          ...(reading?.amountCents != null ? { receiptAmountCents: reading.amountCents } : {}),
         }),
       });
     },
     onSuccess: (result) => {
+      if ("refusal" in result) {
+        /* Nothing was paid and nothing was counted: the payer stays on
+           the upload screen and takes another photo (D2). */
+        setRefusal(result.refusal);
+        setProofId(null);
+        return;
+      }
+      setRefusal(null);
       if ("directPaymentId" in result) {
         setPayment(result);
         setResubmitOf(null);
@@ -688,13 +711,21 @@ export function PaymentPage({ token }: { token: string }) {
               const nextAt = status.nextValidationAt ?? null;
               const farAway = nextAt != null && nextAt - Date.now() > 90 * 60 * 1000;
               const escalated = status.validationAttempts >= 5;
-              /* reading-check D3/D4: the minute-two cross. Agreement is
-                 evidence — the clock escalation retires. A dispute asks
-                 the human now, about exactly the fields the two readers
-                 disagreed on. */
+              /* reading-check D3/D4: the comparison of the two readings,
+                 taken at the first paid call since two-eyes-receipt D5.
+                 Agreement is evidence — the clock escalation retires. A
+                 dispute asks the human now, about exactly the fields the
+                 two readers disagreed on. */
               const agreed = status.readingCheck === "agreed";
               const disputed = status.readingCheck === "disputed";
               const disputedSet = new Set(status.disputedFields ?? []);
+              /* two-eyes-receipt D20: what opens the form is a non-empty
+                 list of fields, whatever the check said. An agreement
+                 with no date on either reading is still an agreement —
+                 the clock retires and the release may fire — and still
+                 needs that one field, because the transfer door is never
+                 called with a date nobody read. */
+              const asked = disputedSet.size > 0;
               const nextHour = nextAt
                 ? new Date(nextAt).toLocaleTimeString("es-MX", {
                     hour: "numeric",
@@ -703,7 +734,7 @@ export function PaymentPage({ token }: { token: string }) {
                 : null;
               const showForm =
                 !enProceso &&
-                (correcting || disputed || (escalated && !agreed && !release && !farAway));
+                (correcting || asked || (escalated && !agreed && !release && !farAway));
 
               return (
                 <div className="space-y-4">
@@ -711,6 +742,16 @@ export function PaymentPage({ token }: { token: string }) {
                     <p className="text-sm text-ink-soft">
                       Tu comprobante dice “{status.receiptStatus}”: tu banco todavía no libera la
                       transferencia. Seguiremos intentando y no necesitas hacer nada.
+                    </p>
+                  ) : asked && !disputed && disputedSet.has("date") ? (
+                    /* D20: the one field, named. Nothing is in doubt —
+                       both machines read the same transfer — so the
+                       sentence does not say anybody disagreed; it asks
+                       for the date that was simply not printed anywhere
+                       either of them could see. */
+                    <p className="text-sm text-ink-soft">
+                      Solo nos falta la fecha de tu transferencia. Confírmala mirando tu
+                      comprobante y seguimos.
                     </p>
                   ) : disputed ? (
                     /* D4: the ask names the field and points at the
@@ -723,7 +764,10 @@ export function PaymentPage({ token }: { token: string }) {
                         ? "Confirma tu clave de rastreo y el monto transferido mirando tu comprobante."
                         : disputedSet.has("amount")
                           ? "Confirma el monto transferido mirando tu comprobante."
-                          : "Confirma tu clave de rastreo mirando tu comprobante."}{" "}
+                          : disputedSet.has("trackingKey")
+                            ? "Confirma tu clave de rastreo mirando tu comprobante."
+                            : /* D20: only the date is in doubt */
+                              "Confirma la fecha de tu transferencia mirando tu comprobante."}{" "}
                       {disputedSet.has("trackingKey") &&
                         "Puedes copiarla desde tu app del banco, o escribirla tal como aparece en tu comprobante."}
                     </p>
@@ -811,7 +855,11 @@ export function PaymentPage({ token }: { token: string }) {
                       draft={{
                         trackingKey: disputedSet.has("trackingKey") ? null : status.trackingKey,
                         senderBank: status.senderBank,
-                        date: status.transferDate,
+                        /* two-eyes-receipt D20: an asked-for date arrives
+                           empty, exactly as the clave and the amount do —
+                           there is no neutral reading to pre-fill when
+                           nobody read one (validation-status-ux D6) */
+                        date: disputedSet.has("date") ? null : status.transferDate,
                       }}
                       /* claimed-amount D3: what this payment asked with,
                          falling back to the expected total — the fourth
@@ -1151,58 +1199,19 @@ export function PaymentPage({ token }: { token: string }) {
       pay.reset();
     };
 
-    /* The model said this is not a receipt. Measured live: that same
-       image sent to the provider makes it answer `error`, which is
-       retryable, so the payment used to ride the whole six-hour schedule
-       at up to seven paid calls and end `expired`. Here it costs the
-       payer ten seconds and a second try. */
-    if (reading.isReceipt === false) {
-      return (
-        <Card className="space-y-4 p-6">
-          {stepHeader(2, "Envía tu comprobante")}
-          <Alert variant="warning" layout="icon">
-            <TriangleAlert aria-hidden />
-            Esta imagen no parece un comprobante de transferencia. Sube la captura de tu
-            comprobante, o captura los datos a mano.
-          </Alert>
-          <Button variant="secondary" onClick={startOver}>
-            Intentar de nuevo
-          </Button>
-        </Card>
-      );
-    }
-
-    /* claimed-amount D2: a reading above the debt is informed, never
-       refused — the refusal's justification (an inflated misread buying
-       six silent hours) died when the correction doors shipped, and the
-       server already settles the overpayment (the surplus lands as
-       credit with the ISP, partial-payment D10). The sentence renders
-       inside the confirmation screen below. */
-
-    const missing =
-      reading.gate.trackingKey !== "ok" ||
-      reading.gate.senderBank !== "ok" ||
-      /* validation-status-ux D6: an unread date is a missing field too */
-      reading.date == null;
+    /* two-eyes-receipt D13: this screen is the surplus consent and
+       nothing else now. A reading that is not a receipt, or that nothing
+       could be read from, is refused on the upload screen before a
+       credit is spent (D2); a reading with a *hole* no longer stops here
+       at all — it goes to the provider, who may fill it for free
+       (FR-005). What is left is claimed-amount D2: a reading above the
+       debt is informed, never refused — the refusal's justification (an
+       inflated misread buying six silent hours) died when the correction
+       doors shipped, and the server already settles the overpayment (the
+       surplus lands as credit with the ISP, partial-payment D10). */
     return (
       <Card className="space-y-4 p-6">
         {stepHeader(2, "Confirma estos datos")}
-
-        {/* Only the incomplete reading asks the human for work — they
-            are COMPLETING fields no machine could read, and it is the
-            one free correction point. With a clean gate this screen
-            exists only for the surplus consent below, and the proofread
-            ask is retired (claimed-amount D2, amended 2026-08-26): the
-            measured truth is that nobody proofreads 28 characters, and
-            the minute-two cross now owns content verification
-            (reading-check). */}
-        {missing && (
-          <Alert variant="warning" layout="icon">
-            <TriangleAlert aria-hidden />
-            Leímos tu comprobante pero no pudimos sacar todos los datos. Complétalos y revísalos
-            antes de continuar.
-          </Alert>
-        )}
 
         {reading.receiptStatus && /proceso/i.test(reading.receiptStatus) && (
           <Alert variant="warning" layout="icon">
@@ -1230,29 +1239,69 @@ export function PaymentPage({ token }: { token: string }) {
             </Alert>
           )}
 
-        <TransferForm
-          busy={busy}
-          draft={reading}
-          /* claimed-amount D3: the receipt's own amount is the honest
-             default here; the human's confirmation of it wins over the
-             raw reading (the pair still measures the reader, D18) */
-          amountCents={reading.amountCents ?? data.totalCents ?? null}
-          submitLabel="Confirmar y verificar"
-          onSubmit={(transfer) =>
-            pay.mutate({
-              transfer,
-              proofId,
-              ...(resubmitOf ? { supersedes: resubmitOf } : {}),
-              /* D12: a short reading can reach this form now, and the
-                 lookup must ask Banxico with the receipt's own amount —
-                 asking with the expected total finds nothing. The status
-                 rides along for the same reason it does on the silent
-                 path. */
-              receiptStatus: reading.receiptStatus ?? undefined,
-              receiptAmountCents: reading.amountCents ?? undefined,
-            })
-          }
-        />
+        {/* two-eyes-receipt D13: two ways out, and the payer picks. Send
+            it as it is — the file alone, like every other reading (the
+            surplus is what they just consented to) — or open the form
+            and correct the numbers, which makes it the human's data
+            (FR-015). Sizes are declared, never improvised (constitution
+            VI): the decisive action at 64px, the secondary at 48px. */}
+        {correcting ? (
+          <TransferForm
+            busy={busy}
+            draft={reading}
+            /* claimed-amount D3: the receipt's own amount is the honest
+               default here; the human's confirmation of it wins over the
+               raw reading (the pair still measures the reader, D18) */
+            amountCents={reading.amountCents ?? data.totalCents ?? null}
+            submitLabel="Confirmar y verificar"
+            onSubmit={(transfer) =>
+              pay.mutate({
+                transfer,
+                proofId,
+                ...(resubmitOf ? { supersedes: resubmitOf } : {}),
+                /* D12: a short reading can reach this form now, and the
+                   lookup must ask Banxico with the receipt's own amount —
+                   asking with the expected total finds nothing. The status
+                   rides along for the same reason it does on the silent
+                   path. */
+                receiptStatus: reading.receiptStatus ?? undefined,
+                receiptAmountCents: reading.amountCents ?? undefined,
+              })
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {/* The wait sits inside <Pending>, with its own label — the
+                screen must be visibly working before any word changes
+                (feedback-vocabulary FR-008, pending-lint). */}
+            <Pending active={busy} label="Estamos enviando tu comprobante.">
+              <Button
+                size="decisive"
+                disabled={busy}
+                onClick={() =>
+                  pay.mutate({
+                    proofId,
+                    ...(resubmitOf ? { supersedes: resubmitOf } : {}),
+                    receiptStatus: reading.receiptStatus ?? undefined,
+                    receiptAmountCents: reading.amountCents ?? undefined,
+                  })
+                }
+              >
+                <ShieldCheck className="size-5" aria-hidden />
+                {busy ? "Enviando…" : "Enviar así"}
+              </Button>
+            </Pending>
+            {/* 48px: the touch size, declared (constitution VI) */}
+            <Button
+              variant="secondary"
+              className="h-12 w-full"
+              disabled={busy}
+              onClick={() => setCorrecting(true)}
+            >
+              Corregir los datos
+            </Button>
+          </div>
+        )}
 
         {submitError && (
           <Alert variant="destructive" layout="icon">
@@ -1373,6 +1422,19 @@ export function PaymentPage({ token }: { token: string }) {
       </Button>
 
       {stepHeader(2, "Envía tu comprobante")}
+
+      {/* two-eyes-receipt D2: the refusal sits above the picker, which
+          stays open — the payer's next move is another photo. Two
+          sentences, in the existing Alert with icon + text (status is
+          never colour alone, constitution VI). */}
+      {refusal && (
+        <Alert variant="warning" layout="icon">
+          <TriangleAlert aria-hidden />
+          {refusal === "not_receipt"
+            ? "Esto no parece un comprobante de transferencia. Sube la captura o el PDF que te dio tu banco."
+            : "No pudimos leer tu comprobante. Toma otra foto con más luz, sin mover el teléfono, y que se vea completo."}
+        </Alert>
+      )}
 
       <ReceiptForm busy={busy} onSubmit={(file) => upload.mutate(file)} />
 

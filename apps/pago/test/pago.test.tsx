@@ -231,6 +231,10 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     proofReadingResponse.parse({
       source: "reader",
       isReceipt: true,
+      /* two-eyes-receipt D2: what the reader said about the picture.
+         `full` is the ordinary case; `none` is one of the two things the
+         page refuses on, and `partial` goes through (FR-005). */
+      legibility: "full",
       amountCents: 51400,
       trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
       senderBank: "NUBANK",
@@ -272,7 +276,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     );
     await uploadReceipt();
 
-    /* If the reading is right, nobody is asked anything. A confirmation
+    /* If the readings are right, nobody is asked anything. A confirmation
        in front of every payer is friction they would click through. */
     expect(await screen.findByText("Pago confirmado")).toBeInTheDocument();
     /* no form was ever rendered — "confirmado" would match a loose
@@ -280,52 +284,118 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /confirmar/i })).not.toBeInTheDocument();
     expect(paid).toHaveLength(1);
-    expect(paid[0]).toMatchObject({
+    /* two-eyes-receipt D13: the file travels, never the reading. The pay
+       used to carry `transfer` built out of what the machine read, which
+       made the row look like a form the payer had filled in and spent
+       the first credit on the transfer door. `transfer` now means one
+       thing only — the payer edited a form (FR-015) — so a machine
+       reading goes as `proofId` and the two readings meet at the
+       provider's image door. */
+    expect(paid[0]).toEqual({
       proofId: "link-1/proof-1",
-      transfer: { trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K", senderBank: "NUBANK" },
       receiptStatus: "Aceptada",
+      receiptAmountCents: 51400,
     });
+    expect(paid[0]).not.toHaveProperty("transfer");
   });
 
-  it("scenario 44: the payer overrides what the machine read, and the override is what travels", async () => {
+  it("scenario 44: the payer overrides what the machines read, and the override is what travels", { timeout: 15000 }, async () => {
+    /* two-eyes-receipt D13: the correction form is no longer reached by
+       a hole in the reading — a hole goes to the provider now (FR-005).
+       It is reached the way the spec says a payer should ever be asked:
+       the two machines disagreed and nothing could break the tie, so the
+       row comes back `disputed` and names the fields (D8). What travels
+       from that form is the human's data, and it still wins. */
     const paid: unknown[] = [];
     server.use(
       handlers.link(() => ok(debtLink)),
       handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
-      /* A field the gate refused arrives empty rather than pre-filled
-         with something that merely looks confirmable */
-      handlers.read(() =>
-        ok(
-          readOk({
-            senderBank: null,
-            gate: { trackingKey: "ok", senderBank: "unknown", amount: "ok" },
-          }),
-        ),
-      ),
+      handlers.read(() => ok(readOk())),
       handlers.pay((body) => {
         paid.push(body);
         return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
       }),
       handlers.status(() =>
-        ok(directPaymentStatusResponse.parse({ status: "validating", validationAttempts: 1, error: null })),
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 1,
+            readingCheck: "disputed",
+            disputedFields: ["trackingKey"],
+            senderBank: "NUBANK",
+            transferDate: "2026-08-19",
+            claimedAmountCents: 51400,
+            /* What the row carries after the first call came back
+               `not_found` — which is when a comparison happens at all */
+            error: "TRANSFER_NOT_FOUND",
+          }),
+        ),
       ),
     );
     await uploadReceipt();
 
-    expect(await screen.findByText(/no pudimos sacar todos los datos/i)).toBeInTheDocument();
-    const bank = screen.getByLabelText(/banco desde el que pagaste/i);
-    expect(bank).toHaveValue("");
-    await userEvent.selectOptions(bank, "BBVA MEXICO");
-
-    const key = screen.getByLabelText(/clave de rastreo/i);
-    await userEvent.clear(key);
-    await userEvent.type(key, "HSBC712057");
-    await userEvent.click(screen.getByRole("button", { name: /confirmar y verificar/i }));
-
+    /* The first submission was silent — the file alone */
     await waitFor(() => expect(paid).toHaveLength(1));
-    expect(paid[0]).toMatchObject({
+    expect(paid[0]).not.toHaveProperty("transfer");
+
+    /* reading-check D4: the disputed field arrives EMPTY — there is no
+       neutral reading to pre-fill when the machines disagree — and the
+       undisputed ones stay filled */
+    expect(
+      await screen.findByText(/confirma tu clave de rastreo/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    const key = screen.getByLabelText(/clave de rastreo/i);
+    expect(key).toHaveValue("");
+    await userEvent.type(key, "HSBC712057");
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "BBVA MEXICO");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar estos datos/i }));
+
+    await waitFor(() => expect(paid).toHaveLength(2));
+    expect(paid[1]).toMatchObject({
       transfer: { trackingKey: "HSBC712057", senderBank: "BBVA MEXICO" },
+      supersedes: "dp-1",
     });
+  });
+
+  it("two-eyes-receipt US1: an agreement missing only the date asks for the date alone (D20)", { timeout: 15000 }, async () => {
+    /* The transfer door is never called with a date nobody read. The
+       agreement stands — the clock retires — and exactly one field is
+       asked for, arriving empty like any other asked-for field. */
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() => ok(readOk({ date: null }))),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 1,
+            readingCheck: "agreed",
+            disputedFields: ["date"],
+            trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
+            senderBank: "NUBANK",
+            claimedAmountCents: 51400,
+            error: "TRANSFER_NOT_FOUND",
+          }),
+        ),
+      ),
+    );
+    await uploadReceipt();
+
+    /* Nothing is in doubt — both machines read the same transfer — so
+       the sentence does not say anybody disagreed; it asks for the one
+       field neither of them could see */
+    expect(
+      await screen.findByText(/solo nos falta la fecha/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("");
+    /* The clave both machines agreed on is not re-asked */
+    expect(screen.getByLabelText(/clave de rastreo/i)).toHaveValue("NU3AGKMP3ASP8QQQ4U8J8F0K1E4K");
   });
 
   it("scenario 45: an image that is not a receipt is caught here, not six hours later", async () => {
@@ -338,6 +408,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
           proofReadingResponse.parse({
             source: "reader",
             isReceipt: false,
+            legibility: null,
             amountCents: null,
             trackingKey: null,
             senderBank: null,
@@ -354,12 +425,112 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     );
     await uploadReceipt();
 
-    expect(await screen.findByText(/no parece un comprobante/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/esto no parece un comprobante de transferencia/i),
+    ).toBeInTheDocument();
     /* Measured live: this image used to make the provider answer `error`,
        which is retryable, so it rode the whole six-hour schedule at up to
        seven paid calls and ended `expired` */
     expect(paid).toHaveLength(0);
-    expect(screen.getByRole("button", { name: /intentar de nuevo/i })).toBeInTheDocument();
+    /* two-eyes-receipt D2: the picker stays open — the payer's next move
+       is another photo, and a screen they have to leave first puts a
+       door in front of it */
+    expect(screen.getByLabelText(/captura o comprobante/i)).toBeInTheDocument();
+  });
+
+  it("two-eyes-receipt US2: a photo the reader cannot read at all is refused with the 'toma otra foto' message", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() =>
+        ok(
+          readOk({
+            legibility: "none",
+            amountCents: null,
+            trackingKey: null,
+            senderBank: null,
+            date: null,
+            receiptStatus: null,
+            gate: { trackingKey: "missing", senderBank: "missing", amount: "missing" },
+          }),
+        ),
+      ),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+    );
+    await uploadReceipt();
+
+    /* D2's sibling refusal: a receipt is in there, and no field on it can
+       be read. Nothing is spent and the payer is told what to change. */
+    expect(await screen.findByText(/toma otra foto con más luz/i)).toBeInTheDocument();
+    expect(paid).toHaveLength(0);
+    expect(screen.getByLabelText(/captura o comprobante/i)).toBeInTheDocument();
+  });
+
+  it("two-eyes-receipt US2: a partly legible photo goes through, hole and all (FR-005)", async () => {
+    /* The bias is to let files through: a wrongly blocked photo costs the
+       payer a step, a wrongly passed one costs a credit the comparison
+       may still salvage. */
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() =>
+        ok(
+          readOk({
+            legibility: "partial",
+            amountCents: null,
+            gate: { trackingKey: "ok", senderBank: "ok", amount: "missing" },
+          }),
+        ),
+      ),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+      handlers.status(() =>
+        ok(directPaymentStatusResponse.parse({ status: "validating", validationAttempts: 1, error: null })),
+      ),
+    );
+    await uploadReceipt();
+
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ proofId: "link-1/proof-1" });
+    expect(paid[0]).not.toHaveProperty("transfer");
+    expect(screen.queryByText(/toma otra foto/i)).not.toBeInTheDocument();
+  });
+
+  it("two-eyes-receipt US1: a reading with a hole is sent to the provider, not shown as a form (FR-005)", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() =>
+        ok(
+          readOk({
+            trackingKey: null,
+            gate: { trackingKey: "missing", senderBank: "ok", amount: "ok" },
+          }),
+        ),
+      ),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
+      }),
+      handlers.status(() =>
+        ok(directPaymentStatusResponse.parse({ status: "validating", validationAttempts: 1, error: null })),
+      ),
+    );
+    await uploadReceipt();
+
+    /* The hole used to stop here and ask the payer before anything had
+       been asked of anybody. The provider may read what we could not. */
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ proofId: "link-1/proof-1" });
+    expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
   });
 
   /* Scenarios 51–53 (D18): what happens when the silent attempt comes
@@ -690,7 +861,14 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(screen.getByRole("button", { name: /subir otro comprobante/i })).toBeInTheDocument();
   });
 
-  it("US-D12 scenario 7: an unread date arrives empty in the confirmation, never today's", async () => {
+  it("US-D12 scenario 7: an unread date never becomes today's — it is asked for, not invented", async () => {
+    /* two-eyes-receipt D13/D20: the date the machine could not read used
+       to stop the payer here, before anything had been asked of anybody.
+       It no longer does — the file goes to the provider, who may have
+       read the date we could not. What survives, and is the point of the
+       original scenario, is that nothing ever invents one: the pay body
+       carries no date at all, and if neither reading had one the payer
+       is asked for it afterwards (the D20 scenario above). */
     const paid: unknown[] = [];
     server.use(
       handlers.link(() => ok(debtLink)),
@@ -700,15 +878,16 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
         paid.push(body);
         return ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201);
       }),
+      handlers.status(() =>
+        ok(directPaymentStatusResponse.parse({ status: "validating", validationAttempts: 1, error: null })),
+      ),
     );
     await uploadReceipt();
 
-    /* D6: a date the machine did not read is a missing field, like clave
-       and banco — pre-filling today invents a confirmable-looking value */
-    expect(await screen.findByText(/no pudimos sacar todos los datos/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("");
-    /* nothing was spent on an invented date */
-    expect(paid).toHaveLength(0);
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ proofId: "link-1/proof-1" });
+    expect(paid[0]).not.toHaveProperty("transfer");
+    expect(JSON.stringify(paid[0])).not.toContain(new Date().toISOString().slice(0, 10));
   });
 
   it("US-D12 scenario 8: 'Subir otro comprobante' walks back to step 2 and the fresh proof supersedes", async () => {
@@ -730,12 +909,12 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
 
     /* the new submission releases the old claim instead of racing it —
        without `supersedes` the payer would be told TRANSFER_ALREADY_USED
-       by their own first attempt */
+       by their own first attempt. two-eyes-receipt D13: it carries the
+       file and the claim, never a `transfer` — a re-upload is a new
+       reading, not a form the payer edited. */
     await waitFor(() => expect(paid).toHaveLength(2));
-    expect(paid[1]).toMatchObject({
-      supersedes: "dp-1",
-      transfer: { trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K" },
-    });
+    expect(paid[1]).toMatchObject({ supersedes: "dp-1", proofId: "link-1/proof-1" });
+    expect(paid[1]).not.toHaveProperty("transfer");
   });
 
   it("scenario 57 (US-D10 D1/D12): a short receipt is submitted with its own amount, never refused", async () => {
@@ -775,12 +954,14 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(await screen.findByText("Pago incompleto", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(paid).toHaveLength(1);
     /* D12: the amount printed on the receipt travels with the submission,
-       so the lookup asks Banxico about the transfer that really happened */
+       so the lookup asks Banxico about the transfer that really happened.
+       two-eyes-receipt D13: the clave and the bank do not travel with it
+       any more — the file does, and the provider reads it. */
     expect(paid[0]).toMatchObject({
       proofId: "link-1/proof-1",
-      transfer: { trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K", senderBank: "NUBANK" },
       receiptAmountCents: 100,
     });
+    expect(paid[0]).not.toHaveProperty("transfer");
   });
 
   it("a receipt claiming more than the debt is informed, never refused (US-D13, D2)", async () => {
@@ -816,12 +997,18 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(screen.getByText("$514.00")).toBeInTheDocument();
     expect(paid).toHaveLength(0);
     /* D2 amended: consent about the surplus, never proofreading — the
-       clean-gate screen carries the surplus sentence and nothing else;
-       the minute-two cross owns content verification now */
+       screen carries the surplus sentence and nothing else; the
+       comparison owns content verification now */
     expect(screen.queryByText(/si algo no coincide/i)).not.toBeInTheDocument();
 
-    /* Confirming travels with the receipt's own amount (D1: the receipt
-       is the source of truth, the debt only judges) */
+    /* two-eyes-receipt D13: two ways out, and the payer picks. "Enviar
+       así" sends the file alone, like every other machine reading. */
+    expect(screen.getByRole("button", { name: /enviar así/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /corregir los datos/i }));
+
+    /* Correcting opens the form, and what it sends is the human's data
+       with the receipt's own amount (D1: the receipt is the source of
+       truth, the debt only judges) */
     await userEvent.click(screen.getByRole("button", { name: /confirmar y verificar/i }));
     expect(await screen.findByText("Verificando pago", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(paid).toHaveLength(1);
@@ -978,25 +1165,32 @@ describe("US-D10: the partial state", () => {
     expect(screen.getByText("Total a pagar")).toBeInTheDocument();
   });
 
-  it("BUG-011: after a receipt-born partial, the button lands on the CLABE, not the stale draft", async () => {
+  it("BUG-011: after a receipt-born partial, the button lands on the CLABE, not the stale draft", { timeout: 15000 }, async () => {
     /* The draft (D18) renders ahead of the step machine, and the pay
        success never consumed it — so this button used to resurface the
-       old reading, complete with the "no pudimos sacar todos los datos"
-       warning, instead of the transfer data it promises. */
+       old reading instead of the transfer data it promises.
+
+       two-eyes-receipt D13: the draft that used to carry this bug — a
+       reading with a hole in it — no longer exists; a hole goes to the
+       provider now (FR-005). The one draft left is the surplus consent
+       (claimed-amount D2), so that is what this guards. */
     server.use(
       handlers.link(() => ok(debtLink)),
       handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      /* $600.00 against a $514.00 debt: the one screen that still holds
+         a draft open before anything is spent */
       handlers.read(() =>
         ok(
           proofReadingResponse.parse({
             source: "reader",
             isReceipt: true,
-            amountCents: 30000,
+            legibility: "full",
+            amountCents: 60000,
             trackingKey: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K",
-            senderBank: null,
+            senderBank: "NUBANK",
             date: "2026-08-19",
             receiptStatus: "Aceptada",
-            gate: { trackingKey: "ok", senderBank: "unknown", amount: "ok" },
+            gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
           }),
         ),
       ),
@@ -1019,10 +1213,11 @@ describe("US-D10: the partial state", () => {
     await userEvent.upload(picker, new File([new Uint8Array(100)], "cep.png", { type: "image/png" }));
     await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
 
-    /* the incomplete reading asks the payer to finish it (D18) */
-    expect(await screen.findByText(/no pudimos sacar todos los datos/i)).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
-    await userEvent.click(screen.getByRole("button", { name: /confirmar y verificar/i }));
+    /* the surplus is named, and the payer consents to it */
+    expect(
+      await screen.findByText(/el sobrante quedará a favor/i, {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /enviar así/i }));
 
     await screen.findByText("Pago incompleto", {}, { timeout: 8000 });
     await userEvent.click(screen.getByRole("button", { name: /ver los datos para transferir/i }));
@@ -1032,7 +1227,7 @@ describe("US-D10: the partial state", () => {
     expect(
       await screen.findByRole("heading", { name: /haz tu transferencia/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/no pudimos sacar todos los datos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/el sobrante quedará a favor/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/confirma estos datos/i)).not.toBeInTheDocument();
   });
 });

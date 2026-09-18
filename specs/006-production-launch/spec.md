@@ -368,7 +368,7 @@ answer as it did before.
 - **SC-003**: The count of checks a release runs equals the count a pull
   request runs.
 - **SC-004**: After a release, each of the three public addresses answers
-  within the release's own wait — five minutes from the deploy at most.
+  within the release's own wait — five minutes per address at most.
 - **SC-005**: A real person completes sign-up in production with a code that
   arrived by email, in under five minutes, and the operator panel is
   reachable to the operator on their first sign-in with a business.

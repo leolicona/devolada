@@ -148,8 +148,8 @@ what makes it trustworthy.
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T026 Run the gates in CI order once more on the finished branch (the T001 list) and `/speckit-analyze` on this feature; resolve any CRITICAL finding before opening the PR.
-- [ ] T027 Open the PR to `main` titled `feat(006): production launch — the release, the runbook, the undo`: body lists the decisions D1–D14, the evidence link from T019, and the pre-flight state from T002/T006 (names only). Merge only after CI is green; the *Deploy Dev* run of the merge commit is the commit T020 tags.
+- [X] T026 Run the gates in CI order once more on the finished branch (the T001 list) and `/speckit-analyze` on this feature; resolve any CRITICAL finding before opening the PR.
+- [X] T027 Open the PR to `main` titled `feat(006): production launch — the release, the runbook, the undo`: body lists the decisions D1–D14, the evidence link from T019, and the pre-flight state from T002/T006 (names only). Merge only after CI is green; the *Deploy Dev* run of the merge commit is the commit T020 tags.
 - [ ] T028 **After the launch** — append `## Launch record (<date>)` to `specs/006-production-launch/tasks.md` with: the release run URL (T020), the three version ids and the archive name, the day-one outcomes (T021–T023: code-arrival time, the first payment's status), the rehearsal run URL (T025), and any `::warning::` the release printed. Tick T020–T025. Open the follow-up PR (`docs(006): launch record`). This is the same shape as 004's post-merge note; the tree keeps the record, not the chat.
 
 ---

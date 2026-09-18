@@ -51,7 +51,11 @@ Answers `{ id, url, customerRef, askCents, mode, expiresAt, state, isTest, notic
 `state` is `open | paid | expired` (derived, see data-model).
 
 Asking again for a **reusable** link with the same `customerRef` returns the
-existing one (FR-033) — not an error, and not a second link.
+existing one (FR-033) — not an error, and not a second link. The reference is
+one namespace per business across both credential modes (D4's index spans
+them): a `customerRef` that already holds a real reusable link is refused to a
+test credential with a `VALIDATION_ERROR` naming which credential holds it, and
+the other way round — never `NOT_FOUND`, which would send the caller in circles.
 
 Refusals: `VALIDATION_ERROR` (bad amount, one-time without a deadline),
 `CHANNEL_UNAVAILABLE` with which piece the **business** has not configured —
@@ -73,11 +77,15 @@ Re-price or close (FR-030).
 
 ```jsonc
 { "askCents": 52000 }   // reusable only
-{ "close": true }       // either kind; idempotent
+{ "close": true }       // one_time only; idempotent
 ```
 
 Re-pricing a one-time link is `VALIDATION_ERROR` — its amount is the thing it
-is. Re-pricing a closed link is `LINK_CLOSED`.
+is. Re-pricing a closed link is `LINK_CLOSED`. Closing a **reusable** link is
+`VALIDATION_ERROR`: by FR-027 and the data model it never expires and is always
+open — re-price it, or stop sending it (aligned with the code 2026-09-18; the
+first draft said "either kind"). Closing an already closed or expired one-time
+link changes nothing and answers the link as it is.
 
 ## `GET /v1/payment-links/:id` · `GET /v1/payment-links?customerRef=…`
 
@@ -91,7 +99,7 @@ The verify path (US3).
 
 ```jsonc
 {
-  "id": "pay_…",
+  "id": "e06da3ff-9acd-4a03-b775-2d9bd81bf654",   // the payment row's own id: opaque, no prefix (aligned with the code 2026-09-18)
   "paymentLinkId": "lnk_…",
   "customerRef": "CLI-4471",
   "status": "confirmed",       // the payment row's own word — see the table below
@@ -172,7 +180,9 @@ Register where outcomes go (FR-012).
 { "url": "https://gym.example/hooks/devolada" }
 ```
 
-Answers `{ url, createdAt }`. There is no secret to copy and nothing to rotate:
+Answers `{ url, createdAt, consecutiveFailures, lastFailureAt, lastSuccessAt }`
+— the address and the same health line the panel shows (FR-018). There is no
+secret to copy and nothing to rotate:
 deliveries are signed with Devolada's own key, whose public half is published
 at the JWKS endpoint below (FR-015, FR-039, D10).
 
@@ -233,7 +243,7 @@ Nothing the business holds can produce this signature.
   "type": "payment.confirmed",
   "createdAt": 1759999000000,
   "data": {
-    "paymentId": "pay_…",
+    "paymentId": "e06da3ff-9acd-4a03-b775-2d9bd81bf654",
     "paymentLinkId": "lnk_…",
     "customerRef": "CLI-4471",
     "askedCents": 49900,
@@ -261,7 +271,7 @@ with the row's own word (FR-013, research D17).
   "type": "payment.validating",
   "createdAt": 1759998000000,
   "data": {
-    "paymentId": "pay_…",
+    "paymentId": "e06da3ff-9acd-4a03-b775-2d9bd81bf654",
     "paymentLinkId": "lnk_…",
     "customerRef": "CLI-4471",
     "askedCents": 49900,

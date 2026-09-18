@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { idempotencyKeys, rateCounters } from "../../db/schema";
@@ -144,3 +144,27 @@ export const idempotent: MiddlewareHandler<Env> = async (c, next) => {
     if (!isUniqueViolation(e)) throw e;
   }
 };
+
+/* automated-collections-api D13 / D14 (T068): what the two middlewares
+   above write is swept by the every-minute cron in apps/api/src/index.ts
+   — no new trigger (constitution). A key lives 24 h: longer than any
+   client's retry policy, short enough that the table never holds more
+   than a day of traffic. A bucket is dead once the minute after it has
+   passed, because `Retry-After` never points further than the next
+   minute. Speaks only when it did something, like every sweep. */
+export const IDEMPOTENCY_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+
+export type ApiSweepReport = { keys: number; buckets: number };
+
+export async function sweepApiCounters(env: Pick<Bindings, "DB">, now: Date = new Date()): Promise<ApiSweepReport> {
+  const db = drizzle(env.DB);
+  const keys = await db
+    .delete(idempotencyKeys)
+    .where(lt(idempotencyKeys.createdAt, new Date(now.getTime() - IDEMPOTENCY_KEY_TTL_MS)))
+    .returning({ id: idempotencyKeys.id });
+  const buckets = await db
+    .delete(rateCounters)
+    .where(lt(rateCounters.bucket, Math.floor(now.getTime() / MINUTE_MS) - 1))
+    .returning({ id: rateCounters.id });
+  return { keys: keys.length, buckets: buckets.length };
+}

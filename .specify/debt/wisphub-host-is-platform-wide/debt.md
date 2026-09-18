@@ -40,7 +40,7 @@ and therefore fails there by design for as long as it lasts:
 the same against its queue. Every manual WispHub check on dev is
 unavailable meanwhile. This is the debt with its bill visible rather
 than deferred, and the strongest argument for paying it: with
-`integrations.base_url` in place, both installations answer at once and
+`integrations.installation` in place, both installations answer at once and
 the swap never happens again.
 
 The pilot's key is also a live credential — it creates invoices and
@@ -56,18 +56,27 @@ Have the ISP regenerate their key in WispHub once the test is done.
 - `apps/api/src/wisphub/client.ts` — `DEFAULT_BASE_URL`, the fallback
   every caller gets when the binding is unset.
 - Every construction site passes the env binding, never a per-business
-  value: `git grep -n "new WispHub(" apps/api/src` — 9 call sites, all
-  of the shape `new WispHub(integration.apiKey, env.WISPHUB_BASE_URL)`.
+  value: `git grep -n "new WispHub(" apps/api/src` — **11** call sites,
+  all of the shape `new WispHub(integration.apiKey, env.WISPHUB_BASE_URL)`.
+  (This entry first said 9; counted again 2026-09-18 while planning 007.)
 
 ## What paying it looks like
 
 The address moves next to the key, on the row that already holds it:
 
-1. `integrations.base_url` (nullable text; null keeps `DEFAULT_BASE_URL`,
-   so every existing row keeps its behavior with no backfill).
-2. The 9 `new WispHub(...)` call sites read
-   `integration.baseUrl ?? env.WISPHUB_BASE_URL`, so the binding degrades
-   into a platform default rather than a platform override.
+**Superseded in shape by `specs/007-provider-address-per-isp/`** — the
+outcome is the same, the mechanism is better. Follow the plan, not the
+sketch below, which is kept for the reasoning that led there.
+
+1. `integrations.installation` (nullable text holding a catalogue **key**,
+   never a URL — 007 research D1; null keeps the default, so every existing
+   row keeps its behavior with no backfill). Storing a key rather than a URL
+   is what keeps `vitest.config.ts`'s origin pin meaningful: no row can name
+   an origin outside the compiled catalogue.
+2. The 11 `new WispHub(...)` call sites go through one factory,
+   `wisphubFor(integration, env)` (007 research D4), so the binding degrades
+   into a platform default rather than a platform override and the rule is
+   one grep.
 3. `/integrations/wisphub` grows the field beside the key, and
    `testKey()` uses the address being saved — a key tested against the
    wrong host is the exact failure this debt describes.
@@ -77,9 +86,9 @@ The address moves next to the key, on the row that already holds it:
 Confirmed paid when all three hold on the tree:
 
 ```
-grep -n "baseUrl" apps/api/src/db/schema.ts                    # the column is declared
-grep -rn "env.WISPHUB_BASE_URL" apps/api/src | grep -v env.ts  # no bare binding at a call site
-grep -n "WISPHUB_BASE_URL" apps/api/wrangler.jsonc             # no output
+grep -n "installation" apps/api/src/db/schema.ts                      # the column is declared
+grep -rn "new WispHub(" apps/api/src | grep -v wisphub/factory.ts     # no output
+grep -n "WISPHUB_BASE_URL" apps/api/wrangler.jsonc                    # no output
 ```
 
 **Trigger**: already met. The debt was logged expecting a *future*
@@ -96,7 +105,7 @@ standing reason to talk to**, each a separate machine (measured
 One binding, one slot, three destinations. The sandbox is the sharpest
 case: it is the right place to exercise the adapter without anyone's
 live credential, and today reaching it costs us the pilot and the demo
-both. With `integrations.base_url` all three answer at once. Until then the shortcut
+both. With `integrations.installation` all three answer at once. Until then the shortcut
 costs nothing that a single pilot can feel.
 
 ## Notes

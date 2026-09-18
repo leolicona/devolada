@@ -23,6 +23,10 @@ jobs:
       - name: Bank vocabulary in step with the docs
         run: node scripts/gen-banks.mjs --check
       - run: node scripts/contrast-lint.mjs
+      # production-launch D2: the same set ci.yml runs on a PR. A deploy's
+      # test job is never a subset of the PR gate.
+      - name: Every wait that says so shows so (feedback-vocabulary-rollout SC-001)
+        run: node scripts/pending-lint.mjs
       - run: pnpm -r --if-present typecheck
       - run: pnpm -r --if-present test
       - run: pnpm -r --if-present build
@@ -73,8 +77,13 @@ jobs:
           APICEP_TOKEN: ${{ secrets.APICEP_TOKEN }}
           PLATFORM_OPERATOR_EMAILS: ${{ secrets.PLATFORM_OPERATOR_EMAILS }}
         run: |
+          # production-launch D5: sign-up requires a verified email, and
+          # without this key the code is only logged (email/sender.ts). A
+          # plain line scrolled past in a green run; a warning names what
+          # will not work. Not a refusal — constitution VIII keeps
+          # BETTER_AUTH_SECRET as the one.
           if [ -z "$RESEND_API_KEY" ]; then
-            echo "No RESEND_API_KEY in the dev environment — skipping (TD-011)."
+            echo "::warning::No RESEND_API_KEY in the dev environment — nobody can finish signing up: the verification code is only logged (production-launch D5)."
           else
             printf '%s' "$RESEND_API_KEY" | pnpm exec wrangler secret put RESEND_API_KEY --env dev
           fi
@@ -119,11 +128,16 @@ jobs:
       # is a module of it), so the probe moved here, right after the sync
       # that planted it. Its body is measured knowledge and is unchanged.
       #
-      # The probe is free: an empty body is rejected before apiCEP touches
-      # Banxico, so no credit is spent. It separates the only two answers
-      # that decide anything — 401 is our credential, 400 is apiCEP telling
-      # us the credential was fine and only the body was wrong. Anything
-      # else is the provider having a bad day, which must not block a deploy.
+      # The probe spends one credit per deploy (production-launch D11).
+      # An earlier version of this comment called it free, reasoning that an
+      # empty body is rejected before apiCEP touches Banxico; measured
+      # 2026-08-19, a request apiCEP rejects with 400 is billed all the same
+      # (archive docs/integrations/apicep.md). One credit per deploy is
+      # kept on purpose: the six-hour silence above cost far more. It
+      # separates the only two answers that decide anything — 401 is our
+      # credential, 400 is apiCEP telling us the credential was fine and
+      # only the body was wrong. Anything else is the provider having a bad
+      # day, which must not block a deploy.
       #
       # The URL matches the adapter's DEFAULT_BASE_URL: the dev env sets no
       # APICEP_BASE_URL, so this is the host the deployed Worker will use.

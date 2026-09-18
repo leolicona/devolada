@@ -109,6 +109,11 @@ CI order on every PR — none of it may be skipped or quarantined to get green:
 tests, build.
 **Never deploy from a local machine.** Merge to `main` deploys dev (the browser
 and passkey layers gate it); a `v*` tag deploys prod behind an approval gate.
+A release is `git tag vX.Y.Z origin/main && git push origin vX.Y.Z` on a commit
+whose Deploy Dev run is green — the tag job checks and refuses otherwise
+(production-launch D1). A rollback is Actions → *Rollback Prod* with the
+service and the version id from the release's summary; it moves code, never
+data (D7). The runbook is `specs/006-production-launch/quickstart.md`.
 
 ## Architecture
 

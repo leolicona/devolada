@@ -1,0 +1,90 @@
+# Return one production service to one named version, from CI
+# (production-launch D7). "Never deploy from a local machine" covers the
+# undo too: the act stays in a run's log, behind the same reviewer and the
+# same credentials the release uses.
+#
+# What it touches: the live version of ONE Worker — devolada-api,
+# devolada-admin or devolada-pago — chosen by `worker`. What it never
+# touches: the database, the proofs bucket, the secrets. wrangler's own
+# warning says it ("Rolling back to a previous deployment will not rollback
+# any of the bound resources"), and this file repeats it because the
+# distinction is the whole design: migrations are additive, so an older
+# Worker keeps serving on a newer schema. Restoring DATA is a human act on
+# the archive the release took (`d1-backup-<tag>`, kept 30 days), with the
+# knowledge that anything written after the export is lost by it
+# (production-launch FR-011). Nothing here does that for you.
+#
+# The version id comes from the release's job summary ("What landed") or
+# from `wrangler versions list` in a previous log. One service per run:
+# a bad panel build should not move the API.
+#
+# Honesty check (research R7): wrangler's non-interactive path can DECLINE
+# a rollback — when secrets changed since that version was deployed, its
+# second confirmation has no default, answers "no" in CI, and returns
+# without a non-zero exit. So this job reads the live deployment afterwards
+# and fails unless it is the version asked for. Its exit code means what it
+# says.
+name: Rollback Prod
+on:
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: "Which service"
+        type: choice
+        required: true
+        options: [api, admin, pago]
+      version_id:
+        description: "Version id to make live (from the release's summary)"
+        type: string
+        required: true
+
+# Same group as the release: a rollback queues behind a deploy in flight
+# rather than racing it.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # apps/api holds the only wrangler in the tree; the two assets Workers
+      # are reached through their configs, exactly as the release does it.
+      - name: Roll back and verify
+        working-directory: apps/api
+        env:
+          WORKER: ${{ inputs.worker }}
+          VERSION_ID: ${{ inputs.version_id }}
+          MESSAGE: "${{ github.actor }} · ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          case "$WORKER" in
+            api)   CONFIG="" ;;
+            admin) CONFIG="--config ../admin/wrangler.jsonc" ;;
+            pago)  CONFIG="--config ../pago/wrangler.jsonc" ;;
+            *) echo "::error::Unknown worker '$WORKER'"; exit 1 ;;
+          esac
+          # shellcheck disable=SC2086 — $CONFIG is two words on purpose.
+          pnpm exec wrangler rollback "$VERSION_ID" --env prod -y -m "$MESSAGE" $CONFIG
+
+          live=$(pnpm exec wrangler deployments list --env prod --json $CONFIG | jq -r '.[0].versions[0].version_id')
+          if [ "$live" != "$VERSION_ID" ]; then
+            echo "::error::Rollback did not take: live is ${live:-unknown}, asked for ${VERSION_ID}. wrangler declines non-interactively when secrets changed since that version was deployed (production-launch D7). Nothing moved."
+            exit 1
+          fi
+          echo "devolada-${WORKER} now serves ${VERSION_ID}"
+          {
+            echo "## Rollback — devolada-${WORKER}"
+            echo
+            echo "Now serving version \`${VERSION_ID}\`. Data untouched: the release's \`d1-backup-<tag>\` artifact is the restore point, and restoring it is a human act (production-launch FR-011)."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -5,7 +5,11 @@ import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { D1_MAX_PARAMS, chunks } from "../../db/params";
 import { creditSummary } from "../../credit";
-import { WispHub, WispHubError } from "../../wisphub/client";
+import { WispHubError } from "../../wisphub/client";
+/* provider-address-per-isp D4: every provider client in this file is
+   addressed to the actor business's own installation, through the one
+   factory. The constructor is never called here. */
+import { wisphubFor } from "../../wisphub/factory";
 import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
 import { NO_DEBT, debtOf } from "../../wisphub/debt";
 import {
@@ -259,7 +263,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
   }
 
   try {
-    const wisphub = new WispHub(integration!.apiKey!, c.env.WISPHUB_BASE_URL);
+    const wisphub = wisphubFor(integration!, c.env);
     /* provider-latency D2: independent reads, one wait. D3: the page
        renders here; the submission below re-reads fresh before any
        amount is committed, so a 30s-old list cannot decide money. */
@@ -459,7 +463,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     let customer;
     let pending;
     try {
-      const wisphub = new WispHub(integration!.apiKey!, c.env.WISPHUB_BASE_URL);
+      const wisphub = wisphubFor(integration!, c.env);
       /* provider-latency D2 together, D3 **fresh**: this read decides the
          amount the CEP must match (D11/D15), so it never takes the cache. */
       [customer, pending] = await Promise.all([
@@ -966,7 +970,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
   }
 
   try {
-    const customers = await new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL).listCustomers();
+    const customers = await wisphubFor(integration, c.env).listCustomers();
     /* D5: the usuario is the identity — an existing usuario keeps its
        token (the link is permanent while its usuario exists) and only
        the numeric id, a cache WispHub may recycle, refreshes. */
@@ -1067,7 +1071,7 @@ export async function linksRoster(c: Ctx) {
 
   let roster;
   try {
-    roster = await rosterForDisplay(actor.id, new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL), now);
+    roster = await rosterForDisplay(actor.id, wisphubFor(integration, c.env), now);
   } catch (e) {
     return wisphubFailure(c, e);
   }

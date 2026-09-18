@@ -121,6 +121,12 @@ export const integrationsHub = {
     provider: "wisphub",
     configured: true,
     keyTail: "1234",
+    /* provider-address-per-isp FR-004/FR-007: the address rides beside
+       the key now. The stub picks the pilot's installation on purpose —
+       a non-default one is what proves the screen renders a CHOICE and
+       not a constant. */
+    installation: "wisphub_io",
+    effectiveInstallation: { key: "wisphub_io", label: "wisphub.io", kind: "real", assumed: false },
     actionsEnabled: false,
     mapping: {
       exact: "register_and_reconnect",

@@ -118,8 +118,14 @@ curl -sI https://link.devoladapago.com/ | head -1 # HTTP/2 200
 1. The ISP signs up; the code arrives; the business is born.
 2. `/settings/direct-payment`: CLABE + bank from the catalog (owner only).
    The shell's banner about SPEI disappears.
-3. `/integrations/wisphub`: paste the key generated in WispHub (Mi Empresa →
-   Staff → Generate API Key). The integration is born **observing** —
+3. `/integrations/wisphub`: pick the **installation** — where this ISP signs
+   in to WispHub (wisphub.net, wisphub.io, or the sandbox for a rehearsal) —
+   and paste the key generated there (Mi Empresa → Staff → Generate API Key).
+   Both, not just the key: WispHub runs more than one installation and a key
+   is valid only on its own, so the wrong installation rejects a perfectly
+   good key (007 provider-address-per-isp). The screen names the installation
+   it tried, and says which permissions it could verify and which the first
+   real payment will exercise. The integration is born **observing** —
    verdicts land, nothing is written to WispHub yet.
 4. Links: open the roster; a link exists per customer. Share one.
 5. The customer transfers a small real amount to the ISP's CLABE and enters

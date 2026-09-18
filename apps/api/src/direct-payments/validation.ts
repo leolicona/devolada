@@ -5,7 +5,10 @@ import { payments, businesses, paymentLinks } from "../db/schema";
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
 import { consta, ConstaError, type ConstaRequest } from "../consta";
-import { WispHub, WispHubError } from "../wisphub/client";
+import { WispHubError } from "../wisphub/client";
+/* provider-address-per-isp D4: the money is registered on the
+   business's own installation, never on the platform's. */
+import { wisphubFor } from "../wisphub/factory";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
@@ -641,7 +644,7 @@ export async function runValidation(
      that keeps every read of `integration` below (`thresholdPercent`,
      `actionForClass`, the `actionsEnabled` observation gate) non-null. */
   if (!integration?.apiKey) return retryLater("WISPHUB_NOT_CONFIGURED", base);
-  const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
+  const wisphub = wisphubFor(integration, env);
   let customer;
   let pending;
   try {

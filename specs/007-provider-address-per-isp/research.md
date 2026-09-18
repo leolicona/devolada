@@ -208,3 +208,39 @@ would have caught a missed call site from D4.
   different server from `api.wisphub.net`, but no HTTP call has verified that
   it serves the provider's API. The catalogue's `wisphub_io` entry inherits
   that uncertainty until one request with a real key answers it.
+
+---
+
+## T001 / T002 — the probe, attempted 2026-09-18, **not made**
+
+Both Phase 1 measurements were attempted from the implementation session and
+**could not be run**. Recorded here rather than silently skipped, because the
+catalogue's `wisphub_io` entry rests on what they would have answered.
+
+```
+$ curl -i "https://api.wisphub.io/api/clientes/?limit=1"
+curl: (56) CONNECT tunnel failed, response 403
+
+$ curl -o /dev/null -w "%{http_code}" "https://api.wisphub.net/api/clientes/?limit=1"
+curl: (56) CONNECT tunnel failed, response 403
+```
+
+**Status code: none.** The request never left the session — the egress policy
+refuses the CONNECT to both provider hosts, the same block D7 already records.
+No pilot key was available here either, so even an open network would have
+answered nothing about permissions.
+
+What follows from that:
+
+- **T003 ships the `wisphub_io` entry with its note intact.** The host stays
+  DNS-confirmed only. This is not "a non-200" — nothing answered at all, so
+  there is no evidence the entry is *wrong*, only none that it is right. The
+  note is the honest record of that, and one real call retires it.
+- **T002's question stays open**, so FR-011 keeps its amended wording (D7) and
+  `testKey` verifies the three reads only. If `OPTIONS /facturas/` later proves
+  to discriminate on the invoice permission, three of the four writes become
+  verifiable and FR-011 can widen back.
+- **The release still needs the call.** `quickstart.md` ("Before implementing")
+  carries it, and it must be made with the pilot's real key from a machine with
+  egress before T036 points their row at `wisphub_io`. A wrong entry leaves the
+  pilot exactly where they are today.

@@ -6,12 +6,37 @@ import { z } from "zod";
 
 export const mappedAction = z.enum(["register_and_reconnect", "register_only"]);
 
+/* provider-address-per-isp D1: which WispHub installation a business's
+   credential belongs to. A closed set, mirroring
+   `wisphub/installations.ts` — the catalogue itself ships as
+   `@devolada/api/installations` and the panel renders from it; this
+   enum is the same closed choice expressed on the wire. */
+export const installationKey = z.enum(["wisphub_net", "wisphub_io", "wisphub_sandbox"]);
+
 export const wisphubIntegration = z.object({
   provider: z.literal("wisphub"),
   configured: z.boolean(),
   /* settings D1, moved verbatim: the key is write-only — only enough of
      it to be recognised ever travels back */
   keyTail: z.string().nullable(),
+
+  /* 007 FR-001/FR-004: the installation this business chose. Null means
+     none was chosen and the platform default is in use — which is every
+     row that existed before this feature (FR-002). */
+  installation: installationKey.nullable(),
+  /* FR-004: what is actually being called, resolved through the
+     catalogue. Present even when `installation` is null, because "which
+     one am I on" is the question the screen must answer — a business
+     that never chose still deserves a straight answer, marked as one
+     nobody picked. `host` is deliberately absent: the panel has no use
+     for an endpoint and it is not something an ISP should be copying. */
+  effectiveInstallation: z.object({
+    key: installationKey,
+    label: z.string(),
+    kind: z.enum(["real", "test"]),
+    /* true when it came from the platform default rather than a choice */
+    assumed: z.boolean(),
+  }),
   /* integrations-hub D4: the master switch; false = observation */
   actionsEnabled: z.boolean(),
   /* D3: three fixed rows, two actions each */
@@ -111,6 +136,58 @@ export const webhookIntegrationResponse = z.object({
   deliveries: z.array(webhookHealthDelivery),
 });
 
+/* provider-address-per-isp FR-010 (007 D7): one code became four
+   outcomes. The old `code` blamed the key for all three failures, which
+   is the line this feature exists to stop showing when the key is fine.
+
+   These are DATA on a successful response, not error codes: the test
+   succeeded in telling us the answer, which is the rule settings D2
+   already set and `testWisphubKey` already follows by answering 200
+   either way (constitution III). */
+export const wisphubTestOutcome = z.enum([
+  "OK",
+  /* no usable answer from the host — it did not reply, or it replied
+     with a failure that says nothing about the key */
+  "INSTALLATION_UNREACHABLE",
+  /* the host answered and refused the key outright: almost always a key
+     for a DIFFERENT installation, which is why the screen raises the
+     address before the credential */
+  "KEY_REJECTED",
+  /* the key works and a permission Devolada needs is absent */
+  "PERMISSION_MISSING",
+]);
+
+/* What a connection can be asked to prove without a side effect (007
+   D7). The reads are probed; the writes are not, because every one of
+   them writes into a real ISP's live billing. */
+export const wisphubVerifiableRead = z.enum(["customers", "invoices", "payment_methods"]);
+export const wisphubUnverifiableWrite = z.enum([
+  "create_invoice",
+  "register_payment",
+  "auto_activate",
+  "payment_promise",
+]);
+
+export const wisphubTestResponse = z.object({
+  ok: z.boolean(),
+  /* FR-010: which of the three failures */
+  outcome: wisphubTestOutcome,
+  /* FR-010: the installation the test actually reached for, so an ISP
+     can see that Devolada knocked on the wrong door. Label, never
+     host. */
+  triedInstallation: z.object({ key: installationKey, label: z.string() }),
+  /* FR-011 as amended (D7): what was proven, and what was not. */
+  verified: z.array(wisphubVerifiableRead),
+  unverified: z.array(wisphubUnverifiableWrite),
+  /* Which probe the provider refused, when it refused one. WispHub
+     sends the same generic 403 for "no permission" as for a bad key
+     (spike), so this names the endpoint that was denied — the thing we
+     actually observed — and never guesses the provider's own wording
+     for the permission. */
+  missingPermission: wisphubVerifiableRead.nullable(),
+  sampleCustomerCount: z.number().int().nullable(),
+});
+
 export const integrationsResponse = z.object({
   wisphub: wisphubIntegration,
   /* automated-collections-api US1: the catalog's second live card */
@@ -118,13 +195,26 @@ export const integrationsResponse = z.object({
     /* live (unrevoked) credentials, real and test alike */
     activeCredentials: z.number().int().nonnegative(),
   }),
-  /* present when the patch carried a new key (settings D3, moved) */
-  wisphubTest: z.object({ ok: z.boolean(), code: z.string().nullable() }).optional(),
+  /* Present when the patch carried a key, an installation, or both
+     (settings D3, moved; provider-address-per-isp FR-009).
+
+     007 T029: this used to be a two-field projection, `{ ok, code }`.
+     Save-then-test is the path an ISP actually uses, so a narrower
+     shape here would ship US2 unable to tell the three failures apart
+     exactly where they are first met. It carries the whole result now,
+     which also means it cannot drift from `wisphubTestResponse`
+     again. */
+  wisphubTest: wisphubTestResponse.optional(),
 });
 
 export const wisphubPatchRequest = z
   .object({
     wisphubApiKey: z.string().trim().min(8),
+    /* 007 FR-005: a closed choice. A value outside the catalogue is
+       rejected here as well as being unofferable in the panel — the
+       column is text and a future writer is not the panel
+       (data-model.md). */
+    installation: installationKey,
     exactAction: mappedAction,
     shortAction: mappedAction,
     overAction: mappedAction,
@@ -141,15 +231,14 @@ export const wisphubTestRequest = z.object({
   apiKey: z.string().trim().min(8).optional(),
 });
 
-export const wisphubTestResponse = z.object({
-  ok: z.boolean(),
-  code: z.string().nullable(),
-  sampleCustomerCount: z.number().int().nullable(),
-});
 
+export type InstallationKeyValue = z.infer<typeof installationKey>;
 export type WisphubIntegration = z.infer<typeof wisphubIntegration>;
 export type IntegrationsResponse = z.infer<typeof integrationsResponse>;
 export type WisphubPatchRequest = z.infer<typeof wisphubPatchRequest>;
+export type WispHubTestOutcome = z.infer<typeof wisphubTestOutcome>;
+export type WispHubVerifiableRead = z.infer<typeof wisphubVerifiableRead>;
+export type WispHubUnverifiableWrite = z.infer<typeof wisphubUnverifiableWrite>;
 export type WispHubTestResponse = z.infer<typeof wisphubTestResponse>;
 export type ApiCredential = z.infer<typeof apiCredential>;
 export type ApiIntegrationResponse = z.infer<typeof apiIntegrationResponse>;

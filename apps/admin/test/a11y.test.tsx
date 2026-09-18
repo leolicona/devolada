@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
+import { integrationsResponse } from "@devolada/api/integrations-schema";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
@@ -39,11 +40,17 @@ const feed = feedResponse.parse({
   today: { count: 1, totalCents: 41400, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 });
 
-const integrationsFixture = {
+/* Parsed against the contract, not hand-written beside it: this fixture
+   had drifted from `integrationsResponse` and the screen rendered
+   nothing at all, which a11y reported as a 5s timeout rather than as
+   the missing field it was (provider-address-per-isp, 2026-09-18). */
+const integrationsFixture = integrationsResponse.parse({
   wisphub: {
     provider: "wisphub",
     configured: true,
     keyTail: "1234",
+    installation: "wisphub_io",
+    effectiveInstallation: { key: "wisphub_io", label: "wisphub.io", kind: "real", assumed: false },
     actionsEnabled: false,
     mapping: { exact: "register_and_reconnect", short: "register_and_reconnect", over: "register_and_reconnect" },
     thresholdPercent: 100,
@@ -51,7 +58,7 @@ const integrationsFixture = {
     provisionalReleaseEnabled: false,
   },
   api: { activeCredentials: 0 },
-} as const;
+});
 
 const settings = settingsResponse.parse({
   serviceFeeCents: 1500,

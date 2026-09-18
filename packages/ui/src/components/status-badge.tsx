@@ -2,8 +2,10 @@ import type { ComponentType } from "react";
 import {
   AlertTriangle,
   Ban,
+  CircleHelp,
   ClipboardCheck,
   Code2,
+  FlaskConical,
   Eye,
   KeyRound,
   MonitorSmartphone,
@@ -96,7 +98,16 @@ export type Status =
   | "webhookFailing"
   | "deliveryDelivered"
   | "deliveryPending"
-  | "deliveryFailed";
+  | "deliveryFailed"
+  /* provider-address-per-isp FR-004/FR-007: which WispHub installation a
+     business collects through. Two facts the ISP must be able to see at
+     a glance and never by colour alone — that an installation is the
+     provider's sandbox rather than their real billing, and that nobody
+     picked the one in use, so it is the platform's default standing in.
+     Neither is a verdict: a business on the default is not broken, and
+     the sandbox is a legitimate choice for someone rehearsing. */
+  | "installationTest"
+  | "installationAssumed";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -143,6 +154,10 @@ const statuses: Record<
   deliveryDelivered: { tone: "success", icon: CheckCircle2, label: "Entregado" },
   deliveryPending: { tone: "warning", icon: Clock3, label: "Reintentando" },
   deliveryFailed: { tone: "error", icon: XCircle, label: "Sin entregar" },
+  /* Warning, not error: choosing the sandbox is allowed and sometimes
+     right. What it must never do is pass unnoticed on a live business. */
+  installationTest: { tone: "warning", icon: FlaskConical, label: "Pruebas" },
+  installationAssumed: { tone: "info", icon: CircleHelp, label: "Asumida" },
 };
 
 /* The shared control-size vocabulary (feedback-vocabulary-rollout D11,

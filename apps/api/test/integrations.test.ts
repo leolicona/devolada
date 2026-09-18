@@ -36,6 +36,34 @@ function mockWispHub(reply: { status: number; body?: unknown }) {
     });
 }
 
+/* provider-address-per-isp D7: the connection test reads three
+   endpoints now, not one — a key that lists customers and cannot read
+   invoices is the silent half-connection the old single probe passed
+   green. A test that expects `OK` has to answer all three. */
+function mockHealthyConnection() {
+  mockWispHub({ status: 200, body: oneCustomer });
+  for (const path of [/\/api\/facturas\/.*/, /\/api\/formas-de-pago\/.*/]) {
+    fetchMock
+      .get(WISPHUB_ORIGIN)
+      .intercept({ method: "GET", path })
+      .reply(200, JSON.stringify({ results: [{ id: 1, nombre: "Efectivo" }] }), {
+        headers: { "Content-Type": "application/json" },
+      });
+  }
+}
+
+/* The shape every healthy answer carries (007 contract): the three
+   reads proven, the four writes named as not proven. */
+const HEALTHY = {
+  ok: true,
+  outcome: "OK",
+  triedInstallation: { key: "wisphub_net", label: "wisphub.net" },
+  verified: ["customers", "invoices", "payment_methods"],
+  unverified: ["create_invoice", "register_payment", "auto_activate", "payment_promise"],
+  missingPermission: null,
+  sampleCustomerCount: 1,
+};
+
 const oneCustomer = {
   results: [
     {
@@ -63,6 +91,11 @@ describe("US-I01 scenario 1: connecting is being born observing", () => {
       provider: "wisphub",
       configured: false,
       keyTail: null,
+      /* provider-address-per-isp FR-002: born choosing nothing, and the
+         card still names the installation it will call — the platform
+         default, marked as one nobody picked. */
+      installation: null,
+      effectiveInstallation: { key: "wisphub_net", label: "wisphub.net", kind: "real", assumed: true },
       actionsEnabled: false,
       mapping: { exact: "register_and_reconnect", short: "register_and_reconnect", over: "register_and_reconnect" },
       thresholdPercent: 100,
@@ -73,7 +106,7 @@ describe("US-I01 scenario 1: connecting is being born observing", () => {
 
   it("saving a key creates the row OBSERVING, re-tests it, and only the tail travels back", async () => {
     await seedBusiness();
-    mockWispHub({ status: 200, body: oneCustomer });
+    mockHealthyConnection();
 
     const res = await (await app()).request(
       ...send("/integrations/wisphub", "PATCH", { wisphubApiKey: "01q9K2Rf.SECRETKEY1234" }),
@@ -85,7 +118,7 @@ describe("US-I01 scenario 1: connecting is being born observing", () => {
     expect(data.wisphub.keyTail).toBe("1234");
     /* D4: a NEW integration is born with actions OFF — the trust ramp */
     expect(data.wisphub.actionsEnabled).toBe(false);
-    expect(data.wisphubTest).toEqual({ ok: true, code: null });
+    expect(data.wisphubTest).toEqual(HEALTHY);
     expect(JSON.stringify(data)).not.toContain("SECRETKEY");
 
     const [row] = await db().select().from(integrations);
@@ -102,7 +135,13 @@ describe("US-I01 scenario 1: connecting is being born observing", () => {
     );
     const { data } = await res.json();
     expect(data.wisphub.keyTail).toBe("0000");
-    expect(data.wisphubTest).toEqual({ ok: false, code: "WISPHUB_AUTH_FAILED" });
+    /* 007 FR-010: one code became four outcomes, and a 403 on the first
+       read is the key being refused — named as that, and never as the
+       unreachable installation or the missing permission it used to be
+       indistinguishable from. */
+    expect(data.wisphubTest.ok).toBe(false);
+    expect(data.wisphubTest.outcome).toBe("KEY_REJECTED");
+    expect(data.wisphubTest.triedInstallation).toEqual({ key: "wisphub_net", label: "wisphub.net" });
   });
 });
 
@@ -152,21 +191,28 @@ describe("US-I01: the connection test speaks for WispHub (settings D2, moved)", 
     await seedBusiness({ wisphubApiKey: "stored-key-0001" });
     const client = await app();
 
-    mockWispHub({ status: 200, body: oneCustomer });
+    mockHealthyConnection();
     const typed = await client.request(
       ...send("/integrations/wisphub/test", "POST", { apiKey: "candidate-key-1" }),
       env,
     );
-    expect((await typed.json()).data).toEqual({ ok: true, code: null, sampleCustomerCount: 1 });
+    expect((await typed.json()).data).toEqual(HEALTHY);
     /* testing is not saving */
     const [row] = await db().select().from(integrations);
     expect(row.apiKey).toBe("stored-key-0001");
 
     mockWispHub({ status: 500 });
     const stored = await client.request(...send("/integrations/wisphub/test", "POST", {}), env);
+    /* 007: a host that cannot answer usefully is the INSTALLATION
+       failing, and says nothing about the key — which is why it no
+       longer shares a code with the rejection above. */
     expect((await stored.json()).data).toEqual({
       ok: false,
-      code: "WISPHUB_UNAVAILABLE",
+      outcome: "INSTALLATION_UNREACHABLE",
+      triedInstallation: { key: "wisphub_net", label: "wisphub.net" },
+      verified: [],
+      unverified: ["create_invoice", "register_payment", "auto_activate", "payment_promise"],
+      missingPermission: null,
       sampleCustomerCount: null,
     });
   });

@@ -2,13 +2,40 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
-import { Button, Card, formatMoney, Input, ListError, parseMoney, Pending, Skeleton } from "@devolada/ui";
+import {
+  Button,
+  Card,
+  formatMoney,
+  Input,
+  ListError,
+  parseMoney,
+  Pending,
+  Skeleton,
+  StatusBadge,
+} from "@devolada/ui";
 import type {
   IntegrationsResponse,
   WisphubIntegration,
   WisphubPatchRequest,
   WispHubTestResponse,
+  WispHubUnverifiableWrite,
+  WispHubVerifiableRead,
 } from "@devolada/api/integrations-schema";
+/* provider-address-per-isp D3: the catalogue is compiled into both
+   sides, so the picker renders the same list the API resolves against.
+   The admin uses `key`, `label` and `kind` — never `host`: this app does
+   not talk to WispHub, and an endpoint is not something an ISP should be
+   reading or copying (ARCHITECTURE.md). */
+import { INSTALLATIONS, type InstallationKey } from "@devolada/api/installations";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -46,11 +73,69 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
+/* provider-address-per-isp FR-005/FR-007, US1: the closed choice.
+
+   The entries are named the way an ISP recognises them — where they sign
+   in — and never as an endpoint. There is no free-text field anywhere on
+   this screen, by design and not by omission: a typo in an address is a
+   credential sent to a stranger, so an installation Devolada has not
+   vetted is neither selectable nor reachable (FR-005). */
+function InstallationPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: InstallationKey;
+  onChange: (key: InstallationKey) => void;
+  disabled?: boolean;
+}) {
+  const selected = INSTALLATIONS.find((i) => i.key === value) ?? INSTALLATIONS[0];
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as InstallationKey)} disabled={disabled}>
+      {/* The trigger renders the choice itself rather than `SelectValue`,
+          so the test marker travels with it: seeing "Pruebas" only while
+          the list is open is exactly how a live business connects to a
+          sandbox without noticing (FR-007). */}
+      <SelectTrigger id="wisphub-installation" className="mt-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{selected.label}</span>
+          {selected.kind === "test" && <StatusBadge status="installationTest" />}
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        {INSTALLATIONS.map((installation) => (
+          <SelectItem key={installation.key} value={installation.key} textValue={installation.label}>
+            <span className="flex items-center gap-2">
+              {installation.label}
+              {/* constitution VI: icon + text, never colour alone */}
+              {installation.kind === "test" && <StatusBadge status="installationTest" />}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 /* settings D1/D2/D3, moved verbatim: write-only key, tested before it
-   is saved, and a failed test never blocks the save. */
+   is saved, and a failed test never blocks the save.
+
+   provider-address-per-isp US1 joins them: an address and a credential
+   are one connection, and a key without the installation it belongs to
+   is the failure this feature exists to end. */
 function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
   const save = useSaveIntegration();
   const [key, setKey] = useState("");
+  /* Seeded with what is actually in use, not with the stored choice: a
+     business that never chose still sees the truth, and saving turns
+     that truth into a choice of its own (FR-004). */
+  const [installation, setInstallation] = useState<InstallationKey>(
+    wisphub.installation ?? wisphub.effectiveInstallation.key,
+  );
+  const [confirming, setConfirming] = useState(false);
+  const inUse = wisphub.effectiveInstallation;
+  const moved = installation !== inUse.key;
+  const saveInstallation = () => save.mutate({ installation });
 
   const test = useMutation<WispHubTestResponse, ApiError, string | undefined>({
     mutationFn: (apiKey) =>
@@ -63,16 +148,90 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
   const savedTest = save.data?.wisphubTest;
 
   return (
-    <SectionCard title="Llave (API Key)">
-      <p className="text-sm text-muted-foreground">
-        {wisphub.configured ? (
-          <>
-            Llave guardada: <span className="font-mono text-foreground">••••{wisphub.keyTail}</span>
-          </>
-        ) : (
-          "Sin conectar. Con la llave, Devolada lee la deuda de tus clientes y tus Cobros."
-        )}
+    <SectionCard title="Conexión con WispHub">
+      {/* FR-004: the installation in use carries the same weight as the
+          key's tail — same block, same type, same emphasis. "Which
+          WispHub am I on" is answered even for a business that never
+          chose, because that is precisely the business most likely to be
+          on the wrong one. */}
+      <dl className="space-y-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <dt>Instalación en uso:</dt>
+          <dd className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-foreground">{inUse.label}</span>
+            {inUse.kind === "test" && <StatusBadge status="installationTest" />}
+            {inUse.assumed && <StatusBadge status="installationAssumed" />}
+          </dd>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <dt>{wisphub.configured ? "Llave guardada:" : "Llave:"}</dt>
+          <dd className="font-medium text-foreground">
+            {wisphub.configured ? (
+              <span className="font-mono">••••{wisphub.keyTail}</span>
+            ) : (
+              "sin conectar"
+            )}
+          </dd>
+        </div>
+      </dl>
+      <p className="text-sm text-ink-soft">
+        {inUse.assumed
+          ? "Nadie eligió esta instalación: es la que Devolada usa por omisión. Si entras a WispHub en otra dirección, elígela abajo — tu llave solo sirve en la tuya."
+          : !wisphub.configured
+            ? "Con la llave, Devolada lee la deuda de tus clientes y tus Cobros."
+            : null}
       </p>
+      <div>
+        <Label htmlFor="wisphub-installation">¿Dónde entras a WispHub?</Label>
+        <InstallationPicker value={installation} onChange={setInstallation} disabled={save.isPending} />
+        {/* FR-006: the ISP whose installation is not listed is told so
+            plainly and shown how to ask, instead of being left with a
+            failing connection or an empty choice. */}
+        <p className="mt-1 text-sm text-ink-soft">
+          ¿No está la tuya? Devolada solo se conecta a las instalaciones que ya revisó, y agregar una
+          es un cambio que hacemos nosotros. Escríbenos con la dirección donde entras y la agregamos.
+        </p>
+        {moved && (
+          <div className="mt-2">
+            {/* feedback-vocabulary-rollout D1/D4: the wait is announced at
+                the control that started it. */}
+            <Pending
+              active={save.isPending && save.variables?.installation !== undefined}
+              label="Guardando la instalación."
+            >
+              <Button
+                size="compact"
+                variant="secondary"
+                disabled={save.isPending}
+                onClick={() => (wisphub.configured ? setConfirming(true) : saveInstallation())}
+              >
+                {save.isPending ? "Guardando…" : "Guardar instalación"}
+              </Button>
+            </Pending>
+          </div>
+        )}
+        {/* Changing the installation of a business that already collects
+            reaches the spec's *Deferred* outcomes, so it is a conscious
+            act rather than a stray click (/speckit-analyze finding U1).
+            The copy names what is NOT protected, in the ISP's terms. */}
+        <AlertDialog open={confirming} onOpenChange={setConfirming}>
+          <AlertDialogContent>
+            <AlertDialogTitle>¿Cambiar a {INSTALLATIONS.find((i) => i.key === installation)?.label}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Devolada volverá a leer tus clientes desde esa instalación. Los que existan ahí con el
+              mismo usuario conservan su link de pago. Los que no: su link sigue abierto y quien lo
+              tenga guardado puede pagar, pero la reconexión fallará porque ese cliente no existe ahí
+              — lo verás en la cola. Y si un usuario existe en la otra instalación pero es de otra
+              persona, el link quedaría ligado a quien no es. Revisa tu lista de clientes después de
+              cambiar.
+            </AlertDialogDescription>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={saveInstallation}>Cambiar instalación</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
       <div>
         <Label htmlFor="wisphub-key">Nueva llave</Label>
         <Input size="compact"
@@ -109,36 +268,120 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
           </Button>
         </Pending>
       </div>
-      {result && (
-        <p
-          role="status"
-          className={cn("flex items-start gap-2 text-sm font-medium", result.ok ? "text-success" : "text-error")}
-        >
-          {result.ok ? (
-            <>
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
-              Conexión correcta. WispHub respondió con {result.sampleCustomerCount} cliente(s) de prueba.
-            </>
-          ) : (
-            <>
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-              {result.code === "WISPHUB_AUTH_FAILED"
-                ? "WispHub rechazó esta llave. Revísala en tu panel."
-                : result.code === "WISPHUB_NOT_CONFIGURED"
-                  ? "Escribe una llave para probarla."
-                  : "No pudimos hablar con WispHub ahora. Puede ser una falla temporal."}
-            </>
-          )}
-        </p>
-      )}
-      {savedTest && !result && (
-        <p role="status" className="text-sm font-medium text-muted-foreground">
-          {savedTest.ok
-            ? "Llave guardada y probada."
-            : "Llave guardada, pero la prueba falló. Puedes volver a probarla."}
+      {/* The result of the last test, typed or saved — save-then-test is
+          the path an ISP actually uses, so the saved answer gets the same
+          words as the typed one instead of a vaguer sentence (T029). */}
+      {(result ?? savedTest) && <TestOutcome result={(result ?? savedTest)!} saved={!result} />}
+      {test.error && (
+        <p role="status" className="flex items-start gap-2 text-sm font-medium text-error">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          {test.error.code === "WISPHUB_NOT_CONFIGURED"
+            ? "Escribe una llave para probarla."
+            : "No pudimos hacer la prueba ahora. Vuelve a intentar."}
         </p>
       )}
     </SectionCard>
+  );
+}
+
+/* provider-address-per-isp US2 (FR-010/FR-011): three failures that must
+   read as three different problems, each naming the installation tried.
+
+   The line this replaces was "WispHub rechazó esta llave. Revísala en tu
+   panel." — shown for all three, and wrong in the one case that matters
+   most: a perfectly good key pointed at the wrong installation. An ISP
+   who follows that advice goes and rotates a key that was never the
+   problem. */
+const OUTCOME_COPY: Record<
+  WispHubTestResponse["outcome"],
+  (installation: string) => { title: string; advice: string }
+> = {
+  OK: (installation) => ({
+    title: `Conexión correcta con ${installation}.`,
+    advice: "",
+  }),
+  INSTALLATION_UNREACHABLE: (installation) => ({
+    title: `${installation} no respondió.`,
+    /* Deliberately says nothing about the key: we learned nothing about
+       it, and guessing is what the old single message did. */
+    advice:
+      "No es tu llave: no pudimos hablar con esa instalación. Puede ser algo pasajero — vuelve a probar en unos minutos, y si sigue igual avísanos.",
+  }),
+  KEY_REJECTED: (installation) => ({
+    title: `${installation} rechazó esta llave.`,
+    /* The installation first, the key second: a key is valid on ONE
+       installation, so the wrong address is the likelier of the two and
+       the cheaper to check. */
+    advice:
+      "Revisa primero la instalación: una llave solo sirve donde la generaste. Si entras a WispHub en otra dirección, elígela arriba y vuelve a probar. Si es la correcta, entonces sí revisa la llave en tu panel de WispHub.",
+  }),
+  PERMISSION_MISSING: (installation) => ({
+    title: `Tu llave entra a ${installation}, pero le falta un permiso.`,
+    advice:
+      "La llave es válida. Al usuario que la generó le falta un permiso que Devolada necesita — agrégaselo en tu panel de WispHub y vuelve a probar.",
+  }),
+};
+
+/* What each probe is, in the ISP's words. Never an endpoint. */
+const READ_LABELS: Record<WispHubVerifiableRead, string> = {
+  customers: "leer tus clientes",
+  invoices: "leer tus facturas",
+  payment_methods: "leer tus formas de pago",
+};
+
+/* D7: the four writes are never attempted, because each one writes into
+   your real billing. Named here so a healthy connection never claims
+   more than it proved. */
+const WRITE_LABELS: Record<WispHubUnverifiableWrite, string> = {
+  create_invoice: "crear una factura",
+  register_payment: "registrar un pago",
+  auto_activate: "activar la reconexión automática del cliente",
+  payment_promise: "crear una promesa de pago",
+};
+
+function TestOutcome({ result, saved }: { result: WispHubTestResponse; saved: boolean }) {
+  const copy = OUTCOME_COPY[result.outcome](result.triedInstallation.label);
+  return (
+    <div role="status" className="space-y-2 text-sm">
+      <p
+        className={cn(
+          "flex items-start gap-2 font-medium",
+          result.ok ? "text-success" : "text-error",
+        )}
+      >
+        {result.ok ? (
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
+        ) : (
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+        )}
+        <span>
+          {saved && "Guardado. "}
+          {copy.title}
+        </span>
+      </p>
+      {copy.advice && <p className="text-ink-soft">{copy.advice}</p>}
+      {result.verified.length > 0 && (
+        <p className="text-ink-soft">
+          Comprobamos que la llave puede {result.verified.map((r) => READ_LABELS[r]).join(", ")}.
+        </p>
+      )}
+      {result.missingPermission && (
+        <p className="text-ink-soft">
+          El permiso que falta es el de {READ_LABELS[result.missingPermission]}.
+        </p>
+      )}
+      {/* FR-011 as amended: the honest half. A connection is not claimed
+          to prove what cannot be proven without writing into the ISP's
+          live billing — those are exercised by the first real payment,
+          where the cola de acciones already shows the outcome. */}
+      {result.ok && (
+        <p className="text-ink-soft">
+          No comprobamos si la llave puede {Object.values(WRITE_LABELS).join(", ")}: hacerlo
+          escribiría en tu facturación real. Esos permisos se prueban con el primer pago, y si
+          alguno falta lo verás en la cola de acciones de ese pago.
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -4,7 +4,9 @@ import type { Bindings } from "../env";
 import { payments } from "../db/schema";
 import { integrationsFor } from "../integrations/store";
 import { settleDispatch } from "../integrations/dispatch";
-import { WispHub } from "../wisphub/client";
+/* provider-address-per-isp D4: the sweep already loads each business's
+   integration row, so it passes that row — never a platform value. */
+import { wisphubFor } from "../wisphub/factory";
 import { attemptReconnection } from "../wisphub/reconnection";
 
 /* The reconnection queue (reconnection-queue spec). The payment row is the
@@ -83,13 +85,16 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
   report.claimed = due.length;
 
   /* One key per ISP, not per charge — from the integration row
-     (integrations-hub D2) */
+     (integrations-hub D2). The row carries the installation too
+     (provider-address-per-isp D4), so the sweep addresses each charge to
+     its own ISP's WispHub and never to a platform value: two businesses
+     in one batch reach two different installations. */
   const ispIds = [...new Set(due.map((c) => c.businessId))];
   const integrationByBusiness = await integrationsFor(db, ispIds);
 
   for (const charge of due) {
-    const apiKey = integrationByBusiness.get(charge.businessId)?.apiKey;
-    if (!apiKey) {
+    const integration = integrationByBusiness.get(charge.businessId);
+    if (!integration?.apiKey) {
       /* Same shape as a rejected key: nothing to retry until Configuración */
       await db
         .update(payments)
@@ -103,7 +108,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     }
 
     const result = await attemptReconnection(
-      new WispHub(apiKey, env.WISPHUB_BASE_URL),
+      wisphubFor(integration, env),
       charge.businessId,
       /* D8: lookups need the usuario; the numeric id only serves the
          auto-activate PATCH. Charges from before 0006 have no stored

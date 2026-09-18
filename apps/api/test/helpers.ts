@@ -150,6 +150,11 @@ export async function seedBusiness(
        their one-line seeds. Actions enabled by default — tests describe
        the backfilled pilot unless they say otherwise. */
     wisphubApiKey?: string | null;
+    /* provider-address-per-isp: which installation this business's key
+       belongs to. Omitted means the column stays null — "not chosen",
+       which is every row that predates the feature (FR-002), so the
+       existing suites keep describing exactly the world they did. */
+    installation?: string | null;
     reconnectionThresholdPercent?: number;
     reconnectionFloorCents?: number;
     provisionalReleaseEnabled?: boolean;
@@ -159,6 +164,7 @@ export async function seedBusiness(
   const {
     emailVerified,
     wisphubApiKey,
+    installation,
     reconnectionThresholdPercent,
     reconnectionFloorCents,
     provisionalReleaseEnabled,
@@ -179,6 +185,7 @@ export async function seedBusiness(
     .returning();
   if (
     wisphubApiKey !== undefined ||
+    installation !== undefined ||
     reconnectionThresholdPercent !== undefined ||
     reconnectionFloorCents !== undefined ||
     provisionalReleaseEnabled !== undefined ||
@@ -187,6 +194,7 @@ export async function seedBusiness(
     await db.insert(integrations).values({
       businessId: business.id,
       apiKey: wisphubApiKey ?? null,
+      installation: installation ?? null,
       thresholdPercent: reconnectionThresholdPercent ?? 100,
       floorCents: reconnectionFloorCents ?? 0,
       provisionalReleaseEnabled: provisionalReleaseEnabled ?? false,

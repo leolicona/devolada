@@ -23,7 +23,8 @@ This feature opens that door, and closes the loop on the payer's side:
 2. That link can **charge again every period** without anyone touching it, so a
    monthly membership or a monthly tuition asks for itself.
 3. The payer's doorway stops being a list of names and becomes **a list of what
-   is owed**.
+   is owed** — and, for a device that asks to be told, it can raise its hand
+   when a new period falls due.
 
 The third is not decoration. Once a payer holds a gym link and a school link,
 "which of these do I owe this month?" is a question they cannot answer today
@@ -36,6 +37,35 @@ the **business's own account** and the transfer is validated against Banxico.
 Nothing new happens automatically after a validated payment either — a hand-made
 payment tells the business, and the business decides what it means. Devolada
 does not open a gym door or enrol a student.
+
+## Clarifications
+
+### Session 2026-09-18
+
+- Q: When a period falls due and the previous one went unpaid, does the debt
+  accumulate or does the new period replace it? → **A: The business chooses,
+  per link, when it sets the charge.** A school sets *accumulate*: tuition is
+  owed whether or not the child came. A gym sets *replace*: you did not train
+  in March, so you do not owe March. The payer's page reads identically either
+  way — one amount, owed now. The cost of the choice is that a link now has two
+  numbers that can differ: what each period adds, and what is owed at this
+  moment. Both are the business's to correct. (FR-024, FR-024a, FR-005)
+- Q: How does the payer learn a new period fell due? → **A: The doorway is the
+  notice, and a device may ask to be told.** Devolada sends nothing on its own
+  to anyone who did not ask for it. A payer who saved a link may turn on a
+  notice for that link, with no account and no phone number, and the device
+  raises its hand when the period falls due. A payer who does not, or whose
+  phone cannot, loses nothing: the doorway still shows the debt and the
+  business can still send the link itself. Devolada messaging payers directly
+  by WhatsApp or SMS is a later feature, not this one — see *Deferred*.
+  (FR-025, FR-036 – FR-043)
+- Q: How does a business bring in the members it already has? → **A: One at a
+  time, in this version.** The panel form is the only door; volume stays with
+  the collections API, which already exists for exactly that. This is a
+  deliberate limit with a known cost: a school with 400 students will not adopt
+  this feature until a list import exists, and the first one that asks is what
+  triggers building it. A gym with 40 members adopts on day one. (FR-035, and
+  *Deferred*)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -123,6 +153,16 @@ with nobody having touched it. Needs US1 for the link, nothing else.
 7. **Given** any link carrying a charge, **When** the business looks at it in
    the panel, **Then** it reads when the next period falls and what it will
    ask.
+8. **Given** a charge set to **accumulate** at $650.00 and a member who paid
+   nothing in March, **When** April falls due, **Then** the link asks for
+   $1,300.00 and the panel shows that two periods are behind.
+9. **Given** a charge set to **replace** at $650.00 and a member who paid
+   nothing in March, **When** April falls due, **Then** the link asks for
+   $650.00 and March is recorded as unpaid without being collected.
+10. **Given** an accumulating link whose balance is wrong — a member paid in
+    cash, or the business is forgiving a month — **When** the business corrects
+    what is owed, **Then** the link asks for the corrected amount and the
+    recurring amount for future periods is untouched.
 
 ---
 
@@ -172,6 +212,50 @@ and watch it fall off the list. Needs US1 for the second business's link.
 
 ---
 
+### User Story 4 - The payer is told when a new period falls due (Priority: P4)
+
+A member pays the gym from their phone and, once the payment is done, is asked
+once whether they want to be told next month. They say yes. On the 1st their
+phone raises its hand: the gym has a payment waiting. One tap opens it.
+
+Nothing is asked of them to make this work — no account, no phone number, no
+email. The device that already holds the link is the thing being told.
+
+**Why this priority**: it is the only part of this feature that is purely an
+improvement. Everything still works without it: the doorway shows the debt, and
+the business can always send the link. It is last because it must be built as a
+bonus that can fail silently, never as the channel the money depends on.
+
+**Independent Test**: turn on the notice for one link, let a period fall due,
+and see the device raise its hand and open the right payment. Then refuse the
+permission on a second device and confirm that device loses nothing. Needs US2
+for the period and US3 for the saved link.
+
+**Acceptance Scenarios**:
+
+1. **Given** a payer who has just finished a payment, **When** the confirmation
+   appears, **Then** they are offered the notice once, in es-MX, and can decline
+   without the offer returning on the next payment.
+2. **Given** a payer who accepted, **When** a new period falls due on that link,
+   **Then** the device raises its hand naming the business, and opening it lands
+   on that payment.
+3. **Given** a payer who declined or ignored the offer, **When** a period falls
+   due, **Then** nothing is sent, nothing is broken, and the doorway shows the
+   debt exactly as it would have.
+4. **Given** a device that cannot receive notices at all, **When** the payer
+   reaches the doorway or finishes a payment, **Then** no switch is shown and no
+   notice is promised.
+5. **Given** a payer who turned the notice on, **When** they turn it off or
+   remove the link from this device, **Then** no further notice is sent for it.
+6. **Given** a link whose period fell due and whose payer has not paid, **When**
+   days pass, **Then** the payer is told once for that period and is not told
+   again.
+7. **Given** a payer arriving at a payment page for the first time, **When** the
+   page loads, **Then** they are never interrupted by a permission request
+   before they have paid.
+
+---
+
 ### Edge Cases
 
 - **A period falls due while the payer has the page open.** The payer is looking
@@ -182,7 +266,8 @@ and watch it fall off the list. Needs US1 for the second business's link.
   transfer is real money that arrived; it must be visible to the business and
   never rejected as a duplicate.
 - **Two periods pass with nothing paid.** What the link asks on the third is the
-  open question this spec carries — see FR-024.
+  link asks on the third is the business's own choice, set on the charge — see
+  FR-024.
 - **A deadline set in the past at creation.** A legitimate way to make a link
   that is closed from birth; the page explains it rather than erroring.
 - **The business has no bank account set.** The link exists but the page says the
@@ -204,6 +289,21 @@ and watch it fall off the list. Needs US1 for the second business's link.
   timezone; the payer's phone never decides whether a link is still open.
 - **A period's day is set to 29 February.** The rule that handles a missing day
   must survive a non-leap year without skipping or doubling.
+- **An accumulating balance has grown wrong.** The member paid in cash, or the
+  business is forgiving a month. The business must be able to write the balance
+  down on the existing link without making a new one and without disturbing what
+  future periods will add.
+- **A payer pays part of an accumulating balance.** The money arrived and is
+  real; the remainder stays owed, exactly as a short payment already behaves
+  everywhere else in the product.
+- **A payer clears their browser data** after turning on the notice. The notice
+  stops, and nothing in the product keeps trying to reach a device that will
+  never answer again.
+- **A period falls due for a payer whose phone can never be told.** The doorway
+  is the only channel they have, and it has to be enough on its own.
+- **A member leaves and the business forgets the link.** Periods keep falling
+  due on a person who is gone; the panel has to make that visible, and stopping
+  the charge has to be one action, not a deletion.
 
 ## Requirements *(mandatory)*
 
@@ -222,9 +322,11 @@ and watch it fall off the list. Needs US1 for the second business's link.
   already offers.
 - **FR-004**: A single-amount link MUST carry a deadline; a reusable link MUST
   NOT carry one, and asking for one MUST be refused rather than ignored.
-- **FR-005**: The business MUST be able to change the amount on a reusable
-  hand-made link at any time, and a payer opening the link MUST see the current
-  amount whatever message brought them there.
+- **FR-005**: The business MUST be able to change **what a reusable hand-made
+  link asks for right now** at any time, and a payer opening the link MUST see
+  that current amount whatever message brought them there. On a link carrying a
+  recurring charge this is the balance owed, which is a different number from
+  what each future period adds (FR-018).
 - **FR-006**: The business MUST be able to close a hand-made link. A closed link
   MUST refuse new payments, explain itself in es-MX, and offer no account to
   transfer to.
@@ -249,6 +351,10 @@ and watch it fall off the list. Needs US1 for the second business's link.
   screen or button.
 - **FR-014**: A hand-made link MUST be visible only to its own business, and MUST
   never appear in another business's panel, list, search or export.
+- **FR-035**: A business MUST create hand-made links one at a time. This version
+  MUST NOT offer a list import; a business with hundreds of members is directed
+  to the collections API, which already serves volume. The panel MUST NOT
+  pretend otherwise — no half-built import, no queue, no promise.
 
 #### Charges that repeat
 
@@ -271,16 +377,21 @@ and watch it fall off the list. Needs US1 for the second business's link.
 - **FR-023**: A recurring charge MUST be attachable only to a reusable hand-made
   link. A link whose amount comes from a provider or from the business's own
   software keeps that source as its only truth.
-- **FR-024**: When a period falls due and the previous period was not paid, the
-  link MUST [NEEDS CLARIFICATION: do unpaid periods accumulate on the link so
-  the member owes the sum, or does each new period replace the last so only the
-  current one is ever asked for? A gym and a school answer this differently, and
-  the answer decides whether a link can ever show a growing debt.]
-- **FR-025**: When a new period falls due, the payer MUST learn about it by
-  [NEEDS CLARIFICATION: the business sending the link itself from the panel as
-  it does today; the payer's own doorway being the notice, so they check it;
-  or Devolada messaging the payer directly, which would be a new channel, a new
-  cost and a new consent to obtain.]
+- **FR-024**: A business MUST choose, when it sets a charge, what an unpaid
+  period does to the next one: **accumulate**, so the amounts add up and the
+  member owes the sum, or **replace**, so each period asks only for itself. The
+  choice MUST be changeable later, and MUST take effect from the next period.
+- **FR-024a**: On an accumulating link, the business MUST be able to correct
+  what is owed — write it down, clear it, or set it outright — without creating
+  a new link and without changing what future periods add. A payment that
+  arrives MUST reduce the balance by what actually arrived, and a short payment
+  MUST leave the remainder owed.
+- **FR-025**: When a new period falls due, the payer MUST be able to learn of it
+  without anyone sending them anything: their own doorway MUST show the new
+  amount (FR-026), and a device that asked to be told MUST be told (FR-036 –
+  FR-043). Devolada MUST NOT message a payer on any channel they did not ask
+  for, and MUST NOT require the business to send anything for the debt to become
+  visible.
 
 #### The payer's doorway
 
@@ -306,11 +417,29 @@ and watch it fall off the list. Needs US1 for the second business's link.
 - **FR-034**: The doorway MUST return, for each link, only what that link's own
   payment page already shows to whoever opens it, and nothing further about the
   business it belongs to.
-- **FR-035**: A business MUST be able to bring in its existing members
-  [NEEDS CLARIFICATION: one at a time only in the first version, leaving volume
-  to the collections API; or by pasting or uploading a list of names, references
-  and amounts that becomes many links at once. A school with 400 students cannot
-  adopt this feature one form at a time.]
+
+#### Being told a period fell due
+
+- **FR-036**: A payer MUST be able to turn on a notice for a link this device
+  holds, without an account, a phone number, an email or any identification.
+- **FR-037**: The product MUST NOT ask for permission to notify while the payer
+  is in the middle of paying. The offer MUST come after a payment is confirmed,
+  or from the doorway, and never on arrival at a payment page.
+- **FR-038**: The offer MUST be made at most once per link until the payer acts
+  on it; a declined offer MUST NOT return on the next payment.
+- **FR-039**: A notice MUST name the business and say a payment is waiting, in
+  es-MX, and MUST open that payment when tapped. It MUST NOT carry the amount:
+  a notice lands on a lock screen anyone nearby can read, and the amount is one
+  tap away for the person who owns the phone.
+- **FR-040**: A payer MUST be told at most once per period per link. A payer who
+  has not paid MUST NOT be told again for that same period.
+- **FR-041**: A payer MUST be able to turn the notice off wherever they turned
+  it on, and removing a link from this device MUST stop its notices.
+- **FR-042**: Where a device cannot receive notices at all, the product MUST NOT
+  show the switch and MUST NOT promise the notice.
+- **FR-043**: Notices MUST be a bonus, never a channel the money depends on:
+  when they are unconfigured, refused, unsupported or failing, the doorway MUST
+  behave exactly as it does today and nothing MUST read as broken.
 
 ### Key Entities
 
@@ -320,13 +449,22 @@ and watch it fall off the list. Needs US1 for the second business's link.
   same two kinds as a link from the collections API, and is one row for the whole
   life of the payments made against it.
 - **Recurring charge**: the rule that puts an amount back on a reusable hand-made
-  link every period. Carries the amount, the day it falls due, when it starts,
-  when it ends if ever, and when it last ran — so a period can never be raised
-  twice or skipped in silence.
+  link every period. Carries the amount each period adds, the day it falls due,
+  what an unpaid period does to the next one, when it starts, when it ends if
+  ever, and when it last ran — so a period can never be raised twice or skipped
+  in silence.
+- **Balance owed**: what a reusable link asks for at this moment. On a replacing
+  charge it is the period's amount; on an accumulating one it is every unpaid
+  period less everything that arrived. It is the number the payer sees, and the
+  business can correct it without touching what future periods add.
 - **The payer's doorway**: what a device shows at the bare address — one row per
   link this device has been handed, each carrying what it owes right now. It is
   not an account: it holds nothing this device was not already given, and a new
   phone starts empty.
+- **A notice**: a standing request from one device to be told when one link's
+  period falls due. It belongs to the device, not to a person: it carries no
+  name, no number and no address, it dies when the link is removed or the
+  browser is cleared, and nothing depends on it arriving.
 
 ## Success Criteria *(mandatory)*
 
@@ -353,7 +491,17 @@ and watch it fall off the list. Needs US1 for the second business's link.
   months lacking the chosen day and a non-leap February — zero skips, zero
   doubles.
 - **SC-009**: A business can correct a wrong amount, a wrong name or a wrong
-  person on a hand-made link without the payer needing a new link.
+  person on a hand-made link without the payer needing a new link, and an
+  accumulated balance can be written down in one action.
+- **SC-010**: A payer who accepted the notice is told once, on the day the
+  period falls due, and tapping it lands on that payment — and a payer who
+  refused, ignored it, or holds a phone that cannot receive it completes the
+  same payment through the doorway with nothing missing and nothing broken.
+- **SC-011**: No payer is ever shown a permission request before they have
+  finished a payment, and no payer who declined is asked a second time.
+- **SC-012**: A business creating 40 links by hand does so without help; beyond
+  that the panel points at the collections API rather than letting the work grow
+  silently.
 
 ## Constitution Impact
 
@@ -372,9 +520,17 @@ and watch it fall off the list. Needs US1 for the second business's link.
   carries status, so status is icon plus text and comes from the single status
   representation; the list must hold at 360px and the decisive action keeps its
   size.
+- **Principle VI (visual foundations), the notice** — a permission request is an
+  interruption, and the payer's page is the one screen in this product that must
+  never interrupt. FR-037 puts the ask after the outcome, which is the same rule
+  that keeps the payer's page free of anything that spins or bounces.
 - **Principle VIII (absent configuration degrades)** — a business with no bank
   account still creates links; the payer's page says the channel is unavailable
-  rather than showing an account nothing can validate.
+  rather than showing an account nothing can validate. The notice is the same
+  shape of promise: unconfigured, refused or unsupported, it turns itself off
+  and the doorway carries on. FR-043 is its enforceable form, and the binding
+  that switches it on must say in one line what "unset" means, as every other
+  one does.
 - No principle is added, removed or redefined by this feature.
 
 ## Assumptions
@@ -400,6 +556,21 @@ and watch it fall off the list. Needs US1 for the second business's link.
   product useful, not who is let in.
 - **A member's name is the payer-facing label**, and two members may share one.
   The business's own reference, when it gives one, is what makes them distinct.
+- **A new charge is born *replacing*, not accumulating.** The safer default: a
+  business that does not think about the question never accidentally grows a
+  debt on a member. A school turns accumulation on deliberately.
+- **Notices reach some phones and not others.** Their availability depends on
+  the payer's phone and browser, and on at least one platform a page must be
+  added to the home screen before it may notify at all. The plan must measure
+  what is actually reachable before any copy promises anything; this spec
+  assumes partial reach and requires the product to work fully without it
+  (FR-042, FR-043).
+- **One notice per period, and no reminders.** A payer who does not pay is not
+  chased. Whether a second, later nudge is worth it is a question for the day
+  there is data, not a guess to build now.
+- **Forty links is the practical ceiling for one business** creating them by
+  hand. Beyond that the collections API is the honest answer until an import
+  exists.
 
 ## Dependencies
 
@@ -414,6 +585,28 @@ and watch it fall off the list. Needs US1 for the second business's link.
 - The payer's doorway builds on what the device already saves; this feature makes
   those saved links live, it does not invent the saving.
 
+## Deferred
+
+Named here because each one was decided against for this version, with what
+would bring it back:
+
+- **Devolada messaging the payer directly**, by WhatsApp or SMS, when a period
+  falls due. It is the only thing that removes the monthly work completely, and
+  it is the largest: a provider, a real cost per message, consent to collect and
+  keep, and Devolada speaking to people who never signed up with it. The notice
+  in US4 is the cheap half of the same job. **Brought back by**: evidence that
+  the notice plus the doorway is not reaching enough payers to collect.
+- **A list import** — paste or upload names, references and amounts and get many
+  links at once. **Brought back by**: the first school, or any business with
+  more members than one person will type.
+- **Weekly, fortnightly, quarterly and annual periods.** **Brought back by**: a
+  business that charges on one of them and would otherwise not adopt.
+- **A reminder after the first notice**, for a period still unpaid.
+  **Brought back by**: measured evidence that one notice is not enough.
+- **Telling the payer when a business changes an amount by hand**, outside any
+  period. **Brought back by**: businesses re-pricing often enough that the
+  silence costs them collections.
+
 ## Out of Scope
 
 - A payer account, login, or any identity that survives changing phones.
@@ -423,5 +616,5 @@ and watch it fall off the list. Needs US1 for the second business's link.
 - Late fees, interest, dunning ladders, or any penalty raised automatically.
 - A customer roster separate from links; the link is the record for this channel,
   as it already is for the collections API.
-- Weekly, fortnightly, quarterly and annual periods.
-- Reminders sent by Devolada on any channel, unless FR-025 is answered that way.
+- Any notice that carries an amount, a name or anything else a stranger could
+  read off a locked phone.

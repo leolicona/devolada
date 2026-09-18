@@ -35,7 +35,9 @@ company can be created with no real billing behind it. There is one slot to
 name them in.
 
 This feature moves the address from the platform to the business, next to the
-credential it belongs with.
+credential it belongs with. **That is all it does.** What happens when an
+already-connected business moves to a different installation is deliberately
+left for later — see *Deferred*.
 
 ## Clarifications
 
@@ -47,15 +49,32 @@ credential it belongs with.
   Devolada. A credential is never sent somewhere nobody looked at first, and a
   typo can never become a credential leak. The cost is accepted: an ISP on a
   new installation waits on Devolada, so the screen must tell them so plainly
-  and show them how to ask (FR-005, FR-006).
+  and show how to ask (FR-005, FR-006).
+
 - **Q: What happens to stored customer references when a connected business
-  changes installation?** **A: Accept the change and invalidate them.** The
-  references are re-read from the new installation and every payment link that
-  used one goes **dormant** — alive, still at its own permanent address, but
-  unable to act until it is matched to a customer of the new installation and
-  that match is confirmed. Refusing the change was the smaller build; it was
-  rejected because an ISP who mis-picks on day one should not have to dismantle
-  their setup to correct it (FR-011 through FR-016, User Story 4).
+  changes installation?** **Asked, answered, then withdrawn.** The first answer
+  was to accept the change, make every affected payment link dormant and
+  re-match it against the new installation. Re-reading the code showed the
+  question rested on a false premise, and the creator cut the scope on
+  2026-09-18. The record, because the reasoning outlives the decision:
+
+  - Reaching the situation at all needs **both** a different installation and a
+    key valid on it. The ordinary correction — an ISP picks the wrong
+    installation, their key is rejected, they fix the pick — reads nothing and
+    stores nothing, so there is nothing to repair.
+  - A payment link is keyed by the customer's **username**, not by the
+    provider's numeric id. The numeric id was already treated as a disposable
+    cache, refreshed on sight and never keying anything, because the provider
+    recycles it (`apps/api/src/db/schema.ts`, admin-links-view D5). So a
+    customer who exists on the new installation under the same username keeps
+    the same link, at the same address, by the behaviour that is already
+    there.
+  - Links a business's own software created through the API carry no provider
+    customer at all, and are untouched by any of this.
+
+  The dormancy and re-matching machinery would have rebuilt something the
+  product does for free. It is cut. What genuinely remains unhandled is
+  recorded under *Deferred* rather than solved here.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -95,6 +114,10 @@ the right customer — with no configuration change outside the panel.
 5. **Given** an ISP whose installation is not on Devolada's list, **When**
    they look for it, **Then** the screen says Devolada does not reach it yet
    and shows how to ask for it — it does not offer a box to type it into.
+6. **Given** an ISP who picked the wrong installation and was rejected,
+   **When** they change the pick and save a key valid on the new one, **Then**
+   they connect normally — nothing was stored by the failed attempt that needs
+   undoing.
 
 ---
 
@@ -165,79 +188,25 @@ installation and neither business's data appears in the other's screens.
 
 ---
 
-### User Story 4 - An ISP who picked wrong recovers without losing their links (Priority: P4)
-
-An ISP connected to the wrong installation, or genuinely moved to another one.
-They change it in the panel. Devolada re-reads the roster from the new
-installation, and every payment link they had built goes **dormant**: still
-alive, still at the same address their customers already have, but unable to
-act until Devolada knows who each one now points at.
-
-Devolada proposes a match for each dormant link, by the identifier the ISP
-knows the customer by. Someone with the right reviews the proposals — many at
-once, not one at a time — and confirms. Each confirmed link wakes at the
-address it always had. A payer who saved that link never learns anything
-happened.
-
-**Why this priority**: it is the difference between "correcting a mistake" and
-"starting over". Without it, an ISP can still change installation safely —
-their old links simply stay dormant and they build new ones. With it, a
-permanent link stays genuinely permanent across the change, which is the
-promise the product is sold on.
-
-**Independent Test**: connect a business, build links, change its installation
-to one holding the same customers, and confirm every link goes dormant, every
-match is proposed, and every confirmed link wakes at its original address.
-
-**Acceptance Scenarios**:
-
-1. **Given** a connected business with payment links, **When** its owner
-   changes the installation, **Then** the roster is re-read from the new
-   installation and every link that used a customer reference goes dormant.
-2. **Given** dormant links, **When** the owner opens the re-matching screen,
-   **Then** Devolada proposes a customer of the new installation for each one
-   and the owner can confirm many at once.
-3. **Given** a dormant link whose match is confirmed, **When** it wakes,
-   **Then** its address is unchanged and a payer who saved it earlier reaches
-   the same page.
-4. **Given** a dormant link, **When** a payer opens it, **Then** the page says
-   in plain es-MX that the link is being updated and asks them to wait — never
-   an error, never a dead end, never a form that would send money to the
-   wrong customer.
-5. **Given** a dormant link whose match is **not** confirmed, **When** any
-   provider-side action would run for it, **Then** nothing is sent to the
-   provider and the action waits with a visible status.
-
----
-
 ### Edge Cases
 
-- **The identifiers stop meaning anything.** A customer reference Devolada
-  stored belongs to one installation. Changing installation makes every stored
-  reference point at a stranger, so a confirmed payment could be registered
-  against the wrong customer's account. Money law says this must be
-  impossible, not unlikely — hence dormancy, and hence FR-013.
-- **Money arrives while a link is dormant.** The payer transfers by SPEI to
-  the ISP's own account whatever Devolada's page says. The money is real and
-  must be received, validated and recorded; only the provider-side action
-  waits.
 - **An ISP picks the wrong installation but a valid-looking key.** Nothing
-  connects; the error must send them to the installation, not the key.
+  connects; the error must send them to the installation, not the key. Nothing
+  was read, so the correction costs nothing.
 - **An installation Devolada does not list.** The ISP is told plainly, and
   given a way to ask, rather than left with a failing connection or a text box.
-- **A dormant link has no match in the new installation.** The customer does
-  not exist there. The link must stay dormant and say so, not guess.
-- **Two customers in the new installation look like the same match.** Devolada
-  must not choose; it asks.
 - **An installation is unreachable while payments are arriving.** Payments must
   still be received and validated; only the provider-side action waits.
 - **A business with a key but no installation recorded** — every business that
-  exists today.
+  exists today. It must keep working untouched.
 - **An ISP reads the address off their browser bar** and it is not the address
   their key answers on. The two are related but not identical, and the ISP
   should never have to know the difference.
 - **The provider's test installation** is chosen by a real business by mistake,
-  connecting live collections to a system with no real customers.
+  connecting live collections to a system with no real customers. The
+  installation is marked as a test in the list so the choice is visibly odd.
+- **An already-connected business changes installation.** Out of scope here;
+  what happens and what is not protected is stated under *Deferred*.
 
 ## Requirements *(mandatory)*
 
@@ -271,54 +240,30 @@ match is proposed, and every confirmed link wakes at its original address.
   connection or an empty choice. Adding an installation to the list is a
   reviewed change made by Devolada, and the list MUST be verified
   automatically so it cannot drift unnoticed.
-- **FR-007**: The platform MUST retain a way to name a default installation
+- **FR-007**: Each entry MUST say whether it is a real or a test installation,
+  so a business cannot connect live collections to a test system without
+  seeing that it did.
+- **FR-008**: The platform MUST retain a way to name a default installation
   for businesses that record none, so the product has a sane answer before
   anyone chooses.
 
 **Telling the truth about failure**
 
-- **FR-008**: The connection test MUST run against the installation being
+- **FR-009**: The connection test MUST run against the installation being
   saved, never against a different one.
-- **FR-009**: A failed connection MUST report which of three causes applies —
+- **FR-010**: A failed connection MUST report which of three causes applies —
   unreachable installation, credential rejected, or missing permission — and
   MUST name the installation that was tried.
-- **FR-010**: A connection MUST NOT be reported as healthy unless the
+- **FR-011**: A connection MUST NOT be reported as healthy unless the
   credential can perform every action Devolada will later take on the ISP's
   behalf. Reading customers alone is not a healthy connection.
 
-**Changing installation without paying a stranger**
-
-- **FR-011**: Changing a connected business's installation MUST be allowed,
-  and MUST invalidate every customer reference that business stored, then
-  re-read its roster from the new installation.
-- **FR-012**: Every payment link that used an invalidated reference MUST
-  become dormant rather than broken: it keeps its own address, and it MUST NOT
-  cause any provider-side action until its match is confirmed.
-- **FR-013**: No provider-side action may execute against a customer reference
-  read from an installation other than the one its business is currently
-  connected to. This holds whether or not the re-matching flow exists.
-- **FR-014**: A payer who opens a dormant link MUST see plain es-MX saying the
-  link is being updated and asking them to wait — never an error page, never a
-  payment form that would send money toward the wrong customer.
-- **FR-015**: A payment that arrives against a dormant link MUST still be
-  received, validated and recorded. Its provider-side action MUST wait with a
-  visible status until the link is matched, and MUST NOT be lost or silently
-  dropped.
-- **FR-016**: Devolada MUST propose a match for each dormant link against the
-  customers of the new installation, and a link MUST NOT wake until someone
-  holding the same right that governs the connection confirms the match.
-  Confirmation MUST be possible for many links in one action. A link with no
-  confident match, or more than one, MUST stay dormant and say so rather than
-  being guessed.
-- **FR-017**: A link that wakes MUST keep the address it has always had, so a
-  payer who saved it earlier reaches the same page.
-
 **Degrading and keeping quiet**
 
-- **FR-018**: An unreachable or misconfigured installation MUST degrade the
+- **FR-012**: An unreachable or misconfigured installation MUST degrade the
   provider-side action only. Payments MUST still be received, validated and
   recorded, and the resulting action MUST wait with a visible status.
-- **FR-019**: No message shown to a user, and no record Devolada keeps of a
+- **FR-013**: No message shown to a user, and no record Devolada keeps of a
   failure, may contain a provider credential.
 
 ### Key Entities
@@ -330,14 +275,6 @@ match is proposed, and every confirmed link wakes at its original address.
 - **Business connection**: what a business has told Devolada about its
   provider — the credential, the behaviour switches that already exist, and
   now the installation. One per business.
-- **Customer reference**: the identifier Devolada stores to act on a specific
-  customer of a specific ISP. Meaningful only within the installation it was
-  read from, which is what makes changing installation a money question and
-  not a tidiness one.
-- **Link dormancy**: the state a payment link holds between an installation
-  change and the confirmation of its new match. A dormant link exists, keeps
-  its address, shows the payer an honest waiting message, and causes nothing to
-  happen at the provider.
 
 ## Success Criteria *(mandatory)*
 
@@ -352,24 +289,19 @@ match is proposed, and every confirmed link wakes at its original address.
 - **SC-003**: For each of the three connection failures, the screen names a
   distinct cause and the installation tried — 3 of 3, with no message blaming
   the credential when the credential is valid.
-- **SC-004**: An ISP who picks the wrong installation can correct it
-  themselves, from the panel, in under 2 minutes and without contacting
-  support.
+- **SC-004**: An ISP who picks the wrong installation before connecting can
+  correct it themselves, from the panel, in under 2 minutes and without
+  contacting support.
 - **SC-005**: Zero provider credentials are sent to any destination Devolada
   does not maintain, across all businesses, for the life of the feature.
 - **SC-006**: Every business connected before this feature keeps collecting
   with no owner action and no interruption — 100% carried over untouched.
-- **SC-007**: No confirmed payment is ever registered against a customer of an
-  installation other than the one its business is currently connected to —
-  zero occurrences, verified by reconciling actions to installations.
+- **SC-007**: No confirmed payment is ever registered on an installation other
+  than the one its business is connected to — zero occurrences, verified by
+  reconciling actions to installations.
 - **SC-008**: While an installation is unreachable, 100% of payments to that
   business are still received and validated, and 100% of their provider-side
   actions are recoverable once it answers.
-- **SC-009**: After an installation change, 100% of payment links keep their
-  original address, and an ISP can review and confirm the matches for a
-  thousand-customer roster in a single session rather than link by link.
-- **SC-010**: Zero payments arriving against a dormant link are lost: 100% are
-  recorded and validated, and their actions run once the match is confirmed.
 
 ## Assumptions
 
@@ -378,9 +310,8 @@ match is proposed, and every confirmed link wakes at its original address.
   valid on exactly one of them.
 - Most ISPs are hosted on the installation Devolada already defaults to, which
   is why an unrecorded installation falls back to it rather than blocking.
-- The right to set the installation, and to confirm a re-match, is the right
-  that already governs the provider credential — owner and admin, not every
-  member. No new role.
+- The right to set the installation is the right that already governs the
+  provider credential — owner and admin, not every member. No new role.
 - An ISP knows where they sign in, and can recognise it in a list. They do not
   know, and must not be asked for, the address their key answers on: the two
   differ, and Devolada holds that mapping.
@@ -394,18 +325,47 @@ match is proposed, and every confirmed link wakes at its original address.
   for businesses that record none — it stops being an override.
 - Which provider permissions Devolada needs is already known from the existing
   integration; this feature checks them, it does not discover them.
-- Changing installation is rare — a correction or a genuine migration, not a
-  routine act. The re-matching flow is built for correctness and for reviewing
-  many at once, not for speed of repetition.
+- Changing installation after connecting is rare, and is not made safer by
+  this feature. See *Deferred*.
+
+## Deferred
+
+Changing the installation of a business that is **already connected and has
+links** is not addressed here. The feature makes such a change possible where
+it was not before, so the state of it is recorded rather than left to be
+discovered.
+
+**What happens today, unchanged by this feature**: the roster is re-read from
+the new installation, and a customer who exists there under the same username
+keeps the same link at the same address. Links created through the API carry
+no provider customer and are unaffected. Most of a migration therefore
+self-heals.
+
+**What is not protected**:
+
+1. A link whose customer does not exist on the new installation keeps
+   resolving for a payer who saved it. They would see a normal payment page.
+   Money sent there is received and validated; the reconnection then fails at
+   the provider as an unknown customer — visible in the queue, but the
+   customer paid and waited. This is not new: the same thing happens today when
+   an ISP deletes a customer from their system.
+2. A username that exists on the new installation but belongs to a **different
+   person** would attach an old link to the wrong customer. No machinery can
+   detect this, because the username is the identity; the ISP would see the
+   wrong name in their roster.
+
+Neither is created by this feature, and neither is fixed by it. Both should be
+taken up as their own work — the first is the more valuable, and it pays off
+whether or not an installation ever changes.
 
 ## Out of Scope
 
+- Any handling of an installation change for a connected business — see
+  *Deferred*.
 - Discovering an ISP's installation automatically from their sign-in address.
   The ISP chooses.
-- Moving an ISP's customers, invoices or history from one installation to
-  another. Devolada re-matches its own links to customers that already exist
-  in the new installation (FR-016); moving the data there is the provider's
-  business.
+- Moving an ISP's customers, invoices or history between installations. That
+  is the provider's business, not Devolada's.
 - Supporting a second provider. This feature is about one provider that
   happens to run many installations, not about a second vendor.
 - Encrypting the stored credential at rest. Real and worth deciding, but a

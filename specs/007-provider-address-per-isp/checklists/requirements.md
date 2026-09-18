@@ -42,23 +42,34 @@ Everything else passed on the first pass.
 
 ### Iteration 2 — 2026-09-18
 
-Both answered by the creator and recorded under **Clarifications**:
+Both markers answered by the creator and recorded under **Clarifications**:
+the list is closed (no free-text address), and an installation change makes
+every affected payment link dormant until re-matched. The second answer added
+User Story 4 and six requirements.
 
-- **Closed list.** No free-text address. An installation Devolada has not
-  vetted is neither selectable nor reachable; adding one is a reviewed change.
-  The cost — an ISP on a new installation waits on Devolada — is carried by
-  FR-006, which requires the screen to say so and show how to ask, rather than
-  leaving an empty choice.
-- **Accept the change and invalidate.** Changing installation re-reads the
-  roster and makes every affected payment link dormant until its match is
-  confirmed. This is the larger of the two options and it grew the feature:
-  User Story 4 was added at P4, and FR-011 through FR-017 now carry dormancy,
-  the payer's message, the survival of the link's address, and the rule that a
-  reference from another installation can never be acted on.
+### Iteration 3 — 2026-09-18
 
-The new story is a genuine slice: without it an ISP can still change
-installation safely — links go dormant and they build new ones — so the
-recovery flow can ship after the rest without leaving money at risk. FR-013
-states that separation explicitly so a plan cannot lose it.
+**Scope cut.** The creator questioned how a business could reach the
+installation-change situation at all, given a connection needs both the
+address and a key valid on it. Re-reading the code showed the second
+clarification rested on a false premise:
 
-Requirement count grew 13 → 19, success criteria 8 → 10, edge cases 7 → 10.
+- The ordinary correction reads nothing and stores nothing, so there is
+  nothing to repair.
+- A payment link is keyed by the customer's **username**, not the provider's
+  numeric id — the id was already a disposable cache, refreshed on sight,
+  because the provider recycles it (`apps/api/src/db/schema.ts`,
+  admin-links-view D5). A customer present on the new installation under the
+  same username keeps the same link at the same address, with no new
+  machinery.
+- API-created links carry no provider customer and are untouched.
+
+User Story 4 and the dormancy requirements are removed. What genuinely
+remains unprotected is written into a **Deferred** section rather than solved
+or dropped silently: a link whose customer is absent from the new
+installation still takes a payment, and a username that means a different
+person there would attach to the wrong customer. Neither is created by this
+feature; neither is fixed by it.
+
+Requirements 19 → 13, stories 4 → 3, success criteria 10 → 8. The feature is
+now what it says on the title: the address, per ISP.

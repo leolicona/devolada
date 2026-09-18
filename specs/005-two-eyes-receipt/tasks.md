@@ -352,3 +352,37 @@ later (quickstart § US5), which is the measurement the spec's D10 asks for.
 - `RECEIPT_INCOMPLETE` stays declared and unused after T011; removing the
   code is a one-line follow-up once no caller switches on it — say so in
   `failure.ts` rather than deleting it in this feature.
+
+---
+
+## Phase 9: Convergence
+
+**Appended 2026-09-18 by `/speckit-converge`**, run against the code after
+T001–T040. One finding. Every other requirement, acceptance scenario, edge
+case, plan decision and constitution principle was found satisfied in the
+code; the two items T002 and T039 record as still-to-run need a machine with
+a Cloudflare login and are tracked there, not re-opened here.
+
+- [ ] T041 [US1] In `apps/api/src/credit/topups.ts`, carry D20 to the top-up
+  door. `acceptedData` is `topUp.trackingKey != null && topUp.senderBank !=
+  null` and never tests the date, so a top-up whose two readings agreed on a
+  clave that neither of them read a date for is stored with `transfer_date`
+  NULL and then sent to the **transfer** door at its next slot with
+  `topUp.transferDate ?? now.toISOString().slice(0, 10)` — today's date,
+  which nobody read. That is the one call D20 says is never made: Banxico is
+  asked about the wrong day, answers a faceless `not_found` for a real
+  transfer, and the row spends a credit per slot on a search that cannot
+  succeed. The payment builder already refuses it — `accepted` in
+  `apps/api/src/direct-payments/validation.ts` tests all four fields for
+  exactly this reason — and research R9 says the top-up takes the transfer
+  door "by the same rule as a payment". Add `topUp.transferDate != null` to
+  `acceptedData`, so a dateless row keeps the receipt door: D18's stated
+  behaviour when the machines cannot supply something and there is no
+  operator to ask, at today's cost. Cite `two-eyes-receipt D20` in the
+  comment beside it. Then add the scenario to `describe("two-eyes-receipt
+  US1: a receipt top-up goes provider-first too")` in
+  `apps/api/test/topups-pause.test.ts`, cited `two-eyes-receipt US1`: both
+  readings agree on the clave with no `fecha` on either side, the first slot
+  writes `reading_check = 'agreed'` with `transfer_date` NULL, and the second
+  slot's captured body still carries `imageUrl` and no `sender` — never a
+  `sender.date` of today. Per plan D20, research R9 (contradicts)

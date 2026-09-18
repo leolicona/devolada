@@ -92,10 +92,13 @@ The verify path (US3).
 ```jsonc
 {
   "id": "pay_…",
+  "paymentLinkId": "lnk_…",
   "customerRef": "CLI-4471",
   "status": "confirmed",       // the payment row's own word — see the table below
   "askedCents": 49900,
-  "receivedCents": 49900,
+  "claimedCents": 51400,       // what the proof said — a claim, never money
+  "proofDoor": "transfer",     // transfer | receipt — the same as the webhook's
+  "receivedCents": 51400,
   "match": "exact",            // exact | short | over — null while validating
   "folio": "DV-000412",        // null until confirmed
   "confirmedAt": 1759999000000,
@@ -103,6 +106,11 @@ The verify path (US3).
   "isTest": false
 }
 ```
+
+The answer carries every fact the webhook carries, rendered by the same code,
+plus `status` and `createdAt`: the read is the safety net under US2, so a
+caller that missed every message finds the same truth here. The list answers
+newest first.
 
 **`status` is the payment row's own vocabulary** (research D17). The API
 invents no second set of names: every value below is a value of

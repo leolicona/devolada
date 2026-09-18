@@ -149,13 +149,13 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Tests for User Story 3
 
-- [ ] T053 [P] [US3] Write `apps/api/test/collections-api-verify.test.ts` (`automated-collections-api US3`) covering all four spec scenarios: validating with its ask, confirmed with folio and amounts, a reference with nothing received answering an **empty list rather than an error**, and another business's payment answering `NOT_FOUND`
+- [X] T053 [P] [US3] Write `apps/api/test/collections-api-verify.test.ts` (`automated-collections-api US3`) covering all four spec scenarios: validating with its ask, confirmed with folio and amounts, a reference with nothing received answering an **empty list rather than an error**, and another business's payment answering `NOT_FOUND`
 
 ### Implementation for User Story 3
 
-- [ ] T054 [P] [US3] Define the read contract in `apps/api/src/routes/v1/payments/schema.ts` per `contracts/public-api.md`
-- [ ] T055 [US3] Implement payment-by-id and payments-by-`customerRef` in `apps/api/src/routes/v1/payments/handler.ts`, filtered by the credential's business
-- [ ] T056 [US3] Wire the pure router in `apps/api/src/routes/v1/payments/index.ts`
+- [X] T054 [P] [US3] Define the read contract in `apps/api/src/routes/v1/payments/schema.ts` per `contracts/public-api.md`
+- [X] T055 [US3] Implement payment-by-id and payments-by-`customerRef` in `apps/api/src/routes/v1/payments/handler.ts`, filtered by the credential's business
+- [X] T056 [US3] Wire the pure router in `apps/api/src/routes/v1/payments/index.ts`
 
 **Checkpoint**: all three of the spec's first priorities work independently.
 

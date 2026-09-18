@@ -306,7 +306,10 @@ what the verdict accepted (`tracking_key`, `sender_bank`, `transfer_date`;
 by the same rule as a payment (D17). A top-up whose readings cannot be
 decided keeps riding the receipt door on every slot, exactly as every
 receipt top-up does today. Classification is recorded on the extraction row
-(D19), not on `top_ups`.
+(D19), which is where every count reads it from. The lifecycle also writes
+the three-word verdict to `top_ups.reading_check`, a column that predates
+this feature: it costs nothing, it keeps a top-up row as self-describing as
+a payment row, and no query depends on it (amended 2026-09-18, analyze F6).
 
 **Rationale**: the engine does the work; the top-up lifecycle only has to
 store three fields it already has columns for. There is no operator-facing

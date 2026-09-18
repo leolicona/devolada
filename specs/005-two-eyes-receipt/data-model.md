@@ -2,7 +2,7 @@
 
 **Feature**: 005 · **Date**: 2026-09-17 · **Phase**: 1
 
-One additive migration (`0029_two_eyes_receipt.sql`): columns on
+One additive migration (`0030_two_eyes_receipt.sql` (planned as `0029`; that number was taken by `collections_api_foundation` before this feature landed)): columns on
 `payments`, `extractions` and `top_ups`. No new table, no drop, no rename.
 Money stays integer cents, timestamps milliseconds (constitution II). Every
 table touched already carries `business_id` (constitution V).
@@ -43,12 +43,21 @@ The decision table is research R3.
 | `accepted_from` | text NULL | **New.** `agreed` \| `reader` \| `provider` \| `human`. Who supplied the clave, bank, amount and date the transfer-door retries carry. `human` is written when a typed correction supersedes (so the count of "payer asked and answered" is a query) |
 | `tracking_key`, `sender_bank`, `transfer_date`, `claimed_amount_cents` | existing | Now also written by the lifecycle from the accepted data (D17). Before this feature they were written only from the payer's form or adopted from the CEP |
 
-**Door rule (D17)**: the next attempt is a transfer call when
-`tracking_key`, `sender_bank`, `claimed_amount_cents` **and**
-`transfer_date` are all present, a receipt call otherwise. Accepted data
-without a date never reaches the transfer door: `disputed_fields` carries
-`"date"`, the page asks for it, and the payer's answer supersedes the row
-with the date (D20). `proof_mode` keeps meaning what the payer submitted.
+**Door rule (D17)**: the next attempt is a receipt call only when the row
+has a `proof_key`, was submitted as `proof_mode = 'receipt'`, and does not
+yet hold all four of `tracking_key`, `sender_bank`, `claimed_amount_cents`
+and `transfer_date`; otherwise it is a transfer call. Accepted data without
+a date never reaches the transfer door: `disputed_fields` carries `"date"`,
+the page asks for it, and the payer's answer supersedes the row with the
+date (D20).
+
+`proof_mode` keeps meaning what the payer submitted, and it still decides
+exactly one thing: whether a *human* put the data there. A form the payer
+edited takes the transfer door on every attempt with no contrast (FR-015),
+even carrying a file beside it and even naming no amount — a typed row
+falls back to the debt's own for the search criterion. **Amended
+2026-09-18** (analyze F3): stated as the four fields alone, this rule sent
+such a row to the image door, which FR-015 forbids.
 
 **Legacy shape (D16)**: `proof_mode = 'transfer' AND proof_key IS NOT NULL
 AND supersedes_id IS NULL AND reading_check IS NULL` identifies a payment
@@ -121,6 +130,10 @@ do now.
   `accepted`, `acceptedFrom`, `ourReading`.
 - `ConstaReading` gains `legibility`.
 - `proofReadingResponse` gains `legibility`.
-- `directPaymentStatusResponse` is unchanged: the page reads
-  `readingCheck` (`agreed` | `disputed`, blind stays null on the wire) and
-  `disputedFields` as today.
+- `directPaymentStatusResponse` gains one *value*, not a field:
+  `disputedFields` may carry `"date"` (D20), and it travels whatever the
+  `readingCheck` says rather than only on a `disputed` — an agreement
+  missing only a date still has one field to ask for. `readingCheck` is
+  unchanged (`agreed` | `disputed`; blind stays null on the wire).
+  **Amended 2026-09-18** (analyze F2): this line read "is unchanged",
+  which contradicted `contracts/payment-page.md`.

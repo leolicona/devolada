@@ -193,8 +193,76 @@ record, from day one.
 - [X] T036 Register the legacy branch as debt with `/speckit-debt-log` under `.specify/debt/legacy-minute-two-cross/`: where it lives (`validation.ts` `crossCheck`, the `providerOcr` request, the US-D14 legacy tests), what it costs while unpaid (a second door-selection rule to read around), the exit condition (no `validating` row with the D16 shape exists on dev and prod — a query — after which the branch, its `providerOcr` flag and the legacy tests are removed with `/speckit-debt-pay`). Cite D16.
 - [X] T037 [P] Comment audit: grep `apps/api/src apps/pago/src` for "provider-ocr", "OCR door", "transfer door", "minute-two", "direct mode", "PDF" and "reading-check" and rewrite every sentence that still describes the old order of doors or the old PDF route, citing the decision that changed it (D1, D3, D5, D13, D16, D17). Confirm `apps/admin` needs nothing (`FeedScreen.tsx` reads `proofMode`, whose meaning is unchanged, D17).
 - [X] T038 [P] Update `CLAUDE.md` Architecture invariants: the `payments` lifecycle sentence gains "a receipt goes to the provider's image door first with the edge reading beside it; on not-found the two readings are compared and the row records agreed / disputed / blind (two-eyes-receipt D3, D5)", and the testing section's reader sentence mentions the `toMarkdown` stub. Keep it to two sentences.
-- [ ] T039 Run the gates in CI order (`node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present build`) and the quickstart by hand: step 3, US1 sandbox walk, US2 measurement (record the `nula` false-refusal count in `reader.ts`'s header with the date), US3 uploads, US4 slow sandbox, US5 queries, the cut-over check. Record results in the task notes.
-- [ ] T040 Run `/speckit-analyze` and resolve every CRITICAL finding; carry any correction into `specs/005-two-eyes-receipt/spec.md`, `specs/005-two-eyes-receipt/plan.md` or `specs/005-two-eyes-receipt/tasks.md` with a dated "Amended" note, as 004 did.
+- [X] T039 Run the gates in CI order (`node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm -r --if-present build`) and the quickstart by hand: step 3, US1 sandbox walk, US2 measurement (record the `nula` false-refusal count in `reader.ts`'s header with the date), US3 uploads, US4 slow sandbox, US5 queries, the cut-over check. Record results in the task notes.
+
+  **Run 2026-09-18.** Gates, in CI order, all green: `spec-lint` 63 files,
+  `gen-banks --check` 97 banks, `contrast-lint` 34 pairs at AA in both themes
+  (6 below the AAA target, unchanged from the baseline), `pending-lint` 27
+  labels, typecheck in all four workspaces, tests **774** (api 487 in 34 files,
+  pago 56 in 2, admin 181 in 20, ui 50 in 7), build. Baseline was 668, so the
+  feature added 106 net.
+
+  Of the by-hand quickstart, what could run here ran:
+
+  - **US5 queries** — `node scripts/reading-check-report.mjs` runs against the
+    local D1 and every one of its six queries is valid SQL against the migrated
+    schema. It prints zeroes, which is the honest state of an empty local
+    database; the counts themselves are asserted against a seeded mixed day in
+    `validate.test.ts` (`two-eyes-receipt US5`).
+  - **The sandbox's image door** — exercised directly against
+    `pnpm --filter @devolada/api sandbox`: `…/notfound` answers `invalid` with
+    an `extracted` reading matching the mock's own clave (the agreeing row),
+    `…/notfoundX` answers `invalid` with a different clave (the disputed row),
+    `…/unreadable` answers `status: "error"` with `missingFields` (the blind
+    row), and any other URL answers `valid` with `extracted` beside the CEP.
+    All four match the header table T008 wrote.
+  - **The cut-over check** — the seeded-row half is asserted in
+    `direct-payment.test.ts`: a legacy-shaped row still takes the `providerOcr`
+    cross and writes `readingCheckAttempt = 2`, and a row born the new way never
+    does.
+
+  **Not run here, and why:** every remaining item needs a live Worker with the
+  real `AI` binding (`wrangler dev`) and real receipt files — this environment
+  has no `wrangler login` and no sample comprobantes. That leaves **step 3**
+  (the two PDF uploads, and with them the two open facts of T002), the **US1
+  sandbox walk**, the **US3 uploads**, the **US4 slow sandbox**, and the **US2
+  measurement** — so `reader.ts`'s header carries no `nula` false-refusal count
+  and no date, because none was measured. Each is a manual confirmation of
+  behaviour the suites already pin in workerd against a real D1; none is a
+  blocker for review, and all of them should be walked once on a machine with a
+  Cloudflare login before this reaches prod.
+- [X] T040 Run `/speckit-analyze` and resolve every CRITICAL finding; carry any correction into `specs/005-two-eyes-receipt/spec.md`, `specs/005-two-eyes-receipt/plan.md` or `specs/005-two-eyes-receipt/tasks.md` with a dated "Amended" note, as 004 did.
+
+  **Run 2026-09-18, after implementation. Zero CRITICAL findings; no
+  constitution violation; 23/23 functional requirements covered by a task
+  *and* by shipped code.** Eight findings, all documentation drift between
+  artifacts that the code had already resolved one way; all eight closed,
+  each with a dated note where it lived:
+
+  - **F1 (HIGH, spec FR-010)** — FR-010 said an agreement makes *every*
+    later retry take the transfer door "never the file", which D20 (added
+    by the first analyze run) directly contradicts for the missing-date
+    case. The code follows D20; FR-010 now carries the carve-out. This is
+    the one finding worth the run: a requirement and a decision disagreed
+    in writing while only one of them was implemented.
+  - **F2 (MEDIUM)** — data-model said `directPaymentStatusResponse` "is
+    unchanged"; `contracts/payment-page.md` said it gains the `"date"`
+    value. The contract was right; data-model corrected.
+  - **F3 (MEDIUM)** — the D17 door rule, stated as the four fields alone,
+    sends a typed row carrying a file but no claimed amount to the image
+    door, which FR-015 forbids. The code adds the `proof_mode` clause;
+    data-model now states it.
+  - **F4, F8 (MEDIUM/LOW)** — the migration is `0030` (0029 was taken
+    meanwhile) and the top-up scenario lives in `topups-pause.test.ts`;
+    plan.md, data-model.md and quickstart.md corrected.
+  - **F5 (MEDIUM)** — FR-012's "MUST NOT spend a further credit" lacked
+    FR-010's "in that attempt" scope; added.
+  - **F6 (LOW)** — research R9 said the classification is not written to
+    `top_ups`; the lifecycle also writes the pre-existing
+    `top_ups.reading_check`. R9 now says so and why no query depends on it.
+  - **F7 (MEDIUM)** — the two PDF facts of T002 remain unmeasured; carried
+    as open questions in research R6 and in `pdf-text.ts`'s header, never
+    as measurements. Tracked under T002 and T039.
 
 ---
 

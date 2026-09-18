@@ -119,8 +119,11 @@ describe("scenario 2: the same reference after confirmation", () => {
     mockApiCep({ cep: { amountCents: 40000, trackingKey: "TRACK000SHORT" } });
     const { ctx, settled } = collectingCtx();
     const short = await payerPost(token, TRANSFER("TRACK000SHORT", 40000), testEnv, ctx);
+    /* two-eyes-receipt D4: the answer does not wait for the provider.
+       The `partial` verdict is on the row — and on this door — once the
+       deferred attempt has settled. */
+    expect(short.body.data).toMatchObject({ status: "validating" });
     await settled();
-    expect(short.body.data).toMatchObject({ status: "partial" });
 
     const byRef = await v1(key, "GET", "/payments?customerRef=CLI-4471");
     const list = apiPaymentList.parse(byRef.body.data).payments;

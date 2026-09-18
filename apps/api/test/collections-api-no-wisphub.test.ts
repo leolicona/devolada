@@ -54,7 +54,10 @@ describe("FR-029: the webhook is the outcome; WispHub is never touched", () => {
     mockApiCep({ cep: { amountCents: ASK + FEE } });
     const { ctx, settled } = collectingCtx();
     const paid = await payerPost(String(link.url).split("/p/")[1], TRANSFER("TRACK000NOWH", ASK + FEE), testEnv, ctx);
-    expect(paid.body.data).toMatchObject({ status: "confirmed" });
+    /* two-eyes-receipt D4: the answer does not wait for the provider —
+       the verdict lands on the row once the deferred attempt settles,
+       and the webhook pair below is what carries it outward */
+    expect(paid.body.data).toMatchObject({ status: "validating" });
     await settled();
 
     expect(captured.map((c) => c.event.type).sort()).toEqual(["payment.confirmed", "payment.validating"]);

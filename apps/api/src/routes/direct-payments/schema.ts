@@ -188,9 +188,15 @@ export const proofReadingResponse = z.object({
 
 export const payResponse = z.object({
   directPaymentId: z.string(),
-  /* `partial` included: the inline attempt can finish the validation, and
-     a short transfer's verdict travels back on the POST itself — the
-     status endpoint is not the only door it comes through (US-D10 D6). */
+  /* The terminal values are kept for compatibility and are **no longer
+     produced inline** (two-eyes-receipt D4): the answer does not wait
+     for the provider any more, so what a payer gets here is
+     `validating`, or `queued_for_credit` while the business is paused.
+     The outcome arrives on the first poll of the status endpoint, which
+     the page was already doing. They stay in the enum because an
+     integrator's client may still switch on them, and because a caller
+     without an execution context (a test calling the app directly)
+     still finishes the attempt inline and can see one. */
   status: z.enum(["validating", "confirmed", "partial", "invalid", "unapplied", "queued_for_credit"]),
   error: publicPaymentError.nullable(),
 });

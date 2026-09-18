@@ -299,6 +299,46 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(paid[0]).not.toHaveProperty("transfer");
   });
 
+  it("two-eyes-receipt US4: Verificando arrives on the POST's answer, and the outcome on a poll", { timeout: 15000 }, async () => {
+    /* D4: the pay request answers `validating` at once — the provider's
+       6–10 seconds happen after the answer now. The page needed no
+       change for it: `onSuccess` already stored a `validating` payment
+       and the poll already ran, which is exactly why the handler could
+       stop waiting. This is the scenario that says so. */
+    let polls = 0;
+    server.use(
+      handlers.link(() => ok(debtLink)),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-1" }))),
+      handlers.read(() => ok(readOk())),
+      handlers.pay(() =>
+        ok(payResponse.parse({ directPaymentId: "dp-1", status: "validating", error: null }), 201),
+      ),
+      handlers.status(() => {
+        polls += 1;
+        return ok(
+          directPaymentStatusResponse.parse(
+            polls < 2
+              ? { status: "validating", validationAttempts: 1, error: null }
+              : {
+                  status: "confirmed",
+                  actionOutcome: "done",
+                  folio: "DV-SPEI09",
+                  validationAttempts: 1,
+                  error: null,
+                },
+          ),
+        );
+      }),
+    );
+    await uploadReceipt();
+
+    /* The badge order is the assertion: the payer sees the wait first,
+       and the outcome arrives without them doing anything */
+    expect(await screen.findByText("Verificando pago")).toBeInTheDocument();
+    expect(await screen.findByText("Pago confirmado", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(polls).toBeGreaterThan(1);
+  });
+
   it("scenario 44: the payer overrides what the machines read, and the override is what travels", { timeout: 15000 }, async () => {
     /* two-eyes-receipt D13: the correction form is no longer reached by
        a hole in the reading — a hole goes to the provider now (FR-005).

@@ -49,10 +49,15 @@ async function confirmAt(token: string, trackingKey: string, when: Date, amountC
   mockApiCep({ cep: { amountCents, trackingKey } });
   const { ctx, settled } = collectingCtx();
   const paid = await payerPost(token, TRANSFER(trackingKey, amountCents), testEnv, ctx);
-  await settled();
   expect(paid.body, JSON.stringify(paid.body)).toMatchObject({ success: true });
-  expect(["confirmed", "partial"]).toContain(paid.body.data!.status);
+  /* two-eyes-receipt D4: the answer does not wait for the provider any
+     more — it is `validating` while the attempt runs past it under
+     `waitUntil`. The verdict is on the row once that work has settled. */
+  expect(paid.body.data!.status).toBe("validating");
+  await settled();
   const id = String(paid.body.data!.directPaymentId);
+  const [row] = await db().select().from(payments).where(eq(payments.id, id));
+  expect(["confirmed", "partial"]).toContain(row.status);
   await db().update(payments).set({ confirmedAt: when }).where(eq(payments.id, id));
   return id;
 }

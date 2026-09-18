@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
-import { env, fetchMock } from "cloudflare:test";
+import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { payments, paymentLinks, proofRejections } from "../src/db/schema";
@@ -3247,5 +3247,105 @@ describe("D7 amended: the learned retryAfter governs the middle", () => {
     const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
     expect(row.status).toBe("validating");
     expect(row.nextValidationAt!.getTime()).toBe(suggested.getTime());
+  });
+});
+
+/* two-eyes-receipt US4 — the answer never waits on the paid call.
+
+   The payer used to hold a spinner for the provider's 6–10 seconds, and
+   up to its 25-second deadline, before the page could say anything at
+   all — for an answer the page then polls for anyway. The attempt still
+   runs first; it simply runs past the response now (D4).
+
+   These exercise a *real* execution context from `cloudflare:test`, not
+   a mocked handler: `waitUntil` is the mechanism, so a test that stubbed
+   it would prove nothing (constitution IV). */
+describe("two-eyes-receipt US4: the answer never waits", () => {
+  it("scenario 1: the POST answers `validating` before the provider has said anything", async () => {
+    await seedLinkedBusiness();
+    /* pay pre-check + validation debt re-check + reconnection verify */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockReconnection("Activo");
+
+    mockApiCep();
+
+    const ctx = createExecutionContext();
+    const db = drizzle(env.DB);
+    const res = await (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/pay",
+      post(TRANSFER),
+      testEnv,
+      ctx,
+    );
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+    /* The whole point: an answer in the time of a D1 insert (SC-007).
+       The provider *did* answer `valid` here — what this proves is that
+       the response did not carry it, because the attempt had not been
+       awaited when the response was built. */
+    expect(data.status).toBe("validating");
+
+    await waitOnExecutionContext(ctx);
+    const [row] = await db.select().from(payments);
+    expect(row.status).toBe("confirmed");
+  });
+
+  it("scenario 2: a caller with no execution context still finishes the attempt inline", async () => {
+    await seedLinkedBusiness();
+    /* pay pre-check + validation debt re-check + reconnection verify */
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockReconnection("Activo");
+    mockApiCep();
+
+    /* `executionCtx` throws outside a Worker request (Hono), so nothing
+       is ever dropped: the handler awaits and answers with the verdict.
+       Every other scenario in this suite rides this path, which is why
+       they still read a terminal status off the POST. */
+    const res = await payTransfer();
+    expect((await res.json()).data.status).toBe("confirmed");
+  });
+
+  it("scenario 3: an attempt that dies past the response leaves the payment due at its own slot (R5)", async () => {
+    await seedLinkedBusiness();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    /* The provider answers nothing at all — the deferred attempt fails
+       after the payer already has their answer */
+    apicep()
+      .intercept({ method: "POST", path: "/validate-transfer" })
+      .replyWithError(new Error("the isolate went away"));
+
+    const ctx = createExecutionContext();
+    const res = await (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/pay",
+      post(TRANSFER),
+      testEnv,
+      ctx,
+    );
+    expect((await res.json()).data.status).toBe("validating");
+    await waitOnExecutionContext(ctx);
+
+    const db = drizzle(env.DB);
+    let [row] = await db.select().from(payments);
+    expect(row.status).toBe("validating");
+    /* The counter was written BEFORE the call (the 2026-08-18 rule), so
+       the retry is this payment's own attempt and the replay carve-out
+       holds (FR-021) — and the slot is the ordinary +2 min. */
+    expect(row.validationAttempts).toBe(1);
+    expect(row.nextValidationAt!.getTime()).toBeGreaterThan(Date.now());
+
+    /* And the sweep picks it up as a retry, exactly as it would an
+       attempt that never started: the validation's debt re-check, then
+       the reconnection's own verify of the customer */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    mockApiCep();
+    await sweepDirectPayments(testEnv, new Date(row.nextValidationAt!.getTime() + 1000));
+    [row] = await db.select().from(payments);
+    expect(row.status).toBe("confirmed");
+    expect(row.validationAttempts).toBe(2);
   });
 });

@@ -3,7 +3,7 @@ import { fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { paymentLinks, payments } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
-import { issueCredential } from "../src/api-clients/store";
+import { issueCredential, revokeCredential } from "../src/api-clients/store";
 import { seedBusiness } from "./helpers";
 import {
   db,
@@ -13,6 +13,7 @@ import {
   payerGet,
   payerPost,
   seedApiBusiness,
+  SPEI,
   testEnv,
   TRANSFER,
   v1,
@@ -332,13 +333,47 @@ describe("scenario 8 / FR-005: a bad credential reveals nothing", () => {
   it("junk, unknown and revoked keys get the same empty 401", async () => {
     const { business } = await seedApiBusiness();
     const { credential, plaintext } = await issueCredential(db(), business.id, { name: "old" });
-    const { revokeCredential } = await import("../src/api-clients/store");
     await revokeCredential(db(), business.id, credential.id, new Date());
     for (const bad of ["junk", "dk_0123456789abcdef0123456789abcdef", plaintext]) {
       const res = await v1(bad, "POST", "/payment-links", { customerRef: "CLI-1", askCents: 100 });
       expect(res.status).toBe(401);
       expect(res.body).toEqual({ success: false, error: { code: "AUTHENTICATION_ERROR", retryable: false } });
     }
+  });
+
+  /* The edge case's other half. Revoking shuts the caller's door, never
+     the payer's: the business asked for that money and the link is
+     already in a customer's hands, so a dead page would lose a transfer
+     that is on its way. It holds structurally — `payment_links` carries
+     no credential reference and the payer's routes are public, the token
+     IS the credential (routes/direct-payments/index.ts) — and this test
+     is what keeps it holding, because a later join from the payer's door
+     to credential state would otherwise pass every gate. */
+  it("revoking shuts the caller's door and leaves the payer's open (spec Edge Cases)", async () => {
+    const { business, key, credential } = await seedApiBusiness({ serviceFeeCents: FEE });
+    const link = (
+      await v1(key, "POST", "/payment-links", { customerRef: "CLI-4471", askCents: 49900, label: "Ana Ruiz" })
+    ).body.data!;
+    const token = String(link.url).split("/p/")[1];
+
+    expect(await revokeCredential(db(), business.id, credential.id, new Date())).toBe(true);
+
+    /* the caller is out, immediately (FR-004) */
+    const after = await v1(key, "GET", `/payment-links/${link.id}`);
+    expect(after.status).toBe(401);
+    expect(after.body).toEqual({ success: false, error: { code: "AUTHENTICATION_ERROR", retryable: false } });
+
+    /* the payer is not: same ask, same CLABE, same reference */
+    const page = await payerGet(token);
+    expect(page.status).toBe(200);
+    expect(page.body.data).toMatchObject({
+      status: "debt",
+      invoiceCents: 49900,
+      totalCents: 49900 + FEE,
+      speiClabe: SPEI.speiClabe,
+      speiBank: SPEI.speiBank,
+      reference: "CLI-4471",
+    });
   });
 });
 

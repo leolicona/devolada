@@ -6,7 +6,10 @@ import { businessActor, handlers, ok, server } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/legacy/platform/prepaid-credit.spec.md UI (US-B04, US-B05) and
-   docs/legacy/platform/operator-panel.spec.md scenario 9 (US-L02). */
+   docs/legacy/platform/operator-panel.spec.md scenario 9 (US-L02).
+
+   Also searchable-picker US3: the top-up's sending bank is the second of the
+   three screens that name a bank, and it must behave as the first one does. */
 
 const feed = { payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } };
 const settings = settingsResponse.parse({
@@ -166,8 +169,13 @@ describe("US-B05: Saldo y recargas — the owner's page", () => {
     expect(screen.getByRole("button", { name: /copiar clabe/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Clave de rastreo"), "TOPUP0001ABC");
-    await userEvent.click(screen.getByRole("combobox", { name: "Banco desde el que transferiste" }));
-    await userEvent.click(await screen.findByRole("option", { name: "BBVA MEXICO" }));
+    /* searchable-picker US3 (AC1): the same field as Configuración, driven the
+       same way — typing narrows it and the same keys finish it. Clicking a row
+       would prove the control is present; typing proves it is the same one. */
+    const bank = screen.getByRole("combobox", { name: "Banco desde el que transferiste" });
+    await userEvent.type(bank, "bbva");
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(bank).toHaveValue("BBVA MEXICO");
     await userEvent.type(screen.getByLabelText("Fecha"), "2026-09-01");
     await userEvent.type(screen.getByLabelText("Monto transferido"), "250.00");
     await userEvent.click(screen.getByRole("button", { name: /validar recarga/i }));

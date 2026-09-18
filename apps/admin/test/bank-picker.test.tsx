@@ -6,16 +6,20 @@ import { businessActor, handlers, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
-/* bug: bank-picker-unreachable.
+/* searchable-picker US1, US2.
 
-   97 names in a popup that had no height of its own: everything below the
-   fold was unreachable, and Radix's scroll lock meant the page behind it
-   could not move either. The list is searched now, from the field itself.
+   97 names are searched, not scanned, and the field is the search box. What
+   this layer can answer is which names are offered for what was typed, and
+   what the field commits. Real contrast, target size and the height the popup
+   gets are layout, so they belong to the browser layer (constitution IV) —
+   happy-dom would be guessing.
 
-   What this layer can answer is which names are offered for what was typed,
-   and what the field commits. The height the popup actually gets is layout,
-   so it belongs to the browser layer (constitution IV) — happy-dom would be
-   guessing. */
+   US3 — the same field on all three screens — is proved where the other two
+   screens are tested, in credit.test.tsx and operator-bank.test.tsx.
+
+   The dropdown that could not be scrolled, which is where this control came
+   from, is a separate story with its own guard:
+   `bug: bank-picker-unreachable`, proved in tests/e2e/dropdown.spec.ts. */
 
 const settings = (over: Record<string, unknown> = {}) =>
   settingsResponse.parse({
@@ -63,7 +67,7 @@ async function openPicker(bank: string | null = null) {
 
 const offered = () => screen.getAllByRole("option").map((o) => o.textContent);
 
-describe("bug: bank-picker-unreachable — every bank is reachable from the field", () => {
+describe("searchable-picker US1: the ISP finds their bank by typing", () => {
   it("offers the whole vocabulary when nothing has been typed", async () => {
     await openPicker();
     expect(offered()).toHaveLength(BANKS.length);
@@ -103,7 +107,7 @@ describe("bug: bank-picker-unreachable — every bank is reachable from the fiel
   });
 });
 
-describe("bug: bank-picker-unreachable — only a name from the vocabulary is ever committed", () => {
+describe("searchable-picker US2: the field never holds a name nobody chose", () => {
   it("saves the name that was chosen with the keyboard", async () => {
     const patches: unknown[] = [];
     server.use(
@@ -144,7 +148,7 @@ describe("bug: bank-picker-unreachable — only a name from the vocabulary is ev
   });
 });
 
-describe("bug: bank-picker-unreachable — the open picker is announced", () => {
+describe("searchable-picker US1: the open picker is announced", () => {
   it("passes axe with the list open, and names the highlighted option", async () => {
     const field = await openPicker();
     await userEvent.type(field, "scotia");

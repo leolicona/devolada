@@ -75,8 +75,9 @@ function SettingField({ setting }: { setting: Setting }) {
       <div>
         <Label htmlFor={id}>{KEY_LABELS[setting.key] ?? setting.key}</Label>
         {setting.type === "bank" ? (
-          /* bug: bank-picker-unreachable — the same searchable picker the
-             business screens use. */
+          /* searchable-picker FR-009 — the same searchable picker the
+             business screens use. The short enum pickers below stay a
+             Select: a list you can read is not one you search. */
           <Combobox
             id={id}
             label={KEY_LABELS[setting.key] ?? setting.key}

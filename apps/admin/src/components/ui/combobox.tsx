@@ -4,28 +4,33 @@ import { Input } from "@devolada/ui";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-/* A picker whose field is its own search box (bug: bank-picker-unreachable).
+/* A picker whose field is its own search box (searchable-picker D1).
 
    The catalogue's Select is right for a list you can read: three timezones,
    four roles. The bank vocabulary is 97 names, and a list that long is not
    read — it is searched. Typing filters it here, in the same input, and the
-   arrows and Enter finish the job.
+   arrows and Enter finish the job. Measured 2026-09-18 against the ranking in
+   D2: every bank reaches the visible rows within 4 characters, 76 of the 97
+   within one.
 
-   It commits ONLY a name from the vocabulary it was given. Blur, Escape and
-   Tab all put the committed name back in the field, because a half-typed
-   fragment left sitting there reads exactly like a choice that was made. For
-   the bank that is the difference between a payment and a silent false
+   It commits ONLY a name from the vocabulary it was given, and every way out
+   puts the committed name back (searchable-picker D3). A half-typed fragment
+   left sitting in the field reads exactly like a choice that was made, and
+   for the bank that is the difference between a payment and a silent false
    rejection: the name travels as `beneficiary.bank` on every validation the
    business ever runs, and apiCEP answers `invalid` — never an error — for one
    it does not know (direct-payment D16, measured 2026-08-19 in banks.ts).
 
-   ARIA 1.2 combobox with a listbox popup: the role is on the input, the
-   popup is owned by `aria-controls` only while it is open, and the
-   highlighted option is named by `aria-activedescendant` — `axe` runs on
-   every admin screen and this is the shape it checks. */
+   ARIA 1.2 combobox with a listbox popup (searchable-picker D6): the role is
+   on the input, the popup is owned by `aria-controls` only while it is open,
+   and the highlighted option is named by `aria-activedescendant` — `axe` runs
+   on every admin screen and this is the shape it checks. */
 
-/* Accent- and case-insensitive: "banorte" finds BANORTE and "mexico" finds
-   BBVA MEXICO, on a keyboard with or without dead keys. */
+/* Accent- and case-insensitive (searchable-picker D2): "banorte" finds
+   BANORTE and "méxico" finds BBVA MEXICO, on a keyboard with or without dead
+   keys. Fuzzy matching was rejected with it — tolerating a typo means
+   offering a name nobody typed, in the one field where a near miss is what
+   fails payments. */
 function normalize(value: string): string {
   return value
     .normalize("NFD")
@@ -73,8 +78,10 @@ export function Combobox({
      did not choose itself. */
   useEffect(() => setQuery(value), [value]);
 
-  /* Sitting on the committed choice is not a search: the whole list stays
-     open so the next name is one arrow away. */
+  /* Sitting on the committed choice is not a search (searchable-picker D4):
+     the whole list stays open so the next name is one arrow away. Filtering
+     down to the name already chosen would open a one-item list and make the
+     next bank feel unreachable — the very feeling this control removes. */
   const matches = useMemo(() => {
     const q = normalize(query.trim());
     if (!q || query === value) return [...options];
@@ -85,8 +92,9 @@ export function Combobox({
       if (candidate.startsWith(q)) starts.push(option);
       else if (candidate.includes(q)) contains.push(option);
     }
-    /* What you typed the start of comes first — "ban" should open on
-       BANAMEX, not on the first name that happens to contain it. */
+    /* What you typed the start of comes first (searchable-picker D2) —
+       "ban" should open on BANAMEX, not on the first name that happens to
+       contain it. */
     return [...starts, ...contains];
   }, [options, query, value]);
 
@@ -107,7 +115,10 @@ export function Combobox({
     inputRef.current?.focus();
   }
 
-  /* Closing always restores the committed name — see the note at the top. */
+  /* Closing always restores the committed name (searchable-picker D3).
+     Committing the highlighted name on the way out is the common alternative
+     and is wrong here: it turns "I changed my mind and tabbed away" into a
+     saved bank nobody chose. */
   function close() {
     setOpen(false);
     setQuery(value);
@@ -148,8 +159,9 @@ export function Combobox({
             }}
             onPointerDown={() => {
               if (disabled) return;
-              /* Opening on a click, never on focus: tabbing through a form
-                 must not leave a list hanging open behind the next field. */
+              /* Opening on a click, never on focus (searchable-picker D9):
+                 tabbing through a form must not leave a list hanging open
+                 behind the next field. */
               openWith(Math.max(0, matches.indexOf(value)));
               inputRef.current?.select();
             }}
@@ -187,12 +199,19 @@ export function Combobox({
       <PopoverContent
         align="start"
         sideOffset={4}
-        /* Radix gives its content `role="dialog"`. A combobox's popup is not
-           a dialog — it is the listbox below, which `aria-controls` already
-           names; an unnamed dialog wrapping it is what axe reports and what
-           a screen reader would announce instead of the options. */
+        /* searchable-picker D6: Radix gives its content `role="dialog"`. A
+           combobox's popup is not a dialog — it is the listbox below, which
+           `aria-controls` already names; an unnamed dialog wrapping it is
+           what axe reports and what a screen reader would announce instead
+           of the options. */
         role="presentation"
-        className="max-h-72 w-[var(--radix-popover-trigger-width)] overflow-y-auto p-1"
+        /* searchable-picker D5: bounded by the space the popup actually has,
+           never by a number alone. 18rem is the reading size — about eight
+           rows, which is what SC-001's "within 4 characters" was measured
+           against — and the available height is what keeps it inside a short
+           window. A fixed cap alone is the mistake that made the panel's
+           other dropdown unreachable (bug: bank-picker-unreachable). */
+        className="max-h-[min(18rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] overflow-y-auto p-1"
         /* The input keeps the keyboard the whole time: it is the control. */
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
@@ -216,7 +235,7 @@ export function Combobox({
                   index === active && "bg-well",
                 )}
                 /* Never let the field lose focus to the list: the blur that
-                   would follow closes it before the click can land. */
+                   would follow closes it (D3) before the click can land. */
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => commit(option)}
                 onMouseEnter={() => setActive(index)}

@@ -2,15 +2,15 @@ import { expect, test } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { stubAdminApi } from "./stubs";
 
-/* bug: bank-picker-unreachable.
+/* searchable-picker US1.
 
-   The defect was geometry, so only a browser can say it is gone: the popup
-   had no height of its own and grew past the window, and Radix's scroll lock
-   meant the page behind it could not move either — every name below the fold
-   was unreachable. happy-dom reports no layout, so the component layer can
-   only prove which names are offered (constitution IV). This proves the popup
-   fits in the window, that it scrolls, and that the far end of the alphabet is
-   reachable both ways: by scrolling and by typing. */
+   happy-dom applies no stylesheet and reports no layout, so the picker's
+   geometry belongs here (constitution IV): its list opens inside the window,
+   it scrolls, and the far end of the alphabet is reachable both ways — by
+   scrolling, and in three keystrokes by typing (SC-001, SC-002).
+
+   The panel's *other* dropdown, the one that could not be scrolled at all, has
+   its own guard in dropdown.spec.ts (`bug: bank-picker-unreachable`). */
 
 async function openPicker(page: import("@playwright/test").Page) {
   await stubAdminApi(page);
@@ -59,4 +59,43 @@ test("typing reaches a bank without scrolling at all", async ({ page }) => {
   await options.first().click();
   await expect(field).toHaveValue("SCOTIABANK");
   await expect(page.getByRole("listbox")).toHaveCount(0);
+});
+
+test("the list is bounded by the space it has, not by a number alone", async ({ page }) => {
+  /* searchable-picker D5. `min(18rem, available)` is void as a whole if Radix
+     never publishes the available height, and a voided max-height is exactly
+     the unbounded popup this control was built away from. So both halves are
+     read back from the browser rather than assumed: the variable has a real
+     length, and the bound is the smaller of the two. */
+  /* 360px tall is where the two halves disagree: measured 2026-09-18, Radix
+     offers 155.8px of space there against the 18rem reading size. A window
+     taller than that leaves both halves agreeing, and the test would pass
+     against a fixed cap too — proving nothing. */
+  await page.setViewportSize({ width: 1280, height: 360 });
+  await openPicker(page);
+  const popup = popupOf(page);
+  await expect(popup).toBeVisible();
+
+  const bound = await popup.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return {
+      maxHeight: style.maxHeight,
+      available: style.getPropertyValue("--radix-popover-content-available-height").trim(),
+    };
+  });
+
+  /* The variable is a real length — not empty, which would void the rule */
+  expect(bound.available).toMatch(/^[\d.]+px$/);
+  expect(bound.maxHeight).not.toBe("none");
+
+  /* …and the bound is the smaller of the reading size and that space */
+  const reading = 18 * 16;
+  expect(parseFloat(bound.available)).toBeLessThan(reading);
+  expect(parseFloat(bound.maxHeight)).toBeCloseTo(parseFloat(bound.available), 0);
+  /* The space won, not the number — this is what a fixed cap would fail */
+  expect(parseFloat(bound.maxHeight)).toBeLessThan(reading);
+
+  const box = (await popup.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(360 + 1);
 });

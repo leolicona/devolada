@@ -151,8 +151,10 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
               them, and silently: apiCEP answers `invalid`, never an error.
               Typed free-hand this said "STP, BBVA, Banorte…", and two of
               those three are not names it accepts. */}
-          {/* bug: bank-picker-unreachable — a combobox, not a list: 97 names
-              are searched, not scanned, and the field is the search box. */}
+          {/* searchable-picker D1 — a search field, not a list: 97 names are
+              searched, not scanned, and the field is the search box. The
+              prefix above still seeds it, and a hand pick wins from then on
+              (FR-008). */}
           <Combobox
             id="spei-bank"
             label="Banco"

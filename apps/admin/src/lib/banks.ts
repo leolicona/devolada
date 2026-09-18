@@ -1,7 +1,7 @@
 import { BANKS } from "@devolada/api/settings-schema";
 
 /* The vocabulary in the order a person reads it, defined once for the three
-   admin screens that offer it (bug: bank-picker-unreachable).
+   admin screens that offer it (searchable-picker D7, FR-009).
 
    `BANKS` keeps the provider's own order and is generated, never transcribed
    (constitution III, scripts/gen-banks.mjs). This sorts a copy — it adds no

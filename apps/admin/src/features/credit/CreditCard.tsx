@@ -116,8 +116,10 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
           </div>
           <div>
             <Label htmlFor="topup-bank">Banco desde el que transferiste</Label>
-            {/* bug: bank-picker-unreachable — same control as the ISP's own
-                bank in Configuración; one picker, one behaviour. */}
+            {/* searchable-picker D1, FR-009 — the same control as the ISP's
+                own bank in Configuración; one picker, one behaviour. It sits
+                in a form, so Enter with the list closed still submits
+                (contracts/bank-field.md). */}
             <Combobox
               id="topup-bank"
               label="Banco desde el que transferiste"

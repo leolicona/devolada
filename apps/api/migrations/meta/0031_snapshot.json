@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c9630592-c397-4175-90a1-301160285291",
-  "prevId": "de3f684e-9e7f-49fd-a0cd-8386da46d88f",
+  "id": "61b8c92b-125f-4fac-b4b9-a935538ae682",
+  "prevId": "c9630592-c397-4175-90a1-301160285291",
   "tables": {
     "api_credentials": {
       "name": "api_credentials",
@@ -1022,6 +1022,13 @@
         },
         "api_key": {
           "name": "api_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "installation": {
+          "name": "installation",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

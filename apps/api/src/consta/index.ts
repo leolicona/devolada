@@ -24,9 +24,24 @@
 
    consta-api-merge D10: the HTTP client's 30 s deadline left with the
    client. One process, one listener — the engine's 25 s (validation spec
-   D16) is the deadline a provider call carries. */
+   D16) is the deadline a provider call carries.
+
+   two-eyes-receipt D3/D11: the receipt door turned around. It used to
+   read the file here, gate it, and spend the first credit on the
+   provider's *transfer* door with our reading — so the provider's own
+   eyes arrived only on a second credit, a minute later. Now the first
+   credit sends the file to the provider's **image door** with our
+   reading kept beside it: the provider's eyes first, ours beside them.
+   When Banxico has nothing yet (`not_found`), the two readings are
+   compared on the spot (`extraction/compare.ts`), the bank's learned
+   clave shape breaks a tie, and the verdict carries what was accepted —
+   so the *lifecycle* only has to store an answer, never compute one.
+   The comparison lives here and not in the lifecycle because every
+   ingredient is here (the gate, the shape rules, both readings), and
+   because that gives top-ups the same flow for nothing (D18). */
 
 import type { DrizzleD1Database } from "drizzle-orm/d1";
+import type { Bank } from "../direct-payments/banks";
 import type { Bindings } from "../env";
 import { validate } from "./validate";
 import { extract } from "./extract";
@@ -68,7 +83,11 @@ export type ConstaRequest = (
       beneficiary: ConstaBeneficiary;
       /* proof-extraction D11: skip Consta's reader — the provider's OCR
          reads the image itself. The reading-check cross (US-D14) sets
-         this: the same model checking itself is no second opinion. */
+         this: the same model checking itself is no second opinion.
+         two-eyes-receipt D16: the product sets it on one path only now —
+         the minute-two cross of a payment born before the cut-over. A
+         request without it takes the provider-first flow, which reads
+         here *and* asks the image door, so it needs no flag. */
       providerOcr?: true;
     }
 ) & {
@@ -150,6 +169,48 @@ export type ConstaVerdict = {
     senderBank: string | null;
     referenceNumber: string | null;
   } | null;
+  /* ---- two-eyes-receipt: what the engine read, and what the two
+     readings settled between them. Present exactly when a provider-first
+     receipt call came back `not_found`, or the provider itself read
+     nothing (D12); absent on `valid`, `pending`, `contradicted`, on the
+     transfer door, and on a legacy `providerOcr` cross, whose caller
+     classifies for itself (D16). ---- */
+  /* D3: our reading of the same file, gated — the other half of the
+     pair the classification compares. A field is null unless the gate
+     said `ok` for it, so a malformed clave of ours never argues with
+     the provider (D5). Null when nothing here could read the file. */
+  ourReading?: {
+    trackingKey: string | null;
+    senderBank: Bank | null;
+    amountCents: number | null;
+    date: string | null;
+    legibility: "full" | "partial" | "none" | null;
+  } | null;
+  /* D5: the three words, taken at minute zero. `agreed` — both read the
+     same clave and the same cents, which is evidence (D6) and stops the
+     spending; `disputed` — they differ; `blind` — one side read nothing. */
+  readingCheck?: "agreed" | "disputed" | "blind";
+  /* D8: the fields to ask the payer for, and only those. Set when
+     nothing could break a tie — and, whatever the check said, carrying
+     `"date"` when the accepted data has no date on either side (D20). */
+  disputedFields?: ("trackingKey" | "amount" | "date")[];
+  /* D5: which side read nothing, on `blind` only */
+  blindSide?: "provider" | "reader" | "both";
+  /* D6/D7: the data later attempts carry through the provider's
+     transfer door. Null when the payer has to be asked. A null `date`
+     here is not a hole to paper over — `disputedFields` carries
+     `"date"` and the transfer door waits for the payer's answer (D20):
+     it is never called with a date nobody read. */
+  accepted?: {
+    trackingKey: string;
+    senderBank: Bank;
+    amountCents: number;
+    date: string | null;
+  } | null;
+  /* D7: which reading the accepted data came from — `agreed` when they
+     said the same, `reader`/`provider` when the shape rules broke the
+     tie for that side */
+  acceptedFrom?: "agreed" | "reader" | "provider";
   downloads?: { cepXml?: string; cepPdf?: string };
 };
 
@@ -168,6 +229,11 @@ export type ConstaGate = {
 
 export type ConstaReading = {
   extractionId: string;
+  /* two-eyes-receipt D1: a PDF with text is `reader` now — it is turned
+     into text at the edge and read by the same model. `provider-ocr`
+     means what it always meant on the wire, "nothing here read this
+     file", but the cases changed: no binding, a PDF the conversion
+     yielded nothing for, or an answer that could not be parsed. */
   source: "reader" | "provider-ocr";
   isReceipt: boolean | null;
   trackingKey: string | null;
@@ -176,6 +242,13 @@ export type ConstaReading = {
   date: string | null;
   receiptStatus: string | null;
   gate: ConstaGate;
+  /* two-eyes-receipt D2 (R7): the reader's own verdict on the picture.
+     `none` is the only one that refuses before a credit is spent — and
+     the page refuses on it, this door only reports (FR-004). Null for a
+     text reading (a PDF has no photograph to judge, D15) and when the
+     model omitted the field, which is read as `full`: the bias is to let
+     files through (FR-005). */
+  legibility: "full" | "partial" | "none" | null;
   /* proof-extraction D16: to confirm, never to send */
   suggestedBank?: string;
 };

@@ -67,7 +67,9 @@ describe("scenarios 1, 2, 10: the accepted proof, then the verdict — signed, i
     const { ctx, settled } = collectingCtx();
     const paid = await payerPost(token, TRANSFER("TRACK0004471", ASK + FEE), testEnv, ctx);
     expect(paid.status).toBe(201);
-    expect(paid.body.data).toMatchObject({ status: "confirmed" });
+    /* two-eyes-receipt D4: the payer's answer no longer waits for the
+       provider — the paid attempt and the deliveries both run past it */
+    expect(paid.body.data).toMatchObject({ status: "validating" });
     /* FR-017: the payer had their answer; the deliveries ran past it */
     await settled();
     expect(captured).toHaveLength(2);
@@ -238,7 +240,9 @@ describe("scenario 6: every other verdict is announced with the row's own word (
     mockApiCep({ status: "invalid", cepStatus: "DEVUELTO" });
     const { ctx, settled } = collectingCtx();
     const res = await payerPost(token, TRANSFER("TRACK000DEVUE", ASK + FEE), testEnv, ctx);
-    expect(res.body.data).toMatchObject({ status: "invalid" });
+    /* two-eyes-receipt D4: the refusal reaches the payer on their first
+       poll and the caller on the webhook — never on the POST */
+    expect(res.body.data).toMatchObject({ status: "validating" });
     await settled();
     const verdict = byType(captured)["payment.invalid"];
     expect(verdict.event.data).toMatchObject({ receivedCents: null, match: null, folio: null, claimedCents: ASK + FEE });
@@ -316,8 +320,10 @@ describe("scenario 8: no address registered", () => {
     mockApiCep({ cep: { amountCents: ASK + FEE } });
     const { ctx, settled } = collectingCtx();
     const paid = await payerPost(String(link.url).split("/p/")[1], TRANSFER("TRACK000NOHOOK", ASK + FEE), testEnv, ctx);
+    /* two-eyes-receipt D4: `validating` on the answer, the verdict on
+       the row once the deferred attempt has settled */
+    expect(paid.body.data).toMatchObject({ status: "validating" });
     await settled();
-    expect(paid.body.data).toMatchObject({ status: "confirmed" });
     expect(await deliveriesOf(business.id)).toHaveLength(0);
     const [row] = await db().select().from(payments).where(eq(payments.businessId, business.id));
     expect(row).toMatchObject({ status: "confirmed", actionOutcome: null });
@@ -432,7 +438,9 @@ describe("scenarios 4 and 7 (T039): a destination that never answers, and a key 
     mockApiCep({ cep: { amountCents: ASK + FEE } });
     const { ctx, settled } = collectingCtx();
     const paid = await payerPost(token, TRANSFER("TRACK000SLOW", ASK + FEE), slow, ctx);
-    expect(paid.body.data).toMatchObject({ status: "confirmed" });
+    /* two-eyes-receipt D4: `validating` on the answer; the verdict and
+       its delivery both ride the deferred work */
+    expect(paid.body.data).toMatchObject({ status: "validating" });
     await settled();
     const rows = await deliveriesOf(business.id);
     expect(rows.map((r) => [r.status, r.attempts, r.lastError, r.responseStatus])).toEqual([
@@ -510,7 +518,9 @@ describe("scenarios 4 and 7 (T039): a destination that never answers, and a key 
     mockApiCep({ cep: { amountCents: ASK + FEE } });
     const { ctx, settled } = collectingCtx();
     const paid = await payerPost(token, TRANSFER("TRACK000UNSIGNED", ASK + FEE), unsigned, ctx);
-    expect(paid.body.data).toMatchObject({ status: "confirmed" });
+    /* two-eyes-receipt D4: `validating` on the answer; the verdict and
+       its delivery both ride the deferred work */
+    expect(paid.body.data).toMatchObject({ status: "validating" });
     await settled();
     const rows = await deliveriesOf(business.id);
     expect(rows.map((r) => [r.status, r.attempts, r.lastError])).toEqual([

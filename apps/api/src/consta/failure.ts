@@ -22,7 +22,14 @@ export type ConstaErrorCode =
   | "PROVIDER_AUTH_FAILED"
   | "REQUEST_REJECTED"
   | "RECEIPT_UNREADABLE"
-  /* proof-extraction D4: the reading did not survive the gate */
+  /* proof-extraction D4: the reading did not survive the gate.
+     **No door throws this since two-eyes-receipt D3.** A hole in our
+     reading used to refuse before any credit and send the payer to a
+     form; now it rides along to the provider, whose own reading may
+     fill it for free (FR-005). The code stays declared because callers
+     still switch on it — removing it is a one-line follow-up once none
+     does, and deleting it here first would only make those switches
+     fail to compile for no gain. */
   | "RECEIPT_INCOMPLETE"
   | "READER_UNAVAILABLE"
   | "READER_UNREADABLE"

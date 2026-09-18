@@ -139,18 +139,32 @@ export const publicPaymentError = z.enum([
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)
 
-   The machine reads, the human confirms, the direct door validates. What
-   comes back is a *draft* of the form the payer is about to submit —
-   never a submission, and never anything that decides money. */
+   The machine reads, and the provider reads beside it on the paid call
+   (two-eyes-receipt D3). What comes back here is a *draft* — never a
+   submission, and never anything that decides money. Since D13 the payer
+   is not asked to confirm it as a matter of course: the page sends the
+   file and the two readings settle what they can between them. */
 export const readProofRequest = z.object({
   proofId: z.string().min(1),
 });
 
 export const proofReadingResponse = z.object({
-  /* "provider-ocr" means the file was a PDF and nothing was read here:
-     the payer keeps the receipt door instead of confirming a draft */
+  /* "provider-ocr" means nothing here could read the file — no AI
+     binding, a PDF whose text conversion yielded nothing, or a model
+     answer that would not parse. It used to mean "the file was a PDF",
+     which two-eyes-receipt D1 retired: a PDF is turned into text at the
+     edge and read by the same model, so it answers like a picture. The
+     payer keeps the receipt door instead of confirming a draft. */
   source: z.enum(["reader", "provider-ocr"]),
   isReceipt: z.boolean().nullable(),
+  /* two-eyes-receipt D2 (R7): how much of the picture the reader could
+     read. The page refuses on `none` — and only on `none`, beside
+     `isReceipt: false` — before any credit is spent (FR-004); `partial`
+     goes through with its hole (FR-005). Null on a text reading of a PDF
+     (no photograph to judge, D15) and when the model omitted the field,
+     both read as `full`: the bias is to let files through. This endpoint
+     reports it; the *page* is what refuses. */
+  legibility: z.enum(["full", "partial", "none"]).nullable(),
   /* Fields the payer may confirm, plus the amount — which they never
      confirm and never edit. **Correction, 2026-08-19**: the first version
      of this contract left the amount out, on the argument that it is
@@ -176,9 +190,15 @@ export const proofReadingResponse = z.object({
 
 export const payResponse = z.object({
   directPaymentId: z.string(),
-  /* `partial` included: the inline attempt can finish the validation, and
-     a short transfer's verdict travels back on the POST itself — the
-     status endpoint is not the only door it comes through (US-D10 D6). */
+  /* The terminal values are kept for compatibility and are **no longer
+     produced inline** (two-eyes-receipt D4): the answer does not wait
+     for the provider any more, so what a payer gets here is
+     `validating`, or `queued_for_credit` while the business is paused.
+     The outcome arrives on the first poll of the status endpoint, which
+     the page was already doing. They stay in the enum because an
+     integrator's client may still switch on them, and because a caller
+     without an execution context (a test calling the app directly)
+     still finishes the attempt inline and can see one. */
   status: z.enum(["validating", "confirmed", "partial", "invalid", "unapplied", "queued_for_credit"]),
   error: publicPaymentError.nullable(),
 });
@@ -221,12 +241,18 @@ export const directPaymentStatusResponse = z.object({
   /* claimed-amount D3: what the payment asked Banxico with, so the
      correction form pre-fills the amount that actually travelled */
   claimedAmountCents: z.number().int().nullable().optional(),
-  /* reading-check D3/D4: the minute-two classification. "agreed" lets
-     the page retire the clock; "disputed" opens the form now with the
-     disputed fields empty. A blind cross stays null on the wire — no
-     evidence is the same as no cross, and the page behaves as today. */
+  /* reading-check D3/D4: what the two readings said. "agreed" lets the
+     page retire the clock; "disputed" opens the form with the disputed
+     fields empty. A blind comparison stays null on the wire — no evidence
+     is the same as no comparison, and the page behaves as today.
+     two-eyes-receipt D5: it arrives on the *first* poll after the first
+     paid call now, instead of after the minute-two attempt. */
   readingCheck: z.enum(["agreed", "disputed"]).nullable().optional(),
-  disputedFields: z.array(z.enum(["trackingKey", "amount"])).optional(),
+  /* two-eyes-receipt D20: `"date"` joins them. The accepted data had no
+     date on either reading, so the payer is asked for that one field
+     while the agreement stands — the transfer door is never called with
+     a date nobody read. The page empties exactly these fields. */
+  disputedFields: z.array(z.enum(["trackingKey", "amount", "date"])).optional(),
   /* The receipt's own `Estatus`: decides whether the payer is asked to
      confirm or simply told their bank has not released it yet */
   receiptStatus: z.string().nullable().optional(),

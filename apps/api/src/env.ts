@@ -74,9 +74,18 @@ export type Bindings = {
      process (consta-api-merge D10). Exists so tests can make a mock hang
      cheaply. */
   APICEP_DEADLINE_MS?: string;
-  /* The receipt reader (proof-extraction D1, D5). Unset binding → the
-     image route degrades to the provider's OCR rather than failing: a
-     door that still works beats a door that 500s. */
+  /* The receipt reader (proof-extraction D1, D5), and since
+     two-eyes-receipt D1 the PDF-to-text conversion beside it: the same
+     binding's `toMarkdown` turns a PDF into text, which the same model
+     then reads, so a PDF gets the same draft, the same gate and the same
+     protections as a photograph.
+
+     Unset → the receipt still goes to the provider's image door, with no
+     reading of ours beside it (D3): the payer's page never blocks, and a
+     PDF is handed over unread. What is lost is the second pair of eyes —
+     a `not_found` classifies as `blind` on our side (FR-005), so the
+     payer is asked rather than the machines agreeing for free. A door
+     that still works beats a door that 500s (constitution VIII). */
   AI?: Ai;
   /* proof-extraction D5: the reader's model is config, not a literal, so
      replacing it is a deploy and not a release. Unset → the reader's

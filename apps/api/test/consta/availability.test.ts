@@ -143,15 +143,32 @@ describe("consta-api-merge US2: able, not on — the credential alone decides", 
     const verdict = await consta(bucketEnv, db(), { businessId: business.id }).validate(request);
     expect(verdict.status).toBe("pending");
     expect(verdict.source).toBe("provider-ocr");
-    /* and with the reader bound, the same file is read here (D2) */
-    expect((await db().select().from(extractions)).length).toBe(0);
+    /* two-eyes-receipt D19: a paid call always leaves a reading record,
+       even one that read nothing — a call with no row at all would be a
+       hole in the measurement (FR-017). It carries no hash, because
+       with no binding the bytes are never fetched (and so never
+       sniffed): an unrecognised file still reaches the provider on this
+       path, which is the degradation constitution VIII asks for. */
+    const blind = await db().select().from(extractions);
+    expect(blind).toHaveLength(1);
+    expect(blind[0].source).toBe("provider-ocr");
+    expect(blind[0].rawOutput).toBe("no-binding");
+    expect(blind[0].proofSha256).toBeNull();
     const readerEnv = { ...bucketEnv, AI: aiReturning({ esComprobante: true, claveDeRastreo: "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K", banco: "NUBANK", monto: 514, fecha: "2026-08-19", estatus: "Aceptada" }) } as Bindings;
     fetchMock
       .get(APICEP_ORIGIN)
       .intercept({ method: "POST", path: "/validate-transfer" })
       .reply(...json({ validationId: "prov-direct", status: "pending", validation: { cepPreviouslyValidated: false } }));
+    /* And with the reader bound, the same file is read here too (D2) —
+       beside the provider, not instead of it (two-eyes-receipt D3). The
+       credit went to the provider's image door either way, so `source`
+       stays `provider-ocr`; what changed is that the verdict now carries
+       a reading of ours, and the row records it. */
     const read = await consta(readerEnv, db(), { businessId: business.id }).validate(request);
-    expect(read.source).toBe("reader");
-    expect((await db().select().from(extractions)).length).toBe(1);
+    expect(read.source).toBe("provider-ocr");
+    expect(read.ourReading).not.toBeNull();
+    const rows = await db().select().from(extractions);
+    expect(rows).toHaveLength(2);
+    expect(rows.some((r) => r.source === "reader" && r.proofSha256 !== null)).toBe(true);
   });
 });

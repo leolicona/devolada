@@ -1,4 +1,4 @@
-import { beforeAll, afterEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -10,6 +10,7 @@ import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/pro
 import { historyVouches } from "../src/direct-payments/provisional";
 import type { Bindings } from "../src/env";
 import { app, fakeProofs, seedBusiness } from "./helpers";
+import { resetShapeRules } from "../src/consta/extraction";
 import { aiReturning, PNG, seedValidations } from "./consta/helpers";
 
 /* business-and-memberships D6: a payment that confirmed carries its folio
@@ -2160,6 +2161,338 @@ describe("US-D13: the amount the payer really sent", () => {
   });
 });
 
+/* two-eyes-receipt US1 — the classifier at minute zero.
+
+   The sibling of "US-D14: the classifier at minute two" below, for rows
+   born after the cut-over. Those rows are `proof_mode = 'receipt'` with a
+   `proof_key`: the page sends the file alone now (D13), so the first paid
+   call goes to the provider's image door with the engine's reading beside
+   it and the comparison happens at attempt 1 rather than attempt 2. What
+   the two settled on is written on the row, and the *next* attempt reads
+   its door out of those fields (D17). */
+describe("two-eyes-receipt US1: the classifier at minute zero", () => {
+  /* The shape rules are cached for a minute and the cache outlives a
+     test's isolated storage, so a scenario that must meet cold start
+     (no graduated rule — the common case, D7) has to start from one. */
+  beforeEach(() => resetShapeRules());
+
+  const CLAVE = "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K";
+  const READING = {
+    esComprobante: true,
+    claveDeRastreo: CLAVE,
+    banco: "NUBANK",
+    monto: 514.0,
+    fecha: "2026-08-19",
+    estatus: "Aceptada",
+  };
+  /* The engine reads the file itself, so the suite binds the reader the
+     way the engine suite does — it is the one thing a test stands in for
+     (constitution IV). */
+  const readerEnv = (reading: Record<string, unknown> = READING) =>
+    ({ ...testEnv, AI: aiReturning(reading) }) as typeof testEnv;
+
+  /* A row born the new way: a file, and nothing typed. */
+  async function seedReceipt(
+    over: Record<string, unknown> = {},
+    businessOver: Parameters<typeof seedLinkedBusiness>[0] = {},
+  ) {
+    const { business, link } = await seedLinkedBusiness(businessOver);
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const proofKey = `${link.id}/proof-1`;
+    await testEnv.PROOFS.put(proofKey, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "receipt",
+        proofKey,
+        claimedAmountCents: 51400,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        ...over,
+      })
+      .returning();
+    return { business, link, payment, now, db, proofKey };
+  }
+
+  const rowOf = async (db: ReturnType<typeof drizzle>, id: string) =>
+    (await db.select().from(payments).where(eq(payments.id, id)))[0];
+
+  const statusOf = async (id: string) => {
+    const res = await (await app()).request(`/direct-payments/${id}/status`, {}, testEnv);
+    return (await res.json()).data as Record<string, unknown>;
+  };
+
+  /* Ten confirmed claves of one length graduate a bank's shape rule
+     (proof-extraction D14), which is the only tiebreak the comparison
+     has when the two readings differ (D7). */
+  /* Ten claves that differ in one digit position: the derived pattern is
+     the literal letters, `\d` where the samples varied, and the same
+     28-character length — which `CLAVE` (i = 1) fits and a truncated
+     clave does not. That is the whole tiebreak (proof-extraction D14). */
+  const nuClave = (i: number) => `NU3AGKMP3ASP8QQQ4U8J8F0K${i}E4K`;
+  async function seedNuShape(businessId: string) {
+    await seedValidations(
+      businessId,
+      Array.from({ length: 10 }, (_, i) => ({
+        mode: "transfer" as const,
+        status: "valid" as const,
+        senderBank: "NUBANK",
+        trackingKey: nuClave(i),
+        amountCents: 100,
+        transferDate: "2026-08-19",
+      })),
+    );
+    /* The rules are cached for a minute (proof-extraction D14): a test
+       that seeds the log has to see its own rows at once */
+    resetShapeRules();
+  }
+
+  const providerRead = (over: Record<string, unknown> = {}) => ({
+    trackingKey: CLAVE,
+    amountCents: 51400,
+    date: "2026-08-19",
+    senderBank: "NUBANK",
+    referenceNumber: null,
+    ...over,
+  });
+
+  it("scenario 1: the first paid call sends the file, never the reading (D3)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined, reading: providerRead() });
+
+    await sweepDirectPayments(readerEnv(), now);
+    const sent = captured.body as Record<string, unknown>;
+    expect(String(sent.imageUrl)).toContain("proof");
+    expect(sent.sender).toBeUndefined();
+    expect((await rowOf(db, payment.id)).readingCheckAttempt).toBe(1);
+  });
+
+  it("scenario 2: the two readings agree at attempt 1, and the next slot takes the transfer door (D6, D17)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined, reading: providerRead() });
+
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.status).toBe("validating");
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.readingCheckAttempt).toBe(1);
+    expect(row.acceptedFrom).toBe("agreed");
+    expect(row.disputedFields).toBeNull();
+    /* D17: what they settled on is on the row, so the door of the next
+       attempt is read out of it — `proof_mode` stays what the payer sent */
+    expect(row.trackingKey).toBe(CLAVE);
+    expect(row.senderBank).toBe("NUBANK");
+    expect(row.transferDate).toBe("2026-08-19");
+    expect(row.proofMode).toBe("receipt");
+
+    /* D9: never an immediate second call — the schedule's own slot */
+    const later = new Date(row.nextValidationAt!.getTime() + 1000);
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(readerEnv(), later);
+    const sent = captured.body as Record<string, unknown>;
+    expect(sent.imageUrl).toBeUndefined();
+    expect((sent.sender as Record<string, unknown>).trackingKey).toBe(CLAVE);
+    expect((sent.sender as Record<string, unknown>).bank).toBe("NUBANK");
+  });
+
+  it("scenario 3: a dispute the shape rules settle for us sends our clave next (D7)", async () => {
+    const { business, payment, now, db } = await seedReceipt();
+    await seedNuShape(business.id);
+    /* Their clave is four characters short of the graduated shape, ours
+       fits it — so ours wins and no human is disturbed */
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: providerRead({ trackingKey: "NU3AGKMP3ASP8QQQ4U8" }),
+    });
+
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.readingCheck).toBe("disputed");
+    expect(row.acceptedFrom).toBe("reader");
+    expect(row.trackingKey).toBe(CLAVE);
+    expect(row.disputedFields).toBeNull();
+
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(readerEnv(), new Date(row.nextValidationAt!.getTime() + 1000));
+    expect(((captured.body as Record<string, unknown>).sender as Record<string, unknown>).trackingKey).toBe(CLAVE);
+  });
+
+  it("scenario 4: a dispute the shape rules settle for them sends theirs next, and asks nobody (D7)", async () => {
+    const { business, payment, now, db } = await seedReceipt();
+    await seedNuShape(business.id);
+    /* Ours is the short one this time; theirs fits the bank's shape */
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: providerRead({ trackingKey: nuClave(3) }),
+    });
+
+    await sweepDirectPayments(readerEnv({ ...READING, claveDeRastreo: "NU3AGKMP3ASP8QQQ4U8" }), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.readingCheck).toBe("disputed");
+    expect(row.acceptedFrom).toBe("provider");
+    expect(row.trackingKey).toBe(nuClave(3));
+    expect(row.disputedFields).toBeNull();
+
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(readerEnv(), new Date(row.nextValidationAt!.getTime() + 1000));
+    expect(((captured.body as Record<string, unknown>).sender as Record<string, unknown>).trackingKey).toBe(nuClave(3));
+  });
+
+  it("scenario 5: a dispute nothing can settle names the fields, and spends nothing more this minute (D8, D9)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    /* No graduated rule for NUBANK in this test's log: cold start, which
+       is the common case and lands in "ask the payer" as D7 intends */
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: providerRead({ trackingKey: "NU3AOTHERREADING00000000X8P", amountCents: 40000 }),
+    });
+
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.readingCheck).toBe("disputed");
+    expect(row.acceptedFrom).toBeNull();
+    expect(row.trackingKey).toBeNull();
+    const data = await statusOf(payment.id);
+    expect(data.readingCheck).toBe("disputed");
+    expect(data.disputedFields).toEqual(["trackingKey", "amount"]);
+
+    /* D9: no second call in the same minute — the payer is asked, and
+       the row waits for its own slot */
+    await sweepDirectPayments(readerEnv(), now);
+    expect((await rowOf(db, payment.id)).validationAttempts).toBe(1);
+  });
+
+  it("scenario 6: the provider goes blind and our complete reading carries the payment (FR-013)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.readingCheck).toBe("blind");
+    expect(row.blindSide).toBe("provider");
+    expect(row.acceptedFrom).toBe("reader");
+    expect(row.trackingKey).toBe(CLAVE);
+    /* reading-check D2, kept: blindness stays null on the wire — no
+       evidence either way is the same as no comparison */
+    expect((await statusOf(payment.id)).readingCheck).toBeNull();
+
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(readerEnv(), new Date(row.nextValidationAt!.getTime() + 1000));
+    expect(((captured.body as Record<string, unknown>).sender as Record<string, unknown>).trackingKey).toBe(CLAVE);
+  });
+
+  it("scenario 7: agreement at minute zero buys the provisional release (D6)", async () => {
+    const { payment, now, db } = await seedReceipt({}, { provisionalReleaseEnabled: true });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined, reading: providerRead() });
+    mockPromise();
+
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    /* provisional-release D1: the promise used to wait for the
+       minute-two cross; agreement now arrives on the first call, so the
+       payer's internet comes back a schedule slot sooner */
+    expect(row.releaseEvidence).toBe("agreed");
+    expect(row.provisionalReleaseAt).not.toBeNull();
+  });
+
+  it("scenario 8: a valid on the first call still adopts the CEP's key", async () => {
+    const { payment, now, db } = await seedReceipt();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    mockApiCep({
+      cep: {
+        trackingKey: "NU3AREALQKRNKJHK00000000X8P",
+        amountCents: 51400,
+        /* Today: a CEP older than 30 days is STALE_TRANSFER (D11), which
+           is a different scenario than the one under test */
+        date: new Date().toISOString().slice(0, 10),
+        senderBank: "NUBANK",
+        senderName: "JANELY REYES",
+        receiverBank: "STP",
+        beneficiaryName: "WifiPlus SA de CV",
+      },
+    });
+
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.status).toBe("confirmed");
+    /* Only the CEP outranks a reading, and the index must end up holding
+       the truth (reading-check D7) */
+    expect(row.trackingKey).toBe("NU3AREALQKRNKJHK00000000X8P");
+    /* `valid` needs no second opinion: the CEP decided (D5) */
+    expect(row.readingCheck).toBeNull();
+  });
+
+  it("scenario 9: agreement with no date asks for the date alone, and never guesses one (D20)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: providerRead({ date: null }),
+    });
+
+    await sweepDirectPayments(readerEnv({ ...READING, fecha: null }), now);
+    const row = await rowOf(db, payment.id);
+    /* The agreement stands — the clock retires, the release may fire — */
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.acceptedFrom).toBe("agreed");
+    /* — and exactly one field is asked for */
+    expect(row.transferDate).toBeNull();
+    expect((await statusOf(payment.id)).disputedFields).toEqual(["date"]);
+
+    /* D9: nothing more is spent this minute */
+    await sweepDirectPayments(readerEnv(), now);
+    expect((await rowOf(db, payment.id)).validationAttempts).toBe(1);
+
+    /* D20: and when the slot does come, the transfer door is *not*
+       called with a date nobody read — the row keeps its receipt door
+       until the payer's correction supersedes it with one */
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(readerEnv(), new Date(row.nextValidationAt!.getTime() + 1000));
+    const sent = captured.body as Record<string, unknown>;
+    expect(sent.sender).toBeUndefined();
+    expect(String(sent.imageUrl)).toContain("proof");
+  });
+
+  it("scenario 10: the transfer-door retry is the payment's own attempt, never a stranger's (FR-021)", async () => {
+    const { payment, now, db } = await seedReceipt();
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined, reading: providerRead() });
+    await sweepDirectPayments(readerEnv(), now);
+    const row = await rowOf(db, payment.id);
+    expect(row.acceptedFrom).toBe("agreed");
+
+    /* direct-payment D8's carve-out: the provider's replay flag is
+       permanent per CEP, and the first call — this row's own, on the
+       image door — is what set it. The retry that follows an agreement
+       must confirm the payment, not accuse its payer of reusing
+       somebody else's transfer. */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    mockApiCep({ alreadyValidated: true });
+    await sweepDirectPayments(readerEnv(), new Date(row.nextValidationAt!.getTime() + 1000));
+
+    const after = await rowOf(db, payment.id);
+    expect(after.status).toBe("confirmed");
+    expect(after.lastError).not.toBe("TRANSFER_ALREADY_USED");
+  });
+});
+
 describe("US-D14: the classifier at minute two", () => {
   /* A reader-sourced payment whose inline attempt found nothing: image
      stored, misread clave on the row, one attempt spent. */
@@ -2228,6 +2561,71 @@ describe("US-D14: the classifier at minute two", () => {
     expect(row.status).toBe("confirmed");
     /* reading-check D7: the index ends up holding the truth */
     expect(row.trackingKey).toBe("NU3AREALQKRNKJHK00000000X8P");
+  });
+
+  /* two-eyes-receipt D16 / FR-020 — the cut-over, which is a *shape* and
+     not a column (research R10). These two scenarios are the whole
+     migration story: the old flow keeps running for rows that can only
+     have been born in it, and no new row can enter it. */
+  it("two-eyes-receipt US1: a legacy-shaped row still crosses at minute two, and says so", async () => {
+    const { payment, now, db } = await seedCross();
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: { trackingKey: CROSS_ROW.trackingKey, amountCents: 51400, date: "2026-08-26", senderBank: "Nubank", referenceNumber: null },
+    });
+
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.readingCheck).toBe("agreed");
+    /* FR-018: the attempt records *when* the comparison was taken, never
+       which flow ran — a new-flow row whose inline attempt died
+       classifies at 2 as well. The D16 shape is what tells them apart. */
+    expect(row.readingCheckAttempt).toBe(2);
+  });
+
+  it("two-eyes-receipt US1: a row born the new way never takes the legacy cross", async () => {
+    /* `supersedes_id` is one of the three things that rule a row out of
+       the legacy shape; a typed correction always has one. A row with a
+       file and typed data *and* a parent could only have been born after
+       the cut-over, so it classifies at its own first call instead. */
+    const { business, link } = await seedLinkedBusiness();
+    const db = drizzle(env.DB);
+    const now = new Date();
+    const [parent] = await db
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        ...CROSS_ROW,
+        trackingKey: null,
+        status: "superseded",
+        transferDate: new Date().toISOString().slice(0, 10),
+      })
+      .returning();
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        ...CROSS_ROW,
+        supersedesId: parent.id,
+        transferDate: new Date().toISOString().slice(0, 10),
+        nextValidationAt: new Date(now.getTime() - 1000),
+      })
+      .returning();
+
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, now);
+    /* The transfer door, with the payer's own data — not the image on
+       the provider's OCR door that the legacy cross would have sent */
+    const sent = captured.body as Record<string, unknown>;
+    expect(sent.imageUrl).toBeUndefined();
+    expect((sent.sender as Record<string, unknown>).trackingKey).toBe(CROSS_ROW.trackingKey);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.readingCheck).toBeNull();
+    expect(row.readingCheckAttempt).toBeNull();
   });
 
   it("scenario 2: a matching reading writes agreed, and the ride keeps its schedule", async () => {

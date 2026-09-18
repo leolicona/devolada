@@ -147,10 +147,22 @@ export const readProofRequest = z.object({
 });
 
 export const proofReadingResponse = z.object({
-  /* "provider-ocr" means the file was a PDF and nothing was read here:
-     the payer keeps the receipt door instead of confirming a draft */
+  /* "provider-ocr" means nothing here could read the file — no AI
+     binding, a PDF whose text conversion yielded nothing, or a model
+     answer that would not parse. It used to mean "the file was a PDF",
+     which two-eyes-receipt D1 retired: a PDF is turned into text at the
+     edge and read by the same model, so it answers like a picture. The
+     payer keeps the receipt door instead of confirming a draft. */
   source: z.enum(["reader", "provider-ocr"]),
   isReceipt: z.boolean().nullable(),
+  /* two-eyes-receipt D2 (R7): how much of the picture the reader could
+     read. The page refuses on `none` — and only on `none`, beside
+     `isReceipt: false` — before any credit is spent (FR-004); `partial`
+     goes through with its hole (FR-005). Null on a text reading of a PDF
+     (no photograph to judge, D15) and when the model omitted the field,
+     both read as `full`: the bias is to let files through. This endpoint
+     reports it; the *page* is what refuses. */
+  legibility: z.enum(["full", "partial", "none"]).nullable(),
   /* Fields the payer may confirm, plus the amount — which they never
      confirm and never edit. **Correction, 2026-08-19**: the first version
      of this contract left the amount out, on the argument that it is
@@ -226,7 +238,11 @@ export const directPaymentStatusResponse = z.object({
      disputed fields empty. A blind cross stays null on the wire — no
      evidence is the same as no cross, and the page behaves as today. */
   readingCheck: z.enum(["agreed", "disputed"]).nullable().optional(),
-  disputedFields: z.array(z.enum(["trackingKey", "amount"])).optional(),
+  /* two-eyes-receipt D20: `"date"` joins them. The accepted data had no
+     date on either reading, so the payer is asked for that one field
+     while the agreement stands — the transfer door is never called with
+     a date nobody read. The page empties exactly these fields. */
+  disputedFields: z.array(z.enum(["trackingKey", "amount", "date"])).optional(),
   /* The receipt's own `Estatus`: decides whether the payer is asked to
      confirm or simply told their bank has not released it yet */
   receiptStatus: z.string().nullable().optional(),

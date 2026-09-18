@@ -2,11 +2,13 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { asc, eq } from "drizzle-orm";
-import { creditEntries, paymentLinks, payments, topUps } from "../src/db/schema";
+import { creditEntries, extractions, paymentLinks, payments, topUps, user as userTable } from "../src/db/schema";
+import { resetShapeRules } from "../src/consta/extraction";
 import { releaseQueuedForCredit, sweepTopUps } from "../src/credit/topups";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import type { Bindings } from "../src/env";
-import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
+import { app, fakeProofs, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
+import { aiReturning, PNG } from "./consta/helpers";
 
 /* docs/legacy/platform/prepaid-credit.spec.md scenarios 8–12 (US-B05, US-B06):
    the top-up through the platform's own account, and the pause. */
@@ -275,5 +277,141 @@ describe("US-B05: the top-up through the platform's own account", () => {
     const unset = await call(OPERATOR, "/credit/top-ups", post({ transfer: { trackingKey: "TOPUP0005ABC", senderBank: "BBVA MEXICO", date: "2026-09-01", amountCents: 25000 } }));
     expect(unset.status).toBe(409);
     expect((await unset.json()).error.code).toBe("TOPUP_NOT_CONFIGURED");
+  });
+});
+
+/* two-eyes-receipt US1/D18 — a top-up takes the same door a payment does.
+
+   The engine does the work, so the top-up lifecycle only has to store
+   what the comparison settled on (research R9): the same three fields a
+   payment stores, in a table that already had the columns. With no human
+   to ask, a top-up the machines cannot decide keeps riding the receipt
+   door on every slot, exactly as today. */
+describe("two-eyes-receipt US1: a receipt top-up goes provider-first too", () => {
+  const CLAVE = "TOPUP0009XYZABCDEFGH";
+  const READING = {
+    esComprobante: true,
+    claveDeRastreo: CLAVE,
+    banco: "BBVA MEXICO",
+    monto: 250.0,
+    fecha: "2026-09-01",
+    estatus: "Aceptada",
+  };
+
+  /* The provider answers `not_found` *and* its own reading of the image:
+     nothing in Banxico yet, but two pairs of eyes on the receipt. */
+  function mockImageDoor(over: Record<string, unknown> = {}) {
+    const captured: { body?: Record<string, unknown> } = {};
+    fetchMock
+      .get(APICEP_ORIGIN)
+      .intercept({
+        method: "POST",
+        path: "/validate-transfer",
+        body: (raw) => {
+          captured.body = JSON.parse(String(raw));
+          return true;
+        },
+      })
+      .reply(
+        ...jsonReply({
+          validationId: "v-topup",
+          status: "invalid",
+          validation: { cepPreviouslyValidated: false },
+          extracted: { trackingKey: CLAVE, amount: 250.0, date: "2026-09-01", senderBank: "BBVA MEXICO" },
+          ...over,
+        }),
+      );
+    return captured;
+  }
+
+  it("the first attempt sends the image, agreement is stored, and the next slot takes the transfer door", async () => {
+    const business = await seedBusiness();
+    await platformAccountSet();
+    const db = drizzle(env.DB);
+    const [owner] = await db.select().from(userTable).where(eq(userTable.email, OPERATOR));
+    const proofKey = `topups/${business.id}/proof-1`;
+    const proofEnv = { ...testEnv(), PROOFS: fakeProofs(), AI: aiReturning(READING) } as Bindings;
+    await proofEnv.PROOFS.put(proofKey, PNG(), { httpMetadata: { contentType: "image/png" } });
+
+    const [topUp] = await db
+      .insert(topUps)
+      .values({
+        businessId: business.id,
+        submittedByUserId: owner.id,
+        claimedCents: 25000,
+        proofMode: "receipt",
+        proofKey,
+        nextValidationAt: new Date(Date.now() - 1000),
+      })
+      .returning();
+
+    const first = mockImageDoor();
+    await sweepTopUps(proofEnv);
+    expect(String(first.body!.imageUrl)).toContain(proofKey);
+    expect(first.body!.sender).toBeUndefined();
+
+    /* R9: the three fields the next attempt needs. `claimedCents` was
+       always there — it is what the transfer door searches with. */
+    let [row] = await db.select().from(topUps).where(eq(topUps.id, topUp.id));
+    expect(row.status).toBe("validating");
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.trackingKey).toBe(CLAVE);
+    expect(row.senderBank).toBe("BBVA MEXICO");
+    expect(row.transferDate).toBe("2026-09-01");
+
+    /* D19: the classification lives on the reading record, under the
+       platform's NULL owner — which is what makes top-ups countable
+       without a payment row (prepaid-credit D6, consta-api-merge D3) */
+    const [reading] = await db.select().from(extractions);
+    expect(reading.businessId).toBeNull();
+    expect(reading.readingCheck).toBe("agreed");
+    expect(reading.providerTrackingKey).toBe(CLAVE);
+
+    await db.update(topUps).set({ nextValidationAt: new Date(Date.now() - 1000) });
+    const second = mockImageDoor({ status: "valid" });
+    await sweepTopUps(proofEnv);
+    expect(second.body!.imageUrl).toBeUndefined();
+    expect((second.body!.sender as Record<string, unknown>).trackingKey).toBe(CLAVE);
+
+    [row] = await db.select().from(topUps).where(eq(topUps.id, topUp.id));
+    expect(row.validationAttempts).toBe(2);
+  });
+
+  it("D18: a top-up the machines cannot decide keeps the receipt door — there is nobody to ask", async () => {
+    const business = await seedBusiness();
+    await platformAccountSet();
+    const db = drizzle(env.DB);
+    const [owner] = await db.select().from(userTable).where(eq(userTable.email, OPERATOR));
+    const proofKey = `topups/${business.id}/proof-2`;
+    const proofEnv = { ...testEnv(), PROOFS: fakeProofs(), AI: aiReturning(READING) } as Bindings;
+    await proofEnv.PROOFS.put(proofKey, PNG(), { httpMetadata: { contentType: "image/png" } });
+
+    await db.insert(topUps).values({
+      businessId: business.id,
+      submittedByUserId: owner.id,
+      claimedCents: 25000,
+      proofMode: "receipt",
+      proofKey,
+      nextValidationAt: new Date(Date.now() - 1000),
+    });
+
+    /* Two different claves and no graduated shape for the bank: the
+       machines have run out of ways to tell, and there is no operator
+       form to send anybody to. */
+    resetShapeRules();
+    mockImageDoor({ extracted: { trackingKey: "TOPUPDIFFERENT000000", amount: 250.0, date: "2026-09-01", senderBank: "BBVA MEXICO" } });
+    await sweepTopUps(proofEnv);
+
+    let [row] = await db.select().from(topUps);
+    expect(row.readingCheck).toBe("disputed");
+    expect(row.trackingKey).toBeNull();
+
+    await db.update(topUps).set({ nextValidationAt: new Date(Date.now() - 1000) });
+    const again = mockImageDoor();
+    await sweepTopUps(proofEnv);
+    /* The same door as today, at the same cost as today */
+    expect(String(again.body!.imageUrl)).toContain(proofKey);
+    [row] = await db.select().from(topUps);
+    expect(row.validationAttempts).toBe(2);
   });
 });

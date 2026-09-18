@@ -551,6 +551,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     proofKey: body.proofId ?? null,
     receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
     supersedesId: superseded?.id ?? null,
+    /* two-eyes-receipt D7 (data-model): a form the payer edited is the
+       human's data, so the row records where its clave came from. That
+       makes "the payer was asked and answered" a count rather than a
+       guess — the number D10 wants, beside the machines' own agreement
+       rate. `transfer` in a pay body means exactly this since D13: a
+       machine reading travels as the file alone. */
+    ...(body.transfer ? { acceptedFrom: "human" as const } : {}),
     ...ask.customer,
     askedCents: ask.askedCents,
     /* automated-collections-api D12: a payment on a test link is a test
@@ -772,10 +779,15 @@ export async function uploadProof(c: Ctx, token: string) {
    and **no provider credit**, and everything it returns is a draft the
    payer is about to see and can overwrite.
 
-   Nothing here fails the payment. A reader that is down, a file that is
-   a PDF, a clave that did not survive the gate — each comes back as a
-   draft with holes in it, and the payer fills them. The machine is help,
-   not an authority: this endpoint cannot reject anybody. */
+   Nothing here fails the payment. A reader that is down, a file nothing
+   could read, a clave that did not survive the gate — each comes back as
+   a draft with holes in it, and the payer fills them. A PDF is no longer
+   one of those cases (two-eyes-receipt D1): it is turned into text at
+   the edge and read by the same model, so it answers like a picture. The
+   machine is help, not an authority: **this endpoint cannot reject
+   anybody**, and that stays true of the legibility it now reports —
+   `legibility: "none"` is a fact on the wire here, and it is the *page*
+   that refuses on it, before a credit is spent (D2, FR-004). */
 export async function readProof(c: Ctx, token: string, proofId: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
@@ -816,6 +828,9 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
     data: {
       source: reading.source,
       isReceipt: reading.isReceipt,
+      /* two-eyes-receipt D2: what the reader said about the picture.
+         Reported, never enforced here. */
+      legibility: reading.legibility,
       /* Reported so the caller can refuse a lookup that cannot succeed —
          never to decide what anything is worth (D3) */
       amountCents: reading.gate.amount === "ok" ? reading.amountCents : null,
@@ -930,9 +945,13 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
         payment.readingCheck === "agreed" || payment.readingCheck === "disputed"
           ? payment.readingCheck
           : null,
-      ...(payment.readingCheck === "disputed" && payment.disputedFields
-        ? { disputedFields: JSON.parse(payment.disputedFields) }
-        : {}),
+      /* two-eyes-receipt D20: the fields travel whatever the check said,
+         not only on a `disputed`. An agreement with no date on either
+         reading is still an agreement — the clock retires and the
+         release may fire — and still needs one field from the payer, so
+         the page opens its form on a non-empty list rather than on the
+         word "disputed" (contracts/payment-page.md). */
+      ...(payment.disputedFields ? { disputedFields: JSON.parse(payment.disputedFields) } : {}),
       receiptStatus: payment.receiptStatus,
       /* provisional-release D9: the page never speaks in conditionals,
          so it must know whether the service was actually given back —

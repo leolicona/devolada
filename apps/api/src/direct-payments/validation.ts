@@ -303,18 +303,33 @@ export async function runValidation(
        apiCEP matches on it is unmeasured, so omitting beats guessing. */
     ...(business.speiBeneficiaryName ? { name: business.speiBeneficiaryName } : {}),
   };
-  /* reading-check D1: attempt 2 sends the image, not the data. A
-     reader-sourced payment whose inline attempt found nothing gets the
-     provider's own OCR as a second, independent reading — in the same
-     paid call the slot was going to spend anyway. `providerOcr` is what
-     makes it independent (proof-extraction D11): without it Consta's
-     reader runs again, and the same model checking itself is no second
-     opinion. Attempt-based, not slot-based, so a payment whose inline
-     attempt never ran still gets its cross on the attempt after its
-     first not_found. */
+  /* reading-check D1 — **legacy rows only since two-eyes-receipt D16.**
+
+     The minute-two cross was how the two readings ever met: attempt 2
+     sent the image so the provider's own OCR could be a second,
+     independent opinion, in the paid call the slot was going to spend
+     anyway. Rows born after the cut-over classify at the *first* call
+     instead (D5), because the file now goes to the image door with our
+     reading beside it — so for them this branch must never run, or the
+     payment would pay twice for the same comparison.
+
+     The shape is what tells them apart, with no column and no migration
+     (research R10): `proof_mode = 'transfer'` with a `proof_key` and no
+     `supersedes_id` is a payment whose page sent a machine reading as
+     typed data, which is exactly what D13 stopped doing. A machine
+     reading is born `receipt` now; a typed correction is born with a
+     `supersedes_id`; the manual door has no `proof_key`. No new row can
+     have this shape, so the branch dies with the last pre-cut-over row,
+     within the 12-hour late slot. Its removal is registered as debt
+     (`.specify/debt/legacy-minute-two-cross/`).
+
+     `providerOcr` is what makes the cross independent (proof-extraction
+     D11): without it Consta's reader runs again, and the same model
+     checking itself is no second opinion. */
   const crossCheck =
     payment.proofMode === "transfer" &&
     payment.proofKey != null &&
+    payment.supersedesId == null &&
     payment.validationAttempts === 1 &&
     payment.lastError === "TRANSFER_NOT_FOUND" &&
     payment.readingCheck === null;
@@ -337,6 +352,41 @@ export async function runValidation(
   /* consta-api-merge D7: the receipt door names the proof's key in the
      product's own bucket; the engine reads the bytes itself and signs a
      short-lived link (D12) only for what the provider must read. */
+  /* two-eyes-receipt D17 — the door of this attempt is read from the
+     row, not from `proof_mode`.
+
+     `proof_mode` keeps meaning what the payer submitted (a file or a
+     form), which is what the admin feed shows and what the `human`
+     release rule reads; flipping it after an agreement would lie to
+     both. What decides the door is whether the row holds everything the
+     provider's transfer door needs: a clave, a bank, an amount and a
+     date. They get there three ways — the payer typed them, the CEP
+     revealed them, or (since D6/D7) the two readings settled on them at
+     minute zero. All three are the same code path from here.
+
+     The date is part of the test on purpose (D20). Accepted data with no
+     date never reaches the transfer door: `disputed_fields` carries
+     `"date"`, the payer is asked for that one field, and their answer
+     supersedes the row with it. Filling the hole with today — which this
+     builder used to do for every row — quietly asks Banxico about the
+     wrong day and gets a faceless `not_found` back for a real transfer.
+     The manual door keeps the fallback below, because a row with no
+     `proof_key` has nowhere else to go and its date came from a human. */
+  const accepted =
+    payment.trackingKey != null &&
+    payment.senderBank != null &&
+    payment.claimedAmountCents != null &&
+    payment.transferDate != null;
+  /* `proof_mode` still decides one thing, and only this one: whether a
+     *human* put the data there. A form the payer edited is the human's
+     data and takes the transfer door on every attempt, with no contrast
+     and no second-guessing (FR-015, D13) — even when it carries a file
+     beside it, and even when it named no amount, because a typed row
+     falls back to the debt's own for the search criterion. Everything
+     else with a file rides the receipt door until the machines have
+     settled on something. */
+  const receiptDoor = payment.proofKey != null && payment.proofMode === "receipt" && !accepted;
+
   const request: ConstaRequest = crossCheck
     ? {
         receipt: { proofKey: payment.proofKey ?? "" },
@@ -344,11 +394,19 @@ export async function runValidation(
         providerOcr: true,
         ...refs,
       }
-    : payment.proofMode === "transfer"
+    : receiptDoor
       ? {
+          receipt: { proofKey: payment.proofKey ?? "" },
+          beneficiary,
+          ...refs,
+        }
+      : {
           transfer: {
             /* D2/Consta D1: amount and beneficiary are server-supplied;
-               only the customer's own transfer data travels from input */
+               only the customer's own transfer data travels from input.
+               The fallback is the manual door's alone now (D20): every
+               other row that reaches here has a date, because a row
+               without one took the receipt door above. */
             date: payment.transferDate ?? now.toISOString().slice(0, 10),
             /* partial-payment D5: the amount is a **search criterion**,
                not an assertion. Asking with what we expected finds
@@ -362,11 +420,6 @@ export async function runValidation(
             trackingKey: payment.trackingKey ?? "",
             beneficiary,
           },
-          ...refs,
-        }
-      : {
-          receipt: { proofKey: payment.proofKey ?? "" },
-          beneficiary,
           ...refs,
         };
 
@@ -433,11 +486,49 @@ export async function runValidation(
        paying customer a liar. It rides the schedule instead, and the
        code survives on the row so the ISP can see why. */
     if (verdict.reason !== "contradicted") {
-      /* reading-check D2–D5: the cross that still found nothing carries
-         its classification — agreement is evidence the page can retire
-         the clock on; a dispute asks the human now; blindness changes
-         nothing. Written once, with the same retry the schedule keeps. */
-      const classification = crossCheck ? classifyReading(payment, verdict.reading ?? null) : {};
+      /* reading-check D2–D5: a call that still found nothing carries its
+         classification — agreement is evidence the page can retire the
+         clock on; a dispute asks the human now; blindness changes
+         nothing. Written once, with the same retry the schedule keeps.
+
+         two-eyes-receipt D5/D17: where the classification comes from is
+         the whole difference between the two flows. A provider-first
+         call brings it on the verdict — the engine compared both
+         readings itself, with the shape rules it holds (D11) — and the
+         row stores it plus whatever the two settled on, so the *next*
+         attempt reads the transfer door out of the row (D17). A legacy
+         row (D16) still computes it here at minute two, against the data
+         its page sent as typed.
+
+         `readingCheckAttempt` records when it was taken, never which
+         flow ran: a new-flow row whose inline attempt died classifies at
+         attempt 2 as well (FR-018). The D16 shape is what tells the
+         flows apart. */
+      const classification = verdict.readingCheck
+        ? {
+            readingCheck: verdict.readingCheck,
+            disputedFields: verdict.disputedFields?.length
+              ? JSON.stringify(verdict.disputedFields)
+              : null,
+            blindSide: verdict.blindSide ?? null,
+            acceptedFrom: verdict.acceptedFrom ?? null,
+            readingCheckAttempt: attempts,
+            /* D6/D7: what the machines agreed on, or what the bank's own
+               clave shape vouched for. Written on the row so the next
+               slot takes the transfer door with it — the same path a
+               typed correction takes, which is the point of D17. */
+            ...(verdict.accepted
+              ? {
+                  trackingKey: verdict.accepted.trackingKey,
+                  senderBank: verdict.accepted.senderBank,
+                  transferDate: verdict.accepted.date,
+                  claimedAmountCents: verdict.accepted.amountCents,
+                }
+              : {}),
+          }
+        : crossCheck
+          ? { ...classifyReading(payment, verdict.reading ?? null), readingCheckAttempt: attempts }
+          : {};
       /* provisional-release D1: an agreed cross or the human's own typed
          data is evidence enough to buy the promise while Banxico thinks */
       const release = await maybeProvisionalRelease(
@@ -584,11 +675,21 @@ export async function runValidation(
      never had a key, and (reading-check D7) a cross-validated row whose
      stored key was the misread the CEP just corrected — the index must
      end up holding the truth. */
+  /* two-eyes-receipt D17: a third row earns it — one whose key came from
+     the minute-zero comparison (`accepted_from` set) rather than from a
+     human. The machines can agree on a misread, and the CEP is the only
+     thing that ever outranks them, so the index must end up holding the
+     truth exactly as it does after a legacy cross. A row whose key the
+     payer typed is untouched: that is the human's data (FR-015). */
+  const machineKey =
+    payment.acceptedFrom === "agreed" ||
+    payment.acceptedFrom === "reader" ||
+    payment.acceptedFrom === "provider";
   const adoptKey =
     cep?.trackingKey &&
-    (payment.proofMode === "receipt"
-      ? !payment.trackingKey
-      : crossCheck && cep.trackingKey !== payment.trackingKey);
+    (!payment.trackingKey
+      ? payment.proofMode === "receipt"
+      : (crossCheck || machineKey) && cep.trackingKey !== payment.trackingKey);
   if (adoptKey && cep?.trackingKey) {
     try {
       await db

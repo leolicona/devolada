@@ -49,11 +49,28 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
   if (!clabe || !bank) return retryLater("TOPUP_NOT_CONFIGURED");
   const beneficiary = { bank, clabe, ...(name ? { name } : {}) };
 
+  /* two-eyes-receipt D17/D18: the door of this attempt is read from the
+     row, exactly as a payment's is. A receipt top-up goes to the
+     provider's image door with the engine's reading beside it, and when
+     the two agree at minute zero the verdict carries what they settled
+     on — stored below, so the *next* slot takes the transfer door with
+     it. `proof_mode` keeps meaning what the operator submitted.
+
+     D18: with no human to ask, a top-up the machines cannot decide keeps
+     riding the receipt door on every slot, exactly as every receipt
+     top-up does today. There is no disputed-field form for an operator
+     and this feature adds none; the remedy is a new upload. The cost is
+     today's cost, and the classification is still recorded on the
+     reading record (D19), so the numbers count top-ups too. */
+  const acceptedData = topUp.trackingKey != null && topUp.senderBank != null;
   const request: ConstaRequest =
-    topUp.proofMode === "transfer"
+    topUp.proofMode === "transfer" || acceptedData
       ? {
           transfer: {
             date: topUp.transferDate ?? now.toISOString().slice(0, 10),
+            /* `claimedCents` is what the transfer door searches with and
+               it is `NOT NULL` on this table, so the amount never has to
+               come from the comparison the way a payment's does */
             amountCents: topUp.claimedCents,
             senderBank: topUp.senderBank ?? "",
             trackingKey: topUp.trackingKey ?? "",
@@ -93,8 +110,24 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
     return update({ ...base, ...(await pendingWrite(retryLater, "CEP_PENDING", false, verdict.retryAfter)) });
   }
   if (verdict.status === "invalid" && verdict.reason !== "contradicted") {
-    /* direct-payment D17: not_found is not a refusal */
-    return update({ ...base, ...(await pendingWrite(retryLater, "TRANSFER_NOT_FOUND", true, verdict.retryAfter)) });
+    /* direct-payment D17: not_found is not a refusal.
+       two-eyes-receipt D17: and when the two readings settled on
+       something at minute zero, it is stored here so the next slot
+       builds a transfer call out of it by the same rule as a payment's.
+       Nothing is stored when they could not decide — the row keeps its
+       null clave and rides the receipt door again (D18). */
+    return update({
+      ...base,
+      ...(verdict.accepted
+        ? {
+            trackingKey: verdict.accepted.trackingKey,
+            senderBank: verdict.accepted.senderBank,
+            transferDate: verdict.accepted.date,
+          }
+        : {}),
+      ...(verdict.readingCheck ? { readingCheck: verdict.readingCheck } : {}),
+      ...(await pendingWrite(retryLater, "TRANSFER_NOT_FOUND", true, verdict.retryAfter)),
+    });
   }
   if (verdict.status === "invalid") {
     return update({ ...base, status: "invalid", lastError: "TRANSFER_CONTRADICTED", nextValidationAt: null });

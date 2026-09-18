@@ -34,6 +34,7 @@
     "./payment-requests-schema": "./src/routes/payment-requests/schema.ts",
     "./businesses-schema": "./src/routes/businesses/schema.ts",
     "./role-matrix": "./src/auth/role-matrix.ts",
+    "./installations": "./src/wisphub/installations.ts",
     "./clabe": "./src/direct-payments/clabe.ts",
     "./credit-schema": "./src/routes/credit/schema.ts",
     "./platform-schema": "./src/routes/platform/schema.ts",

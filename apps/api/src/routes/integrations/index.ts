@@ -35,7 +35,7 @@ integrationsRoute.post(
   requireSession,
   requireArea("integrations", "manage"),
   zValidator("json", wisphubTestRequest),
-  (c) => testWisphubKey(c, c.req.valid("json").apiKey),
+  (c) => testWisphubKey(c, c.req.valid("json")),
 );
 
 /* automated-collections-api US1: the API card — credentials issued,

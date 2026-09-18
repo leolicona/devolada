@@ -153,3 +153,47 @@ test.describe("US-P03: the admin follows the ISP to a phone", () => {
     await expectNoHorizontalScroll(page);
   });
 });
+
+/* provider-address-per-isp US1 (T042) — the three questions happy-dom
+   cannot answer about the installation picker (constitution IV). The
+   component layer already proves it renders the right entries and marks
+   the test one; only a browser can say whether an ISP can actually hit
+   it on a phone, and whether the badge that marks a sandbox is legible
+   once the real stylesheet is applied. */
+test.describe("provider-address-per-isp US1: the installation picker in a real browser", () => {
+  for (const size of [PHONE, TABLET, DESKTOP]) {
+    test(`does not scroll sideways at ${size.width}px, open or closed`, async ({ page }) => {
+      await stubAdminApi(page);
+      await page.setViewportSize(size);
+      await page.goto(`${ADMIN}/integrations/wisphub`);
+      await expect(page.getByText("Instalación en uso:")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+
+      /* The listbox is the part that can overflow: it is as wide as its
+         trigger plus whatever the longest label and its badge need. */
+      await page.getByLabel("¿Dónde entras a WispHub?").click();
+      await expect(page.getByRole("option", { name: "Pruebas (sandbox)" })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+    });
+  }
+
+  test("the picker and its options clear the touch floor on a phone", async ({ page }) => {
+    await stubAdminApi(page);
+    await page.setViewportSize(PHONE);
+    await page.goto(`${ADMIN}/integrations/wisphub`);
+    await expect(page.getByText("Instalación en uso:")).toBeVisible();
+
+    /* Choosing the wrong installation is a mis-tap that costs an ISP a
+       failed connection and a support message, so the control has to be
+       aimable — measured, not assumed. */
+    const trigger = page.getByLabel("¿Dónde entras a WispHub?");
+    expect((await trigger.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+
+    await trigger.click();
+    for (const label of ["wisphub.net", "wisphub.io", "Pruebas (sandbox)"]) {
+      const option = page.getByRole("option", { name: label });
+      expect((await option.boundingBox())!.height, `${label} is too small to hit`).toBeGreaterThanOrEqual(32);
+    }
+  });
+});

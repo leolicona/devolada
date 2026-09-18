@@ -3,7 +3,11 @@ import { amountToCents, decimalToCents } from "./money";
 /* WispHub adapter. Contract verified in .design/devolada/WISPHUB_SPIKE.md.
    All WispHub traffic goes through this file (ARCHITECTURE.md rule). */
 
-const DEFAULT_BASE_URL = "https://api.wisphub.net/api";
+/* Exported so the catalogue's default entry can be asserted equal to it
+   (provider-address-per-isp D5): the factory falls back here, and two
+   copies of one host that drift apart is a whole tenant calling the
+   wrong server. */
+export const DEFAULT_BASE_URL = "https://api.wisphub.net/api";
 
 /* Deadlines (provider-latency spec D1). Measured 2026-08-18 against the
    live demo tenant: healthy calls answer in 0.4–0.6s, and about one call
@@ -130,7 +134,14 @@ export class WispHub {
 
   constructor(
     private apiKey: string,
-    private baseUrl: string = DEFAULT_BASE_URL,
+    /* Readable on purpose (provider-address-per-isp T046): the provider
+       caches key their entries by the address the answer came from, and
+       asking the instance is the only way that cannot drift from where
+       the call actually went. It is a host, never a credential — the key
+       beside it stays private. Nothing else should read it: the panel is
+       never shown an endpoint (FR-005) and every caller already gets its
+       client from `wisphubFor`. */
+    readonly baseUrl: string = DEFAULT_BASE_URL,
     limits: Partial<WispHubLimits> = {},
   ) {
     this.limits = {
@@ -253,6 +264,24 @@ export class WispHub {
     }
     const cash = data.results.find((m) => /efect|cash/i.test(m.nombre));
     return (cash ?? data.results[0]).id;
+  }
+
+  /* Health probes for the connection test (provider-address-per-isp
+     D7), and nothing else. One call each, `limit=1`, no paging: the
+     question is "does this key reach this endpoint on this
+     installation", not "what is in it". The business methods below
+     answer a different question and page up to five times, which is not
+     what an ISP waiting on a Probar conexión button should pay for.
+
+     They deliberately do NOT interpret an empty list as a failure: a
+     tenant with no invoice yet has a perfectly good permission. Only
+     the provider's own refusal means anything here. */
+  async probeInvoices(): Promise<void> {
+    await this.get<{ results: unknown[] }>("/facturas/?limit=1");
+  }
+
+  async probePaymentMethods(): Promise<void> {
+    await this.get<{ results: unknown[] }>("/formas-de-pago/?limit=1");
   }
 
   /* The pending invoices of the whole tenant, for an explicit window

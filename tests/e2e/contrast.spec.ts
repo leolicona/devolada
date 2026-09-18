@@ -11,6 +11,11 @@ import { stubAdminApi, stubPagoClosed } from "./stubs";
 const screens = [
   { name: "Cobros", url: ADMIN, stub: stubAdminApi, ready: "Janely Guadalupe Reyes" },
   { name: "WispHub", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Ejecutar acciones automáticamente" },
+  /* provider-address-per-isp US1 (T042): the installation picker and the
+     two badges that mark a sandbox and an assumed default. A status told
+     by colour alone fails the brief, and only a browser can say whether
+     these met their surface in either theme. */
+  { name: "WispHub instalación", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Instalación en uso:" },
   /* account-hub (US-A05): the rail, the identity card and the door */
   { name: "Cuenta", url: `${ADMIN}/settings`, stub: stubAdminApi, ready: "Cerrar sesión" },
   /* automated-collections-api US1 scenarios 3 and 4 (D6, FR-031): the

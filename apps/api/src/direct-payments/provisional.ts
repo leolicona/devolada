@@ -3,7 +3,9 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import type { Integration } from "../integrations/store";
 import { payments, businesses, paymentLinks, proofRejections } from "../db/schema";
-import { WispHub } from "../wisphub/client";
+/* provider-address-per-isp D4: the business's own installation, from
+   the integration row this function already holds. */
+import { wisphubFor } from "../wisphub/factory";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { sendProvisionalExpiry } from "../email/sender";
 import { settle } from "./partial";
@@ -176,7 +178,7 @@ export async function maybeProvisionalRelease(
   try {
     if (await isRevoked(db, payment, now)) return {};
 
-    const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
+    const wisphub = wisphubFor(integration, env);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
       wisphub.pendingInvoices(now),
@@ -231,7 +233,7 @@ export async function notifyProvisionalExpiry(
     /* automated-collections-api D5: only a panel link can have been
        released (above), so only a panel link has an expiry to announce */
     if (!isPanelLink(link)) return;
-    const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
+    const wisphub = wisphubFor(integration, env);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
       wisphub.pendingInvoices(now),

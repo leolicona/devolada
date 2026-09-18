@@ -13,7 +13,8 @@ import {
   recordDispatch,
   settleDispatch,
 } from "../../integrations/dispatch";
-import { WispHub } from "../../wisphub/client";
+/* provider-address-per-isp D4 */
+import { wisphubFor } from "../../wisphub/factory";
 import { attemptReconnection } from "../../wisphub/reconnection";
 import { pendingVersion } from "../../wisphub/cache";
 import { firstAttemptSchedule } from "../../reconnection/queue";
@@ -293,7 +294,7 @@ export async function executeAction(c: Ctx, id: string) {
     action,
   });
   const attempt = await attemptReconnection(
-    new WispHub(integration.apiKey, c.env.WISPHUB_BASE_URL),
+    wisphubFor(integration, c.env),
     actor.id,
     { usuario: row.customerUsuario ?? "", wisphubId: row.wisphubCustomerId ?? "" },
     row.registeredCents ?? 0,

@@ -218,6 +218,13 @@
       "when": 1789733363890,
       "tag": "0030_two_eyes_receipt",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1789758152327,
+      "tag": "0031_integration_installation",
+      "breakpoints": true
     }
   ]
 }

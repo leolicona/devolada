@@ -438,6 +438,18 @@ export const integrations = sqliteTable(
     /* Nullable: a row can be born from a dials-only save; the channel
        stays "unavailable" until the key lands (D2). */
     apiKey: text("api_key"),
+    /* Which WispHub installation this business's key belongs to
+       (provider-address-per-isp D1/D5/D6). A catalogue KEY, never a URL:
+       the address is resolved from `wisphub/installations.ts`, so no row
+       can name an origin the platform does not compile in (D1).
+
+       Nullable with no default and no backfill (D6), and null is a
+       meaning, not a gap: "not chosen", which resolves to the platform
+       default. That is every row that existed before this feature, and
+       it is how they carry over untouched (FR-002) — `wisphubFor` reads
+       null and falls through to `WISPHUB_BASE_URL`, then to wisphub.net,
+       exactly the behaviour those rows had yesterday (D5). */
+    installation: text("installation"),
     /* integrations-hub D3: two actions, no "nothing" — money that
        arrived and goes unregistered makes the ISP's books lie. */
     exactAction: text("exact_action", { enum: ["register_and_reconnect", "register_only"] })

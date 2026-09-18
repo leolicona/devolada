@@ -22,7 +22,7 @@ import type { ApiPayment, ListTransfersQuery, TransferList } from "./schema";
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 type DirectPayment = typeof payments.$inferSelect;
 
-function toPublic(payment: DirectPayment, link: ApiLink): ApiPayment {
+export function toPublic(payment: DirectPayment, link: ApiLink): ApiPayment {
   /* the same facts the webhook carries, rendered by the same function
      so the two can never disagree (FR-014, FR-019) */
   const { paymentId: _paymentId, ...facts } = paymentFacts(payment, link);

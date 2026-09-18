@@ -158,3 +158,51 @@ describe("FR-009: the platform's own condition is a notice in Devolada's words",
     expect(screen.queryByText(/no está disponible por ahora/i)).not.toBeInTheDocument();
   });
 });
+
+describe("FR-034 / research D12: test mode is chosen when the key is issued, and a test key is always labelled", () => {
+  it("the switch sends isTest, the issued card and the row both read Modo prueba, and a real key sends nothing extra", async () => {
+    const posted: unknown[] = [];
+    let listed = integration({ credentials: [] });
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.apiIntegration(() => ok(listed)),
+      handlers.issueCredential((body) => {
+        posted.push(body);
+        const isTest = Boolean((body as { isTest?: boolean }).isTest);
+        const issued = credential({ id: `cred-${posted.length}`, name: isTest ? "Pruebas" : "ERP", keyTail: "ab12", isTest, lastUsedAt: null });
+        listed = integration({ credentials: [...listed.credentials, issued] });
+        return ok(issueCredentialResponse.parse({ credential: issued, key: `dk_0123456789abcdef0123456789abab1${posted.length}` }), 201);
+      }),
+      handlers.integrations(() => ok({})),
+    );
+    renderApp("/integrations/api");
+
+    const toggle = await screen.findByRole("switch", { name: /modo prueba/i });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText(/sin mover dinero/i)).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    await userEvent.type(screen.getByLabelText("Nombre"), "Pruebas");
+    await userEvent.click(screen.getByRole("button", { name: /crear llave/i }));
+
+    /* the one moment the key shows, it says which kind it is */
+    const issued = await screen.findByTestId("issued-key");
+    expect(issued).toHaveTextContent("dk_0123456789abcdef0123456789abab11");
+    expect(issued).toHaveTextContent(/modo prueba/i);
+    expect(posted).toEqual([{ name: "Pruebas", isTest: true }]);
+    await expectNoViolations(document.body);
+
+    /* listed afterwards, still labelled; the switch is back off */
+    await userEvent.click(screen.getByRole("button", { name: /ya la guardé/i }));
+    const row = (await screen.findByText("Pruebas")).closest("li")!;
+    expect(row).toHaveTextContent(/modo prueba/i);
+    expect(screen.getByRole("switch", { name: /modo prueba/i })).not.toBeChecked();
+
+    /* a real key is the default and names nothing */
+    await userEvent.type(screen.getByLabelText("Nombre"), "ERP");
+    await userEvent.click(screen.getByRole("button", { name: /crear llave/i }));
+    expect(await screen.findByText("dk_0123456789abcdef0123456789abab12")).toBeInTheDocument();
+    expect(posted[1]).toEqual({ name: "ERP" });
+    expect(screen.getByTestId("issued-key")).not.toHaveTextContent(/modo prueba/i);
+  });
+});

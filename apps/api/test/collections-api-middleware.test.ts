@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { apiCredentials, idempotencyKeys, rateCounters } from "../src/db/schema";
 import type { Bindings, Variables } from "../src/env";
 import { hashApiKey, keyTail, looksLikeApiKey } from "../src/api-clients/credentials";
 import { issueCredential, listCredentials, resolveCredential, revokeCredential } from "../src/api-clients/store";
-import { idempotent, RATE_LIMIT_PER_MINUTE, rateLimit, requireApiCredential } from "../src/routes/v1/middleware";
+import { internalError } from "../src/routes/v1/envelope";
+import { idempotent, IDEMPOTENCY_KEY_TTL_MS, RATE_LIMIT_PER_MINUTE, rateLimit, requireApiCredential, sweepApiCounters } from "../src/routes/v1/middleware";
 import { seedBusiness } from "./helpers";
 
 /* automated-collections-api US1 — the credential and the middleware every
@@ -230,5 +232,61 @@ describe("D14 / FR-008: Idempotency-Key replays the first response verbatim", ()
     const huge = await r.request("/create", post(plaintext, {}, "x".repeat(256)), env);
     expect(huge.status).toBe(400);
     expect((await huge.json()).error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("D13 / D14 (T068): the cron expires what the middleware wrote", () => {
+  const MINUTE = 60_000;
+  const post = (key: string, idem: string) => ({
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Idempotency-Key": idem },
+    body: "{}",
+  });
+
+  it("keys older than 24 h and buckets older than the previous minute go; the rest stay, and a quiet sweep reports zeros", async () => {
+    const business = await seedBusiness();
+    const { plaintext } = await issueCredential(db(), business.id, { name: "k" });
+    const t0 = Date.UTC(2026, 8, 17, 12, 0, 20);
+    const bucket0 = Math.floor(t0 / MINUTE);
+    const { r } = harness({ now: () => new Date(t0) });
+
+    /* one key and one bucket, then aged past their lives */
+    expect((await r.request("/create", post(plaintext, "old"), env)).status).toBe(201);
+    await db().update(idempotencyKeys).set({ createdAt: new Date(t0 - IDEMPOTENCY_KEY_TTL_MS - 1) }).where(eq(idempotencyKeys.key, "old"));
+    await db().update(rateCounters).set({ bucket: bucket0 - 2 });
+    /* a fresh key at t0, and the bucket of t0's own minute */
+    expect((await r.request("/create", post(plaintext, "fresh"), env)).status).toBe(201);
+    /* a key exactly at the edge stays: it is 24 h old, not older */
+    await db().update(idempotencyKeys).set({ createdAt: new Date(t0 - IDEMPOTENCY_KEY_TTL_MS) }).where(eq(idempotencyKeys.key, "fresh"));
+
+    expect(await sweepApiCounters(env, new Date(t0))).toEqual({ keys: 1, buckets: 1 });
+    expect((await db().select().from(idempotencyKeys)).map((k) => k.key)).toEqual(["fresh"]);
+    expect((await db().select().from(rateCounters)).map((b) => b.bucket)).toEqual([bucket0]);
+    /* the previous minute's bucket survives: Retry-After may still point into this one */
+    await db().update(rateCounters).set({ bucket: bucket0 - 1 });
+    expect(await sweepApiCounters(env, new Date(t0))).toEqual({ keys: 0, buckets: 0 });
+    /* a minute later the previous bucket is dead — and the edge key is now past its 24 h */
+    expect(await sweepApiCounters(env, new Date(t0 + MINUTE))).toEqual({ keys: 1, buckets: 1 });
+    expect(await db().select().from(idempotencyKeys)).toHaveLength(0);
+    expect(await db().select().from(rateCounters)).toHaveLength(0);
+  });
+});
+
+describe("FR-025 (analyze I1): a failure of ours under /v1 still says whether waiting helps", () => {
+  it("a handler that throws answers the /v1 envelope with retryable: true; a browser-facing route keeps the bare code", async () => {
+    const r = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+    r.onError((_err, c) => internalError(c));
+    r.get("/v1/boom", () => {
+      throw new Error("ours");
+    });
+    r.get("/boom", () => {
+      throw new Error("ours");
+    });
+    const api = await r.request("/v1/boom", {}, env);
+    expect(api.status).toBe(500);
+    expect(await api.json()).toEqual({ success: false, error: { code: "INTERNAL_SERVER_ERROR", retryable: true } });
+    const panel = await r.request("/boom", {}, env);
+    expect(panel.status).toBe(500);
+    expect(await panel.json()).toEqual({ success: false, error: { code: "INTERNAL_SERVER_ERROR" } });
   });
 });

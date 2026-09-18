@@ -1,4 +1,41 @@
 <!--
+Sync Impact Report (v1.4.0, 2026-09-18)
+- Version change: 1.3.0 → 1.4.0 — MINOR: one bullet of Development Workflow
+  & Quality Gates describes a different mechanism for the same act. No
+  principle added, removed or redefined, no renumbering. Precedent: v1.3.0,
+  also MINOR, for a table that stopped describing the product as built.
+- Source: specs/006-production-launch — spec Clarifications (amended
+  2026-09-18), plan D3, research R3; the creator's decision in session.
+- What this decides: the approval a production release waits for is the
+  push of the tag itself, not a click on a required reviewer. Measured
+  2026-09-18: GitHub answers HTTP 422 "Please ensure the billing plan
+  supports the required reviewers protection rule" for this private
+  repository on the Free plan. The creator chose the tag as the deliberate
+  act over GitHub Pro and over a third-party approval action. What keeps
+  the act deliberate is mechanical, not ceremonial: the release refuses a
+  commit whose dev deploy did not finish green, or that is not on `main`,
+  before it touches production; the `production` environment accepts
+  deployments only from `v*` tags and the `main` branch.
+- Modified sections:
+  · Development Workflow & Quality Gates, fourth bullet — "through the
+    `production` environment's approval gate" → "the tag is the approval:
+    pushing it is the deliberate act, taken on a `main` commit whose dev
+    deploy finished green — the release refuses any other commit before it
+    touches production". The D1 export before migrating is unchanged.
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅ (Constitution Check is filled at plan time
+  from this file); spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(TD-005): still open from v1.0.0 — spec-lint runs warning-only until
+  the debt it names is registered with /speckit-debt-log.
+  TODO(BREATH-AMPLITUDE): carried unchanged from v1.1.0.
+  Carried from v1.2.0, still open: who may be admitted as a business, and
+  whether identity is checked before one can collect — production-launch
+  D8 launches with open sign-up and names admission as the next feature.
+-->
+
+<!--
 Sync Impact Report (v1.3.0, 2026-09-16)
 - Version change: 1.2.0 → 1.3.0 — MINOR: the fixed stack table shrinks by one
   Worker and one database, one bullet of Principle V is generalised and one
@@ -397,8 +434,10 @@ Additional constraints:
 - Merge to `main` deploys `dev`: the browser layer (`pnpm e2e`) and the
   passkey ceremony (`pnpm e2e:passkey`) gate the deploy, then migrations,
   deploy, secrets sync, credential verification, smoke test.
-- Production deploys from a `v*` tag through the `production` environment's
-  approval gate, with a D1 export archived before migrating.
+- Production deploys from a `v*` tag, and the tag is the approval: pushing
+  it is the deliberate act, taken on a `main` commit whose dev deploy finished
+  green — the release refuses any other commit before it touches production —
+  with a D1 export archived before migrating.
 - A feature is done when its spec's stories have cited tests at the layer
   that can answer them (Principle IV), its plan's Constitution Check passes,
   and `/speckit-analyze` reports no CRITICAL finding.
@@ -424,4 +463,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.3.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-16
+**Version**: 1.4.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-18

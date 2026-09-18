@@ -45,6 +45,16 @@ export const requireApiCredential: MiddlewareHandler<Env> = async (c, next) => {
   await next();
 };
 
+/* automated-collections-api D12 (FR-034): the test-mode door exists
+   only for a test credential. A real one is told NOT_FOUND — not
+   AUTHENTICATION_ERROR, not VALIDATION_ERROR — because for it the route
+   does not exist (contracts/public-api.md), and nothing a real
+   credential sends may move a real payment by pretending to be a test. */
+export const requireTestCredential: MiddlewareHandler<Env> = async (c, next) => {
+  if (!c.get("apiClient").isTest) return fail(c, "NOT_FOUND");
+  await next();
+};
+
 /* automated-collections-api D13 (FR-024): 120 requests per minute per
    business, every /v1 endpoint counted together, real and test
    credentials sharing the one budget — the limit protects the platform

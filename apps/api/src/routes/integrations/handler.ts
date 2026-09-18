@@ -10,6 +10,7 @@ import {
   type CredentialSummary,
 } from "../../api-clients/store";
 import { validationAvailable } from "../../direct-payments/validation";
+import { realOnly } from "../../direct-payments/links";
 import { and, desc, eq } from "drizzle-orm";
 import { apiWebhooks, payments, webhookDeliveries } from "../../db/schema";
 import { activeSigningKey, parseSigningKeys } from "../../webhooks/sign";
@@ -121,7 +122,8 @@ export async function getWebhookIntegration(c: Ctx) {
     .select({ delivery: webhookDeliveries })
     .from(webhookDeliveries)
     .innerJoin(payments, eq(payments.id, webhookDeliveries.paymentId))
-    .where(and(eq(webhookDeliveries.businessId, actor.id), eq(payments.isTest, false)))
+    /* automated-collections-api D12 (FR-035): real payments only, by the one shared rule */
+    .where(and(eq(webhookDeliveries.businessId, actor.id), realOnly(payments)))
     .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
     .limit(RECENT_DELIVERIES);
   const data: WebhookIntegrationResponse = {

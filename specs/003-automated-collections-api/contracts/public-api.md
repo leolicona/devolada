@@ -316,6 +316,25 @@ Consta, and fires the real webhook.
 `payment.validating` like a real one, so a developer can rehearse every
 webhook type, `payment.superseded` included.
 
+Answers the payment in the shape of `GET /v1/payments/:id`. The request must
+tell one story, and a `VALIDATION_ERROR` names the field that does not:
+
+- `receivedCents` is read by `confirmed`, `partial` and `unapplied`, and refused
+  on any other state. Omitted, it is the ask plus the fee (an exact match).
+- `match` comes from the same classifier a real validation uses, against the
+  business's tolerance — so `confirmed` with an amount below the ask is refused
+  (that verdict is `partial`), and `partial` with an amount that covers it is
+  refused (that verdict is `confirmed`). `unapplied` is classed `over` (D16).
+- A verdict is final, in test mode too: a payment that already ended cannot be
+  moved again. `validating` and `queued_for_credit` can be rehearsed in either
+  order before the verdict.
+- `confirmed` closes a one-time link, exactly as the real verdict does, so
+  `LINK_CLOSED` can be rehearsed on the payer's page.
+
+A test payment never reaches the validation engine: the payer's submission
+leaves it `validating` with no schedule, and only this call moves it. An empty
+credit balance does not queue it either — it costs nothing.
+
 A real credential calling it gets `NOT_FOUND` — the route does not exist for it.
 Test records are readable through the API and are excluded from every real total
 and from the validation fee (FR-035).

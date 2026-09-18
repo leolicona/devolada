@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { businesses, creditEntries, paymentLinks, payments, topUps } from "../db/schema";
-import { isApiLink } from "../direct-payments/links";
+import { isApiLink, realOnly } from "../direct-payments/links";
 import { enqueueDelivery } from "../webhooks/queue";
 import { consta, ConstaError, type ConstaRequest } from "../consta";
 import { nextValidationSlot, suggestedSlot } from "../direct-payments/schedule";
@@ -185,7 +185,10 @@ export async function releaseQueuedForCredit(env: Bindings, now: Date = new Date
     .select({ id: payments.id, businessId: payments.businessId, link: paymentLinks })
     .from(payments)
     .innerJoin(paymentLinks, eq(paymentLinks.id, payments.paymentLinkId))
-    .where(eq(payments.status, "queued_for_credit"))
+    /* automated-collections-api D12: a test row is never queued by the
+       payer's door, and one the caller rehearsed into this state moves
+       only when the caller says — never by a sweep */
+    .where(and(eq(payments.status, "queued_for_credit"), realOnly(payments)))
     .orderBy(asc(payments.createdAt), asc(payments.id));
   if (!queued.length) return 0;
   const byBusiness = new Map<string, typeof queued>();

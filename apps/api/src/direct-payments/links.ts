@@ -1,4 +1,5 @@
-import type { paymentLinks } from "../db/schema";
+import { eq, type SQL } from "drizzle-orm";
+import type { paymentLinks, payments } from "../db/schema";
 
 /* The link's kind and state, read from the row (automated-collections-api
    D3, data-model.md). One table carries both collection channels, so the
@@ -65,4 +66,20 @@ export function linkAcceptsPayments(
   now: Date,
 ): boolean {
   return linkState(link, now) === "open";
+}
+
+/* automated-collections-api D12 (FR-035): a test credential's links and
+   payments EXIST — the caller reads them through /v1 to test its own
+   polling and history — and reach nothing real. Every business-facing
+   read (the panel's feed and its totals, the proof and the actions, the
+   link roster, the webhook health) spells this one predicate instead of
+   remembering `is_test = false` at each call site: the requirement most
+   likely to leak is enforced by one rule and one test
+   (collections-api-test-mode.test.ts). The fee has its own gate in
+   credit/index.ts, and the validation sweep never claims a test row. A
+   panel link is never a test link — the write path guarantees it — so
+   the panel's own list needs nothing. The payer's page reads by token
+   and is not a business-facing read. */
+export function realOnly(table: typeof paymentLinks | typeof payments): SQL {
+  return eq(table.isTest, false);
 }

@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../../env";
 import { businesses, integrationEvents, paymentLinks, payments } from "../../db/schema";
 import { nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
+import { realOnly } from "../../direct-payments/links";
 import { integrationOf } from "../../integrations/store";
 import {
   outcomeOf,
@@ -71,6 +72,10 @@ export async function listPaymentFeed(
 
   const filters = [
     eq(payments.businessId, actor.id),
+    /* automated-collections-api D12 (FR-035): a test payment is never
+       in the business's real history — one shared rule, not a filter
+       to remember */
+    realOnly(payments),
     /* D4, amended by the pilot-UX round: the default answers money that
        arrived PLUS money in flight — the owner staring at "¿ya me
        pagó?" must see the payment being verified without touching a
@@ -141,6 +146,8 @@ export async function listPaymentFeed(
     .where(
       and(
         eq(payments.businessId, actor.id),
+        /* FR-035: nor in its real totals */
+        realOnly(payments),
         inArray(payments.status, ["confirmed", "partial"]),
         gte(payments.createdAt, new Date(todayStartMs)),
       ),
@@ -216,7 +223,7 @@ export async function getPaymentProof(c: Ctx, id: string) {
   const [row] = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
@@ -262,7 +269,7 @@ export async function executeAction(c: Ctx, id: string) {
   const [row] = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
@@ -332,7 +339,7 @@ export async function retryAction(c: Ctx, id: string) {
   const [row] = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }

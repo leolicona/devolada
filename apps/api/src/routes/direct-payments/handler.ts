@@ -22,6 +22,7 @@ import {
   linkAcceptsPayments,
   linkState,
   makeLinkToken,
+  realOnly,
   type PaymentLink,
 } from "../../direct-payments/links";
 import {
@@ -343,8 +344,11 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     return c.json({ success: false, error: { code: "LINK_CLOSED" } }, 409);
   }
   /* prepaid-credit D8: below the cap, what is new waits without spending
-     — no provider call, no extraction. The payer did nothing wrong (D9). */
-  const paused = (await creditSummary(db, business)).step === "paused";
+     — no provider call, no extraction. The payer did nothing wrong (D9).
+     automated-collections-api D12: a test payment costs nothing, so an
+     empty balance never queues it — a queued test row would be released
+     by the top-up sweep into a real validation. */
+  const paused = !link.isTest && (await creditSummary(db, business)).step === "paused";
   if (body.proofId) {
     /* No cross-link references: proofs are token-bound (D12) — and the
        object must actually exist before a paid provider call is spent */
@@ -564,8 +568,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
        at it again (found live, 2026-08-18).
 
        No race with the inline attempt: the first slot is +2 min and
-       a validation answers in ~15 s. */
-    nextValidationAt: paused ? null : nextValidationSlot(now, now),
+       a validation answers in ~15 s.
+
+       automated-collections-api D12: a test row is never due. The
+       sweep cannot select it, no attempt ever runs, and it moves only
+       when the caller advances it through /v1/test. */
+    nextValidationAt: paused || link.isTest ? null : nextValidationSlot(now, now),
     ...(paused ? { status: "queued_for_credit" as const } : {}),
   };
 
@@ -699,8 +707,9 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
 
   /* Inline attempt, then the sweep takes over (D7) — the same split as
      charge recording and reconnection. A queued row waits for the
-     release (D8): nothing runs, nothing is spent. */
-  const row = paused ? payment : await runValidation(c.env, db, payment, link, business, integration, now, { defer });
+     release (D8): nothing runs, nothing is spent. A test row waits for
+     the caller (automated-collections-api D12): Consta is never asked. */
+  const row = paused || link.isTest ? payment : await runValidation(c.env, db, payment, link, business, integration, now, { defer });
   return c.json(
     {
       success: true,
@@ -1022,14 +1031,11 @@ export async function linksRoster(c: Ctx) {
 
   /* automated-collections-api FR-011 (US1 scenario 11): the API's links
      join the same list, read from the row — no provider, no cache. Test
-     rows never reach the panel (D12); the shared `realOnly` predicate
-     lands with test mode (T065), so the filter is spelled here once. */
+     rows never reach the panel (D12, FR-035): `realOnly` is the one rule. */
   const apiRows = await db
     .select()
     .from(paymentLinks)
-    .where(
-      and(eq(paymentLinks.businessId, actor.id), eq(paymentLinks.source, "api"), eq(paymentLinks.isTest, false)),
-    );
+    .where(and(eq(paymentLinks.businessId, actor.id), eq(paymentLinks.source, "api"), realOnly(paymentLinks)));
   const apiResults: RosterRow[] = apiRows.filter(isApiLink).map((link) => {
     const url = `${c.env.PAGO_BASE_URL}/p/${link.token}`;
     return {

@@ -186,11 +186,11 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 **Purpose**: a developer at a company that is not an ISP integrates without moving real money — and not one test record touches anything real. This is the requirement most likely to leak, so its isolation is tested before it is trusted.
 
-- [ ] T062 [P] Write `apps/api/test/collections-api-test-mode.test.ts` (`automated-collections-api US1`) proving the whole flow runs under a test credential with no Consta call, and then proving the isolation: the panel feed does not list it, the credit balance does not move, the **real** credential's `/v1/transfers` does not return it
-- [ ] T063 Implement the test-mode advance endpoint in `apps/api/src/routes/v1/test-mode/{index,handler,schema}.ts`, reachable only by a test credential and answering `NOT_FOUND` to a real one (research D12)
-- [ ] T064 Guard the validation fee in `apps/api/src/credit/index.ts` so a test payment is never debited — one gate, in the one place a payment already costs money
-- [ ] T065 Add the shared `realOnly` predicate in `apps/api/src/direct-payments/links.ts` and apply it to the business-facing reads in `apps/api/src/routes/payments/handler.ts` and `apps/api/src/routes/direct-payments/handler.ts`, so test rows are excluded by one rule rather than 22 remembered filters
-- [ ] T066 Add the test-mode toggle to `apps/admin/src/features/integrations/ApiScreen.tsx` and make a test credential visibly labelled, so nobody confuses the two
+- [X] T062 [P] Write `apps/api/test/collections-api-test-mode.test.ts` (`automated-collections-api US1`) proving the whole flow runs under a test credential with no Consta call, and then proving the isolation: the panel feed does not list it, the credit balance does not move, the **real** credential's `/v1/transfers` does not return it
+- [X] T063 Implement the test-mode advance endpoint in `apps/api/src/routes/v1/test-mode/{index,handler,schema}.ts`, reachable only by a test credential and answering `NOT_FOUND` to a real one (research D12)
+- [X] T064 Guard the validation fee in `apps/api/src/credit/index.ts` so a test payment is never debited — one gate, in the one place a payment already costs money
+- [X] T065 Add the shared `realOnly` predicate in `apps/api/src/direct-payments/links.ts` and apply it to the business-facing reads in `apps/api/src/routes/payments/handler.ts` and `apps/api/src/routes/direct-payments/handler.ts`, so test rows are excluded by one rule rather than 22 remembered filters
+- [X] T066 Add the test-mode toggle to `apps/admin/src/features/integrations/ApiScreen.tsx` and make a test credential visibly labelled, so nobody confuses the two
 
 ---
 

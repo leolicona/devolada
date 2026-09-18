@@ -7,6 +7,19 @@ import type { paymentLinks } from "../db/schema";
 
 export type PaymentLink = typeof paymentLinks.$inferSelect;
 
+/* The token the payer's URL carries: opaque, permanent, non-guessable
+   (direct-payment D1). 32-char alphabet without confusables; 256 % 32
+   === 0, so the modulo is unbiased. 16 chars ≈ 80 bits. Shared by the
+   panel's lazy generation and the API's create (automated-collections-api
+   D2: one table, one token space). */
+export function makeLinkToken(): string {
+  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let out = "";
+  for (const b of bytes) out += alphabet[b % 32];
+  return out;
+}
+
 /* A panel link: made for a WispHub customer, its ask read live from
    WispHub. `source = 'panel'` ⟹ usuario and numeric id present. */
 export type PanelLink = PaymentLink & {

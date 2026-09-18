@@ -131,11 +131,31 @@ export const integrationsHub = {
     floorCents: 0,
     provisionalReleaseEnabled: false,
   },
+  /* automated-collections-api US1: the API card's count */
+  api: { activeCredentials: 1 },
 };
 
+/* automated-collections-api US1: the API card's detail */
+export const apiIntegration = {
+  credentials: [
+    {
+      id: "cred-1",
+      name: "Sistema de facturación",
+      keyTail: "9f3a",
+      isTest: false,
+      lastUsedAt: at,
+      revokedAt: null,
+      createdAt: at - 86_400_000,
+    },
+  ],
+  validationAvailable: true,
+};
+
+/* automated-collections-api FR-011: both channels in one list */
 export const linksRoster = {
   results: [
     {
+      channel: "panel",
       wisphubId: 6,
       usuario: "greyes@wifiplus",
       name: "Janely Guadalupe Reyes",
@@ -143,9 +163,41 @@ export const linksRoster = {
       url: "https://link.dev.devoladapago.com/p/tok-greyes",
       waLink: "https://wa.me/525551234567?text=hola",
     },
+    {
+      channel: "api",
+      wisphubId: null,
+      usuario: null,
+      customerRef: "CLI-4471",
+      label: "Ana Ruiz",
+      askCents: 49900,
+      linkState: "open",
+      name: "Ana Ruiz",
+      phone: null,
+      url: "https://link.dev.devoladapago.com/p/tok-cli4471",
+      waLink: "https://wa.me/?text=hola",
+    },
   ],
   complete: true,
   readAt: at,
+};
+
+/* What the business's software receives from POST /v1/payment-links
+   (automated-collections-api US1, T036) — the same row the roster above
+   shows as its API entry */
+export const apiPaymentLink = {
+  id: "lnk_0123456789abcdef0123456789abcdef",
+  url: "https://link.dev.devoladapago.com/p/tok-cli4471",
+  customerRef: "CLI-4471",
+  askCents: 49900,
+  mode: "reusable",
+  expiresAt: null,
+  state: "open",
+  closedAt: null,
+  label: "Ana Ruiz",
+  concept: null,
+  isTest: false,
+  createdAt: at,
+  notices: [],
 };
 
 /* Holds one endpoint open until the test lets it go (feedback-vocabulary-rollout
@@ -182,7 +234,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/payments/feed*", feed);
   await apiRoute(page, "**/payment-requests", cobros);
   await apiRoute(page, "**/integrations", integrationsHub);
+  await apiRoute(page, "**/integrations/api", apiIntegration);
   await apiRoute(page, "**/direct-payments/links/roster", linksRoster);
+  await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

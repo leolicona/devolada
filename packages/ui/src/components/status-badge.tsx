@@ -1,8 +1,12 @@
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
+  Ban,
   ClipboardCheck,
+  Code2,
   Eye,
+  KeyRound,
+  MonitorSmartphone,
   ArrowDownToLine,
   Check,
   CheckCircle2,
@@ -71,7 +75,18 @@ export type Status =
   | "observation"
   /* integrations-hub D7: `done` under register_only — the router was
      deliberately never asked, so "Reconectado" would be a lie. */
-  | "registered";
+  | "registered"
+  /* automated-collections-api FR-011: which channel a link collects
+     through — the panel's own roster, or the business's software through
+     the API. Icon + text, never colour alone, and both the same tone: a
+     channel is a fact, not a verdict. */
+  | "channelPanel"
+  | "channelApi"
+  /* automated-collections-api FR-003/FR-004: an API credential is live or
+     revoked. Revoked is a deliberate state the business chose, not a
+     failure — amber, not red. */
+  | "credentialActive"
+  | "credentialRevoked";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -109,6 +124,10 @@ const statuses: Record<
   classOver: { tone: "info", icon: CirclePlus, label: "Sobrante" },
   observation: { tone: "info", icon: Eye, label: "Observación" },
   registered: { tone: "success", icon: ClipboardCheck, label: "Registrado" },
+  channelPanel: { tone: "info", icon: MonitorSmartphone, label: "Panel" },
+  channelApi: { tone: "info", icon: Code2, label: "API" },
+  credentialActive: { tone: "success", icon: KeyRound, label: "Activa" },
+  credentialRevoked: { tone: "warning", icon: Ban, label: "Revocada" },
 };
 
 /* The shared control-size vocabulary (feedback-vocabulary-rollout D11,

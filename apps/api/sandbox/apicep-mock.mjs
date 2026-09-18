@@ -25,10 +25,24 @@
      contains "HANG"  → no answer, ever (Consta's own deadline must fire — D16)
      contains "ERR"   → HTTP 503 (PROVIDER_UNAVAILABLE)
      anything else    → valid, LIQUIDADO, echoing the claimed data
-   The receipt door (imageUrl) answers valid with fixed data — it is
-   reached only by PDFs now (proof-extraction D2) — unless the URL
-   contains "unreadable": then it answers apiCEP's one named OCR failure,
-   200 + status "error" with `missingFields` (RECEIPT_UNREADABLE).
+   The image door (imageUrl) is where every receipt lands first since
+   two-eyes-receipt D3, so it carries scenarios of its own now, picked
+   from the signed URL (the proof key is in it):
+     contains "unreadable" → apiCEP's one named OCR failure: 200 + status
+                        "error" with `missingFields`. The provider read
+                        nothing, so the classification is blind on its
+                        side (D12) — and the call is still billed
+     contains "notfound"   → invalid with no cepStatus and no cepDetails
+                        (reason not_found) *and* an `extracted` reading:
+                        Banxico has nothing yet, but the provider's eyes
+                        worked. This is the case the whole feature turns
+                        on — two readings to compare at minute zero
+     anything else         → valid, LIQUIDADO, with `extracted` beside the
+                        CEP, which is what the real thing answers
+   The `extracted` block echoes the mock's own clave and amount, so a
+   manual walk agrees with a reader that read the same fixture — and
+   `notfoundX` (any suffix) disagrees on the clave, which is the disputed
+   row of the table.
 
    Headers ride 200s only, exactly like the real thing (measured
    2026-08-19): rate-limit trio plus X-Processing-Time, slow for a lookup
@@ -61,6 +75,20 @@ const cepDetails = (claim) => ({
   digitalSignature: "bW9jay1zZWxsbw==",
 });
 
+/* proof-extraction D11 / two-eyes-receipt D5: what the provider's OCR
+   read off the image, in the field the real apiCEP uses (`extracted`,
+   read against `ApiCepResponse` in provider/apicep.ts). Measured
+   2026-08-26: it is present and complete even on a faceless `invalid`,
+   which is exactly when the comparison needs it. */
+const extracted = (overrides = {}) => ({
+  trackingKey: "MOCK0000000000000000",
+  amount: 514.0,
+  date: "2026-08-15",
+  senderBank: "BBVA MEXICO",
+  referenceNumber: "1234567",
+  ...overrides,
+});
+
 function reply(body) {
   if (body.imageUrl?.includes("unreadable"))
     return {
@@ -73,6 +101,24 @@ function reply(body) {
         missingFields: ["fecha de la operación", "clave de rastreo o número de referencia"],
       },
     };
+
+  /* The classification case: nothing in Banxico yet, but the provider
+     read the image. A plain "notfound" reads the same clave the mock
+     signs everything with (the agreed row of the table); any suffix
+     makes it read a different one (the disputed row). */
+  if (body.imageUrl?.includes("notfound")) {
+    const disagrees = !/notfound(?=[^a-z0-9]|$)/i.test(body.imageUrl);
+    return {
+      code: 200,
+      headers: headers200(1300),
+      json: {
+        validationId: crypto.randomUUID(),
+        status: "invalid",
+        validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+        extracted: extracted(disagrees ? { trackingKey: "MOCK9999999999999999" } : {}),
+      },
+    };
+  }
 
   const claim = body.sender ?? {};
   const key = claim.trackingKey ?? "";
@@ -152,6 +198,10 @@ function reply(body) {
     json: {
       validationId: crypto.randomUUID(),
       status: "valid",
+      /* An image-door call carries the OCR reading beside the CEP, as
+         the real thing does; a transfer-door call read no image and
+         carries none (two-eyes-receipt D5) */
+      ...(body.imageUrl ? { extracted: extracted() } : {}),
       validation: {
         banxicoConfirmed: true,
         cepStatus: "LIQUIDADO",

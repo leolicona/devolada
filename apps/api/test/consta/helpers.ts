@@ -76,6 +76,10 @@ export const fenced = (obj: unknown) => "```json\n" + JSON.stringify(obj, null, 
 
 export type StubbedReading = {
   esComprobante?: boolean;
+  /* two-eyes-receipt D2: the model's own word on the picture, in the
+     Spanish the prompt asks in. Omitted is the common case and reads as
+     `full` — the bias is to let files through (FR-005). */
+  legibilidad?: "completa" | "parcial" | "nula";
   claveDeRastreo?: string | null;
   banco?: string | null;
   monto?: number | null;
@@ -83,11 +87,47 @@ export type StubbedReading = {
   estatus?: string | null;
 };
 
-export function aiReturning(reading: StubbedReading | string, calls?: unknown[]): Ai {
+/* two-eyes-receipt D1/D15: what the PDF-to-text conversion would return
+   for a receipt, seeded rather than converted. The binding is the one
+   thing a test stands in for (constitution IV), and that covers both of
+   its doors — `run` for the reading and `toMarkdown` for the text. The
+   shape is a real es-MX comprobante's: labelled lines, the clave on its
+   own, the amount with its currency. */
+export const RECEIPT_TEXT = `Comprobante de transferencia SPEI
+
+Banco: BBVA
+Clave de rastreo: MBAN01002608190001234567
+Monto: $1,250.00 MXN
+Fecha de operación: 2026-08-19
+Estatus: Liquidado
+Beneficiario: DEVOLADA SA DE CV`;
+
+/* `pdfText` seeds what `toMarkdown` returns: receipt text for a text
+   PDF, and the empty string for a scanned one (D15) — the case where
+   the conversion succeeds and there is simply nothing in it to read.
+   Both go through `format: "markdown"`, because that is what the real
+   binding answers; a conversion that *fails* is a separate test that
+   makes the stub throw. */
+export function aiReturning(
+  reading: StubbedReading | string,
+  calls?: unknown[],
+  opts: { pdfText?: string } = {},
+): Ai {
   return {
     run: async (model: string, input: unknown) => {
       calls?.push({ model, input });
       return { response: typeof reading === "string" ? reading : fenced(reading) };
+    },
+    toMarkdown: async (files: unknown) => {
+      calls?.push({ toMarkdown: files });
+      const one = Array.isArray(files) ? files : [files];
+      return one.map((f) => ({
+        name: (f as { name?: string })?.name ?? "receipt.pdf",
+        mimeType: "application/pdf",
+        format: "markdown",
+        tokens: 0,
+        data: opts.pdfText ?? "",
+      }));
     },
   } as unknown as Ai;
 }

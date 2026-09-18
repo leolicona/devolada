@@ -551,6 +551,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     proofKey: body.proofId ?? null,
     receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
     supersedesId: superseded?.id ?? null,
+    /* two-eyes-receipt D7 (data-model): a form the payer edited is the
+       human's data, so the row records where its clave came from. That
+       makes "the payer was asked and answered" a count rather than a
+       guess — the number D10 wants, beside the machines' own agreement
+       rate. `transfer` in a pay body means exactly this since D13: a
+       machine reading travels as the file alone. */
+    ...(body.transfer ? { acceptedFrom: "human" as const } : {}),
     ...ask.customer,
     askedCents: ask.askedCents,
     /* automated-collections-api D12: a payment on a test link is a test
@@ -708,14 +715,52 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   /* Inline attempt, then the sweep takes over (D7) — the same split as
      charge recording and reconnection. A queued row waits for the
      release (D8): nothing runs, nothing is spent. A test row waits for
-     the caller (automated-collections-api D12): Consta is never asked. */
-  const row = paused || link.isTest ? payment : await runValidation(c.env, db, payment, link, business, integration, now, { defer });
+     the caller (automated-collections-api D12): Consta is never asked.
+
+     two-eyes-receipt D4: the attempt still runs first, but **the answer
+     no longer waits for it.** The payer used to hold a spinner for the
+     provider's 6–10 seconds — and up to its 25-second deadline — before
+     the page could say anything at all, for an answer the page then
+     polls for anyway. The row is already born owned by the sweep, so
+     nothing here is load-bearing: `validation_attempts` is written
+     before the provider call (the rule found live on 2026-08-18), which
+     is what makes a lost verdict the payment's *own* attempt on retry
+     and keeps the replay carve-out honest (FR-021). An attempt that
+     never finishes runs again at +2 min, exactly as one that never
+     started does.
+
+     The platform bounds post-response work handed to `waitUntil`; the
+     published limit is 30 s of CPU-plus-wait after the response, which
+     covers the worst case here — the provider's 25 s deadline plus a
+     reused reading (no model call, D14) plus the D1 writes — with the
+     typical case at 6–10 s. **Read from the Workers docs, not measured
+     against this Worker.** A verdict lost to that window is survived by
+     the counter above.
+
+     `executionCtx` throws outside a Worker request (Hono), so a caller
+     that has none — a test calling the app directly — awaits inline and
+     nothing is ever dropped. */
+  let row = payment;
+  if (!paused && !link.isTest) {
+    const attempt = runValidation(c.env, db, payment, link, business, integration, now, { defer });
+    try {
+      c.executionCtx.waitUntil(
+        attempt.catch((e) => console.error("deferred validation failed:", e)),
+      );
+    } catch {
+      row = await attempt;
+    }
+  }
   return c.json(
     {
       success: true,
       data: {
         directPaymentId: row.id,
-        /* `expired` cannot happen inline (the schedule starts now) */
+        /* The row's own status as the payer leaves: `validating`, or
+           `queued_for_credit` when the business is paused (D8). The
+           terminal values stay in the enum for compatibility and are no
+           longer produced inline — the page reads the outcome on its
+           first poll (two-eyes-receipt D4). */
         status: row.status as "validating" | "confirmed" | "partial" | "invalid" | "unapplied" | "queued_for_credit",
         error: publicError(row.lastError),
       },
@@ -767,15 +812,25 @@ export async function uploadProof(c: Ctx, token: string) {
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)
 
-   The machine reads, the human confirms, the direct door validates. This
-   endpoint is the first half: it spends a Workers AI call in the engine
-   and **no provider credit**, and everything it returns is a draft the
-   payer is about to see and can overwrite.
+   The machine reads — and since two-eyes-receipt D3 the provider reads
+   too, beside it, on the paid call this one precedes. This endpoint is
+   the free half: it spends a Workers AI call in the engine and **no
+   provider credit**, and everything it returns is a draft. The payer no
+   longer confirms that draft as a matter of course (D13): it is shown to
+   them when the amount is above the debt, and otherwise it exists so the
+   page can refuse the two files that are not worth a credit (D2) and so
+   the paid attempt can reuse the reading instead of making it twice
+   (D14).
 
-   Nothing here fails the payment. A reader that is down, a file that is
-   a PDF, a clave that did not survive the gate — each comes back as a
-   draft with holes in it, and the payer fills them. The machine is help,
-   not an authority: this endpoint cannot reject anybody. */
+   Nothing here fails the payment. A reader that is down, a file nothing
+   could read, a clave that did not survive the gate — each comes back as
+   a draft with holes in it, and the payer fills them. A PDF is no longer
+   one of those cases (two-eyes-receipt D1): it is turned into text at
+   the edge and read by the same model, so it answers like a picture. The
+   machine is help, not an authority: **this endpoint cannot reject
+   anybody**, and that stays true of the legibility it now reports —
+   `legibility: "none"` is a fact on the wire here, and it is the *page*
+   that refuses on it, before a credit is spent (D2, FR-004). */
 export async function readProof(c: Ctx, token: string, proofId: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
@@ -816,6 +871,9 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
     data: {
       source: reading.source,
       isReceipt: reading.isReceipt,
+      /* two-eyes-receipt D2: what the reader said about the picture.
+         Reported, never enforced here. */
+      legibility: reading.legibility,
       /* Reported so the caller can refuse a lookup that cannot succeed —
          never to decide what anything is worth (D3) */
       amountCents: reading.gate.amount === "ok" ? reading.amountCents : null,
@@ -930,9 +988,13 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
         payment.readingCheck === "agreed" || payment.readingCheck === "disputed"
           ? payment.readingCheck
           : null,
-      ...(payment.readingCheck === "disputed" && payment.disputedFields
-        ? { disputedFields: JSON.parse(payment.disputedFields) }
-        : {}),
+      /* two-eyes-receipt D20: the fields travel whatever the check said,
+         not only on a `disputed`. An agreement with no date on either
+         reading is still an agreement — the clock retires and the
+         release may fire — and still needs one field from the payer, so
+         the page opens its form on a non-empty list rather than on the
+         word "disputed" (contracts/payment-page.md). */
+      ...(payment.disputedFields ? { disputedFields: JSON.parse(payment.disputedFields) } : {}),
       receiptStatus: payment.receiptStatus,
       /* provisional-release D9: the page never speaks in conditionals,
          so it must know whether the service was actually given back —

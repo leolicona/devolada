@@ -208,14 +208,42 @@ export const payments = sqliteTable(
        faceless `not_found` and six hours of silence for a real payment.
        Null on the manual door, where nobody read anything. */
     claimedAmountCents: integer("claimed_amount_cents"),
-    /* reading-check D1–D5: what the minute-two cross said. 'agreed' —
-       the provider's OCR read the same clave and amount (evidence, the
-       clock escalation retires); 'disputed' — at least one machine is
-       wrong, the human is asked now; 'blind' — the provider could not
-       read the image, no evidence either way. NULL = no cross ran. */
+    /* reading-check D1–D5: what the comparison of the two readings said.
+       'agreed' — the provider's OCR read the same clave and amount
+       (evidence, the clock escalation retires); 'disputed' — at least one
+       machine is wrong, the human is asked now; 'blind' — one side read
+       nothing, no evidence either way. NULL = no comparison ran.
+       *When* it is taken changed with two-eyes-receipt: at the first call
+       for rows born after the cut-over (D5 — the file goes to the
+       provider's image door on the first credit, so both readings exist at
+       minute zero), at minute two for legacy rows (D16). */
     readingCheck: text("reading_check", { enum: ["agreed", "disputed", "blind"] }),
-    /* JSON array, set only on 'disputed' (D4): which fields to empty */
+    /* JSON array (D4): which fields to empty in the payer's form. Set on
+       'disputed' when nothing could break the tie, and — whatever the
+       reading check says — carrying "date" when the accepted data has no
+       date on either side (two-eyes-receipt D20): the transfer door is
+       never called with a date nobody read, so the payer is asked for that
+       one field while the agreement stands. */
     disputedFields: text("disputed_fields"),
+    /* two-eyes-receipt D5/FR-018: the attempt number the classification
+       was taken at — 1 on a provider-first call, higher when the inline
+       attempt never ran (provider down, worker evicted) and a sweep
+       classified instead. Which *flow* a row followed is the D16 shape,
+       never this number: a new-flow row whose first attempt died classifies
+       at 2 like a legacy cross does. */
+    readingCheckAttempt: integer("reading_check_attempt"),
+    /* two-eyes-receipt D5: which side read nothing. Set only when
+       `readingCheck = 'blind'`; 'both' is a hole on our side and no clave
+       on theirs, which is the one blind case that still asks the payer. */
+    blindSide: text("blind_side", { enum: ["provider", "reader", "both"] }),
+    /* two-eyes-receipt D7/D17: who supplied the clave, bank, amount and
+       date that the transfer-door retries carry. 'agreed' — both readings
+       said the same; 'reader' / 'provider' — the shape rules broke the tie
+       for that side; 'human' — a typed correction superseded the row, so
+       "the payer was asked and answered" is a count, not a guess. */
+    acceptedFrom: text("accepted_from", {
+      enum: ["agreed", "reader", "provider", "human"],
+    }),
     serviceFeeCents: integer("service_fee_cents").notNull(),
     /* unapplied (D14): the CEP was real but the debt was settled
        elsewhere meanwhile — visible, never silent */
@@ -245,8 +273,15 @@ export const payments = sqliteTable(
     })
       .notNull()
       .default("validating"),
+    /* What the payer submitted — a file or a form (two-eyes-receipt D17).
+       It does *not* decide the door of the next attempt any more: that is
+       read from the accepted fields below. The admin feed and the `human`
+       evidence rule keep reading it with its original meaning. */
     proofMode: text("proof_mode", { enum: ["receipt", "transfer"] }).notNull(),
-    /* From customer input (transfer door) or from the CEP (receipt door) */
+    /* From customer input (transfer door), from the CEP (receipt door),
+       or — since two-eyes-receipt D17 — from what the two readings agreed
+       on. All four present (with `claimedAmountCents`) is what makes the
+       next attempt a transfer call. */
     trackingKey: text("tracking_key"),
     senderBank: text("sender_bank"),
     transferDate: text("transfer_date"),
@@ -701,8 +736,21 @@ export const extractions = sqliteTable(
     /* Which reader saw the file — the routing decision of D2, recorded so
        a caller (and we) can tell the two paths apart after the fact */
     source: text("source", { enum: ["reader", "provider-ocr"] }).notNull(),
+    /* `illegible` (two-eyes-receipt D2): the model said it could read no
+       field at all, so the file was refused before a credit was spent —
+       the sibling of `not_a_receipt`, and countable apart from it.
+       `gated` no longer means "refused": since D3 a gated reading goes to
+       the provider with its hole, and the word is kept for the row. */
     outcome: text("outcome", {
-      enum: ["passed", "gated", "not_a_receipt", "unreadable", "refused", "routed"],
+      enum: [
+        "passed",
+        "gated",
+        "not_a_receipt",
+        "unreadable",
+        "refused",
+        "routed",
+        "illegible",
+      ],
     }).notNull(),
     model: text("model"),
     /* Never the bytes themselves (D8) */
@@ -722,8 +770,34 @@ export const extractions = sqliteTable(
        `suggested_bank` is what the payer was offered to confirm */
     shape: text("shape", { enum: ["ok", "mismatch", "unknown"] }),
     suggestedBank: text("suggested_bank"),
+    /* two-eyes-receipt D2 (R7): what the model said about the picture it
+       saw — 'none' is the one legibility that refuses before spending.
+       Null on a text reading (a PDF has no photograph to judge, D15) and
+       when the model omitted the field, which is read as 'full'. */
+    legibility: text("legibility", { enum: ["full", "partial", "none"] }),
+    /* two-eyes-receipt D19: the comparison, recorded beside the two
+       readings it compared, for every owner — a business payment and a
+       platform top-up alike. This row, not `payments`, is where the
+       measurement of FR-018 is counted, because a top-up has no payment
+       row. Same words as on `payments`. */
+    readingCheck: text("reading_check", { enum: ["agreed", "disputed", "blind"] }),
+    /* JSON array, as on `payments` (D8, D20) */
+    disputedFields: text("disputed_fields"),
+    /* As on `payments` (D5): which side read nothing */
+    blindSide: text("blind_side", { enum: ["provider", "reader", "both"] }),
+    /* As on `payments` (D7), minus 'human': a typed correction reads
+       nothing, so it never writes an extraction row */
+    acceptedFrom: text("accepted_from", { enum: ["agreed", "reader", "provider"] }),
+    /* two-eyes-receipt D19: what the *provider* read, verbatim, on the
+       same row as what we read — so "who was right" is a row-by-row
+       comparison and not a reconstruction. Cents here, as everywhere
+       (constitution II); converted by `amountToCents` in `apicep.ts`. */
+    providerTrackingKey: text("provider_tracking_key"),
+    providerAmountCents: integer("provider_amount_cents"),
     rawOutput: text("raw_output"),
-    /* Set only when the reading went on to buy a provider call */
+    /* Set only when the reading went on to buy a provider call. NULL on
+       every refusal, which is what makes "refused, and no credit spent" a
+       single query (two-eyes-receipt D10). */
     validationId: text("validation_id").references(() => validations.id),
     createdAt: createdAt(),
   },

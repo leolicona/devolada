@@ -8,7 +8,7 @@ in `contracts/` and `data-model.md`.
 
 ```sh
 pnpm install
-pnpm --filter @devolada/api db:migrate:local      # applies 0029
+pnpm --filter @devolada/api db:migrate:local      # applies 0030
 pnpm --filter @devolada/api sandbox               # apiCEP mock on :8789 (for the manual runs)
 pnpm --filter @devolada/api dev                   # API on :8787, AI binding remote
 pnpm --filter @devolada/pago dev                  # payment page on :5175

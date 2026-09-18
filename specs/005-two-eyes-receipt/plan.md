@@ -79,7 +79,7 @@ PDFs (`@cloudflare/workers-types` 4.20260702.1 in the lockfile declares it:
 `toMarkdown(files: MarkdownDocument[]) → ConversionResponse[]`); apiCEP at
 `https://api.apicep.cloud`, the only provider, two doors at one price
 
-**Storage**: one D1 (`devolada-db`; one additive migration `0029`: columns
+**Storage**: one D1 (`devolada-db`; one additive migration `0030`: columns
 on `payments`, `extractions` and `top_ups`, no new table); R2 `PROOFS`
 unchanged
 
@@ -183,7 +183,7 @@ specs/005-two-eyes-receipt/
 
 ```text
 apps/api/
-├── migrations/0029_two_eyes_receipt.sql        # + additive columns (data-model.md)
+├── migrations/0030_two_eyes_receipt.sql        # + additive columns (data-model.md)
 ├── src/
 │   ├── db/schema.ts                            # ~ payments, extractions, top_ups columns; comments rewritten
 │   ├── env.ts                                  # ~ AI comment: what unset means now
@@ -210,7 +210,7 @@ apps/api/
     ├── consta/helpers.ts                       # ~ aiReturning gains toMarkdown; a text-PDF fixture
     ├── consta/validate.test.ts                 # ~ receipt door scenarios rewritten (R12)
     ├── direct-payment.test.ts                  # ~ inline attempt, US-D14 cross, + first-call classification
-    └── prepaid-credit.test.ts                  # + top-up receipt through the new door
+    └── topups-pause.test.ts                    # + top-up receipt through the new door
 
 apps/pago/
 ├── src/features/pago/PaymentPage.tsx           # ~ upload: legibility refusal; silent path sends proofId only (D13); above-debt: send as is / correct
@@ -223,6 +223,13 @@ apps/pago/
 route handlers and one page in place. No new package, no new route, no new
 table. The one new engine module (`compare.ts`) holds the comparison and
 tiebreak so that `validate.ts` reads as the flow and the rule has one home.
+
+**Amended 2026-09-18** after the second `/speckit-analyze`, run at
+implementation (findings F4, F8): the migration is `0030`, not `0029` —
+`0029` was taken by `collections_api_foundation` between planning and
+implementation; and the top-up scenario lives in `test/topups-pause.test.ts`,
+which is where top-up validation is exercised (`prepaid-credit.test.ts` says
+so in its own header).
 
 ## Complexity Tracking
 

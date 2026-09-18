@@ -439,7 +439,10 @@ a credit is countable. Needs Story 1.
   credit in that attempt, MUST treat the agreement as evidence for the page's
   clock and for provisional release at minute zero, and MUST make every later
   retry for that payment go through the transfer door with the agreed data,
-  never the file (D6).
+  never the file (D6) — **except when the agreed data has no date on either
+  reading**, in which case the retry MUST keep the receipt door until the
+  payer supplies one (D20). The agreement still stands: the clock retires and
+  the release may fire while that one field is outstanding.
 - **FR-011**: When the readings disagree, the product MUST apply the bank's
   learned clave shape to both claves. If exactly one fits, that reading MUST
   be the one the retries carry through the transfer door, with no question to
@@ -449,8 +452,10 @@ a credit is countable. Needs Story 1.
   the accepted data (D7).
 - **FR-012**: When the readings disagree and the shape rules cannot decide,
   because the bank has no rule yet or both or neither clave fits, the product
-  MUST NOT spend a further credit and MUST ask the payer to fill in only the
-  disputed fields (D8).
+  MUST NOT spend a further credit in that attempt and MUST ask the payer to
+  fill in only the disputed fields (D8). The row keeps riding its ordinary
+  schedule meanwhile — the payer's answer and Banxico's are a race, and
+  whichever lands first wins (D9, FR-014).
 - **FR-013**: When the provider read no clave and our reading is complete
   and passed the gate, the product MUST send our data through the transfer
   door at the schedule's next slot; when our reading is incomplete too, it
@@ -539,6 +544,12 @@ a credit is countable. Needs Story 1.
   the count of payments whose record mixes the two flows is zero.
 - **SC-011**: Every new test carries its story citation, and the count of
   decision citations lost in the change is zero.
+
+**Amended 2026-09-18** after the second `/speckit-analyze` (run at
+implementation, finding F1/F5): FR-010 carries D20's missing-date carve-out,
+which was added to the plan by the first run and never carried back into the
+requirement it contradicts; FR-012 gains the "in that attempt" scope FR-010
+already had.
 
 ## Assumptions
 

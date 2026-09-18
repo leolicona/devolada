@@ -90,6 +90,25 @@ export const businesses = sqliteTable("businesses", {
   createdAt: createdAt(),
 });
 
+/* One table for both collection channels (automated-collections-api D2,
+   D3): a link the panel made for a WispHub customer, and a link the
+   business's own software made through /v1. Widened rather than twinned —
+   the payer's page resolves a link by token and `payments` references
+   `payment_links.id`, so a second table would fork the token space, the
+   payer path and every reader. Existing rows are panel links and stay
+   exactly as they were.
+
+   Invariants, enforced at the write path (the panel's `ensureLinks`, the
+   API's create handler) and narrowed by `direct-payments/links.ts`:
+     source = 'api'    ⟹ customer_ref and ask_cents are present
+     source = 'panel'  ⟹ customer_usuario and wisphub_customer_id are present
+     mode = 'one_time' ⟹ expires_at is present
+     mode = 'reusable' ⟹ expires_at is null and closed_at stays null
+     ask_cents > 0 whenever it is present (FR-010)
+   Link state is derived, never stored (data-model.md): `open` while
+   closed_at is null and expires_at is null or ahead; `paid` once
+   closed_at is set; `expired` when closed_at is null and expires_at has
+   passed. A reusable link is always open. */
 export const paymentLinks = sqliteTable(
   "payment_links",
   {
@@ -98,17 +117,66 @@ export const paymentLinks = sqliteTable(
       .notNull()
       .references(() => businesses.id),
     token: text("token").notNull().unique(),
+    /* automated-collections-api D3/D5: who created the link (FR-011),
+       and therefore where the ask comes from — a panel link reads its
+       debt live from WispHub, an API link carries `ask_cents`. */
+    source: text("source", { enum: ["panel", "api"] })
+      .notNull()
+      .default("panel"),
+    /* automated-collections-api D3 (FR-027): stored rather than inferred
+       from `expires_at IS NULL` — two kinds the spec names in words are
+       named in the data, so a reader never has to know that a null
+       deadline means reusable. */
+    mode: text("mode", { enum: ["reusable", "one_time"] })
+      .notNull()
+      .default("reusable"),
+    /* The caller's own customer identifier — stored and echoed, never
+       interpreted, never joined against anything (data-model: no
+       api_customers table on purpose). API links only. */
+    customerRef: text("customer_ref"),
+    /* The amount to collect, in cents. Null on a panel link, whose ask
+       is read live from WispHub; a re-price overwrites it — what was
+       asked at the time of a payment lives on `payments.asked_cents`. */
+    askCents: integer("ask_cents"),
+    /* Display name the payer sees; falls back to the business name */
+    label: text("label"),
+    /* The payer-facing description the caller may supply (FR-006) */
+    concept: text("concept"),
+    /* One-time links only: the deadline, in ms */
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    /* When the link stopped accepting payments — a one-time link that
+       was paid or closed by the caller. Null on every reusable link. */
+    closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+    /* automated-collections-api D12: born from a test credential. Its
+       payments are test payments — excluded from the fee, the panel and
+       the sweeps by one shared predicate, never by a remembered filter. */
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
     /* Numeric WispHub id (as string) for the auto-activate PATCH;
        the usuario is what every lookup needs — same split as charges.
        The usuario is the link's identity (admin-links-view D5): the
        numeric id is a cache WispHub may recycle to a different person,
-       so it is refreshed on sight and never keys anything. */
-    wisphubCustomerId: text("wisphub_customer_id").notNull(),
-    customerUsuario: text("customer_usuario").notNull(),
+       so it is refreshed on sight and never keys anything.
+       automated-collections-api D3: both nullable now — an API link has
+       no WispHub customer, and `customer_usuario` is surfaced to the
+       payer as `reference`, so a sentinel here would reach a customer's
+       screen. */
+    wisphubCustomerId: text("wisphub_customer_id"),
+    customerUsuario: text("customer_usuario"),
     createdAt: createdAt(),
   },
   (t) => [
-    uniqueIndex("payment_links_business_usuario_idx").on(t.businessId, t.customerUsuario),
+    /* automated-collections-api D4: two partial unique indexes replace
+       the one `(business_id, customer_usuario)` index. One index over both
+       namespaces would let an ISP's WispHub usuario collide with its own
+       API customer reference — two different people, one row. One-time
+       links are excluded from the second because a customer can
+       legitimately hold many (FR-033 is about reusable links). */
+    uniqueIndex("payment_links_panel_usuario_idx")
+      .on(t.businessId, t.customerUsuario)
+      .where(sql`source = 'panel'`),
+    uniqueIndex("payment_links_api_ref_idx")
+      .on(t.businessId, t.customerRef)
+      .where(sql`source = 'api' AND mode = 'reusable'`),
   ],
 );
 
@@ -240,6 +308,21 @@ export const payments = sqliteTable(
     customerName: text("customer_name"),
     customerZone: text("customer_zone"),
     customerPhone: text("customer_phone"),
+    /* automated-collections-api D3/D7: the caller's own customer
+       reference, denormalised at submission for the same reason as the
+       WispHub customer fields above — the history and the webhook must
+       not depend on the link row. Null on a panel payment. */
+    customerRef: text("customer_ref"),
+    /* automated-collections-api D7: what was asked at submission. The
+       classification compares against this number, and a retry days
+       later compares against the same one — never against a link that
+       was re-priced meanwhile. Null on a panel payment, whose ask is
+       read fresh from WispHub at the verdict (direct-payment D14). */
+    askedCents: integer("asked_cents"),
+    /* automated-collections-api D12: a payment on a test link. Readable
+       through the API so a developer can test their own polling, and
+       excluded from the fee, the panel feed and every real total. */
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
     /* What is registered against the WispHub debt (partial-payment D5/D9:
        what arrived, applied) — the number every retry registers again */
     registeredCents: integer("registered_cents"),
@@ -640,4 +723,185 @@ export const extractions = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("extractions_business_idx").on(t.businessId, t.createdAt)],
+);
+
+/* ---- The public collections API (automated-collections-api): the
+   business's own software as a second actor, and the webhook that closes
+   the loop without a human. Every table carries `business_id` and every
+   query filters by the credential's business (constitution V). ---- */
+
+/* automated-collections-api D11: the API credential — a second kind of
+   actor, a credential and not a membership (plan, Complexity Tracking).
+   It resolves to exactly one business and carries no role; it never
+   passes through `requireArea`. Mirrors the engine's former key table
+   (`apps/consta/src/db/schema.ts`, deleted by consta-api-merge): only
+   the SHA-256 of `dk_<32 hex>` is stored, the plaintext exists once in
+   the issuing response (constitution V: a credential the product only
+   compares is hashed). The WispHub key on `integrations` is stored as it
+   is because Devolada must *send* it — the asymmetry is deliberate. */
+export const apiCredentials = sqliteTable(
+  "api_credentials",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    /* What the business called it, so the panel can tell two apart */
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    /* The last 4 characters, so the panel can name which credential it is
+       without ever showing the key again (FR-003) */
+    keyTail: text("key_tail").notNull(),
+    /* automated-collections-api D12: a credential is real or test, never
+       both. A test credential creates test links; their payments are test
+       payments. */
+    isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
+    /* Touched on every authenticated request, so a business can retire a
+       credential it no longer recognises */
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    /* Revocation is a timestamp, never a delete (FR-004): the row stays
+       so the panel can still name it, and the hash can never match again */
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("api_credentials_business_idx").on(t.businessId, t.createdAt)],
+);
+
+/* automated-collections-api D10 (FR-012): where a business's outcomes
+   go — one address per business (spec assumption). No secret on this
+   row, on purpose: deliveries are signed with Devolada's own private key,
+   one set for the whole platform, held in the Worker secret
+   `WEBHOOK_SIGNING_KEYS` and never in a business table. The business has
+   nothing to store, nothing that can leak and nothing to rotate; the row
+   is an address and its health. */
+export const apiWebhooks = sqliteTable(
+  "api_webhooks",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .unique()
+      .references(() => businesses.id),
+    /* Must protect the message in transit (FR-038): the handler refuses
+       anything that is not https with INSECURE_URL */
+    url: text("url").notNull(),
+    /* What the panel's health line reads (FR-018): reset to 0 by a 2xx,
+       incremented by every attempt that was not */
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    lastFailureAt: integer("last_failure_at", { mode: "timestamp_ms" }),
+    lastSuccessAt: integer("last_success_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+);
+
+/* automated-collections-api D8: the queue is the row, exactly as the
+   reconnection queue is the payment row (reconnection-queue D2). A first
+   attempt runs inline at the verdict under `waitUntil`; retries are
+   claimed by a lease in a sweep that rides the every-minute cron — no
+   new trigger (constitution). Backoff [1, 5, 15, 60, 240] minutes, the
+   same five waits the reconnection queue uses, so the product has one
+   retry rhythm to explain; each attempt waits 10 s for a 2xx (FR-016).
+   Transitions: pending → delivered on a 2xx; pending → pending with a
+   later `next_attempt_at` on anything else while waits remain; pending →
+   failed when the schedule is spent; failed → pending, same event id,
+   same payload, when the business asks for a re-send (FR-041). */
+export const webhookDeliveries = sqliteTable(
+  "webhook_deliveries",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    /* Null is possible for a future event that is not about one payment */
+    paymentId: text("payment_id").references(() => payments.id),
+    /* What the caller uses to recognise a repeat (FR-014): at least once,
+       never exactly once, so the same id travels on every attempt and on
+       a re-send */
+    eventId: text("event_id").notNull().unique(),
+    /* automated-collections-api D17: `payment.<status>` for every status
+       the payment row enters — the row's own word, never a synonym */
+    eventType: text("event_type").notNull(),
+    /* automated-collections-api D9: the body, rendered once at enqueue
+       and never re-rendered. A retry four hours later must deliver what
+       the verdict said, not what the row looks like now — and a re-send
+       is byte-identical, so its event id still holds. */
+    payload: text("payload").notNull(),
+    /* automated-collections-api D10: the `kid` that signed the latest
+       attempt, for settling arguments (FR-026). A re-send may carry a
+       newer one than the first attempt did. */
+    keyId: text("key_id"),
+    status: text("status", { enum: ["pending", "delivered", "failed"] })
+      .notNull()
+      .default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    /* When the sweep may touch the row again. Null = terminal, or a
+       lease held by a running sweep (the reconnection queue's shape). */
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+    /* What the endpoint answered, for the panel and for settling
+       arguments (FR-026). Null when it never answered. */
+    responseStatus: integer("response_status"),
+    /* The last attempt's failure, or SIGNING_KEY_MISSING when the
+       platform's signing key is unset (D10, constitution VIII) */
+    lastError: text("last_error"),
+    deliveredAt: integer("delivered_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    /* The sweep's claim */
+    index("webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt),
+    /* The panel's delivery list, and GET /v1/webhook/deliveries */
+    index("webhook_deliveries_business_created_idx").on(t.businessId, t.createdAt),
+    index("webhook_deliveries_payment_idx").on(t.paymentId),
+  ],
+);
+
+/* automated-collections-api D14 (FR-008): the first response to a POST
+   carrying `Idempotency-Key`, replayed verbatim on a repeat. Its own
+   table rather than a column on `payment_links`, because FR-008 must
+   return *the first response*, not merely avoid a second write — and
+   because a key whose request failed validation is remembered too, which
+   is the case that otherwise creates duplicates on a retried network
+   failure. Swept after 24 hours by the cron that also expires
+   `rate_counters` buckets. */
+export const idempotencyKeys = sqliteTable(
+  "idempotency_keys",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    /* The caller's own key, opaque; unique per business, never across */
+    key: text("key").notNull(),
+    /* The first response body, as sent */
+    response: text("response").notNull(),
+    statusCode: integer("status_code").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("idempotency_keys_business_key_idx").on(t.businessId, t.key),
+    index("idempotency_keys_created_idx").on(t.createdAt),
+  ],
+);
+
+/* automated-collections-api D13 (FR-024): the per-business rate limit
+   as D1 counters — the house pattern (`HOURLY_ATTEMPT_BUDGET`,
+   `UPLOAD_HOURLY_BUDGET` count rows in D1 over a window), and the one
+   that can be asserted deterministically on real D1 in the test layer.
+   `bucket` is the minute as epoch minutes; the request that takes a
+   business's count past 120 is refused with RATE_LIMITED and a
+   Retry-After of the seconds left in that minute. A test credential
+   shares its business's bucket: the limit protects the platform from one
+   business's traffic, and test traffic is that business's traffic. Old
+   buckets are deleted by the same sweep that expires idempotency keys. */
+export const rateCounters = sqliteTable(
+  "rate_counters",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    bucket: integer("bucket").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [uniqueIndex("rate_counters_business_bucket_idx").on(t.businessId, t.bucket)],
 );

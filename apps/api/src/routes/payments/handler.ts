@@ -185,7 +185,10 @@ export async function listPaymentFeed(
               : Math.max(0, receivedCents - askedCents),
           observedAction: charge.observedAction,
           dispatchedAction: lastAction.get(charge.id) ?? null,
-          customerName: charge.customerName ?? linkUsuario,
+          /* automated-collections-api D3: the link's usuario is null on an
+             API link, whose payment carries the caller's reference
+             instead; the feed's own API rows arrive with US1 (T076). */
+          customerName: charge.customerName ?? linkUsuario ?? charge.customerRef ?? "",
           storeName: null,
           createdAt: charge.createdAt.getTime(),
           actionDoneAt: charge.actionDoneAt?.getTime() ?? null,

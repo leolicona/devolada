@@ -7,6 +7,7 @@ import { WispHub } from "../wisphub/client";
 import { NO_DEBT, debtOf } from "../wisphub/debt";
 import { sendProvisionalExpiry } from "../email/sender";
 import { settle } from "./partial";
+import { isPanelLink } from "./links";
 
 /* Provisional release (provisional-release spec, US-D15).
 
@@ -161,6 +162,10 @@ export async function maybeProvisionalRelease(
   now: Date,
 ): Promise<Partial<typeof payments.$inferInsert>> {
   if (!evidence) return {};
+  /* automated-collections-api D5: a payment promise is a WispHub write on
+     the link's usuario — an API link has neither, so there is nothing to
+     release and the evaluation is skipped, never failed. */
+  if (!isPanelLink(link)) return {};
   if (!integration?.provisionalReleaseEnabled) return {};
   /* integrations-hub D8: observation pauses the release too — a payment
      promise is a WispHub write, and observation means zero writes. */
@@ -223,6 +228,9 @@ export async function notifyProvisionalExpiry(
 ): Promise<void> {
   try {
     if (!integration?.apiKey) return;
+    /* automated-collections-api D5: only a panel link can have been
+       released (above), so only a panel link has an expiry to announce */
+    if (!isPanelLink(link)) return;
     const wisphub = new WispHub(integration.apiKey, env.WISPHUB_BASE_URL);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),

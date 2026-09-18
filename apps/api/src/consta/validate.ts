@@ -45,9 +45,10 @@ export async function validate(
   const body = parsed.data;
 
   /* The credential absent in this environment (constitution VIII,
-     consta-api-merge D9): the callers gate on `speiAvailable` first, so
-     a payer never reaches this; a payment already in flight can, and it
-     rides the schedule. Retryable, because the fix is a secret planted,
+     consta-api-merge D9): the callers gate on `validationAvailable`
+     first (automated-collections-api D5 split it out of the old
+     `speiAvailable`), so a payer never reaches this; a payment already
+     in flight can, and it rides the schedule. Retryable, because the fix is a secret planted,
      and nothing was billed. */
   if (!env.APICEP_TOKEN) {
     throw new ConstaError("PROVIDER_NOT_CONFIGURED", true, "APICEP_TOKEN is not configured");

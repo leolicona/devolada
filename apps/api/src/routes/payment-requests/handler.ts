@@ -46,12 +46,21 @@ export async function listPaymentRequests(c: Ctx) {
     /* One parameter is the business id; the rest are usuarios (BUG-021) */
     const links: { customerUsuario: string; token: string }[] = [];
     for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
-      links.push(
-        ...(await db
-          .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
-          .from(paymentLinks)
-          .where(and(eq(paymentLinks.businessId, actor.id), inArray(paymentLinks.customerUsuario, part)))),
-      );
+      /* automated-collections-api D3: panel links only — an API link has
+         no usuario, and only a panel link belongs on a WispHub invoice */
+      const rows = await db
+        .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
+        .from(paymentLinks)
+        .where(
+          and(
+            eq(paymentLinks.businessId, actor.id),
+            eq(paymentLinks.source, "panel"),
+            inArray(paymentLinks.customerUsuario, part),
+          ),
+        );
+      for (const row of rows) {
+        if (row.customerUsuario !== null) links.push({ customerUsuario: row.customerUsuario, token: row.token });
+      }
     }
     const urlByUsuario = new Map(
       links.map((l) => [l.customerUsuario, `${c.env.PAGO_BASE_URL}/p/${l.token}`]),

@@ -15,7 +15,16 @@ export { BANKS, type Bank } from "../../direct-payments/banks";
 export const linkStatusResponse = z.object({
   ispName: z.string(),
   customerName: z.string().optional(),
-  status: z.enum(["debt", "no_debt", "unavailable"]),
+  /* automated-collections-api D6 (FR-031): `closed` is the one state an
+     API link adds — a one-time link that was paid or whose deadline
+     passed. The page explains itself in es-MX and offers no CLABE. */
+  status: z.enum(["debt", "no_debt", "unavailable", "closed"]),
+  /* With `closed` only: which of the two it was, because the payer who
+     already paid and the payer who arrived late read different words */
+  closedReason: z.enum(["paid", "expired"]).optional(),
+  /* automated-collections-api FR-006: the description the caller
+     supplied for the payer. Panel links carry none. */
+  concept: z.string().optional(),
   invoiceCents: z.number().int().optional(),
   carriedBalanceCents: z.number().int().optional(),
   serviceFeeCents: z.number().int().optional(),
@@ -263,8 +272,18 @@ export const linksListResponse = z.object({
 export const linksRosterResponse = z.object({
   results: z.array(
     z.object({
-      wisphubId: z.number(),
-      usuario: z.string(),
+      /* automated-collections-api FR-011 (US1 scenario 11): one list per
+         business, every row marked with the channel that collects. */
+      channel: z.enum(["panel", "api"]),
+      /* Panel rows: the WispHub customer. Null on an API row. */
+      wisphubId: z.number().nullable(),
+      usuario: z.string().nullable(),
+      /* API rows: the caller's reference, its display name and the ask
+         stored on the row. Absent on a panel row. */
+      customerRef: z.string().optional(),
+      label: z.string().nullable().optional(),
+      askCents: z.number().int().optional(),
+      linkState: z.enum(["open", "paid", "expired"]).optional(),
       name: z.string(),
       phone: z.string().nullable(),
       url: z.string(),

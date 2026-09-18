@@ -1,3 +1,5 @@
+import type { businesses } from "./db/schema";
+
 export type Bindings = {
   DB: D1Database;
   /* Private bucket for SPEI transfer proofs (direct-payment spec D12):
@@ -33,9 +35,12 @@ export type Bindings = {
      (consta-api-merge D1, D9). What can be absent is the provider's
      credential, never the engine.
      APICEP_TOKEN — worker secret (validation spec D2). Unset → the SPEI
-     channel is unavailable: `speiAvailable` is false, the link answers
-     `unavailable` and the page says so; a payment already in flight
-     retries as PROVIDER_NOT_CONFIGURED and rides the schedule. */
+     channel is unavailable: `validationAvailable` is false, the payer's
+     link answers `unavailable` and the page says so; a payment already in
+     flight retries as PROVIDER_NOT_CONFIGURED and rides the schedule.
+     automated-collections-api D5: a platform condition, never the
+     business's — /v1 still creates its link and attaches a
+     VALIDATION_UNAVAILABLE notice rather than refusing it. */
   APICEP_TOKEN?: string;
   /* Overridable so the local sandbox (`pnpm --filter @devolada/api
      sandbox`) can stand in for the provider. Unset → the real apiCEP.
@@ -98,6 +103,26 @@ export type Actor = {
   platformOperator: boolean;
 };
 
+/* automated-collections-api D11 (plan, Complexity Tracking): the second
+   kind of actor — the business's own software holding a credential, not
+   a person holding a membership. It resolves to exactly one business,
+   carries no role and never passes through `requireArea`; every /v1
+   query filters by `businessId`. Set by `requireApiCredential`. */
+export type ApiClient = {
+  type: "api";
+  credentialId: string;
+  businessId: string;
+  /* automated-collections-api D12: a test credential creates test links
+     and test payments — readable through the API, invisible to every
+     real total */
+  isTest: boolean;
+  /* The business row, read in the same query as the credential so no
+     handler needs a second lookup for the CLABE, the status or the
+     timezone */
+  business: typeof businesses.$inferSelect;
+};
+
 export type Variables = {
   actor: Actor;
+  apiClient: ApiClient;
 };

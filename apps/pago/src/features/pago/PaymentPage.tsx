@@ -32,6 +32,7 @@ import {
   ScanLine,
   ShieldCheck,
   Store,
+  TimerOff,
   TriangleAlert,
   Wifi,
 } from "lucide-react";
@@ -355,7 +356,7 @@ export function PaymentPage({ token }: { token: string }) {
     rememberLink(token, linkData.customerName ?? linkData.ispName);
     /* D19: nothing left to pay means the last payment is over — give the
        step back, so next month starts where the next payment starts. */
-    if (linkData.status === "no_debt") forgetStep(token);
+    if (linkData.status === "no_debt" || linkData.status === "closed") forgetStep(token);
   }, [linkData, token]);
 
   /* A link the ISP removed is dropped rather than offered forever. Only
@@ -898,9 +899,15 @@ export function PaymentPage({ token }: { token: string }) {
           <Reveal className="space-y-4">
             <StatusBadge status="paymentConfirmed" size="standard" />
             <p className="text-sm text-ink-soft">
-              {"actionOutcome" in status && status.actionOutcome === "done"
-                ? "Tu pago fue registrado. Tu servicio ya está activo."
-                : "Tu pago fue registrado. Tu servicio se reactivará en unos minutos."}
+              {/* automated-collections-api D6: an API payment carries no
+                  action outcome — the business's own system acts on the
+                  webhook — so nothing here promises a service the page
+                  knows nothing about (FR-028 reaches the payer too) */}
+              {!("actionOutcome" in status) || status.actionOutcome === undefined
+                ? "Tu pago fue registrado."
+                : status.actionOutcome === "done"
+                  ? "Tu pago fue registrado. Tu servicio ya está activo."
+                  : "Tu pago fue registrado. Tu servicio se reactivará en unos minutos."}
             </p>
             {"folio" in status && status.folio && (
               <p className="font-mono text-sm text-ink-soft">Folio {status.folio}</p>
@@ -923,11 +930,13 @@ export function PaymentPage({ token }: { token: string }) {
                   {/* Three different facts, three sentences: reconnected
                       is done, queued needs no more money (the threshold
                       was met), and only withheld waits for the rest. */}
-                  {status.actionOutcome === "done"
-                    ? "Tu servicio ya está activo."
-                    : status.actionOutcome === "queued"
-                      ? "Tu servicio se reactivará en unos minutos."
-                      : "Tu servicio se reactivará cuando llegue el resto."}
+                  {status.actionOutcome === undefined
+                    ? /* automated-collections-api D6: no service to speak of */ ""
+                    : status.actionOutcome === "done"
+                      ? "Tu servicio ya está activo."
+                      : status.actionOutcome === "queued"
+                        ? "Tu servicio se reactivará en unos minutos."
+                        : "Tu servicio se reactivará cuando llegue el resto."}
                 </>
               ) : (
                 "Recibimos tu pago, pero no cubre todo el adeudo."
@@ -1080,6 +1089,25 @@ export function PaymentPage({ token }: { token: string }) {
     );
   }
 
+  /* ——— 9. Link cerrado (automated-collections-api D6, FR-031) ———
+     A one-time link that was paid, or whose deadline passed. Static copy,
+     no CLABE: a transfer against it would be applied to nobody. The
+     payer who already paid and the payer who arrived late read
+     different sentences, because they are in different situations. */
+  if (data.status === "closed") {
+    return (
+      <Card className="space-y-4 p-6">
+        <h1 className="text-lg font-semibold">{data.ispName}</h1>
+        <Alert layout="icon">
+          {data.closedReason === "expired" ? <TimerOff aria-hidden /> : <CheckCircle2 aria-hidden />}
+          {data.closedReason === "expired"
+            ? `Este link de pago venció. Pide uno nuevo a ${data.ispName} para hacer tu pago.`
+            : `Este link de pago ya fue utilizado. Si necesitas hacer otro pago, pide un link nuevo a ${data.ispName}.`}
+        </Alert>
+      </Card>
+    );
+  }
+
   /* ——— 2. Sin adeudo ——— */
   if (data.status === "no_debt") {
     return (
@@ -1107,6 +1135,10 @@ export function PaymentPage({ token }: { token: string }) {
       <h1 className="text-lg font-semibold">{title}</h1>
       <p className="text-sm text-ink-soft">{data.ispName}</p>
       {data.customerName && <p className="text-sm text-ink-soft">{data.customerName}</p>}
+      {/* automated-collections-api FR-006: what the caller told the payer
+          this is for — a line under the name, never a label that would
+          compete with the amount */}
+      {data.concept && <p className="text-sm text-ink-soft">{data.concept}</p>}
     </header>
   );
 

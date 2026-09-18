@@ -293,13 +293,33 @@ export const proofReading = {
   isReceipt: true,
   amountCents: paymentLink.totalCents,
   trackingKey: longTrackingKey,
-  /* Unresolved on purpose: it is what opens the confirmation screen
-     instead of paying silently (D18). */
+  /* Unresolved on purpose — but no longer a door. Until two-eyes-receipt
+     D13 a hole like this one stopped the payer for a confirmation; now it
+     travels to the provider, who may fill it for free (FR-005), and
+     nobody is asked. The hole stays here because the reading a real
+     reader returns usually has one, and the silent path is what every
+     test using this stub is meant to walk. */
   senderBank: null,
   date: "2026-08-19",
   receiptStatus: "Aceptada",
   gate: { trackingKey: "ok", senderBank: "unresolved", amount: "ok" },
 };
+
+/* The one reading that still stops for the payer (claimed-amount D2):
+   read whole, and above the debt. The surplus is consented to, never
+   refused — so this is the only door left through which the machine's
+   own clave is put in front of the payer to proofread, which is what
+   BUG-009 measures. */
+export const surplusReading = {
+  ...proofReading,
+  senderBank: "STP",
+  amountCents: paymentLink.totalCents + 8600,
+  gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+};
+
+export async function stubPagoSurplusReading(page: Page): Promise<void> {
+  await apiRoute(page, "**/direct-payments/links/*/read", surplusReading);
+}
 
 export async function stubPagoApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/links/*", paymentLink);

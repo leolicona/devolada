@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PAGO } from "../../playwright.config";
-import { longTrackingKey, stubPagoApi } from "./stubs";
+import { longTrackingKey, stubPagoApi, stubPagoSurplusReading } from "./stubs";
 
 /* docs/legacy/direct-payment/direct-payment.spec.md (D16, D18, D19) — the
    customer's page in a real browser.
@@ -47,9 +47,25 @@ async function expectNoHorizontalScroll(page: Page) {
 test.describe("US-D09: the payer can read what they are asked to confirm", () => {
   /* BUG-009. D18's whole point is that the human checks the machine's
      reading — and the field was showing about 24 of the 28 characters,
-     so the tail nobody could see was the part most likely to be wrong. */
+     so the tail nobody could see was the part most likely to be wrong.
+
+     The door changed under this test, so the test moved to the door
+     rather than the other way round. Until two-eyes-receipt D13 any
+     reading with a hole in it opened the confirmation screen, and a
+     plain upload landed here. It does not any more: a hole goes to the
+     provider and nobody is asked (FR-005), so an upload now reaches
+     `validating` with no field on screen at all — which is what made
+     this test fail on main rather than any change to the field.
+
+     One door is left, and it is the one that matters most: a reading
+     above the debt, where claimed-amount D2 shows the payer both
+     numbers and asks for consent instead of refusing. "Corregir los
+     datos" is what opens the machine's reading for proofreading there,
+     and the clave it pre-fills is still 28 characters on a 360px
+     phone. */
   test("the clave de rastreo fits its field at the 360px floor", async ({ page }) => {
     await open(page);
+    await stubPagoSurplusReading(page);
 
     await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
     await page.locator('input[type="file"]').setInputFiles({
@@ -58,6 +74,8 @@ test.describe("US-D09: the payer can read what they are asked to confirm", () =>
       buffer: Buffer.alloc(120),
     });
     await page.getByRole("button", { name: /enviar comprobante/i }).click();
+
+    await page.getByRole("button", { name: /corregir los datos/i }).click();
 
     const field = page.getByLabel(/clave de rastreo/i);
     await expect(field).toHaveValue(longTrackingKey);

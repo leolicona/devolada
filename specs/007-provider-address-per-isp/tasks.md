@@ -28,7 +28,7 @@ task below carries `provider-address-per-isp US<n>`.
 on it.
 
 - [ ] T001 Verify the pilot's installation answers the provider API — run the `curl` in [quickstart.md](./quickstart.md) ("Before implementing") with the pilot's real key against `https://api.wisphub.io/api/clientes/?limit=1`, and record the status code in `specs/007-provider-address-per-isp/research.md` under "Carried, not resolved here". A non-200 stops T003 until the right host is known.
-- [ ] T002 [P] While the key is in hand, compare `OPTIONS /facturas/` with and without the invoice permission (research D7) and record the answer in `specs/007-provider-address-per-isp/research.md`. If it discriminates, T019 can verify three of the four writes and FR-011 keeps more of its wording.
+- [ ] T002 While the key is in hand, compare `OPTIONS /facturas/` with and without the invoice permission (research D7) and record the answer in `specs/007-provider-address-per-isp/research.md`. If it discriminates, **T027** (the `testKey` rewrite) can verify three of the four writes, and FR-011 can be widened back toward its original wording.
 
 **Checkpoint**: the catalogue's `wisphub_io` host is confirmed, or known to be wrong.
 
@@ -66,16 +66,19 @@ these.
 
 **Independent Test**: create a business, choose a non-default installation, save a key valid there, confirm the roster loads from that installation; then confirm a business with no installation recorded behaves exactly as before.
 
-### Tests for User Story 1
+### Contract, then tests, then implementation for User Story 1
 
-- [ ] T017 [P] [US1] API test in `apps/api/test/integrations-installation.test.ts` citing `provider-address-per-isp US1` — saving an installation stores the key and resolves its host; a business with `installation` null resolves to the platform default and its provider calls still reach the pinned origin (FR-002, SC-006); a value outside the catalogue is rejected at the write path (FR-005).
-- [ ] T018 [P] [US1] Component test in `apps/admin/test/integrations.test.tsx` citing `provider-address-per-isp US1` — the picker renders the three entries with the test installation visibly marked, the saved installation shows beside the key tail, and a business with none shows the resolved one marked as assumed. MSW answers the contract; `axe` runs on the screen.
+> The contract lands first because the tests import it — see "Within each
+> story" below (`/speckit-analyze` finding I4).
+
+- [ ] T017 [US1] Add `installationKey`, `installation` and `effectiveInstallation` to `wisphubIntegration`, and `installation` to `wisphubPatchRequest`, in `apps/api/src/routes/integrations/schema.ts` per [contracts/integrations.md](./contracts/integrations.md). `host` stays out of the response on purpose.
+- [ ] T018 [P] [US1] API test in `apps/api/test/integrations-installation.test.ts` citing `provider-address-per-isp US1` — saving an installation stores the key and resolves its host; a business with `installation` null resolves to the platform default and its provider calls still reach the pinned origin (FR-002, SC-006); a value outside the catalogue is rejected at the write path (FR-005).
+- [ ] T019 [P] [US1] Component test in `apps/admin/test/integrations.test.tsx` citing `provider-address-per-isp US1` — the picker renders the three entries with the test installation visibly marked, the saved installation shows beside the key tail, and a business with none shows the resolved one marked as assumed. MSW answers the contract; `axe` runs on the screen.
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Add `installationKey`, `installation` and `effectiveInstallation` to `wisphubIntegration`, and `installation` to `wisphubPatchRequest`, in `apps/api/src/routes/integrations/schema.ts` per [contracts/integrations.md](./contracts/integrations.md). `host` stays out of the response on purpose.
 - [ ] T020 [US1] Persist and read the installation in `apps/api/src/routes/integrations/handler.ts` — `toWisphub` returns `installation` and the resolved `effectiveInstallation` with its `assumed` flag; `patchWisphub` accepts and validates the key against the catalogue.
-- [ ] T021 [US1] Add the installation picker to `apps/admin/src/features/integrations/WispHubScreen.tsx` — a closed choice from `@devolada/api/installations`, es-MX labels, the test entry marked with `StatusBadge` (icon + text, never colour alone), sized per the declared scale and readable at the 360px floor (constitution VI).
+- [ ] T021 [US1] Add the installation picker to `apps/admin/src/features/integrations/WispHubScreen.tsx` — a closed choice from `@devolada/api/installations`, es-MX labels, the test entry marked with `StatusBadge` (icon + text, never colour alone), sized per the declared scale and readable at the 360px floor (constitution VI). When the business already has links, changing the installation asks for confirmation first and says plainly what is not protected — the spec's **Deferred** outcomes are reachable through this control and should be a conscious act, not a stray click (`/speckit-analyze` finding U1).
 - [ ] T022 [US1] Show the installation in use beside the key tail in `apps/admin/src/features/integrations/WispHubScreen.tsx`, with the same prominence (FR-004), and word the assumed case so the ISP can tell a default from a choice.
 - [ ] T023 [US1] Add the "not on the list" path to `apps/admin/src/features/integrations/WispHubScreen.tsx` (FR-006) — plain es-MX saying Devolada does not reach that installation yet and how to ask, with no free-text field anywhere on the screen.
 
@@ -89,18 +92,19 @@ these.
 
 **Independent Test**: seed each failure against a test business and confirm a distinct outcome and the installation label, with the key absent from every response and log line.
 
-### Tests for User Story 2
+### Contract, then tests, then implementation for User Story 2
 
-- [ ] T024 [P] [US2] API test in `apps/api/test/integrations-installation.test.ts` citing `provider-address-per-isp US2` — an unreachable host gives `INSTALLATION_UNREACHABLE`, a 403 gives `KEY_REJECTED`, a refused permission gives `PERMISSION_MISSING`, and success gives `OK` with the three reads in `verified` and the four writes in `unverified`. Assert `triedInstallation` on all four, and assert the fixture key appears in no response body (FR-013).
-- [ ] T025 [P] [US2] Component test in `apps/admin/test/integrations.test.tsx` citing `provider-address-per-isp US2` — each outcome renders its own message and names the installation; the rejected-key case must not tell the owner their key is wrong; the missing-permission case must not report the connection as healthy.
+- [ ] T024 [US2] Replace `code` with `outcome`, `triedInstallation`, `verified`, `unverified` and `missingPermission` in `WispHubTestResponse` in `apps/api/src/routes/integrations/schema.ts` per [contracts/integrations.md](./contracts/integrations.md).
+- [ ] T025 [US2] API test in `apps/api/test/integrations-installation.test.ts` citing `provider-address-per-isp US2` — an unreachable host gives `INSTALLATION_UNREACHABLE`, a 403 gives `KEY_REJECTED`, a refused permission gives `PERMISSION_MISSING`, and success gives `OK` with the three reads in `verified` and the four writes in `unverified`. Assert `triedInstallation` on all four, and assert the fixture key appears in no response body **and in no captured log line** — FR-013 covers "no message **and no record**", and the adapter already logs provider failures (`/speckit-analyze` finding G2).
+- [ ] T026 [US2] Component test in `apps/admin/test/integrations.test.tsx` citing `provider-address-per-isp US2` — each outcome renders its own message and names the installation; the rejected-key case must not tell the owner their key is wrong; the missing-permission case must not report the connection as healthy.
 
 ### Implementation for User Story 2
 
-- [ ] T026 [US2] Replace `code` with `outcome`, `triedInstallation`, `verified`, `unverified` and `missingPermission` in `WispHubTestResponse` in `apps/api/src/routes/integrations/schema.ts` per [contracts/integrations.md](./contracts/integrations.md).
 - [ ] T027 [US2] Rewrite `testKey` in `apps/api/src/routes/integrations/handler.ts` to probe the three reads Devolada needs — the customer list, the invoice list and the payment methods — and to map the adapter's failures onto the four outcomes. It never attempts a write (research D7). Cite `provider-address-per-isp D7`.
 - [ ] T028 [US2] Make the test run against the installation **being saved** in `apps/api/src/routes/integrations/handler.ts` — the one in the patch if present, the stored one otherwise (FR-009). Saving stays unblocked by a failed test (settings D3).
-- [ ] T029 [US2] Rewrite the three-branch message block in `apps/admin/src/features/integrations/WispHubScreen.tsx` against `outcome`. The current "WispHub rechazó esta llave. Revísala en tu panel." is the line this story exists to stop showing when the key is fine.
-- [ ] T030 [US2] Show what was and was not verified in `apps/admin/src/features/integrations/WispHubScreen.tsx` — plain es-MX naming the four write permissions as first exercised by a real payment, so a healthy connection never claims more than it proved (research D7).
+- [ ] T029 [US2] Widen the `wisphubTest` projection on the PATCH answer in `apps/api/src/routes/integrations/handler.ts` — it currently sends `{ ok, code }`, and T024 retires `code`. Save-then-test is the path an ISP actually uses, so without this US2 ships unable to tell the three failures apart exactly where they are first met (`/speckit-analyze` finding G1). Carry `outcome`, `triedInstallation`, `verified` and `unverified`, and update `IntegrationsResponse` in `schema.ts` to match.
+- [ ] T030 [US2] Rewrite the three-branch message block in `apps/admin/src/features/integrations/WispHubScreen.tsx` against `outcome`. The current "WispHub rechazó esta llave. Revísala en tu panel." is the line this story exists to stop showing when the key is fine.
+- [ ] T031 [US2] Show what was and was not verified in `apps/admin/src/features/integrations/WispHubScreen.tsx` — plain es-MX naming the four write permissions as first exercised by a real payment, so a healthy connection never claims more than it proved (research D7).
 
 **Checkpoint**: an ISP can diagnose a failed connection without contacting support.
 
@@ -114,13 +118,13 @@ these.
 
 ### Tests for User Story 3
 
-- [ ] T031 [US3] Isolation test in `apps/api/test/installation-isolation.test.ts` citing `provider-address-per-isp US3` — intercept a second provider origin beside the pinned one (research D8); confirm a payment for each business; assert each registration landed on its own origin **and that the other origin received nothing at all** for that business. The negative assertion is the one that catches a missed call site.
-- [ ] T032 [P] [US3] Degradation test in `apps/api/test/installation-isolation.test.ts` citing `provider-address-per-isp US3` — one origin unreachable queues only its own business's action with a visible status, while the other business collects and reconnects normally (FR-012).
-- [ ] T033 [P] [US3] Structural guard in `apps/api/test/installations.test.ts` citing `provider-address-per-isp US3` — assert no `new WispHub(` outside `apps/api/src/wisphub/factory.ts`, so the twelfth call site cannot appear unnoticed (research D4, constitution V "auditable with grep").
+- [ ] T032 [US3] Isolation test in `apps/api/test/installation-isolation.test.ts` citing `provider-address-per-isp US3` — intercept a second provider origin beside the pinned one (research D8); confirm a payment for each business; assert each registration landed on its own origin **and that the other origin received nothing at all** for that business. The negative assertion is the one that catches a missed call site.
+- [ ] T033 [US3] Degradation test in `apps/api/test/installation-isolation.test.ts` citing `provider-address-per-isp US3` — one origin unreachable queues only its own business's action with a visible status, while the other business collects and reconnects normally (FR-012).
+- [ ] T034 [US3] Structural guard in `apps/api/test/installation-isolation.test.ts` citing `provider-address-per-isp US3` — assert no `new WispHub(` outside `apps/api/src/wisphub/factory.ts`, so the twelfth call site cannot appear unnoticed (research D4, constitution V "auditable with grep"). It lives here, not in `installations.test.ts`, so that no test file carries two story citations and US1 can ship without US3 editing its files (`/speckit-analyze` finding C1).
 
 ### Implementation for User Story 3
 
-- [ ] T034 [US3] Fix whatever T031–T033 expose in `apps/api/src/wisphub/factory.ts` and the routed call sites. If all three pass unchanged, the work was done in Phase 2 and this task closes empty — record that in the task rather than deleting it.
+- [ ] T035 [US3] Fix whatever T032–T034 expose in `apps/api/src/wisphub/factory.ts` and the routed call sites. If all three pass unchanged, the work was done in Phase 2 and this task closes empty — record that in the task rather than deleting it.
 
 **Checkpoint**: onboarding a second ISP costs the first nothing. All three stories independently functional.
 
@@ -130,7 +134,6 @@ these.
 
 **Purpose**: settle the spec gap, pay the debt this feature was written to remove, and prove the whole thing.
 
-- [ ] T035 Amend FR-011 in `specs/007-provider-address-per-isp/spec.md` to the honest version research D7 proposes — a connection is healthy when every permission verifiable without a side effect passes, and the screen states which were not verified. Record the amendment under **Clarifications** with its date and reason, per constitution I.
 - [ ] T036 Point the pilot's business row at its installation from `/integrations/wisphub` in `apps/admin`, and confirm its roster loads — the "Release" steps in [quickstart.md](./quickstart.md). Set it through the panel, never by writing the row, so the path an ISP uses is the path that gets proven.
 - [ ] T037 Remove `WISPHUB_BASE_URL` from `env.dev.vars` and `env.prod.vars` in `apps/api/wrangler.jsonc`, and the two stopgap comments with it. **This must land in the same release as T036** or the platform default keeps overriding every business that chose nothing (research D5).
 - [ ] T038 Confirm the demo tenant `FastIsp` works on dev again after T037 — verify from `/integrations/wisphub` in `apps/admin` and from a roster read, not from the row. It has been failing by design since the stopgap comments landed in `apps/api/wrangler.jsonc`.
@@ -146,24 +149,28 @@ these.
 
 ### Phase Dependencies
 
-- **Setup (T001–T002)**: no dependencies. T001 gates T003's host value.
+- **Setup (T001–T002)**: no dependencies, and sequential — both append to `research.md`. T001 gates T003's host value.
 - **Foundational (T003–T016)**: blocks all three stories. T003 → T004/T005; T006 → T007; T008 → T009–T015.
-- **US1 (T017–T023)**: after Foundational. Delivers the MVP.
-- **US2 (T024–T030)**: after Foundational. Independent of US1 — it changes the test's *answer*, not the address's *storage*.
-- **US3 (T031–T034)**: after Foundational. Proves what Phase 2 built; expected to find little if T008–T015 were done well.
-- **Polish (T035–T043)**: T037 depends on T036. T039 depends on T037 and T038.
+- **US1 (T017–T023)**: after Foundational. T017 (the contract) lands before its tests, because they import it. Delivers the MVP.
+- **US2 (T024–T031)**: after Foundational. Independent of US1 — it changes the test's *answer*, not the address's *storage*. T024 (the contract) lands before its tests, same reason.
+- **US3 (T032–T035)**: after Foundational. Proves what Phase 2 built; expected to find little if T008–T015 were done well.
+- **Polish (T036–T043)**: T037 depends on T036. T039 depends on T037 and T038.
 
 ### Within each story
 
-Contract (`schema.ts`) before handler, handler before screen, tests written
-against the contract and failing first.
+The contract (`schema.ts`) lands **first**, because the tests import it and
+would not compile without it. Then the tests, written to fail. Then the
+handler, then the screen. The template's "tests before everything" does not
+survive contact with a typed contract, and pretending otherwise is how a
+phase stalls on its first task (`/speckit-analyze` finding I4).
 
 ### Parallel Opportunities
 
 - **T009–T014** touch six different files and are the bulk of Phase 2 — the widest parallel window in the feature. T009 is not marked `[P]` only because it is four edits in one file.
-- **T004 and T005** run alongside each other once T003 exists.
-- **US1 and US2 are genuinely independent** once Phase 2 is done — one developer on the storage and the picker, one on the outcomes and the messages, meeting at `schema.ts` (T019 and T026 both edit it; sequence them or land T019 first).
+- **T004 and T005** run alongside each other once T003 exists — different files.
+- **US1 and US2 are genuinely independent** once Phase 2 is done — one developer on the storage and the picker, one on the outcomes and the messages. They meet in three files, so those tasks are **not** marked `[P]` and must be sequenced: `schema.ts` (T017, T024), `apps/api/test/integrations-installation.test.ts` (T018, T025) and `apps/admin/test/integrations.test.tsx` (T019, T026). Land the US1 task of each pair first (`/speckit-analyze` finding I2).
 - **T040, T041, T042** are three separate files in Phase 6.
+- **`[P]` is checked, not assumed**: no two `[P]` tasks name the same file anywhere in this list.
 
 ---
 
@@ -187,7 +194,7 @@ Task: "Give testKey its own resolution path in routes/integrations/handler.ts"  
 
 1. Phase 1 — confirm the host. A wrong catalogue entry leaves the pilot where they are today.
 2. Phase 2 — catalogue, column, factory.
-3. Phase 3 — the picker and the resolution.
+3. Phase 3 — the contract, the resolution and the picker.
 4. **Stop and validate**: an ISP on `wisphub.io` connects from the panel, and every existing business is untouched.
 5. This is shippable. The pilot is unblocked without the stopgap.
 
@@ -211,4 +218,5 @@ Task: "Give testKey its own resolution path in routes/integrations/handler.ts"  
 - `[P]` means a different file and no unfinished dependency.
 - Every test file cites `provider-address-per-isp US<n>` (constitution VII); `spec-lint` checks it.
 - Commit per task or per logical group; every non-obvious rule carries its `provider-address-per-isp D<n>`.
-- Phase 5 may find nothing. That is a pass, not a wasted phase — T031's negative assertion is the only thing that can prove Phase 2 was complete.
+- Phase 5 may find nothing. That is a pass, not a wasted phase — T032's negative assertion is the only thing that can prove Phase 2 was complete.
+- FR-011 was amended in `spec.md` on 2026-09-18 rather than scheduled as a task here, so no phase implements code the spec contradicts (`/speckit-analyze` finding I1).

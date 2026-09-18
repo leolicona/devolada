@@ -73,3 +73,43 @@ feature; neither is fixed by it.
 
 Requirements 19 → 13, stories 4 → 3, success criteria 10 → 8. The feature is
 now what it says on the title: the address, per ISP.
+
+### Iteration 4 — 2026-09-18 (post-`/speckit-analyze`)
+
+The cross-artifact analysis found no critical issues and two high ones. Both
+are closed, along with eight lesser findings. Still 16 of 16; the spec grew one
+requirement.
+
+- **I1 (high)** — the plan proposed amending FR-011, and `tasks.md` scheduled
+  that amendment *after* the code implementing it. **FR-011 is amended here
+  instead**, so the spec never disagrees with its own implementation. The
+  requirement now asks for every permission checkable without a side effect,
+  plus honesty on screen about the rest — strictly more than the product does
+  today, where a read-only key passes green in silence. The task is gone.
+- **G1 (high)** — nothing widened the `wisphubTest` projection on the PATCH
+  answer, which sends `{ ok, code }` while the contract retires `code`.
+  Save-then-test is the path an ISP actually uses, so US2 would have shipped
+  unable to tell the three failures apart exactly where they are first met. Now
+  T029.
+- **I2** — five `[P]` pairs named the same file. `[P]` now means what it says;
+  a check over the list confirms no two parallel tasks share a file.
+- **I3** — a cross-reference named the schema task where it meant the `testKey`
+  rewrite.
+- **I4** — the task order put tests before the contract they import. The
+  contract lands first in both stories, and the rule text now says why.
+- **C1** — the structural guard moved out of `installations.test.ts`, so no
+  test file carries two story citations and US1 ships without US3 editing its
+  files.
+- **G2** — FR-013 covers "no message **and no record**"; the test asserted
+  responses only, not logs.
+- **U1** — the spec's **Deferred** outcomes are reachable through the picker.
+  Changing installation on a business that already has links now asks first.
+- **A1** — FR-008 read as though a particular setting had to stay in place.
+  The list's own default is the floor; retaining the *way* is the requirement.
+- **I5** — FR-006 bundled two obligations covered by different tasks, now
+  FR-006 and FR-006a.
+
+**U2** was left alone: T035's "fix whatever the isolation tests expose" has no
+definite content by design, and already instructs recording an empty close.
+
+Requirements 13 → 14, tasks 43 → 43 (one added, one removed).

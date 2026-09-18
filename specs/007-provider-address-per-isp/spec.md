@@ -76,6 +76,18 @@ left for later — see *Deferred*.
   product does for free. It is cut. What genuinely remains unhandled is
   recorded under *Deferred* rather than solved here.
 
+- **FR-011 amended 2026-09-18, after `/speckit-plan` and `/speckit-analyze`.**
+  It required a connection to prove the credential can perform *every* action
+  Devolada will take. Four of the seven are writes into a real ISP's live
+  billing, and the only way to prove a write permission is to write. `OPTIONS`
+  does not rescue it: the most important write answers 500 to `OPTIONS`, and
+  whether `OPTIONS` varies by key permission is unverified. The requirement now
+  asks for everything checkable without a side effect, plus honesty on screen
+  about the rest — which is strictly more than the product does today, where a
+  read-only key passes green in silence. Amended here rather than scheduled as
+  a task, so the spec never disagrees with the code that implements it
+  (`/speckit-analyze` finding I1).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - An ISP connects on their own installation (Priority: P1)
@@ -238,14 +250,17 @@ installation and neither business's data appears in the other's screens.
 - **FR-006**: An ISP whose installation is not on the list MUST be told so
   plainly and shown how to request it, rather than being left with a failing
   connection or an empty choice. Adding an installation to the list is a
-  reviewed change made by Devolada, and the list MUST be verified
-  automatically so it cannot drift unnoticed.
+  reviewed change made by Devolada.
+- **FR-006a**: The list MUST be verified automatically, so an entry cannot
+  drift from what the provider actually operates without something failing.
 - **FR-007**: Each entry MUST say whether it is a real or a test installation,
   so a business cannot connect live collections to a test system without
   seeing that it did.
 - **FR-008**: The platform MUST retain a way to name a default installation
   for businesses that record none, so the product has a sane answer before
-  anyone chooses.
+  anyone chooses. The list itself carries that floor: one entry is the
+  default, and it answers even when no environment names one. Retaining the
+  *way* is the requirement — leaving any particular setting in place is not.
 
 **Telling the truth about failure**
 
@@ -254,9 +269,13 @@ installation and neither business's data appears in the other's screens.
 - **FR-010**: A failed connection MUST report which of three causes applies —
   unreachable installation, credential rejected, or missing permission — and
   MUST name the installation that was tried.
-- **FR-011**: A connection MUST NOT be reported as healthy unless the
-  credential can perform every action Devolada will later take on the ISP's
-  behalf. Reading customers alone is not a healthy connection.
+- **FR-011**: A connection MUST NOT be reported as healthy unless every
+  permission that can be checked **without a side effect** passes, and the
+  screen MUST state which permissions were not checked. Reading customers
+  alone is not a healthy connection. The permissions Devolada can only
+  exercise by writing into the ISP's live billing are named as unverified
+  rather than assumed; they are first proven by a real payment, where the
+  action queue already shows the outcome.
 
 **Degrading and keeping quiet**
 

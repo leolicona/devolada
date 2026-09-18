@@ -1,4 +1,4 @@
-import { cloneElement, useId, type ComponentType, type InputHTMLAttributes, type ReactElement } from "react";
+import { cloneElement, useId, type ComponentProps, type ComponentType, type ReactElement } from "react";
 import { cn } from "../lib/cn";
 
 /* The one text field (design-foundations D6; constitution VI). This file
@@ -30,7 +30,11 @@ const SIZES = {
   },
 } as const;
 
-export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
+/* `ComponentProps` rather than `InputHTMLAttributes` so `ref` travels with
+   the rest (React 19 passes it as an ordinary prop): the admin's combobox
+   has to put the focus back on the field after a choice is clicked, and a
+   second copy of this recipe to get a ref would be drift (constitution VI). */
+export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   icon?: ComponentType<{ className?: string }>;
   /* design-review D8: a field that takes money shows the sign every
      displayed amount already carries. */

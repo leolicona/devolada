@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;
+/* The anchor a control positions itself against when the control is not
+   a trigger — the combobox's field stays a field, and keeps the keyboard. */
+export const PopoverAnchor = PopoverPrimitive.Anchor;
 export const PopoverClose = PopoverPrimitive.Close;
 
 /* feedback-vocabulary-rollout D9, FR-005/FR-006. Arriving and departing have

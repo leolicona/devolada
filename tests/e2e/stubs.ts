@@ -229,8 +229,31 @@ export async function holdApiRoute(
   return release;
 }
 
+/* The business's settings, as /settings/direct-payment reads them
+   (settings-schema). The SPEI card opens on a CLABE whose prefix is not in
+   PREFIX_TO_BANK, which is the state the bank has to be picked by hand in
+   (bug: bank-picker-unreachable). */
+export const settings = {
+  serviceFeeCents: 1500,
+  timezone: "America/Mexico_City",
+  timeFormat: "12h",
+  wisphub: { configured: true, keyTail: "1234" },
+  spei: {
+    clabe: "159180157000000004",
+    bank: null,
+    beneficiaryName: null,
+    serviceFeeCents: null,
+    effectiveServiceFeeCents: 1500,
+    bankUnknown: false,
+    configured: false,
+  },
+  reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
+  reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
+};
+
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
+  await apiRoute(page, "**/settings", settings);
   await apiRoute(page, "**/payments/feed*", feed);
   await apiRoute(page, "**/payment-requests", cobros);
   await apiRoute(page, "**/integrations", integrationsHub);

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
 import { Button, Card, Input, Pending, Skeleton, parseMoney } from "@devolada/ui";
 import type { SettingsPatchRequest, SettingsResponse } from "@devolada/api/settings-schema";
-import { BANKS, TIMEZONES } from "@devolada/api/settings-schema";
+import { TIMEZONES } from "@devolada/api/settings-schema";
 import { roleCan, type Role } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
 import { SubPage } from "../account/AccountHub";
@@ -12,6 +12,8 @@ import { bankForClabe } from "@devolada/api/clabe";
 import type { Bank } from "@devolada/api/settings-schema";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import { BANK_OPTIONS } from "@/lib/banks";
 import { Switch } from "@/components/ui/switch";
 import { api, ApiError } from "@/lib/api";
 import { formatTime, SAMPLE_TIME_MS } from "@/lib/datetime";
@@ -149,26 +151,20 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
               them, and silently: apiCEP answers `invalid`, never an error.
               Typed free-hand this said "STP, BBVA, Banorte…", and two of
               those three are not names it accepts. */}
-          <Select
+          {/* bug: bank-picker-unreachable — a combobox, not a list: 97 names
+              are searched, not scanned, and the field is the search box. */}
+          <Combobox
+            id="spei-bank"
+            label="Banco"
+            className="mt-1"
+            placeholder="Elige tu banco"
             value={bank}
+            options={BANK_OPTIONS}
             onValueChange={(v) => {
               setBankTouched(true);
               setBank(v as Bank);
             }}
-          >
-            <SelectTrigger id="spei-bank" className="mt-1" aria-label="Banco">
-              <SelectValue placeholder="Elige tu banco" />
-            </SelectTrigger>
-            <SelectContent>
-              {[...BANKS]
-                .sort((a, b) => a.localeCompare(b, "es-MX"))
-                .map((b) => (
-                  <SelectItem key={b} value={b}>
-                    {b}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
         <div>
           <Label htmlFor="spei-beneficiary">Nombre del beneficiario (opcional)</Label>

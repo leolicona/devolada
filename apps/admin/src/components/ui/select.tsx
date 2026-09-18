@@ -47,13 +47,20 @@ export function SelectContent({
         position="popper"
         sideOffset={4}
         className={cn(
-          "z-dropdown min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg",
+          /* bug: bank-picker-unreachable — the popup MUST be bounded. Radix's
+             viewport is `overflow: hidden auto` inside `flex: 1`, so it can
+             only scroll within a parent whose height is fixed; unbounded, a
+             long list simply grew past the window, and Radix's own scroll
+             lock meant the page behind it could not move either. Everything
+             below the fold was unreachable. The available-height variable is
+             the space the popup actually has after collision handling. */
+          "z-dropdown max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-card p-1 shadow-lg",
           "data-[state=open]:animate-enter data-[state=closed]:animate-leave",
           className,
         )}
         {...props}
       >
-        <SelectPrimitive.Viewport>{children}</SelectPrimitive.Viewport>
+        <SelectPrimitive.Viewport className="max-h-72 overflow-y-auto">{children}</SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );

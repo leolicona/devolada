@@ -148,10 +148,14 @@ describe("US-B01 / D5: the CLABE form in Configuración keeps the wizard's prefi
     renderApp("/settings/direct-payment");
     const clabe = await screen.findByLabelText("CLABE");
     await userEvent.type(clabe, "646180157000000004");
-    expect(screen.getByRole("combobox", { name: "Banco" })).toHaveTextContent("STP");
+    /* bug: bank-picker-unreachable — the picker is a combobox now, so the
+       seeded name is the field's value, not a label rendered beside it. */
+    expect(screen.getByRole("combobox", { name: "Banco" })).toHaveValue("STP");
     await userEvent.clear(clabe);
     await userEvent.type(clabe, "999180157000000004");
-    expect(screen.getByRole("combobox", { name: "Banco" })).toHaveTextContent("Elige tu banco");
+    const bank = screen.getByRole("combobox", { name: "Banco" });
+    expect(bank).toHaveValue("");
+    expect(bank).toHaveAttribute("placeholder", "Elige tu banco");
   });
 });
 

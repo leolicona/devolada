@@ -2,11 +2,12 @@ import { Alert, Amount, Button, Card, Input, parseMoney, Pending, Skeleton } fro
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
-import { BANKS } from "@devolada/api/settings-schema";
 import type { BusinessesListResponse, PlatformBusinessRow, SettingsListResponse } from "@devolada/api/platform-schema";
 import type { CreditEntriesResponse } from "@devolada/api/credit-schema";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import { BANK_OPTIONS } from "@/lib/banks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
@@ -74,18 +75,17 @@ function SettingField({ setting }: { setting: Setting }) {
       <div>
         <Label htmlFor={id}>{KEY_LABELS[setting.key] ?? setting.key}</Label>
         {setting.type === "bank" ? (
-          <Select value={value} onValueChange={setValue}>
-            <SelectTrigger id={id} className="mt-1" aria-label={KEY_LABELS[setting.key]}>
-              <SelectValue placeholder="Elige el banco" />
-            </SelectTrigger>
-            <SelectContent>
-              {[...BANKS].sort((a, b) => a.localeCompare(b, "es")).map((b) => (
-                <SelectItem key={b} value={b}>
-                  {b}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          /* bug: bank-picker-unreachable — the same searchable picker the
+             business screens use. */
+          <Combobox
+            id={id}
+            label={KEY_LABELS[setting.key] ?? setting.key}
+            className="mt-1"
+            placeholder="Elige el banco"
+            value={value}
+            options={BANK_OPTIONS}
+            onValueChange={setValue}
+          />
         ) : setting.type === "enum" ? (
           <Select value={value} onValueChange={setValue}>
             <SelectTrigger id={id} className="mt-1" aria-label={KEY_LABELS[setting.key]}>

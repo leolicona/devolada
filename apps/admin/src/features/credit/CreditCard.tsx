@@ -2,11 +2,11 @@ import { Alert, Amount, Button, Card, Input, ListError, parseMoney, Pending, Ske
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
-import { BANKS } from "@devolada/api/settings-schema";
 import type { Bank } from "@devolada/api/settings-schema";
 import type { CreditEntriesResponse, CreditResponse, TopUpItem, TopUpsResponse } from "@devolada/api/credit-schema";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+import { BANK_OPTIONS } from "@/lib/banks";
 import { api, ApiError } from "@/lib/api";
 import { API_BASE } from "@/lib/base";
 import { formatTime } from "@/lib/datetime";
@@ -116,18 +116,17 @@ function TopUpForm({ credit, onDone }: { credit: CreditResponse; onDone: (t: Top
           </div>
           <div>
             <Label htmlFor="topup-bank">Banco desde el que transferiste</Label>
-            <Select value={bank} onValueChange={(v) => setBank(v as Bank)}>
-              <SelectTrigger id="topup-bank" className="mt-1" aria-label="Banco desde el que transferiste">
-                <SelectValue placeholder="Elige tu banco" />
-              </SelectTrigger>
-              <SelectContent>
-                {[...BANKS].sort((a, b) => a.localeCompare(b, "es")).map((b) => (
-                  <SelectItem key={b} value={b}>
-                    {b}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* bug: bank-picker-unreachable — same control as the ISP's own
+                bank in Configuración; one picker, one behaviour. */}
+            <Combobox
+              id="topup-bank"
+              label="Banco desde el que transferiste"
+              className="mt-1"
+              placeholder="Elige tu banco"
+              value={bank}
+              options={BANK_OPTIONS}
+              onValueChange={(v) => setBank(v as Bank)}
+            />
           </div>
           <div>
             <Label htmlFor="topup-date">Fecha</Label>

@@ -149,13 +149,13 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Tests for User Story 3
 
-- [ ] T053 [P] [US3] Write `apps/api/test/collections-api-verify.test.ts` (`automated-collections-api US3`) covering all four spec scenarios: validating with its ask, confirmed with folio and amounts, a reference with nothing received answering an **empty list rather than an error**, and another business's payment answering `NOT_FOUND`
+- [X] T053 [P] [US3] Write `apps/api/test/collections-api-verify.test.ts` (`automated-collections-api US3`) covering all four spec scenarios: validating with its ask, confirmed with folio and amounts, a reference with nothing received answering an **empty list rather than an error**, and another business's payment answering `NOT_FOUND`
 
 ### Implementation for User Story 3
 
-- [ ] T054 [P] [US3] Define the read contract in `apps/api/src/routes/v1/payments/schema.ts` per `contracts/public-api.md`
-- [ ] T055 [US3] Implement payment-by-id and payments-by-`customerRef` in `apps/api/src/routes/v1/payments/handler.ts`, filtered by the credential's business
-- [ ] T056 [US3] Wire the pure router in `apps/api/src/routes/v1/payments/index.ts`
+- [X] T054 [P] [US3] Define the read contract in `apps/api/src/routes/v1/payments/schema.ts` per `contracts/public-api.md`
+- [X] T055 [US3] Implement payment-by-id and payments-by-`customerRef` in `apps/api/src/routes/v1/payments/handler.ts`, filtered by the credential's business
+- [X] T056 [US3] Wire the pure router in `apps/api/src/routes/v1/payments/index.ts`
 
 **Checkpoint**: all three of the spec's first priorities work independently.
 
@@ -169,14 +169,14 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Tests for User Story 4
 
-- [ ] T057 [P] [US4] Write `apps/api/test/collections-api-transfers.test.ts` (`automated-collections-api US4`) covering the four spec scenarios: a date range returns exactly its payments with all their facts, a cursor walk with a payment confirmed mid-walk skips and repeats nothing, a non-`America/Mexico_City` business's "Tuesday" is its own day, and unapplied money is visible
-- [ ] T058 [P] [US4] Add the D16 assertion to `apps/api/test/collections-api-transfers.test.ts`: `unapplied` covers a payment on a closed link and one against an ask of zero — and nothing claims to report a deposit Devolada was never told about
+- [X] T057 [P] [US4] Write `apps/api/test/collections-api-transfers.test.ts` (`automated-collections-api US4`) covering the four spec scenarios: a date range returns exactly its payments with all their facts, a cursor walk with a payment confirmed mid-walk skips and repeats nothing, a non-`America/Mexico_City` business's "Tuesday" is its own day, and unapplied money is visible
+- [X] T058 [P] [US4] Add the D16 assertion to `apps/api/test/collections-api-transfers.test.ts`: `unapplied` covers a payment on a closed link and one against an ask of zero — and nothing claims to report a deposit Devolada was never told about
 
 ### Implementation for User Story 4
 
-- [ ] T059 [P] [US4] Define the transfers contract in `apps/api/src/routes/v1/payments/schema.ts` — `from`, `to`, `limit`, `cursor`, `nextCursor`
-- [ ] T060 [US4] Implement the day-range resolution in the business's timezone in `apps/api/src/routes/v1/payments/handler.ts`, reusing the existing business-timezone helper rather than a second one (constitution II)
-- [ ] T061 [US4] Implement the keyset cursor on `(confirmedAt, id)` in `apps/api/src/routes/v1/payments/handler.ts`, so a concurrent confirmation cannot make a walk skip or repeat a row (FR-020)
+- [X] T059 [P] [US4] Define the transfers contract in `apps/api/src/routes/v1/payments/schema.ts` — `from`, `to`, `limit`, `cursor`, `nextCursor`
+- [X] T060 [US4] Implement the day-range resolution in the business's timezone in `apps/api/src/routes/v1/payments/handler.ts`, reusing the existing business-timezone helper rather than a second one (constitution II)
+- [X] T061 [US4] Implement the keyset cursor on `(confirmedAt, id)` in `apps/api/src/routes/v1/payments/handler.ts`, so a concurrent confirmation cannot make a walk skip or repeat a row (FR-020)
 
 **Checkpoint**: all four user stories independently functional.
 
@@ -186,25 +186,25 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 **Purpose**: a developer at a company that is not an ISP integrates without moving real money — and not one test record touches anything real. This is the requirement most likely to leak, so its isolation is tested before it is trusted.
 
-- [ ] T062 [P] Write `apps/api/test/collections-api-test-mode.test.ts` (`automated-collections-api US1`) proving the whole flow runs under a test credential with no Consta call, and then proving the isolation: the panel feed does not list it, the credit balance does not move, the **real** credential's `/v1/transfers` does not return it
-- [ ] T063 Implement the test-mode advance endpoint in `apps/api/src/routes/v1/test-mode/{index,handler,schema}.ts`, reachable only by a test credential and answering `NOT_FOUND` to a real one (research D12)
-- [ ] T064 Guard the validation fee in `apps/api/src/credit/index.ts` so a test payment is never debited — one gate, in the one place a payment already costs money
-- [ ] T065 Add the shared `realOnly` predicate in `apps/api/src/direct-payments/links.ts` and apply it to the business-facing reads in `apps/api/src/routes/payments/handler.ts` and `apps/api/src/routes/direct-payments/handler.ts`, so test rows are excluded by one rule rather than 22 remembered filters
-- [ ] T066 Add the test-mode toggle to `apps/admin/src/features/integrations/ApiScreen.tsx` and make a test credential visibly labelled, so nobody confuses the two
+- [X] T062 [P] Write `apps/api/test/collections-api-test-mode.test.ts` (`automated-collections-api US1`) proving the whole flow runs under a test credential with no Consta call, and then proving the isolation: the panel feed does not list it, the credit balance does not move, the **real** credential's `/v1/transfers` does not return it
+- [X] T063 Implement the test-mode advance endpoint in `apps/api/src/routes/v1/test-mode/{index,handler,schema}.ts`, reachable only by a test credential and answering `NOT_FOUND` to a real one (research D12)
+- [X] T064 Guard the validation fee in `apps/api/src/credit/index.ts` so a test payment is never debited — one gate, in the one place a payment already costs money
+- [X] T065 Add the shared `realOnly` predicate in `apps/api/src/direct-payments/links.ts` and apply it to the business-facing reads in `apps/api/src/routes/payments/handler.ts` and `apps/api/src/routes/direct-payments/handler.ts`, so test rows are excluded by one rule rather than 22 remembered filters
+- [X] T066 Add the test-mode toggle to `apps/admin/src/features/integrations/ApiScreen.tsx` and make a test credential visibly labelled, so nobody confuses the two
 
 ---
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T067 [P] Write the published reference at `specs/003-automated-collections-api/contracts/reference.md` covering every endpoint, every error code and the webhook contract — including how to verify a signature, how to recognise a repeat, and the one line that nothing before the verdict is money — readable by a developer who has never heard of WispHub (FR-036, SC-004)
-- [ ] T068 [P] Add the expiry sweep for `idempotency_keys` and old `rate_counters` buckets to the existing cron in `apps/api/src/index.ts`, riding the same trigger
-- [ ] T069 [P] Add the payer's closed and expired states to `tests/e2e/contrast.spec.ts` — real contrast in both themes, 360/768/1280, no horizontal scroll (constitution IV and VI)
-- [ ] T070 [P] Extend `apps/api/src/routes/dev.ts` so `/dev/seed` can mint a credential and a test credential for the demo business, making the quickstart runnable in one step
-- [ ] T071 Update `.dev.vars` documentation and `apps/api/src/env.ts` comments for any new binding, each saying what "unset" means (constitution VIII) — `WEBHOOK_SIGNING_KEYS` unset → deliveries are recorded but never attempted, `SIGNING_KEY_MISSING` on the row, empty JWKS (research D10)
+- [X] T067 [P] Write the published reference at `specs/003-automated-collections-api/contracts/reference.md` covering every endpoint, every error code and the webhook contract — including how to verify a signature, how to recognise a repeat, and the one line that nothing before the verdict is money — readable by a developer who has never heard of WispHub (FR-036, SC-004)
+- [X] T068 [P] Add the expiry sweep for `idempotency_keys` and old `rate_counters` buckets to the existing cron in `apps/api/src/index.ts`, riding the same trigger
+- [X] T069 [P] Add the payer's closed and expired states to `tests/e2e/contrast.spec.ts` — real contrast in both themes, 360/768/1280, no horizontal scroll (constitution IV and VI)
+- [X] T070 [P] Extend `apps/api/src/routes/dev.ts` so `/dev/seed` can mint a credential and a test credential for the demo business, making the quickstart runnable in one step
+- [X] T071 Update `.dev.vars` documentation and `apps/api/src/env.ts` comments for any new binding, each saying what "unset" means (constitution VIII) — `WEBHOOK_SIGNING_KEYS` unset → deliveries are recorded but never attempted, `SIGNING_KEY_MISSING` on the row, empty JWKS (research D10)
 - [x] T072 **Done 2026-09-17** — FR-022 amended with the developer in the clarification session, per research D16: the history covers only transfers validated through Devolada, the reference says it is not a bank feed, and the manual operations around an orphan deposit are an independent feature
-- [ ] T073 Run the full gate in order: `node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm e2e`
-- [ ] T074 Walk `specs/003-automated-collections-api/quickstart.md` end to end against a locally running stack and fix anything it gets wrong
-- [ ] T075 Run `/speckit-analyze` and resolve every CRITICAL finding
+- [X] T073 Run the full gate in order: `node scripts/spec-lint.mjs`, `node scripts/gen-banks.mjs --check`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `pnpm e2e`
+- [X] T074 Walk `specs/003-automated-collections-api/quickstart.md` end to end against a locally running stack and fix anything it gets wrong
+- [X] T075 Run `/speckit-analyze` and resolve every CRITICAL finding
 
 ---
 

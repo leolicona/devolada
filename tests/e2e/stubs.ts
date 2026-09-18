@@ -277,3 +277,19 @@ export async function stubPagoApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/links/*/proof", { proofId: "link-1/proof-1" });
   await apiRoute(page, "**/direct-payments/links/*/read", proofReading);
 }
+
+/* automated-collections-api D6 / FR-031 (US1 scenarios 3 and 4): the one
+   state an API link adds to the payer's page — a one-time link that was
+   paid, or whose deadline passed. Static copy, no CLABE; the two reasons
+   read different sentences. Shape from `linkStatusResponse`. */
+export const closedLink = (closedReason: "paid" | "expired") => ({
+  ispName: "Gimnasio Norte",
+  status: "closed",
+  closedReason,
+});
+
+export function stubPagoClosed(closedReason: "paid" | "expired") {
+  return async (page: Page): Promise<void> => {
+    await apiRoute(page, "**/direct-payments/links/*", closedLink(closedReason));
+  };
+}

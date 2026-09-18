@@ -111,6 +111,8 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /Buscar por nombre/,
       /Copiar/ /* the first customer's actions: the roster is alive on arrival */,
       /WhatsApp/ /* one word for the channel (pilot-UX review) */,
+      /Copiar/ /* automated-collections-api FR-011 (T076): the API link joins the same roster, with the same two actions */,
+      /WhatsApp/,
     ]);
   });
 });

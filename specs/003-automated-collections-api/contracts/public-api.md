@@ -51,7 +51,11 @@ Answers `{ id, url, customerRef, askCents, mode, expiresAt, state, isTest, notic
 `state` is `open | paid | expired` (derived, see data-model).
 
 Asking again for a **reusable** link with the same `customerRef` returns the
-existing one (FR-033) — not an error, and not a second link.
+existing one (FR-033) — not an error, and not a second link. The reference is
+one namespace per business across both credential modes (D4's index spans
+them): a `customerRef` that already holds a real reusable link is refused to a
+test credential with a `VALIDATION_ERROR` naming which credential holds it, and
+the other way round — never `NOT_FOUND`, which would send the caller in circles.
 
 Refusals: `VALIDATION_ERROR` (bad amount, one-time without a deadline),
 `CHANNEL_UNAVAILABLE` with which piece the **business** has not configured —
@@ -73,11 +77,15 @@ Re-price or close (FR-030).
 
 ```jsonc
 { "askCents": 52000 }   // reusable only
-{ "close": true }       // either kind; idempotent
+{ "close": true }       // one_time only; idempotent
 ```
 
 Re-pricing a one-time link is `VALIDATION_ERROR` — its amount is the thing it
-is. Re-pricing a closed link is `LINK_CLOSED`.
+is. Re-pricing a closed link is `LINK_CLOSED`. Closing a **reusable** link is
+`VALIDATION_ERROR`: by FR-027 and the data model it never expires and is always
+open — re-price it, or stop sending it (aligned with the code 2026-09-18; the
+first draft said "either kind"). Closing an already closed or expired one-time
+link changes nothing and answers the link as it is.
 
 ## `GET /v1/payment-links/:id` · `GET /v1/payment-links?customerRef=…`
 
@@ -91,11 +99,14 @@ The verify path (US3).
 
 ```jsonc
 {
-  "id": "pay_…",
+  "id": "e06da3ff-9acd-4a03-b775-2d9bd81bf654",   // the payment row's own id: opaque, no prefix (aligned with the code 2026-09-18)
+  "paymentLinkId": "lnk_…",
   "customerRef": "CLI-4471",
   "status": "confirmed",       // the payment row's own word — see the table below
   "askedCents": 49900,
-  "receivedCents": 49900,
+  "claimedCents": 51400,       // what the proof said — a claim, never money
+  "proofDoor": "transfer",     // transfer | receipt — the same as the webhook's
+  "receivedCents": 51400,
   "match": "exact",            // exact | short | over — null while validating
   "folio": "DV-000412",        // null until confirmed
   "confirmedAt": 1759999000000,
@@ -103,6 +114,11 @@ The verify path (US3).
   "isTest": false
 }
 ```
+
+The answer carries every fact the webhook carries, rendered by the same code,
+plus `status` and `createdAt`: the read is the safety net under US2, so a
+caller that missed every message finds the same truth here. The list answers
+newest first.
 
 **`status` is the payment row's own vocabulary** (research D17). The API
 invents no second set of names: every value below is a value of
@@ -134,9 +150,20 @@ A payment belonging to another business answers `NOT_FOUND` (FR-023).
 
 The reconciliation path (US4). `from`/`to` are days in the business's timezone.
 
-Answers `{ transfers: [...], nextCursor }`. The cursor is keyed on
-`(confirmedAt, id)` so a payment confirmed while the caller is walking the pages
-cannot make it skip or repeat one (FR-020).
+Answers `{ transfers: [...], nextCursor }`. Each transfer is a payment exactly
+as `GET /v1/payments/:id` answers it — the same shape, so a row found here can
+be asked about by id. Oldest verdict first, then by id; `limit` is 1–200
+(default 50); `nextCursor` is null on the last page and opaque otherwise — a
+cursor this history never handed out is a `VALIDATION_ERROR`. The cursor is
+keyed on `(confirmedAt, id)` so a payment confirmed while the caller is walking
+the pages cannot make it skip or repeat one (FR-020).
+
+Only money Banxico confirmed is history: `status` here is `confirmed`,
+`partial` or `unapplied`, and the range is on the **verdict moment**
+(`confirmedAt`). A claim still validating, a contradicted one, an expired one
+or a superseded reading is not money and is not listed. `from` and `to` are
+both inclusive, on the business's wall clock (FR-021), and `to` before `from`
+is refused.
 
 `unapplied` here means **validated but not applied** — a payment on a link that
 had closed, or against an ask of zero. It is not a feed of the business's bank
@@ -153,7 +180,9 @@ Register where outcomes go (FR-012).
 { "url": "https://gym.example/hooks/devolada" }
 ```
 
-Answers `{ url, createdAt }`. There is no secret to copy and nothing to rotate:
+Answers `{ url, createdAt, consecutiveFailures, lastFailureAt, lastSuccessAt }`
+— the address and the same health line the panel shows (FR-018). There is no
+secret to copy and nothing to rotate:
 deliveries are signed with Devolada's own key, whose public half is published
 at the JWKS endpoint below (FR-015, FR-039, D10).
 
@@ -214,7 +243,7 @@ Nothing the business holds can produce this signature.
   "type": "payment.confirmed",
   "createdAt": 1759999000000,
   "data": {
-    "paymentId": "pay_…",
+    "paymentId": "e06da3ff-9acd-4a03-b775-2d9bd81bf654",
     "paymentLinkId": "lnk_…",
     "customerRef": "CLI-4471",
     "askedCents": 49900,
@@ -242,7 +271,7 @@ with the row's own word (FR-013, research D17).
   "type": "payment.validating",
   "createdAt": 1759998000000,
   "data": {
-    "paymentId": "pay_…",
+    "paymentId": "e06da3ff-9acd-4a03-b775-2d9bd81bf654",
     "paymentLinkId": "lnk_…",
     "customerRef": "CLI-4471",
     "askedCents": 49900,
@@ -296,6 +325,25 @@ Consta, and fires the real webhook.
 `to` accepts any status from the table above. Creating a test payment fires
 `payment.validating` like a real one, so a developer can rehearse every
 webhook type, `payment.superseded` included.
+
+Answers the payment in the shape of `GET /v1/payments/:id`. The request must
+tell one story, and a `VALIDATION_ERROR` names the field that does not:
+
+- `receivedCents` is read by `confirmed`, `partial` and `unapplied`, and refused
+  on any other state. Omitted, it is the ask plus the fee (an exact match).
+- `match` comes from the same classifier a real validation uses, against the
+  business's tolerance — so `confirmed` with an amount below the ask is refused
+  (that verdict is `partial`), and `partial` with an amount that covers it is
+  refused (that verdict is `confirmed`). `unapplied` is classed `over` (D16).
+- A verdict is final, in test mode too: a payment that already ended cannot be
+  moved again. `validating` and `queued_for_credit` can be rehearsed in either
+  order before the verdict.
+- `confirmed` closes a one-time link, exactly as the real verdict does, so
+  `LINK_CLOSED` can be rehearsed on the payer's page.
+
+A test payment never reaches the validation engine: the payer's submission
+leaves it `validating` with no schedule, and only this call moves it. An empty
+credit balance does not queue it either — it costs nothing.
 
 A real credential calling it gets `NOT_FOUND` — the route does not exist for it.
 Test records are readable through the API and are excluded from every real total

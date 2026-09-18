@@ -87,8 +87,12 @@ async function notifyCrossings(
 export async function debitValidationFee(
   env: Bindings,
   db: DB,
-  payment: { id: string; businessId: string; status: string; paymentLinkId: string },
+  payment: { id: string; businessId: string; status: string; paymentLinkId: string; isTest: boolean },
 ): Promise<boolean> {
+  /* automated-collections-api D12 (FR-035): a test payment is never
+     debited — one gate, here, in the one place a payment costs money.
+     Nothing else in this module needs to know test mode exists. */
+  if (payment.isTest) return false;
   if (!FEE_STATUSES.has(payment.status)) return false;
   const [business] = await db.select().from(businesses).where(eq(businesses.id, payment.businessId));
   if (!business) return false;

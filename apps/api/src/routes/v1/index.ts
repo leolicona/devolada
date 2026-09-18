@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import type { Bindings, Variables } from "../../env";
 import { paymentLinksRoute } from "./payment-links";
-import { paymentsRoute } from "./payments";
+import { paymentsRoute, transfersRoute } from "./payments";
+import { testModeRoute } from "./test-mode";
 import { webhookRoute } from "./webhook";
 
 /* Pure router for the public collections API (constitution III, research D1):
@@ -14,4 +15,6 @@ export const v1Route = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 v1Route.route("/payment-links", paymentLinksRoute);
 v1Route.route("/payments", paymentsRoute);
+v1Route.route("/transfers", transfersRoute);
 v1Route.route("/webhook", webhookRoute);
+v1Route.route("/test", testModeRoute);

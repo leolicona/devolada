@@ -576,10 +576,17 @@ describe("FR-012, FR-038: registering the address", () => {
     const test = await issueCredential(db(), business.id, { name: "test", isTest: true });
     const link = (await v1(test.plaintext, "POST", "/payment-links", { customerRef: "CLI-T", askCents: ASK })).body.data!;
     const captured = mockDestination({ times: 2 });
-    mockApiCep({ cep: { amountCents: ASK + FEE } });
+    /* test mode (D12, T063): a test payment never reaches the provider —
+       no apiCEP interceptor here — and the verdict is the caller's to name */
     const { ctx, settled } = collectingCtx();
-    await payerPost(String(link.url).split("/p/")[1], TRANSFER("TRACK000TEST", ASK + FEE), testEnv, ctx);
+    const paid = await payerPost(String(link.url).split("/p/")[1], TRANSFER("TRACK000TEST", ASK + FEE), testEnv, ctx);
     await settled();
+    expect(paid.body.data).toMatchObject({ status: "validating" });
+    const advanced = await v1(test.plaintext, "POST", `/test/payments/${paid.body.data!.directPaymentId}/advance`, { to: "confirmed" });
+    expect(advanced.body.data).toMatchObject({ status: "confirmed", isTest: true });
+    /* no execution context on that call: the verdict's delivery waits for the sweep */
+    expect(await sweepWebhookDeliveries(testEnv, new Date(Date.now() + minutes(1)))).toMatchObject({ delivered: 1 });
+    expect(captured.map((c) => c.event.type)).toEqual(["payment.validating", "payment.confirmed"]);
     expect(captured.every((c) => c.event.data.isTest)).toBe(true);
     expect((await v1(key, "GET", "/webhook/deliveries")).body.data).toEqual({ deliveries: [] });
     const own = await v1(test.plaintext, "GET", "/webhook/deliveries");

@@ -3,8 +3,9 @@ import { and, count, desc, eq, gte, inArray, like, lt, lte, or, sum } from "driz
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { businesses, integrationEvents, paymentLinks, payments } from "../../db/schema";
-import { startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
+import { nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
+import { realOnly } from "../../direct-payments/links";
 import { integrationOf } from "../../integrations/store";
 import {
   outcomeOf,
@@ -46,11 +47,6 @@ function businessGuard(c: Ctx) {
 
 /* The day after a calendar date, still as a calendar date — the `to`
    filter is inclusive, so the boundary is the NEXT midnight. */
-function nextDayIso(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-}
-
 /* The ISP's live feed (payments-and-classes D4). Tenant isolation by
    businessId (charge-feed D6, unchanged in spirit). */
 export async function listPaymentFeed(
@@ -76,6 +72,10 @@ export async function listPaymentFeed(
 
   const filters = [
     eq(payments.businessId, actor.id),
+    /* automated-collections-api D12 (FR-035): a test payment is never
+       in the business's real history — one shared rule, not a filter
+       to remember */
+    realOnly(payments),
     /* D4, amended by the pilot-UX round: the default answers money that
        arrived PLUS money in flight — the owner staring at "¿ya me
        pagó?" must see the payment being verified without touching a
@@ -91,7 +91,7 @@ export async function listPaymentFeed(
       ? [gte(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, q.from)))]
       : []),
     ...(q.to
-      ? [lt(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, nextDayIso(q.to))))]
+      ? [lt(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, nextIsoDate(q.to))))]
       : []),
     /* D4: customer by usuario and by name. The link's usuario covers the
        rows that never denormalized one (validating, unapplied). */
@@ -146,6 +146,8 @@ export async function listPaymentFeed(
     .where(
       and(
         eq(payments.businessId, actor.id),
+        /* FR-035: nor in its real totals */
+        realOnly(payments),
         inArray(payments.status, ["confirmed", "partial"]),
         gte(payments.createdAt, new Date(todayStartMs)),
       ),
@@ -221,7 +223,7 @@ export async function getPaymentProof(c: Ctx, id: string) {
   const [row] = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
@@ -267,7 +269,7 @@ export async function executeAction(c: Ctx, id: string) {
   const [row] = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
@@ -337,7 +339,7 @@ export async function retryAction(c: Ctx, id: string) {
   const [row] = await db
     .select()
     .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id)));
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
   if (!row) {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }

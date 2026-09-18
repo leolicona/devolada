@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { businesses, member } from "../src/db/schema";
 import { makeAuth } from "../src/auth/better";
+import { listCredentials } from "../src/api-clients/store";
 import type { Bindings } from "../src/env";
 import { app, cookiesOf, json, PASSWORD } from "./helpers";
 
@@ -37,6 +38,35 @@ describe("dev seed creates the demo business with its owner", () => {
     const again = await (await app()).request("/dev/seed", { method: "POST" }, env);
     expect(again.status).toBe(200);
     expect(await db.select().from(businesses)).toHaveLength(1);
+  });
+
+  it("automated-collections-api T070: hands out a real and a test credential, fresh on every seed", async () => {
+    const seed = async () =>
+      ((await (await (await app()).request("/dev/seed", { method: "POST" }, env)).json()) as { data: { api: { key: string; testKey: string } } }).data.api;
+    const v1 = async (key: string) =>
+      (await app()).request("/v1/payment-links?customerRef=CLI-1", { headers: { Authorization: `Bearer ${key}` } }, env);
+
+    const first = await seed();
+    expect(first.key).toMatch(/^dk_[0-9a-f]{32}$/);
+    expect(first.testKey).toMatch(/^dk_[0-9a-f]{32}$/);
+    expect(first.key).not.toBe(first.testKey);
+    expect((await v1(first.key)).status).toBe(200);
+    expect((await v1(first.testKey)).status).toBe(200);
+
+    /* the next seed replaces the pair: the old keys stop working, the demo holds one live pair */
+    const second = await seed();
+    expect((await v1(first.key)).status).toBe(401);
+    expect((await v1(first.testKey)).status).toBe(401);
+    expect((await v1(second.key)).status).toBe(200);
+    expect((await v1(second.testKey)).status).toBe(200);
+    const [business] = await drizzle(env.DB).select().from(businesses).where(eq(businesses.email, "demo@devolada.app"));
+    /* and the business can collect: the quickstart's first link shows a CLABE */
+    expect(business).toMatchObject({ speiClabe: "646180157000000004", speiBank: "STP" });
+    const live = (await listCredentials(drizzle(env.DB), business.id)).filter((c) => c.revokedAt === null);
+    expect(live.map((c) => [c.name, c.isTest]).sort()).toEqual([
+      ["Demo (prueba)", true],
+      ["Demo (real)", false],
+    ]);
   });
 
   it("marries an orphan user to the demo business, keeping the user's password", async () => {

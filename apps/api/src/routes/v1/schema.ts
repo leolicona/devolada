@@ -19,8 +19,10 @@ export type {
   PaymentLink,
   PaymentLinkList,
 } from "./payment-links/schema";
-export { apiPayment, apiPaymentList, listPaymentsQuery } from "./payments/schema";
-export type { ApiPayment, ApiPaymentList, ListPaymentsQuery } from "./payments/schema";
+export { apiPayment, apiPaymentList, listPaymentsQuery, listTransfersQuery, transferList, TRANSFERS_PAGE_MAX } from "./payments/schema";
+export type { ApiPayment, ApiPaymentList, ListPaymentsQuery, ListTransfersQuery, TransferList } from "./payments/schema";
+export { advanceTestPaymentRequest } from "./test-mode/schema";
+export type { AdvanceTestPaymentRequest } from "./test-mode/schema";
 export {
   DELIVERY_STATUSES,
   deleteWebhookResponse,

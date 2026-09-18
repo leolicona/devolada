@@ -71,6 +71,14 @@ export function startOfIsoDateMs(timezone: string, isoDate: string): number {
   return midnightAsUtc - offsetMsAt(timezone, new Date(guess));
 }
 
+/* The calendar day after an ISO date, for an inclusive `to` bound:
+   "up to and including the 30th" is "before the 1st's midnight". Pure
+   calendar arithmetic; the zone enters through startOfIsoDateMs. */
+export function nextIsoDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
 export function startOfBusinessDayMs(timezone: string, now: Date = new Date()): number {
   const list = formatterFor(timezone).formatToParts(now);
   const midnightAsUtc = Date.UTC(read(list, "year"), read(list, "month") - 1, read(list, "day"));

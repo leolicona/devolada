@@ -32,6 +32,22 @@ a deploy that moves the first ISP off their own host. Onboarding is also
 a lie in the runbook: "paste your key" is really "paste your key **and**
 your address", and only one of the two has a field.
 
+**That cost is already being paid, on dev.** Dev names the pilot's host
+too, so the pilot's key can be tried before a release tag carries the
+same address to prod. The demo tenant FastIsp holds a wisphub.net key
+and therefore fails there by design for as long as it lasts:
+`WISPHUB_AUTH_FAILED` in the panel, and the every-minute sweep logging
+the same against its queue. Every manual WispHub check on dev is
+unavailable meanwhile. This is the debt with its bill visible rather
+than deferred, and the strongest argument for paying it: with
+`integrations.base_url` in place, both installations answer at once and
+the swap never happens again.
+
+The pilot's key is also a live credential — it creates invoices and
+registers payments on their real billing system — and while dev is
+flipped it is typed into an environment whose D1 the PR previews share.
+Have the ISP regenerate their key in WispHub once the test is done.
+
 ## Where it lives
 
 - `apps/api/wrangler.jsonc` — `env.prod.vars.WISPHUB_BASE_URL`, with the

@@ -35,9 +35,15 @@ export type Bindings = {
      the wisphub.net one this defaults to, so a perfectly good key is
      rejected against the wrong host. Unset → wisphub.net
      (`DEFAULT_BASE_URL` in wisphub/client.ts), which is where the demo
-     tenant and the local sandbox live. Platform-wide, so it can name one
-     installation for all tenants at once — the address really belongs on
-     the business's integration row (debt `wisphub-host-is-platform-wide`). */
+     tenant and the local sandbox live.
+
+     Per environment, never per tenant, so setting it is an either/or:
+     whoever is not on the named installation stops working until it
+     changes back. Both remote environments name the pilot's host today,
+     which means the demo tenant FastIsp fails on dev by design while
+     that lasts (see the two comments in wrangler.jsonc). The address
+     belongs on the business's own integration row — debt
+     `wisphub-host-is-platform-wide` carries the four steps. */
   WISPHUB_BASE_URL?: string;
   /* The SPEI validation engine (Consta) runs inside this Worker
      (consta-api-merge D1, D9). What can be absent is the provider's

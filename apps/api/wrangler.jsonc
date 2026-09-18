@@ -66,6 +66,23 @@
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://app.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://link.dev.devoladapago.com",
+        /* TEMPORARY, and it costs something while it is here. Dev points
+           at the pilot's WispHub installation so their key can be tried
+           end to end before the release tag carries the same address to
+           prod.
+
+           The binding is per environment, not per tenant, so this is an
+           either/or: the demo tenant (FastIsp, a wisphub.net key) is
+           EXPECTED TO FAIL for as long as this line exists —
+           WISPHUB_AUTH_FAILED on the panel, and the every-minute sweep
+           logging the same against its queue. That is the trade, taken
+           knowingly; it is not a regression to chase.
+
+           Put this line back to the default once the pilot's key has
+           answered. The real fix — an address per business, so both
+           installations work at once — is debt
+           `wisphub-host-is-platform-wide`. */
+        "WISPHUB_BASE_URL": "https://api.wisphub.io/api",
         "ALLOWED_ORIGINS": "https://app.dev.devoladapago.com,https://link.dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"

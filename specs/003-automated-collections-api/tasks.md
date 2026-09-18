@@ -169,14 +169,14 @@ Per [plan.md](./plan.md): `apps/api/src/` for the API, `apps/api/test/` for its 
 
 ### Tests for User Story 4
 
-- [ ] T057 [P] [US4] Write `apps/api/test/collections-api-transfers.test.ts` (`automated-collections-api US4`) covering the four spec scenarios: a date range returns exactly its payments with all their facts, a cursor walk with a payment confirmed mid-walk skips and repeats nothing, a non-`America/Mexico_City` business's "Tuesday" is its own day, and unapplied money is visible
-- [ ] T058 [P] [US4] Add the D16 assertion to `apps/api/test/collections-api-transfers.test.ts`: `unapplied` covers a payment on a closed link and one against an ask of zero — and nothing claims to report a deposit Devolada was never told about
+- [X] T057 [P] [US4] Write `apps/api/test/collections-api-transfers.test.ts` (`automated-collections-api US4`) covering the four spec scenarios: a date range returns exactly its payments with all their facts, a cursor walk with a payment confirmed mid-walk skips and repeats nothing, a non-`America/Mexico_City` business's "Tuesday" is its own day, and unapplied money is visible
+- [X] T058 [P] [US4] Add the D16 assertion to `apps/api/test/collections-api-transfers.test.ts`: `unapplied` covers a payment on a closed link and one against an ask of zero — and nothing claims to report a deposit Devolada was never told about
 
 ### Implementation for User Story 4
 
-- [ ] T059 [P] [US4] Define the transfers contract in `apps/api/src/routes/v1/payments/schema.ts` — `from`, `to`, `limit`, `cursor`, `nextCursor`
-- [ ] T060 [US4] Implement the day-range resolution in the business's timezone in `apps/api/src/routes/v1/payments/handler.ts`, reusing the existing business-timezone helper rather than a second one (constitution II)
-- [ ] T061 [US4] Implement the keyset cursor on `(confirmedAt, id)` in `apps/api/src/routes/v1/payments/handler.ts`, so a concurrent confirmation cannot make a walk skip or repeat a row (FR-020)
+- [X] T059 [P] [US4] Define the transfers contract in `apps/api/src/routes/v1/payments/schema.ts` — `from`, `to`, `limit`, `cursor`, `nextCursor`
+- [X] T060 [US4] Implement the day-range resolution in the business's timezone in `apps/api/src/routes/v1/payments/handler.ts`, reusing the existing business-timezone helper rather than a second one (constitution II)
+- [X] T061 [US4] Implement the keyset cursor on `(confirmedAt, id)` in `apps/api/src/routes/v1/payments/handler.ts`, so a concurrent confirmation cannot make a walk skip or repeat a row (FR-020)
 
 **Checkpoint**: all four user stories independently functional.
 

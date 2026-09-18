@@ -3,7 +3,7 @@ import { and, count, desc, eq, gte, inArray, like, lt, lte, or, sum } from "driz
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { businesses, integrationEvents, paymentLinks, payments } from "../../db/schema";
-import { startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
+import { nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { integrationOf } from "../../integrations/store";
 import {
@@ -46,11 +46,6 @@ function businessGuard(c: Ctx) {
 
 /* The day after a calendar date, still as a calendar date — the `to`
    filter is inclusive, so the boundary is the NEXT midnight. */
-function nextDayIso(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-}
-
 /* The ISP's live feed (payments-and-classes D4). Tenant isolation by
    businessId (charge-feed D6, unchanged in spirit). */
 export async function listPaymentFeed(
@@ -91,7 +86,7 @@ export async function listPaymentFeed(
       ? [gte(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, q.from)))]
       : []),
     ...(q.to
-      ? [lt(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, nextDayIso(q.to))))]
+      ? [lt(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, nextIsoDate(q.to))))]
       : []),
     /* D4: customer by usuario and by name. The link's usuario covers the
        rows that never denormalized one (validating, unapplied). */

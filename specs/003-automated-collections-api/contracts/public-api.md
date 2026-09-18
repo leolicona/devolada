@@ -142,9 +142,20 @@ A payment belonging to another business answers `NOT_FOUND` (FR-023).
 
 The reconciliation path (US4). `from`/`to` are days in the business's timezone.
 
-Answers `{ transfers: [...], nextCursor }`. The cursor is keyed on
-`(confirmedAt, id)` so a payment confirmed while the caller is walking the pages
-cannot make it skip or repeat one (FR-020).
+Answers `{ transfers: [...], nextCursor }`. Each transfer is a payment exactly
+as `GET /v1/payments/:id` answers it — the same shape, so a row found here can
+be asked about by id. Oldest verdict first, then by id; `limit` is 1–200
+(default 50); `nextCursor` is null on the last page and opaque otherwise — a
+cursor this history never handed out is a `VALIDATION_ERROR`. The cursor is
+keyed on `(confirmedAt, id)` so a payment confirmed while the caller is walking
+the pages cannot make it skip or repeat one (FR-020).
+
+Only money Banxico confirmed is history: `status` here is `confirmed`,
+`partial` or `unapplied`, and the range is on the **verdict moment**
+(`confirmedAt`). A claim still validating, a contradicted one, an expired one
+or a superseded reading is not money and is not listed. `from` and `to` are
+both inclusive, on the business's wall clock (FR-021), and `to` before `from`
+is refused.
 
 `unapplied` here means **validated but not applied** — a payment on a link that
 had closed, or against an ask of zero. It is not a feed of the business's bank

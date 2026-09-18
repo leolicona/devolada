@@ -4,10 +4,12 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { businesses, invitation, member, organization, user as userTable, verification } from "../db/schema";
 import { upsertIntegration } from "../integrations/store";
+import { issueCredential, listCredentials, revokeCredential } from "../api-clients/store";
 import { makeAuth } from "../auth/better";
 import { queuedCount, sweepReconnections } from "../reconnection/queue";
 import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
 import { releaseQueuedForCredit, sweepTopUps } from "../credit/topups";
+import { sweepWebhookDeliveries } from "../webhooks/queue";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
    Seeds a demo ISP to verify login with curl. */
@@ -17,6 +19,8 @@ export const dev = new Hono<{ Bindings: Bindings }>();
 const DEMO = {
   ispEmail: "demo@devolada.app",
   password: "devolada123",
+  credential: "Demo (real)",
+  testCredential: "Demo (prueba)",
 };
 
 /* D7: one sweep on demand — waiting a minute for cron while standing
@@ -31,7 +35,9 @@ dev.post("/direct-payment-sweep", async (c) => {
   const released = await releaseQueuedForCredit(c.env);
   const report = await sweepDirectPayments(c.env);
   const topUps = await sweepTopUps(c.env);
-  return c.json({ success: true, data: { ...report, released, topUps, validating: await validatingCount(c.env) } });
+  /* automated-collections-api D8: the webhook retries, chained as in the cron */
+  const webhooks = await sweepWebhookDeliveries(c.env);
+  return c.json({ success: true, data: { ...report, released, topUps, webhooks, validating: await validatingCount(c.env) } });
 });
 
 /* The journey e2e (tests/passkey/identity-journey.spec.ts) reads what
@@ -101,6 +107,18 @@ dev.post("/seed", async (c) => {
       })
       .returning();
   }
+  /* automated-collections-api T070 / quickstart: the demo business
+     collects by SPEI out of the box — a CLABE, a bank the provider knows
+     and a beneficiary — so a link created with the credential below
+     shows the payer an account, not "no disponible". Written once; a
+     CLABE the person changed in Configuración is theirs and stays. */
+  if (!business.speiClabe) {
+    [business] = await db
+      .update(businesses)
+      .set({ speiClabe: "646180157000000004", speiBank: "STP", speiBeneficiaryName: "ISP Demo SA de CV" })
+      .where(eq(businesses.id, business.id))
+      .returning();
+  }
   /* Idempotent, and the key refreshes: the demo business may have been
      seeded before the key existed in the environment. Actions enabled —
      the demo tenant is the backfill posture, not a new customer's ramp
@@ -112,10 +130,28 @@ dev.post("/seed", async (c) => {
     });
   }
 
+  /* automated-collections-api T070: the quickstart in one step — a real
+     and a test credential for the demo business (research D11/D12).
+     Minted fresh on every seed, because the plaintext exists only in
+     this answer; the pair from the previous seed is revoked first, so
+     the demo never holds more than one live pair and the key you copied
+     last time is simply replaced by the one you just received. */
+  const seededAt = new Date();
+  for (const row of await listCredentials(db, business.id)) {
+    if (row.revokedAt === null && (row.name === DEMO.credential || row.name === DEMO.testCredential)) {
+      await revokeCredential(db, business.id, row.id, seededAt);
+    }
+  }
+  const real = await issueCredential(db, business.id, { name: DEMO.credential });
+  const test = await issueCredential(db, business.id, { name: DEMO.testCredential, isTest: true });
+
   return c.json({
     success: true,
     data: {
       admin: { email: DEMO.ispEmail, password: DEMO.password },
+      /* `Authorization: Bearer <key>` on /v1; `testKey` runs the whole
+         flow with no bank transfer (contracts/public-api.md) */
+      api: { key: real.plaintext, testKey: test.plaintext },
     },
   });
 });

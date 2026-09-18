@@ -1,7 +1,9 @@
 import { and, asc, eq, inArray, isNotNull, lte } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { businesses, creditEntries, payments, topUps } from "../db/schema";
+import { businesses, creditEntries, paymentLinks, payments, topUps } from "../db/schema";
+import { isApiLink, realOnly } from "../direct-payments/links";
+import { enqueueDelivery } from "../webhooks/queue";
 import { consta, ConstaError, type ConstaRequest } from "../consta";
 import { nextValidationSlot, suggestedSlot } from "../direct-payments/schedule";
 import { getSetting } from "../platform/settings";
@@ -176,16 +178,23 @@ export async function sweepTopUps(env: Bindings, now: Date = new Date()): Promis
    direct sweep; a business still paused releases nothing. */
 export async function releaseQueuedForCredit(env: Bindings, now: Date = new Date()): Promise<number> {
   const db = drizzle(env.DB);
+  /* The link rides along (automated-collections-api D17): a released
+     API-link payment announces `validating` again, and the row's kind
+     decides that without a second read per payment */
   const queued = await db
-    .select({ id: payments.id, businessId: payments.businessId })
+    .select({ id: payments.id, businessId: payments.businessId, link: paymentLinks })
     .from(payments)
-    .where(eq(payments.status, "queued_for_credit"))
+    .innerJoin(paymentLinks, eq(paymentLinks.id, payments.paymentLinkId))
+    /* automated-collections-api D12: a test row is never queued by the
+       payer's door, and one the caller rehearsed into this state moves
+       only when the caller says — never by a sweep */
+    .where(and(eq(payments.status, "queued_for_credit"), realOnly(payments)))
     .orderBy(asc(payments.createdAt), asc(payments.id));
   if (!queued.length) return 0;
-  const byBusiness = new Map<string, string[]>();
-  for (const row of queued) byBusiness.set(row.businessId, [...(byBusiness.get(row.businessId) ?? []), row.id]);
+  const byBusiness = new Map<string, typeof queued>();
+  for (const row of queued) byBusiness.set(row.businessId, [...(byBusiness.get(row.businessId) ?? []), row]);
   let released = 0;
-  for (const [businessId, ids] of byBusiness) {
+  for (const [businessId, rows] of byBusiness) {
     const [business] = await db.select().from(businesses).where(eq(businesses.id, businessId));
     if (!business) continue;
     /* payments-and-classes D9: suspension freezes the queue exactly as
@@ -193,11 +202,17 @@ export async function releaseQueuedForCredit(env: Bindings, now: Date = new Date
     if (business.status === "suspended") continue;
     const { step } = await creditSummary(db, business);
     if (step === "paused") continue;
-    for (const [i, id] of ids.entries()) {
-      await db
+    for (const [i, { id, link }] of rows.entries()) {
+      const [row] = await db
         .update(payments)
         .set({ status: "validating", nextValidationAt: new Date(now.getTime() + i * 1000) })
-        .where(eq(payments.id, id));
+        .where(eq(payments.id, id))
+        .returning();
+      /* automated-collections-api D17 (FR-013): the caller heard
+         `queued_for_credit`; it hears `validating` again as the row
+         moves. A sweep has no `waitUntil`, so the webhook sweep chained
+         after the direct one delivers it this same minute. */
+      if (isApiLink(link)) await enqueueDelivery(db, { payment: row, link, now });
       released++;
     }
   }

@@ -68,6 +68,49 @@ export const revokeCredentialResponse = z.object({
   credential: apiCredential,
 });
 
+/* automated-collections-api US2 (FR-018, research D10): what the panel
+   may see of the webhook — the address the business's software
+   registered, its health, and the recent deliveries with their reasons.
+   No secret exists to show: deliveries are signed with Devolada's own
+   key, whose public half is published at `jwksUrl`. */
+export const webhookHealthEndpoint = z.object({
+  url: z.string(),
+  createdAt: z.number().int(),
+  consecutiveFailures: z.number().int().nonnegative(),
+  lastFailureAt: z.number().int().nullable(),
+  lastSuccessAt: z.number().int().nullable(),
+});
+
+export const webhookHealthDelivery = z.object({
+  id: z.string(),
+  eventId: z.string(),
+  type: z.string(),
+  paymentId: z.string().nullable(),
+  status: z.enum(["pending", "delivered", "failed"]),
+  attempts: z.number().int().nonnegative(),
+  nextAttemptAt: z.number().int().nullable(),
+  responseStatus: z.number().int().nullable(),
+  /* the last attempt's reason: HTTP_<status>, TIMEOUT, UNREACHABLE,
+     ENDPOINT_REMOVED, or SIGNING_KEY_MISSING (the platform's) */
+  lastError: z.string().nullable(),
+  deliveredAt: z.number().int().nullable(),
+  createdAt: z.number().int(),
+});
+
+/* GET /integrations/webhook */
+export const webhookIntegrationResponse = z.object({
+  /* null until the business's software registers one through /v1 */
+  endpoint: webhookHealthEndpoint.nullable(),
+  /* constitution VIII / research D10: the platform's own condition —
+     with no signing key nothing is attempted, and the screen says so
+     in Devolada's words */
+  signingConfigured: z.boolean(),
+  /* where a developer verifies signatures: the published key set */
+  jwksUrl: z.string(),
+  /* the latest deliveries of real payments, newest first */
+  deliveries: z.array(webhookHealthDelivery),
+});
+
 export const integrationsResponse = z.object({
   wisphub: wisphubIntegration,
   /* automated-collections-api US1: the catalog's second live card */
@@ -113,3 +156,5 @@ export type ApiIntegrationResponse = z.infer<typeof apiIntegrationResponse>;
 export type IssueCredentialRequest = z.infer<typeof issueCredentialRequest>;
 export type IssueCredentialResponse = z.infer<typeof issueCredentialResponse>;
 export type RevokeCredentialResponse = z.infer<typeof revokeCredentialResponse>;
+export type WebhookHealthDelivery = z.infer<typeof webhookHealthDelivery>;
+export type WebhookIntegrationResponse = z.infer<typeof webhookIntegrationResponse>;

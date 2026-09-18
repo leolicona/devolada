@@ -43,6 +43,11 @@ export const feedCharge = z.object({
   folio: z.string(),
   /* 'spei' = direct payment (direct-payment D6); one channel today */
   channel: z.enum(["spei"]),
+  /* automated-collections-api D8/FR-026: which door the link came
+     through. An API payment's `actionOutcome` is its verdict webhook's
+     delivery, so the badge must speak the webhook's words, never
+     WispHub's. Defaulted so fixtures born before it still parse. */
+  source: z.enum(["panel", "api"]).default("panel"),
   /* The payment lifecycle status (D4). The feed's default answers money
      that arrived; the filter reaches everything else. */
   status: z.enum(PAYMENT_STATUSES),

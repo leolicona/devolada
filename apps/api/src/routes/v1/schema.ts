@@ -19,3 +19,37 @@ export type {
   PaymentLink,
   PaymentLinkList,
 } from "./payment-links/schema";
+export { apiPayment, apiPaymentList, listPaymentsQuery, listTransfersQuery, transferList, TRANSFERS_PAGE_MAX } from "./payments/schema";
+export type { ApiPayment, ApiPaymentList, ListPaymentsQuery, ListTransfersQuery, TransferList } from "./payments/schema";
+export { advanceTestPaymentRequest } from "./test-mode/schema";
+export type { AdvanceTestPaymentRequest } from "./test-mode/schema";
+export {
+  DELIVERY_STATUSES,
+  deleteWebhookResponse,
+  jwk,
+  jwks,
+  listDeliveriesQuery,
+  MATCHES,
+  PAYMENT_STATUSES,
+  registerWebhookRequest,
+  WEBHOOK_EVENT_TYPES,
+  WEBHOOK_HEADERS,
+  webhookDelivery,
+  webhookDeliveryList,
+  webhookEndpoint,
+  webhookEvent,
+  webhookEventData,
+  webhookEventType,
+} from "./webhook/schema";
+export type {
+  Jwks,
+  ListDeliveriesQuery,
+  PaymentStatus,
+  RegisterWebhookRequest,
+  WebhookDelivery,
+  WebhookDeliveryList,
+  WebhookEndpoint,
+  WebhookEvent,
+  WebhookEventData,
+  WebhookEventType,
+} from "./webhook/schema";

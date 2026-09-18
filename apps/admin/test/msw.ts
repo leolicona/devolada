@@ -74,6 +74,8 @@ export const handlers = {
     http.post("/integrations/api/credentials", async ({ request }) => r(await request.json())),
   revokeCredential: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/integrations/api/credentials/:id/revoke", ({ params }) => r(String(params.id))),
+  /* automated-collections-api US2: the webhook's health (FR-018) */
+  webhookIntegration: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/integrations/webhook", () => r()),
   /* automated-collections-api US1 (T036): the public surface, for a screen
      or a fixture that rehearses what the business's software sees. The
      panel itself never calls /v1 — a browser holding a `dk_` key is a

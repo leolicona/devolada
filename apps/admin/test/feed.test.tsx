@@ -309,6 +309,40 @@ describe("US-R03: the proof and the retry live on the row", () => {
     expect(screen.getByText(/no envió imagen/)).toBeInTheDocument();
   });
 
+  it("automated-collections-api US2 (FR-026): an API payment's outcome speaks the webhook's words, and its retry is a re-send", async () => {
+    const retried: string[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed(() =>
+        ok(
+          feedOf([
+            charge({ id: "api-1", source: "api" as const, customerName: "CLI-4471", actionOutcome: "done" as const }),
+            charge({ id: "api-2", source: "api" as const, customerName: "CLI-4472", actionOutcome: "queued" as const, actionDoneAt: null }),
+            charge({ id: "api-3", source: "api" as const, customerName: "CLI-4473", actionOutcome: "failed" as const, actionDoneAt: null, actionAttempts: 6 }),
+          ]),
+        ),
+      ),
+      handlers.retryReconnection((id) => {
+        retried.push(id);
+        return ok({ actionOutcome: "queued", nextAttemptAt: Date.now() });
+      }),
+    );
+    renderApp("/");
+    expect(await screen.findByText("Entregado")).toBeInTheDocument();
+    expect(screen.getByText("Reintentando")).toBeInTheDocument();
+    expect(screen.getByText("Sin entregar")).toBeInTheDocument();
+    /* the WispHub badges never appear on these rows (the filter tab
+       "Reconectados" is the feed's, not a row's) */
+    expect(screen.queryByText("Reconectado")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reconexión en cola")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fallido")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /cli-4473/i }));
+    expect(await screen.findByText(/intentos de aviso al sistema: 6/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reenviar aviso" }));
+    await screen.findByRole("button", { name: /cli-4473/i });
+    expect(retried).toEqual(["api-3"]);
+  });
+
   it("scenario 7: 'Reintentar reconexión' re-queues a failed row", async () => {
     const retried: string[] = [];
     server.use(

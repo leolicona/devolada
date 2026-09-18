@@ -7,31 +7,48 @@ match the spec's acceptance scenarios.
 
 ## Setup
 
+Point the API at the sandbox and give it a signing key, in `apps/api/.dev.vars`
+(git-ignored; every key's "unset" meaning is in CLAUDE.md and `env.ts`):
+
+```sh
+APICEP_TOKEN=sandbox                        # any value: the sandbox checks nothing
+APICEP_BASE_URL=http://localhost:8789       # the mock below, instead of the real provider
+WEBHOOK_SIGNING_KEYS=[{...}]                # mint one with the one-liner under US2
+```
+
 ```sh
 pnpm install
 pnpm --filter @devolada/api db:migrate:local
 pnpm --filter @devolada/api dev            # 8787 — the API and, inside it, the validation engine
 pnpm --filter @devolada/api sandbox        # 8789, apiCEP mock — no provider token needed
-pnpm --filter @devolada/admin dev          # 5174, to issue the credential
+pnpm --filter @devolada/admin dev          # 5174, the panel (optional: the seed issues the credentials)
 pnpm --filter @devolada/pago dev           # 5175, the payer's page
 ```
 
-Seed a business and sign in:
+(`wrangler dev --local` if the machine has no Cloudflare login: the receipt
+reader's AI binding is remote by default and needs one; the reader degrades,
+nothing else changes. Walked 2026-09-18.)
+
+Seed a business, its CLABE and its credentials in one step:
 
 ```sh
-curl -X POST localhost:8787/dev/seed       # demo@devolada.app / devolada123
+curl -sX POST localhost:8787/dev/seed      # demo@devolada.app / devolada123
+# → { admin: { email, password }, api: { key: "dk_…", testKey: "dk_…" } }
 ```
 
 The seeded business has a CLABE, so the channel is available. **Do not connect
 WispHub** — running without it is the point: it proves D5, that the SPEI channel
 no longer depends on a WispHub key.
 
-## Issue a credential
+## The credential
 
-Admin → Integraciones → API. Save, and copy the `dk_…` key — it is shown once.
+The seed answered with a real key and a test key (T070); each seed replaces
+the previous pair. Or issue one by hand in Admin → Integraciones → API and copy
+it — it is shown once.
 
 ```sh
 export DK=dk_...................................
+export DK_TEST=dk_..............................
 export API=http://localhost:8787
 ```
 
@@ -169,12 +186,17 @@ nothing, not a feed of the business's bank account (research D16).
 
 ## Test mode
 
-Issue a **test** credential, then run the whole flow above with no bank transfer:
+With the **test** credential, run the whole flow above with no bank transfer —
+under its own customer references (`TEST-…`): a reference is one namespace per
+business across both modes, so `CLI-4471`, which already holds a real reusable
+link, is refused to the test key with a `VALIDATION_ERROR` that says so
+(walked 2026-09-18). Submit a proof on the test link's page: it stays
+`validating` and the sandbox is never called. Then name the verdict:
 
 ```sh
 curl -sX POST $API/v1/test/payments/<id>/advance \
   -H "Authorization: Bearer $DK_TEST" -H 'Content-Type: application/json' \
-  -d '{"to":"confirmed","receivedCents":49900}'
+  -d '{"to":"confirmed","receivedCents":51400}'
 ```
 
 Then prove the isolation that FR-035 demands:

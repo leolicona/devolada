@@ -77,3 +77,13 @@ export function fail(c: JsonContext, code: V1ErrorCode, message?: string) {
 export function ok<T>(c: JsonContext, data: T, status: ContentfulStatusCode = 200) {
   return c.json({ success: true as const, data }, status);
 }
+
+/* The app's one error handler, told which surface it is answering
+   (FR-025, /speckit-analyze I1 2026-09-18): a handler that throws under
+   /v1 still answers the /v1 envelope — `retryable: true`, because ours
+   is the kind of failure waiting can fix — while every browser-facing
+   route keeps the bare code its clients ship with (constitution III). */
+export function internalError(c: JsonContext & { req: { path: string } }) {
+  if (c.req.path.startsWith("/v1/") || c.req.path === "/v1") return fail(c, "INTERNAL_SERVER_ERROR");
+  return c.json({ success: false, error: { code: "INTERNAL_SERVER_ERROR" } }, 500);
+}

@@ -10,12 +10,17 @@ import {
   type CredentialSummary,
 } from "../../api-clients/store";
 import { validationAvailable } from "../../direct-payments/validation";
+import { realOnly } from "../../direct-payments/links";
+import { and, desc, eq } from "drizzle-orm";
+import { apiWebhooks, payments, webhookDeliveries } from "../../db/schema";
+import { activeSigningKey, parseSigningKeys } from "../../webhooks/sign";
 import type {
   ApiCredential,
   IntegrationsResponse,
   IssueCredentialRequest,
   WisphubPatchRequest,
   WispHubTestResponse,
+  WebhookIntegrationResponse,
 } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -96,6 +101,58 @@ export async function getApiIntegration(c: Ctx) {
     success: true,
     data: { credentials: credentials.map(toCredential), validationAvailable: validationAvailable(c.env) },
   });
+}
+
+/* GET /integrations/webhook (automated-collections-api US2, FR-018): the
+   address, its health and the recent deliveries with their reasons — an
+   endpoint the business broke is the business's to fix, and this is
+   where it sees that. Real payments only (research D12, T065); the
+   counters on the endpoint row count every attempt. The address is
+   registered by the business's software through PUT /v1/webhook: it
+   belongs to the system that will answer it, not to a person in the
+   panel. */
+const RECENT_DELIVERIES = 20;
+
+export async function getWebhookIntegration(c: Ctx) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const { db, actor } = ctx;
+  const [endpoint] = await db.select().from(apiWebhooks).where(eq(apiWebhooks.businessId, actor.id));
+  const recent = await db
+    .select({ delivery: webhookDeliveries })
+    .from(webhookDeliveries)
+    .innerJoin(payments, eq(payments.id, webhookDeliveries.paymentId))
+    /* automated-collections-api D12 (FR-035): real payments only, by the one shared rule */
+    .where(and(eq(webhookDeliveries.businessId, actor.id), realOnly(payments)))
+    .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
+    .limit(RECENT_DELIVERIES);
+  const data: WebhookIntegrationResponse = {
+    endpoint: endpoint
+      ? {
+          url: endpoint.url,
+          createdAt: endpoint.createdAt.getTime(),
+          consecutiveFailures: endpoint.consecutiveFailures,
+          lastFailureAt: endpoint.lastFailureAt?.getTime() ?? null,
+          lastSuccessAt: endpoint.lastSuccessAt?.getTime() ?? null,
+        }
+      : null,
+    signingConfigured: activeSigningKey(parseSigningKeys(c.env)) !== null,
+    jwksUrl: `${c.env.API_BASE_URL ?? ""}/.well-known/jwks.json`,
+    deliveries: recent.map(({ delivery }) => ({
+      id: delivery.id,
+      eventId: delivery.eventId,
+      type: delivery.eventType,
+      paymentId: delivery.paymentId,
+      status: delivery.status,
+      attempts: delivery.attempts,
+      nextAttemptAt: delivery.nextAttemptAt?.getTime() ?? null,
+      responseStatus: delivery.responseStatus,
+      lastError: delivery.lastError,
+      deliveredAt: delivery.deliveredAt?.getTime() ?? null,
+      createdAt: delivery.createdAt.getTime(),
+    })),
+  };
+  return c.json({ success: true, data });
 }
 
 /* POST /integrations/api/credentials: the plaintext exists in this one

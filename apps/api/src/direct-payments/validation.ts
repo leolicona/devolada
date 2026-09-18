@@ -12,7 +12,7 @@ import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
-import { classifyPayment } from "./classes";
+import { classifyPayment, type ReconciliationClass } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
 import {
   actionForClass,
@@ -27,7 +27,8 @@ import {
   notifyProvisionalExpiry,
   releaseEvidenceFor,
 } from "./provisional";
-import { isApiLink, isPanelLink, type ApiLink } from "./links";
+import { isApiLink, isPanelLink, realOnly, type ApiLink } from "./links";
+import { enqueueAndDeliver, type Defer } from "../webhooks/queue";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -195,6 +196,42 @@ async function tracesToOwnAttempt(
   return siblings.some(attempted);
 }
 
+/* automated-collections-api D7/D17 (FR-013): every status an API
+   link's payment enters is announced to the business's endpoint —
+   here, in the one write every terminal outcome of an attempt passes
+   through, so `expired`, `invalid` and the API half's own verdicts all
+   announce without a list of call sites to keep in step. Compared
+   against the last status seen, so one attempt announces each state
+   once; a write that keeps the status (a retry with a later slot)
+   announces nothing. A panel payment's outcome is WispHub's and never
+   reaches here. Shared by the validation and by test mode's advance
+   (D12): a test verdict is written by the same hand as a real one. */
+function announcingWriter(
+  env: Bindings,
+  db: DB,
+  payment: DirectPayment,
+  link: PaymentLink,
+  now: Date,
+  defer?: Defer,
+): (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment> {
+  let announced = payment.status;
+  return async (values) => {
+    const [row] = await db
+      .update(payments)
+      .set(values)
+      .where(eq(payments.id, payment.id))
+      .returning();
+    /* prepaid-credit D2: the fee keys on the terminal verdict, once per
+       payment — idempotent in the book, so every path may call it */
+    await debitValidationFee(env, db, row);
+    if (isApiLink(link) && row.status !== announced) {
+      announced = row.status;
+      await enqueueAndDeliver(env, db, { payment: row, link, now }, defer);
+    }
+    return row;
+  };
+}
+
 export async function runValidation(
   env: Bindings,
   db: DB,
@@ -205,20 +242,13 @@ export async function runValidation(
      switch read from here; null = not connected */
   integration: Integration | null,
   now: Date,
+  /* automated-collections-api D8: where the first webhook attempt may
+     run past this call's return (`ctx.waitUntil`). The sweep passes
+     none — its verdicts are picked up by the webhook sweep chained
+     after it the same minute. */
+  opts: { defer?: Defer } = {},
 ): Promise<DirectPayment> {
-  const update = async (
-    values: Partial<typeof payments.$inferInsert>,
-  ): Promise<DirectPayment> => {
-    const [row] = await db
-      .update(payments)
-      .set(values)
-      .where(eq(payments.id, payment.id))
-      .returning();
-    /* prepaid-credit D2: the fee keys on the terminal verdict, once per
-       payment — idempotent in the book, so every path may call it */
-    await debitValidationFee(env, db, row);
-    return row;
-  };
+  const update = announcingWriter(env, db, payment, link, now, opts.defer);
 
   /* A retryable failure rides the D7 schedule like a pending CEP; when
      the schedule is exhausted the honest terminal state is `expired` —
@@ -523,17 +553,28 @@ export async function runValidation(
   {
     const rideKey = payment.trackingKey ?? cep?.trackingKey;
     if (rideKey) {
-      await db
-        .update(payments)
-        .set({ status: "superseded", nextValidationAt: null })
-        .where(
-          and(
-            eq(payments.paymentLinkId, payment.paymentLinkId),
-            eq(payments.trackingKey, rideKey),
-            eq(payments.status, "expired"),
-            ne(payments.id, payment.id),
-          ),
-        );
+      const expiredRides = and(
+        eq(payments.paymentLinkId, payment.paymentLinkId),
+        eq(payments.trackingKey, rideKey),
+        eq(payments.status, "expired"),
+        ne(payments.id, payment.id),
+      );
+      if (isApiLink(link)) {
+        /* automated-collections-api D17: a caller that heard `expired`
+           deserves to hear the row was superseded — one row at a time,
+           so each gets its own event. */
+        const rides = await db.select().from(payments).where(expiredRides);
+        for (const ride of rides) {
+          const [row] = await db
+            .update(payments)
+            .set({ status: "superseded", nextValidationAt: null })
+            .where(eq(payments.id, ride.id))
+            .returning();
+          await enqueueAndDeliver(env, db, { payment: row, link, now }, opts.defer);
+        }
+      } else {
+        await db.update(payments).set({ status: "superseded", nextValidationAt: null }).where(expiredRides);
+      }
     }
   }
 
@@ -580,9 +621,11 @@ export async function runValidation(
      API link for a gym has no integration row at all, so `integration`
      is `null` on its path. The API half settles against `asked_cents`
      with the business's tolerance and constructs no WispHub client
-     (FR-029 holds structurally). US2 (T046) adds the webhook enqueue at
-     the same spot and sets `action_outcome` from its delivery; until
-     then the verdict lands whole and the outcome stays null. */
+     (FR-029 holds structurally). Its verdict is announced by `update`
+     above (D8/D17), and `action_outcome` is written by that delivery —
+     `queued` while it is retried, `done` when accepted, `failed` when
+     the schedule is spent (FR-026); with no address registered nothing
+     is sent and the outcome stays null. */
   if (isApiLink(link)) {
     return settleApiPayment(db, update, payment, link, business, cep ?? null, base, now);
   }
@@ -793,7 +836,10 @@ export async function runValidation(
    Closing the link: a `confirmed` verdict closes a one-time link
    (FR-027 "closes when it is paid"). A `partial` leaves it open so the
    payer can complete it — the caller sees `partial` and closes it
-   through PATCH if it would rather not. */
+   through PATCH if it would rather not.
+
+   The verdict written through `update` is what enqueues the webhook
+   (D8): this function never touches the queue itself. */
 async function settleApiPayment(
   db: DB,
   update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
@@ -838,6 +884,67 @@ async function settleApiPayment(
   return update({ ...facts, folio: makeFolio(), status, reconciliationClass: klass });
 }
 
+/* automated-collections-api D12 (FR-034): the test verdict. There is
+   no way to simulate a Banxico CEP, so a test payment never goes to
+   the engine (the payer's door leaves it undue — no slot, no inline
+   attempt) and moves only when the caller names the state. The write
+   is the validation's own: the same fields `settleApiPayment` and the
+   refusals set, through the same announcing writer, so the webhook the
+   developer rehearses is the one production sends — the fee gate in
+   credit/index.ts is what keeps it free. Which state may follow which,
+   and whether the amount tells the same story, is decided by the
+   handler (routes/v1/test-mode); this function trusts its plan. */
+export type TestAdvance =
+  | { status: "confirmed" | "partial" | "unapplied"; receivedCents: number; match: ReconciliationClass }
+  | { status: "invalid" | "expired" | "superseded" | "validating" | "queued_for_credit" };
+
+export async function advanceTestPayment(
+  env: Bindings,
+  db: DB,
+  payment: DirectPayment,
+  link: ApiLink,
+  advance: TestAdvance,
+  now: Date,
+  opts: { defer?: Defer } = {},
+): Promise<DirectPayment> {
+  if (!payment.isTest || !link.isTest) {
+    throw new Error(`payment ${payment.id} is real; only a test payment can be advanced`);
+  }
+  const update = announcingWriter(env, db, payment, link, now, opts.defer);
+  /* never due again, whatever it enters: the sweep does not know it */
+  const undue = { nextValidationAt: null, lastError: null };
+  switch (advance.status) {
+    case "confirmed":
+    case "partial":
+    case "unapplied": {
+      /* FR-027: a paying verdict closes a one-time link, as the real one does */
+      if (advance.status === "confirmed" && link.mode === "one_time") {
+        await db
+          .update(paymentLinks)
+          .set({ closedAt: now })
+          .where(and(eq(paymentLinks.id, link.id), isNull(paymentLinks.closedAt)));
+      }
+      return update({
+        ...undue,
+        status: advance.status,
+        receivedCents: advance.receivedCents,
+        reconciliationClass: advance.match,
+        folio: makeFolio(),
+        confirmedAt: now,
+        cepSenderName: null,
+      });
+    }
+    /* the two refusals wear the words the real path writes, so the
+       payer's page reads the same (D17/BUG-003) */
+    case "invalid":
+      return update({ ...undue, status: "invalid", lastError: "TRANSFER_CONTRADICTED" });
+    case "expired":
+      return update({ ...undue, status: "expired", lastError: "TRANSFER_NOT_FOUND" });
+    default:
+      return update({ ...undue, status: advance.status });
+  }
+}
+
 export type DirectSweepReport = {
   claimed: number;
   confirmed: number;
@@ -879,6 +986,10 @@ export async function sweepDirectPayments(
         isNotNull(payments.nextValidationAt),
         lte(payments.nextValidationAt, now),
         eq(businesses.status, "active"),
+        /* automated-collections-api D12: a test row is born undue and
+           stays so; spelled here too, so a test payment never reaches
+           the engine whatever a future write sets on it */
+        realOnly(payments),
       ),
     )
     .orderBy(payments.nextValidationAt)

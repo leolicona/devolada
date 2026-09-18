@@ -19,6 +19,7 @@ import {
   PauseCircle,
   Store,
   TimerOff,
+  Webhook,
   Wifi,
   WifiOff,
   XCircle,
@@ -86,7 +87,16 @@ export type Status =
      revoked. Revoked is a deliberate state the business chose, not a
      failure — amber, not red. */
   | "credentialActive"
-  | "credentialRevoked";
+  | "credentialRevoked"
+  /* automated-collections-api FR-018: the business's webhook endpoint,
+     as the panel's health line reads it — answering, or failing on the
+     business's side. And each delivery: accepted, still being retried,
+     or the schedule spent (never lost: readable and re-sendable). */
+  | "webhookHealthy"
+  | "webhookFailing"
+  | "deliveryDelivered"
+  | "deliveryPending"
+  | "deliveryFailed";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -128,6 +138,11 @@ const statuses: Record<
   channelApi: { tone: "info", icon: Code2, label: "API" },
   credentialActive: { tone: "success", icon: KeyRound, label: "Activa" },
   credentialRevoked: { tone: "warning", icon: Ban, label: "Revocada" },
+  webhookHealthy: { tone: "success", icon: Webhook, label: "Entregas al día" },
+  webhookFailing: { tone: "error", icon: AlertTriangle, label: "Entregas fallando" },
+  deliveryDelivered: { tone: "success", icon: CheckCircle2, label: "Entregado" },
+  deliveryPending: { tone: "warning", icon: Clock3, label: "Reintentando" },
+  deliveryFailed: { tone: "error", icon: XCircle, label: "Sin entregar" },
 };
 
 /* The shared control-size vocabulary (feedback-vocabulary-rollout D11,

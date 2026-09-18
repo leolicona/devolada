@@ -18,6 +18,8 @@ import { supportRoute } from "./routes/support";
 import { v1Route } from "./routes/v1";
 import { wellKnownRoute } from "./routes/v1/well-known";
 import { sweepWebhookDeliveries } from "./webhooks/queue";
+import { sweepApiCounters } from "./routes/v1/middleware";
+import { internalError } from "./routes/v1/envelope";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -72,7 +74,7 @@ app.route("/dev", dev);
 
 app.onError((err, c) => {
   console.error(err);
-  return c.json({ success: false, error: { code: "INTERNAL_SERVER_ERROR" } }, 500);
+  return internalError(c);
 });
 
 /* The Hono app itself, for tests and for the worker below */
@@ -118,6 +120,14 @@ export default {
     ctx.waitUntil(
       sweepTopUps(env).then((report) => {
         if (report.claimed) console.log("top-up sweep:", JSON.stringify(report));
+      }),
+    );
+    /* automated-collections-api D13/D14: the public API's housekeeping —
+       idempotency keys past 24 h and rate buckets past their minute —
+       rides the same trigger */
+    ctx.waitUntil(
+      sweepApiCounters(env).then((report) => {
+        if (report.keys || report.buckets) console.log("api housekeeping:", JSON.stringify(report));
       }),
     );
   },

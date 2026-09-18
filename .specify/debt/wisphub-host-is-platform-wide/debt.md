@@ -82,8 +82,21 @@ grep -rn "env.WISPHUB_BASE_URL" apps/api/src | grep -v env.ts  # no bare binding
 grep -n "WISPHUB_BASE_URL" apps/api/wrangler.jsonc             # no output
 ```
 
-**Trigger**: the second ISP, or any ISP not on the installation the
-prod binding names — whichever arrives first. Until then the shortcut
+**Trigger**: already met. The debt was logged expecting a *future*
+second installation; DNS says there are already **three hosts we have a
+standing reason to talk to**, each a separate machine (measured
+2026-09-18):
+
+| Host | Address | Why it matters to us |
+| --- | --- | --- |
+| `api.wisphub.net` | 192.241.208.217 | the adapter's default; the demo tenant FastIsp |
+| `api.wisphub.io` | 104.131.178.56 | the pilot ISP's installation |
+| `sandbox-api.wisphub.net` | 174.138.57.55 | WispHub's official sandbox — a throwaway company and key, no real billing touched. No `.io` equivalent exists. |
+
+One binding, one slot, three destinations. The sandbox is the sharpest
+case: it is the right place to exercise the adapter without anyone's
+live credential, and today reaching it costs us the pilot and the demo
+both. With `integrations.base_url` all three answer at once. Until then the shortcut
 costs nothing that a single pilot can feel.
 
 ## Notes

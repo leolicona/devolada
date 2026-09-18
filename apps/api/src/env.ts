@@ -34,8 +34,16 @@ export type Bindings = {
      signs in at wisphub.io, whose API host is a different server than
      the wisphub.net one this defaults to, so a perfectly good key is
      rejected against the wrong host. Unset → wisphub.net
-     (`DEFAULT_BASE_URL` in wisphub/client.ts), which is where the demo
-     tenant and the local sandbox live.
+     (`DEFAULT_BASE_URL` in wisphub/client.ts), where the demo tenant
+     lives.
+
+     Three hosts are real and all three matter to us (measured by DNS
+     2026-09-18, each its own machine): production `.net`
+     (192.241.208.217), production `.io` (104.131.178.56 — the pilot's),
+     and WispHub's official sandbox `sandbox-api.wisphub.net`
+     (174.138.57.55), where a throwaway company can be created and keyed
+     without touching anyone's real billing. There is no sandbox on the
+     `.io` side.
 
      Per environment, never per tenant, so setting it is an either/or:
      whoever is not on the named installation stops working until it

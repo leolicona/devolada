@@ -2,7 +2,7 @@ import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { payments } from "../src/db/schema";
+import { integrations, payments } from "../src/db/schema";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { seedBusiness, seedConfirmedPayment } from "./helpers";
 
@@ -223,6 +223,62 @@ const SOURCES = import.meta.glob("../src/**/*.ts", {
   import: "default",
   eager: true,
 }) as Record<string, string>;
+
+describe("provider-address-per-isp US3: what a business carries across a change of installation", () => {
+  it("T046 (FR-003): the cash payment method is re-read on the new installation, never reused from the old", async () => {
+    /* The provider caches live for a tenant, and until T046 they lived
+       for a tenant ALONE. The cash payment-method id is the one that
+       matters: it sits on the money path for ten minutes, and an id
+       minted on one installation names somebody else's method on
+       another — or nothing at all. */
+    const onNet: Tenant = {
+      origin: DEFAULT_ORIGIN,
+      usuario: "ana@fastisp",
+      wisphubId: "6",
+      invoiceId: 601,
+      seen: [],
+    };
+    const { business } = await seedQueued("mover@isp.mx", null, onNet);
+    mockReconnection(onNet);
+    expect(await sweepReconnections(env)).toMatchObject({ reconnected: 1, failed: 0 });
+    /* The first payment warmed the cache on the default installation. */
+    expect(onNet.seen.some((path) => path.startsWith("/api/formas-de-pago/"))).toBe(true);
+
+    /* The ISP picks their real installation. The panel writes this row;
+       the sweep reads it on its next pass, with the cache still warm. */
+    await db()
+      .update(integrations)
+      .set({ installation: "wisphub_io" })
+      .where(eq(integrations.businessId, business.id));
+
+    const onIo: Tenant = {
+      origin: IO_ORIGIN,
+      usuario: "ana@fastisp",
+      wisphubId: "6",
+      invoiceId: 777,
+      seen: [],
+    };
+    await seedConfirmedPayment(business, {
+      wisphubCustomerId: onIo.wisphubId,
+      customerUsuario: onIo.usuario,
+      registeredCents: 49900,
+      actionOutcome: "queued",
+      actionAttempts: 1,
+      nextAttemptAt: new Date(Date.now() - MINUTE),
+    });
+    mockReconnection(onIo);
+    expect(await sweepReconnections(env)).toMatchObject({ reconnected: 1, failed: 0 });
+
+    /* THE assertion: wisphub.io was asked for its own payment methods.
+       Keyed by business alone, the ten-minute entry from wisphub.net
+       would have answered instead, this interceptor would have gone
+       unused, and `assertNoPendingInterceptors` would say so. */
+    expect(onIo.seen.some((path) => path.startsWith("/api/formas-de-pago/"))).toBe(true);
+    /* And the old installation was not asked for anything belonging to
+       the payment that came after the change. */
+    expect(onNet.seen).not.toContain(`/api/facturas/${onIo.invoiceId}/registrar-pago/`);
+  });
+});
 
 describe("provider-address-per-isp US3: the factory is the only door", () => {
   it("reads the API's own source, so the assertion below is about real files", () => {

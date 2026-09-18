@@ -46,10 +46,33 @@ export function resetProviderCaches(): void {
 
 type Entry<T> = { value: T; readAt: number; expiresAt: number };
 
-function keyFor(kind: string, businessId: string, version: number | null): Request {
+/* provider-address-per-isp T046 (FR-003): the ADDRESS is part of the
+   key, not only the tenant.
+
+   A business can now change installation, and everything cached under
+   it was read from the old one. The cash payment-method id is the one
+   that bites: it sits on the money path for ten minutes
+   (`wisphub/reconnection.ts`), and an id minted on one installation
+   means nothing on another — the payment would be registered against a
+   `forma_pago` that belongs to somebody else's WispHub, or refused. The
+   roster and the pending list are thirty seconds of a stale screen,
+   which is milder and wrong in the same way.
+
+   Keying by the address makes the change invalidate by itself: the new
+   installation is a new key, so the first read after it goes to the
+   provider, and the old entries expire unread. Nothing has to remember
+   to clear anything, which is the only kind of invalidation that
+   survives a second writer. The address is a host, never a credential
+   (FR-013). */
+function keyFor(
+  kind: string,
+  businessId: string,
+  address: string,
+  version: number | null,
+): Request {
   const v = version === null ? "" : `/${version}`;
   return new Request(
-    `${CACHE_ORIGIN}/${generation}/${kind}/${encodeURIComponent(businessId)}${v}`,
+    `${CACHE_ORIGIN}/${generation}/${kind}/${encodeURIComponent(businessId)}/${encodeURIComponent(address)}${v}`,
     { method: "GET" },
   );
 }
@@ -62,9 +85,15 @@ function store(): Cache | null {
   return caches?.default ?? null;
 }
 
-async function read<T>(kind: string, businessId: string, version: number | null, now: Date): Promise<Entry<T> | null> {
+async function read<T>(
+  kind: string,
+  businessId: string,
+  address: string,
+  version: number | null,
+  now: Date,
+): Promise<Entry<T> | null> {
   const cache = store();
-  const hit = cache ? await cache.match(keyFor(kind, businessId, version)) : null;
+  const hit = cache ? await cache.match(keyFor(kind, businessId, address, version)) : null;
   const entry = hit ? ((await hit.json()) as Entry<T>) : null;
   const fresh = entry !== null && entry.expiresAt > now.getTime();
   /* TD-014's own payment condition: the hit rate is measured, not guessed */
@@ -72,12 +101,18 @@ async function read<T>(kind: string, businessId: string, version: number | null,
   return fresh ? entry : null;
 }
 
-async function write<T>(kind: string, businessId: string, version: number | null, entry: Entry<T>): Promise<void> {
+async function write<T>(
+  kind: string,
+  businessId: string,
+  address: string,
+  version: number | null,
+  entry: Entry<T>,
+): Promise<void> {
   const cache = store();
   if (!cache) return;
   const maxAge = Math.max(1, Math.ceil((entry.expiresAt - entry.readAt) / 1000));
   await cache.put(
-    keyFor(kind, businessId, version),
+    keyFor(kind, businessId, address, version),
     new Response(JSON.stringify(entry), {
       headers: { "Content-Type": "application/json", "Cache-Control": `max-age=${maxAge}` },
     }),
@@ -106,13 +141,13 @@ export async function pendingInvoicesForDisplay(
   now: Date,
   version = 0,
 ): Promise<PendingInvoices & { readAt: number }> {
-  const hit = await read<PendingInvoices>("pending", businessId, version, now);
+  const hit = await read<PendingInvoices>("pending", businessId, wisphub.baseUrl, version, now);
   if (hit) return { ...hit.value, readAt: hit.readAt };
   /* Only a successful answer is cached: a provider failure must not
      become 30 seconds of remembered failure (scenario 10). */
   const fresh = await wisphub.pendingInvoices(now);
   const readAt = now.getTime();
-  await write("pending", businessId, version, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
+  await write("pending", businessId, wisphub.baseUrl, version, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
   return { ...fresh, readAt };
 }
 
@@ -125,11 +160,11 @@ export async function rosterForDisplay(
   wisphub: WispHub,
   now: Date,
 ): Promise<Roster & { readAt: number }> {
-  const hit = await read<Roster>("roster", businessId, null, now);
+  const hit = await read<Roster>("roster", businessId, wisphub.baseUrl, null, now);
   if (hit) return { ...hit.value, readAt: hit.readAt };
   const fresh = await wisphub.listCustomersFull();
   const readAt = now.getTime();
-  await write("roster", businessId, null, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
+  await write("roster", businessId, wisphub.baseUrl, null, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
   return { ...fresh, readAt };
 }
 
@@ -140,10 +175,10 @@ export async function cashPaymentMethodId(
   wisphub: WispHub,
   now: Date,
 ): Promise<number> {
-  const hit = await read<number>("payment-method", businessId, null, now);
+  const hit = await read<number>("payment-method", businessId, wisphub.baseUrl, null, now);
   if (hit) return hit.value;
   const fresh = await wisphub.getCashPaymentMethodId();
   const readAt = now.getTime();
-  await write("payment-method", businessId, null, { value: fresh, readAt, expiresAt: readAt + PAYMENT_METHOD_TTL_MS });
+  await write("payment-method", businessId, wisphub.baseUrl, null, { value: fresh, readAt, expiresAt: readAt + PAYMENT_METHOD_TTL_MS });
   return fresh;
 }

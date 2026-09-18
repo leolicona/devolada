@@ -229,6 +229,14 @@ export const wisphubPatchRequest = z
    omit to test the stored one */
 export const wisphubTestRequest = z.object({
   apiKey: z.string().trim().min(8).optional(),
+  /* 007 T045: the address is a candidate too. An ISP correcting a wrong
+     pick has the new installation on screen and the old one in the row,
+     and testing the row's would answer about the door they are walking
+     away from — the same wrong answer FR-010 exists to stop giving.
+     Omitted means "the stored one", which is what the panel sends while
+     the pick has not moved, so `WISPHUB_BASE_URL` keeps resolving those
+     rows (D5). */
+  installation: installationKey.optional(),
 });
 
 
@@ -236,6 +244,7 @@ export type InstallationKeyValue = z.infer<typeof installationKey>;
 export type WisphubIntegration = z.infer<typeof wisphubIntegration>;
 export type IntegrationsResponse = z.infer<typeof integrationsResponse>;
 export type WisphubPatchRequest = z.infer<typeof wisphubPatchRequest>;
+export type WisphubTestRequest = z.infer<typeof wisphubTestRequest>;
 export type WispHubTestOutcome = z.infer<typeof wisphubTestOutcome>;
 export type WispHubVerifiableRead = z.infer<typeof wisphubVerifiableRead>;
 export type WispHubUnverifiableWrite = z.infer<typeof wisphubUnverifiableWrite>;

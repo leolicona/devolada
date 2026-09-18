@@ -333,6 +333,32 @@ describe("provider-address-per-isp US2: a failed connection says which thing is 
     expect(row.apiKey).toBe("stored-key-0001");
   });
 
+  it("T045: the test knocks on the installation the panel named, not the stored one", async () => {
+    /* An ISP who picked wrong and was rejected: the row still holds the
+       old address (null — the platform default), and the picker on
+       screen holds the new one. Testing the row would answer about the
+       door they are walking away from, which is the wrong answer
+       FR-010 exists to stop giving. */
+    await seedBusiness({ wisphubApiKey: "stored-key-0001" });
+    mockCustomers(IO_ORIGIN, { status: 403 });
+
+    const res = await (await app()).request(
+      ...send("/integrations/wisphub/test", "POST", { installation: "wisphub_io" }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+
+    /* The origin is the proof: the interceptor is on wisphub.io and a
+       call to the pinned default would fail netConnect. */
+    expect(data.triedInstallation).toEqual({ key: "wisphub_io", label: "wisphub.io" });
+    expect(data.outcome).toBe("KEY_REJECTED");
+    /* A test writes nothing — naming an installation is not choosing
+       it. Only a PATCH stores one. */
+    const [row] = await db().select().from(integrations);
+    expect(row.installation).toBeNull();
+  });
+
   it("with no key at all no test ran, and the answer says exactly that", async () => {
     await seedBusiness();
     const res = await (await app()).request(...send("/integrations/wisphub/test", "POST", {}), env);

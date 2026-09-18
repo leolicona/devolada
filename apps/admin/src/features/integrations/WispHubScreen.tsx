@@ -132,16 +132,42 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
   const [installation, setInstallation] = useState<InstallationKey>(
     wisphub.installation ?? wisphub.effectiveInstallation.key,
   );
-  const [confirming, setConfirming] = useState(false);
+  /* The patch waiting on a confirmation, or null when none is (T044). */
+  const [pending, setPending] = useState<WisphubPatchRequest | null>(null);
   const inUse = wisphub.effectiveInstallation;
   const moved = installation !== inUse.key;
-  const saveInstallation = () => save.mutate({ installation });
+
+  /* T044: a key and an address are ONE connection, so they travel as one
+     patch. Saving the key alone while the picker had moved sent it to be
+     tested against the address the ISP was walking away from, and
+     answered "wisphub.net rechazó esta llave" for a key that was
+     perfectly good — the exact sentence this feature exists to stop
+     showing, arriving through the panel's own button order. The API has
+     accepted both in one patch since T017, and re-tests against the one
+     being saved (FR-009); this is the screen catching up to its own
+     contract. */
+  const submit = (patch: WisphubPatchRequest) => {
+    const full = moved ? { ...patch, installation } : patch;
+    /* A business that already collects gets the question first, whether
+       the installation moved on its own or rode along with a key. */
+    if (moved && wisphub.configured) {
+      setPending(full);
+      return;
+    }
+    save.mutate(full);
+  };
 
   const test = useMutation<WispHubTestResponse, ApiError, string | undefined>({
     mutationFn: (apiKey) =>
       api<WispHubTestResponse>("/integrations/wisphub/test", {
         method: "POST",
-        body: JSON.stringify(apiKey ? { apiKey } : {}),
+        body: JSON.stringify({
+          ...(apiKey ? { apiKey } : {}),
+          /* T045: while the pick differs from what is in use, the test is
+             about the door on screen. Sending nothing means the stored
+             one, which is what an unmoved picker wants. */
+          ...(moved ? { installation } : {}),
+        }),
       }),
   });
   const result = test.data;
@@ -196,14 +222,18 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
             {/* feedback-vocabulary-rollout D1/D4: the wait is announced at
                 the control that started it. */}
             <Pending
-              active={save.isPending && save.variables?.installation !== undefined}
+              active={
+                save.isPending &&
+                save.variables?.installation !== undefined &&
+                save.variables?.wisphubApiKey === undefined
+              }
               label="Guardando la instalación."
             >
               <Button
                 size="compact"
                 variant="secondary"
                 disabled={save.isPending}
-                onClick={() => (wisphub.configured ? setConfirming(true) : saveInstallation())}
+                onClick={() => submit({})}
               >
                 {save.isPending ? "Guardando…" : "Guardar instalación"}
               </Button>
@@ -214,7 +244,7 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
             reaches the spec's *Deferred* outcomes, so it is a conscious
             act rather than a stray click (/speckit-analyze finding U1).
             The copy names what is NOT protected, in the ISP's terms. */}
-        <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
           <AlertDialogContent>
             <AlertDialogTitle>¿Cambiar a {INSTALLATIONS.find((i) => i.key === installation)?.label}?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -227,7 +257,14 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={saveInstallation}>Cambiar instalación</AlertDialogAction>
+              <AlertDialogAction
+                onClick={() => {
+                  if (pending) save.mutate(pending);
+                  setPending(null);
+                }}
+              >
+                Cambiar instalación
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -244,6 +281,10 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
         />
         <p className="mt-1 text-sm text-ink-soft">
           La llave nunca se muestra completa después de guardarla.
+          {/* T044: the key save carries the pick, so the screen says so
+              before the button is pressed rather than after. */}
+          {moved &&
+            ` Al guardarla también se guardará ${INSTALLATIONS.find((i) => i.key === installation)?.label} como tu instalación.`}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -259,10 +300,13 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
         {/* feedback-vocabulary-rollout D1/D4: an action the operator started is
           announced at the control they used. Disabled plus a changed word is
           not a signal — it is silent to a screen reader and easy to miss. */}
-        <Pending active={save.isPending} label="Guardando la llave.">
+        <Pending
+          active={save.isPending && save.variables?.wisphubApiKey !== undefined}
+          label="Guardando la llave."
+        >
           <Button size="compact"
             disabled={save.isPending || key.trim().length < 8}
-            onClick={() => save.mutate({ wisphubApiKey: key.trim() })}
+            onClick={() => submit({ wisphubApiKey: key.trim() })}
           >
             {save.isPending ? "Guardando…" : "Guardar llave"}
           </Button>

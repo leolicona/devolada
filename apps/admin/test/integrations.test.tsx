@@ -363,3 +363,130 @@ describe("provider-address-per-isp US2: a failed connection says which thing is 
     expect(screen.getByText(/Revisa primero la instalación/)).toBeInTheDocument();
   });
 });
+
+/* provider-address-per-isp US1/US2 (T044, T045) — the address and the
+   key are one connection, so neither control may act on half of it.
+
+   What this block exists to stop: the panel used to save the key on its
+   own while the picker showed a different installation, which sent a
+   perfectly good key to be tested against the address the ISP had just
+   moved away from. The answer was "wisphub.net rechazó esta llave" — the
+   one sentence this whole feature was written to stop showing, arriving
+   through the panel's own button order. */
+describe("provider-address-per-isp: the pick on screen is the pick that is saved and tested", () => {
+  const io = {
+    installation: "wisphub_io",
+    effectiveInstallation: { key: "wisphub_io", label: "wisphub.io", kind: "real", assumed: false },
+  };
+
+  const pickIo = async () => {
+    await userEvent.click(await screen.findByLabelText("¿Dónde entras a WispHub?"));
+    await userEvent.click(await screen.findByRole("option", { name: "wisphub.io" }));
+  };
+
+  it("T044: saving the key carries the installation just picked, as ONE patch", async () => {
+    const patches: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      /* An ISP connecting for the first time: nothing chosen, nothing
+         saved. This is US1's first acceptance scenario, done in the
+         order a person actually does it — pick, paste, save. */
+      handlers.integrations(() => ok(assumed({ configured: false, keyTail: null }))),
+      handlers.patchWisphub((body) => {
+        patches.push(body);
+        return ok(wisphub({ ...io, keyTail: "2bG7" }));
+      }),
+    );
+    renderApp("/integrations/wisphub");
+
+    await pickIo();
+    await userEvent.type(screen.getByLabelText("Nueva llave"), "01q9K2Rf.M02bG7");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar llave" }));
+
+    /* One request, both halves. A patch without the installation is the
+       key being judged by the wrong door. */
+    expect(patches).toEqual([{ wisphubApiKey: "01q9K2Rf.M02bG7", installation: "wisphub_io" }]);
+  });
+
+  it("T044: and the screen says so before the button is pressed", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.integrations(() => ok(assumed({ configured: false, keyTail: null }))),
+    );
+    renderApp("/integrations/wisphub");
+
+    await pickIo();
+    /* Named, not implied: saving a key is about to save an address too,
+       and an ISP should never discover that from the result. */
+    expect(
+      screen.getByText(/también se guardará wisphub\.io como tu instalación/),
+    ).toBeInTheDocument();
+  });
+
+  it("T044: a connected business is still asked first when the key save moves the installation", async () => {
+    const patches: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.integrations(() => ok(wisphub())),
+      handlers.patchWisphub((body) => {
+        patches.push(body);
+        return ok(wisphub({ ...io }));
+      }),
+    );
+    renderApp("/integrations/wisphub");
+
+    await pickIo();
+    await userEvent.type(screen.getByLabelText("Nueva llave"), "01q9K2Rf.M02bG7");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar llave" }));
+
+    /* The Deferred outcomes are reached the same way whether the
+       installation moves alone or rides a key, so the question is the
+       same (/speckit-analyze finding U1). */
+    expect(patches).toEqual([]);
+    expect(await screen.findByText("¿Cambiar a wisphub.io?")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cambiar instalación" }));
+    expect(patches).toEqual([{ wisphubApiKey: "01q9K2Rf.M02bG7", installation: "wisphub_io" }]);
+  });
+
+  it("T045: Probar conexión tests the installation on screen, not the stored one", async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.integrations(() => ok(wisphub())),
+      handlers.testWisphubIntegration((body) => {
+        bodies.push(body);
+        return ok(testResult({ outcome: "KEY_REJECTED" }));
+      }),
+    );
+    renderApp("/integrations/wisphub");
+
+    await pickIo();
+    await userEvent.click(screen.getByRole("button", { name: "Probar conexión" }));
+
+    /* An ISP correcting a wrong pick is answered about the door they
+       chose. Testing the stored one would report on the address they
+       are leaving — the wrong-door answer FR-010 exists to end. */
+    expect(bodies).toEqual([{ installation: "wisphub_io" }]);
+    expect(await screen.findByText(/wisphub\.io rechazó esta llave\./)).toBeInTheDocument();
+  });
+
+  it("T045: with the pick unchanged it names none, so the stored address answers", async () => {
+    const bodies: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      /* A row that chose nothing: naming its resolved installation back
+         would freeze the platform default into the request and take
+         `WISPHUB_BASE_URL` out of the resolution (D5). */
+      handlers.integrations(() => ok(assumed())),
+      handlers.testWisphubIntegration((body) => {
+        bodies.push(body);
+        return ok(testResult({ outcome: "OK", ok: true, verified: ["customers", "invoices", "payment_methods"] }));
+      }),
+    );
+    renderApp("/integrations/wisphub");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Probar conexión" }));
+    expect(bodies).toEqual([{}]);
+  });
+});

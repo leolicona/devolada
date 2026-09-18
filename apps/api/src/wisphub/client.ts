@@ -134,7 +134,14 @@ export class WispHub {
 
   constructor(
     private apiKey: string,
-    private baseUrl: string = DEFAULT_BASE_URL,
+    /* Readable on purpose (provider-address-per-isp T046): the provider
+       caches key their entries by the address the answer came from, and
+       asking the instance is the only way that cannot drift from where
+       the call actually went. It is a host, never a credential — the key
+       beside it stays private. Nothing else should read it: the panel is
+       never shown an endpoint (FR-005) and every caller already gets its
+       client from `wisphubFor`. */
+    readonly baseUrl: string = DEFAULT_BASE_URL,
     limits: Partial<WispHubLimits> = {},
   ) {
     this.limits = {

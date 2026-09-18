@@ -26,6 +26,7 @@ import type {
   IntegrationsResponse,
   IssueCredentialRequest,
   WisphubPatchRequest,
+  WisphubTestRequest,
   WispHubTestResponse,
   WispHubVerifiableRead,
   WebhookIntegrationResponse,
@@ -377,15 +378,22 @@ export async function patchWisphub(c: Ctx, body: WisphubPatchRequest) {
   return c.json({ success: true, data });
 }
 
-export async function testWisphubKey(c: Ctx, apiKey?: string) {
+export async function testWisphubKey(c: Ctx, body: WisphubTestRequest) {
   const ctx = businessGuard(c);
   if ("error" in ctx) return ctx.error;
-  /* Loaded once: the stored key when none was typed, and — always — the
-     stored installation, because a typed candidate is still being tested
-     against the address this business actually uses
-     (provider-address-per-isp FR-009). */
+  /* Loaded once: the stored key when none was typed, and the stored
+     installation when none was named.
+
+     T045: both halves of a connection are candidates here. The panel
+     names the installation while the picker differs from the one in
+     use, so an ISP fixing a wrong pick is answered about the door they
+     chose, not the one they are leaving — the same reason FR-009 makes
+     a save test the address being saved. Naming nothing still means the
+     stored one, which is how a row that chose nothing keeps resolving
+     through `WISPHUB_BASE_URL` (D5). */
   const stored = await integrationOf(ctx.db, ctx.actor.id);
-  const key = apiKey ?? stored?.apiKey ?? undefined;
+  const key = body.apiKey ?? stored?.apiKey ?? undefined;
+  const installation = body.installation ?? stored?.installation ?? null;
   if (!key) {
     /* Not one of the four outcomes, because no test ran: there is
        nothing to report about a connection that was never attempted.
@@ -395,5 +403,5 @@ export async function testWisphubKey(c: Ctx, apiKey?: string) {
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 409);
   }
   /* 200 either way: the test succeeded in telling us the answer (D2) */
-  return c.json({ success: true, data: await testKey(key, stored?.installation ?? null, c.env) });
+  return c.json({ success: true, data: await testKey(key, installation, c.env) });
 }

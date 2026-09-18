@@ -363,7 +363,7 @@ case, plan decision and constitution principle was found satisfied in the
 code; the two items T002 and T039 record as still-to-run need a machine with
 a Cloudflare login and are tracked there, not re-opened here.
 
-- [ ] T041 [US1] In `apps/api/src/credit/topups.ts`, carry D20 to the top-up
+- [X] T041 [US1] In `apps/api/src/credit/topups.ts`, carry D20 to the top-up
   door. `acceptedData` is `topUp.trackingKey != null && topUp.senderBank !=
   null` and never tests the date, so a top-up whose two readings agreed on a
   clave that neither of them read a date for is stored with `transfer_date`
@@ -386,3 +386,17 @@ a Cloudflare login and are tracked there, not re-opened here.
   writes `reading_check = 'agreed'` with `transfer_date` NULL, and the second
   slot's captured body still carries `imageUrl` and no `sender` — never a
   `sender.date` of today. Per plan D20, research R9 (contradicts)
+
+  **Done 2026-09-18.** The test was written first and failed exactly where
+  the finding said it would — `expected 'undefined' to contain
+  'topups/…/proof-3'`: the second slot carried no `imageUrl`, because it had
+  gone to the transfer door. Its first four assertions passed before the fix,
+  which is what confirmed the state is reachable rather than theoretical: the
+  row really is stored `reading_check = 'agreed'` with the clave, the bank
+  and a null `transfer_date`. `acceptedData` in `apps/api/src/credit/topups.ts`
+  now tests `transferDate != null` too, with the D20 reasoning beside it, so
+  such a row keeps the receipt door; the `?? now` fallback stays for
+  `proof_mode = 'transfer'`, where an operator typed the date. Gates in CI
+  order, all green: spec-lint 63 files, gen-banks 97 banks, contrast-lint 34
+  pairs at AA, pending-lint 27 labels, typecheck in four workspaces, tests
+  **775** (api 488, pago 56, admin 181, ui 50), build.

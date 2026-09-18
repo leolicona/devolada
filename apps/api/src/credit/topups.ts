@@ -61,8 +61,22 @@ export async function validateTopUp(env: Bindings, db: DB, topUp: TopUp, now: Da
      top-up does today. There is no disputed-field form for an operator
      and this feature adds none; the remedy is a new upload. The cost is
      today's cost, and the classification is still recorded on the
-     reading record (D19), so the numbers count top-ups too. */
-  const acceptedData = topUp.trackingKey != null && topUp.senderBank != null;
+     reading record (D19), so the numbers count top-ups too.
+
+     D20: the date is part of the test for the same reason it is part of
+     a payment's, and it is the field a top-up cannot chase. Two machines
+     can agree on a clave neither of them read a date for; `accepted`
+     then carries a null date, and the transfer door below would fall
+     back to `now` — today, which nobody read. That asks Banxico about
+     the wrong day, gets a faceless `not_found` back for a transfer that
+     really happened, and repeats it at a credit a slot until the row
+     expires. A payment asks its payer for that one field; a top-up has
+     nobody to ask, so it keeps the receipt door, which is D18's answer
+     whenever the machines cannot supply something here. The fallback
+     below survives for `proof_mode = 'transfer'`: an operator typed
+     that date. */
+  const acceptedData =
+    topUp.trackingKey != null && topUp.senderBank != null && topUp.transferDate != null;
   const request: ConstaRequest =
     topUp.proofMode === "transfer" || acceptedData
       ? {

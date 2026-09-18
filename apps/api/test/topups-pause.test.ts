@@ -414,4 +414,65 @@ describe("two-eyes-receipt US1: a receipt top-up goes provider-first too", () =>
     [row] = await db.select().from(topUps);
     expect(row.validationAttempts).toBe(2);
   });
+
+  /* two-eyes-receipt D20 on the top-up path — the one place where "the
+     same rule as a payment" (research R9) was not the same rule.
+
+     Both machines read the clave and neither read a date: the readings
+     agree, and `accepted` carries a null date (`compare.ts`). A payment
+     asks its payer for that one field and keeps the receipt door until
+     the answer comes; a top-up has nobody to ask, so the transfer door
+     would be built with `now` — today's date, which nobody read. Banxico
+     would be asked about the wrong day, answer a faceless `not_found`
+     for a transfer that really happened, and the row would spend a
+     credit per slot on a question that cannot be answered. So it keeps
+     riding the receipt door, which is D18's answer whenever the machines
+     cannot supply something here. */
+  it("D20: agreement with no date on either side keeps the receipt door, never today's date", async () => {
+    const business = await seedBusiness();
+    await platformAccountSet();
+    const db = drizzle(env.DB);
+    const [owner] = await db.select().from(userTable).where(eq(userTable.email, OPERATOR));
+    const proofKey = `topups/${business.id}/proof-3`;
+    /* The same receipt as above with one field missing — the bank
+       printed a date our reader could not make out. */
+    const DATELESS = { esComprobante: true, claveDeRastreo: CLAVE, banco: "BBVA MEXICO", monto: 250.0, estatus: "Aceptada" };
+    const proofEnv = { ...testEnv(), PROOFS: fakeProofs(), AI: aiReturning(DATELESS) } as Bindings;
+    await proofEnv.PROOFS.put(proofKey, PNG(), { httpMetadata: { contentType: "image/png" } });
+
+    await db.insert(topUps).values({
+      businessId: business.id,
+      submittedByUserId: owner.id,
+      claimedCents: 25000,
+      proofMode: "receipt",
+      proofKey,
+      nextValidationAt: new Date(Date.now() - 1000),
+    });
+
+    /* The provider read the same clave off the same image, and no date
+       either: the agreeing row of the R3 table, minus one field. */
+    const dateless = { trackingKey: CLAVE, amount: 250.0, senderBank: "BBVA MEXICO" };
+    mockImageDoor({ extracted: dateless });
+    await sweepTopUps(proofEnv);
+
+    let [row] = await db.select().from(topUps);
+    /* The agreement stands and is stored — a missing date is not a
+       dispute, and the clave two machines settled on is still worth
+       keeping (D20). */
+    expect(row.readingCheck).toBe("agreed");
+    expect(row.trackingKey).toBe(CLAVE);
+    expect(row.senderBank).toBe("BBVA MEXICO");
+    /* The hole stays a hole. Filling it with today is the bug. */
+    expect(row.transferDate).toBeNull();
+
+    await db.update(topUps).set({ nextValidationAt: new Date(Date.now() - 1000) });
+    const again = mockImageDoor({ extracted: dateless });
+    await sweepTopUps(proofEnv);
+    /* The file again — never a `sender` block carrying a date nobody
+       read, which would search the wrong day at a credit a slot. */
+    expect(String(again.body!.imageUrl)).toContain(proofKey);
+    expect(again.body!.sender).toBeUndefined();
+    [row] = await db.select().from(topUps);
+    expect(row.transferDate).toBeNull();
+  });
 });

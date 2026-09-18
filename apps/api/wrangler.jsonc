@@ -66,6 +66,23 @@
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://app.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://link.dev.devoladapago.com",
+        /* TEMPORARY, and it costs something while it is here. Dev points
+           at the pilot's WispHub installation so their key can be tried
+           end to end before the release tag carries the same address to
+           prod.
+
+           The binding is per environment, not per tenant, so this is an
+           either/or: the demo tenant (FastIsp, a wisphub.net key) is
+           EXPECTED TO FAIL for as long as this line exists —
+           WISPHUB_AUTH_FAILED on the panel, and the every-minute sweep
+           logging the same against its queue. That is the trade, taken
+           knowingly; it is not a regression to chase.
+
+           Put this line back to the default once the pilot's key has
+           answered. The real fix — an address per business, so both
+           installations work at once — is debt
+           `wisphub-host-is-platform-wide`. */
+        "WISPHUB_BASE_URL": "https://api.wisphub.io/api",
         "ALLOWED_ORIGINS": "https://app.dev.devoladapago.com,https://link.dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
@@ -93,6 +110,24 @@
         "API_BASE_URL": "https://api.devoladapago.com",
         "ADMIN_BASE_URL": "https://app.devoladapago.com",
         "PAGO_BASE_URL": "https://link.devoladapago.com",
+        /* WispHub runs more than one installation, and a tenant's key is
+           only valid on its own. The pilot ISP signs in at wisphub.io,
+           whose API host resolves to a different server than the
+           wisphub.net one the adapter defaults to — so its key is
+           rejected there no matter how correct it is.
+
+           This binding is platform-wide: it points EVERY production ISP
+           at one installation, which is the wrong shape the moment the
+           second ISP arrives on another host. It is set here anyway
+           because production carries zero connected integrations today
+           (measured 2026-09-18), so the blast radius is nobody, and the
+           pilot is blocked without it. The address belongs on the
+           business's own integration row — debt `wisphub-host-is-platform-wide`.
+
+           Dev keeps the default (wisphub.net): the demo tenant lives
+           there, and the API tests pin the same origin in
+           vitest.config.ts, independent of this file. */
+        "WISPHUB_BASE_URL": "https://api.wisphub.io/api",
         /* No APICEP_TOKEN planted here by this feature — switching
            production on is a separate decision (consta-api-merge, spec
            Q3); until it is, the channel is unavailable and says so. The

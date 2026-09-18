@@ -29,7 +29,29 @@ export type Bindings = {
   /* Dev only: the seed copies this key into the demo ISP row.
      In real use, every ISP stores its own key in businesses.wisphub_api_key. */
   WISPHUB_API_KEY?: string;
-  /* Points the adapter at a sandbox; unset means the real API */
+  /* Which WispHub installation the adapter talks to. WispHub runs more
+     than one, and a tenant's key is valid only on its own: the pilot ISP
+     signs in at wisphub.io, whose API host is a different server than
+     the wisphub.net one this defaults to, so a perfectly good key is
+     rejected against the wrong host. Unset → wisphub.net
+     (`DEFAULT_BASE_URL` in wisphub/client.ts), where the demo tenant
+     lives.
+
+     Three hosts are real and all three matter to us (measured by DNS
+     2026-09-18, each its own machine): production `.net`
+     (192.241.208.217), production `.io` (104.131.178.56 — the pilot's),
+     and WispHub's official sandbox `sandbox-api.wisphub.net`
+     (174.138.57.55), where a throwaway company can be created and keyed
+     without touching anyone's real billing. There is no sandbox on the
+     `.io` side.
+
+     Per environment, never per tenant, so setting it is an either/or:
+     whoever is not on the named installation stops working until it
+     changes back. Both remote environments name the pilot's host today,
+     which means the demo tenant FastIsp fails on dev by design while
+     that lasts (see the two comments in wrangler.jsonc). The address
+     belongs on the business's own integration row — debt
+     `wisphub-host-is-platform-wide` carries the four steps. */
   WISPHUB_BASE_URL?: string;
   /* The SPEI validation engine (Consta) runs inside this Worker
      (consta-api-merge D1, D9). What can be absent is the provider's

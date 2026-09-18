@@ -1868,3 +1868,121 @@ describe("two-eyes-receipt US3: a PDF read at the edge", () => {
     expect(row.mediaType).toBe("application/pdf");
   });
 });
+
+/* two-eyes-receipt US5 — the record answers the questions.
+
+   D10 asks for a ratio the creator can read a week after the feature
+   ships: how often do the two machines agree, and how often is a payer
+   still asked? A number nobody records is a number nobody has, so the
+   columns were designed for it (D19) and the queries live in
+   `data-model.md` and in `scripts/reading-check-report.mjs`.
+
+   These drive real scenarios through the engine and then run those very
+   queries against the test D1 — so a query that stops matching the
+   record breaks here, and not a month later on a dashboard nobody
+   checked. */
+describe("two-eyes-receipt US5: the record answers the questions", () => {
+  const providerRead = (over: Record<string, unknown> = {}) => ({
+    trackingKey: "MBAN01002508150012345678",
+    amount: 514.0,
+    date: "2026-08-15",
+    senderBank: "BBVA MEXICO",
+    ...over,
+  });
+  const notFound = (extracted?: Record<string, unknown>) => ({
+    validationId: `prov-${crypto.randomUUID().slice(0, 8)}`,
+    status: "invalid",
+    validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+    ...(extracted ? { extracted } : {}),
+  });
+
+  it("the five counts of data-model.md come back right after a mixed day", async () => {
+    const { key } = await seedOwner();
+    resetShapeRules();
+
+    /* Each scenario is a different receipt, so each file is different
+       bytes: the same bytes by the same owner inside fifteen minutes are
+       one reading, not two (D14). */
+    /* 1. agreed — both read the same clave and the same cents */
+    await mockProof(PNG(64), "image/png");
+    mockApiCep(notFound(providerRead()), (b) => expectSignedProofUrl(b.imageUrl));
+    expect((await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) })).ok).toBe(true);
+
+    /* 2. disputed — different claves, no graduated rule to break the tie */
+    await mockProof(PNG(65), "image/png");
+    mockApiCep(notFound(providerRead({ trackingKey: "MBAN01002508150099999999" })));
+    expect((await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) })).ok).toBe(true);
+
+    /* 3. blind on the provider's side, with a complete reading of ours */
+    await mockProof(PNG(66), "image/png");
+    mockApiCep(notFound());
+    expect((await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING) })).ok).toBe(true);
+
+    /* 4 and 5. the two refusals, which spend nothing */
+    await mockProof(PNG(67), "image/png");
+    expect(
+      (await postValidate(key, receiptRequest, { AI: aiReturning({ esComprobante: false }) })).ok,
+    ).toBe(false);
+    await mockProof(PNG(68), "image/png");
+    expect(
+      (
+        await postValidate(key, receiptRequest, {
+          AI: aiReturning({ esComprobante: true, legibilidad: "nula", claveDeRastreo: null }),
+        })
+      ).ok,
+    ).toBe(false);
+
+    /* And a PDF nothing could read, handed to the provider unread */
+    await mockProof(PDF(), "application/pdf");
+    mockApiCep(notFound());
+    expect(
+      (await postValidate(key, receiptRequest, { AI: aiReturning(GOOD_READING, undefined, { pdfText: "" }) }))
+        .ok,
+    ).toBe(true);
+
+    const sql = (q: string) => env.DB.prepare(q).all<Record<string, unknown>>();
+
+    /* Q1: agreed / disputed / blind on first calls */
+    const byCheck = await sql(
+      `SELECT reading_check, blind_side, COUNT(*) AS n FROM extractions
+       WHERE validation_id IS NOT NULL AND reading_check IS NOT NULL GROUP BY 1, 2`,
+    );
+    expect(
+      Object.fromEntries(byCheck.results.map((r) => [`${r.reading_check}/${r.blind_side ?? "-"}`, r.n])),
+    ).toEqual({ "agreed/-": 1, "disputed/-": 1, "blind/provider": 1, "blind/both": 1 });
+
+    /* Q2: no legacy cross exists — every row here was born the new way,
+       and the shape is what says so (D16), never the attempt number */
+    const legacy = await sql(
+      `SELECT COUNT(*) AS n FROM payments
+       WHERE proof_mode = 'transfer' AND proof_key IS NOT NULL
+         AND supersedes_id IS NULL AND reading_check IS NOT NULL`,
+    );
+    expect(legacy.results[0].n).toBe(0);
+
+    /* Q3: provider blind while we read fully */
+    const blindFully = await sql(
+      `SELECT COUNT(*) AS n FROM extractions
+       WHERE blind_side = 'provider' AND gate_tracking_key = 'ok' AND amount_cents IS NOT NULL`,
+    );
+    expect(blindFully.results[0].n).toBe(1);
+
+    /* Q4: the refusals, and the zero that is the whole point of them */
+    const refusals = await sql(
+      `SELECT outcome, COUNT(*) AS n, SUM(validation_id IS NOT NULL) AS billed FROM extractions
+       WHERE outcome IN ('not_a_receipt', 'illegible') GROUP BY 1`,
+    );
+    expect(Object.fromEntries(refusals.results.map((r) => [r.outcome, r.n]))).toEqual({
+      not_a_receipt: 1,
+      illegible: 1,
+    });
+    expect(refusals.results.every((r) => r.billed === 0)).toBe(true);
+
+    /* Q5: PDFs read here vs handed over unread */
+    const pdfs = await sql(
+      `SELECT source, outcome, COUNT(*) AS n FROM extractions
+       WHERE media_type = 'application/pdf' GROUP BY 1, 2`,
+    );
+    expect(pdfs.results).toEqual([{ source: "provider-ocr", outcome: "routed", n: 1 }]);
+  });
+});

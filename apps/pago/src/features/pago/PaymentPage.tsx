@@ -473,9 +473,11 @@ export function PaymentPage({ token }: { token: string }) {
           body: JSON.stringify({ proofId }),
         });
       } catch {
-        /* The reader being down is not the payer's problem: fall through
-           to the provider's OCR door, which is what shipped before this
-           step existed. */
+        /* The reader being down is not the payer's problem: fall
+           through and send the file, which the provider reads itself
+           (two-eyes-receipt D3). The payment loses its second pair of
+           eyes, not its chance — a `not_found` simply classifies blind
+           on our side and the payer is asked then, if at all. */
       }
       /* two-eyes-receipt D2 (FR-004): the two refusals, and only these.
          `isReceipt: false` is measured — the model answered it five times

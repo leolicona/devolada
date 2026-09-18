@@ -158,6 +158,11 @@ Invariants worth knowing before you touch anything:
   failure never rejects a payment; it queues the action with visible status.
   Every one of those words was chosen against a specific wrong reading — read
   the comment in `apps/api/src/db/schema.ts` before renaming one.
+  A receipt goes to the provider's image door first, with the edge reading
+  beside it; on `not_found` the two are compared and the row records
+  agreed / disputed / blind plus what they accepted (`two-eyes-receipt D3, D5`),
+  which is what picks the door of the next attempt (D17). The pay request
+  answers before that call returns (D4).
 - **Sweeps ride one trigger**: the every-minute cron in `apps/api/src/index.ts`
   (`waitUntil`) runs re-validation, the reconnection queue and top-ups. New
   periodic work joins it rather than adding a trigger,
@@ -197,7 +202,9 @@ Four layers, each answering only what it can (constitution IV):
   per test, isolated storage, **no database mocks**. Providers are intercepted at
   the network edge with `fetchMock` at their real origin, and
   `vitest.config.ts` *pins* those origins and secrets so a developer's
-  `.dev.vars` can never redirect a suite.
+  `.dev.vars` can never redirect a suite. The reader is stubbed at the binding
+  (`aiReturning`), both of its doors: `run` for the reading and `toMarkdown`
+  for the text a PDF converts to.
 - **Component** (happy-dom + Testing Library + MSW with
   `onUnhandledRequest: "error"`); handlers answer with the envelope and
   schema-validated fixtures, and `axe` runs on every rendered screen with

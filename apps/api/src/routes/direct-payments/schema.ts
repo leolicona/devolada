@@ -139,9 +139,11 @@ export const publicPaymentError = z.enum([
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)
 
-   The machine reads, the human confirms, the direct door validates. What
-   comes back is a *draft* of the form the payer is about to submit —
-   never a submission, and never anything that decides money. */
+   The machine reads, and the provider reads beside it on the paid call
+   (two-eyes-receipt D3). What comes back here is a *draft* — never a
+   submission, and never anything that decides money. Since D13 the payer
+   is not asked to confirm it as a matter of course: the page sends the
+   file and the two readings settle what they can between them. */
 export const readProofRequest = z.object({
   proofId: z.string().min(1),
 });
@@ -239,10 +241,12 @@ export const directPaymentStatusResponse = z.object({
   /* claimed-amount D3: what the payment asked Banxico with, so the
      correction form pre-fills the amount that actually travelled */
   claimedAmountCents: z.number().int().nullable().optional(),
-  /* reading-check D3/D4: the minute-two classification. "agreed" lets
-     the page retire the clock; "disputed" opens the form now with the
-     disputed fields empty. A blind cross stays null on the wire — no
-     evidence is the same as no cross, and the page behaves as today. */
+  /* reading-check D3/D4: what the two readings said. "agreed" lets the
+     page retire the clock; "disputed" opens the form with the disputed
+     fields empty. A blind comparison stays null on the wire — no evidence
+     is the same as no comparison, and the page behaves as today.
+     two-eyes-receipt D5: it arrives on the *first* poll after the first
+     paid call now, instead of after the minute-two attempt. */
   readingCheck: z.enum(["agreed", "disputed"]).nullable().optional(),
   /* two-eyes-receipt D20: `"date"` joins them. The accepted data had no
      date on either reading, so the payer is asked for that one field

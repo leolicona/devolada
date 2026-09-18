@@ -812,10 +812,15 @@ export async function uploadProof(c: Ctx, token: string) {
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)
 
-   The machine reads, the human confirms, the direct door validates. This
-   endpoint is the first half: it spends a Workers AI call in the engine
-   and **no provider credit**, and everything it returns is a draft the
-   payer is about to see and can overwrite.
+   The machine reads — and since two-eyes-receipt D3 the provider reads
+   too, beside it, on the paid call this one precedes. This endpoint is
+   the free half: it spends a Workers AI call in the engine and **no
+   provider credit**, and everything it returns is a draft. The payer no
+   longer confirms that draft as a matter of course (D13): it is shown to
+   them when the amount is above the debt, and otherwise it exists so the
+   page can refuse the two files that are not worth a credit (D2) and so
+   the paid attempt can reuse the reading instead of making it twice
+   (D14).
 
    Nothing here fails the payment. A reader that is down, a file nothing
    could read, a clave that did not survive the gate — each comes back as

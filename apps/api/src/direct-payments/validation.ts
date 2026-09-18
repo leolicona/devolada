@@ -133,11 +133,18 @@ export function isUniqueViolation(e: unknown): boolean {
   return /UNIQUE constraint failed/i.test(String(e instanceof Error ? e.message : e));
 }
 
-/* reading-check D2/D5: the minute-two comparison. Clave and amount are
-   the two Banxico search filters (both measured) — the only fields that
-   can raise a dispute; a bank-name or date difference never wakes the
-   human. No clave from the provider means no second opinion: blind, and
-   the payment keeps today's exact behaviour. */
+/* reading-check D2/D5: the comparison, **for legacy rows only** since
+   two-eyes-receipt D16 — rows born before the cut-over, whose page sent
+   a machine reading as typed data and whose two readings therefore only
+   meet at minute two. Its sibling for every new row is the engine's own
+   `extraction/compare.ts`, which runs at the first paid call with the
+   shape rules to break a tie; this one has neither and never will.
+   Both die together: `.specify/debt/legacy-minute-two-cross/`.
+
+   Clave and amount are the two Banxico search filters (both measured) —
+   the only fields that can raise a dispute; a bank-name or date
+   difference never wakes the human. No clave from the provider means no
+   second opinion: blind, and the payment keeps today's exact behaviour. */
 export function classifyReading(
   payment: Pick<DirectPayment, "trackingKey" | "claimedAmountCents" | "amountCents">,
   reading: { trackingKey: string | null; amountCents: number | null } | null,

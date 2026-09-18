@@ -166,9 +166,14 @@ export async function validate(
      takes exactly one beneficiary. So a caller using it keeps the OCR
      door — that is this spec's answer to its own open question, rather
      than quietly dropping a field from the contract. */
-  /* D11: `providerOcr` keeps the image on the OCR door on purpose — a
-     caller that already holds a reading wants the provider's eyes, not
-     a second pass of the same model. */
+  /* D11: `providerOcr` sends the image to the provider's image door and
+     skips our reader — a caller that already holds a reading wants the
+     provider's eyes, not a second pass of the same model.
+     two-eyes-receipt D16: one caller sets it, the minute-two cross of a
+     payment born before the cut-over. Without it the file goes to the
+     same image door *and* is read here, which is the flow every new row
+     takes (D3), so the flag now means "read nothing here" rather than
+     "use the other door". */
   const readable = input.mode === "receipt" && Boolean(body.beneficiary) && !body.providerOcr;
   /* With no binding nothing here can read anything, so the bytes are not
      fetched at all — and, importantly, not sniffed either: a file whose

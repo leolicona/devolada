@@ -129,6 +129,26 @@ describe("US-R01: the section reads WispHub live", () => {
     expect(body).toMatchObject({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } });
   });
 
+  /* bug: cobros-installation-fallback — a refused key is a setup
+     problem, and the screen can only send it to Integraciones if the
+     code says which of the two it was. The 403 is what wisphub.net
+     answers a wisphub.io key (provider-address-per-isp D5). */
+  it("bug cobros-installation-fallback: a refused key answers 503 with WISPHUB_AUTH_FAILED, not the outage code", async () => {
+    await seedBusiness({ wisphubApiKey: "wh-key-io" });
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") })
+      .reply(403, JSON.stringify({ detail: "Invalid API key" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const res = await (await app()).request("/payment-requests", await asBusiness(), env);
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body).toMatchObject({ success: false, error: { code: "WISPHUB_AUTH_FAILED" } });
+    /* The key never rides the wire, whatever the provider said */
+    expect(JSON.stringify(body)).not.toContain("wh-key-io");
+  });
+
   it("scenario 9: without a WispHub key the read answers 409 NOT_CONFIGURED", async () => {
     await seedBusiness();
 

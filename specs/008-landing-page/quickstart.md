@@ -107,7 +107,16 @@ Things a build cannot decide, checked once and recorded in the PR:
       and `{{DOMICILIO}}` in `apps/landing/src/content/legal.ts` replaced —
       `content.test.ts` fails until they are.
 - [ ] **The contact address answers**: the `mailto:` on the page reaches the
-      creator; send one.
+      creator; send one — and it equals the platform's `support_email`
+      (`curl $DEV_API_URL/support`).
+- [ ] **The reading test** (SC-001): five people who collect by SPEI and have
+      never seen Devolada, at least three from ISPs, each read the page once
+      on a phone and say back what it does, for whom and how it is charged.
+      Record what they said in the PR, unprompted answers only.
+- [ ] **The timing** (SC-002): in Chrome DevTools with the "Slow 4G" preset
+      and 4× CPU throttling, the first screen is readable within 2 s and the
+      page within 5 s. Record the numbers in the PR; the weight is measured
+      by the browser layer.
 - [ ] **Repository variables**: `DEV_LANDING_URL=https://dev.devoladapago.com`,
       `PROD_LANDING_URL=https://devoladapago.com`; the smoke probes read them.
 - [ ] **`ALLOWED_ORIGINS`** in `apps/api/wrangler.jsonc` carries the landing

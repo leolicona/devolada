@@ -94,3 +94,45 @@ without identifying anyone.
 
 Requirements 32 → 32 (three rewritten, six touched), stories 3 → 3 (US1
 gains two scenarios), success criteria 11 → 11, edge cases 11 → 13.
+
+### Iteration 3 — 2026-09-19 (post-`/speckit-analyze`)
+
+The cross-artifact analysis found one CRITICAL, one HIGH, seven MEDIUM and
+six LOW findings. Still 16 of 16; the spec grew no requirement and lost
+none — five wordings changed.
+
+- **C1 (critical)** — the fixed stack table names React + Vite and Vitest 3;
+  the landing is Astro 7 on Vitest 4.1. Handled the way governance
+  prescribes: justified in the plan's Complexity Tracking, and the
+  amendment text is now ready to paste under research D19 (a stack row, a
+  one-phrase change to Principle VI, a note on the Tests row). **Open until
+  the creator runs `/speckit-constitution`** — T049.
+- **A1 (high)** — SC-002 named no device or network class. It now names the
+  measurement (Chrome DevTools "Slow 4G" + 4× CPU throttling, or
+  Lighthouse's mobile preset); the plan and the pre-flight repeat it.
+- **G1** — SC-010 had no test. T032 asserts an empty cookie jar and storage
+  after a session with no request; T033 asserts a counts row holds nothing
+  but day, channel, step and count.
+- **G2** — the "same person asks twice" edge case had no mark in the
+  operator list. T038 shows "repetida" as icon + text on a shared contact;
+  T034's fixture carries a pair.
+- **G3** — "scripts do not run" had no browser assertion. T032 gains a
+  context with JavaScript off: every section, every claim, the form's
+  `method` and `action`.
+- **G4** — the sending state and its reduced-motion floor had no assertion.
+  T032 holds a route and asserts the breath after the shared threshold, and
+  opacity-only under reduced motion.
+- **G5** — SC-001 (five readers) had no home. The pre-flight and T050 now
+  schedule the reading test and record what was said.
+- **I1** — FR-024 promised "any period"; the tab offers three. FR-024 now
+  says "a chosen period — the last 7, 30 or 90 days".
+- **I2** — FR-001 allowed one confirmation address; the plan emits two
+  outcome pages and a not-found page. FR-001 now says so.
+- **A2, I3, I4, D1** — FR-023 defines "began" as the first focus inside the
+  form; the Step-count entity defines a visit as a page load and names
+  sign-up departures; FR-009 points at FR-014 instead of restating it.
+- **U1, U2** — the site URL is read from `PUBLIC_SITE_URL` in the config
+  rather than a CLI flag (T002, T044, T046); T005 notes the fallback if the
+  Workers pool binds `ASSETS` itself.
+
+Requirements 32 → 32, tasks 51 → 51 (six grew), success criteria 11 → 11.

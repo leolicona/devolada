@@ -43,30 +43,49 @@ plan's Complexity Tracking justifies it and D19 proposes the amendment.
 
 ---
 
-## D2 — The page wears the product's stylesheet and recipes at build time; no client framework
+## D2 — The page wears the product's stylesheet and renders the shared atoms at build time; nothing framework-shaped reaches the browser
 
 **Decision**: the landing's global stylesheet is one line —
 `@import "@devolada/ui/styles.css";` — exactly as `apps/pago/src/styles.css`
 does. Tokens, Tailwind mapping, self-hosted fonts and the motion utilities
-arrive together. Buttons and links styled as buttons take their classes from
-`buttonVariants()` exported by `@devolada/ui`, called in `.astro` frontmatter
-at build; no React reaches the browser. `vite.ssr.noExternal` lists the two
-workspace packages so Vite transforms their TypeScript and CSS during the
-build instead of handing them to Node.
+arrive together. The shared atoms are used **as they are**: `@astrojs/react`
+(6.0.6, React 19; measured 2026-09-19) lets an `.astro` component render
+`Field`, `Input`, `Alert`, `Button` and `StatusBadge` from `@devolada/ui`
+**without a `client:*` directive**, so Astro turns them into HTML at build
+and ships no JavaScript for them. The two actions that must be links — the
+main action (`href="#solicitar"`) and the sign-up link — take their classes
+from `buttonVariants()` in frontmatter, the recipe the package exports for
+exactly that. `Pending` and `Reveal` are not rendered: they need hydration;
+the waiting state is the page's script on the shared thresholds (D16).
+`vite.ssr.noExternal` lists the two workspace packages so Vite transforms
+their TypeScript, JSX and CSS during the build instead of handing them to
+Node.
+
+**Amended 2026-09-19**, after the creator asked whether Astro fits the
+design system. The first version relied on `buttonVariants` alone and would
+have rewritten the field, the input and the outcome alert in Astro "with the
+same classes" — measured that day: only `button.tsx` exports a recipe. That
+rewrite is the drift constitution VI names. Rendering the atoms at build
+keeps one definition, costs the browser nothing, and changes nothing in
+`packages/ui`.
 
 **Rationale**: constitution VI makes `packages/ui` the one definition of a
-shared atom; the recipe *is* the atom's definition, and calling it at build
-keeps one source without shipping a runtime. The stylesheet already declares
-`@source "../"` so utilities used only inside the shared package reach the
-output — the same gap the two apps hit and fixed once.
+shared atom. Astro's build-time rendering is the way to consume a React
+atom from a page that ships no React; the recipe export is the way to
+consume the button's look on an element that is not a button. The
+stylesheet already declares `@source "../"` so utilities used only inside
+the shared package reach the output — the same gap the two apps hit and
+fixed once.
 
 **Alternatives rejected**:
 
-- *`@astrojs/react` islands for the shared atoms.* Correct and heavier: React
-  in the client bundle for a button that is a link. Kept as the fallback if
-  a future section needs real interactivity.
-- *Copying the button's classes into an `.astro` component.* Two recipes for
-  one atom — the drift VI names.
+- *Extracting recipes (`inputVariants`, `alertVariants`, …) into
+  `packages/ui` and calling them from Astro.* One definition too, but a
+  refactor of five atoms for one consumer. Kept as the long-term shape if a
+  second framework-free surface ever appears.
+- *Hydrated React islands (`client:*`).* React in the browser for a form the
+  script already drives.
+- *Copying the atoms' classes into `.astro` components.* The drift VI names.
 
 ---
 
@@ -466,6 +485,42 @@ creator's hand, in the same release as this feature:
 **Rationale**: governance — a plan that departs from the stack table
 justifies it in Complexity Tracking, and a rule the code will now hold
 three surfaces to should say so.
+
+**Ready to paste** (drafted 2026-09-19 after `/speckit-analyze` finding C1;
+the creator runs `/speckit-constitution` with it — MINOR, 1.4.0 → 1.5.0):
+
+1. *Technology Stack & Constraints* — a new row after **Shared UI**:
+
+   ```text
+   | Landing | `apps/landing`: Astro (static output, no adapter) on an assets Worker with a script in front for the host redirect, the channel tag and the headers; consumes `@devolada/ui` tokens, stylesheet, atoms and recipes at build; ships no client framework |
+   ```
+
+2. *Technology Stack & Constraints* — the **Tests** row, "Vitest 3" becomes:
+
+   ```text
+   Vitest 3 (Vitest 4 in `apps/landing`, whose Astro build sits on Vite 8, until the workspace moves)
+   ```
+
+3. *Principle VI* — the `packages/ui` bullet. Replace
+
+   ```text
+   `packages/ui` is the single definition of any atom both surfaces render; a duplicate recipe in an app is drift.
+   ```
+
+   with
+
+   ```text
+   `packages/ui` is the single definition of any atom more than one surface renders; a duplicate recipe in an app is drift. A surface that ships no client framework consumes the atoms rendered at build and the recipes as class strings — the definition stays in the package either way.
+   ```
+
+   The rest of the bullet ("Sizes are declared, not improvised…", "Primitives
+   only one surface uses…") stays as written.
+
+4. *Sync Impact Report* — source `specs/008-landing-page` (plan Complexity
+   Tracking; research D2, D13, D19). What this decides: a third surface
+   exists and the law counts it. What it does not change: no principle
+   added, removed or redefined; no renumbering; templates unchanged; the
+   TD-005 and BREATH-AMPLITUDE TODOs carried unchanged.
 
 ---
 

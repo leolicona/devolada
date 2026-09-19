@@ -3,7 +3,9 @@
 **Feature**: 008-landing-page · **Date**: 2026-09-19
 
 What the browser layer, the Worker test and the API's redirect rely on. A
-change to any name here is a change to a test.
+change to any name here is a change to a test. Every atom named below is the
+`@devolada/ui` component rendered to HTML at build by `@astrojs/react` with
+no `client:*` directive (D2); the browser receives markup, not React.
 
 ---
 
@@ -27,13 +29,14 @@ Workers static assets resolve `/gracias` to `gracias.html` and redirect
 | Selector | Meaning |
 | --- | --- |
 | `main > section:first-of-type` (`#inicio`) | the first screen: the promise, the reader, the main action, the customer's line (FR-003, FR-011). At 360×740 the main action's box ends inside the viewport. |
-| `a[data-cta="main"]` | the main action, repeated top and bottom, same text, `href="#solicitar"`, class `buttonVariants({ size: "critical" })` — 64px |
-| `a[data-signup]` | the secondary link to `${SIGNUP_URL}` (`https://app.<host>/signup`), 48px; the Worker appends `?ch=<tag>` when a tag is present (D3, D4) |
+| `a[data-cta="main"]` | the main action, repeated top and bottom, same text, `href="#solicitar"`, class `buttonVariants({ size: "decisive" })` — 64px, full width |
+| `a[data-signup]` | the secondary link to `${SIGNUP_URL}` (`https://app.<host>/signup`), class `buttonVariants({ variant: "secondary", size: "standard" })` — 48px; the Worker appends `?ch=<tag>` when a tag is present (D3, D4) |
 | `form#solicitar` | the request form; `method="post"`, `action="${PUBLIC_API_URL}/landing/requests"`, `enctype="application/x-www-form-urlencoded"` |
 | `input[name="channel"]` (hidden) | value `""` in the built file; the Worker sets it to the tag |
 | `input[name="website"]` (the honeypot) | visually and accessibly hidden (`tabindex="-1"`, `autocomplete="off"`, `aria-hidden="true"`), never required |
-| `[data-field="<name>"] [data-error]` | where the field's es-MX message renders (FR-020) |
-| `[data-outcome]` | the region that shows received / refused / unavailable with icon + words; `aria-live="polite"` |
+| `[data-field="<name>"] [data-error]` | the shared `Field` + `Input` (or the native `<select>` / `<textarea>` inside `Field`), rendered at build; where the field's es-MX message renders (FR-020) |
+| `[data-outcome]` | the shared `Alert`, rendered at build once per outcome and shown by the script: received / refused / limited / unavailable, icon + words; `aria-live="polite"` |
+| `button[type="submit"]` | the shared `Button` (`size="decisive"`), rendered at build — 64px |
 | `[data-sending]` | the region that breathes while sending: `animate-breath` + `aria-busy="true"` after 200 ms, held ≥ 500 ms (D16) |
 | `[data-claim="<id>"]` | every claim from `claims.ts`, rendered from the list (D11) |
 | `a[href="/privacidad"]` | beside the send button and in the footer (FR-022) |
@@ -101,5 +104,5 @@ value the binding holds.
 | Name | Source | Used for |
 | --- | --- | --- |
 | `PUBLIC_API_URL` | CI: `DEV_API_URL` / `PROD_API_URL`; local fallback `http://localhost:8787` | the form's `action`, the script's fetch base |
-| `site` (astro config) | `https://devoladapago.com` | canonical and Open Graph URLs; `dev` builds pass `--site` |
+| `PUBLIC_SITE_URL` → `site` (astro config) | CI per environment; fallback `https://devoladapago.com` | canonical and Open Graph URLs, the sign-up host |
 | `SIGNUP_URL` | derived: `https://app.` + the site's host + `/signup`; local fallback `http://localhost:5174/signup` | the secondary link |

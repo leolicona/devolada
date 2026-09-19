@@ -17,8 +17,8 @@ began, who asked and who walked in, by channel, so the creator can answer
 
 The approach: a static Astro site served by an assets Worker with a short
 script in front of it (research D1, D3), wearing the product's stylesheet
-and button recipe at build time so nothing framework-shaped reaches the
-browser (D2). The request and the four counters live in the API's own
+and rendering its shared atoms at build time so nothing framework-shaped
+reaches the browser (D2). The request and the four counters live in the API's own
 database as platform-owned rows (D5); the API answers the page's script
 with the envelope and a plain form post with a redirect to an outcome page
 (D6). The operator reads both — the numbers and the requests — in a third
@@ -32,9 +32,11 @@ list with a basis, reviewed before publication (D11).
 ≥ 22.12 — CI's `node-version: 22` resolves above it); pnpm 10 workspace.
 
 **Primary Dependencies**: **new package** `apps/landing` — `astro@^7.3`
-(static output, no adapter; Vite 8 inside it), `@astrojs/check`,
-`@tailwindcss/vite@^4.3` + `tailwindcss@^4.3`, `@devolada/ui` (stylesheet,
-tokens, `buttonVariants`, `@devolada/ui/motion`), `@devolada/api`
+(static output, no adapter; Vite 8 inside it), `@astrojs/react@^6` with
+`react` / `react-dom` 19 **at build time only** (the shared atoms rendered to
+HTML, never hydrated, D2), `@astrojs/check`, `@tailwindcss/vite@^4.3` +
+`tailwindcss@^4.3`, `@devolada/ui` (stylesheet, tokens, the atoms,
+`buttonVariants`, `@devolada/ui/motion`), `@devolada/api`
 (`./landing-schema` at build). **API** — Hono 4, `@hono/zod-validator`, zod
 3, Drizzle: one new area. **Admin** — one new tab on the existing stack. No
 new dependency in the API, the admin or `packages/ui` (D13).
@@ -61,8 +63,9 @@ assets, `run_worker_first: true`, custom domains `devoladapago.com` +
 UI package, **plus one static site with a Worker in front**.
 
 **Performance Goals**: SC-002 — first screen readable within 2 s on a
-mid-range phone over cellular, the page within 5 s, first visit under
-500 KB. Expected first visit: HTML ≈ 15 KB, stylesheet ≈ 20 KB, script
+mid-range phone over cellular (Chrome DevTools "Slow 4G" + 4× CPU
+throttling, or Lighthouse's mobile preset), the page within 5 s, first
+visit under 500 KB. Expected first visit: HTML ≈ 15 KB, stylesheet ≈ 20 KB, script
 ≈ 4 KB, the display font's latin subset ≈ 100 KB (Archivo Variable,
 self-hosted), no raster image on the page — roughly 150 KB, measured by the
 browser layer.
@@ -91,7 +94,7 @@ and `CLAUDE.md` touched; ~6 test files.
 | **III. One Contract, Pure Routers** | `routes/<area>/{index,handler,schema}.ts`, one envelope, `UPPER_SNAKE` codes, schema exported and shared; browser-facing routes carry only a `code` | **Pass.** New area `routes/landing/`; `index.ts` is wiring (two routers, `zValidator`, the limiter); logic in `handler.ts`; `@devolada/api/landing-schema` exported and consumed by the page at build, the admin, MSW and Playwright. JSON callers get the envelope with a bare `code`. A plain form post is answered with a 303 to an outcome page (D6) — a navigation, not a program's envelope; the constants the page stamps into the form come from the schema module (D7). |
 | **IV. Tests Run on the Real Runtime** | workerd + real D1, no DB mocks, providers intercepted at their origin, config pins them; component layer on happy-dom + MSW; browser layer answers layout | **Pass.** API tests in workerd against migrated D1; Resend intercepted at `https://api.resend.com` (the pinned empty key in `vitest.config.ts` stays — the notice test sets a key and intercepts). The Worker script runs in workerd because `HTMLRewriter` lives nowhere else (D18). The admin tab on happy-dom + MSW with fixtures validated by the schema. The page on Playwright + axe in both themes at 360/768/1280, with measured targets and focus (D18). The Container API is experimental and is not a gate. |
 | **V. Tenant Isolation and Authorization by Area** | `business_id` on business rows, every query filtered, authorization by area and action, operator by `PLATFORM_OPERATOR_EMAILS` | **Pass.** The two tables are platform rows and carry no `business_id` on purpose, exactly as `platform_settings` does; no business query reads them. Operator reads sit behind `requireSession + requirePlatformOperator`. The public doors write a request or a counter and read nothing. No credential is stored. |
-| **VI. Visual Foundations** | tokens only, declared sizes, icon + text, `packages/ui` the one definition, motion from tokens, self-hosted fonts, both palettes, 360 floor | **Pass, with a wording gap named.** The page imports the shared stylesheet as-is and calls `buttonVariants` at build (D2); sizes 48 / 64 from the recipe; outcomes are icon + words; the waiting state breathes with `animate-breath` on the shared thresholds (`@devolada/ui/motion`, D16); fonts self-hosted through the stylesheet; both palettes by system preference (D15); no raw value in any `.astro` file. The bullet says "both surfaces" and there are now three — D19 proposes the wording. |
+| **VI. Visual Foundations** | tokens only, declared sizes, icon + text, `packages/ui` the one definition, motion from tokens, self-hosted fonts, both palettes, 360 floor | **Pass, with a wording gap named.** The page imports the shared stylesheet as-is and renders the shared atoms at build through `@astrojs/react`, never hydrated, with `buttonVariants` on the two anchors (D2); sizes 48 / 64 from the atoms and the recipe; outcomes are icon + words; the waiting state breathes with `animate-breath` on the shared thresholds (`@devolada/ui/motion`, D16); fonts self-hosted through the stylesheet; both palettes by system preference (D15); no raw value in any `.astro` file. The bullet says "both surfaces" and there are now three — D19 proposes the wording. |
 | **VII. Every Test Cites Its Story** | every test file cites `<feature-slug> US<n>` | **Pass.** `landing-page US1` (request door, page, claims), `US2` (counts, operator reads and tab), `US3` (Worker redirect and injection, sharing, weight). Tasks carry the label. |
 | **VIII. Absent Configuration Degrades, Never Breaks** | every binding documented, absent config degrades loudly, never throws at the edge | **Pass.** `LANDING_BASE_URL` unset → a form post is answered with the envelope instead of a redirect, and `env.ts` says so (D6). `RESEND_API_KEY` unset → the notice is logged (D10). `PLATFORM_OPERATOR_EMAILS` unset → the row says `NO_OPERATOR_EMAILS` and the list shows it. The landing's `API_ORIGIN` has a birth value in `wrangler.jsonc` and one per environment; the CSP never lacks it. The page reads in full when the API is down (FR-021; verified by the browser layer). |
 
@@ -130,7 +133,7 @@ specs/008-landing-page/
 ```text
 apps/landing/                                   # NEW — the page and its Worker
 ├── package.json                                # @devolada/landing: dev 5176, build, preview, typecheck, test
-├── astro.config.ts                             # output static, build.format "file", inlineStylesheets "never", @tailwindcss/vite, ssr.noExternal
+├── astro.config.ts                             # output static, build.format "file", inlineStylesheets "never", react() integration, @tailwindcss/vite, ssr.noExternal
 ├── tsconfig.json                               # extends astro/tsconfigs/strict
 ├── tsconfig.worker.json                        # the Worker's own, with workers-types
 ├── wrangler.jsonc                              # main worker/index.ts, assets ./dist + ASSETS binding + run_worker_first, 404-page, custom domains, API_ORIGIN per env
@@ -144,8 +147,7 @@ apps/landing/                                   # NEW — the page and its Worke
 │   ├── content/claims.ts                       # the reviewed claims list: { id, text, basis } (D11)
 │   ├── content/legal.ts                        # the responsible party's name and address for the notice (D20)
 │   ├── layouts/Base.astro                      # <html lang="es-MX">, title, description, canonical, Open Graph, theme colours
-│   ├── components/
-│   │   ├── Button.astro                        # class from buttonVariants() at build (D2)
+│   ├── components/                             # every component renders @devolada/ui atoms at build — Field, Input, Alert, Button, StatusBadge — with no client:* directive; anchors take buttonVariants() (D2)
 │   │   ├── Hero.astro                          # FR-003 first screen · FR-011 the customer's line
 │   │   ├── Readers.astro                       # FR-002 / FR-007 what each reader gets
 │   │   ├── HowItWorks.astro                    # FR-006 both sides, the payer page's words
@@ -208,6 +210,8 @@ product already does those things — the API's `routes/landing/` area — and
 everything the operator reads lives on the screen they already open. The
 one shared change is a two-constant export from `packages/ui`, so the
 landing and `Pending` read a single definition of the waiting thresholds.
+The atoms themselves are consumed unchanged: React is a build-time
+dependency of the landing and never reaches the browser (D2).
 
 ## Complexity Tracking
 

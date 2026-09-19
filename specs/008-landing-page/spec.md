@@ -289,7 +289,8 @@ on the request the creator sees; search the product's name and find the page.
 - **FR-001**: The page MUST be reachable at the product's root address, over
   a secure connection, with the `www` form leading to the same page. It is
   one page: every section is on it. The only other addresses it needs are
-  the privacy notice and the request's confirmation.
+  the privacy notice, the request's outcome pages (received; not sent) and
+  a not-found page.
 - **FR-002**: The page MUST speak to any business in Mexico that collects
   recurring payments by SPEI, and MUST feature the ISP on the supported
   billing system as its worked case. It MUST say what each reader gets: the
@@ -328,8 +329,9 @@ on the request the creator sees; search the product's name and find the page.
   the product as built.
 - **FR-009**: The page MUST say how Devolada charges — prepaid, per verified
   payment, no monthly fee, no contract, the first payments free — and MUST
-  say that the figures come with the answer to a request. That description
-  MUST be how the product charges; it is a claim under FR-013.
+  say that the figures come with the answer to a request — the figures
+  themselves stay off the page (FR-014). That description MUST be how the
+  product charges; it is a claim under FR-013.
 - **FR-010**: The page MUST show a way to reach a person — an address at the
   product's own domain, answered by the creator — visible without taking
   either action.
@@ -390,11 +392,13 @@ on the request the creator sees; search the product's name and find the page.
 **Reading the result**
 
 - **FR-023**: The page MUST count visits, visitors who began the request
-  (touched its first answer), requests sent, and visitors who took the
-  secondary link — by day and by channel — without cookies, without recording anything that
-  identifies a visitor, and therefore without a consent banner.
+  (the first focus inside the form), requests sent, and visitors who took
+  the secondary link — by day and by channel — without cookies, without
+  recording anything that identifies a visitor, and therefore without a
+  consent banner.
 - **FR-024**: The creator MUST be able to read those counts, and the share
-  each is of the visits, for any period, in one place, without a developer.
+  each is of the visits, for a chosen period — the last 7, 30 or 90 days —
+  in one place, without a developer.
 - **FR-025**: A channel tag in the page's address MUST be kept for the visit,
   recorded on any request sent from it, and carried on the secondary link
   the visitor leaves by. An address without a tag counts as "direct"; a tag
@@ -433,9 +437,10 @@ on the request the creator sees; search the product's name and find the page.
   billing, an optional note — plus what the page knew: the channel tag, when
   it arrived, and whether the creator's notification went out. Kept whole,
   never edited, exportable. Owned by the platform.
-- **Step count**: how many visits, begun requests, sent requests and
-  sign-up departures there were on a day, through a channel. Holds no
-  person.
+- **Step count**: how many visits (a visit is a page load — not a person,
+  not a device), begun requests, sent requests and sign-up departures
+  (visitors who took the secondary link) there were on a day, through a
+  channel. Holds no person.
 - **Claim**: one sentence the page makes about the product, paired with the
   behaviour or decision that makes it true. The claims form a list reviewed
   before every publication; the pricing model is one of them.
@@ -451,9 +456,11 @@ on the request the creator sees; search the product's name and find the page.
   SPEI — at least three of them at an ISP — and have never seen Devolada can
   each say, after reading the page once on a phone, what it does, for whom,
   and how it is charged — 5 of 5, unprompted.
-- **SC-002**: On a mid-range phone over a cellular connection, the first
-  screen is readable within 2 seconds and the whole page within 5; the first
-  visit costs the visitor less than half a megabyte of data.
+- **SC-002**: On a mid-range phone over a cellular connection — measured
+  in Chrome DevTools with the "Slow 4G" network preset and 4× CPU
+  throttling, or Lighthouse's mobile preset — the first screen is readable
+  within 2 seconds and the whole page within 5; the first visit costs the
+  visitor less than half a megabyte of data.
 - **SC-003**: Thirty days after publication the creator can state, from one
   view in under five minutes: requests received, requests from businesses on
   the supported billing system, requests from businesses with their own

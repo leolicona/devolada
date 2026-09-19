@@ -331,6 +331,31 @@ describe("US-D01: the link answers with the live debt", () => {
     expect(res.status).toBe(404);
   });
 
+  /* bug: links-refused-key — the panel now hears WISPHUB_AUTH_FAILED;
+     the payer must not. Whose gap it is is not the customer's business,
+     and the audience default in `wisphubFailure` is what keeps it that
+     way. The refusal sits on the invoice door: the two reads fire
+     together (provider-latency D2) and the page answers on the first
+     rejection, so a refused customer lookup would leave the invoice read
+     mid-flight in the display cache when this test ends — which the
+     runner's isolated storage rightly refuses. */
+  it("bug links-refused-key: a refused key reads as WISPHUB_UNAVAILABLE on the payer's page, never as the ISP's setup gap", async () => {
+    await seedLinkedBusiness({ wisphubApiKey: "wh-key-io" });
+    mockCustomerLookup([wisphubCustomer()]);
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/") })
+      .reply(403, JSON.stringify({ detail: "Invalid API key" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body).toMatchObject({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } });
+    expect(JSON.stringify(body)).not.toContain("AUTH");
+    expect(JSON.stringify(body)).not.toContain("wh-key-io");
+  });
+
   it("scenario 23: ISP without SPEI → unavailable, no WispHub call", async () => {
     await seedLinkedBusiness({ speiClabe: null, speiBank: null, speiBeneficiaryName: null });
     const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);

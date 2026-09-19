@@ -91,8 +91,20 @@ export async function listPaymentRequests(c: Ctx) {
     return c.json({ success: true, data });
   } catch (e) {
     if (e instanceof WispHubError) {
-      /* D7: the section says so — error state with Reintentar */
-      return c.json({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } }, 503);
+      /* D7: the section says so. The code travels as the adapter named
+         it (bug cobros-installation-fallback): WISPHUB_UNAVAILABLE is
+         weather and earns a Reintentar; WISPHUB_AUTH_FAILED is a setup
+         problem the screen sends to Integraciones — a retry re-sends the
+         same key to the same installation. Folding the two into one
+         code is what let a good key on the wrong installation
+         (provider-address-per-isp D5, the pilot's row with no choice
+         recorded) read as an outage for a day.
+
+         Logged here because nothing else on this path does: the screen
+         said "no pudimos cargar" and no line said why. The detail is a
+         status or a timeout, never the key (007 FR-013). */
+      console.error("wisphub failure:", e.code, e.message);
+      return c.json({ success: false, error: { code: e.code } }, 503);
     }
     throw e;
   }

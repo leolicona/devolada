@@ -1,12 +1,12 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { app, fakeProofs, seedBusiness, sessionCookieHeader } from "./helpers";
-import { paymentLinks, payments, wisphubPendingPages, wisphubPendingSweeps } from "../src/db/schema";
+import { paymentLinks, payments, wisphubPages, wisphubSweeps } from "../src/db/schema";
 import { resetProviderCaches } from "../src/wisphub/cache";
 import { PENDING_LIVE_PAGES } from "../src/wisphub/client";
-import { REST_MS, SWEEP_PAGES, sweepPendingInvoices, wakePendingSweep } from "../src/wisphub/pending-snapshot";
+import { REST_MS, SWEEP_PAGES, sweepWispHubLists, wakeSweep } from "../src/wisphub/snapshot";
 import type { Bindings } from "../src/env";
 
 /* bug: pending-invoice-cap — a customer whose invoice sat beyond the
@@ -199,14 +199,19 @@ const mockInvoiceDetail = (invoiceId: number, estado: unknown) =>
     .reply(...json({ id_factura: invoiceId, estado }));
 
 const sweepRow = async (businessId: string) =>
-  (await drizzle(env.DB).select().from(wisphubPendingSweeps).where(eq(wisphubPendingSweeps.businessId, businessId)))[0];
+  (
+    await drizzle(env.DB)
+      .select()
+      .from(wisphubSweeps)
+      .where(and(eq(wisphubSweeps.businessId, businessId), eq(wisphubSweeps.kind, "pending")))
+  )[0];
 
 /* Wakes the tenant and runs the sweep until the pass finishes */
 async function sweptTenant(businessId: string, pages: unknown[][], now = new Date()) {
-  await wakePendingSweep(drizzle(env.DB), businessId, `${WISPHUB_ORIGIN}/api`, now);
+  await wakeSweep(drizzle(env.DB), businessId, "pending", `${WISPHUB_ORIGIN}/api`, now);
   mockPages(pages);
-  const report = await sweepPendingInvoices(testEnv, now);
-  expect(report).toMatchObject({ tenants: 1, pages: pages.length, finished: 1, failed: 0 });
+  const report = await sweepWispHubLists(testEnv, now);
+  expect(report).toMatchObject({ lists: 1, pages: pages.length, finished: 1, failed: 0 });
   return report;
 }
 
@@ -250,7 +255,7 @@ describe("bug: pending-invoice-cap — a cut-off read is never 'owes nothing'", 
     expect(data.status).toBe("debt");
     expect(data.invoiceCents).toBe(49900);
     /* nothing to wake: no row is born from a complete read */
-    expect(await drizzle(env.DB).select().from(wisphubPendingSweeps)).toHaveLength(0);
+    expect(await drizzle(env.DB).select().from(wisphubSweeps)).toHaveLength(0);
   });
 });
 
@@ -369,15 +374,15 @@ describe("bug: pending-invoice-cap — the sweep itself", () => {
   it("a failure mid-tick keeps the cursor; the next tick resumes and finishes", async () => {
     const business = await seedLinkedBusiness();
     const now = new Date();
-    await wakePendingSweep(drizzle(env.DB), business.id, `${WISPHUB_ORIGIN}/api`, now);
+    await wakeSweep(drizzle(env.DB), business.id, "pending", `${WISPHUB_ORIGIN}/api`, now);
     const pages = sevenPagesWithMine();
     mockPages(pages, { to: 3, last: false });
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("offset=300") })
       .reply(500, "boom");
 
-    const first = await sweepPendingInvoices(testEnv, now);
-    expect(first).toMatchObject({ tenants: 1, pages: 3, finished: 0, failed: 1 });
+    const first = await sweepWispHubLists(testEnv, now);
+    expect(first).toMatchObject({ lists: 1, pages: 3, finished: 0, failed: 1 });
     let row = await sweepRow(business.id);
     expect(row.livePages).toBe(3);
     expect(row.liveCursor).toContain("offset=300");
@@ -387,25 +392,25 @@ describe("bug: pending-invoice-cap — the sweep itself", () => {
 
     const later = new Date(now.getTime() + 60_000);
     mockPages(pages, { from: 3 });
-    const second = await sweepPendingInvoices(testEnv, later);
-    expect(second).toMatchObject({ tenants: 1, pages: 4, finished: 1, failed: 0 });
+    const second = await sweepWispHubLists(testEnv, later);
+    expect(second).toMatchObject({ lists: 1, pages: 4, finished: 1, failed: 0 });
     row = await sweepRow(business.id);
     expect(row.servedPages).toBe(7);
     expect(row.lastError).toBeNull();
-    const stored = await drizzle(env.DB).select().from(wisphubPendingPages);
+    const stored = await drizzle(env.DB).select().from(wisphubPages);
     expect(stored).toHaveLength(7);
   });
 
   it("a tick reads at most SWEEP_PAGES and continues next minute", async () => {
     const business = await seedLinkedBusiness();
     const now = new Date();
-    await wakePendingSweep(drizzle(env.DB), business.id, `${WISPHUB_ORIGIN}/api`, now);
+    await wakeSweep(drizzle(env.DB), business.id, "pending", `${WISPHUB_ORIGIN}/api`, now);
     const pages = Array.from({ length: SWEEP_PAGES + 2 }, (_, p) => strangers(p));
     mockPages(pages, { to: SWEEP_PAGES, last: false });
-    expect(await sweepPendingInvoices(testEnv, now)).toMatchObject({ pages: SWEEP_PAGES, finished: 0 });
+    expect(await sweepWispHubLists(testEnv, now)).toMatchObject({ pages: SWEEP_PAGES, finished: 0 });
 
     mockPages(pages, { from: SWEEP_PAGES });
-    expect(await sweepPendingInvoices(testEnv, new Date(now.getTime() + 60_000))).toMatchObject({
+    expect(await sweepWispHubLists(testEnv, new Date(now.getTime() + 60_000))).toMatchObject({
       pages: 2,
       finished: 1,
     });
@@ -421,7 +426,7 @@ describe("bug: pending-invoice-cap — the sweep itself", () => {
     expect(row.restUntil!.getTime()).toBe(now.getTime() + REST_MS);
 
     /* resting: the next minute reads nothing */
-    expect(await sweepPendingInvoices(testEnv, new Date(now.getTime() + 60_000))).toMatchObject({ tenants: 0 });
+    expect(await sweepWispHubLists(testEnv, new Date(now.getTime() + 60_000))).toMatchObject({ lists: 0 });
 
     /* and the page still asks WispHub itself — the mock below is consumed */
     mockCustomerLookup([wisphubCustomer()]);
@@ -434,8 +439,8 @@ describe("bug: pending-invoice-cap — the sweep itself", () => {
   it("a disconnected tenant rests instead of failing every minute", async () => {
     const business = await seedBusiness({ wisphubApiKey: null });
     const now = new Date();
-    await wakePendingSweep(drizzle(env.DB), business.id, `${WISPHUB_ORIGIN}/api`, now);
-    expect(await sweepPendingInvoices(testEnv, now)).toMatchObject({ tenants: 1, pages: 0, failed: 0 });
+    await wakeSweep(drizzle(env.DB), business.id, "pending", `${WISPHUB_ORIGIN}/api`, now);
+    expect(await sweepWispHubLists(testEnv, now)).toMatchObject({ lists: 1, pages: 0, failed: 0 });
     const row = await sweepRow(business.id);
     expect(row.lastError).toBe("WISPHUB_NOT_CONFIGURED");
     expect(row.restUntil!.getTime()).toBe(now.getTime() + REST_MS);

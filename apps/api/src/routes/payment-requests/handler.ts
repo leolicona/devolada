@@ -8,7 +8,7 @@ import { integrationOf } from "../../integrations/store";
 import { WispHubError } from "../../wisphub/client";
 /* provider-address-per-isp D4 */
 import { wisphubFor } from "../../wisphub/factory";
-import { readPendingInvoices } from "../../wisphub/pending-snapshot";
+import { readPendingInvoices } from "../../wisphub/snapshot";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 

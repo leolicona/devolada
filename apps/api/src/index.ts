@@ -18,7 +18,7 @@ import { supportRoute } from "./routes/support";
 import { v1Route } from "./routes/v1";
 import { wellKnownRoute } from "./routes/v1/well-known";
 import { sweepWebhookDeliveries } from "./webhooks/queue";
-import { sweepPendingInvoices } from "./wisphub/pending-snapshot";
+import { sweepWispHubLists } from "./wisphub/snapshot";
 import { sweepApiCounters } from "./routes/v1/middleware";
 import { internalError } from "./routes/v1/envelope";
 
@@ -123,13 +123,14 @@ export default {
         if (report.claimed) console.log("top-up sweep:", JSON.stringify(report));
       }),
     );
-    /* bug: pending-invoice-cap: the background read of a tenant's
-       pending invoices, for the tenants a request cannot read whole.
-       Its own lane — the verdicts above read the list it keeps, and a
-       slow page must not hold a verdict this minute. */
+    /* bug: pending-invoice-cap, bug: links-roster-cap: the background
+       read of a tenant's WispHub lists — pending invoices and customers —
+       for the tenants a request cannot read whole. Its own lane — the
+       verdicts above read the list it keeps, and a slow page must not
+       hold a verdict this minute. */
     ctx.waitUntil(
-      sweepPendingInvoices(env).then((report) => {
-        if (report.pages || report.failed) console.log("pending-invoice sweep:", JSON.stringify(report));
+      sweepWispHubLists(env).then((report) => {
+        if (report.pages || report.failed) console.log("wisphub list sweep:", JSON.stringify(report));
       }),
     );
     /* automated-collections-api D13/D14: the public API's housekeeping —

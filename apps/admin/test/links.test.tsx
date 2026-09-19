@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { linksRosterResponse } from "@devolada/api/direct-payments-schema";
 import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
+import { FOCUS_FLOOR_MS, resetPresenceForTests } from "../src/lib/presence";
 
 /* US-D07, amended by the pilot-UX round: the page is the roster, alive
    on arrival, searched locally by contains. */
@@ -84,6 +85,69 @@ describe("US-D07: the roster is alive on arrival", () => {
   it("a provider that stalled with nothing to show is the error block, with a retry", async () => {
     arrange(() => fail("WISPHUB_UNAVAILABLE", 503));
     expect(await screen.findByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /ir a integraciones/i })).not.toBeInTheDocument();
+  });
+});
+
+/* bug: links-refused-key — the same refusal Cobros learned to name
+   (cobros-installation-fallback): a key the installation rejected is
+   setup, not weather, and the roster says so with the same sentence and
+   the same door, never with a Reintentar. */
+describe("bug links-refused-key: a refused key is a setup problem, not an outage", () => {
+  function setVisibility(state: "visible" | "hidden") {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  }
+  beforeEach(() => {
+    setVisibility("visible");
+    resetPresenceForTests();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    setVisibility("visible");
+  });
+
+  it("WISPHUB_AUTH_FAILED → the Integraciones door, the installation named first, no Reintentar, no search box", async () => {
+    arrange(() => fail("WISPHUB_AUTH_FAILED", 503));
+    const sentence = await screen.findByText(/wisphub rechazó la conexión/i);
+    const notice = sentence.closest('[role="status"]') as HTMLElement;
+    expect(notice).not.toBeNull();
+    expect(notice).toHaveTextContent(/revisa primero la instalación y luego la llave/i);
+    expect(screen.getByRole("link", { name: /ir a integraciones/i })).toHaveAttribute(
+      "href",
+      "/integrations/wisphub",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos cargar/i)).not.toBeInTheDocument();
+    /* Nothing to search until the read is allowed again */
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("a background read that starts being refused replaces the rows with the door, not the 'sin conexión' note", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reads = 0;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.linksRoster(() => {
+        reads++;
+        return reads === 1 ? ok(roster()) : fail("WISPHUB_AUTH_FAILED", 503);
+      }),
+    );
+    renderApp("/links");
+    expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
+
+    /* presence-freshness D3: the return to the tab past the floor re-reads */
+    vi.advanceTimersByTime(FOCUS_FLOOR_MS + 1_000);
+    setVisibility("hidden");
+    setVisibility("visible");
+
+    expect(await screen.findByText(/wisphub rechazó la conexión/i)).toBeInTheDocument();
+    expect(reads).toBe(2);
+    expect(screen.queryByText("Janely Reyes")).not.toBeInTheDocument();
+    expect(screen.queryByText(/sin conexión a wisphub/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
   });
 });
 

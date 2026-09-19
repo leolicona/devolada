@@ -83,6 +83,26 @@ describe("US-D07: the roster hands every customer their link", () => {
 
   /* The route sits under the public /links/:token prefix: if the
      registration order ever changed, an anonymous caller would reach it. */
+  /* bug: links-refused-key — the panel hears the adapter's own code, so
+     the screen can send a refused key to Integraciones instead of a
+     Reintentar. The 403 is what wisphub.net answers a wisphub.io key
+     (provider-address-per-isp D5). */
+  it("bug links-refused-key: a refused key answers 503 with WISPHUB_AUTH_FAILED, not the outage code", async () => {
+    await seedBusiness({ wisphubApiKey: "wh-key-io" });
+    fetchMock
+      .get(WISPHUB_ORIGIN)
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/") })
+      .reply(403, JSON.stringify({ detail: "Invalid API key" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const res = await search();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body).toMatchObject({ success: false, error: { code: "WISPHUB_AUTH_FAILED" } });
+    expect(JSON.stringify(body)).not.toContain("wh-key-io");
+  });
+
   it("requires an ISP session and is not shadowed by the public token route", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     const res = await (await app()).request("/direct-payments/links/roster", {}, env);

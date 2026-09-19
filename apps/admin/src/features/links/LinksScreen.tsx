@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Share2, Link as LinkIcon, AlertCircle, Check, WifiOff } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Search, Share2, Link as LinkIcon, AlertCircle, Check, TriangleAlert, WifiOff } from "lucide-react";
 import { Alert, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
 import { api, ApiError } from "@/lib/api";
 import { focusReadOptions } from "@/lib/presence";
@@ -172,14 +173,49 @@ export function LinksScreen() {
   const visible = filtered.slice(0, limit);
 
   /* automated-collections-api FR-011: a missing WispHub key is no longer
-     a refusal — the roster answers the API links alone — so the only 503
-     left is a provider that stalled (WISPHUB_UNAVAILABLE). D9: a
-     background failure with rows on screen is a quiet note, never the
-     error block — that one is for a failure with nothing to show */
+     a refusal — the roster answers the API links alone. Two 503s remain
+     (bug links-refused-key): a provider that stalled (WISPHUB_UNAVAILABLE)
+     and a key the installation refused (WISPHUB_AUTH_FAILED). The first
+     is weather; the second is setup, and gets the Cobros door rather than
+     a Reintentar that re-sends the same key to the same place. D9: a
+     background *stall* with rows on screen is a quiet note, never the
+     error block — that one is for a failure with nothing to show. A
+     refusal returns early below, rows or no rows: the note promises a
+     last reading that is still being refreshed, which a refused key
+     makes untrue. */
   const staleAfterFailure = roster.isError && !!roster.data;
   /* The empty list reads differently for a business that never connected
      WispHub: its links come from the API, or from nowhere yet */
   const wisphubConnected = actor?.integrationConfigured ?? true;
+
+  if (roster.error?.code === "WISPHUB_AUTH_FAILED") {
+    return (
+      <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
+        <h1 className="text-xl font-semibold">Links de pago</h1>
+        {/* The shell's recipe for a setup problem with a way out, and the
+            same sentence as Cobros: the installation before the key
+            (provider-address-per-isp D7), because the case that produced
+            this was a good key sent to the wrong installation. No search
+            box and no rows: there is nothing to search until the read is
+            allowed again. */}
+        <Alert
+          variant="warning"
+          className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+        >
+          <span className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              WispHub rechazó la conexión. Una llave solo sirve en la instalación donde la
+              generaste: revisa primero la instalación y luego la llave en Integraciones.
+            </span>
+          </span>
+          <Link to="/integrations/wisphub" className="block">
+            <Button size="compact" variant="secondary">Ir a Integraciones</Button>
+          </Link>
+        </Alert>
+      </main>
+    );
+  }
 
   return (
     <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">

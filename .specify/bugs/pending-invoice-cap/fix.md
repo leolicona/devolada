@@ -36,7 +36,7 @@ amount (a full pass every ~7 minutes at this ISP's size).
 | `apps/api/src/routes/direct-payments/handler.ts` | modified | GET: a zero that is not proven answers 503 instead of `no_debt`; POST: reads through the snapshot door, plan-price fallback removed, unproven zero answers 503 |
 | `apps/api/src/direct-payments/validation.ts` | modified | verdict reads through the snapshot door; unproven zero → `retryLater("WISPHUB_READ_INCOMPLETE")`; `ispDebtCents = debt.totalCents`; `stillPendingInvoiceId` re-reads a snapshot id before `attemptReconnection` |
 | `apps/api/src/direct-payments/provisional.ts` | modified | release and expiry read through the snapshot door; release needs a real debt (no plan price); `notifyProvisionalExpiry` takes `db` |
-| `apps/api/src/routes/payment-requests/handler.ts` | modified | Cobros reads through the snapshot door; **and** the BUG-021 chunk size `D1_MAX_PARAMS - 1` → `- 2` (see Deviations) |
+| `apps/api/src/routes/payment-requests/handler.ts` | modified | Cobros reads through the snapshot door. (The BUG-021 chunk size `- 1` → `- 2` was made here too, and turned out to be `main`'s own fix meanwhile — see Deviations.) |
 | `apps/api/src/wisphub/cache.ts` | modified | comment only: D3 as amended |
 | `apps/api/src/index.ts` | modified | the sweep joins the every-minute trigger, its own `waitUntil` lane |
 | `apps/api/test/pending-invoice-cap.test.ts` | added test | 12 scenarios, all `bug: pending-invoice-cap` |
@@ -142,15 +142,16 @@ tenants the suite describes.
 
 ## Deviations from Assessment
 
-- **Scope expansion, one line**: `routes/payment-requests/handler.ts` chunked
-  the Cobros `IN (…)` at `D1_MAX_PARAMS - 1`, leaving room for the business id
-  but not for `source = 'panel'` — 99 usuarios + 2 = 101 bound parameters, and
-  D1 refuses at 100. The bug's 700-invoice fixture is the first read to list 99
-  debtors at once, so it surfaced here; the same read in the roster already
-  used `- 2`. Fixed in place with a comment. **It means Cobros answers 500
-  today for any ISP with 99 or more customers on the pending list** — the
-  6,509-customer ISP almost certainly among them — which may be why the
-  `/cobros` banner check went unanswered.
+- **Scope expansion that `main` had already made.** `routes/payment-requests/handler.ts`
+  chunked the Cobros `IN (…)` at `D1_MAX_PARAMS - 1`, leaving room for the
+  business id but not for `source = 'panel'` — 99 usuarios + 2 = 101 bound
+  parameters, and D1 refuses at 100. The bug's 700-invoice fixture is the
+  first read in this suite to list 99 debtors at once, so it surfaced here and
+  was fixed in place. The same defect was found and fixed independently on
+  `main` the same day as bug `cobros-links-lookup-params` (#218), with a
+  suite-wide guard in `test/setup.ts` that now counts every bound parameter;
+  on merge that version, and its comment, won. The finding stands: Cobros
+  answered 500 for any ISP with 99 or more customers on the pending list.
 - **The neutral page state uses an existing door.** The assessment weighed a
   new `status` value. The page's outage branch (`link.isError` → *"No pudimos
   consultar tu cuenta en este momento. Intenta de nuevo en unos minutos."*)

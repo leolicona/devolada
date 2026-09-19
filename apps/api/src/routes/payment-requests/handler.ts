@@ -8,15 +8,16 @@ import { integrationOf } from "../../integrations/store";
 import { WispHubError } from "../../wisphub/client";
 /* provider-address-per-isp D4 */
 import { wisphubFor } from "../../wisphub/factory";
-import { pendingInvoicesForDisplay, pendingVersion } from "../../wisphub/cache";
+import { readPendingInvoices } from "../../wisphub/pending-snapshot";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 /* The Cobros section's live read (cobros-live spec, US-R01). Display
-   only, so it goes through the 30-second cache (D3) — every decision
-   that moves money keeps reading the adapter directly (debt truth).
+   only, so it goes through the 30-second cache (D3) — or, for a tenant
+   no request can read whole, the sweep's last finished pass, the same
+   list every money path reads (bug: pending-invoice-cap).
    Every member reads: "who owes me" is the daily question (D4). */
 export async function listPaymentRequests(c: Ctx) {
   const actor = c.get("actor");
@@ -35,7 +36,7 @@ export async function listPaymentRequests(c: Ctx) {
     const wisphub = wisphubFor(integration, c.env);
     /* presence-freshness D6: the key carries the tenant's last
        registration, so a payment registered anywhere is a miss here */
-    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now, await pendingVersion(db, actor.id));
+    const pending = await readPendingInvoices(db, actor.id, wisphub, now, { display: true });
 
     /* pilot-UX round: the debtor's permanent link rides the row, so
        "veo quién me debe → le mando su link" is one expansion away.

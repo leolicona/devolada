@@ -10,8 +10,9 @@ import { WispHubError } from "../../wisphub/client";
    addressed to the actor business's own installation, through the one
    factory. The constructor is never called here. */
 import { wisphubFor } from "../../wisphub/factory";
-import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
-import { NO_DEBT, debtOf } from "../../wisphub/debt";
+import { rosterForDisplay } from "../../wisphub/cache";
+import { readPendingInvoices } from "../../wisphub/pending-snapshot";
+import { NO_DEBT, debtFor, nothingOwedIsProven } from "../../wisphub/debt";
 import {
   askAvailable,
   businessConfigured,
@@ -275,19 +276,27 @@ export async function getLinkStatus(c: Ctx, token: string) {
   try {
     const wisphub = wisphubFor(integration!, c.env);
     /* provider-latency D2: independent reads, one wait. D3: the page
-       renders here; the submission below re-reads fresh before any
-       amount is committed, so a 30s-old list cannot decide money. */
-    const version = await pendingVersion(ctx.db, business.id);
+       renders here; the submission below re-reads before any amount is
+       committed, so a 30s-old list cannot decide money. A large tenant
+       reads the sweep's snapshot on both paths (bug: pending-invoice-cap). */
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      pendingInvoicesForDisplay(business.id, wisphub, now, version),
+      readPendingInvoices(ctx.db, business.id, wisphub, now, { display: true }),
     ]);
     /* debt-truth D7: invoices plus the carried balance. A payer whose
        invoice closed on a short payment owes a remainder that the
        invoice list alone cannot see. */
-    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+    const debt = customer ? debtFor(customer, pending) : NO_DEBT;
     const customerName = customer?.name ?? link.customerUsuario;
 
+    if (debt.totalCents === 0 && customer && !nothingOwedIsProven(customer, pending)) {
+      /* bug: pending-invoice-cap — a zero from a cut-off list is not
+         "al corriente". This page painted the green "no tienes pagos
+         pendientes" to a customer whose invoice sat beyond the read
+         (debt-truth D4 was never applied here). The honest answer is the
+         one the page already has for a provider it could not read. */
+      return c.json({ success: false, error: { code: "WISPHUB_READ_INCOMPLETE" } }, 503);
+    }
     if (debt.totalCents === 0 || !customer) {
       const data: LinkStatusResponse = {
         ispName: business.name,
@@ -475,34 +484,35 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     try {
       const wisphub = wisphubFor(integration!, c.env);
       /* provider-latency D2 together, D3 **fresh**: this read decides the
-         amount the CEP must match (D11/D15), so it never takes the cache. */
+         amount the CEP must match (D11/D15), so it never takes the
+         30-second cache. bug: pending-invoice-cap — for a tenant no
+         request can read whole, "fresh" is the sweep's last finished
+         pass plus the live customer record. */
       [customer, pending] = await Promise.all([
         wisphub.getCustomer(link.customerUsuario),
-        wisphub.pendingInvoices(now),
+        readPendingInvoices(db, business.id, wisphub, now),
       ]);
     } catch (e) {
       return wisphubFailure(c, e);
     }
-    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
-    if (
-      !customer ||
-      (debt.totalCents === 0 &&
-        (pending.complete ||
-          customer.carriedBalanceCents < 0 ||
-          customer.billingStatus === "paid"))
-    ) {
+    const debt = customer ? debtFor(customer, pending) : NO_DEBT;
+    if (!customer || (debt.totalCents === 0 && nothingOwedIsProven(customer, pending))) {
       return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
     }
+    if (debt.totalCents === 0) {
+      /* bug: pending-invoice-cap — debt-truth D4's fallback to the plan's
+         price stood here. It asked a customer beyond the read for a
+         number that was not their debt, and the verdict then settled
+         against it. Nothing is asked until the list can say. */
+      return c.json({ success: false, error: { code: "WISPHUB_READ_INCOMPLETE" } }, 503);
+    }
 
-    /* Same rule as the store path: only D4's truncation fallback falls back
-       to the plan's price. A zero invoice line beside a carried balance is
-       a real number, not a missing one. */
-    const debtUnknown = debt.totalCents === 0;
-    const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
+    /* A zero invoice line beside a carried balance is a real number, not
+       a missing one — the ask is the debt, whole. */
     ask = {
-      ispDebtCents,
-      invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
-      carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+      ispDebtCents: debt.totalCents,
+      invoiceCents: debt.invoiceCents,
+      carriedBalanceCents: debt.carriedBalanceCents,
       customer: {
         wisphubCustomerId: link.wisphubCustomerId,
         customerUsuario: link.customerUsuario,

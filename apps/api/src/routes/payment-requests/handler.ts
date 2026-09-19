@@ -45,9 +45,15 @@ export async function listPaymentRequests(c: Ctx) {
        here (the invoice row carries none): it opens WhatsApp's own
        picker with the message ready, never a stranger's chat. */
     const usuarios = [...new Set(pending.invoices.map((f) => f.usuario))];
-    /* One parameter is the business id; the rest are usuarios (BUG-021) */
+    /* Two fixed parameters — the business id and `source` — and the rest
+       are usuarios (BUG-021). It read "one" until bug
+       cobros-links-lookup-params: `source` joined the WHERE after the
+       chunk was sized, 99 debtors bound 101, and production D1 refused
+       what the local one let through. test/setup.ts now enforces the
+       cap in the suite, so the next such slip fails a test instead of a
+       tenant. */
     const links: { customerUsuario: string; token: string }[] = [];
-    for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
+    for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
       /* automated-collections-api D3: panel links only — an API link has
          no usuario, and only a panel link belongs on a WispHub invoice */
       const rows = await db

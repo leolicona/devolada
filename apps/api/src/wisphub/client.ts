@@ -126,11 +126,18 @@ export type PendingInvoices = {
 
 /* How deep a live read goes before it gives up and says so. Five pages
    is what a request can pay (provider-latency D1); a tenant that needs
-   more is read by the sweep (`pending-snapshot.ts`), which uses this
+   more is read by the sweep (`snapshot.ts`), which uses this
    number to tell the two apart. */
 export const PENDING_LIVE_PAGES = 5;
 
 export type PendingPage = { invoices: PendingInvoice[]; next: string | null };
+export type CustomersPage = { customers: WispHubCustomer[]; next: string | null };
+
+/* How deep a live read of the customer list goes before it says so:
+   ten pages of 100 was "the pilot scale with room" (direct-payment D5),
+   and it is what one admin request can pay. A tenant past it is read by
+   the sweep (bug: links-roster-cap). */
+export const ROSTER_LIVE_PAGES = 10;
 
 type WispHubListItem = {
   id_servicio: number;
@@ -232,37 +239,39 @@ export class WispHub {
   /* The whole tenant, full shape — the Links roster (admin-links-view,
      amended by the pilot-UX round: WispHub's own filters are
      exact-match and the param was guessed, so "search" moved client-side
-     over this list). Same pagination and cap as listCustomers below;
-     `complete` says whether the cap was hit. */
+     over this list). Up to `ROSTER_LIVE_PAGES` of 100; `complete` says
+     whether the cap was hit — and bug: links-roster-cap reads a tenant
+     this cannot finish by the sweep instead (`snapshot.ts`), page by
+     page through `customersPage` below. */
   async listCustomersFull(): Promise<{ customers: WispHubCustomer[]; complete: boolean }> {
     const customers: WispHubCustomer[] = [];
-    let path: string | null = "/clientes/?limit=100";
-    let page = 0;
-    for (; page < 10 && path; page++) {
-      const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
-      for (const c of data.results) {
-        if (c.usuario) customers.push(mapCustomer(c));
-      }
-      path = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    let path: string | null = this.customersPath();
+    for (let page = 0; page < ROSTER_LIVE_PAGES && path; page++) {
+      const data: CustomersPage = await this.customersPage(path);
+      customers.push(...data.customers);
+      path = data.next;
     }
     return { customers, complete: path === null };
   }
 
-  /* Every customer of the tenant, for payment-link generation
-     (direct-payment spec D5). Same list endpoint, paginated; the page
-     bound keeps one admin request from walking a huge tenant forever —
-     10 pages of 100 covers the pilot scale with room. */
-  async listCustomers(): Promise<{ wisphubId: number; usuario: string }[]> {
-    const customers: { wisphubId: number; usuario: string }[] = [];
-    let path: string | null = "/clientes/?limit=100";
-    for (let page = 0; page < 10 && path; page++) {
-      const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
-      for (const c of data.results) {
-        if (c.usuario) customers.push({ wisphubId: c.id_servicio, usuario: c.usuario });
-      }
-      path = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+  /* The first page of the customer list — where a pass begins, whether
+     the live read's or the sweep's. */
+  customersPath(): string {
+    return "/clientes/?limit=100";
+  }
+
+  /* One page of the customer list and the path of the next — the unit
+     the sweep stores and resumes from (bug: links-roster-cap). A row
+     without `usuario` is nobody a link can be made for (US-D07 review). */
+  async customersPage(path: string): Promise<CustomersPage> {
+    const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
+    const customers: WispHubCustomer[] = [];
+    for (const c of data.results) {
+      if (c.usuario) customers.push(mapCustomer(c));
     }
-    return customers;
+    /* WispHub's `next` is absolute; keep only the API path */
+    const next = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    return { customers, next };
   }
 
   /* D1 (charge-confirm spec): one customer loads through the list filter.

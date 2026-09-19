@@ -7,7 +7,7 @@ import { payments, businesses, paymentLinks, proofRejections } from "../db/schem
    the integration row this function already holds. */
 import { wisphubFor } from "../wisphub/factory";
 import { NO_DEBT, debtFor } from "../wisphub/debt";
-import { readPendingInvoices } from "../wisphub/pending-snapshot";
+import { readPendingInvoices } from "../wisphub/snapshot";
 import { sendProvisionalExpiry } from "../email/sender";
 import { settle } from "./partial";
 import { isPanelLink } from "./links";

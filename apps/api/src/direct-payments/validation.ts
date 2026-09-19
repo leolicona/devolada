@@ -10,7 +10,7 @@ import { WispHubError, type PendingInvoices, type WispHub } from "../wisphub/cli
    business's own installation, never on the platform's. */
 import { wisphubFor } from "../wisphub/factory";
 import { NO_DEBT, debtFor, nothingOwedIsProven } from "../wisphub/debt";
-import { readPendingInvoices } from "../wisphub/pending-snapshot";
+import { readPendingInvoices } from "../wisphub/snapshot";
 import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";

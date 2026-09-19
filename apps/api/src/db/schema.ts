@@ -513,64 +513,75 @@ export const integrationEvents = sqliteTable(
   ],
 );
 
-/* bug: pending-invoice-cap — the tenant's pending invoices, read in the
-   background.
+/* The tenant's WispHub lists, read in the background
+   (bug: pending-invoice-cap; generalised by bug: links-roster-cap).
 
-   WispHub's invoice list has no customer filter, so every debt question
-   read the whole tenant inside the request, five pages deep, and a
-   customer beyond row 500 read as owing nothing: the payer's page said
-   "al corriente", the verdict settled against the plan's price. At
-   6,509 customers (measured 2026-09-18) a whole read is 30–40 s, which
-   no request can pay — so the every-minute sweep reads it instead, a few
-   pages per tick, and swaps a finished pass in whole. One row per tenant
-   holds the sweep's state; the pages live in `wisphub_pending_pages`.
+   WispHub pages every list at 100 and filters none of them by customer,
+   so "what does this customer owe" and "who are my customers" both read
+   the whole tenant. A request can pay a few pages; a 6,509-customer ISP
+   (measured 2026-09-18) needs sixty-odd, 30–40 s — so the every-minute
+   sweep reads it instead, a few pages per tick, and swaps a finished pass
+   in whole. One row per tenant AND list (`kind`) holds the sweep's
+   state; the pages live in `wisphub_pages`. Two kinds today: `pending`
+   (the invoices every money path reads) and `roster` (the customers the
+   Links page hands their links to).
 
    Demand-driven: the row is born when a live read comes back cut off,
    and a tenant whose whole list fits the live budget rests until the
-   next cut-off read wakes it — a small ISP costs WispHub nothing extra. */
-export const wisphubPendingSweeps = sqliteTable("wisphub_pending_sweeps", {
-  businessId: text("business_id")
-    .primaryKey()
-    .references(() => businesses.id),
-  /* The installation the pages were read from (provider-address-per-isp
-     T046): a changed address makes the whole snapshot somebody else's. */
-  baseUrl: text("base_url").notNull(),
-  /* The finished pass the readers serve. `servedStartedAt` is also the
-     window the pass was read for; null until the first pass completes. */
-  servedPassId: text("served_pass_id"),
-  servedPages: integer("served_pages"),
-  servedStartedAt: integer("served_started_at", { mode: "timestamp_ms" }),
-  servedFinishedAt: integer("served_finished_at", { mode: "timestamp_ms" }),
-  /* The pass in flight: the API path the next tick resumes from */
-  livePassId: text("live_pass_id"),
-  liveCursor: text("live_cursor"),
-  livePages: integer("live_pages").notNull().default(0),
-  liveStartedAt: integer("live_started_at", { mode: "timestamp_ms" }),
-  /* A small tenant rests here between passes; a cut-off live read clears it */
-  restUntil: integer("rest_until", { mode: "timestamp_ms" }),
-  /* The tick's lease (reconnection-queue D4's idea): an overlapping
-     sweep skips a claimed row instead of racing its cursor */
-  claimedUntil: integer("claimed_until", { mode: "timestamp_ms" }),
-  lastError: text("last_error"),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-});
-
-/* One WispHub page of one pass — `PendingInvoice[]` as JSON, read whole
-   and never queried by column. A pass is swapped in only once it is
-   finished, so a tick that dies mid-pass leaves the served pass intact. */
-export const wisphubPendingPages = sqliteTable(
-  "wisphub_pending_pages",
+   next cut-off read wakes it — a small ISP costs WispHub nothing extra.
+   Nothing here is durable: a pass rebuilds in minutes, which is why the
+   0033 migration could drop the pending-only tables and recreate these. */
+export const wisphubSweeps = sqliteTable(
+  "wisphub_sweeps",
   {
     id: id(),
     businessId: text("business_id")
       .notNull()
       .references(() => businesses.id),
+    kind: text("kind", { enum: ["pending", "roster"] }).notNull(),
+    /* The installation the pages were read from (provider-address-per-isp
+       T046): a changed address makes the whole snapshot somebody else's. */
+    baseUrl: text("base_url").notNull(),
+    /* The finished pass the readers serve. `servedStartedAt` is also the
+       window the pass was read for; null until the first pass completes. */
+    servedPassId: text("served_pass_id"),
+    servedPages: integer("served_pages"),
+    servedStartedAt: integer("served_started_at", { mode: "timestamp_ms" }),
+    servedFinishedAt: integer("served_finished_at", { mode: "timestamp_ms" }),
+    /* The pass in flight: the API path the next tick resumes from */
+    livePassId: text("live_pass_id"),
+    liveCursor: text("live_cursor"),
+    livePages: integer("live_pages").notNull().default(0),
+    liveStartedAt: integer("live_started_at", { mode: "timestamp_ms" }),
+    /* A small tenant rests here between passes; a cut-off live read clears it */
+    restUntil: integer("rest_until", { mode: "timestamp_ms" }),
+    /* The tick's lease (reconnection-queue D4's idea): an overlapping
+       sweep skips a claimed row instead of racing its cursor */
+    claimedUntil: integer("claimed_until", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("wisphub_sweeps_business_kind_idx").on(t.businessId, t.kind)],
+);
+
+/* One WispHub page of one pass — the mapped rows (`PendingInvoice[]` or
+   `WispHubCustomer[]`) as JSON, read whole and never queried by column.
+   A pass is swapped in only once it is finished, so a tick that dies
+   mid-pass leaves the served pass intact. */
+export const wisphubPages = sqliteTable(
+  "wisphub_pages",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    kind: text("kind", { enum: ["pending", "roster"] }).notNull(),
     passId: text("pass_id").notNull(),
     page: integer("page").notNull(),
     rows: text("rows").notNull(),
     fetchedAt: integer("fetched_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (t) => [uniqueIndex("wisphub_pending_pages_pass_idx").on(t.businessId, t.passId, t.page)],
+  (t) => [uniqueIndex("wisphub_pages_pass_idx").on(t.businessId, t.kind, t.passId, t.page)],
 );
 
 /* provisional-release D6 (US-D15): the edge rejection gets a memory. A

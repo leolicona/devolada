@@ -8,15 +8,16 @@ import { integrationOf } from "../../integrations/store";
 import { WispHubError } from "../../wisphub/client";
 /* provider-address-per-isp D4 */
 import { wisphubFor } from "../../wisphub/factory";
-import { pendingInvoicesForDisplay, pendingVersion } from "../../wisphub/cache";
+import { readPendingInvoices } from "../../wisphub/pending-snapshot";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 /* The Cobros section's live read (cobros-live spec, US-R01). Display
-   only, so it goes through the 30-second cache (D3) — every decision
-   that moves money keeps reading the adapter directly (debt truth).
+   only, so it goes through the 30-second cache (D3) — or, for a tenant
+   no request can read whole, the sweep's last finished pass, the same
+   list every money path reads (bug: pending-invoice-cap).
    Every member reads: "who owes me" is the daily question (D4). */
 export async function listPaymentRequests(c: Ctx) {
   const actor = c.get("actor");
@@ -35,7 +36,7 @@ export async function listPaymentRequests(c: Ctx) {
     const wisphub = wisphubFor(integration, c.env);
     /* presence-freshness D6: the key carries the tenant's last
        registration, so a payment registered anywhere is a miss here */
-    const pending = await pendingInvoicesForDisplay(actor.id, wisphub, now, await pendingVersion(db, actor.id));
+    const pending = await readPendingInvoices(db, actor.id, wisphub, now, { display: true });
 
     /* pilot-UX round: the debtor's permanent link rides the row, so
        "veo quién me debe → le mando su link" is one expansion away.
@@ -45,9 +46,12 @@ export async function listPaymentRequests(c: Ctx) {
        here (the invoice row carries none): it opens WhatsApp's own
        picker with the message ready, never a stranger's chat. */
     const usuarios = [...new Set(pending.invoices.map((f) => f.usuario))];
-    /* One parameter is the business id; the rest are usuarios (BUG-021) */
+    /* Two parameters are the business id and the source; the rest are
+       usuarios (BUG-021). It was `- 1` until bug: pending-invoice-cap's
+       700-invoice fixture bound 101 and D1 refused — the pilot's Cobros
+       never listed 99 debtors at once. The roster's read had it right. */
     const links: { customerUsuario: string; token: string }[] = [];
-    for (const part of chunks(usuarios, D1_MAX_PARAMS - 1)) {
+    for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
       /* automated-collections-api D3: panel links only — an API link has
          no usuario, and only a panel link belongs on a WispHub invoice */
       const rows = await db

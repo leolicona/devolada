@@ -96,6 +96,41 @@ describe("US-R01: the section reads WispHub live", () => {
     expect(abraham.waLink).toBeNull();
   });
 
+  /* bug: cobros-links-lookup-params — the pilot's 205 pending invoices
+     name more than 99 debtors, all of whom the roster had already given a
+     link. The lookup chunked by D1_MAX_PARAMS - 1 and bound the business
+     id, `source = 'panel'` AND 99 usuarios: 101, one over D1's cap, and
+     the read died as a generic 500. test/setup.ts makes the cap real, so
+     this test fails on the old chunk size the way production did. The
+     link INSERT below is chunked for the same reason. */
+  it("bug cobros-links-lookup-params: 120 debtors with stored links read in one page, every row carrying its link", async () => {
+    const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    const usuarios = Array.from({ length: 120 }, (_, i) => `cliente${String(i).padStart(3, "0")}@wifiplus`);
+    const db = drizzle(env.DB);
+    for (let i = 0; i < usuarios.length; i += 10) {
+      await db.insert(paymentLinks).values(
+        usuarios.slice(i, i + 10).map((usuario, j) => ({
+          businessId: business.id,
+          token: `tok${String(i + j).padStart(13, "0")}`,
+          wisphubCustomerId: String(1000 + i + j),
+          customerUsuario: usuario,
+        })),
+      );
+    }
+    mockFacturas(
+      usuarios.map((usuario, i) =>
+        invoiceRow({ id_factura: 5000 + i, cliente: { usuario, nombre: `Cliente ${i}` } }),
+      ),
+    );
+
+    const res = await (await app()).request("/payment-requests", await asBusiness(), env);
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.cobros).toHaveLength(120);
+    const withLink = data.cobros.filter((c: { linkUrl: string | null }) => c.linkUrl !== null);
+    expect(withLink).toHaveLength(120);
+  });
+
   it("scenario 4: two reads inside 30 seconds cost one provider call (the display cache)", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     mockFacturas([invoiceRow()]); /* once — the second read must not fetch */

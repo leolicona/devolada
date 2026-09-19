@@ -175,10 +175,20 @@ async function attemptsInLastHour(
   return Number(row?.n ?? 0);
 }
 
-function wisphubFailure(c: Ctx, e: unknown) {
+/* One helper, two audiences (bug links-refused-key). The panel hears
+   the adapter's own code: WISPHUB_AUTH_FAILED is a setup problem with a
+   door to Integraciones, WISPHUB_UNAVAILABLE is weather and a Reintentar
+   — folding them was what let a good key on the wrong installation read
+   as an outage (see cobros-installation-fallback). The payer keeps
+   hearing one word: whose gap it is is not the customer's business, and
+   the enumerated codes below are the whole of what travels to them. The
+   default is the payer so an omitted argument can never leak an ISP's
+   setup state to a customer. Never the key in the line (007 FR-013). */
+function wisphubFailure(c: Ctx, e: unknown, audience: "payer" | "panel" = "payer") {
   if (e instanceof WispHubError) {
     console.error("wisphub failure:", e.code, e.message);
-    return c.json({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } }, 503);
+    const code = audience === "panel" ? e.code : "WISPHUB_UNAVAILABLE";
+    return c.json({ success: false, error: { code } }, 503);
   }
   throw e;
 }
@@ -1048,7 +1058,7 @@ export async function listLinks(c: Ctx, cursor?: string) {
        the numeric id, a cache WispHub may recycle, refreshes. */
     await ensureLinks(db, actor.id, customers);
   } catch (e) {
-    return wisphubFailure(c, e);
+    return wisphubFailure(c, e, "panel");
   }
 
   const PAGE = 50;
@@ -1145,7 +1155,7 @@ export async function linksRoster(c: Ctx) {
   try {
     roster = await rosterForDisplay(actor.id, wisphubFor(integration, c.env), now);
   } catch (e) {
-    return wisphubFailure(c, e);
+    return wisphubFailure(c, e, "panel");
   }
   const customers = roster.customers.filter((customer) => customer.usuario !== "");
   /* D5: the usuario keeps its token, the recycled numeric id only

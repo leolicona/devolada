@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { paymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import { fail, handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
+import { FOCUS_FLOOR_MS, resetPresenceForTests } from "../src/lib/presence";
 
 /* docs/legacy/reconciliation/cobros-live.spec.md — the section (US-R01):
    grouped by customer, local search and filters, freshness, and the
@@ -110,14 +111,92 @@ describe("US-R01: who owes what, grouped by customer, oldest debt first", () => 
     expect(screen.queryByText(/nadie te debe hoy/i)).not.toBeInTheDocument();
   });
 
-  it("scenario 9: without a WispHub key the section says how to connect", async () => {
+  it("scenario 9: without a WispHub key the section says how to connect, and the door is Integraciones", async () => {
     arrange(() => fail("NOT_CONFIGURED", 409));
     expect(await screen.findByText(/conecta wisphub para ver tus cobros/i)).toBeInTheDocument();
+    /* bug cobros-installation-fallback: the key lives in the hub, not in
+       Configuración, since integrations-hub D1 */
+    expect(screen.getByRole("link", { name: /ir a integraciones/i })).toHaveAttribute(
+      "href",
+      "/integrations/wisphub",
+    );
   });
 
   it("nobody owes → the honest empty state", async () => {
     arrange(() => ok(paymentRequestsResponse.parse({ cobros: [], complete: true, readAt: Date.now() })));
     expect(await screen.findByText(/nadie te debe hoy/i)).toBeInTheDocument();
+  });
+});
+
+/* bug: cobros-installation-fallback — the pilot's key was refused by the
+   installation the platform fell back to, and the screen called it an
+   outage with a Reintentar that re-sent the same key to the same place.
+   A refused key is setup, not weather: it gets the Integraciones door,
+   and the address is named before the credential (provider-address-per-isp
+   D7), because the key was fine. */
+describe("bug cobros-installation-fallback: a refused key is a setup problem, not an outage", () => {
+  function setVisibility(state: "visible" | "hidden") {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  }
+  beforeEach(() => {
+    setVisibility("visible");
+    resetPresenceForTests();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    setVisibility("visible");
+  });
+
+  it("WISPHUB_AUTH_FAILED → the Integraciones door, the installation named first, and no Reintentar", async () => {
+    arrange(() => fail("WISPHUB_AUTH_FAILED", 503));
+    const sentence = await screen.findByText(/wisphub rechazó la conexión/i);
+    /* A warning, announced politely — not the assertive alert an outage is */
+    const notice = sentence.closest('[role="status"]') as HTMLElement;
+    expect(notice).not.toBeNull();
+    expect(notice).toHaveTextContent(/revisa primero la instalación y luego la llave/i);
+    expect(within(notice).getByRole("link", { name: /ir a integraciones/i })).toHaveAttribute(
+      "href",
+      "/integrations/wisphub",
+    );
+    /* Neither the outage recipe nor an empty claim (US-P01) */
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos cargar/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nadie te debe hoy/i)).not.toBeInTheDocument();
+  });
+
+  it("a background read that starts being refused replaces the rows with the door, not the 'sin conexión' note", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reads = 0;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.paymentRequests(() => {
+        reads++;
+        return reads === 1 ? ok(cobros()) : fail("WISPHUB_AUTH_FAILED", 503);
+      }),
+      pulse(),
+    );
+    renderApp("/payment-requests");
+    expect(await screen.findByRole("button", { name: /janely/i })).toBeInTheDocument();
+
+    /* presence-freshness D3: the return to the tab past the floor re-reads */
+    vi.advanceTimersByTime(FOCUS_FLOOR_MS + 1_000);
+    setVisibility("hidden");
+    setVisibility("visible");
+
+    expect(await screen.findByText(/wisphub rechazó la conexión/i)).toBeInTheDocument();
+    expect(reads).toBe(2);
+    expect(screen.queryByRole("button", { name: /janely/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/sin conexión a wisphub/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+  });
+
+  it("WISPHUB_UNAVAILABLE keeps the outage recipe: Reintentar, no door", async () => {
+    arrange(() => fail("WISPHUB_UNAVAILABLE", 503));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no pudimos cargar tus cobros en wisphub/i);
+    expect(screen.getByRole("button", { name: /reintentar/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /ir a integraciones/i })).not.toBeInTheDocument();
   });
 });
 /* pilot-UX round: the debtor's link lives one expansion away. */

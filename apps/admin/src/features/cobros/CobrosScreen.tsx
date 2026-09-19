@@ -237,24 +237,63 @@ export function CobrosScreen() {
   const shown = visible.slice(0, pages * PAGE);
 
   /* D9: without an integration there are no Cobros — the section says
-     how to connect. (Integraciones is phase 5; the key lives in
-     Configuración today.) */
-  if (query.error?.code === "NOT_CONFIGURED") {
+     how to connect, and the door is Integraciones, where the key and the
+     installation live (integrations-hub D1; this once pointed at
+     Configuración, from before the hub existed).
+
+     bug cobros-installation-fallback: a key WispHub refused is the same
+     kind of problem — setup, not weather — and gets the same door, not a
+     Reintentar. A retry re-sends the same key to the same installation;
+     what fixes it is a change in Integraciones. The sentence checks the
+     installation before the key (provider-address-per-isp D7) because
+     the case that produced the bug was a good key sent to the wrong
+     installation. Checked before the rows on purpose: a background read
+     that starts being refused replaces the list, not the "sin conexión"
+     note below, which promises a last reading that is still being
+     refreshed — a refused key makes that untrue. */
+  const setup =
+    query.error?.code === "NOT_CONFIGURED"
+      ? "not-connected"
+      : query.error?.code === "WISPHUB_AUTH_FAILED"
+        ? "refused"
+        : null;
+  if (setup) {
     return (
       <main className="px-4 pt-4 lg:px-8 lg:pt-8">
         <h1 className="text-xl font-semibold">Cobros</h1>
-        <Card className="mt-4 p-6">
-          <p className="text-sm">Conecta WispHub para ver tus cobros.</p>
-          <Link to="/settings/direct-payment" className="mt-3 block">
-            <Button size="compact" variant="secondary">Ir a Configuración</Button>
-          </Link>
-        </Card>
+        {setup === "not-connected" ? (
+          <Card className="mt-4 p-6">
+            <p className="text-sm">Conecta WispHub para ver tus cobros.</p>
+            <Link to="/integrations/wisphub" className="mt-3 block">
+              <Button size="compact" variant="secondary">Ir a Integraciones</Button>
+            </Link>
+          </Card>
+        ) : (
+          /* The shell's own recipe for a setup problem with a way out
+             (Shell.tsx, the CLABE and integration banners) */
+          <Alert
+            variant="warning"
+            className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+          >
+            <span className="flex items-start gap-2">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                WispHub rechazó la conexión. Una llave solo sirve en la instalación donde la
+                generaste: revisa primero la instalación y luego la llave en Integraciones.
+              </span>
+            </span>
+            <Link to="/integrations/wisphub" className="block">
+              <Button size="compact" variant="secondary">Ir a Integraciones</Button>
+            </Link>
+          </Alert>
+        )}
       </main>
     );
   }
 
   /* presence-freshness D9: a background failure with rows on screen is
-     a quiet note, never the error block */
+     a quiet note, never the error block. A refused key never reaches
+     here — it returned above as a setup state. */
   const staleAfterFailure = !!query.error && !!query.data;
 
   return (

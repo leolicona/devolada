@@ -46,10 +46,13 @@ export async function listPaymentRequests(c: Ctx) {
        here (the invoice row carries none): it opens WhatsApp's own
        picker with the message ready, never a stranger's chat. */
     const usuarios = [...new Set(pending.invoices.map((f) => f.usuario))];
-    /* Two parameters are the business id and the source; the rest are
-       usuarios (BUG-021). It was `- 1` until bug: pending-invoice-cap's
-       700-invoice fixture bound 101 and D1 refused — the pilot's Cobros
-       never listed 99 debtors at once. The roster's read had it right. */
+    /* Two fixed parameters — the business id and `source` — and the rest
+       are usuarios (BUG-021). It read "one" until bug
+       cobros-links-lookup-params: `source` joined the WHERE after the
+       chunk was sized, 99 debtors bound 101, and production D1 refused
+       what the local one let through. test/setup.ts now enforces the
+       cap in the suite, so the next such slip fails a test instead of a
+       tenant. */
     const links: { customerUsuario: string; token: string }[] = [];
     for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
       /* automated-collections-api D3: panel links only — an API link has
@@ -95,8 +98,20 @@ export async function listPaymentRequests(c: Ctx) {
     return c.json({ success: true, data });
   } catch (e) {
     if (e instanceof WispHubError) {
-      /* D7: the section says so — error state with Reintentar */
-      return c.json({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } }, 503);
+      /* D7: the section says so. The code travels as the adapter named
+         it (bug cobros-installation-fallback): WISPHUB_UNAVAILABLE is
+         weather and earns a Reintentar; WISPHUB_AUTH_FAILED is a setup
+         problem the screen sends to Integraciones — a retry re-sends the
+         same key to the same installation. Folding the two into one
+         code is what let a good key on the wrong installation
+         (provider-address-per-isp D5, the pilot's row with no choice
+         recorded) read as an outage for a day.
+
+         Logged here because nothing else on this path does: the screen
+         said "no pudimos cargar" and no line said why. The detail is a
+         status or a timeout, never the key (007 FR-013). */
+      console.error("wisphub failure:", e.code, e.message);
+      return c.json({ success: false, error: { code: e.code } }, 503);
     }
     throw e;
   }

@@ -65,8 +65,9 @@ pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangl
    without a tag.
 3. The requests table lists the two rows from US1 newest first, with the
    WhatsApp, the name, the system, which form, the channel, the arrival
-   time and the notice state; send the hero form again with the same number
-   and the "repetida" mark appears on both.
+   time and the notice state, under a one-line count by billing system;
+   send the hero form again with the same number and the "repetida" mark
+   appears on both.
 5. *Exportar CSV* downloads the list; open it and find the same row.
 
 ## US3 — The page travels well

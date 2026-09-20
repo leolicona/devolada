@@ -171,3 +171,29 @@ success criteria; the spec gained one section.
 Two things the spec now depends on that are not code: the two WhatsApp
 message templates (on the canvas's *Flujo* board) and the 60-second
 recording of the customer's side — both in the pre-flight (T050).
+
+### Iteration 5 — 2026-09-20 (post-`/speckit-analyze`, second run)
+
+One CRITICAL (C1, carried: the constitution amendment is the creator's
+act), two MEDIUM and six LOW, all from the reconciliation itself. Still 16
+of 16; no requirement added or lost.
+
+- **G1** — two claims (`reply-sla`, `activation-together`) were on the list
+  but no component task rendered them by id. T020 and T026 now do.
+- **I1** — one claim id with two texts (the proof tile and the benefit
+  card). The tiles are echoes (`data-claim-echo`); the cards render the
+  claims once by id. Contract, data model and research D11 say so.
+- **I2** — FR-004 said the header "MAY" carry the sign-in link while the
+  contract and tests require it. It carries it.
+- **U1** — the "hero row carries nothing but the WhatsApp" invariant is now
+  a `refine` on the schema, not a sentence.
+- **U2** — the footer's links get the 48 px touch height in T028.
+- **I3** — the two forms are named once: `hero` (the first screen) and
+  `full` (the closing form), with *inicio* / *completo* as the operator's
+  labels.
+- **U3** — a per-system count line above the requests table (T038), so
+  SC-003 is read, not counted by hand.
+- **A1** — the workflow's step-2 measure says it is read from the
+  conversations, not the panel.
+
+Requirements 32 → 32, tasks 51 → 51 (six touched), success criteria 11 → 11.

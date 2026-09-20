@@ -142,7 +142,7 @@ is the product's. The canvas carries the two message templates.
 | # | Step | Who | What happens | Measured by |
 | --- | --- | --- | --- | --- |
 | 1 | The page | the page | One promise, one field: the WhatsApp. The closing form adds the name and the billing system. | visits → requests |
-| 2 | The first message | the creator, same business day | Thanks, three questions — customers, system, CLABE — and a 60-second recording of the customer's side. | answered within a business day; fit, by system |
+| 2 | The first message | the creator, same business day | Thanks, three questions — customers, system, CLABE — and a 60-second recording of the customer's side. | answered within a business day; fit, by system (read from the conversations, not the panel) |
 | 3 | The door | the creator | Supported system: the sign-up link and four steps (create the account → confirm the email → the CLABE → connect the system). Own software: the connection guide, together. No system: a waiting list. | accounts created from a conversation |
 | 4 | The first payment, together | the creator and the product | One link to one real customer with the chat open: transfer, verification, reactivation. | first verified payment within 7 days |
 | 5 | The real yes | the product | The welcome allowance runs out; the first top-up is the yes to the price quoted in step 2. | first top-up |
@@ -368,8 +368,8 @@ on the request the creator sees; search the product's name and find the page.
 - **FR-004**: The page MUST offer exactly one action: the reader's WhatsApp
   number and a button, worded the same wherever it appears, present in the
   first screen and again at the end — there with the name and the billing
-  system. The page MUST NOT link to the product's sign-up. The header MAY
-  carry a sign-in link for customers who already have an account, and no
+  system. The page MUST NOT link to the product's sign-up. The header
+  carries a sign-in link for customers who already have an account, and no
   other call to act.
 - **FR-005**: The page MUST state the two brakes in plain words: the money
   goes to the business's own account and never passes through Devolada; the
@@ -500,9 +500,9 @@ on the request the creator sees; search the product's name and find the page.
 
 - **Access request**: what a prospect typed — the WhatsApp number and, when
   the closing form was used, their name and which system runs their billing
-  — plus what the page knew: which of the two forms it came from, the
-  channel tag, when it arrived, and whether the creator's notification went
-  out. Kept whole, never edited, exportable. Owned by the platform.
+  — plus what the page knew: which of the two forms it came from — `hero`
+  (the first screen) or `full` (the closing form) — the channel tag, when it
+  arrived, and whether the creator's notification went out. Kept whole, never edited, exportable. Owned by the platform.
 - **Step count**: how many visits (a visit is a page load — not a person,
   not a device), begun requests and sent requests there were on a day,
   through a channel. Holds no person.

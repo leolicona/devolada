@@ -30,14 +30,16 @@ values — the same arrangement the bank list and the role matrix use.
 Body, as JSON or as `application/x-www-form-urlencoded`:
 
 ```ts
-export const accessRequestBody = z.object({
-  whatsapp: z.string().trim().regex(WHATSAPP_PATTERN),                        // the one required answer (FR-015)
-  name: z.string().trim().min(2).max(FIELD_LIMITS.name).or(z.literal("")).optional(),
-  billingSystem: z.enum(BILLING_SYSTEMS).or(z.literal("")).optional(),
-  form: z.enum(FORMS),                                                        // stamped by each form at build (D23)
-  channel: z.string().regex(CHANNEL_PATTERN).optional(),                     // anything else → "direct" (D4)
-  website: z.string().optional(),                                             // the honeypot: non-empty → REQUEST_REFUSED (D9)
-});
+export const accessRequestBody = z
+  .object({
+    whatsapp: z.string().trim().regex(WHATSAPP_PATTERN),                        // the one required answer (FR-015)
+    name: z.string().trim().min(2).max(FIELD_LIMITS.name).or(z.literal("")).optional(),
+    billingSystem: z.enum(BILLING_SYSTEMS).or(z.literal("")).optional(),
+    form: z.enum(FORMS),                                                        // stamped by each form at build (D23)
+    channel: z.string().regex(CHANNEL_PATTERN).optional(),                     // anything else → "direct" (D4)
+    website: z.string().optional(),                                             // the honeypot: non-empty → REQUEST_REFUSED (D9)
+  })
+  .refine((b) => b.form === "full" || (!b.name && !b.billingSystem), { path: ["form"] }); // the hero form carries nothing but the WhatsApp
 ```
 
 Two answers, chosen by the request's `Content-Type` (D6):

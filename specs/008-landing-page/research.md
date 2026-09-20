@@ -338,7 +338,11 @@ creator's promise); `activation-together` (*lo activamos contigo, hasta tu
 primer pago verificado* — the activation workflow, spec §The workflow the
 page starts). Gone with the page's copy: `own-software-loop` and
 `permanent-link` (the page now says *un link por cliente* inside the steps,
-which `payment_links.mode = "reusable"` still backs).
+which `payment_links.mode = "reusable"` still backs). Each claim is rendered
+once by id; the proof tiles shorten three of them (*Directo a tu CLABE*,
+*Primeros pagos gratis*, *SPEI verificado contra Banxico*) and carry
+`data-claim-echo`, so the browser test finds one text per claim
+(`/speckit-analyze` 2026-09-20, I1).
 
 **Alternatives rejected**:
 

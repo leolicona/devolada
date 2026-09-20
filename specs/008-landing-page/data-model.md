@@ -84,8 +84,10 @@ components and by the tests (D11).
 | `basis` | string, non-empty | what makes it true: a decision (`direct-payment D3`), a requirement (`payments-and-classes FR-…`), a file (`apps/api/src/reconnection/queue.ts`), or a measured date |
 
 Rules: every claim has a non-empty `basis` (unit test); every claim's `text`
-appears on the page (browser test); the list is reviewed by a person before
-each publication (quickstart, *Pre-flight*). The entries follow the canvas
+appears on the page exactly once, under `[data-claim="<id>"]` (browser
+test) — a tile or a headline that shortens a claim carries
+`data-claim-echo` and is not the claim; the list is reviewed by a person
+before each publication (quickstart, *Pre-flight*). The entries follow the canvas
 (v8) and are listed with their bases in research D11 (amended 2026-09-20);
 the pricing model sentence — *Prepago. Por pago verificado. Sin mensualidad
 ni contrato. Los primeros pagos son gratis.* — is one of them, with

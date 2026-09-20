@@ -39,7 +39,8 @@ Workers static assets resolve `/gracias` to `gracias.html` and redirect
 | `[data-outcome]` | the shared `Alert`, rendered at build once per outcome and shown by the script: received / refused / limited / unavailable, icon + words; `aria-live="polite"` |
 | `button[type="submit"]` | the shared `Button` (`size="decisive"`), rendered at build — 64px |
 | `[data-sending]` | the region that breathes while sending: `animate-breath` + `aria-busy="true"` after 200 ms, held ≥ 500 ms (D16) |
-| `[data-claim="<id>"]` | every claim from `claims.ts`, rendered from the list (D11) |
+| `[data-claim="<id>"]` | every claim from `claims.ts`, rendered from the list, **once per id** (D11): `reply-sla` under the hero form, `activation-together` as the closing form's intro, `money-never-touches` in the Benefits card, `pricing-model` in the Pricing card |
+| `[data-claim-echo="<id>"]` | a shortened echo of a claim rendered elsewhere — the proof tiles — never the claim's text; the tests look for the claim's text only under `[data-claim]` |
 | `a[href="/privacidad"]` | beside the send button and in the footer (FR-022) |
 | `a[href^="mailto:"]` | the human contact, visible without taking the action (FR-010) |
 | `html[lang="es-MX"]` | |

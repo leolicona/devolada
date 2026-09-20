@@ -4,9 +4,9 @@
 
 **Created**: 2026-09-19
 
-**Status**: Draft — clarified 2026-09-19 and 2026-09-20 (two design sessions); plan and tasks in step
+**Status**: Implemented 2026-09-20 under [tasks.md](./tasks.md) (PR #221) — clarified 2026-09-19 and 2026-09-20 (two design sessions and a footer pass); the pre-flight items only a person can do are listed in [quickstart.md](./quickstart.md)
 
-**Design**: [canvas v12](https://claude.ai/artifact/WSMGzw9TsBvYj3RUyad6Sk) — teléfono, escritorio, páginas de salida, estados y el flujo de activación (2026-09-20, second session)
+**Design**: [canvas v13](https://claude.ai/artifact/WSMGzw9TsBvYj3RUyad6Sk) — teléfono, escritorio, páginas de salida, estados y el flujo de activación (2026-09-20, second session; v13 trims the footers)
 
 **Input**: User description: "lest create A single page Landing Page to validate devoladapago business and attract your first customers. Same tech stack, astro as FE framework."
 
@@ -166,6 +166,17 @@ named that as the next feature and this spec leaves it there (*Deferred*).
   button is the form's one accent, the label is the field label, a hairline
   separates the customer's line; and the phone and desktop boards were
   resized to their content (both had been clipping the footer).
+
+### Session 2026-09-20 (footer pass, canvas v13)
+
+- **Q: Does the footer carry the contact address?** **A: No.** The creator
+  removed *hola@devoladapago.com* and *Hecho en México* from both footers;
+  they now carry the mark and *Aviso de privacidad* alone. The page's one
+  way to reach a person is the WhatsApp form (FR-004). The address stays
+  where the form cannot send — every refusal outcome and the `/no-enviada`
+  page — and in the privacy notice, where the law needs it (FR-010,
+  FR-019, FR-021, FR-022; research D26). It still equals the platform's
+  `support_email`.
 
 ## The workflow the page starts
 
@@ -431,9 +442,12 @@ on the request the creator sees; search the product's name and find the page.
   say that the figures come with the answer to a request — the figures
   themselves stay off the page (FR-014). That description MUST be how the
   product charges; it is a claim under FR-013.
-- **FR-010**: The page MUST show a way to reach a person — an address at the
-  product's own domain, answered by the creator — visible without taking
-  the action.
+- **FR-010**: The page MUST show a way to reach a person when the form
+  cannot send — an address at the product's own domain, answered by the
+  creator and equal to the platform's support address — in every refusal
+  outcome, on the not-sent page and in the privacy notice. The footer
+  carries no address: the page's one way to reach a person is the
+  WhatsApp form (clarified 2026-09-20, canvas v13).
 - **FR-011**: The page MUST tell a customer who arrived looking for where to
   pay that this page is for businesses and their payment is made from the
   link they were sent. The page MUST NOT show a CLABE, take a payment, or
@@ -623,7 +637,8 @@ on the request the creator sees; search the product's name and find the page.
   change the message before changing the product. The creator may set
   another number; it is a reading aid, not a requirement.
 - The WhatsApp is the channel: the reader gives theirs; the creator's own
-  number is not published. The human contact by email stays in the footer.
+  number is not published. The human contact by email appears where the
+  form fails and in the privacy notice, not in the footer (canvas v13).
 - The creator can keep what the page promises — a WhatsApp reply within one
   business day, and activation together up to the first verified payment
   (workflow steps 2–4) — and the 60-second recording of the customer's side

@@ -1,6 +1,6 @@
 # Contract: the page and the Worker in front of it
 
-**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (D22, D23: one action, two forms, dark by default)
+**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (D22, D23: one action, two forms, dark by default; D26: the address leaves the footer) — as built, see `apps/landing`
 
 What the browser layer, the Worker test and the API's redirect rely on. A
 change to any name here is a change to a test. Every atom named below is the
@@ -41,8 +41,8 @@ Workers static assets resolve `/gracias` to `gracias.html` and redirect
 | `[data-sending]` | the region that breathes while sending: `animate-breath` + `aria-busy="true"` after 200 ms, held ≥ 500 ms (D16) |
 | `[data-claim="<id>"]` | every claim from `claims.ts`, rendered from the list, **once per id** (D11): `reply-sla` under the hero form, `activation-together` as the closing form's intro, `money-never-touches` in the Benefits card, `pricing-model` in the Pricing card |
 | `[data-claim-echo="<id>"]` | a shortened echo of a claim rendered elsewhere — the proof tiles — never the claim's text; the tests look for the claim's text only under `[data-claim]` |
-| `a[href="/privacidad"]` | beside the send button and in the footer (FR-022) |
-| `a[href^="mailto:"]` | the human contact, visible without taking the action (FR-010) |
+| `a[href="/privacidad"]` | under each form's send button and in the footer (FR-022) |
+| `a[href^="mailto:"]` | the contact address, inside the refusal outcomes under `[data-outcome]`, on `/no-enviada` and in the privacy notice — never in the footer (FR-010, canvas v13) |
 | `html[lang="es-MX"]` | |
 
 The three payer-page strings appear verbatim in the "how it works" section:
@@ -65,11 +65,14 @@ The three payer-page strings appear verbatim in the "how it works" section:
 3. On submit of either form: `preventDefault`; check `form.checkValidity()`; for each
    invalid field render its es-MX message from `ValidityState`; else POST
    JSON, apply the sending state (D16), and render the outcome from the
-   envelope's `code` — `VALIDATION_ERROR` → "Revisa tus respuestas" (the
+   envelope's `code` — `VALIDATION_ERROR` → "Revisa tu WhatsApp" (the
    route carries only a code; the page's own checks named the field first),
    `REQUEST_REFUSED` and `TOO_MANY_REQUESTS` → their copy plus the contact
-   address — or "No pudimos enviar tu solicitud" with the contact address
-   when the fetch itself fails (FR-021).
+   address — or "No pudimos enviar tu WhatsApp" with the contact address
+   when the fetch itself fails (FR-021). Every sentence is rendered at
+   build under `[data-outcome-for="<code>"]`, hidden; the script only
+   reveals one. Received hides `[data-fields]` (FR-016: nothing further is
+   asked); a refusal keeps them.
 4. Nothing else. No tag handling (the Worker did it), no theme switch (D15).
 
 Events are `fetch(`${API}/landing/events`, { method: "POST", mode: "no-cors",

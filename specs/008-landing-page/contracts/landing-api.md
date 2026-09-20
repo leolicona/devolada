@@ -1,6 +1,6 @@
 # Contract: the landing's doors into the API
 
-**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (D22, D23: three fields, no sign-up)
+**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (D22, D23: three fields, no sign-up) — as built in `apps/api/src/routes/landing/schema.ts`
 
 The zod schema is the contract (constitution III). Everything below lands in
 `apps/api/src/routes/landing/schema.ts`, exported as
@@ -16,7 +16,7 @@ constants), by the admin (types), by MSW handlers and by Playwright stubs
 export const BILLING_SYSTEMS = ["wisphub", "own_software", "other", "none"] as const;
 export const FORMS = ["hero", "full"] as const;               // which of the two forms sent it (D23)
 export const FIELD_LIMITS = { name: 80 } as const;
-export const WHATSAPP_PATTERN = /^\+?[0-9 ()-]{10,20}$/;
+export const WHATSAPP_PATTERN = /^\+?[0-9 \(\)\-]{10,20}$/;  // escaped: the page stamps `source` into `pattern`, which browsers compile with the `v` flag (D7)
 export const CHANNEL_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 ```
 
@@ -36,7 +36,7 @@ export const accessRequestBody = z
     name: z.string().trim().min(2).max(FIELD_LIMITS.name).or(z.literal("")).optional(),
     billingSystem: z.enum(BILLING_SYSTEMS).or(z.literal("")).optional(),
     form: z.enum(FORMS),                                                        // stamped by each form at build (D23)
-    channel: z.string().regex(CHANNEL_PATTERN).optional(),                     // anything else → "direct" (D4)
+    channel: z.string().max(200).optional(),                                    // the handler keeps a CHANNEL_PATTERN match and writes "direct" otherwise (D4) — a bad tag never refuses a person
     website: z.string().optional(),                                             // the honeypot: non-empty → REQUEST_REFUSED (D9)
   })
   .refine((b) => b.form === "full" || (!b.name && !b.billingSystem), { path: ["form"] }); // the hero form carries nothing but the WhatsApp
@@ -47,7 +47,7 @@ Two answers, chosen by the request's `Content-Type` (D6):
 | Request | Received | Refused |
 | --- | --- | --- |
 | `application/json` | `200 { success: true, data: { id, receivedAt } }` | `400 { success: false, error: { code: "VALIDATION_ERROR" \| "REQUEST_REFUSED" } }` · `429 { …, code: "TOO_MANY_REQUESTS" }` |
-| form-urlencoded | `303` → `${LANDING_BASE_URL}/gracias` | `303` → `${LANDING_BASE_URL}/no-enviada?motivo=<code>` |
+| form-urlencoded | `303` → `${LANDING_BASE_URL}/gracias` | `303` → `${LANDING_BASE_URL}/no-enviada?motivo=<code>` for all three codes — the limiter takes a `refuse` callback so its 429 lands on the page too (D6, D9) |
 
 `LANDING_BASE_URL` unset → the form-urlencoded request is answered exactly
 as the JSON one (VIII). No `message`, no `retryable`: this is a
@@ -86,6 +86,13 @@ malformed event answers the envelope with `VALIDATION_ERROR` /
 Behind `requireSession + requirePlatformOperator`, mounted by `platformRoute`.
 
 ```ts
+export const accessRequestListQuery = z.object({
+  cursor: z.string().optional(),                                  // opaque: base64 of `${createdAt}|${id}`
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+});
+```
+
+```ts
 export const accessRequestRow = z.object({
   id: z.string(),
   whatsapp: z.string(),
@@ -108,7 +115,12 @@ export const accessRequestList = z.object({
 
 ## `GET /platform/landing/counts?from=YYYY-MM-DD&to=YYYY-MM-DD` — operator only
 
-Default: the last 30 days in `America/Mexico_City`, inclusive.
+Default: the last 30 days in `America/Mexico_City`, inclusive. `from > to`
+or a malformed day answers `VALIDATION_ERROR`.
+
+```ts
+export const landingCountsQuery = z.object({ from: isoDay.optional(), to: isoDay.optional() });  // isoDay = /^\d{4}-\d{2}-\d{2}$/
+```
 
 ```ts
 export const landingCountRow = z.object({

@@ -1,6 +1,6 @@
 # Implementation Plan: Landing Page
 
-**Branch**: `008-landing-page` | **Date**: 2026-09-19, amended 2026-09-20 (design session: research D22, D23) | **Spec**: [spec.md](./spec.md)
+**Branch**: `008-landing-page` | **Date**: 2026-09-19, amended 2026-09-20 (design session: research D22, D23; built the same day — research *Implementation notes*) | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/008-landing-page/spec.md`
 
@@ -36,8 +36,9 @@ list with a basis, reviewed before publication (D11).
 `react` / `react-dom` 19 **at build time only** (the shared atoms rendered to
 HTML, never hydrated, D2), `@astrojs/check`, `@tailwindcss/vite@^4.3` +
 `tailwindcss@^4.3`, `@devolada/ui` (stylesheet, tokens, the atoms,
-`buttonVariants`, `@devolada/ui/motion`), `@devolada/api`
-(`./landing-schema` at build). **API** — Hono 4, `@hono/zod-validator`, zod
+`buttonVariants`, `inputClassName`, `@devolada/ui/motion`), `@devolada/api`
+(`./landing-schema` at build), `lucide-react` (the product's icon set,
+rendered at build like the atoms). **API** — Hono 4, `@hono/zod-validator`, zod
 3, Drizzle: one new area. **Admin** — one new tab on the existing stack. No
 new dependency in the API, the admin or `packages/ui` (D13).
 
@@ -146,8 +147,11 @@ apps/landing/                                   # NEW — the page and its Worke
 │   ├── styles/global.css                       # @import "@devolada/ui/styles.css";
 │   ├── content/claims.ts                       # the reviewed claims list: { id, text, basis } (D11)
 │   ├── content/legal.ts                        # the responsible party's name and address for the notice (D20)
-│   ├── layouts/Base.astro                      # <html lang="es-MX" data-theme="dark">, title, description, canonical, Open Graph, theme colour
+│   ├── lib/urls.ts · lib/labels.ts             # API_URL / LOGIN_URL (D14); the es-MX labels for the contract's values and the HTML `pattern` helper (D7)
+│   ├── layouts/Base.astro                      # <html lang="es-MX" data-theme="dark">, title, description, canonical, Open Graph, theme colour; the visit beacon
 │   ├── components/                             # every component renders @devolada/ui atoms at build — Field, Input, Alert, Button, StatusBadge — with no client:* directive; the sign-in link takes buttonVariants() (D2)
+│   │   ├── atoms.tsx                           # Field+Input, Field+native select (inputClassName), Alert+icon composed in one React tree — Astro hands children as static HTML (implementation notes)
+│   │   ├── Mark.astro                          # the product's mark (D21)
 │   │   ├── Header.astro                        # the mark and the sign-in link for existing customers (FR-004)
 │   │   ├── Hero.astro                          # FR-003 first screen: eyebrow naming SPEI, headline, subhead, the hero form · FR-011 the customer's line
 │   │   ├── Proof.astro                         # the three tiles: SPEI verificado contra Banxico · directo a tu CLABE · primeros pagos gratis
@@ -158,7 +162,7 @@ apps/landing/                                   # NEW — the page and its Worke
 │   │   ├── Doubts.astro                        # FR-008 the three questions
 │   │   ├── Pricing.astro                       # FR-009 the model, no figure
 │   │   ├── RequestForm.astro                   # FR-015..FR-021 — both forms (hero: one field; full: three), constraints stamped from the schema (D7), hidden channel + form + honeypot, the script
-│   │   └── Footer.astro                        # FR-010 contact · FR-022 privacy link
+│   │   └── Footer.astro                        # the mark and the FR-022 privacy link; no address (D26)
 │   └── pages/
 │       ├── index.astro
 │       ├── gracias.astro                       # received (D6)
@@ -172,7 +176,7 @@ apps/landing/                                   # NEW — the page and its Worke
     └── content.test.ts                         # landing-page US1 — every claim has a basis; the legal identity is no placeholder (D11, D20)
 
 apps/api/
-├── migrations/00NN_landing_page.sql            # access_requests + landing_counts (additive)
+├── migrations/0034_landing_page.sql            # access_requests + landing_counts (additive; 0033 was taken by #220 on main)
 ├── src/db/schema.ts                            # + accessRequests, landingCounts, with their D-citations
 ├── src/env.ts                                  # + LANDING_BASE_URL (unset → envelope instead of redirect, D6)
 ├── src/email/sender.ts                         # + sendAccessRequestNotice (D10)
@@ -194,6 +198,7 @@ apps/admin/
 packages/ui/
 ├── src/lib/motion.ts                           # NEW — FLASH_THRESHOLD_MS, MINIMUM_VISIBLE_MS (moved from pending.tsx, D16)
 ├── src/components/pending.tsx                  # imports them
+├── src/components/input.tsx                    # + inputClassName(): the field's recipe as a class string, for the landing's native <select> (D2, constitution VI v1.5.0)
 └── package.json                                # + "./motion"
 
 playwright.config.ts                            # + LANDING on 4176 (build, then astro preview)
@@ -238,9 +243,9 @@ dependency of the landing and never reaches the browser (D2).
 - **Migration number**: `.specify/bugs/links-roster-cap` carries a migration
   numbered 0033 on its own branch. This feature takes the next number on
   `main` at implementation time; drizzle-kit assigns it.
-- **The constitution amendment (D19)** lands in the same release, by the
-  creator through `/speckit-constitution`; `/speckit-analyze` will read the
-  stack table as CRITICAL until it does.
+- **The constitution amendment (D19)** landed on 2026-09-20 as v1.5.0
+  (`dcc8467`), by the creator through `/speckit-constitution`, ahead of the
+  code as v1.1.0 and v1.3.0 did.
 - **Not touched, on purpose**: the product's sign-up and sign-in (the page
   only links to sign-in), the cron (no notification retry, D10),
   `tokens.css` (no new value — contrast-lint stays green by construction).

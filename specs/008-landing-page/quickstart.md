@@ -42,8 +42,8 @@ pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangl
    "Tu pago fue registrado", then the system's "Reconectado"), the four
    benefits, both sides of a payment in the payer page's words,
    the system panel naming no vendor, the three doubts, the pricing model
-   with **no figure**, the closing form, the human contact, the privacy
-   link. No link to sign-up anywhere.
+   with **no figure**, the closing form, the privacy link. No link to
+   sign-up anywhere, and no address in the footer (D26).
 3. Type a WhatsApp into the hero form and send. Expect: the sending region
    breathes (throttle the network to see it), then the received outcome
    with "un día hábil". In the API's log: the notice, logged because no
@@ -53,7 +53,7 @@ pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangl
    `notify_error = NO_RESEND_KEY`.
 5. Send with the WhatsApp empty or malformed → the message appears next to
    the field, everything else typed stays.
-6. Stop the API; send again → "No pudimos enviar tu solicitud" with the
+6. Stop the API; send again → "No pudimos enviar tu WhatsApp" with the
    contact address; the page itself still reads in full.
 7. Disable JavaScript in DevTools; send once more → the browser posts the
    form; with `LANDING_BASE_URL` set you land on `/gracias`.
@@ -93,7 +93,7 @@ node scripts/spec-lint.mjs && node scripts/gen-banks.mjs --check && node scripts
 pnpm -r --if-present typecheck                 # includes `astro check` and the Worker's tsc
 pnpm -r --if-present test                      # API (landing.test.ts), admin (operator-landing), landing (worker, content)
 pnpm -r --if-present build
-pnpm e2e -- landing                            # tests/e2e/landing.spec.ts on astro preview (4176)
+pnpm exec playwright test tests/e2e/landing.spec.ts   # the landing alone, on astro preview (4176); `pnpm e2e` runs every spec
 ```
 
 What `landing.spec.ts` proves that nothing else can: the dark palette with axe
@@ -112,9 +112,10 @@ Things a build cannot decide, checked once and recorded in the PR:
 - [ ] **The privacy notice names a legal person** (D20): `{{RESPONSABLE}}`
       and `{{DOMICILIO}}` in `apps/landing/src/content/legal.ts` replaced —
       `content.test.ts` fails until they are.
-- [ ] **The contact address answers**: the `mailto:` on the page reaches the
-      creator; send one — and it equals the platform's `support_email`
-      (`curl $DEV_API_URL/support`).
+- [ ] **The contact address answers**: `CONTACT_EMAIL` in
+      `apps/landing/src/content/legal.ts` — shown where the form fails and
+      in the privacy notice (D26) — reaches the creator; send one — and it
+      equals the platform's `support_email` (`curl $DEV_API_URL/support`).
 - [ ] **The two message templates and the 60-second recording** of the
       customer's side exist — the templates are on the canvas's *Flujo*
       board; the recording is what message 1 sends (spec §The workflow the
@@ -129,13 +130,13 @@ Things a build cannot decide, checked once and recorded in the PR:
       by the browser layer.
 - [ ] **Repository variables**: `DEV_LANDING_URL=https://dev.devoladapago.com`,
       `PROD_LANDING_URL=https://devoladapago.com`; the smoke probes read them.
-- [ ] **`ALLOWED_ORIGINS`** in `apps/api/wrangler.jsonc` carries the landing
+- [x] **`ALLOWED_ORIGINS`** in `apps/api/wrangler.jsonc` carries the landing
       origins for `dev` and `prod` and the preview suffix (D14) — without
-      them the page's script cannot read the API's answer.
-- [ ] **`LANDING_BASE_URL`** set per environment in the same file (D6).
-- [ ] **The constitution amendment** (D19) drafted with
-      `/speckit-constitution` — the stack row and the one-word change to VI.
-- [ ] **CLAUDE.md** names the fourth Worker, its port and its command.
+      them the page's script cannot read the API's answer (T011).
+- [x] **`LANDING_BASE_URL`** set per environment in the same file (D6; T011).
+- [x] **The constitution amendment** (D19) — v1.5.0, 2026-09-20: the stack
+      row, the Tests row's note and the count in Principle VI.
+- [x] **CLAUDE.md** names the fourth Worker, its port and its command.
 
 ## First deploy
 

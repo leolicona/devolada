@@ -2,10 +2,12 @@
 
 **Feature**: 008-landing-page · **Date**: 2026-09-19
 
-Twenty-three decisions. Each names what was chosen, why, and what was rejected.
+Twenty-six decisions. Each names what was chosen, why, and what was rejected.
 D22 and D23 come from the design session of 2026-09-20 (spec Clarifications,
 same date) and amend D4, D7, D8, D11, D15, D17 and D20 in place; each amended
-decision says so.
+decision says so. D24 and D25 come from the second session that day, D26
+from the footer pass; the implementation notes at the end record what the
+build settled.
 Where a fact was measured — a registry version, a documentation page, a DNS
 answer — the date is the day it was read: 2026-09-19.
 
@@ -719,6 +721,65 @@ height; the boards are the design's frames.
   already sit on the page; this one carries screens, which is what makes it
   a scene rather than a list.
 - *Keeping the tinted panel with a lighter tint.* Still two accents.
+
+---
+
+## D26 — The contact address lives where the form fails, not in the footer
+
+**Decision** (footer pass, 2026-09-20, canvas v13): the footers carry the
+mark and *Aviso de privacidad* alone; *hola@devoladapago.com* and *Hecho en
+México* left them at the creator's word. The address stays in every
+refusal outcome the form can show, on `/no-enviada`, and in the privacy
+notice as the channel for access, correction, cancellation and opposition.
+FR-010 was reworded to say so.
+
+**Rationale**: the page asks for one thing (D22); an email in the footer is
+a second door standing open next to it, and a reader who is going to write
+does so when the form did not work — which is exactly where the address now
+is. The notice needs the address by law (D20), and it still equals the
+platform's `support_email`, so there is one address to keep true.
+
+**Alternatives rejected**:
+
+- *Keeping the footer address.* Two ways to ask on a page built to count
+  one.
+- *Removing the address everywhere.* Leaves a reader whose send failed with
+  no way out, and the notice without a channel for their rights.
+
+---
+
+## Implementation notes (2026-09-20)
+
+Three things the build settled that the decisions above did not name:
+
+- **D2, the recipe as a class string.** The closing form's billing-system
+  question is a native `<select>` — the package has no atom for it and a
+  hydrated picker would ship React. `packages/ui` now exports
+  `inputClassName(size, lead)` from `input.tsx`, the field's own classes,
+  and `Input` is built from it; the select wears them
+  (`apps/landing/src/components/atoms.tsx`). Same for the two composites
+  there: Astro hands a framework component its children as static HTML, so
+  `Field` + `Input` and `Alert` + its icon are composed in one React tree,
+  rendered at build, never hydrated.
+- **D11, where `spei-verified` renders.** Its text is the hero subhead —
+  the page's one sentence about verification against Banxico — so `Hero`
+  renders it with `data-claim` and the proof tile echoes it; `System`
+  renders `system-stays-record` alone.
+- **D13, the pool's shape.** `@cloudflare/vitest-pool-workers@0.22` on
+  Vitest 4 is a Vite plugin (`cloudflareTest(...)` from the package root),
+  not a `poolOptions` block, and types `env` as the global
+  `Cloudflare.Env`; `apps/landing/vitest.config.ts` and `test/env.d.ts`
+  follow that shape. `lucide-react` joined the landing's dependencies for
+  the icons the tiles and outcomes carry, rendered at build like the atoms.
+- **D12, no inline script.** Astro inlines a hoisted script below Vite's
+  `assetsInlineLimit` — measured 2026-09-20: `/no-enviada`'s few lines came
+  out as an inline `<script type="module">`, which `script-src 'self'`
+  would block. `astro.config.ts` sets the limit to zero and
+  `landing.spec.ts` asserts no page carries an inline script or style.
+- **D18, owning the preview.** Astro 7 detaches `astro preview` into a
+  background process when it detects an AI agent's terminal (measured
+  2026-09-20); `playwright.config.ts` passes `--ignore-lock`, which keeps
+  it in the foreground where the webServer block owns it. Harmless in CI.
 
 ---
 

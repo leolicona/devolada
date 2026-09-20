@@ -1,6 +1,6 @@
 # Data Model: Landing Page
 
-**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (design session: D22, D23)
+**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (design session: D22, D23) — as built in migration `0034_landing_page.sql` (0033 went to #220 first, as plan.md foresaw)
 
 Two new tables, both owned by the platform (no `business_id`, like
 `platform_settings`); one typed list compiled into the page; one rule for the
@@ -23,7 +23,7 @@ Append-only: a row is never edited after the notice outcome is written.
 | `channel` | text, not null, default `direct` | the tag as typed (rule below) |
 | `created_at` | integer ms, not null | the workspace's `createdAt()` helper |
 | `notified_at` | integer ms, null | set when the operator notice was accepted by the provider (D10) |
-| `notify_error` | text, null | why the notice did not go: `NO_RESEND_KEY`, `NO_OPERATOR_EMAILS`, or `RESEND_<status>`; shown on the operator list (FR-018) |
+| `notify_error` | text, null | why the notice did not go: `NO_RESEND_KEY`, `NO_OPERATOR_EMAILS`, `RESEND_<status>` or `RESEND_UNREACHABLE` (the provider could not be reached at all); shown on the operator list (FR-018) |
 
 Indexes: `access_requests_created_idx (created_at)` — the list reads newest
 first with a cursor on `(created_at, id)`.

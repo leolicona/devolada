@@ -1,6 +1,6 @@
 # Contract: the landing's doors into the API
 
-**Feature**: 008-landing-page · **Date**: 2026-09-19
+**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (D22, D23: three fields, no sign-up)
 
 The zod schema is the contract (constitution III). Everything below lands in
 `apps/api/src/routes/landing/schema.ts`, exported as
@@ -13,10 +13,10 @@ constants), by the admin (types), by MSW handlers and by Playwright stubs
 ## The constants the page stamps into its form (D7)
 
 ```ts
-export const CUSTOMER_BANDS = ["under_100", "100_500", "500_2000", "over_2000"] as const;
 export const BILLING_SYSTEMS = ["wisphub", "own_software", "other", "none"] as const;
-export const FIELD_LIMITS = { name: 80, businessName: 120, email: 120, note: 500 } as const;
-export const PHONE_PATTERN = /^\+?[0-9 ()-]{10,20}$/;
+export const FORMS = ["hero", "full"] as const;               // which of the two forms sent it (D23)
+export const FIELD_LIMITS = { name: 80 } as const;
+export const WHATSAPP_PATTERN = /^\+?[0-9 ()-]{10,20}$/;
 export const CHANNEL_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 ```
 
@@ -30,19 +30,14 @@ values — the same arrangement the bank list and the role matrix use.
 Body, as JSON or as `application/x-www-form-urlencoded`:
 
 ```ts
-export const accessRequestBody = z
-  .object({
-    name: z.string().trim().min(2).max(FIELD_LIMITS.name),
-    businessName: z.string().trim().min(2).max(FIELD_LIMITS.businessName),
-    phone: z.string().trim().regex(PHONE_PATTERN).or(z.literal("")).optional(),
-    email: z.string().trim().email().max(FIELD_LIMITS.email).or(z.literal("")).optional(),
-    customerBand: z.enum(CUSTOMER_BANDS),
-    billingSystem: z.enum(BILLING_SYSTEMS),
-    note: z.string().trim().max(FIELD_LIMITS.note).optional(),
-    channel: z.string().regex(CHANNEL_PATTERN).optional(),   // anything else → "direct" (D4)
-    website: z.string().optional(),                          // the honeypot: non-empty → REQUEST_REFUSED (D9)
-  })
-  .refine((b) => Boolean(b.phone || b.email), { path: ["phone"] });
+export const accessRequestBody = z.object({
+  whatsapp: z.string().trim().regex(WHATSAPP_PATTERN),                        // the one required answer (FR-015)
+  name: z.string().trim().min(2).max(FIELD_LIMITS.name).or(z.literal("")).optional(),
+  billingSystem: z.enum(BILLING_SYSTEMS).or(z.literal("")).optional(),
+  form: z.enum(FORMS),                                                        // stamped by each form at build (D23)
+  channel: z.string().regex(CHANNEL_PATTERN).optional(),                     // anything else → "direct" (D4)
+  website: z.string().optional(),                                             // the honeypot: non-empty → REQUEST_REFUSED (D9)
+});
 ```
 
 Two answers, chosen by the request's `Content-Type` (D6):
@@ -73,7 +68,7 @@ so no preflight and no dependency on `ALLOWED_ORIGINS`):
 
 ```ts
 export const landingEventBody = z.object({
-  step: z.enum(["visit", "began", "signup"]),   // `sent` is never accepted from the page
+  step: z.enum(["visit", "began"]),   // `sent` is never accepted from the page
   channel: z.string().regex(CHANNEL_PATTERN).optional(),
 });
 ```
@@ -91,13 +86,11 @@ Behind `requireSession + requirePlatformOperator`, mounted by `platformRoute`.
 ```ts
 export const accessRequestRow = z.object({
   id: z.string(),
-  name: z.string(),
-  businessName: z.string(),
-  phone: z.string().nullable(),
-  email: z.string().nullable(),
-  customerBand: z.enum(CUSTOMER_BANDS),
-  billingSystem: z.enum(BILLING_SYSTEMS),
-  note: z.string().nullable(),
+  whatsapp: z.string(),
+  name: z.string().nullable(),
+  billingSystem: z.enum(BILLING_SYSTEMS).nullable(),
+  form: z.enum(FORMS),
+  repeated: z.boolean(),                    // another row carries the same WhatsApp (the "repetida" mark)
   channel: z.string(),
   createdAt: z.number(),
   notifiedAt: z.number().nullable(),
@@ -119,7 +112,7 @@ Default: the last 30 days in `America/Mexico_City`, inclusive.
 export const landingCountRow = z.object({
   day: z.string(),                          // YYYY-MM-DD
   channel: z.string(),
-  step: z.enum(["visit", "began", "sent", "signup"]),
+  step: z.enum(["visit", "began", "sent"]),
   count: z.number().int(),
 });
 export const landingCounts = z.object({ from: z.string(), to: z.string(), rows: z.array(landingCountRow) });
@@ -144,6 +137,6 @@ The admin computes the shares; the API returns rows.
 
 `POST https://api.resend.com/emails` from `sendAccessRequestNotice`:
 `from: EMAIL_FROM`, `to: PLATFORM_OPERATOR_EMAILS` (split on commas),
-subject `Nueva solicitud de acceso — <businessName>`, body with every field
-as typed and the channel. Tests intercept the origin with `fetchMock`,
+subject `Nuevo WhatsApp — <whatsapp>`, body with every field as typed, the
+form and the channel. Tests intercept the origin with `fetchMock`,
 exactly as `prepaid-credit.test.ts` does.

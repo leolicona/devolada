@@ -33,20 +33,25 @@ pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangl
 ## US1 — A business owner understands Devolada and asks for it
 
 1. Open `http://localhost:5176/?ch=prueba` at 360 px wide (DevTools device
-   toolbar). The first screen shows the promise, whom it is for and the main
-   action without zooming; nothing scrolls sideways.
-2. Read down: both readers (the ISP by name, the other business through its
-   own software), the two brakes, both sides of a payment in the payer
-   page's words, the doubts, the pricing model with **no figure**, the human
-   contact, the privacy link.
-3. Fill the form with a name, a business, one contact, a band and a system;
-   send. Expect: the sending region breathes (throttle the network to see
-   it), then the received outcome with "un día hábil". In the API's log:
-   the notice, logged because no Resend key is set.
-4. `pnpm --filter @devolada/api exec wrangler d1 execute devolada-db --local --command "select name, channel, notify_error from access_requests"`
-   → one row, `channel = prueba`, `notify_error = NO_RESEND_KEY`.
-5. Leave the contact empty and send → the message appears next to the
-   contact field, everything else typed stays.
+   toolbar). The page is dark. The first screen shows the eyebrow naming
+   SPEI, *Cobrar por transferencia, sin la talacha.*, the subhead, and the
+   one-field WhatsApp form with its button inside the viewport; nothing
+   scrolls sideways; the header's only link is *Entrar*.
+2. Read down: the three proof tiles, the customer's screen at its two
+   moments (the "Verificando" breath, the green "Tu pago fue registrado"),
+   the four benefits, both sides of a payment in the payer page's words,
+   the system panel naming no vendor, the three doubts, the pricing model
+   with **no figure**, the closing form, the human contact, the privacy
+   link. No link to sign-up anywhere.
+3. Type a WhatsApp into the hero form and send. Expect: the sending region
+   breathes (throttle the network to see it), then the received outcome
+   with "un día hábil". In the API's log: the notice, logged because no
+   Resend key is set. Then send the closing form with a name and a system.
+4. `pnpm --filter @devolada/api exec wrangler d1 execute devolada-db --local --command "select whatsapp, name, billing_system, form, channel, notify_error from access_requests"`
+   → two rows, `form = hero` and `form = full`, `channel = prueba`,
+   `notify_error = NO_RESEND_KEY`.
+5. Send with the WhatsApp empty or malformed → the message appears next to
+   the field, everything else typed stays.
 6. Stop the API; send again → "No pudimos enviar tu solicitud" with the
    contact address; the page itself still reads in full.
 7. Disable JavaScript in DevTools; send once more → the browser posts the
@@ -58,10 +63,10 @@ pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangl
 2. The counts table shows the `prueba` channel with `visit`, `began`,
    `sent` and their shares of visits; `direct` if you opened the page
    without a tag.
-3. Click the secondary link once → back in the tab, `signup` counts 1 for
-   the channel.
-4. The requests table lists the row from US1 newest first, with every
-   answer, the system, the channel, the arrival time and the notice state.
+3. The requests table lists the two rows from US1 newest first, with the
+   WhatsApp, the name, the system, which form, the channel, the arrival
+   time and the notice state; send the hero form again with the same number
+   and the "repetida" mark appears on both.
 5. *Exportar CSV* downloads the list; open it and find the same row.
 
 ## US3 — The page travels well
@@ -69,9 +74,8 @@ pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangl
 1. With the built page under `wrangler dev` (above, port 8790):
    `curl -I -H 'Host: www.devoladapago.com' 'http://localhost:8790/?ch=x'`
    — `301` to the same path and query without `www.`.
-2. `curl -s 'http://localhost:8790/?ch=Grupo-ISP' | grep -E 'name="channel"|data-signup'`
-   → the hidden input carries `Grupo-ISP` and the sign-up link ends in
-   `?ch=Grupo-ISP`.
+2. `curl -s 'http://localhost:8790/?ch=Grupo-ISP' | grep -c 'name="channel" value="Grupo-ISP"'`
+   → `2`: both forms' hidden inputs carry the tag.
 3. `curl -I http://localhost:8790/` → `Content-Security-Policy` with the
    local `API_ORIGIN`, `X-Content-Type-Options`, `Referrer-Policy`,
    `Permissions-Policy`.
@@ -90,7 +94,7 @@ pnpm -r --if-present build
 pnpm e2e -- landing                            # tests/e2e/landing.spec.ts on astro preview (4176)
 ```
 
-What `landing.spec.ts` proves that nothing else can: both themes with axe
+What `landing.spec.ts` proves that nothing else can: the dark palette with axe
 at 360/768/1280, zero sideways scroll, every target ≥ 48 px and the main
 action 64 px, keyboard order with a visible focus, every claim's text on the
 page, the three payer-page strings, the four form outcomes against a stubbed
@@ -109,6 +113,10 @@ Things a build cannot decide, checked once and recorded in the PR:
 - [ ] **The contact address answers**: the `mailto:` on the page reaches the
       creator; send one — and it equals the platform's `support_email`
       (`curl $DEV_API_URL/support`).
+- [ ] **The two message templates and the 60-second recording** of the
+      customer's side exist — the templates are on the canvas's *Flujo*
+      board; the recording is what message 1 sends (spec §The workflow the
+      page starts).
 - [ ] **The reading test** (SC-001): five people who collect by SPEI and have
       never seen Devolada, at least three from ISPs, each read the page once
       on a phone and say back what it does, for whom and how it is charged.
@@ -142,8 +150,11 @@ beside the other three; *Rollback Prod* offers `landing` as a choice.
 ## Reading the result
 
 Thirty days after the production deploy, open *Operador → Landing*, period
-30 days: requests, requests by billing system, sign-up departures, and each
-step's share of visits — the numbers SC-003 promises, read in one place.
+30 days: requests, requests by billing system and by form, and each step's
+share of visits — the numbers SC-003 promises, read in one place. The rest
+of the workflow — answered within a day, fit, accounts from conversations,
+first verified payment within 7 days, first top-up — is read from the
+conversations and the panel's businesses and credit screens.
 The spec's working number is ten requests from businesses the product
 serves end to end; fewer says change the message before changing the
 product.

@@ -1,24 +1,24 @@
 # Implementation Plan: Landing Page
 
-**Branch**: `008-landing-page` | **Date**: 2026-09-19 | **Spec**: [spec.md](./spec.md)
+**Branch**: `008-landing-page` | **Date**: 2026-09-19, amended 2026-09-20 (design session: research D22, D23) | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/008-landing-page/spec.md`
 
 ## Summary
 
-Give the product a front door at its root address: one es-MX page that says
-what Devolada does for a business that collects by SPEI — the ISP on the
-supported billing system as the worked case — shows both sides of a payment,
-says how it is charged without a figure, and asks for one thing first: a
-request the creator answers personally, with a quieter link to the open
-sign-up for whoever would rather start alone. Then count who came, who
-began, who asked and who walked in, by channel, so the creator can answer
-"is there demand?" with a number in thirty days.
+Give the product a front door at its root address: one es-MX page, dark,
+that says what Devolada does for a business that collects by SPEI — ISPs
+first, no vendor named — shows both sides of a payment, says how it is
+charged without a figure, and asks for exactly one thing: the reader's
+WhatsApp, so the creator can answer in person and walk them to their first
+verified payment (the workflow the spec carries). Then count who came, who
+began and who asked, by channel, so the creator can answer "is there
+demand?" with a number in thirty days.
 
 The approach: a static Astro site served by an assets Worker with a short
 script in front of it (research D1, D3), wearing the product's stylesheet
 and rendering its shared atoms at build time so nothing framework-shaped
-reaches the browser (D2). The request and the four counters live in the API's own
+reaches the browser (D2). The request and the three counters live in the API's own
 database as platform-owned rows (D5); the API answers the page's script
 with the envelope and a plain form post with a redirect to an outcome page
 (D6). The operator reads both — the numbers and the requests — in a third
@@ -71,7 +71,7 @@ self-hosted), no raster image on the page — roughly 150 KB, measured by the
 browser layer.
 
 **Constraints**: constitution VI in full at the 360px floor; WCAG 2.2 AA in
-both themes; es-MX product copy; no origin but the page's own and the API's
+the dark palette it renders (D15); es-MX product copy; no origin but the page's own and the API's
 (D12); the one envelope with only a `code` on a browser-facing route (D6,
 D7); no new Worker trigger — notification is one attempt, no sweep (D10);
 the API's `ALLOWED_ORIGINS` and a new `LANDING_BASE_URL` are `vars`, never
@@ -92,9 +92,9 @@ and `CLAUDE.md` touched; ~6 test files.
 | **I. Spec-Driven, Every Decision Cited** | spec → plan → tasks → implement under `specs/008-*`; every non-obvious rule cites `landing-page D<n>` | **Pass.** Spec committed (`394a4fd`); this plan and research.md carry D1–D21. Rules in code cite them; measured facts carry their date. |
 | **II. Money Law** | integer cents, string-parsed decimals, business timezone owns "today" | **Pass, barely engaged.** The page shows no figure (FR-014, D7). The only "today" here is the platform's counters: the calendar day in `America/Mexico_City`, the platform's own timezone (D8). Timestamps stay milliseconds. |
 | **III. One Contract, Pure Routers** | `routes/<area>/{index,handler,schema}.ts`, one envelope, `UPPER_SNAKE` codes, schema exported and shared; browser-facing routes carry only a `code` | **Pass.** New area `routes/landing/`; `index.ts` is wiring (two routers, `zValidator`, the limiter); logic in `handler.ts`; `@devolada/api/landing-schema` exported and consumed by the page at build, the admin, MSW and Playwright. JSON callers get the envelope with a bare `code`. A plain form post is answered with a 303 to an outcome page (D6) — a navigation, not a program's envelope; the constants the page stamps into the form come from the schema module (D7). |
-| **IV. Tests Run on the Real Runtime** | workerd + real D1, no DB mocks, providers intercepted at their origin, config pins them; component layer on happy-dom + MSW; browser layer answers layout | **Pass.** API tests in workerd against migrated D1; Resend intercepted at `https://api.resend.com` (the pinned empty key in `vitest.config.ts` stays — the notice test sets a key and intercepts). The Worker script runs in workerd because `HTMLRewriter` lives nowhere else (D18). The admin tab on happy-dom + MSW with fixtures validated by the schema. The page on Playwright + axe in both themes at 360/768/1280, with measured targets and focus (D18). The Container API is experimental and is not a gate. |
+| **IV. Tests Run on the Real Runtime** | workerd + real D1, no DB mocks, providers intercepted at their origin, config pins them; component layer on happy-dom + MSW; browser layer answers layout | **Pass.** API tests in workerd against migrated D1; Resend intercepted at `https://api.resend.com` (the pinned empty key in `vitest.config.ts` stays — the notice test sets a key and intercepts). The Worker script runs in workerd because `HTMLRewriter` lives nowhere else (D18). The admin tab on happy-dom + MSW with fixtures validated by the schema. The page on Playwright + axe on the palette it renders at 360/768/1280, with measured targets and focus (D18). The Container API is experimental and is not a gate. |
 | **V. Tenant Isolation and Authorization by Area** | `business_id` on business rows, every query filtered, authorization by area and action, operator by `PLATFORM_OPERATOR_EMAILS` | **Pass.** The two tables are platform rows and carry no `business_id` on purpose, exactly as `platform_settings` does; no business query reads them. Operator reads sit behind `requireSession + requirePlatformOperator`. The public doors write a request or a counter and read nothing. No credential is stored. |
-| **VI. Visual Foundations** | tokens only, declared sizes, icon + text, `packages/ui` the one definition, motion from tokens, self-hosted fonts, both palettes, 360 floor | **Pass, with a wording gap named.** The page imports the shared stylesheet as-is and renders the shared atoms at build through `@astrojs/react`, never hydrated, with `buttonVariants` on the two anchors (D2); sizes 48 / 64 from the atoms and the recipe; outcomes are icon + words; the waiting state breathes with `animate-breath` on the shared thresholds (`@devolada/ui/motion`, D16); fonts self-hosted through the stylesheet; both palettes by system preference (D15); no raw value in any `.astro` file. The bullet says "both surfaces" and there are now three — D19 proposes the wording. |
+| **VI. Visual Foundations** | tokens only, declared sizes, icon + text, `packages/ui` the one definition, motion from tokens, self-hosted fonts, both palettes, 360 floor | **Pass, with a wording gap named.** The page imports the shared stylesheet as-is and renders the shared atoms at build through `@astrojs/react`, never hydrated, with `buttonVariants` on the header's sign-in link (D2); sizes 48 / 64 from the atoms and the recipe; outcomes are icon + words; the waiting state breathes with `animate-breath` on the shared thresholds (`@devolada/ui/motion`, D16); fonts self-hosted through the stylesheet; the dark palette by decision, verified on the palette rendered (D15); no raw value in any `.astro` file. The bullet says "both surfaces" and there are now three — D19 proposes the wording. |
 | **VII. Every Test Cites Its Story** | every test file cites `<feature-slug> US<n>` | **Pass.** `landing-page US1` (request door, page, claims), `US2` (counts, operator reads and tab), `US3` (Worker redirect and injection, sharing, weight). Tasks carry the label. |
 | **VIII. Absent Configuration Degrades, Never Breaks** | every binding documented, absent config degrades loudly, never throws at the edge | **Pass.** `LANDING_BASE_URL` unset → a form post is answered with the envelope instead of a redirect, and `env.ts` says so (D6). `RESEND_API_KEY` unset → the notice is logged (D10). `PLATFORM_OPERATOR_EMAILS` unset → the row says `NO_OPERATOR_EMAILS` and the list shows it. The landing's `API_ORIGIN` has a birth value in `wrangler.jsonc` and one per environment; the CSP never lacks it. The page reads in full when the API is down (FR-021; verified by the browser layer). |
 
@@ -146,16 +146,18 @@ apps/landing/                                   # NEW — the page and its Worke
 │   ├── styles/global.css                       # @import "@devolada/ui/styles.css";
 │   ├── content/claims.ts                       # the reviewed claims list: { id, text, basis } (D11)
 │   ├── content/legal.ts                        # the responsible party's name and address for the notice (D20)
-│   ├── layouts/Base.astro                      # <html lang="es-MX">, title, description, canonical, Open Graph, theme colours
-│   ├── components/                             # every component renders @devolada/ui atoms at build — Field, Input, Alert, Button, StatusBadge — with no client:* directive; anchors take buttonVariants() (D2)
-│   │   ├── Hero.astro                          # FR-003 first screen · FR-011 the customer's line
-│   │   ├── Readers.astro                       # FR-002 / FR-007 what each reader gets
+│   ├── layouts/Base.astro                      # <html lang="es-MX" data-theme="dark">, title, description, canonical, Open Graph, theme colour
+│   ├── components/                             # every component renders @devolada/ui atoms at build — Field, Input, Alert, Button, StatusBadge — with no client:* directive; the sign-in link takes buttonVariants() (D2)
+│   │   ├── Header.astro                        # the mark and the sign-in link for existing customers (FR-004)
+│   │   ├── Hero.astro                          # FR-003 first screen: eyebrow naming SPEI, headline, subhead, the hero form · FR-011 the customer's line
+│   │   ├── Proof.astro                         # the three tiles: SPEI verificado contra Banxico · directo a tu CLABE · primeros pagos gratis
+│   │   ├── CustomerScreen.astro                # FR-006 the customer's screen at its two moments — verifying (breath), registered
+│   │   ├── Benefits.astro                      # FR-005 / FR-008 the four things the reader stops doing, the two brakes inside them
 │   │   ├── HowItWorks.astro                    # FR-006 both sides, the payer page's words
-│   │   ├── Brakes.astro                        # FR-005
-│   │   ├── Doubts.astro                        # FR-008
+│   │   ├── System.astro                        # FR-002 / FR-007 "se conecta con tu sistema de facturación", no vendor named
+│   │   ├── Doubts.astro                        # FR-008 the three questions
 │   │   ├── Pricing.astro                       # FR-009 the model, no figure
-│   │   ├── RequestForm.astro                   # FR-015..FR-021 — constraints stamped from the schema (D7), hidden channel + honeypot, the script
-│   │   ├── SignupLink.astro                    # FR-004 the secondary link, data-signup
+│   │   ├── RequestForm.astro                   # FR-015..FR-021 — both forms (hero: one field; full: three), constraints stamped from the schema (D7), hidden channel + form + honeypot, the script
 │   │   └── Footer.astro                        # FR-010 contact · FR-022 privacy link
 │   └── pages/
 │       ├── index.astro
@@ -195,7 +197,7 @@ packages/ui/
 └── package.json                                # + "./motion"
 
 playwright.config.ts                            # + LANDING on 4176 (build, then astro preview)
-tests/e2e/landing.spec.ts                       # landing-page US1, US3 — first screen, both themes, targets, keyboard, widths, claims, form, weight
+tests/e2e/landing.spec.ts                       # landing-page US1, US3 — first screen, the dark palette, targets, keyboard, widths, claims, both forms, weight
 .github/workflows/ci.yml                        # preview: build landing (dev API baked in) + upload devolada-landing-dev
 .github/workflows/deploy-dev.yml                # build + deploy landing; smoke probes DEV_LANDING_URL
 .github/workflows/deploy-prod.yml               # build + deploy landing; "What landed" adds it; smoke probes PROD_LANDING_URL
@@ -239,6 +241,10 @@ dependency of the landing and never reaches the browser (D2).
 - **The constitution amendment (D19)** lands in the same release, by the
   creator through `/speckit-constitution`; `/speckit-analyze` will read the
   stack table as CRITICAL until it does.
-- **Not touched, on purpose**: the product's sign-up (the tag it receives is
-  deferred), the cron (no notification retry, D10), `tokens.css` (no new
-  value — contrast-lint stays green by construction).
+- **Not touched, on purpose**: the product's sign-up and sign-in (the page
+  only links to sign-in), the cron (no notification retry, D10),
+  `tokens.css` (no new value — contrast-lint stays green by construction).
+- **Outside this tree, before publication** (spec §The workflow the page
+  starts; quickstart *Pre-flight*): the two WhatsApp message templates
+  (drafted on the canvas's Flujo board) and the 60-second recording of the
+  customer's side.

@@ -136,3 +136,38 @@ none — five wordings changed.
   Workers pool binds `ASSETS` itself.
 
 Requirements 32 → 32, tasks 51 → 51 (six grew), success criteria 11 → 11.
+
+### Iteration 4 — 2026-09-20 (design session)
+
+The creator took the page to a design canvas
+(https://claude.ai/artifact/WSMGzw9TsBvYj3RUyad6Sk, v8) and decided five
+things there that the spec did not say. All five are recorded under
+**Clarifications, Session 2026-09-20** and folded into the requirements;
+the plan, research, data model, contracts, quickstart and tasks were brought
+in step in the same commit. Still 16 of 16; 32 requirements, 3 stories, 11
+success criteria; the spec gained one section.
+
+- **One action** (reverses Q1 of 2026-09-19). The page asks for the
+  WhatsApp and nothing else; sign-up is step 3 of the activation workflow
+  the spec now carries (§The workflow the page starts), sent by the creator
+  in the conversation. FR-004 rewritten; the `signup` step left FR-023 and
+  FR-025; US1 scenario 9, US2 and US3 lose the second door; the header's
+  sign-in link is the one link to the product. Research D22.
+- **Three fields, the WhatsApp required** (FR-015): name and billing system
+  only in the closing form; no email, business name, size band or note. The
+  row records which form sent it. Research D23; data model and API
+  contract rewritten.
+- **Dark by default**, no toggle (FR-026; FR-028 and SC-006 now read "the
+  palette it renders"). Research D15 amended.
+- **Register**: close and Mexican in the body, formal where money,
+  verification and the law are named; the headline fixed; SPEI named in
+  the eyebrow, the subhead and the proof tile (FR-012).
+- **No vendor on the page** (FR-002, FR-007): the connection is to "tu
+  sistema de facturación"; which one is settled in the conversation.
+- Also from the canvas: three doubts as a list (FR-008), the customer's
+  screen at its two moments (FR-006), and the claims list following the
+  page's words (research D11).
+
+Two things the spec now depends on that are not code: the two WhatsApp
+message templates (on the canvas's *Flujo* board) and the 60-second
+recording of the customer's side — both in the pre-flight (T050).

@@ -2,7 +2,10 @@
 
 **Feature**: 008-landing-page · **Date**: 2026-09-19
 
-Twenty decisions. Each names what was chosen, why, and what was rejected.
+Twenty-three decisions. Each names what was chosen, why, and what was rejected.
+D22 and D23 come from the design session of 2026-09-20 (spec Clarifications,
+same date) and amend D4, D7, D8, D11, D15, D17 and D20 in place; each amended
+decision says so.
 Where a fact was measured — a registry version, a documentation page, a DNS
 answer — the date is the day it was read: 2026-09-19.
 
@@ -52,10 +55,10 @@ arrive together. The shared atoms are used **as they are**: `@astrojs/react`
 (6.0.6, React 19; measured 2026-09-19) lets an `.astro` component render
 `Field`, `Input`, `Alert`, `Button` and `StatusBadge` from `@devolada/ui`
 **without a `client:*` directive**, so Astro turns them into HTML at build
-and ships no JavaScript for them. The two actions that must be links — the
-main action (`href="#solicitar"`) and the sign-up link — take their classes
-from `buttonVariants()` in frontmatter, the recipe the package exports for
-exactly that. `Pending` and `Reveal` are not rendered: they need hydration;
+and ships no JavaScript for them. The one control that must be a link — the
+header's sign-in link — takes its classes from `buttonVariants()` in
+frontmatter, the recipe the package exports for exactly that (amended
+2026-09-20 with D22: the sign-up link is gone). `Pending` and `Reveal` are not rendered: they need hydration;
 the waiting state is the page's script on the shared thresholds (D16).
 `vite.ssr.noExternal` lists the two workspace packages so Vite transforms
 their TypeScript, JSX and CSS during the build instead of handing them to
@@ -94,9 +97,10 @@ fixed once.
 **Decision**: `apps/landing/worker/index.ts` runs before asset matching. It
 (1) answers any `www.` host with a 301 to the same URL without it, path and
 query intact; (2) fetches the asset from `env.ASSETS`; (3) when the request
-carries a channel tag (D4) and the asset is HTML, rewrites two elements with
-`HTMLRewriter` — the form's hidden `channel` input and the sign-up link's
-`href`; (4) sets the security headers and the CSP (D12).
+carries a channel tag (D4) and the asset is HTML, rewrites the hidden
+`channel` input of each form with `HTMLRewriter` (amended 2026-09-20: there
+is no sign-up link to rewrite, D22); (4) sets the security headers and the
+CSP (D12).
 
 **Rationale**: measured 2026-09-19 in the Workers documentation — a
 `_redirects` file cannot express a domain-level redirect ("Domain-level
@@ -122,9 +126,9 @@ run in the visitor's browser.
 
 **Decision**: the tag rides the query parameter `ch`. A value matching
 `^[A-Za-z0-9_-]{1,32}$` is kept exactly as typed — case included — and
-travels into the hidden `channel` field, the beacon (D8), the request row and
-the sign-up link (`?ch=<tag>` appended). Anything else, or no tag, is
-`direct`. The charset is enforced in the Worker (D3), in the beacon and in
+travels into the hidden `channel` field of both forms, the beacon (D8) and
+the request row. Anything else, or no tag, is `direct`. (Amended 2026-09-20:
+the tag no longer rides a sign-up link — D22.) The charset is enforced in the Worker (D3), in the beacon and in
 the API's schema; the same regular expression lives in
 `@devolada/api/landing-schema` and is imported everywhere it is checked.
 
@@ -198,10 +202,11 @@ addresses; the outcome pages are that confirmation, one per outcome.
 ## D7 — Field rules are stamped into the form at build; no validator in the browser
 
 **Decision**: `@devolada/api/landing-schema` exports the zod schema and,
-beside it, the constants the schema is built from: `CUSTOMER_BANDS`,
-`BILLING_SYSTEMS`, `FIELD_LIMITS`, `CHANNEL_PATTERN`. The `.astro` form reads
-those constants in frontmatter and stamps them into `required`, `maxlength`,
-`pattern`, `type` and the `<option>` lists. The client script does not
+beside it, the constants the schema is built from: `BILLING_SYSTEMS`,
+`FIELD_LIMITS`, `WHATSAPP_PATTERN`, `CHANNEL_PATTERN`, `FORMS` (amended
+2026-09-20 with D23: no size bands, no email, no business name, no note).
+The two `.astro` forms read those constants in frontmatter and stamp them
+into `required`, `maxlength`, `pattern`, `type` and the `<option>` list. The client script does not
 import zod: it turns the browser's `ValidityState` into es-MX messages next
 to the field (FR-020), sends the request, and maps the API's `error.code`
 onto es-MX copy. The API's zod schema remains the only validator that
@@ -209,7 +214,7 @@ decides.
 
 **Rationale**: constitution III keeps the schema the contract; stamping its
 constants at build keeps one source without shipping ~15 KB of validator for
-five fields. The browser-facing route carries only a `code` (III), so the
+three fields. The browser-facing route carries only a `code` (III), so the
 page must know its own field rules to name the field at fault — the
 attributes are those rules.
 
@@ -221,13 +226,13 @@ attributes are those rules.
 
 ---
 
-## D8 — Counting is a first-party beacon into four aggregate steps; a visit is a page load
+## D8 — Counting is a first-party beacon into three aggregate steps; a visit is a page load
 
-**Decision**: the page sends three events to `POST /landing/events` —
-`visit` once the page has loaded, `began` on the first focus inside the form,
-`signup` when the secondary link is followed — as `fetch` with `keepalive`
-and a form-encoded body (no preflight, survives navigation). `sent` is
-counted by the API when it stores a request. Each event increments one row
+**Decision**: the page sends two events to `POST /landing/events` —
+`visit` once the page has loaded, `began` on the first focus inside either
+form — as `fetch` with `keepalive` and a form-encoded body (no preflight,
+survives navigation). `sent` is counted by the API when it stores a request.
+(Amended 2026-09-20: the `signup` step left with the sign-up link, D22.) Each event increments one row
 of `landing_counts` keyed by `(day, channel, step)`. `day` is the calendar day
 in `America/Mexico_City` — the platform's own "today" (constitution II applies
 the business's timezone to the business's counts; the platform's counts take
@@ -235,11 +240,11 @@ the platform's). Nothing per visitor is written: no address, no user agent,
 no cookie, no hash. A visit is a page load, stated as such on the operator
 screen.
 
-**Rationale**: the spec's funnel (visit → began → sent, plus sign-up
-departures) by channel is not something a generic analytics product answers,
-and SC-010 forbids the fingerprint that "unique visitors" would need. Four
-counters in the product's own database answer FR-023 exactly and put the
-numbers beside the requests (FR-024, "one place").
+**Rationale**: the spec's funnel (visit → began → sent) by channel is not
+something a generic analytics product answers, and SC-010 forbids the
+fingerprint that "unique visitors" would need. Three counters in the
+product's own database answer FR-023 exactly and put the numbers beside the
+requests (FR-024, "one place").
 
 **Alternatives rejected**:
 
@@ -310,6 +315,30 @@ pre-flight is the human review of the list against the product (FR-013).
 **Rationale**: FR-013 and SC-008 ask for a reviewed list tied to behaviour.
 Making the list the *source* of the claims, rather than a document beside
 them, means removing a claim removes it from the page in the same change.
+
+**Amended 2026-09-20** — the list follows the canvas (v8). Entries and their
+bases: `money-never-touches` (*directo a tu CLABE; Devolada nunca lo toca* —
+`direct-payment D3/D4`); `system-stays-record` (*tu sistema sigue mandando;
+Devolada le avisa y él reactiva el servicio* — the reconnection queue);
+`spei-verified` (*SPEI verificado contra Banxico* — `consta/validate.ts`);
+`auto-reactivation` (*se verifica el pago y el servicio vuelve solo* — the
+reconnection queue); `no-fake-receipts` (*lo inventado, lo editado y lo
+repetido no pasan* — status `invalid`, `direct-payment D8/D17`);
+`partial-visible` (*si te pagan de menos, lo ves como parcial* — status
+`partial`, `payments-and-classes D1`); `verification-time` (*le pregunta a
+Banxico en cuanto llega el comprobante e insiste durante horas* — the
+re-validation slots); `any-bank` (*cualquier CLABE de cualquier banco* —
+`scripts/banks.data.md`); `system-down` (*la reactivación espera en cola, a la
+vista* — `reconnection-queue D2`); `customer-meanwhile` (*Verificando tu
+pago… Tu servicio sigue activo* — the payer page's copy); `pricing-model`
+(*Prepago. Por pago verificado. Sin mensualidad ni contrato. Los primeros
+pagos son gratis.* — `prepaid-credit D2/D4`, `platform/settings.ts`);
+`reply-sla` (*te escribimos en menos de un día hábil* — FR-016, the
+creator's promise); `activation-together` (*lo activamos contigo, hasta tu
+primer pago verificado* — the activation workflow, spec §The workflow the
+page starts). Gone with the page's copy: `own-software-loop` and
+`permanent-link` (the page now says *un link por cliente* inside the steps,
+which `payment_links.mode = "reusable"` still backs).
 
 **Alternatives rejected**:
 
@@ -398,15 +427,19 @@ there conflicts with nothing.
 
 ---
 
-## D15 — The theme follows the system; there is no toggle
+## D15 — The page is dark by default; there is no toggle
 
-**Decision**: the page renders the tokens' light and dark palettes by
-`prefers-color-scheme` alone. It never sets `[data-theme]`.
+**Decision** (amended 2026-09-20 in the design session; the first version
+followed `prefers-color-scheme`): the page sets `data-theme="dark"` on its
+root and renders the tokens' dark palette for every visitor. No toggle, no
+system preference.
 
-**Rationale**: FR-026 asks the page to follow the visitor's preference as the
-product does; a stranger reading a page for ninety seconds does not need a
-switch. The tokens carry both palettes and contrast-lint already measures
-them; the browser layer verifies the page in both.
+**Rationale**: the creator chose it on the canvas and the palette earns it —
+on warm charcoal the teal action and the green "pago registrado" moment are
+the page's colour, and a stranger reading for ninety seconds does not need a
+switch. The tokens already carry the palette and contrast-lint measures it;
+the browser layer verifies the page on the palette it renders (FR-028,
+SC-006). The light palette stays in the design as a tweak.
 
 ---
 
@@ -435,8 +468,10 @@ exporting them keeps one definition without importing React into the page.
 
 **Decision**: `OperatorScreen` gains a tab "Landing" (`LandingTab.tsx`):
 a period picker (7 / 30 / 90 days), one table of counts by channel with
-the four steps and their shares of visits, and the requests table newest
-first with every field, the channel, the arrival time and the notice state.
+the three steps and their shares of visits, and the requests table newest
+first with the WhatsApp, the name, the billing system, which form it came
+from, the channel, the arrival time and the notice state (amended
+2026-09-20 with D22/D23).
 "Exportar CSV" builds the file in the browser from the loaded list.
 
 **Rationale**: FR-017 and FR-024 — one place, the place the operator already
@@ -528,8 +563,9 @@ the creator runs `/speckit-constitution` with it — MINOR, 1.4.0 → 1.5.0):
 
 **Decision**: `/privacidad` carries the sections the LFPDPPP and its
 guidelines require of a full notice: the identity and address of the
-responsible party, the data collected (the five fields and the optional
-note), the purposes (answering the request; no secondary purpose), that no
+responsible party, the data collected (the WhatsApp number and, when given,
+the name and the billing system — amended 2026-09-20 with D23), the purposes
+(answering the request; no secondary purpose), that no
 transfer is made, how to exercise access, correction, cancellation and
 opposition and how to revoke consent (the contact address), and how changes
 are announced. A short notice sits beside the form's send button and links
@@ -556,11 +592,62 @@ would be the heaviest thing in the package.
 
 ---
 
+## D22 — One action on the page; sign-up is step 3 of the conversation
+
+**Decision** (design session 2026-09-20; spec Clarifications of that date):
+the page asks for one thing, the reader's WhatsApp — a one-field form in the
+first screen, a three-field form at the end — and carries no link to the
+product's sign-up. The header links to sign-in for customers who already have
+an account. Sign-up happens inside the WhatsApp conversation, sent by the
+creator when the prospect is a fit, as step 3 of the activation workflow the
+spec now carries. The `signup` beacon step, the `a[data-signup]` rewrite in
+the Worker and the second closing card are gone.
+
+**Rationale**: an account without a CLABE, a connected system and a first
+link is an empty room — for a business whose system is not supported, empty
+by construction — so self-serve sign-ups from the page would have been noise
+in the numbers and dead rows in the panel. At this stage the conversation is
+where activation happens and where validation data comes from; one action
+gives one honest rate to watch. The exposure accepted on 2026-09-19 stands:
+sign-up is one click behind sign-in.
+
+**Alternatives rejected**:
+
+- *Two doors (the 2026-09-19 answer).* Split attention, two mediocre rates,
+  and accounts nobody activates.
+- *Sign-up as the only action.* Dead on arrival for every business without
+  the supported system, and no conversation to learn from.
+
+---
+
+## D23 — Three fields, the WhatsApp required; which form sent it is recorded
+
+**Decision** (design session 2026-09-20): the request carries the WhatsApp
+number (required, `WHATSAPP_PATTERN`), and optionally the person's name and
+the billing system (`BILLING_SYSTEMS`: the supported one, own software,
+another, none yet). No email, no business name, no size band, no note. The
+row records `form`: `hero` (the one-field form) or `full` (the closing form),
+so the operator can tell which form converts. The "same person asked twice"
+mark keys on the WhatsApp number.
+
+**Rationale**: the creator asks the rest in the chat (workflow step 2), and
+every field removed from a phone form is a request not abandoned. The
+billing-system answer stays because it is the one question that decides
+which door step 3 opens.
+
+**Alternatives rejected**:
+
+- *Keeping email as an alternative contact.* The reader is on WhatsApp; a
+  second channel is a second place for the creator to look.
+- *Keeping the size band.* Asked in the chat, where the answer comes with
+  context.
+
+---
+
 ## Carried, not resolved here
 
-- **The product's sign-up does not keep the tag** the page hands it on the
-  secondary link; the spec defers it. Until then the operator reads
-  sign-ups from the page by date beside the page's `signup` departures.
+- **"Crear cuenta" on the page**, with the channel tag recorded at account
+  creation when it returns — the spec's *Deferred* names the three triggers.
 - **Retrying a failed notification** from the sweep (D10) if failures ever
   cluster.
 - **A messaging button** beside the form, when the creator decides to

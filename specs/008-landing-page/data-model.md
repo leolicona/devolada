@@ -1,6 +1,6 @@
 # Data Model: Landing Page
 
-**Feature**: 008-landing-page · **Date**: 2026-09-19
+**Feature**: 008-landing-page · **Date**: 2026-09-19, amended 2026-09-20 (design session: D22, D23)
 
 Two new tables, both owned by the platform (no `business_id`, like
 `platform_settings`); one typed list compiled into the page; one rule for the
@@ -16,13 +16,10 @@ Append-only: a row is never edited after the notice outcome is written.
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | text PK | the workspace's `id()` helper |
-| `name` | text, not null | 2–80 characters, trimmed |
-| `business_name` | text, not null | 2–120 characters, trimmed |
-| `phone` | text, null | messaging phone as typed, 10–20 characters of digits, spaces, `+ ( ) -`; **at least one of** `phone` / `email` |
-| `email` | text, null | a valid address, ≤ 120 |
-| `customer_band` | text enum, not null | `under_100` · `100_500` · `500_2000` · `over_2000` — a band, never a number (FR-015) |
-| `billing_system` | text enum, not null | `wisphub` · `own_software` · `other` · `none` — the answer that tells a request served end to end from one served through the API (spec Clarifications) |
-| `note` | text, null | ≤ 500 characters |
+| `whatsapp` | text, not null | the number as typed, 10–20 characters of digits, spaces, `+ ( ) -` (`WHATSAPP_PATTERN`); the one required answer (FR-015, D23) |
+| `name` | text, null | 2–80 characters, trimmed; asked only by the closing form |
+| `billing_system` | text enum, null | `wisphub` · `own_software` · `other` · `none` — the answer that decides which door step 3 of the workflow opens (spec Clarifications 2026-09-20); asked only by the closing form |
+| `form` | text enum, not null | `hero` (the one-field form in the first screen) · `full` (the closing form) — which form converts (D23) |
 | `channel` | text, not null, default `direct` | the tag as typed (rule below) |
 | `created_at` | integer ms, not null | the workspace's `createdAt()` helper |
 | `notified_at` | integer ms, null | set when the operator notice was accepted by the provider (D10) |
@@ -34,8 +31,9 @@ first with a cursor on `(created_at, id)`.
 Invariants, enforced by the schema in `routes/landing/schema.ts` and
 narrowed nowhere else:
 
-- `phone IS NOT NULL OR email IS NOT NULL`
-- `customer_band` and `billing_system` are members of their enums
+- `whatsapp` matches `WHATSAPP_PATTERN`
+- `billing_system`, when present, and `form` are members of their enums
+- a `hero` row has `name` and `billing_system` null; a `full` row may carry either
 - `channel` matches the tag rule or is `direct`
 - the honeypot field (`website`) is **never** a column: a request that
   carried one was refused and not stored (D9)
@@ -54,7 +52,7 @@ The step counts (spec: *Step count*). Holds no person.
 | `id` | text PK | |
 | `day` | text, not null | `YYYY-MM-DD` in `America/Mexico_City` (D8) |
 | `channel` | text, not null | the tag or `direct` |
-| `step` | text enum, not null | `visit` · `began` · `sent` · `signup` |
+| `step` | text enum, not null | `visit` · `began` · `sent` |
 | `count` | integer, not null, default 0 | |
 
 Unique index `landing_counts_day_channel_step_idx (day, channel, step)`; an
@@ -66,9 +64,8 @@ Who writes which step:
 | step | written by | meaning |
 | --- | --- | --- |
 | `visit` | the page's script, once the page has loaded | a page load — not a person, not a device; the operator screen says so |
-| `began` | the page's script, on the first focus inside the form | the request was begun (spec FR-023) |
+| `began` | the page's script, on the first focus inside either form, once per page load | the request was begun (spec FR-023) |
 | `sent` | the API, when it stores a request | exact by construction |
-| `signup` | the page's script, when the secondary link is followed | a departure to the product's sign-up |
 
 Shares shown to the operator are each step over `visit` for the same
 channel and period (FR-024).
@@ -88,10 +85,11 @@ components and by the tests (D11).
 
 Rules: every claim has a non-empty `basis` (unit test); every claim's `text`
 appears on the page (browser test); the list is reviewed by a person before
-each publication (quickstart, *Pre-flight*). The pricing model sentence —
-prepaid, per verified payment, no monthly fee, no contract, the first
-payments free — is one entry, with `prepaid-credit D2/D4` and
-`platform/settings.ts` as its basis.
+each publication (quickstart, *Pre-flight*). The entries follow the canvas
+(v8) and are listed with their bases in research D11 (amended 2026-09-20);
+the pricing model sentence — *Prepago. Por pago verificado. Sin mensualidad
+ni contrato. Los primeros pagos son gratis.* — is one of them, with
+`prepaid-credit D2/D4` and `platform/settings.ts` as its basis.
 
 ---
 
@@ -117,8 +115,8 @@ script and the API (D4).
 | anything else | `direct` |
 
 The tag travels: `?ch=` on the page's address → the hidden `channel` input
-and the sign-up link's `?ch=` (injected by the Worker) → the beacon's
-`channel` field → `landing_counts.channel` and `access_requests.channel`.
+of each form (injected by the Worker) → the beacon's `channel` field →
+`landing_counts.channel` and `access_requests.channel`.
 
 ---
 

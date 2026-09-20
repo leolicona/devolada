@@ -109,9 +109,10 @@ Things a build cannot decide, checked once and recorded in the PR:
 - [ ] **The claims list reviewed against the product** (FR-013, SC-008):
       every entry in `apps/landing/src/content/claims.ts` read against its
       `basis`, by a person, on the day. Record the date in the PR.
-- [ ] **The privacy notice names a legal person** (D20): `{{RESPONSABLE}}`
+- [x] **The privacy notice names a legal person** (D20): `{{RESPONSABLE}}`
       and `{{DOMICILIO}}` in `apps/landing/src/content/legal.ts` replaced —
-      `content.test.ts` fails until they are.
+      `content.test.ts` fails until they are. *Done 2026-09-20 by the
+      creator: the natural person and the address in Mineral de la Reforma.*
 - [ ] **The contact address answers**: `CONTACT_EMAIL` in
       `apps/landing/src/content/legal.ts` — shown where the form fails and
       in the privacy notice (D26) — reaches the creator; send one — and it

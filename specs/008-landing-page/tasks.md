@@ -234,7 +234,7 @@ on the branch, measured 2026-09-20 on the implementer's machine:
 | `pnpm -r --if-present typecheck` | green — includes `astro check` (27 files) and the Worker's `tsc` |
 | `pnpm --filter @devolada/api test` | 556 passed, 19 of them `landing.test.ts` (US1 12, US2 7) |
 | `pnpm --filter @devolada/admin test` · `@devolada/pago` · `@devolada/ui` | 217 · 56 · 50 passed, 5 of the admin's `operator-landing.test.tsx` |
-| `pnpm --filter @devolada/landing test` | `worker.test.ts` 6 passed; `content.test.ts` **1 red by design** — `{{RESPONSABLE}}` / `{{DOMICILIO}}` still placeholders (D20, T050) |
+| `pnpm --filter @devolada/landing test` | `worker.test.ts` 6 passed; `content.test.ts` 4 passed — red by design until the creator named the responsible party and address on 2026-09-20 (D20, T050) |
 | `pnpm -r --if-present build` | green; `dist/` 5 pages, first visit ≈ 150 KB |
 | `pnpm exec playwright test tests/e2e/landing.spec.ts` | 22 passed (US1 19, US3 3) |
 
@@ -264,6 +264,7 @@ What the build settled beyond the task text — recorded in research.md,
 - The migration is `0034_landing_page.sql`: #220 took 0033 on `main`
   first, as plan.md foresaw.
 
-Left to the creator (T050): the placeholders, the claims review date, the
-contact address check, the two templates and the recording, the reading
-test, the timing, the two repository variables.
+Left to the creator (T050): the claims review date, the contact address
+check, the two templates and the recording, the reading test, the timing,
+the two repository variables. Done 2026-09-20: the legal identity in
+`legal.ts` (the placeholders are gone; `content.test.ts` is green).

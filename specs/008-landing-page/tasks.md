@@ -265,6 +265,7 @@ What the build settled beyond the task text — recorded in research.md,
   first, as plan.md foresaw.
 
 Left to the creator (T050): the claims review date, the contact address
-check, the two templates and the recording, the reading test, the timing,
-the two repository variables. Done 2026-09-20: the legal identity in
-`legal.ts` (the placeholders are gone; `content.test.ts` is green).
+check, the two templates and the recording, the reading test, the timing.
+Done 2026-09-20: the legal identity in `legal.ts` (the placeholders are
+gone; `content.test.ts` is green) and the two repository variables
+`DEV_LANDING_URL` / `PROD_LANDING_URL`.

@@ -129,8 +129,10 @@ Things a build cannot decide, checked once and recorded in the PR:
       and 4× CPU throttling, the first screen is readable within 2 s and the
       page within 5 s. Record the numbers in the PR; the weight is measured
       by the browser layer.
-- [ ] **Repository variables**: `DEV_LANDING_URL=https://dev.devoladapago.com`,
+- [x] **Repository variables**: `DEV_LANDING_URL=https://dev.devoladapago.com`,
       `PROD_LANDING_URL=https://devoladapago.com`; the smoke probes read them.
+      *Set 2026-09-20 with `gh variable set`, beside `DEV_API_URL` and
+      `PROD_PAGO_URL`.*
 - [x] **`ALLOWED_ORIGINS`** in `apps/api/wrangler.jsonc` carries the landing
       origins for `dev` and `prod` and the preview suffix (D14) — without
       them the page's script cannot read the API's answer (T011).

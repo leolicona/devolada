@@ -2,10 +2,12 @@
 
 **Feature**: 008-landing-page · **Date**: 2026-09-19
 
-Twenty-three decisions. Each names what was chosen, why, and what was rejected.
+Twenty-six decisions. Each names what was chosen, why, and what was rejected.
 D22 and D23 come from the design session of 2026-09-20 (spec Clarifications,
 same date) and amend D4, D7, D8, D11, D15, D17 and D20 in place; each amended
-decision says so.
+decision says so. D24 and D25 come from the second session that day, D26
+from the footer pass; the implementation notes at the end record what the
+build settled.
 Where a fact was measured — a registry version, a documentation page, a DNS
 answer — the date is the day it was read: 2026-09-19.
 
@@ -316,12 +318,12 @@ pre-flight is the human review of the list against the product (FR-013).
 Making the list the *source* of the claims, rather than a document beside
 them, means removing a claim removes it from the page in the same change.
 
-**Amended 2026-09-20** — the list follows the canvas (v8). Entries and their
+**Amended 2026-09-20** — the list follows the canvas (v12). Entries and their
 bases: `money-never-touches` (*directo a tu CLABE; Devolada nunca lo toca* —
 `direct-payment D3/D4`); `system-stays-record` (*tu sistema sigue mandando;
 Devolada le avisa y él reactiva el servicio* — the reconnection queue);
 `spei-verified` (*SPEI verificado contra Banxico* — `consta/validate.ts`);
-`auto-reactivation` (*se verifica el pago y el servicio vuelve solo* — the
+`auto-reactivation` (*se verifica el pago y el internet vuelve solo* — the
 reconnection queue); `no-fake-receipts` (*lo inventado, lo editado y lo
 repetido no pasan* — status `invalid`, `direct-payment D8/D17`);
 `partial-visible` (*si te pagan de menos, lo ves como parcial* — status
@@ -329,8 +331,7 @@ repetido no pasan* — status `invalid`, `direct-payment D8/D17`);
 Banxico en cuanto llega el comprobante e insiste durante horas* — the
 re-validation slots); `any-bank` (*cualquier CLABE de cualquier banco* —
 `scripts/banks.data.md`); `system-down` (*la reactivación espera en cola, a la
-vista* — `reconnection-queue D2`); `customer-meanwhile` (*Verificando tu
-pago… Tu servicio sigue activo* — the payer page's copy); `pricing-model`
+vista* — `reconnection-queue D2`); `pricing-model`
 (*Prepago. Por pago verificado. Sin mensualidad ni contrato. Los primeros
 pagos son gratis.* — `prepaid-credit D2/D4`, `platform/settings.ts`);
 `reply-sla` (*te escribimos en menos de un día hábil* — FR-016, the
@@ -342,7 +343,12 @@ which `payment_links.mode = "reusable"` still backs). Each claim is rendered
 once by id; the proof tiles shorten three of them (*Directo a tu CLABE*,
 *Primeros pagos gratis*, *SPEI verificado contra Banxico*) and carry
 `data-claim-echo`, so the browser test finds one text per claim
-(`/speckit-analyze` 2026-09-20, I1).
+(`/speckit-analyze` 2026-09-20, I1). Gone in the second session of
+2026-09-20 (D25): `customer-meanwhile` — the page no longer says *Tu
+servicio sigue activo*. The payment flow's third moment shows *Reconectado*,
+which is the product's own `StatusBadge` word for a done reconnection
+(`packages/ui/src/components/status-badge.tsx`), a rendered fact rather than
+a sentence the list has to vouch for.
 
 **Alternatives rejected**:
 
@@ -645,6 +651,135 @@ which door step 3 opens.
   second channel is a second place for the creator to look.
 - *Keeping the size band.* Asked in the chat, where the answer comes with
   context.
+
+---
+
+## D24 — The reader is the ISP; platforms come second, through the API and a page of their own
+
+**Decision** (second design session, 2026-09-20): the page speaks to ISPs
+and says so in its first line, *Cobros por SPEI para ISPs en México*; where
+it said *servicio* it says *internet*. It still names no vendor (the
+2026-09-20 clarification stands). Platforms — billing systems and software
+vendors who would integrate `/v1` to offer verified SPEI to their own
+users — are the second customer and get their own page when the first ISPs
+have converted; this page carries no line for them.
+
+**Rationale**: the promise the page makes in three moments is true end to
+end only for an ISP whose system Devolada talks to; a reader who sees *Pago
+de internet* and *Reconectado* and recognises their own week is the ISP
+owner. A platform is a different buyer who reads documentation, has a
+different conversation, and would dilute this one. *ISP* stays wider than
+the one system integrated today: the form's billing-system answer and the
+conversation are how the creator learns which system to build next, and
+naming a vendor would narrow the page to that vendor's users.
+
+**Alternatives rejected**:
+
+- *"ISPs y negocios", as the first canvas said.* Two readers, one page;
+  the second reader gets a promise the product only keeps through the API.
+- *One footer line for platforms.* Cheap, but it is what focus gives up;
+  a platform that arrives picks *Mi propio sistema* and is answered in
+  the chat.
+- *Naming the integrated system.* Reads as one vendor's add-on and loses
+  every ISP on another system, the very demand the page should count.
+
+---
+
+## D25 — A payment shown as three moments; the customer's screen moves inside it
+
+**Decision** (second design session, 2026-09-20): the section after the
+proof tiles, *Lo que pasa cuando te pagan*, shows one payment as three
+numbered moments on a rail: *Tu cliente paga* (the payment screen: amount,
+CLABE ending), *Se verifica la transferencia* (that screen at its two
+moments — *Verificando tu pago…* breathing, then the green *Tu pago fue
+registrado.*), *El internet vuelve solo* (the business's system: a customer
+row with the `StatusBadge` *Reconectado*). It replaces the customer's
+screen shown alone (FR-006 amended). *Tu servicio sigue activo* leaves the
+page, and `customer-meanwhile` leaves the claims list (D11). The hero form
+drops its tinted panel: field label, input, the 64 px button as the one
+accent, one help line, a hairline before the customer's line.
+
+**Rationale**: the reader asked for the automation, not the screen. Three
+moments across two screens — the customer's phone, then the business's
+system — is the automation; the screen alone was one side of it. *Tu
+servicio sigue activo* is the payer page's line for a customer who was never
+cut (`PaymentPage.tsx`, the `protect` release) and contradicted a story that
+ends in a reconnection. The panel around the hero form was a second accent
+competing with the button inside it.
+
+**Measured 2026-09-20**: with Archivo loaded, the phone page runs to
+5,172 px and the desktop page to 3,611 px; the boards had been 4,440 and
+3,320 and were clipping the footer. They are now 5,200 and 3,640. The
+browser test's no-clipping check is the page itself, which has no fixed
+height; the boards are the design's frames.
+
+**Alternatives rejected**:
+
+- *Timestamps on the moments (14:20 → 14:21).* Implies a speed the page
+  cannot promise; verification can take hours (the *¿Cuánto tarda?* doubt).
+- *A third numbered list styled like "Cómo funciona".* Two numbered lists
+  already sit on the page; this one carries screens, which is what makes it
+  a scene rather than a list.
+- *Keeping the tinted panel with a lighter tint.* Still two accents.
+
+---
+
+## D26 — The contact address lives where the form fails, not in the footer
+
+**Decision** (footer pass, 2026-09-20, canvas v13): the footers carry the
+mark and *Aviso de privacidad* alone; *hola@devoladapago.com* and *Hecho en
+México* left them at the creator's word. The address stays in every
+refusal outcome the form can show, on `/no-enviada`, and in the privacy
+notice as the channel for access, correction, cancellation and opposition.
+FR-010 was reworded to say so.
+
+**Rationale**: the page asks for one thing (D22); an email in the footer is
+a second door standing open next to it, and a reader who is going to write
+does so when the form did not work — which is exactly where the address now
+is. The notice needs the address by law (D20), and it still equals the
+platform's `support_email`, so there is one address to keep true.
+
+**Alternatives rejected**:
+
+- *Keeping the footer address.* Two ways to ask on a page built to count
+  one.
+- *Removing the address everywhere.* Leaves a reader whose send failed with
+  no way out, and the notice without a channel for their rights.
+
+---
+
+## Implementation notes (2026-09-20)
+
+Three things the build settled that the decisions above did not name:
+
+- **D2, the recipe as a class string.** The closing form's billing-system
+  question is a native `<select>` — the package has no atom for it and a
+  hydrated picker would ship React. `packages/ui` now exports
+  `inputClassName(size, lead)` from `input.tsx`, the field's own classes,
+  and `Input` is built from it; the select wears them
+  (`apps/landing/src/components/atoms.tsx`). Same for the two composites
+  there: Astro hands a framework component its children as static HTML, so
+  `Field` + `Input` and `Alert` + its icon are composed in one React tree,
+  rendered at build, never hydrated.
+- **D11, where `spei-verified` renders.** Its text is the hero subhead —
+  the page's one sentence about verification against Banxico — so `Hero`
+  renders it with `data-claim` and the proof tile echoes it; `System`
+  renders `system-stays-record` alone.
+- **D13, the pool's shape.** `@cloudflare/vitest-pool-workers@0.22` on
+  Vitest 4 is a Vite plugin (`cloudflareTest(...)` from the package root),
+  not a `poolOptions` block, and types `env` as the global
+  `Cloudflare.Env`; `apps/landing/vitest.config.ts` and `test/env.d.ts`
+  follow that shape. `lucide-react` joined the landing's dependencies for
+  the icons the tiles and outcomes carry, rendered at build like the atoms.
+- **D12, no inline script.** Astro inlines a hoisted script below Vite's
+  `assetsInlineLimit` — measured 2026-09-20: `/no-enviada`'s few lines came
+  out as an inline `<script type="module">`, which `script-src 'self'`
+  would block. `astro.config.ts` sets the limit to zero and
+  `landing.spec.ts` asserts no page carries an inline script or style.
+- **D18, owning the preview.** Astro 7 detaches `astro preview` into a
+  background process when it detects an AI agent's terminal (measured
+  2026-09-20); `playwright.config.ts` passes `--ignore-lock`, which keeps
+  it in the foreground where the webServer block owns it. Harmless in CI.
 
 ---
 

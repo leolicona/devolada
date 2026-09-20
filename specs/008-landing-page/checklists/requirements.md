@@ -197,3 +197,25 @@ of 16; no requirement added or lost.
   conversations, not the panel.
 
 Requirements 32 → 32, tasks 51 → 51 (six touched), success criteria 11 → 11.
+
+### Iteration 6 — 2026-09-20 (second design session)
+
+Three decisions on the canvas (v12), recorded under **Clarifications,
+Session 2026-09-20 (second design session)** and research D24–D25, folded
+into the spec, plan, tasks, quickstart and data model. Still 16 of 16.
+
+- **The reader is the ISP** (FR-002, FR-012, SC-001, Assumptions): the
+  eyebrow names them; *internet* replaces *servicio*; platforms that
+  integrate the API are the second customer, named in *Deferred* with their
+  own page. US1's second reader is now an ISP on another system;
+  acceptance scenario 3 no longer asks for the system to be named, which
+  contradicted FR-007 since iteration 4.
+- **A payment as three moments** (FR-006, FR-007): the customer's screen
+  moves inside the second moment; the third shows the business's system
+  and the product's badge word. `CustomerScreen.astro` → `PaymentFlow.astro`
+  (plan, T023, T029). *Tu servicio sigue activo* leaves the page and
+  `customer-meanwhile` the claims list (D11, T012): 13 claims → 12.
+- **The hero form without its panel** (T020) — a design decision with no
+  requirement behind it; recorded so the task matches the canvas.
+
+Requirements 32 → 32, tasks 51 → 51 (five touched), success criteria 11 → 11.

@@ -46,6 +46,12 @@ export default defineWorkersConfig(async () => {
                  times from one address; the limiter's own test hands the
                  app an env without this pin. */
               AUTH_RATE_LIMIT: "off",
+              /* landing-page D6: the landing's address, so the request
+                 door's redirect answer can be asserted. A test that wants
+                 the unset behaviour — the envelope for a plain form post —
+                 strips it from the env the way rate-limit.test.ts strips
+                 AUTH_RATE_LIMIT. */
+              LANDING_BASE_URL: "https://landing-test.devolada.internal",
               /* automated-collections-api D8/D10: every webhook test
                  registers this fixed origin as its destination and
                  intercepts it with fetchMock, rather than each file

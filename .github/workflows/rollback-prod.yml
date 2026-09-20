@@ -5,7 +5,7 @@
 # deliberate act — there is no reviewer pause on this repository (D3).
 #
 # What it touches: the live version of ONE Worker — devolada-api,
-# devolada-admin or devolada-pago — chosen by `worker`. What it never
+# devolada-admin, devolada-pago or devolada-landing — chosen by `worker`. What it never
 # touches: the database, the proofs bucket, the secrets. wrangler's own
 # warning says it ("Rolling back to a previous deployment will not rollback
 # any of the bound resources"), and this file repeats it because the
@@ -33,7 +33,7 @@ on:
         description: "Which service"
         type: choice
         required: true
-        options: [api, admin, pago]
+        options: [api, admin, pago, landing]
       version_id:
         description: "Version id to make live (from the release's summary)"
         type: string
@@ -60,7 +60,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # apps/api holds the only wrangler in the tree; the two assets Workers
+      # apps/api holds the only wrangler in the tree; the three assets Workers
       # are reached through their configs, exactly as the release does it.
       - name: Roll back and verify
         working-directory: apps/api
@@ -73,6 +73,7 @@ jobs:
             api)   CONFIG="" ;;
             admin) CONFIG="--config ../admin/wrangler.jsonc" ;;
             pago)  CONFIG="--config ../pago/wrangler.jsonc" ;;
+            landing) CONFIG="--config ../landing/wrangler.jsonc" ;;
             *) echo "::error::Unknown worker '$WORKER'"; exit 1 ;;
           esac
           # shellcheck disable=SC2086 — $CONFIG is two words on purpose.

@@ -33,7 +33,11 @@
     "API_BASE_URL": "http://localhost:8787",
     "ADMIN_BASE_URL": "http://localhost:5174",
     "PAGO_BASE_URL": "http://localhost:5175",
-    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175",
+    /* landing-page D14: 5176 is the landing page's dev server; its script
+       posts the request door with fetch. LANDING_BASE_URL stays unset here
+       on purpose (D6): a plain form post answers the envelope until a
+       developer sets it in .dev.vars. */
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176",
     /* Not a secret. Repeated in every env block below because an env's
        `vars` replaces the top-level one rather than merging with it. */
     "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
@@ -66,7 +70,12 @@
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://app.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://link.dev.devoladapago.com",
-        "ALLOWED_ORIGINS": "https://app.dev.devoladapago.com,https://link.dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev",
+        /* landing-page D14: the landing's host and its preview suffix, so
+           the page's script can read the request door's answer */
+        "ALLOWED_ORIGINS": "https://app.dev.devoladapago.com,https://link.dev.devoladapago.com,https://dev.devoladapago.com,*-devolada-admin-dev.devoladapago-14b.workers.dev,*-devolada-pago-dev.devoladapago-14b.workers.dev,*-devolada-landing-dev.devoladapago-14b.workers.dev",
+        /* landing-page D6: the no-script form post lands on the landing's
+           outcome pages */
+        "LANDING_BASE_URL": "https://dev.devoladapago.com",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }
@@ -98,7 +107,8 @@
            Q3); until it is, the channel is unavailable and says so. The
            engine deploys here all the same (D9): planting the secret is
            the whole act, with no code change. */
-        "ALLOWED_ORIGINS": "https://app.devoladapago.com,https://link.devoladapago.com",
+        "ALLOWED_ORIGINS": "https://app.devoladapago.com,https://link.devoladapago.com,https://devoladapago.com,https://www.devoladapago.com",
+        "LANDING_BASE_URL": "https://devoladapago.com",
         "PASSKEY_RP_ID": "devoladapago.com",
         "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
       }

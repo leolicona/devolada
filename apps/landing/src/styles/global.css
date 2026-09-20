@@ -1,0 +1,4 @@
+/* landing-page D2: the product's stylesheet, as-is — tokens, the Tailwind
+   mapping, the self-hosted fonts and the motion vocabulary arrive together,
+   exactly as apps/pago/src/styles.css takes them. */
+@import "@devolada/ui/styles.css";

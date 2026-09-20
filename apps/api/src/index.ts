@@ -21,6 +21,7 @@ import { sweepWebhookDeliveries } from "./webhooks/queue";
 import { sweepWispHubLists } from "./wisphub/snapshot";
 import { sweepApiCounters } from "./routes/v1/middleware";
 import { internalError } from "./routes/v1/envelope";
+import { landingPublicRoute } from "./routes/landing";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -57,6 +58,10 @@ app.route("/credit", creditRoute);
 app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
 app.route("/support", supportRoute);
+/* landing-page D5/D6: the landing page's two public doors — the request
+   and the beacon. Inside CORS, unlike /v1: the page's script calls the
+   request door from the landing's origin (ALLOWED_ORIGINS, D14). */
+app.route("/landing", landingPublicRoute);
 
 /* The public collections API (automated-collections-api D1): server-to-server,
    no CORS, versioned because outside callers now depend on its shape. */

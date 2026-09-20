@@ -1,0 +1,19 @@
+---
+import Mark from "./Mark.astro";
+
+/* The foot of the page (FR-022): the mark and the privacy notice, each
+   link at least 48 px tall by padding (FR-029), and nothing that looks
+   like a second call to act. The contact address is not here — the page's
+   one way to reach a person is the WhatsApp form; the address stands where
+   the form cannot send and in the notice (canvas v13, 2026-09-20). */
+---
+
+<footer class="border-t border-line-soft">
+  <div class="mx-auto flex w-full max-w-wide flex-col gap-4 px-4 py-10 text-sm lg:flex-row lg:items-center lg:justify-between lg:py-12">
+    <div class="flex items-center gap-2.5">
+      <Mark />
+      <span class="text-md font-semibold tracking-tight">Devolada</span>
+    </div>
+    <a href="/privacidad" class="inline-flex min-h-12 items-center self-start text-link hover:underline lg:self-auto">Aviso de privacidad</a>
+  </div>
+</footer>

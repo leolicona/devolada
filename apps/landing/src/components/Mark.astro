@@ -1,0 +1,12 @@
+---
+/* The product's mark, as apps/admin/public/icon.svg draws it (landing-page
+   D21): the teal square and the D. Decorative — the wordmark beside it
+   carries the name. */
+interface Props {
+  size?: "standard" | "small";
+}
+const { size = "standard" } = Astro.props;
+const box = size === "small" ? "size-6 rounded-sm text-sm" : "size-8 rounded-md text-lg";
+---
+
+<span class={`inline-flex shrink-0 items-center justify-center bg-accent font-bold text-ink-inverse ${box}`} aria-hidden="true">D</span>

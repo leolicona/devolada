@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- landing-page D21 / FR-031: the sharing image. The wordmark must stay
+       legible at a thumbnail's size, so it is set large on the dark surface
+       with the product's teal — the palette tokens.css names, written here
+       as literals because an SVG file cannot read CSS custom properties.
+       og.png is exported from this file by hand when it changes. -->
+  <rect width="1200" height="630" fill="#171412"/>
+  <rect x="0" y="0" width="1200" height="8" fill="#34c4b5"/>
+  <rect x="96" y="120" width="112" height="112" rx="24" fill="#0f766e"/>
+  <text x="152" y="204" font-family="Archivo, system-ui, sans-serif" font-size="80" font-weight="700" fill="#faf9f7" text-anchor="middle">D</text>
+  <text x="240" y="204" font-family="Archivo, system-ui, sans-serif" font-size="72" font-weight="600" fill="#ece9e4" letter-spacing="-1">Devolada</text>
+  <text x="96" y="352" font-family="Archivo, system-ui, sans-serif" font-size="64" font-weight="600" fill="#ece9e4" letter-spacing="-1">Cobrar por transferencia,</text>
+  <text x="96" y="432" font-family="Archivo, system-ui, sans-serif" font-size="64" font-weight="600" fill="#34c4b5" letter-spacing="-1">sin la talacha.</text>
+  <text x="96" y="530" font-family="Archivo, system-ui, sans-serif" font-size="30" font-weight="500" fill="#a9a39b">Cobros por SPEI para ISPs en México · verificado contra Banxico</text>
+</svg>

@@ -41,6 +41,7 @@
     "./settings-schema": "./src/routes/settings/schema.ts",
     "./integrations-schema": "./src/routes/integrations/schema.ts",
     "./direct-payments-schema": "./src/routes/direct-payments/schema.ts",
-    "./v1-schema": "./src/routes/v1/schema.ts"
+    "./v1-schema": "./src/routes/v1/schema.ts",
+    "./landing-schema": "./src/routes/landing/schema.ts"
   }
 }

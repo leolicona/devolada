@@ -156,3 +156,66 @@ export async function sendProvisionalExpiry(
   });
   if (!res.ok) throw new Error(`resend failed: ${res.status}`);
 }
+
+/* landing-page D10 (FR-018): a prospect left their WhatsApp on the landing
+   page. One email to every platform operator, every field as typed, the
+   form it came from and the channel. One attempt, no retry: the caller
+   writes the outcome on the request's row, and the operator's list shows
+   it (the row is the safety net, not a sweep). Returns the outcome rather
+   than throwing, because a mail problem must never lose the request.
+   Without RESEND_API_KEY the notice is logged, as the OTP is (constitution
+   VIII). es-MX product copy. */
+export type AccessRequestNotice = {
+  whatsapp: string;
+  name: string | null;
+  billingSystem: string | null;
+  form: string;
+  channel: string;
+};
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] ?? ch);
+
+export async function sendAccessRequestNotice(
+  env: Bindings,
+  request: AccessRequestNotice,
+): Promise<{ notifiedAt: number } | { error: string }> {
+  const to = (env.PLATFORM_OPERATOR_EMAILS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const subject = `Nuevo WhatsApp — ${request.whatsapp}`;
+  const lines = [
+    `WhatsApp: ${request.whatsapp}`,
+    `Nombre: ${request.name ?? "—"}`,
+    `Sistema de facturación: ${request.billingSystem ?? "—"}`,
+    `Formulario: ${request.form}`,
+    `Canal: ${request.channel}`,
+  ];
+  if (to.length === 0) {
+    console.warn(`[solicitud] sin PLATFORM_OPERATOR_EMAILS — nadie recibe: ${lines.join(" · ")}`);
+    return { error: "NO_OPERATOR_EMAILS" };
+  }
+  if (!env.RESEND_API_KEY) {
+    console.log(`[solicitud] ${to.join(", ")} → ${subject} · ${lines.join(" · ")}`);
+    return { error: "NO_RESEND_KEY" };
+  }
+  const html =
+    `<p>Alguien dejó su WhatsApp en la página de Devolada.</p><ul>` +
+    lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("") +
+    `</ul><p>Escríbele en menos de un día hábil.</p>`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: env.EMAIL_FROM ?? "Devolada <onboarding@resend.dev>", to, subject, html }),
+    });
+    if (!res.ok) return { error: `RESEND_${res.status}` };
+    return { notifiedAt: Date.now() };
+  } catch (err) {
+    /* The provider unreachable is an outcome too, not an exception: the
+       row says so and the request is already stored. */
+    console.warn("[solicitud] Resend unreachable:", err);
+    return { error: "RESEND_UNREACHABLE" };
+  }
+}

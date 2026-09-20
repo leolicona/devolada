@@ -1,0 +1,24 @@
+---
+import { buttonVariants, cn } from "@devolada/ui";
+import { LOGIN_URL } from "../lib/urls";
+import Mark from "./Mark.astro";
+
+/* The mark, the wordmark and the sign-in link — the only link to the
+   product on the page (FR-004, landing-page D22). The link wears the
+   button's link recipe as a class string (D2), stretched to a 48 px target
+   by padding, not font size (FR-029). */
+---
+
+<header class="mx-auto flex w-full max-w-wide items-center justify-between px-4 py-2 lg:py-5">
+  <a href="/" class="flex items-center gap-2.5 py-2" aria-label="Devolada, inicio">
+    <Mark />
+    <span class="text-md font-semibold tracking-tight">Devolada</span>
+  </a>
+  <a
+    data-login
+    href={LOGIN_URL}
+    class={cn(buttonVariants({ variant: "link" }), "inline-flex min-h-12 items-center px-2 text-base")}
+  >
+    Entrar
+  </a>
+</header>

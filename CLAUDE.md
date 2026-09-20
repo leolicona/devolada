@@ -65,6 +65,7 @@ pnpm playground                               # packages/ui tokens + atoms showc
 pnpm --filter @devolada/api dev               # product API + the validation engine: wrangler + local D1 (8787)
 pnpm --filter @devolada/admin dev             # ISP panel (5174)
 pnpm --filter @devolada/pago dev              # public payment page (5175)
+pnpm --filter @devolada/landing dev           # public landing page (5176; Astro, no client framework)
 pnpm --filter @devolada/api sandbox           # apiCEP mock (8789), for validating without a provider token
 
 pnpm --filter @devolada/api db:generate       # drizzle migration from src/db/schema.ts
@@ -107,9 +108,10 @@ suffixed copies). The API's optional secrets, each degrading when unset
 CI order on every PR — none of it may be skipped or quarantined to get green:
 `spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`, typecheck,
 tests, build.
-**Never deploy from a local machine.** Merge to `main` deploys dev (the browser
-and passkey layers gate it); a `v*` tag deploys prod, and **the tag is the
-approval** — there is no reviewer click (production-launch D3). A release is
+**Never deploy from a local machine.** Merge to `main` deploys dev — all four
+Workers: API, admin, payment page, landing (the browser and passkey layers
+gate it); a `v*` tag deploys prod, and **the tag is the approval** — there is
+no reviewer click (production-launch D3). A release is
 `git tag vX.Y.Z origin/main && git push origin vX.Y.Z` on a commit whose
 Deploy Dev run is green — the tag job checks and refuses otherwise (D1). A
 rollback is Actions → *Rollback Prod* with the service and the version id
@@ -126,12 +128,21 @@ apps/api      Hono 4 + Drizzle + zod on Workers/D1 — the only party that talks
               in-process and attributed by `business_id`
 apps/pago     public payment page, no session, mobile-first (assets Worker)
 apps/admin    ISP panel, desktop-first, TanStack Router + Query (assets Worker)
-packages/ui   design tokens + the atoms both frontends render
+apps/landing  the product's front door at the root domain: an Astro static
+              page on an assets Worker with a script in front (`www`
+              redirect, `?ch=` channel tag into the forms, security
+              headers + CSP); renders the shared atoms at build and ships
+              no framework. Requests and counts live in the API
+              (`routes/landing/`); the operator reads them in the panel
+packages/ui   design tokens + the atoms every surface renders
 ```
 
 The frontends never proxy through Vite — SPA routes and API paths share names —
 so they call the Worker directly (`VITE_API_URL` baked in at build;
-`apps/admin/src/lib/base.ts` falls back to `localhost:8787` in dev).
+`apps/admin/src/lib/base.ts` falls back to `localhost:8787` in dev). The
+landing bakes `PUBLIC_API_URL` and `PUBLIC_SITE_URL` the same way
+(`apps/landing/src/lib/urls.ts`); its Worker's CSP takes the API origin from
+`API_ORIGIN` in `apps/landing/wrangler.jsonc` (landing-page D12, D14).
 
 **The zod schema is the contract.** Each resource is
 `apps/api/src/routes/<area>/{index,handler,schema}.ts`: `index.ts` is a *pure*

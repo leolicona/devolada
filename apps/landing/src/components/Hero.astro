@@ -1,0 +1,27 @@
+---
+import { claim } from "../content/claims";
+import RequestForm from "./RequestForm.astro";
+
+/* The first screen (FR-003, FR-011, FR-012; landing-page D24, D25): the
+   eyebrow naming the reader, the fixed headline with its second half in
+   the link colour, the subhead naming SPEI, Banxico and the CLABE — the
+   page's one sentence about verification, so it is the `spei-verified`
+   claim and the proof tile only echoes it (D11) — then the one-field form
+   with no panel around it: the button is the form's one accent (D25). At
+   360×740 the button ends inside the viewport. Under a hairline, the line
+   for a customer who arrived looking for where to pay (FR-011). "Cobrar"
+   for the business, "pago" for the customer (FR-012). */
+const verified = claim("spei-verified");
+---
+
+<section id="inicio" class="flex flex-col gap-4 pt-6 pb-10 lg:col-start-1 lg:row-start-1 lg:gap-5 lg:self-center lg:py-14">
+  <p class="text-xs font-medium uppercase tracking-wider text-link">Cobros por SPEI para ISPs en México</p>
+  <h1 class="text-3xl font-semibold leading-tight tracking-tight lg:text-4xl">
+    Cobrar por transferencia, <span class="text-link">sin la talacha.</span>
+  </h1>
+  <p class="text-lg leading-normal" data-claim={verified.id}>{verified.text}</p>
+  <div class="mt-4 lg:mt-3 lg:max-w-md">
+    <RequestForm variant="hero" />
+  </div>
+  <p class="border-t border-line-soft pt-4 text-sm text-ink-soft">¿Te mandaron un link para pagar? Ábrelo desde ese mensaje.</p>
+</section>

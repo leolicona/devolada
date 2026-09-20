@@ -1,0 +1,28 @@
+---
+import { claim } from "../content/claims";
+
+/* Lo que seguro te preguntas (FR-008): three questions as a list — how
+   long it takes, whether they must change banks, what happens when their
+   system does not answer. The rest of the doubts live in the benefits and
+   the payment flow. Each answer is a claim rendered by id (landing-page
+   D11). */
+const doubts = [
+  { q: "¿Cuánto tarda?", a: claim("verification-time") },
+  { q: "¿Tengo que cambiar de banco?", a: claim("any-bank") },
+  { q: "¿Y si mi sistema no responde?", a: claim("system-down") },
+];
+---
+
+<section class="flex flex-col gap-6 border-t border-line-soft py-12 lg:col-span-2 lg:gap-8 lg:py-16" aria-labelledby="dudas">
+  <h2 id="dudas" class="text-xl font-semibold leading-tight tracking-tight lg:text-2xl">Lo que seguro te preguntas</h2>
+  <dl class="flex flex-col gap-6 lg:grid lg:grid-cols-3 lg:gap-x-12 lg:gap-y-8">
+    {
+      doubts.map(({ q, a }) => (
+        <div class="flex flex-col gap-1.5">
+          <dt class="text-md font-semibold leading-tight">{q}</dt>
+          <dd class="text-ink-soft" data-claim={a.id}>{a.text}</dd>
+        </div>
+      ))
+    }
+  </dl>
+</section>

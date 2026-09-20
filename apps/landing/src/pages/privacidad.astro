@@ -1,0 +1,57 @@
+---
+import { buttonVariants } from "@devolada/ui";
+import Base from "../layouts/Base.astro";
+import Mark from "../components/Mark.astro";
+import { CONTACT_EMAIL, DOMICILIO, RESPONSABLE } from "../content/legal";
+
+/* Aviso de privacidad (FR-022; landing-page D20, D23): what the LFPDPPP
+   asks of a full notice — who answers for the data (the creator's legal
+   person and address, from legal.ts; the build refuses the placeholders
+   through content.test.ts), what is collected (the WhatsApp and, when
+   given, the name and the billing system), why (writing back; no other
+   purpose), that nothing is transferred, how to exercise ARCO rights and
+   revoke consent (the contact address), and how changes are announced.
+   es-MX, body 16 px, no form. */
+const UPDATED = "20 de septiembre de 2026";
+const sections = [
+  { title: "Qué datos recabamos", text: "Tu número de WhatsApp y, si los escribes, tu nombre y el sistema con el que facturas." },
+  { title: "Para qué", text: "Solo para escribirte y responder a tu interés en Devolada. No hay otra finalidad." },
+  { title: "Con quién se comparten", text: "Con nadie. No transferimos tus datos a terceros." },
+];
+---
+
+<Base title="Devolada — aviso de privacidad" description="Qué datos recaba la página de Devolada, para qué, y cómo ejercer tus derechos.">
+  <header slot="header" class="mx-auto flex w-full max-w-wide items-center gap-2.5 px-4 py-4">
+    <a href="/" class="flex items-center gap-2.5 py-2" aria-label="Devolada, inicio">
+      <Mark />
+      <span class="text-md font-semibold tracking-tight">Devolada</span>
+    </a>
+  </header>
+  <article class="flex flex-col gap-5 py-8 lg:max-w-2xl lg:py-14">
+    <h1 class="text-2xl font-semibold leading-tight tracking-tight lg:text-3xl">Aviso de privacidad</h1>
+    <p class="text-ink-soft">
+      <span data-responsable>{RESPONSABLE}</span>, con domicilio en <span data-domicilio>{DOMICILIO}</span>, es responsable del tratamiento de los
+      datos personales que compartes en esta página.
+    </p>
+    {
+      sections.map(({ title, text }) => (
+        <section class="flex flex-col gap-2">
+          <h2 class="text-lg font-semibold leading-tight">{title}</h2>
+          <p>{text}</p>
+        </section>
+      ))
+    }
+    <section class="flex flex-col gap-2">
+      <h2 class="text-lg font-semibold leading-tight">Tus derechos</h2>
+      <p>
+        Puedes acceder, corregir, cancelar u oponerte al uso de tus datos, y revocar tu consentimiento, escribiendo a
+        <a href={`mailto:${CONTACT_EMAIL}`} class="text-link underline">{CONTACT_EMAIL}</a>. Te contestamos por el mismo medio.
+      </p>
+    </section>
+    <section class="flex flex-col gap-2">
+      <h2 class="text-lg font-semibold leading-tight">Cambios a este aviso</h2>
+      <p>Se publican en esta misma página, con la fecha de la última actualización. Última actualización: {UPDATED}.</p>
+    </section>
+    <a href="/" class={`${buttonVariants({ variant: "secondary", size: "standard" })} mt-2 self-start`}>Volver a la página</a>
+  </article>
+</Base>

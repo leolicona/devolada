@@ -16,12 +16,14 @@ import { cn } from "@/lib/utils";
 import { useDisplaySettings, useSession } from "../auth/session";
 import { ENTRY_LABELS } from "../credit/CreditCard";
 import { STEP_COPY } from "../credit/CreditChip";
+import { LandingTab } from "./LandingTab";
 
 /* /operador (operator-panel spec, US-L02): the platform's hands. Boring
-   on purpose (IA). Two tabs — Reglas (D1's keys as typed fields with
-   their history) and Negocios (D7's map, with the adjustment and override
-   forms). The route is hidden unless the actor is the operator; the API
-   guard is the real defense (D3). */
+   on purpose (IA). Three tabs — Reglas (D1's keys as typed fields with
+   their history), Negocios (D7's map, with the adjustment and override
+   forms) and Landing (landing-page D17: the page's counts and requests).
+   The route is hidden unless the actor is the operator; the API guard is
+   the real defense (D3). */
 
 const KEY_LABELS: Record<string, string> = {
   validation_fee_cents: "Tarifa por validación",
@@ -332,12 +334,16 @@ export function OperatorScreen() {
         <TabsList>
           <TabsTrigger value="rules">Reglas</TabsTrigger>
           <TabsTrigger value="businesses">Negocios</TabsTrigger>
+          <TabsTrigger value="landing">Landing</TabsTrigger>
         </TabsList>
         <TabsContent value="rules" className="mt-4">
           <RulesTab />
         </TabsContent>
         <TabsContent value="businesses" className="mt-4">
           <BusinessesTab />
+        </TabsContent>
+        <TabsContent value="landing" className="mt-4">
+          <LandingTab />
         </TabsContent>
       </Tabs>
     </main>

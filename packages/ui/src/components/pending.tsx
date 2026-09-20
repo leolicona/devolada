@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../lib/cn";
+import { FLASH_THRESHOLD_MS, MINIMUM_VISIBLE_MS } from "../lib/motion";
 
 /* The `waiting` feedback state (design-foundations D10, D16; constitution VI).
 
-   FR-014: a wait shorter than a glance should leave no trace. The breath
-   waits out the flash threshold before it starts, and once started it stays
-   long enough to be read — a signal that appears and vanishes in the same
-   blink is worse than no signal at all.
+   The two thresholds live in ../lib/motion.ts (landing-page D16): the
+   landing's form script applies the same breath without React, and the
+   numbers must be one definition, not two.
 
    Note what is delayed: the *signal*, never the children. The copy the payer
    reads is the page's content and renders immediately; only the breathing
    waits. */
-const FLASH_THRESHOLD_MS = 200;
-const MINIMUM_VISIBLE_MS = 500;
 
 export interface PendingProps {
   /* Whether the region is pending. Nothing else — no elapsed time, no

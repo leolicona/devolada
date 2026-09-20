@@ -8,7 +8,7 @@ export {
 export { formatMoney, parseMoney } from "./lib/money";
 export { cn } from "./lib/cn";
 export { Button, buttonVariants, type ButtonProps } from "./components/button";
-export { Input, Field, type InputProps } from "./components/input";
+export { Input, Field, inputClassName, type InputProps } from "./components/input";
 export { ListError, type ListErrorProps } from "./components/list-error";
 
 /* Primitives from the shadcn catalog, themed by tokens and shared

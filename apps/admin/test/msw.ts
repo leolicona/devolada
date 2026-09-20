@@ -134,6 +134,11 @@ export const handlers = {
     http.get("/platform/businesses/:id", ({ params }) => r(String(params.id))),
   adjustment: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/platform/businesses/:id/adjustments", async ({ params, request }) => r(String(params.id), await request.json())),
+  /* landing-page US2 (D17): the operator's Landing tab */
+  landingRequests: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/landing/requests", ({ request }) => r(new URL(request.url))),
+  landingCounts: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/landing/counts", ({ request }) => r(new URL(request.url))),
 };
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };

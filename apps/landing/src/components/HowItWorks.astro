@@ -1,0 +1,41 @@
+---
+/* Cómo funciona (FR-006): the business's three steps and the customer's
+   three, apart. The customer's steps are the payer page's own words,
+   verbatim (apps/pago/src/features/pago/PaymentPage.tsx): "Haz tu
+   transferencia", "Envía tu comprobante", "Tu pago fue registrado". "Un
+   link por cliente" is what payment_links.mode = "reusable" backs
+   (landing-page D11). */
+const business = ["Conecta tu CLABE y tu sistema.", "Mándale a cada cliente su link.", "Cada pago llega verificado."];
+const customer = ["Haz tu transferencia", "Envía tu comprobante", "Tu pago fue registrado"];
+const big = "inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-md font-semibold text-link";
+const small = "inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-link";
+---
+
+<section class="flex flex-col gap-6 border-t border-line-soft py-12 lg:col-span-2 lg:gap-8 lg:py-16" aria-labelledby="como-funciona">
+  <h2 id="como-funciona" class="text-xl font-semibold leading-tight tracking-tight lg:text-2xl">Cómo funciona</h2>
+  <div class="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:gap-12">
+    <ol class="flex flex-col gap-4" aria-label="Para tu negocio">
+      {
+        business.map((step, i) => (
+          <li class="flex items-center gap-3">
+            <span class={big} aria-hidden="true">{i + 1}</span>
+            <p class="text-md font-medium">{step}</p>
+          </li>
+        ))
+      }
+    </ol>
+    <div class="flex flex-col gap-3">
+      <p class="text-xs font-medium uppercase tracking-wider text-ink-soft">Y tu cliente</p>
+      <ol class="flex flex-col gap-3" aria-label="Para tu cliente">
+        {
+          customer.map((step, i) => (
+            <li class="flex items-center gap-3">
+              <span class={small} aria-hidden="true">{i + 1}</span>
+              <p class="font-medium">{step}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,21 @@
+---
+import Base from "../layouts/Base.astro";
+import Mark from "../components/Mark.astro";
+
+/* Served by the assets Worker's `not_found_handling: "404-page"` for any
+   path the build did not emit (FR-001; landing-page D1). One line and the
+   way back. */
+---
+
+<Base title="Devolada — página no encontrada" description="Esa página no existe.">
+  <meta slot="head" name="robots" content="noindex" />
+  <header slot="header" class="mx-auto flex w-full max-w-wide items-center gap-2.5 px-4 py-4">
+    <Mark />
+    <span class="text-md font-semibold tracking-tight">Devolada</span>
+  </header>
+  <section class="flex flex-col gap-4 py-10 lg:max-w-xl lg:py-14">
+    <h1 class="text-2xl font-semibold leading-tight tracking-tight lg:text-3xl">No encontramos esa página.</h1>
+    <p class="text-md text-ink-soft">Si te mandaron un link para pagar, ábrelo desde ese mensaje.</p>
+    <a href="/" class="inline-flex min-h-12 items-center self-start font-medium text-link hover:underline">Ir a la página</a>
+  </section>
+</Base>

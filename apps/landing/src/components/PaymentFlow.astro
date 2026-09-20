@@ -1,0 +1,83 @@
+---
+import { StatusBadge } from "@devolada/ui";
+import { ArrowDown, Landmark } from "lucide-react";
+import Mark from "./Mark.astro";
+import { Notice } from "./atoms";
+
+/* Lo que pasa cuando te pagan (FR-006, FR-007; landing-page D25): one
+   payment as three numbered moments on a rail — the customer pays, the
+   transfer is verified, the internet comes back. Two screens: the
+   customer's phone in the first two moments (the payer page's own words:
+   "Verificando tu pago…" breathing, then the green "Tu pago fue
+   registrado."), the business's system in the third, marking the customer
+   with the product's own badge word, Reconectado (StatusBadge
+   `reconnected`). No vendor named (D24), no timestamps — verification can
+   take hours and the page promises no speed it cannot keep (D25). The
+   amount and the CLABE ending are a customer's, not the product's
+   (FR-014). Every atom rendered at build (D2). */
+const steps = [
+  { n: 1, title: "Tu cliente paga", line: "Transfiere por SPEI a tu CLABE." },
+  { n: 2, title: "Se verifica la transferencia", line: "Devolada la confirma con Banxico." },
+  { n: 3, title: "El internet vuelve solo", line: "Tu sistema reconecta al cliente. Tú no mueves un dedo." },
+];
+const rail = "inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-link";
+---
+
+<section class="flex flex-col gap-6 border-t border-line-soft py-12 lg:col-start-2 lg:row-start-1 lg:self-center lg:border-0 lg:py-14" aria-labelledby="flujo">
+  <p id="flujo" class="text-xs font-medium uppercase tracking-wider text-link">Lo que pasa cuando te pagan</p>
+  <ol class="flex flex-col">
+    {
+      steps.map(({ n, title, line }) => (
+        <li class="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3">
+          <div class="flex flex-col items-center gap-1.5">
+            <span class={rail} aria-hidden="true">{n}</span>
+            {n < 3 && <span class="w-px grow bg-line" aria-hidden="true" />}
+          </div>
+          <div class:list={["flex flex-col gap-2", n < 3 && "pb-5"]}>
+            <h3 class="text-md font-semibold leading-tight">{title}</h3>
+            <p class="text-ink-soft">{line}</p>
+            {n === 1 && (
+              <div class="mt-1 flex flex-col gap-2.5 rounded-lg border border-line bg-card p-5" aria-label="La pantalla de pago de tu cliente">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <Mark size="small" />
+                    <span class="text-sm font-medium">Pago de internet</span>
+                  </div>
+                  <span class="text-sm text-ink-soft">Tu negocio</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <p class="text-xs font-medium uppercase tracking-wider text-ink-soft">Monto a pagar</p>
+                  <p class="text-2xl font-semibold leading-tight tracking-tight tabular-nums">$350.00</p>
+                </div>
+                <p class="flex items-center gap-2 text-sm font-medium text-ink-soft">
+                  <Landmark className="size-4 shrink-0" aria-hidden />
+                  <span>Tu CLABE · termina en 4821</span>
+                </p>
+              </div>
+            )}
+            {n === 2 && (
+              <div class="mt-1 flex flex-col gap-1.5 rounded-lg border border-line bg-card p-5" aria-label="La misma pantalla, dos momentos">
+                <Notice variant="default" icon="clock" className="animate-breath" data-motion="breath">
+                  Verificando tu pago…
+                </Notice>
+                <div class="flex justify-center text-ink-faint" aria-hidden="true">
+                  <ArrowDown className="size-4" aria-hidden />
+                </div>
+                <Notice variant="success" icon="check">Tu pago fue registrado.</Notice>
+              </div>
+            )}
+            {n === 3 && (
+              <div class="mt-1 flex flex-col gap-2.5 rounded-lg border border-line bg-card px-5 py-4" aria-label="Tu sistema de facturación">
+                <p class="text-xs font-medium uppercase tracking-wider text-ink-soft">Tu sistema de facturación</p>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-sm font-medium">Cliente #1042</span>
+                  <StatusBadge status="reconnected" />
+                </div>
+              </div>
+            )}
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+</section>

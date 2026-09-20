@@ -11,6 +11,7 @@ import {
   postAdjustment,
   postPlatformSetting,
 } from "./handler";
+import { landingOperatorRoute } from "../landing";
 
 /* Pure router (operator-panel spec). Every route: session + operator. */
 export const platformRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -29,3 +30,8 @@ platformRoute.post("/businesses/:id/adjustments", zValidator("json", adjustmentR
   const body = c.req.valid("json");
   return postAdjustment(c, c.req.param("id"), body.cents, body.reason);
 });
+
+/* landing-page D5/D17: the landing page's requests and counts, read by the
+   operator's Landing tab. Mounted here so they sit behind this file's
+   session + operator guard like every other platform read. */
+platformRoute.route("/landing", landingOperatorRoute);

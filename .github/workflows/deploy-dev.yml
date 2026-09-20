@@ -240,21 +240,42 @@ jobs:
       - name: Deploy dev payment page
         working-directory: apps/pago
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../pago/wrangler.jsonc --env dev
+      # landing-page D14: the fourth Worker. `custom_domain: true` creates
+      # dev.devoladapago.com on this first deploy (measured 2026-09-19: no
+      # record existed); the smoke below waits out the certificate race.
+      - name: Build landing (dev API baked in)
+        working-directory: apps/landing
+        run: PUBLIC_API_URL="${{ vars.DEV_API_URL }}" PUBLIC_SITE_URL=https://dev.devoladapago.com pnpm build
+      - name: Deploy dev landing
+        working-directory: apps/landing
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../landing/wrangler.jsonc --env dev
       - name: Smoke test
         run: |
-          URL="${{ vars.DEV_API_URL }}"
-          if [ -z "$URL" ]; then
-            echo "::warning::DEV_API_URL not set; smoke skipped"
-            exit 0
-          fi
+          failed=0
           # Retry up to 5 minutes: the first deploy after a custom-domain
           # change races certificate issuance (measured on the punto/admin
           # domain move: DNS resolved, TLS was not ready yet).
-          for i in $(seq 1 10); do
-            curl -sf "$URL/health" && exit 0
-            echo "health not up yet (attempt $i), waiting 30s"
-            sleep 30
-          done
-          echo "::error::Smoke failed: dev deployed but not responding after 5 minutes"
-          exit 1
+          probe() {
+            name="$1"; url="$2"
+            if [ -z "$url" ]; then
+              echo "::warning::$name URL variable not set; $name smoke skipped"
+              return 0
+            fi
+            for i in $(seq 1 10); do
+              if curl -sf -o /dev/null "$url"; then
+                echo "$name answered: $url"
+                return 0
+              fi
+              echo "$name not up yet (attempt $i), waiting 30s"
+              sleep 30
+            done
+            echo "::error::Smoke failed: $name deployed but not responding after 5 minutes ($url)"
+            return 1
+          }
+          API="${{ vars.DEV_API_URL }}"
+          probe api "${API:+$API/health}" || failed=1
+          # landing-page FR-032: the page rides the same smoke as the API
+          LANDING="${{ vars.DEV_LANDING_URL }}"
+          probe landing "${LANDING:+$LANDING/}" || failed=1
+          exit $failed
       # TODO: Playwright + axe E2E against dev (TESTING.md layer 4)

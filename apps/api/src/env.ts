@@ -110,8 +110,19 @@ export type Bindings = {
      APICEP_DEADLINE_MS; no wrangler environment sets it. */
   WEBHOOK_DELIVERY_TIMEOUT_MS?: string;
   /* operator-panel D2: comma-separated emails of the platform operators.
-     Never grantable from a screen; changing it is a deploy. */
+     Never grantable from a screen; changing it is a deploy.
+     landing-page D10: also where the landing page's access requests are
+     announced — one email per request, the outcome written on the row. */
   PLATFORM_OPERATOR_EMAILS?: string;
+  /* landing-page D6: where the landing page lives, for the request door's
+     second answer. A plain HTML form post (no script in the visitor's
+     browser) is answered with a 303 to `${LANDING_BASE_URL}/gracias` or
+     `/no-enviada?motivo=<code>` — a browser navigating a form needs a page,
+     not an envelope. Unset → the form post is answered with the envelope
+     exactly as a JSON request is (a developer's machine; constitution
+     VIII). Tests pin a value in vitest.config.ts and strip it for the
+     unset behaviour. */
+  LANDING_BASE_URL?: string;
 };
 
 export type Role = "owner" | "admin" | "operator" | "viewer";

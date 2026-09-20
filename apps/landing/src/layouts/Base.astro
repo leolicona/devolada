@@ -1,0 +1,79 @@
+---
+import "../styles/global.css";
+
+/* The page's shell (landing-page D15, FR-031; contracts/landing-page.md).
+
+   `data-theme="dark"` on the root renders the tokens' dark palette for
+   every visitor — dark by decision, no toggle, no system preference (D15).
+   The head carries what a messaging app or a search engine reads: title,
+   one-line description, canonical, Open Graph and the sharing image; every
+   URL is absolute from `Astro.site`, which CI sets per environment (D14).
+   No script lives in the head: the beacon and the form script are module
+   scripts at the end of the body, and every word reads before either runs
+   (FR-030). */
+interface Props {
+  title: string;
+  description: string;
+  /* `og.png`, 1200×630, exported by hand from public/og.svg (D21) */
+  image?: string;
+  /* The page's own layout for <main>: the landing lays its sections on a
+     two-column grid at desktop width; the outcome pages take one column. */
+  mainClass?: string;
+}
+
+const { title, description, image = "/og.png", mainClass = "mx-auto w-full max-w-wide px-4" } = Astro.props;
+const site = Astro.site ?? new URL("https://devoladapago.com");
+/* `build.format: "file"` names the route `/gracias.html`; the assets Worker
+   serves it at `/gracias` and redirects the `.html` form there, so the
+   canonical is the clean path. */
+const path = Astro.url.pathname.replace(/\.html$/, "").replace(/^\/index$/, "/");
+const canonical = new URL(path, site);
+const imageUrl = new URL(image, site);
+
+/* The dark surface's value — `--color-bg-primary` under [data-theme="dark"]
+   in packages/ui/src/styles/tokens.css. A meta tag cannot read a custom
+   property, so the value is repeated here with its source named. */
+const THEME_COLOR_DARK = "#171412";
+---
+
+<!doctype html>
+<html lang="es-MX" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content={THEME_COLOR_DARK} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Devolada" />
+    <meta property="og:locale" content="es_MX" />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={imageUrl.href} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Devolada — Cobrar por transferencia, sin la talacha." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={imageUrl.href} />
+    <slot name="head" />
+  </head>
+  <body class="min-h-dvh bg-surface font-body text-ink antialiased">
+    <div class="h-1 bg-link" aria-hidden="true"></div>
+    <slot name="header" />
+    <main class={mainClass}>
+      <slot />
+    </main>
+    <slot name="footer" />
+    <!-- landing-page D8: `visit`, once the page has loaded. A module script:
+         deferred by definition, so no word waits on it (FR-030). -->
+    <script>
+      import { sendVisit } from "../scripts/beacon";
+      sendVisit();
+    </script>
+  </body>
+</html>

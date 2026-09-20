@@ -4,9 +4,9 @@
 
 **Created**: 2026-09-19
 
-**Status**: Draft — clarified 2026-09-19 and 2026-09-20 (design session); plan and tasks in step
+**Status**: Draft — clarified 2026-09-19 and 2026-09-20 (two design sessions); plan and tasks in step
 
-**Design**: [canvas v8](https://claude.ai/artifact/WSMGzw9TsBvYj3RUyad6Sk) — teléfono, escritorio, páginas de salida, estados y el flujo de activación (2026-09-20)
+**Design**: [canvas v12](https://claude.ai/artifact/WSMGzw9TsBvYj3RUyad6Sk) — teléfono, escritorio, páginas de salida, estados y el flujo de activación (2026-09-20, second session)
 
 **Input**: User description: "lest create A single page Landing Page to validate devoladapago business and attract your first customers. Same tech stack, astro as FE framework."
 
@@ -19,15 +19,18 @@ acceptable at launch for one stated reason: **the address is not public**
 
 That is also the problem. The product has no front door. `devoladapago.com`
 answers nothing today; `app.` is the panel, `link.` is the customer's payment
-page, `api.` is for programs. A business owner who hears of Devolada from the
+page, `api.` is for programs. An ISP owner who hears of Devolada from the
 creator, a partner or a WhatsApp group has nowhere to look, nothing to read at
 their own pace, and nothing to forward to the partner who holds the purse.
 Every prospect today is a conversation the creator has to be present for.
 
 "Validate the business" means one question, answered with a number rather
-than a feeling: **do businesses beyond the pilot — ISPs first — want this
-enough to ask for it?** A single page is the cheapest instrument that can
-answer it. It states the promise once, shows how it works from both sides of
+than a feeling: **do ISPs beyond the pilot want this enough to ask for
+it?** A single page is the cheapest instrument that can answer it. The
+ISP is the first customer because it is the only one the product serves end
+to end today; the second customer — a platform that integrates the API to
+offer this to its own users — is a different buyer with a different page,
+and this one says nothing to them (*Deferred*). It states the promise once, shows how it works from both sides of
 the payment, says how it is charged, and asks for exactly one thing: the
 reader's WhatsApp, so the creator can answer in person. Then it counts who
 asked and where they came from.
@@ -132,7 +135,37 @@ named that as the next feature and this spec leaves it there (*Deferred*).
   doubts as a list instead of six, the rest answered by the benefits and the
   customer's screen; and the customer's screen shown at its two moments —
   verifying, with the waiting breath, and registered — as the page's one
-  strong colour.
+  strong colour (the screen moved inside the payment flow later the same
+  day; next session).
+
+### Session 2026-09-20 (second design session, canvas v12)
+
+- **Q: Who is the reader?** **A: The ISP.** The eyebrow names them —
+  *Cobros por SPEI para ISPs en México* — and the page's words follow:
+  *internet* where it said *servicio*. Why: the whole promise — the
+  customer pays, Banxico confirms, the connection comes back with nobody
+  touching anything — is true today only for an ISP whose system Devolada
+  already talks to; a page that speaks to one reader converts better than
+  one that speaks to two. *ISP* is wider than the one system integrated:
+  the page still names no vendor, and the form's billing-system answer plus
+  the conversation tell the creator which system to build next — the
+  demand signal this page exists to collect. Platforms that would
+  integrate the API are the second customer, with their own page later
+  (*Deferred*); this page carries no line for them.
+- **Q: How does the page show the automation?** **A: As three moments,
+  in order** — *Tu cliente paga* (the customer's payment screen: amount,
+  CLABE), *Se verifica la transferencia* (that screen at its two moments,
+  *Verificando tu pago…* breathing, then the green *Tu pago fue
+  registrado.*), *El internet vuelve solo* (the business's own system
+  showing the customer with the product's badge word, *Reconectado*). This
+  replaces the customer's screen shown alone. *Tu servicio sigue activo*
+  leaves the page: it is the payer page's line for a customer who was never
+  cut, and it contradicted the reactivation story told beside it; the claim
+  `customer-meanwhile` goes with it (research D11).
+- Also settled on the canvas: the hero form loses its tinted panel — the
+  button is the form's one accent, the label is the field label, a hairline
+  separates the customer's line; and the phone and desktop boards were
+  resized to their content (both had been clipping the footer).
 
 ## The workflow the page starts
 
@@ -153,7 +186,7 @@ recording (quickstart, *Pre-flight*).
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - A business owner understands Devolada and asks for it (Priority: P1)
+### User Story 1 - An ISP owner understands Devolada and asks for it (Priority: P1)
 
 An ISP owner opens the page on their phone, from a message a colleague
 forwarded. Within the first screen they know three things: this collects
@@ -166,10 +199,10 @@ They type their WhatsApp into the first screen — or, further down, their
 WhatsApp, their name and the system they bill with — and are told when they
 will hear back.
 
-The owner of a school, a gym or a software company reads the same page and
-finds nothing that names a vendor: the connection to their billing system is
-a question the conversation answers. Nothing on the page promises an action
-in a system that is not connected.
+An ISP on another system — or on its own software — reads the same page and
+finds nothing that names a vendor: which system, and what Devolada does in
+it, is a question the conversation answers. Nothing on the page promises an
+action in a system that is not connected.
 
 **Why this priority**: it is the feature. Without it nothing else on the
 page has a reader. On its own it delivers the whole value: a prospect can
@@ -191,14 +224,15 @@ how it is charged, without prompting.
    they see the business's steps and the customer's steps separately, and
    the customer's steps use the words the customer's payment page uses ("Haz
    tu transferencia", "Envía tu comprobante", "Tu pago fue registrado").
-3. **Given** a reader on the supported billing system, **When** they read
-   what Devolada does in it, **Then** the action is named by what it does
-   there — reactivates the service, marks the invoice paid — and the system
-   is named, so they recognise themselves.
-4. **Given** a reader whose business is not on the supported billing system,
-   **When** they look for their case, **Then** the page says their own
-   software asks for the link and is told the verdict, and says nothing that
-   implies more than that.
+3. **Given** an ISP reading what happens when a customer pays, **When**
+   they reach the three moments, **Then** they see the customer pay, the
+   transfer verified against Banxico, and the internet come back in their
+   own system — the action named by what it does, no vendor named — so they
+   recognise their own week.
+4. **Given** an ISP whose system is not the one connected today, **When**
+   they look for their case, **Then** the page says which system they use is
+   settled in the conversation, and nothing on it implies an action in a
+   system that is not connected.
 5. **Given** a visitor with a doubt the page anticipates (a short payment, a
    false or reused receipt, how long verification takes, whether they must
    change banks, what happens when their system does not answer), **When**
@@ -353,9 +387,8 @@ on the request the creator sees; search the product's name and find the page.
   one page: every section is on it. The only other addresses it needs are
   the privacy notice, the request's outcome pages (received; not sent) and
   a not-found page.
-- **FR-002**: The page MUST speak to any business in Mexico that collects
-  recurring payments by SPEI — ISPs first — without naming a billing-system
-  vendor. It MUST say that Devolada connects to the reader's billing system
+- **FR-002**: The page MUST speak to ISPs in Mexico that collect by SPEI —
+  its first line names them — without naming a billing-system vendor. It MUST say that Devolada connects to the reader's billing system
   and tells it when a payment is verified, and that which system they use is
   settled in the conversation. It MUST NOT promise the automatic action to a
   system that is not connected, nor imply that a business makes links by
@@ -376,13 +409,16 @@ on the request the creator sees; search the product's name and find the page.
   business's own system stays the record, and Devolada tells it what
   happened.
 - **FR-006**: The page MUST show how it works from both sides — the
-  business's steps and the customer's steps — and MUST show the customer's
-  screen at its two moments, verifying (with the waiting breath) and
-  registered. The customer's side MUST use the words the customer's payment
-  page uses.
+  business's steps and the customer's steps — and MUST show what happens
+  when a customer pays as three moments in order: the customer pays, the
+  transfer is verified, the internet comes back. The customer's screen
+  appears at its two moments — verifying (with the waiting breath) and
+  registered — inside the second; the third shows the business's own system
+  marking the customer reconnected, in the product's own word. The
+  customer's side MUST use the words the customer's payment page uses.
 - **FR-007**: The page MUST name the action by what it does in the reader's
-  system — reactivate the service — never by an internal word and never by
-  a vendor's name. The supported system appears on the page only as an
+  system — the customer is reconnected, the internet comes back — never by
+  an internal word and never by a vendor's name. The supported system appears on the page only as an
   answer in the form's billing-system question.
 - **FR-008**: The page MUST answer, somewhere on it, the doubts a reader
   brings: a short payment, a false or reused receipt, how long verification
@@ -407,8 +443,9 @@ on the request the creator sees; search the product's name and find the page.
   verification or the law are named: SPEI, Banxico, CLABE, the privacy
   notice. It says "cobrar" for what the business does and "pago" for what
   the customer does; it never uses "cobro" for the customer's act. The
-  headline is *Cobrar por transferencia, sin la talacha.*; SPEI is named in
-  the eyebrow, the subhead and the proof tile.
+  headline is *Cobrar por transferencia, sin la talacha.*; the eyebrow is
+  *Cobros por SPEI para ISPs en México*; SPEI is named in the eyebrow, the
+  subhead and the proof tile.
 
 **Every claim is true**
 
@@ -517,9 +554,8 @@ on the request the creator sees; search the product's name and find the page.
 
 ### Measurable Outcomes
 
-- **SC-001**: Five people who run or work at a business that collects by
-  SPEI — at least three of them at an ISP — and have never seen Devolada can
-  each say, after reading the page once on a phone, what it does, for whom,
+- **SC-001**: Five people who run or work at an ISP and have never seen
+  Devolada can each say, after reading the page once on a phone, what it does, for whom,
   and how it is charged — 5 of 5, unprompted.
 - **SC-002**: On a mid-range phone over a cellular connection — measured
   in Chrome DevTools with the "Slow 4G" network preset and 4× CPU
@@ -560,12 +596,13 @@ on the request the creator sees; search the product's name and find the page.
 - The product's root address is unused today and becomes the page's home,
   with `www` leading there. The panel, the payment page and the programs'
   address keep their own names.
-- The page is es-MX only. The reader is a decision-maker at a business; the
+- The page is es-MX only. The reader is a decision-maker at an ISP; the
   customer never lands here on purpose — their door is the link they were
   sent — and FR-011 catches the ones who do.
-- ISPs are the first readers because they are the only ones the product
-  serves end to end today, with the action in their system. The page does
-  not say so; the conversation does, system by system (workflow step 3).
+- ISPs are the readers because they are the only ones the product serves
+  end to end today, with the action in their system. The page says so in
+  its first line; which ISP systems are connected, the conversation says,
+  system by system (workflow step 3).
 - No testimonial or customer name at launch: the pilot ISP's identity is not
   public unless they agree. The page is laid out so one can be added without
   redesign.
@@ -615,6 +652,12 @@ on the request the creator sees; search the product's name and find the page.
   this feature does not touch.
 - **Testimonials, names and a case study** from the pilot ISP, once they
   agree.
+- **Platforms that integrate the API** — billing systems and software
+  vendors who would offer verified SPEI to their own users. The second
+  customer, decided 2026-09-20: a different buyer, who reads documentation
+  rather than a landing page, and gets their own page once the first ISPs
+  have converted. This page says nothing to them; one who arrives anyway
+  picks *Mi propio sistema* in the form and is answered in the conversation.
 - **An English version.**
 
 ## Out of Scope

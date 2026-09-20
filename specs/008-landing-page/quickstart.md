@@ -30,16 +30,17 @@ The Worker in front of the page does not run under `astro dev`. To see the
 pnpm --filter @devolada/landing build && pnpm --filter @devolada/api exec wrangler dev --config ../landing/wrangler.jsonc --port 8790
 ```
 
-## US1 — A business owner understands Devolada and asks for it
+## US1 — An ISP owner understands Devolada and asks for it
 
 1. Open `http://localhost:5176/?ch=prueba` at 360 px wide (DevTools device
    toolbar). The page is dark. The first screen shows the eyebrow naming
    SPEI, *Cobrar por transferencia, sin la talacha.*, the subhead, and the
    one-field WhatsApp form with its button inside the viewport; nothing
    scrolls sideways; the header's only link is *Entrar*.
-2. Read down: the three proof tiles, the customer's screen at its two
-   moments (the "Verificando" breath, the green "Tu pago fue registrado"),
-   the four benefits, both sides of a payment in the payer page's words,
+2. Read down: the three proof tiles, the payment in three moments (the
+   customer's screen paying, then the "Verificando" breath and the green
+   "Tu pago fue registrado", then the system's "Reconectado"), the four
+   benefits, both sides of a payment in the payer page's words,
    the system panel naming no vendor, the three doubts, the pricing model
    with **no figure**, the closing form, the human contact, the privacy
    link. No link to sign-up anywhere.
@@ -118,9 +119,9 @@ Things a build cannot decide, checked once and recorded in the PR:
       customer's side exist — the templates are on the canvas's *Flujo*
       board; the recording is what message 1 sends (spec §The workflow the
       page starts).
-- [ ] **The reading test** (SC-001): five people who collect by SPEI and have
-      never seen Devolada, at least three from ISPs, each read the page once
-      on a phone and say back what it does, for whom and how it is charged.
+- [ ] **The reading test** (SC-001): five people who run or work at an ISP and have
+      never seen Devolada, all of them at ISPs, each read the page once on a
+      phone and say back what it does, for whom and how it is charged.
       Record what they said in the PR, unprompted answers only.
 - [ ] **The timing** (SC-002): in Chrome DevTools with the "Slow 4G" preset
       and 4× CPU throttling, the first screen is readable within 2 s and the

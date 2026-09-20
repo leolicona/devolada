@@ -151,7 +151,7 @@ apps/landing/                                   # NEW — the page and its Worke
 │   │   ├── Header.astro                        # the mark and the sign-in link for existing customers (FR-004)
 │   │   ├── Hero.astro                          # FR-003 first screen: eyebrow naming SPEI, headline, subhead, the hero form · FR-011 the customer's line
 │   │   ├── Proof.astro                         # the three tiles: SPEI verificado contra Banxico · directo a tu CLABE · primeros pagos gratis
-│   │   ├── CustomerScreen.astro                # FR-006 the customer's screen at its two moments — verifying (breath), registered
+│   │   ├── PaymentFlow.astro                   # FR-006 the three moments — the customer pays, the transfer is verified, the internet comes back; the customer's screen (breath, registered) inside the second, the business's system with StatusBadge "Reconectado" in the third (D25)
 │   │   ├── Benefits.astro                      # FR-005 / FR-008 the four things the reader stops doing, the two brakes inside them
 │   │   ├── HowItWorks.astro                    # FR-006 both sides, the payer page's words
 │   │   ├── System.astro                        # FR-002 / FR-007 "se conecta con tu sistema de facturación", no vendor named

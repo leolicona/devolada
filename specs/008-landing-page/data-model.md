@@ -88,7 +88,7 @@ appears on the page exactly once, under `[data-claim="<id>"]` (browser
 test) — a tile or a headline that shortens a claim carries
 `data-claim-echo` and is not the claim; the list is reviewed by a person
 before each publication (quickstart, *Pre-flight*). The entries follow the canvas
-(v8) and are listed with their bases in research D11 (amended 2026-09-20);
+(v12) and are listed with their bases in research D11 (amended 2026-09-20);
 the pricing model sentence — *Prepago. Por pago verificado. Sin mensualidad
 ni contrato. Los primeros pagos son gratis.* — is one of them, with
 `prepaid-credit D2/D4` and `platform/settings.ts` as its basis.

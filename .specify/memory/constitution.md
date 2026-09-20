@@ -1,4 +1,65 @@
 <!--
+Sync Impact Report (v1.5.0, 2026-09-20)
+- Version change: 1.4.0 → 1.5.0 — MINOR: the fixed stack table gains one
+  row, its Tests row names a second test runner for one workspace, and one
+  bullet of Principle VI counts surfaces differently. No principle added,
+  removed or redefined, no renumbering. Precedent: v1.3.0, also MINOR, for
+  a table that stopped describing the product as built.
+- Source: specs/008-landing-page — plan.md Complexity Tracking (the one
+  departure from the stack table), research.md D2 (the page renders the
+  shared atoms at build and ships no client framework), D13 (Astro 7
+  mandates Vite 8, which the workspace's Vitest 3 does not support, so that
+  one workspace tests on Vitest 4) and D19 (this amendment, drafted after
+  the /speckit-analyze finding C1 of 2026-09-19); run by the creator on
+  2026-09-20. As with v1.1.0 and v1.3.0, the amendment leads the
+  implementation on purpose: the code catches up under
+  specs/008-landing-page/tasks.md.
+- What this decides: a third surface exists and the law counts it. The
+  landing page is a static site built by Astro, served by an assets Worker
+  with a small script in front (host redirect, channel tag, headers); it
+  consumes the design system at build — tokens, stylesheet, atoms, recipes —
+  and sends no framework to the browser. `packages/ui` remains the single
+  definition of every shared atom; what changes is how many surfaces the
+  rule counts, and that a surface may consume an atom as built HTML and a
+  recipe as a class string rather than as a hydrated component.
+- What it does not change: the Frontend row (React 19, Vite 6) still
+  governs `apps/admin` and `apps/pago`; the page's requests and counts are
+  resources of `apps/api` under Principle III like any other; no new Worker
+  trigger; no principle added, removed or redefined; no renumbering;
+  templates unchanged.
+- Modified sections:
+  · Technology Stack & Constraints — new row **Landing** after **Shared
+    UI**: "`apps/landing`: Astro (static output, no adapter) on an assets
+    Worker with a script in front for the host redirect, the channel tag
+    and the headers; consumes `@devolada/ui` tokens, stylesheet, atoms and
+    recipes at build; ships no client framework".
+  · Technology Stack & Constraints, Tests row — "Vitest 3" gains "Vitest 4
+    in `apps/landing`, whose Astro build sits on Vite 8, until the workspace
+    moves", folded into the row's existing parenthesis.
+  · VI. Visual Foundations, the `packages/ui` bullet — "any atom both
+    surfaces render" → "any atom more than one surface renders", plus one
+    sentence: "A surface that ships no client framework consumes the atoms
+    rendered at build and the recipes as class strings — the definition
+    stays in the package either way." The rest of the bullet is unchanged.
+  · Two count words that follow from the new row, not named in research
+    D19, changed so the document does not contradict itself: Shared UI row,
+    "consumed by both apps" → "consumed by every surface"; Development
+    Workflow & Quality Gates, second bullet, "the three Workers" → "the
+    four Workers".
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅ (Constitution Check is filled at plan time
+  from this file); spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(TD-005): still open from v1.0.0 — spec-lint runs warning-only until
+  the debt it names is registered with /speckit-debt-log.
+  TODO(BREATH-AMPLITUDE): carried unchanged from v1.1.0.
+  Carried from v1.2.0, still open: who may be admitted as a business, and
+  whether identity is checked before one can collect — production-launch
+  D8 launches with open sign-up and names admission as the next feature.
+-->
+
+<!--
 Sync Impact Report (v1.4.0, 2026-09-18)
 - Version change: 1.3.0 → 1.4.0 — MINOR: one bullet of Development Workflow
   & Quality Gates describes a different mechanism for the same act. No
@@ -343,11 +404,13 @@ filter is missing. One matrix, checked by area, is auditable with grep.
 - One dimming treatment: every modal surface — dialog, sheet, confirmation —
   renders the same backdrop from `--color-surface-overlay`. A hand-mixed
   translucent black or ink is drift, in either theme.
-- `packages/ui` is the single definition of any atom both surfaces render; a
-  duplicate recipe in an app is drift. Sizes are declared, not improvised:
-  compact (40px, desktop admin), standard (48px touch), decisive (64px).
-  Primitives only one surface uses may live in that app, but consume the shared
-  tokens and never redefine a value.
+- `packages/ui` is the single definition of any atom more than one surface
+  renders; a duplicate recipe in an app is drift. A surface that ships no
+  client framework consumes the atoms rendered at build and the recipes as
+  class strings — the definition stays in the package either way. Sizes are
+  declared, not improvised: compact (40px, desktop admin), standard (48px
+  touch), decisive (64px). Primitives only one surface uses may live in that
+  app, but consume the shared tokens and never redefine a value.
 - Feedback has a named motion vocabulary: waiting breathes, the outcome
   cross-fades, nothing spins or bounces on the payer's page. Duration and
   easing come from tokens — a literal duration in a component is drift.
@@ -408,9 +471,10 @@ Complexity Tracking.
 | Data | D1 via Drizzle ORM (`sqlite`), one database, migrations generated by `drizzle-kit`, additive — the per-PR preview applies them to the live dev database while the deployed Worker keeps serving; R2 for transfer proofs behind signed URLs; Workers AI for receipt reading (model is a var) |
 | Auth | Better Auth 1.6: email + password with OTP verification, passkeys (`@better-auth/passkey`), organization plugin as the tenant twin; sessions in our D1 |
 | Frontend | React 19, Vite 6, Tailwind CSS 4, shadcn/ui (new-york, lucide) over Radix, TanStack Router + Query; `apps/admin` (panel) and `apps/pago` (public payment page) served as assets-only Workers with SPA fallback |
-| Shared UI | `@devolada/ui`: tokens, base stylesheet and atoms consumed by both apps |
+| Shared UI | `@devolada/ui`: tokens, base stylesheet and atoms consumed by every surface |
+| Landing | `apps/landing`: Astro (static output, no adapter) on an assets Worker with a script in front for the host redirect, the channel tag and the headers; consumes `@devolada/ui` tokens, stylesheet, atoms and recipes at build; ships no client framework |
 | Language | TypeScript 5.7 strict, ESM, `verbatimModuleSyntax`; Node 22; pnpm 10 workspace |
-| Tests | Vitest 3 (`vitest-pool-workers` for Workers, happy-dom for React), MSW 2, Testing Library, Playwright 1.6x + axe |
+| Tests | Vitest 3 (`vitest-pool-workers` for Workers, happy-dom for React; Vitest 4 in `apps/landing`, whose Astro build sits on Vite 8, until the workspace moves), MSW 2, Testing Library, Playwright 1.6x + axe |
 | Environments | `dev` and `prod` per Worker under `devoladapago.com`; per-PR preview versions. The engine deploys where the API deploys; whether an environment validates is decided by the provider credential planted there, not by a deploy |
 
 Additional constraints:
@@ -429,7 +493,7 @@ Additional constraints:
   typecheck, unit/component/API tests, build. All MUST pass; none may be
   skipped, disabled or quarantined to get green.
 - With `PREVIEW_ENABLED`, every PR uploads no-traffic preview versions of the
-  three Workers against the dev database; migrations are applied early
+  four Workers against the dev database; migrations are applied early
   because they are additive.
 - Merge to `main` deploys `dev`: the browser layer (`pnpm e2e`) and the
   passkey ceremony (`pnpm e2e:passkey`) gate the deploy, then migrations,
@@ -463,4 +527,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.4.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-18
+**Version**: 1.5.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-20

@@ -1,4 +1,8 @@
 import type { Page } from "@playwright/test";
+/* By path, not by package name: the root workspace does not depend on the
+   API, and the contract's zod resolves from apps/api's own node_modules
+   when the file is reached this way. */
+import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
 
 /* The API, stubbed at the network edge. Same discipline as MSW in the
    component layer: the shapes come from the real contracts, so a stub
@@ -341,4 +345,24 @@ export function stubPagoClosed(closedReason: "paid" | "expired") {
   return async (page: Page): Promise<void> => {
     await apiRoute(page, "**/direct-payments/links/*", closedLink(closedReason));
   };
+}
+
+/* The landing page's two doors (landing-page US1; contracts/landing-api.md),
+   with fixtures the contract parses. The page is built with PUBLIC_API_URL
+   pointing at its own preview origin, so these are same-origin routes like
+   the admin's. */
+export const accessRequestReceived = accessRequestReceivedSchema.parse({ id: "req-1", receivedAt: at });
+
+export async function stubLandingApi(page: Page): Promise<void> {
+  await apiRoute(page, "**/landing/requests", accessRequestReceived);
+  await apiRoute(page, "**/landing/events", { counted: true });
+}
+
+/* One refusal from the request door, in the envelope with a bare code
+   (constitution III; landing-page D6, D9) */
+export async function stubLandingRefusal(page: Page, code: "REQUEST_REFUSED" | "TOO_MANY_REQUESTS" | "VALIDATION_ERROR", status: number): Promise<void> {
+  await page.route("**/landing/requests", (route) => {
+    if (route.request().resourceType() === "document") return route.fallback();
+    return route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ success: false, error: { code } }) });
+  });
 }

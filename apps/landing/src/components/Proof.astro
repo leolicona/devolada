@@ -1,0 +1,29 @@
+---
+import { Gift, Landmark, ShieldCheck } from "lucide-react";
+
+/* The three proof tiles (FR-003, FR-012): icon + words. Each shortens a
+   claim rendered in full elsewhere and carries `data-claim-echo` for it —
+   an echo, never the claim's text, so the browser layer finds one text per
+   claim (landing-page D11; /speckit-analyze I1). */
+const tiles = [
+  { echo: "spei-verified", icon: ShieldCheck, text: "SPEI verificado contra Banxico" },
+  { echo: "money-never-touches", icon: Landmark, text: "Directo a tu CLABE" },
+  { echo: "pricing-model", icon: Gift, text: "Primeros pagos gratis" },
+];
+---
+
+<section class="border-t border-line-soft py-12 lg:col-span-2 lg:row-start-2 lg:border-0 lg:pt-0 lg:pb-16" aria-label="Lo que garantiza">
+  <ul class="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:gap-4">
+    {
+      tiles.map(({ echo, icon: Icon, text }) => (
+        <li
+          data-claim-echo={echo}
+          class="flex items-center gap-3 rounded-md border border-line bg-card px-4 py-3.5 text-sm font-medium leading-snug"
+        >
+          <Icon className="size-5 shrink-0 text-link" aria-hidden />
+          <span>{text}</span>
+        </li>
+      ))
+    }
+  </ul>
+</section>

@@ -1,0 +1,45 @@
+---
+import Base from "../layouts/Base.astro";
+import Header from "../components/Header.astro";
+import Hero from "../components/Hero.astro";
+import Proof from "../components/Proof.astro";
+import PaymentFlow from "../components/PaymentFlow.astro";
+import Benefits from "../components/Benefits.astro";
+import HowItWorks from "../components/HowItWorks.astro";
+import System from "../components/System.astro";
+import Doubts from "../components/Doubts.astro";
+import Pricing from "../components/Pricing.astro";
+import RequestForm from "../components/RequestForm.astro";
+import Footer from "../components/Footer.astro";
+
+/* The page (FR-001): every section on it, in the phone's order — Header →
+   Hero → Proof → PaymentFlow → Benefits → HowItWorks → System → Doubts →
+   Pricing → the closing form → Footer. At desktop width <main> becomes a
+   two-column grid and the payment flow moves beside the hero, as the
+   canvas's Escritorio board lays it (landing-page D25); the DOM order —
+   what a screen reader and the no-script visitor get — stays the phone's.
+   The title and the one-line description are what a shared address
+   unfurls into (FR-031). */
+const title = "Devolada — Cobrar por transferencia, sin la talacha";
+const description =
+  "Cobros por SPEI para ISPs en México: cada transferencia se verifica contra Banxico, llega a tu CLABE y tu sistema reconecta al cliente solo. Déjanos tu WhatsApp.";
+---
+
+<Base title={title} description={description} mainClass="mx-auto w-full max-w-wide px-4 lg:grid lg:grid-cols-2 lg:gap-x-16">
+  <Header slot="header" />
+  <Hero />
+  <Proof />
+  <PaymentFlow />
+  <Benefits />
+  <HowItWorks />
+  <System />
+  <Doubts />
+  <Pricing />
+  <section class="flex flex-col gap-6 border-t border-line-soft py-12 lg:col-span-2 lg:gap-8 lg:py-16" aria-labelledby="arranca">
+    <h2 id="arranca" class="text-xl font-semibold leading-tight tracking-tight lg:text-2xl">Arranca hoy</h2>
+    <div class="rounded-lg border border-accent bg-accent-soft p-6 lg:mx-auto lg:w-full lg:max-w-xl">
+      <RequestForm variant="full" />
+    </div>
+  </section>
+  <Footer slot="footer" />
+</Base>

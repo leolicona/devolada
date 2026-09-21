@@ -18,8 +18,10 @@ import { supportRoute } from "./routes/support";
 import { v1Route } from "./routes/v1";
 import { wellKnownRoute } from "./routes/v1/well-known";
 import { sweepWebhookDeliveries } from "./webhooks/queue";
+import { sweepWispHubLists } from "./wisphub/snapshot";
 import { sweepApiCounters } from "./routes/v1/middleware";
 import { internalError } from "./routes/v1/envelope";
+import { landingPublicRoute } from "./routes/landing";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -56,6 +58,10 @@ app.route("/credit", creditRoute);
 app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
 app.route("/support", supportRoute);
+/* landing-page D5/D6: the landing page's two public doors — the request
+   and the beacon. Inside CORS, unlike /v1: the page's script calls the
+   request door from the landing's origin (ALLOWED_ORIGINS, D14). */
+app.route("/landing", landingPublicRoute);
 
 /* The public collections API (automated-collections-api D1): server-to-server,
    no CORS, versioned because outside callers now depend on its shape. */
@@ -120,6 +126,16 @@ export default {
     ctx.waitUntil(
       sweepTopUps(env).then((report) => {
         if (report.claimed) console.log("top-up sweep:", JSON.stringify(report));
+      }),
+    );
+    /* bug: pending-invoice-cap, bug: links-roster-cap: the background
+       read of a tenant's WispHub lists — pending invoices and customers —
+       for the tenants a request cannot read whole. Its own lane — the
+       verdicts above read the list it keeps, and a slow page must not
+       hold a verdict this minute. */
+    ctx.waitUntil(
+      sweepWispHubLists(env).then((report) => {
+        if (report.pages || report.failed) console.log("wisphub list sweep:", JSON.stringify(report));
       }),
     );
     /* automated-collections-api D13/D14: the public API's housekeeping —

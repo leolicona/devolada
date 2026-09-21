@@ -1,0 +1,30 @@
+---
+import { Landmark, Scale, ShieldCheck, Zap } from "lucide-react";
+import { claim } from "../content/claims";
+
+/* Lo que te quitas de encima (FR-005, FR-008): four cards of one line
+   each, the two brakes inside them — the money goes to the business's own
+   account, the business's own system stays the record. Each line is a
+   claim rendered by id (landing-page D11). */
+const cards = [
+  { icon: Zap, title: "Reactivación automática", claim: claim("auto-reactivation") },
+  { icon: ShieldCheck, title: "Cero comprobantes chuecos", claim: claim("no-fake-receipts") },
+  { icon: Scale, title: "Pagos incompletos, a la vista", claim: claim("partial-visible") },
+  { icon: Landmark, title: "Tu dinero, en tu cuenta", claim: claim("money-never-touches") },
+];
+---
+
+<section class="flex flex-col gap-6 border-t border-line-soft py-12 lg:col-span-2 lg:gap-8 lg:py-16" aria-labelledby="beneficios">
+  <h2 id="beneficios" class="text-xl font-semibold leading-tight tracking-tight lg:text-2xl">Lo que te quitas de encima</h2>
+  <ul class="flex flex-col gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
+    {
+      cards.map(({ icon: Icon, title, claim }) => (
+        <li class="flex flex-col gap-2.5 rounded-md border border-line bg-card p-6">
+          <Icon className="size-6 text-link" aria-hidden />
+          <h3 class="text-md font-semibold leading-tight">{title}</h3>
+          <p class="text-ink-soft" data-claim={claim.id}>{claim.text}</p>
+        </li>
+      ))
+    }
+  </ul>
+</section>

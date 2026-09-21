@@ -1,0 +1,20 @@
+---
+import { claim } from "../content/claims";
+
+/* Se conecta con tu sistema de facturación (FR-002, FR-007; landing-page
+   D24): Devolada tells the reader's system when a payment is verified and
+   it reactivates the service; which system they use is settled in the
+   conversation. No vendor named — the supported system appears on the page
+   only as an answer in the form. The sentence is the `system-stays-record`
+   claim (D11). */
+const record = claim("system-stays-record");
+---
+
+<section class="border-t border-line-soft py-12 lg:col-span-2 lg:py-16" aria-labelledby="sistema">
+  <div class="flex flex-col gap-2.5 rounded-lg border border-accent bg-accent-soft p-6">
+    <p class="text-xs font-medium uppercase tracking-wider text-link">Tu sistema sigue mandando</p>
+    <h2 id="sistema" class="text-lg font-semibold leading-tight">Se conecta con tu sistema de facturación.</h2>
+    <p data-claim={record.id}>{record.text}</p>
+    <p class="text-ink-soft">¿Cuál usas? Nos lo cuentas por WhatsApp.</p>
+  </div>
+</section>

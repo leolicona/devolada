@@ -1,17 +1,16 @@
 import type { Context } from "hono";
-import { and, asc, eq, gt, gte, sql, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, gte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
-import { D1_MAX_PARAMS, chunks } from "../../db/params";
 import { creditSummary } from "../../credit";
 import { WispHubError } from "../../wisphub/client";
 /* provider-address-per-isp D4: every provider client in this file is
    addressed to the actor business's own installation, through the one
    factory. The constructor is never called here. */
 import { wisphubFor } from "../../wisphub/factory";
-import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "../../wisphub/cache";
-import { NO_DEBT, debtOf } from "../../wisphub/debt";
+import { readPendingInvoices, readRoster } from "../../wisphub/snapshot";
+import { NO_DEBT, debtFor, nothingOwedIsProven } from "../../wisphub/debt";
 import {
   askAvailable,
   businessConfigured,
@@ -21,6 +20,7 @@ import {
   validationAvailable,
 } from "../../direct-payments/validation";
 import {
+  ensureLinks,
   isApiLink,
   isPanelLink,
   linkAcceptsPayments,
@@ -53,98 +53,6 @@ type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
    endpoint. Per link, per hour. */
 const HOURLY_ATTEMPT_BUDGET = 5;
 
-/* Every customer of the roster has a link (direct-payment D5,
-   admin-links-view D5): the usuario is the identity, the numeric id a
-   cache. Writes only what changed. The upsert this replaces rewrote one
-   `payment_links` row per customer on every read, cache hit or not —
-   and the roster is read on every return to the Links tab (BUG-020).
-   Statements grow with the tenant, so each goes in chunks under D1's
-   parameter cap (BUG-021). Returns usuario → token. */
-async function ensureLinks(
-  db: ReturnType<typeof drizzle>,
-  businessId: string,
-  customers: { usuario: string; wisphubId: number }[],
-): Promise<Map<string, string>> {
-  const tokens = new Map<string, string>();
-  if (!customers.length) return tokens;
-  /* usuario → the numeric id the row holds today */
-  const storedId = new Map<string, string>();
-  const readTokens = async (usuarios: string[]) => {
-    /* one parameter is the business id, one the source */
-    for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
-      const rows = await db
-        .select({
-          customerUsuario: paymentLinks.customerUsuario,
-          token: paymentLinks.token,
-          wisphubCustomerId: paymentLinks.wisphubCustomerId,
-        })
-        .from(paymentLinks)
-        .where(
-          and(
-            eq(paymentLinks.businessId, businessId),
-            /* automated-collections-api D3/D4: the usuario namespace is the
-               panel's; an API link never holds one */
-            eq(paymentLinks.source, "panel"),
-            inArray(paymentLinks.customerUsuario, part),
-          ),
-        );
-      for (const row of rows) {
-        if (row.customerUsuario === null || row.wisphubCustomerId === null) continue;
-        tokens.set(row.customerUsuario, row.token);
-        storedId.set(row.customerUsuario, row.wisphubCustomerId);
-      }
-    }
-  };
-  await readTokens(customers.map((customer) => customer.usuario));
-
-  const missing = customers.filter((customer) => !tokens.has(customer.usuario));
-  /* nine values per row at most: id and created_at, the four written
-     below, and `source`, `mode`, `is_test` — drizzle sends a column's
-     literal default as a parameter too (automated-collections-api D3;
-     measured 2026-09-17: 150 customers at six per row overran D1's cap) */
-  for (const part of chunks(missing, Math.floor(D1_MAX_PARAMS / 9))) {
-    const inserted = await db
-      .insert(paymentLinks)
-      .values(
-        part.map((customer) => ({
-          businessId,
-          token: makeLinkToken(),
-          wisphubCustomerId: String(customer.wisphubId),
-          customerUsuario: customer.usuario,
-        })),
-      )
-      /* Two members listing at once: the first insert wins the usuario,
-         the second reads its token below. automated-collections-api D4:
-         the usuario index is partial now, and SQLite matches a named
-         conflict target to a partial index only when the target repeats
-         its WHERE — which drizzle 0.40 cannot emit for DO NOTHING (it
-         places `where` after `do nothing`, a syntax error; measured
-         2026-09-17). An untargeted DO NOTHING covers every unique index
-         on the table, which for a fresh token is the same one. */
-      .onConflictDoNothing()
-      .returning({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token });
-    for (const row of inserted) {
-      if (row.customerUsuario !== null) tokens.set(row.customerUsuario, row.token);
-    }
-  }
-  const raced = missing.filter((customer) => !tokens.has(customer.usuario)).map((c) => c.usuario);
-  if (raced.length) await readTokens(raced);
-
-  /* D5: the numeric id refreshes on sight — one row each, only when it
-     moved, which is a recycled id on the demo tenant and nothing on a
-     real one. */
-  for (const customer of customers) {
-    const stored = storedId.get(customer.usuario);
-    if (stored !== undefined && stored !== String(customer.wisphubId)) {
-      await db
-        .update(paymentLinks)
-        .set({ wisphubCustomerId: String(customer.wisphubId) })
-        .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.customerUsuario, customer.usuario)));
-    }
-  }
-  return tokens;
-}
-
 async function resolveLink(c: Ctx, token: string) {
   const db = drizzle(c.env.DB);
   const [link] = await db.select().from(paymentLinks).where(eq(paymentLinks.token, token));
@@ -174,10 +82,20 @@ async function attemptsInLastHour(
   return Number(row?.n ?? 0);
 }
 
-function wisphubFailure(c: Ctx, e: unknown) {
+/* One helper, two audiences (bug links-refused-key). The panel hears
+   the adapter's own code: WISPHUB_AUTH_FAILED is a setup problem with a
+   door to Integraciones, WISPHUB_UNAVAILABLE is weather and a Reintentar
+   — folding them was what let a good key on the wrong installation read
+   as an outage (see cobros-installation-fallback). The payer keeps
+   hearing one word: whose gap it is is not the customer's business, and
+   the enumerated codes below are the whole of what travels to them. The
+   default is the payer so an omitted argument can never leak an ISP's
+   setup state to a customer. Never the key in the line (007 FR-013). */
+function wisphubFailure(c: Ctx, e: unknown, audience: "payer" | "panel" = "payer") {
   if (e instanceof WispHubError) {
     console.error("wisphub failure:", e.code, e.message);
-    return c.json({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } }, 503);
+    const code = audience === "panel" ? e.code : "WISPHUB_UNAVAILABLE";
+    return c.json({ success: false, error: { code } }, 503);
   }
   throw e;
 }
@@ -265,19 +183,27 @@ export async function getLinkStatus(c: Ctx, token: string) {
   try {
     const wisphub = wisphubFor(integration!, c.env);
     /* provider-latency D2: independent reads, one wait. D3: the page
-       renders here; the submission below re-reads fresh before any
-       amount is committed, so a 30s-old list cannot decide money. */
-    const version = await pendingVersion(ctx.db, business.id);
+       renders here; the submission below re-reads before any amount is
+       committed, so a 30s-old list cannot decide money. A large tenant
+       reads the sweep's snapshot on both paths (bug: pending-invoice-cap). */
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      pendingInvoicesForDisplay(business.id, wisphub, now, version),
+      readPendingInvoices(ctx.db, business.id, wisphub, now, { display: true }),
     ]);
     /* debt-truth D7: invoices plus the carried balance. A payer whose
        invoice closed on a short payment owes a remainder that the
        invoice list alone cannot see. */
-    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+    const debt = customer ? debtFor(customer, pending) : NO_DEBT;
     const customerName = customer?.name ?? link.customerUsuario;
 
+    if (debt.totalCents === 0 && customer && !nothingOwedIsProven(customer, pending)) {
+      /* bug: pending-invoice-cap — a zero from a cut-off list is not
+         "al corriente". This page painted the green "no tienes pagos
+         pendientes" to a customer whose invoice sat beyond the read
+         (debt-truth D4 was never applied here). The honest answer is the
+         one the page already has for a provider it could not read. */
+      return c.json({ success: false, error: { code: "WISPHUB_READ_INCOMPLETE" } }, 503);
+    }
     if (debt.totalCents === 0 || !customer) {
       const data: LinkStatusResponse = {
         ispName: business.name,
@@ -465,34 +391,35 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     try {
       const wisphub = wisphubFor(integration!, c.env);
       /* provider-latency D2 together, D3 **fresh**: this read decides the
-         amount the CEP must match (D11/D15), so it never takes the cache. */
+         amount the CEP must match (D11/D15), so it never takes the
+         30-second cache. bug: pending-invoice-cap — for a tenant no
+         request can read whole, "fresh" is the sweep's last finished
+         pass plus the live customer record. */
       [customer, pending] = await Promise.all([
         wisphub.getCustomer(link.customerUsuario),
-        wisphub.pendingInvoices(now),
+        readPendingInvoices(db, business.id, wisphub, now),
       ]);
     } catch (e) {
       return wisphubFailure(c, e);
     }
-    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
-    if (
-      !customer ||
-      (debt.totalCents === 0 &&
-        (pending.complete ||
-          customer.carriedBalanceCents < 0 ||
-          customer.billingStatus === "paid"))
-    ) {
+    const debt = customer ? debtFor(customer, pending) : NO_DEBT;
+    if (!customer || (debt.totalCents === 0 && nothingOwedIsProven(customer, pending))) {
       return c.json({ success: false, error: { code: "NOTHING_DUE" } }, 409);
     }
+    if (debt.totalCents === 0) {
+      /* bug: pending-invoice-cap — debt-truth D4's fallback to the plan's
+         price stood here. It asked a customer beyond the read for a
+         number that was not their debt, and the verdict then settled
+         against it. Nothing is asked until the list can say. */
+      return c.json({ success: false, error: { code: "WISPHUB_READ_INCOMPLETE" } }, 503);
+    }
 
-    /* Same rule as the store path: only D4's truncation fallback falls back
-       to the plan's price. A zero invoice line beside a carried balance is
-       a real number, not a missing one. */
-    const debtUnknown = debt.totalCents === 0;
-    const ispDebtCents = debtUnknown ? customer.planPriceCents : debt.totalCents;
+    /* A zero invoice line beside a carried balance is a real number, not
+       a missing one — the ask is the debt, whole. */
     ask = {
-      ispDebtCents,
-      invoiceCents: debtUnknown ? ispDebtCents : debt.invoiceCents,
-      carriedBalanceCents: debtUnknown ? 0 : debt.carriedBalanceCents,
+      ispDebtCents: debt.totalCents,
+      invoiceCents: debt.invoiceCents,
+      carriedBalanceCents: debt.carriedBalanceCents,
       customer: {
         wisphubCustomerId: link.wisphubCustomerId,
         customerUsuario: link.customerUsuario,
@@ -1032,13 +959,16 @@ export async function listLinks(c: Ctx, cursor?: string) {
   }
 
   try {
-    const customers = await wisphubFor(integration, c.env).listCustomers();
+    /* bug: links-roster-cap: the same read the roster uses — live for a
+       tenant that fits, the sweep's finished pass for one that does not
+       — so this door can no longer stop at 1,000 without saying so */
+    const roster = await readRoster(db, actor.id, wisphubFor(integration, c.env), new Date());
     /* D5: the usuario is the identity — an existing usuario keeps its
        token (the link is permanent while its usuario exists) and only
        the numeric id, a cache WispHub may recycle, refreshes. */
-    await ensureLinks(db, actor.id, customers);
+    await ensureLinks(db, actor.id, roster.customers);
   } catch (e) {
-    return wisphubFailure(c, e);
+    return wisphubFailure(c, e, "panel");
   }
 
   const PAGE = 50;
@@ -1133,9 +1063,12 @@ export async function linksRoster(c: Ctx) {
 
   let roster;
   try {
-    roster = await rosterForDisplay(actor.id, wisphubFor(integration, c.env), now);
+    /* bug: links-roster-cap: a tenant the ten-page read cannot finish is
+       served the sweep's last finished pass, whole; `complete` and
+       `readAt` say which it was */
+    roster = await readRoster(db, actor.id, wisphubFor(integration, c.env), now, { display: true });
   } catch (e) {
-    return wisphubFailure(c, e);
+    return wisphubFailure(c, e, "panel");
   }
   const customers = roster.customers.filter((customer) => customer.usuario !== "");
   /* D5: the usuario keeps its token, the recycled numeric id only

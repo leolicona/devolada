@@ -12,9 +12,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 const ADMIN_PORT = 4174;
 const PAGO_PORT = 4175;
+const LANDING_PORT = 4176;
 
 export const ADMIN = `http://localhost:${ADMIN_PORT}`;
 export const PAGO = `http://localhost:${PAGO_PORT}`;
+export const LANDING = `http://localhost:${LANDING_PORT}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -39,6 +41,24 @@ export default defineConfig({
          (BUG-009), and no simulated DOM can measure that. */
       command: `pnpm --filter @devolada/pago build && pnpm --filter @devolada/pago preview --port ${PAGO_PORT} --strictPort`,
       url: PAGO,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      /* The landing page (landing-page D18): `astro preview` on the static
+         build, not wrangler — the browser layer answers layout, contrast,
+         targets and the form's outcomes against a stubbed API, and a static
+         preview starts in seconds. The Worker in front of the page
+         (redirect, tag, headers) is proved in workerd by
+         apps/landing/test/worker.test.ts, where HTMLRewriter exists.
+         PUBLIC_API_URL is this same origin so the page's fetches are
+         same-origin and route interception stubs them like the admin's.
+         `--ignore-lock`: Astro 7 detaches `astro preview` into a background
+         process when it detects an AI agent's terminal (measured
+         2026-09-20), and Playwright then sees its command exit; the flag
+         keeps the server in the foreground, where this config owns it. */
+      command: `PUBLIC_API_URL=${LANDING} pnpm --filter @devolada/landing build && pnpm --filter @devolada/landing preview --port ${LANDING_PORT} --host --ignore-lock`,
+      url: LANDING,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

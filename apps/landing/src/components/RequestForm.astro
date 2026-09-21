@@ -1,0 +1,157 @@
+---
+import { Button } from "@devolada/ui";
+import { BILLING_SYSTEMS, FIELD_LIMITS, WHATSAPP_PATTERN } from "@devolada/api/landing-schema";
+import { CircleAlert } from "lucide-react";
+import { claim } from "../content/claims";
+import { CONTACT_EMAIL } from "../content/legal";
+import { BILLING_SYSTEM_LABELS, htmlPattern } from "../lib/labels";
+import { API_URL } from "../lib/urls";
+import { LabeledInput, LabeledSelect, Notice } from "./atoms";
+
+/* The page's one action, in two forms (FR-004, FR-015–FR-021; landing-page
+   D6, D7, D9, D22, D23; contracts/landing-page.md).
+
+   `hero` asks for the WhatsApp alone; `full` adds the name and the billing
+   system, both optional. Each is a real HTML form: method, action and
+   enctype are set so a browser with no script posts it to the API and
+   lands on an outcome page (D6). The field rules are stamped from the
+   contract's constants (D7) — the browser enforces them without a script,
+   and the script (scripts/form.ts) turns the same ValidityState into es-MX
+   words next to the field (FR-020). Every outcome the script can show is
+   rendered here at build, hidden, so no copy is written by JavaScript. */
+interface Props {
+  variant: "hero" | "full";
+}
+const { variant } = Astro.props;
+const ids = { whatsapp: `whatsapp-${variant}`, name: `name-${variant}`, system: `system-${variant}`, website: `website-${variant}` };
+const systems = [{ value: "", label: "Elige una opción" }, ...BILLING_SYSTEMS.map((v) => ({ value: v, label: BILLING_SYSTEM_LABELS[v] }))];
+const reply = claim("reply-sla");
+const together = claim("activation-together");
+/* Hidden by the attribute, never a class: Tailwind's preflight makes
+   `[hidden]` display:none !important, so the script has one switch. */
+const errorClass = "mt-2 flex items-start gap-1.5 text-sm font-medium text-error [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:shrink-0";
+---
+
+<form
+  data-form={variant}
+  id={variant === "full" ? "solicitar" : undefined}
+  method="post"
+  action={`${API_URL}/landing/requests`}
+  enctype="application/x-www-form-urlencoded"
+  class="flex flex-col gap-4"
+>
+  {
+    variant === "full" && (
+      <div class="flex flex-col gap-1.5">
+        <h3 class="text-lg font-semibold leading-tight">Déjanos tu WhatsApp.</h3>
+        <p data-claim={together.id}>{together.text}</p>
+      </div>
+    )
+  }
+
+  <div data-fields class="flex flex-col gap-4">
+    <div data-field="whatsapp">
+      <LabeledInput
+        label={variant === "hero" ? "Déjanos tu WhatsApp." : "Tu WhatsApp"}
+        id={ids.whatsapp}
+        name="whatsapp"
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel"
+        placeholder="55 1234 5678"
+        required
+        pattern={htmlPattern(WHATSAPP_PATTERN)}
+        aria-describedby={`${ids.whatsapp}-error`}
+      />
+      <p id={`${ids.whatsapp}-error`} data-error class={errorClass} hidden>
+        <CircleAlert aria-hidden />
+        <span data-error-text></span>
+      </p>
+    </div>
+
+    {
+      variant === "full" && (
+        <>
+          <div data-field="name">
+            <LabeledInput
+              label="Tu nombre"
+              id={ids.name}
+              name="name"
+              type="text"
+              autoComplete="name"
+              placeholder="Como te llamamos"
+              minLength={2}
+              maxLength={FIELD_LIMITS.name}
+              aria-describedby={`${ids.name}-error`}
+            />
+            <p id={`${ids.name}-error`} data-error class={errorClass} hidden>
+              <CircleAlert aria-hidden />
+              <span data-error-text></span>
+            </p>
+          </div>
+          <div data-field="billingSystem">
+            <LabeledSelect label="¿Con qué facturas?" id={ids.system} name="billingSystem" options={systems} />
+          </div>
+        </>
+      )
+    }
+
+    <input type="hidden" name="form" value={variant} />
+    <!-- landing-page D4: the Worker fills this from ?ch= before the page reaches the browser -->
+    <input type="hidden" name="channel" value="" />
+    <!-- landing-page D9: a field no person sees or fills; a value in it is refused -->
+    <div class="sr-only" aria-hidden="true">
+      <label for={ids.website}>Sitio web</label>
+      <input id={ids.website} name="website" type="text" tabindex="-1" autocomplete="off" />
+    </div>
+
+    <div data-sending class="flex flex-col gap-3">
+      <Button size="decisive" type="submit">Quiero probarlo</Button>
+      <p data-sending-text class="text-center text-sm text-ink-soft" aria-live="polite" hidden>Enviando…</p>
+    </div>
+
+    {
+      variant === "hero" ? (
+        <p class="text-sm text-ink-soft">
+          <span data-claim={reply.id}>{reply.text}</span>
+          <a href="/privacidad" class="ml-1 inline-flex min-h-12 items-center text-link hover:underline">Aviso de privacidad</a>
+        </p>
+      ) : (
+        <p class="text-sm text-ink-soft">
+          Solo para escribirte.
+          <a href="/privacidad" class="ml-1 inline-flex min-h-12 items-center text-link hover:underline">Aviso de privacidad</a>
+        </p>
+      )
+    }
+  </div>
+
+  <!-- The outcomes, one Alert each, rendered at build and shown by the script (FR-016, FR-019, FR-021) -->
+  <div data-outcome aria-live="polite" class="flex flex-col gap-3">
+    <div data-outcome-for="received" hidden>
+      <Notice variant="success" icon="check">¡Listo! Te escribimos por WhatsApp en menos de un día hábil, con las cifras y los siguientes pasos.</Notice>
+    </div>
+    <div data-outcome-for="REQUEST_REFUSED" hidden>
+      <Notice variant="destructive" icon="alert">
+        No pudimos aceptar esta solicitud. Escríbenos a <a href={`mailto:${CONTACT_EMAIL}`} class="underline">{CONTACT_EMAIL}</a> y te contestamos igual.
+      </Notice>
+    </div>
+    <div data-outcome-for="TOO_MANY_REQUESTS" hidden>
+      <Notice variant="warning" icon="clock">
+        Nos llegaron varias solicitudes desde tu conexión. Espera un momento, o escríbenos a <a href={`mailto:${CONTACT_EMAIL}`} class="underline">{CONTACT_EMAIL}</a>.
+      </Notice>
+    </div>
+    <div data-outcome-for="VALIDATION_ERROR" hidden>
+      <Notice variant="destructive" icon="alert">Revisa tu WhatsApp: escríbelo con lada, como 55 1234 5678.</Notice>
+    </div>
+    <div data-outcome-for="unavailable" hidden>
+      <Notice variant="destructive" icon="alert">
+        No pudimos enviar tu WhatsApp. El servicio anda caído ahorita: escríbenos a <a href={`mailto:${CONTACT_EMAIL}`} class="underline">{CONTACT_EMAIL}</a>.
+      </Notice>
+    </div>
+  </div>
+</form>
+
+<script>
+  import { wireRequestForms } from "../scripts/form";
+  wireRequestForms();
+</script>

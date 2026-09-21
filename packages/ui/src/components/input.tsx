@@ -44,25 +44,36 @@ export interface InputProps extends Omit<ComponentProps<"input">, "size"> {
   size?: keyof typeof SIZES;
 }
 
+/* The field's recipe as a class string (landing-page D2; constitution VI as
+   amended in v1.5.0): a surface that ships no React consumes the atoms
+   rendered at build and the recipes as class strings. The landing's closing
+   form has one control this component cannot be — a native <select> — and
+   it must look like the field beside it without a second copy of these
+   classes. `Input` itself is built from this, so there is still one
+   definition. */
+export function inputClassName(
+  size: keyof typeof SIZES = "standard",
+  lead: keyof (typeof SIZES)["standard"]["lead"] = "none",
+  className?: string,
+): string {
+  const spec = SIZES[size];
+  return cn(
+    /* border-line-input, not border-line: a field must be findable
+       (polish/dark-and-contrast.spec.md D4, WCAG 1.4.11) */
+    "w-full rounded-sm border border-line-input bg-well text-ink placeholder:text-ink-faint focus:border-focus focus-visible:outline-none disabled:text-ink-faint",
+    spec.field,
+    /* design-review D7: the UA's own clear button paints in the
+       browser's accent and sits outside our token system. */
+    "[&::-webkit-search-cancel-button]:hidden",
+    spec.lead[lead],
+    className,
+  );
+}
+
 export function Input({ icon: Icon, prefix, className, size = "standard", ...props }: InputProps) {
   const spec = SIZES[size];
-  const lead = Icon ? spec.lead.icon : prefix ? spec.lead.prefix : spec.lead.none;
-  const field = (
-    <input
-      className={cn(
-        /* border-line-input, not border-line: a field must be findable
-           (polish/dark-and-contrast.spec.md D4, WCAG 1.4.11) */
-        "w-full rounded-sm border border-line-input bg-well text-ink placeholder:text-ink-faint focus:border-focus focus-visible:outline-none disabled:text-ink-faint",
-        spec.field,
-        /* design-review D7: the UA's own clear button paints in the
-           browser's accent and sits outside our token system. */
-        "[&::-webkit-search-cancel-button]:hidden",
-        lead,
-        className,
-      )}
-      {...props}
-    />
-  );
+  const lead = Icon ? "icon" : prefix ? "prefix" : "none";
+  const field = <input className={inputClassName(size, lead, className)} {...props} />;
   if (!Icon && !prefix) return field;
   return (
     <div className="relative">

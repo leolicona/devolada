@@ -1,5 +1,6 @@
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { Bindings, Variables } from "../env";
 import { rateLimit } from "../db/schema";
@@ -11,7 +12,18 @@ import { rateLimit } from "../db/schema";
    (the API test suite pins AUTH_RATE_LIMIT=off); keys carry a `hono:`
    prefix so they never collide with the plugin's. */
 
-export function rateLimitRoute(name: string, rule: { window: number; max: number }) {
+/* landing-page D6/D9: a route whose caller may be a browser navigating a
+   plain HTML form passes `refuse`, and the refusal is answered in a shape
+   that caller can read (a redirect to an outcome page) instead of the
+   envelope. Every other route keeps the envelope below. */
+export function rateLimitRoute(
+  name: string,
+  rule: {
+    window: number;
+    max: number;
+    refuse?: (c: Context<{ Bindings: Bindings; Variables: Variables }>) => Response | Promise<Response>;
+  },
+) {
   return createMiddleware<{ Bindings: Bindings; Variables: Variables }>(async (c, next) => {
     if (c.env.AUTH_RATE_LIMIT === "off") return next();
     const ip =
@@ -46,6 +58,7 @@ export function rateLimitRoute(name: string, rule: { window: number; max: number
     }
     const retryAfter = Math.ceil((existing.lastRequest + rule.window * 1000 - now) / 1000);
     c.header("X-Retry-After", String(Math.max(retryAfter, 1)));
+    if (rule.refuse) return rule.refuse(c);
     return c.json({ success: false, error: { code: "TOO_MANY_REQUESTS" } }, 429);
   });
 }

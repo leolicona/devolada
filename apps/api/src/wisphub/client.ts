@@ -54,8 +54,10 @@ export type WispHubCustomer = {
   serviceStatus: "active" | "suspended" | "unknown";
   billingStatus: "paid" | "due" | "unknown";
   /* `precio_plan`: the plan's list price, NOT what this customer owes
-     (debt-truth D8). Kept only as the truncation fallback — the real
-     amount comes from the invoice. */
+     (debt-truth D8). It was the truncation fallback until bug:
+     pending-invoice-cap removed that fallback from every money path;
+     nothing decides an amount by it now. Still mapped: it is the one
+     number a screen can show for a customer with no invoice yet. */
   planPriceCents: number;
   /* WispHub's running balance for the customer (`saldo`, debt-truth
      D7): positive is carried debt, negative is a credit. It is where a
@@ -112,7 +114,30 @@ export type PendingInvoice = {
   invoiceDate: string | null;
   dueDate: string | null;
 };
-export type PendingInvoices = { invoices: PendingInvoice[]; complete: boolean };
+/* `source` says how old the list can be (bug: pending-invoice-cap): a
+   `live` one was read from WispHub inside this operation, a `snapshot`
+   one by the sweep, minutes ago — and the readers of a snapshot let the
+   customer record, which is always live, outrank it (`debt.ts`). */
+export type PendingInvoices = {
+  invoices: PendingInvoice[];
+  complete: boolean;
+  source: "live" | "snapshot";
+};
+
+/* How deep a live read goes before it gives up and says so. Five pages
+   is what a request can pay (provider-latency D1); a tenant that needs
+   more is read by the sweep (`snapshot.ts`), which uses this
+   number to tell the two apart. */
+export const PENDING_LIVE_PAGES = 5;
+
+export type PendingPage = { invoices: PendingInvoice[]; next: string | null };
+export type CustomersPage = { customers: WispHubCustomer[]; next: string | null };
+
+/* How deep a live read of the customer list goes before it says so:
+   ten pages of 100 was "the pilot scale with room" (direct-payment D5),
+   and it is what one admin request can pay. A tenant past it is read by
+   the sweep (bug: links-roster-cap). */
+export const ROSTER_LIVE_PAGES = 10;
 
 type WispHubListItem = {
   id_servicio: number;
@@ -214,37 +239,39 @@ export class WispHub {
   /* The whole tenant, full shape — the Links roster (admin-links-view,
      amended by the pilot-UX round: WispHub's own filters are
      exact-match and the param was guessed, so "search" moved client-side
-     over this list). Same pagination and cap as listCustomers below;
-     `complete` says whether the cap was hit. */
+     over this list). Up to `ROSTER_LIVE_PAGES` of 100; `complete` says
+     whether the cap was hit — and bug: links-roster-cap reads a tenant
+     this cannot finish by the sweep instead (`snapshot.ts`), page by
+     page through `customersPage` below. */
   async listCustomersFull(): Promise<{ customers: WispHubCustomer[]; complete: boolean }> {
     const customers: WispHubCustomer[] = [];
-    let path: string | null = "/clientes/?limit=100";
-    let page = 0;
-    for (; page < 10 && path; page++) {
-      const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
-      for (const c of data.results) {
-        if (c.usuario) customers.push(mapCustomer(c));
-      }
-      path = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    let path: string | null = this.customersPath();
+    for (let page = 0; page < ROSTER_LIVE_PAGES && path; page++) {
+      const data: CustomersPage = await this.customersPage(path);
+      customers.push(...data.customers);
+      path = data.next;
     }
     return { customers, complete: path === null };
   }
 
-  /* Every customer of the tenant, for payment-link generation
-     (direct-payment spec D5). Same list endpoint, paginated; the page
-     bound keeps one admin request from walking a huge tenant forever —
-     10 pages of 100 covers the pilot scale with room. */
-  async listCustomers(): Promise<{ wisphubId: number; usuario: string }[]> {
-    const customers: { wisphubId: number; usuario: string }[] = [];
-    let path: string | null = "/clientes/?limit=100";
-    for (let page = 0; page < 10 && path; page++) {
-      const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
-      for (const c of data.results) {
-        if (c.usuario) customers.push({ wisphubId: c.id_servicio, usuario: c.usuario });
-      }
-      path = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+  /* The first page of the customer list — where a pass begins, whether
+     the live read's or the sweep's. */
+  customersPath(): string {
+    return "/clientes/?limit=100";
+  }
+
+  /* One page of the customer list and the path of the next — the unit
+     the sweep stores and resumes from (bug: links-roster-cap). A row
+     without `usuario` is nobody a link can be made for (US-D07 review). */
+  async customersPage(path: string): Promise<CustomersPage> {
+    const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
+    const customers: WispHubCustomer[] = [];
+    for (const c of data.results) {
+      if (c.usuario) customers.push(mapCustomer(c));
     }
-    return customers;
+    /* WispHub's `next` is absolute; keep only the API path */
+    const next = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    return { customers, next };
   }
 
   /* D1 (charge-confirm spec): one customer loads through the list filter.
@@ -291,53 +318,104 @@ export class WispHub {
      filter** — re-verified against the live API 2026-08-16 — so the
      match happens in the caller. `estado=1` is Pendiente. The window is
      180 days by issue date: the product's core case is the suspended
-     customer whose unpaid invoice can be months old (D3). Up to 5 pages
-     of 100; `complete` says whether the answer is the whole truth or a
-     truncated one the caller must not treat as "owes nothing" (D4). */
+     customer whose unpaid invoice can be months old (D3). Up to
+     `PENDING_LIVE_PAGES` of 100; `complete` says whether the answer is
+     the whole truth or a truncated one.
+
+     debt-truth D4, as amended by bug: pending-invoice-cap — a truncated
+     answer used to fall back to WispHub's label and the plan's price.
+     It no longer does: a tenant this read cannot finish is read by the
+     sweep instead, and until that list exists the callers answer
+     "cannot confirm", never "owes nothing" and never a guessed amount. */
   async pendingInvoices(now: Date): Promise<PendingInvoices> {
+    const invoices: PendingInvoice[] = [];
+    let path: string | null = this.pendingInvoicesPath(now);
+    for (let page = 0; page < PENDING_LIVE_PAGES && path; page++) {
+      const data: PendingPage = await this.pendingInvoicesPage(path);
+      invoices.push(...data.invoices);
+      path = data.next;
+    }
+    return { invoices, complete: path === null, source: "live" };
+  }
+
+  /* The first page of the window above — where a pass begins, whether
+     the live read's or the sweep's. */
+  pendingInvoicesPath(now: Date): string {
     const day = (d: Date) => d.toISOString().slice(0, 10);
     const desde = day(new Date(now.getTime() - 180 * 24 * 3600 * 1000));
     /* One day ahead: WispHub stamps in the tenant's timezone, not UTC */
     const hasta = day(new Date(now.getTime() + 24 * 3600 * 1000));
+    return `/facturas/?estado=1&tipo_fecha=fecha_emision&desde=${desde}&hasta=${hasta}&limit=100`;
+  }
 
+  /* One page of the walk, and the path of the next — the unit the sweep
+     stores and resumes from (bug: pending-invoice-cap). */
+  async pendingInvoicesPage(path: string): Promise<PendingPage> {
+    const data: {
+      next: string | null;
+      results: {
+        id_factura: number;
+        cliente: { usuario: string | null; nombre?: string | null };
+        /* D8: the amount this customer actually owes for the period —
+           prorations, discounts and any reconnection charge included.
+           It rides in the same row we already fetch (D9). */
+        total: number | null;
+        /* The dates the list filters by (integrations/wisphub.md,
+           2026-09-01). Optional on purpose: a row without them still
+           is a debt, and the Cobros section degrades to no date. */
+        fecha_emision?: string | null;
+        fecha_vencimiento?: string | null;
+      }[];
+    } = await this.get(path);
     const invoices: PendingInvoice[] = [];
-    let path: string | null =
-      `/facturas/?estado=1&tipo_fecha=fecha_emision&desde=${desde}&hasta=${hasta}&limit=100`;
-    for (let page = 0; page < 5 && path; page++) {
-      const data: {
-        next: string | null;
-        results: {
-          id_factura: number;
-          cliente: { usuario: string | null; nombre?: string | null };
-          /* D8: the amount this customer actually owes for the period —
-             prorations, discounts and any reconnection charge included.
-             It rides in the same row we already fetch (D9). */
-          total: number | null;
-          /* The dates the list filters by (integrations/wisphub.md,
-             2026-09-01). Optional on purpose: a row without them still
-             is a debt, and the Cobros section degrades to no date. */
-          fecha_emision?: string | null;
-          fecha_vencimiento?: string | null;
-        }[];
-      } = await this.get(path);
-      for (const f of data.results) {
-        if (f.cliente?.usuario) {
-          /* WispHub may stamp a datetime; the day is all Cobros needs */
-          const day = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
-          invoices.push({
-            invoiceId: f.id_factura,
-            usuario: f.cliente.usuario,
-            customerName: f.cliente.nombre ?? null,
-            totalCents: f.total == null ? 0 : amountToCents(f.total),
-            invoiceDate: day(f.fecha_emision),
-            dueDate: day(f.fecha_vencimiento),
-          });
-        }
+    for (const f of data.results) {
+      if (f.cliente?.usuario) {
+        /* WispHub may stamp a datetime; the day is all Cobros needs */
+        const day = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
+        invoices.push({
+          invoiceId: f.id_factura,
+          usuario: f.cliente.usuario,
+          customerName: f.cliente.nombre ?? null,
+          totalCents: f.total == null ? 0 : amountToCents(f.total),
+          invoiceDate: day(f.fecha_emision),
+          dueDate: day(f.fecha_vencimiento),
+        });
       }
-      /* WispHub's `next` is absolute; keep only the API path */
-      path = data.next ? data.next.slice(data.next.indexOf("/facturas/")) : null;
     }
-    return { invoices, complete: path === null };
+    /* WispHub's `next` is absolute; keep only the API path */
+    const next = data.next ? data.next.slice(data.next.indexOf("/facturas/")) : null;
+    return { invoices, next };
+  }
+
+  /* Whether one invoice can still carry a payment — asked fresh, right
+     before money is registered against an id that came from the sweep's
+     snapshot (bug: pending-invoice-cap). A snapshot is minutes old, and
+     an invoice paid in the panel meanwhile would answer `registrar-pago`
+     with the 422 that reconnection D8 reads as "already landed" — and
+     the SPEI payment would go unregistered. The detail route's `estado`
+     shape is not documented: only a clear "paid" or "cancelled" — or a
+     404 — closes the door; anything unreadable keeps today's behaviour. */
+  async invoiceState(invoiceId: number): Promise<"pending" | "closed" | "unknown"> {
+    let data: { estado?: unknown };
+    try {
+      data = await this.get(`/facturas/${invoiceId}/`);
+    } catch (e) {
+      if (e instanceof WispHubError && e.status === 404) return "closed";
+      /* A route WispHub does not serve (405) cannot answer; an outage or
+         a rejected key must surface as itself */
+      if (e instanceof WispHubError && e.status !== undefined && e.status < 500 && e.code !== "WISPHUB_AUTH_FAILED") {
+        return "unknown";
+      }
+      throw e;
+    }
+    const estado = data.estado;
+    if (estado === 1 || estado === "1" || (typeof estado === "string" && /pendiente/i.test(estado))) {
+      return "pending";
+    }
+    if (estado === 2 || estado === 3 || (typeof estado === "string" && /pagad|cancel/i.test(estado))) {
+      return "closed";
+    }
+    return "unknown";
   }
 
   /* TD-009: the pending invoice a customer already has, if any.

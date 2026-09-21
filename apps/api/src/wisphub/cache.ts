@@ -134,7 +134,14 @@ export async function pendingVersion(db: DrizzleD1Database, businessId: string):
    Never call this from a path that decides whether money moves — the
    charge guard, the SPEI amount and the re-validation all read the
    adapter directly, and debt-truth.spec.md D1/D5 depend on that.
-   `readAt` is when the provider was asked (presence-freshness D7). */
+   `readAt` is when the provider was asked (presence-freshness D7).
+
+   D3 as amended by bug: pending-invoice-cap — every reader now enters
+   through `readPendingInvoices` (snapshot.ts), which comes here
+   for a display read of a tenant the live walk can finish, and serves
+   the sweep's snapshot to display and money paths alike for one it
+   cannot. The rule above is unchanged for the tenants it was written
+   for; for the others "fresh" was never on offer. */
 export async function pendingInvoicesForDisplay(
   businessId: string,
   wisphub: WispHub,
@@ -154,7 +161,10 @@ export async function pendingInvoicesForDisplay(
 type Roster = { customers: WispHubCustomer[]; complete: boolean };
 
 /* The tenant roster for the Links page — display only, same TTL and
-   the same rule as the pending list above: money paths never read it. */
+   the same rule as the pending list above: money paths never read it.
+   bug: links-roster-cap: reached through `readRoster` (snapshot.ts),
+   which serves the sweep's finished pass to a tenant this walk cannot
+   finish and comes here for one it can. */
 export async function rosterForDisplay(
   businessId: string,
   wisphub: WispHub,

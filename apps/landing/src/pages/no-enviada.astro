@@ -1,0 +1,56 @@
+---
+import { CircleAlert } from "lucide-react";
+import Base from "../layouts/Base.astro";
+import Mark from "../components/Mark.astro";
+import { CONTACT_EMAIL } from "../content/legal";
+
+/* /no-enviada (landing-page D6; FR-019, FR-021): where a plain form post
+   lands when the request was refused, limited or malformed. The default
+   sentence covers every case without a script; `?motivo=<code>` narrows
+   it when one runs — every sentence rendered here, the script only picks.
+   The contact address is the reader's way out when the form cannot send.
+   Not indexed. */
+const reasons = [
+  { code: "default", text: "No pudimos recibir tu WhatsApp." },
+  { code: "REQUEST_REFUSED", text: "No pudimos aceptar esta solicitud." },
+  { code: "TOO_MANY_REQUESTS", text: "Nos llegaron varias solicitudes desde tu conexión. Espera un momento." },
+  { code: "VALIDATION_ERROR", text: "Revisa tu WhatsApp: escríbelo con lada, como 55 1234 5678." },
+];
+---
+
+<Base title="Devolada — no pudimos recibir tu WhatsApp" description="Escríbenos y te contestamos igual.">
+  <meta slot="head" name="robots" content="noindex" />
+  <header slot="header" class="mx-auto flex w-full max-w-wide items-center gap-2.5 px-4 py-4">
+    <Mark />
+    <span class="text-md font-semibold tracking-tight">Devolada</span>
+  </header>
+  <section class="flex flex-col gap-4 py-10 lg:max-w-xl lg:py-14">
+    <CircleAlert className="size-10 text-error" aria-hidden />
+    {
+      reasons.map(({ code, text }) => (
+        <h1
+          data-reason={code}
+          hidden={code !== "default"}
+          class="text-2xl font-semibold leading-tight tracking-tight lg:text-3xl"
+        >
+          {text}
+        </h1>
+      ))
+    }
+    <p class="text-md text-ink-soft">
+      Escríbenos a <a href={`mailto:${CONTACT_EMAIL}`} class="text-link underline">{CONTACT_EMAIL}</a> y te contestamos igual.
+    </p>
+    <a href="/" class="inline-flex min-h-12 items-center self-start font-medium text-link hover:underline">Volver e intentar de nuevo</a>
+  </section>
+</Base>
+
+<script>
+  /* landing-page D6: narrow the sentence to the code the API sent, when a
+     script runs. The sentences are in the markup above; nothing is written
+     here. */
+  const code = new URLSearchParams(location.search).get("motivo");
+  const named = code ? document.querySelector<HTMLElement>(`[data-reason="${CSS.escape(code)}"]`) : null;
+  if (named) {
+    for (const h of document.querySelectorAll<HTMLElement>("[data-reason]")) h.hidden = h !== named;
+  }
+</script>

@@ -5,11 +5,12 @@ import { payments, businesses, paymentLinks } from "../db/schema";
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
 import { consta, ConstaError, type ConstaRequest } from "../consta";
-import { WispHubError } from "../wisphub/client";
+import { WispHubError, type PendingInvoices, type WispHub } from "../wisphub/client";
 /* provider-address-per-isp D4: the money is registered on the
    business's own installation, never on the platform's. */
 import { wisphubFor } from "../wisphub/factory";
-import { NO_DEBT, debtOf } from "../wisphub/debt";
+import { NO_DEBT, debtFor, nothingOwedIsProven } from "../wisphub/debt";
+import { readPendingInvoices } from "../wisphub/snapshot";
 import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
@@ -281,7 +282,7 @@ export async function runValidation(
        one exception the ISP signed up to hear about — after a fresh debt
        check, and never blocking the sweep. */
     if (!slot && row.provisionalReleaseAt != null) {
-      await notifyProvisionalExpiry(env, business, integration, link, now);
+      await notifyProvisionalExpiry(env, db, business, integration, link, now);
     }
     return row;
   };
@@ -638,7 +639,7 @@ export async function runValidation(
         : { ...base, ...release, ...shadow, status: "expired", nextValidationAt: null, lastError: null },
     );
     if (!slot && row.provisionalReleaseAt != null) {
-      await notifyProvisionalExpiry(env, business, integration, link, now);
+      await notifyProvisionalExpiry(env, db, business, integration, link, now);
     }
     return row;
   }
@@ -799,10 +800,12 @@ export async function runValidation(
   try {
     /* provider-latency D2 together, D3 **fresh**: this decides whether a
        payment is registered in WispHub (D14), so it never takes the
-       display cache. */
+       display cache. bug: pending-invoice-cap — a tenant no request can
+       read whole is served the sweep's last finished pass; the customer
+       record beside it is live, and the invoice is re-read below. */
     [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      wisphub.pendingInvoices(now),
+      readPendingInvoices(db, business.id, wisphub, now),
     ]);
   } catch (e) {
     const code = e instanceof WispHubError ? e.code : "WISPHUB_UNAVAILABLE";
@@ -811,38 +814,61 @@ export async function runValidation(
   /* debt-truth D7: the debt is the pending invoices plus what the
      customer carries. Read fresh — between submission and here the debt
      can have been settled elsewhere (D14) or grown. */
-  const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+  const debt = customer ? debtFor(customer, pending) : NO_DEBT;
   if (debt.totalCents === 0) {
     /* Debt-truth D4/D14: a truncated list cannot prove "owes nothing",
        but `saldo` is never truncated and it said nothing either. */
-    const provenSettled = pending.complete || customer?.billingStatus === "paid";
-    if (provenSettled) {
-      /* The money already moved to the ISP's CLABE: never register a
-         second WispHub payment, never drop the proof (D14). */
-      return update({
-        ...base,
-        status: "unapplied",
-        /* payments-and-classes D3: money arrived against a debt of zero —
-           `over` by definition, a class and never a credit (D2 keeps its
-           treatment at `flag`). What the CEP said arrived and who sent it
-           land on the row too, so the proof view has its facts — and the
-           customer identity just read rides along (design-review
-           2026-09-01): the feed showed the usuario where every other row
-           shows a name, for money the ISP must resolve with that person. */
-        reconciliationClass: "over",
-        receivedCents: cep?.amountCents ?? payment.amountCents,
-        cepSenderName: cep?.senderName ?? null,
-        wisphubCustomerId: link.wisphubCustomerId,
-        customerUsuario: link.customerUsuario,
-        customerName: customer?.name ?? link.customerUsuario,
-        customerZone: customer?.zone ?? null,
-        customerPhone: customer?.phone ?? null,
-        nextValidationAt: null,
-        lastError: null,
-      });
+    const provenSettled = !customer || nothingOwedIsProven(customer, pending);
+    if (!provenSettled) {
+      /* bug: pending-invoice-cap — the plan's price stood in for the
+         debt here, and the verdict settled, classed and registered
+         against a guess. The row waits on the schedule instead until the
+         sweep's list can answer, as it would for a provider outage. */
+      return retryLater("WISPHUB_READ_INCOMPLETE", base);
+    }
+    /* The money already moved to the ISP's CLABE: never register a
+       second WispHub payment, never drop the proof (D14). */
+    return update({
+      ...base,
+      status: "unapplied",
+      /* payments-and-classes D3: money arrived against a debt of zero —
+         `over` by definition, a class and never a credit (D2 keeps its
+         treatment at `flag`). What the CEP said arrived and who sent it
+         land on the row too, so the proof view has its facts — and the
+         customer identity just read rides along (design-review
+         2026-09-01): the feed showed the usuario where every other row
+         shows a name, for money the ISP must resolve with that person. */
+      reconciliationClass: "over",
+      receivedCents: cep?.amountCents ?? payment.amountCents,
+      cepSenderName: cep?.senderName ?? null,
+      wisphubCustomerId: link.wisphubCustomerId,
+      customerUsuario: link.customerUsuario,
+      customerName: customer?.name ?? link.customerUsuario,
+      customerZone: customer?.zone ?? null,
+      customerPhone: customer?.phone ?? null,
+      nextValidationAt: null,
+      lastError: null,
+    });
+  }
+  const ispDebtCents = debt.totalCents;
+
+  /* bug: pending-invoice-cap — an id the snapshot named is minutes old.
+     Paid in the panel meanwhile, it would answer `registrar-pago` with
+     the 422 that reconnection D8 reads as "already landed", and this
+     payment would never reach WispHub's books. So it is re-read fresh,
+     oldest first, and a closed one yields to the next; none left means
+     debt-truth D15's empty vehicle, exactly as a customer with no
+     pending invoice gets. A live list needs none of this: it is seconds
+     old, and D8's reading of the 422 was measured against it. */
+  let invoiceId = debt.invoiceId;
+  if (pending.source === "snapshot" && invoiceId !== null && customer) {
+    try {
+      invoiceId = await stillPendingInvoiceId(wisphub, customer.usuario, pending);
+    } catch (e) {
+      const code = e instanceof WispHubError ? e.code : "WISPHUB_UNAVAILABLE";
+      return retryLater(code, base);
     }
   }
-  const ispDebtCents = debt.totalCents || (customer?.planPriceCents ?? payment.invoiceCents);
 
   /* D5: what the CEP says arrived is what settles the debt, and the
      ISP's threshold decides whether it earns the service back. Both
@@ -905,7 +931,7 @@ export async function runValidation(
       lastError: null,
       actionOutcome: "observation",
       observedAction: hypothesisOf(action, settlement.reconnect),
-      wisphubInvoiceId: debt.invoiceId,
+      wisphubInvoiceId: invoiceId,
       actionAttempts: 0,
       nextAttemptAt: null,
     });
@@ -931,7 +957,7 @@ export async function runValidation(
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
     settlement.ispRegisteredCents,
     now,
-    { invoiceId: debt.invoiceId, paymentRegistered: false },
+    { invoiceId, paymentRegistered: false },
     /* D3: register_only never asks the router, whatever the threshold */
     action === "register_and_reconnect" && settlement.reconnect,
   );
@@ -1109,6 +1135,24 @@ export type DirectSweepReport = {
 /* The re-validation sweep (D7): rides the api's existing every-minute
    scheduled handler — no new trigger. Same lease discipline as the
    reconnection sweep. */
+/* The customer's pending invoices as the snapshot lists them, oldest
+   first (the rule `debtOf` picks by), each confirmed with WispHub before
+   it is trusted with money (bug: pending-invoice-cap). */
+async function stillPendingInvoiceId(
+  wisphub: WispHub,
+  usuario: string,
+  pending: PendingInvoices,
+): Promise<number | null> {
+  const candidates = pending.invoices
+    .filter((f) => f.usuario === usuario)
+    .map((f) => f.invoiceId)
+    .sort((a, b) => a - b);
+  for (const id of candidates) {
+    if ((await wisphub.invoiceState(id)) !== "closed") return id;
+  }
+  return null;
+}
+
 export async function sweepDirectPayments(
   env: Bindings,
   now: Date = new Date(),

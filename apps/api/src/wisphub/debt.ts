@@ -57,16 +57,34 @@ export function debtOf(
   };
 }
 
-/* debt-truth D7 + D14. A carried balance is read from the customer record,
-   which is never truncated, so it proves a debt on its own. The label is
-   only consulted when the invoice list was cut off, the customer was not in
-   the fetched part, and nothing is carried — a narrower gap than D4 left. */
-export function billingStatusOf(
-  customer: WispHubCustomer,
-  pending: PendingInvoices,
-  debt: Debt,
-): WispHubCustomer["billingStatus"] {
-  if (debt.totalCents > 0) return "due";
-  if (customer.carriedBalanceCents < 0) return "paid";
-  return pending.complete ? "paid" : customer.billingStatus;
+/* bug: pending-invoice-cap — the debt of one customer, from a list that
+   may be the sweep's snapshot. The customer record is always live, so
+   where the two disagree about THIS customer the record wins: a
+   "Pagadas" label empties the snapshot's rows for them (paid meanwhile,
+   the snapshot has not seen it yet), and `saldo` is added as ever. A
+   live list is as fresh as the record, so it is read as it is. */
+export function debtFor(customer: WispHubCustomer, pending: PendingInvoices): Debt {
+  if (pending.source === "snapshot" && customer.billingStatus === "paid") {
+    return debtOf(customer, { ...pending, invoices: [] });
+  }
+  return debtOf(customer, pending);
+}
+
+/* Whether a debt of zero can be believed (debt-truth D4/D14, as amended
+   by bug: pending-invoice-cap). A customer absent from a cut-off list
+   proves nothing, and the plan's price is no longer the stand-in — the
+   callers answer "cannot confirm" instead. What does prove it:
+
+     - a credit in `saldo`: the record is never truncated (D14);
+     - WispHub's own "Pagadas" label, for the same reason;
+     - a live list read to its end;
+     - a finished snapshot, unless the live label says the customer owes
+       — then their invoice was issued after the pass and is not in it yet.
+
+   `billingStatusOf` stood here with the old fallback and no caller. */
+export function nothingOwedIsProven(customer: WispHubCustomer, pending: PendingInvoices): boolean {
+  if (customer.carriedBalanceCents < 0) return true;
+  if (customer.billingStatus === "paid") return true;
+  if (!pending.complete) return false;
+  return pending.source === "live" || customer.billingStatus !== "due";
 }

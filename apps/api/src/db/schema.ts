@@ -7,6 +7,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { organization, user } from "./auth-schema";
+import { BILLING_SYSTEMS, FORMS, STEPS } from "../routes/landing/schema";
 
 /* Better Auth's tables live in auth-schema.ts; re-exported here so
    drizzle-kit sees a single schema. */
@@ -513,6 +514,77 @@ export const integrationEvents = sqliteTable(
   ],
 );
 
+/* The tenant's WispHub lists, read in the background
+   (bug: pending-invoice-cap; generalised by bug: links-roster-cap).
+
+   WispHub pages every list at 100 and filters none of them by customer,
+   so "what does this customer owe" and "who are my customers" both read
+   the whole tenant. A request can pay a few pages; a 6,509-customer ISP
+   (measured 2026-09-18) needs sixty-odd, 30–40 s — so the every-minute
+   sweep reads it instead, a few pages per tick, and swaps a finished pass
+   in whole. One row per tenant AND list (`kind`) holds the sweep's
+   state; the pages live in `wisphub_pages`. Two kinds today: `pending`
+   (the invoices every money path reads) and `roster` (the customers the
+   Links page hands their links to).
+
+   Demand-driven: the row is born when a live read comes back cut off,
+   and a tenant whose whole list fits the live budget rests until the
+   next cut-off read wakes it — a small ISP costs WispHub nothing extra.
+   Nothing here is durable: a pass rebuilds in minutes, which is why the
+   0033 migration could drop the pending-only tables and recreate these. */
+export const wisphubSweeps = sqliteTable(
+  "wisphub_sweeps",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    kind: text("kind", { enum: ["pending", "roster"] }).notNull(),
+    /* The installation the pages were read from (provider-address-per-isp
+       T046): a changed address makes the whole snapshot somebody else's. */
+    baseUrl: text("base_url").notNull(),
+    /* The finished pass the readers serve. `servedStartedAt` is also the
+       window the pass was read for; null until the first pass completes. */
+    servedPassId: text("served_pass_id"),
+    servedPages: integer("served_pages"),
+    servedStartedAt: integer("served_started_at", { mode: "timestamp_ms" }),
+    servedFinishedAt: integer("served_finished_at", { mode: "timestamp_ms" }),
+    /* The pass in flight: the API path the next tick resumes from */
+    livePassId: text("live_pass_id"),
+    liveCursor: text("live_cursor"),
+    livePages: integer("live_pages").notNull().default(0),
+    liveStartedAt: integer("live_started_at", { mode: "timestamp_ms" }),
+    /* A small tenant rests here between passes; a cut-off live read clears it */
+    restUntil: integer("rest_until", { mode: "timestamp_ms" }),
+    /* The tick's lease (reconnection-queue D4's idea): an overlapping
+       sweep skips a claimed row instead of racing its cursor */
+    claimedUntil: integer("claimed_until", { mode: "timestamp_ms" }),
+    lastError: text("last_error"),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("wisphub_sweeps_business_kind_idx").on(t.businessId, t.kind)],
+);
+
+/* One WispHub page of one pass — the mapped rows (`PendingInvoice[]` or
+   `WispHubCustomer[]`) as JSON, read whole and never queried by column.
+   A pass is swapped in only once it is finished, so a tick that dies
+   mid-pass leaves the served pass intact. */
+export const wisphubPages = sqliteTable(
+  "wisphub_pages",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    kind: text("kind", { enum: ["pending", "roster"] }).notNull(),
+    passId: text("pass_id").notNull(),
+    page: integer("page").notNull(),
+    rows: text("rows").notNull(),
+    fetchedAt: integer("fetched_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [uniqueIndex("wisphub_pages_pass_idx").on(t.businessId, t.kind, t.passId, t.page)],
+);
+
 /* provisional-release D6 (US-D15): the edge rejection gets a memory. A
    reused clave dies today at the unique index above with a 409 and left
    no row anywhere — but a revocation signal needs one, and knowing WHICH
@@ -995,4 +1067,61 @@ export const rateCounters = sqliteTable(
     count: integer("count").notNull().default(0),
   },
   (t) => [uniqueIndex("rate_counters_business_bucket_idx").on(t.businessId, t.bucket)],
+);
+
+/* ---- The landing page (landing-page spec) ---- */
+
+/* landing-page D5: what a prospect typed on the landing page, plus what
+   the page knew. Platform rows — no `business_id`, like `platform_settings`:
+   a request belongs to nobody yet, and only the platform operator reads
+   it (FR-017). Append-only: after the insert the only thing that changes
+   is the notice outcome, written by the same request's `waitUntil` (D10).
+
+   D23: three fields, the WhatsApp required; `name` and `billing_system`
+   are the closing form's answers and stay null from the one-field hero
+   form; `form` records which of the two converted. D9: the honeypot the
+   form carries (`website`) is never a column — a request that filled it
+   was refused and not stored. The enums are the contract's constants
+   (routes/landing/schema.ts), imported so the list is written once. */
+export const accessRequests = sqliteTable(
+  "access_requests",
+  {
+    id: id(),
+    /* As typed, 10–20 characters of digits, spaces and + ( ) - */
+    whatsapp: text("whatsapp").notNull(),
+    name: text("name"),
+    billingSystem: text("billing_system", { enum: BILLING_SYSTEMS }),
+    form: text("form", { enum: FORMS }).notNull(),
+    /* landing-page D4: the tag as typed when it matches the charset,
+       `direct` otherwise */
+    channel: text("channel").notNull().default("direct"),
+    createdAt: createdAt(),
+    /* landing-page D10: set when the provider accepted the notice; or the
+       reason it did not go — NO_RESEND_KEY, NO_OPERATOR_EMAILS,
+       RESEND_<status> — shown on the operator's list (FR-018). No retry. */
+    notifiedAt: integer("notified_at", { mode: "timestamp_ms" }),
+    notifyError: text("notify_error"),
+  },
+  /* The list reads newest first with a cursor on (created_at, id) */
+  (t) => [index("access_requests_created_idx").on(t.createdAt)],
+);
+
+/* landing-page D8: the page's three counters by day and channel. Holds no
+   person — no address, no agent, no cookie, no hash (SC-010). `day` is the
+   calendar day in America/Mexico_City: the platform's own "today", as the
+   business's timezone owns the business's (constitution II). A `visit` is
+   a page load, not a person; the operator screen says so. One statement
+   per event — INSERT … ON CONFLICT DO UPDATE SET count = count + 1 — so
+   there is no read-modify-write. */
+export const landingCounts = sqliteTable(
+  "landing_counts",
+  {
+    id: id(),
+    /* YYYY-MM-DD in America/Mexico_City */
+    day: text("day").notNull(),
+    channel: text("channel").notNull(),
+    step: text("step", { enum: STEPS }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [uniqueIndex("landing_counts_day_channel_step_idx").on(t.day, t.channel, t.step)],
 );

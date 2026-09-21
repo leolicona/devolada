@@ -6,7 +6,8 @@ import { payments, businesses, paymentLinks, proofRejections } from "../db/schem
 /* provider-address-per-isp D4: the business's own installation, from
    the integration row this function already holds. */
 import { wisphubFor } from "../wisphub/factory";
-import { NO_DEBT, debtOf } from "../wisphub/debt";
+import { NO_DEBT, debtFor } from "../wisphub/debt";
+import { readPendingInvoices } from "../wisphub/snapshot";
 import { sendProvisionalExpiry } from "../email/sender";
 import { settle } from "./partial";
 import { isPanelLink } from "./links";
@@ -179,21 +180,25 @@ export async function maybeProvisionalRelease(
     if (await isRevoked(db, payment, now)) return {};
 
     const wisphub = wisphubFor(integration, env);
+    /* bug: pending-invoice-cap: the sweep's list for a large tenant, so
+       the promise finds the invoice a five-page read could not */
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      wisphub.pendingInvoices(now),
+      readPendingInvoices(db, business.id, wisphub, now),
     ]);
-    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+    const debt = customer ? debtFor(customer, pending) : NO_DEBT;
     /* v1: the promise lives on an invoice; a carried-balance-only debt
-       has none to live on, so it keeps today's flow (spec D3 note) */
-    if (!debt.invoiceId) return {};
+       has none to live on, so it keeps today's flow (spec D3 note).
+       A zero debt has nothing to promise on either — the plan's price
+       no longer stands in for it (bug: pending-invoice-cap). */
+    if (!debt.invoiceId || debt.totalCents === 0) return {};
 
     /* D2: the ISP's ONE reconnection policy applies, provisional or
        confirmed — same threshold, same floor, against the claim */
     const claimed = payment.claimedAmountCents ?? payment.amountCents;
     const ok = settle({
       receivedCents: claimed,
-      ispDebtCents: debt.totalCents || (customer?.planPriceCents ?? payment.invoiceCents),
+      ispDebtCents: debt.totalCents,
       serviceFeeCents: payment.serviceFeeCents,
       thresholdPercent: integration.thresholdPercent,
       floorCents: integration.floorCents,
@@ -223,6 +228,7 @@ export async function maybeProvisionalRelease(
    never showed. Best-effort: an email must never break the sweep. */
 export async function notifyProvisionalExpiry(
   env: Bindings,
+  db: DB,
   business: Isp,
   integration: Integration | null,
   link: PaymentLink,
@@ -236,9 +242,9 @@ export async function notifyProvisionalExpiry(
     const wisphub = wisphubFor(integration, env);
     const [customer, pending] = await Promise.all([
       wisphub.getCustomer(link.customerUsuario),
-      wisphub.pendingInvoices(now),
+      readPendingInvoices(db, business.id, wisphub, now),
     ]);
-    const debt = customer ? debtOf(customer, pending) : NO_DEBT;
+    const debt = customer ? debtFor(customer, pending) : NO_DEBT;
     if (debt.totalCents === 0) return;
     await sendProvisionalExpiry(env, business.email, {
       name: customer?.name ?? link.customerUsuario,

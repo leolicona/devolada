@@ -1,0 +1,26 @@
+---
+import { claim } from "../content/claims";
+
+/* Cómo se cobra (FR-009, FR-014): the model only — prepaid, per verified
+   payment, no monthly fee, no contract, the first payments free — and
+   that the figures come with the answer. No number anywhere in this file;
+   the claim's basis names where the figures live and why they stay off
+   the page. One element carries the whole claim text (landing-page D11),
+   split visually into its two sentences. */
+const model = claim("pricing-model");
+const [lead, rest] = ["Prepago. Por pago verificado.", "Sin mensualidad ni contrato. Los primeros pagos son gratis."];
+if (`${lead} ${rest}` !== model.text) throw new Error("landing-page D11: Pricing.astro splits the pricing claim; keep the two halves equal to claims.ts");
+---
+
+<section class="border-t border-line-soft py-12 lg:col-span-2 lg:py-16" aria-labelledby="precio">
+  <div class="flex flex-col gap-2.5 rounded-lg border border-accent bg-accent-soft px-6 py-8 lg:mx-auto lg:max-w-2xl">
+    <p id="precio" class="text-xs font-medium uppercase tracking-wider text-link">Cómo se cobra</p>
+    <!-- The space rides inside the second span: Astro drops whitespace-only
+         text between elements, and the claim's textContent must read as one
+         sentence. At the start of a block it never paints. -->
+    <p data-claim={model.id}>
+      <span class="block text-2xl font-semibold leading-tight tracking-tight">{lead}</span><span class="mt-2.5 block">{` ${rest}`}</span>
+    </p>
+    <p class="text-sm text-ink-soft">Las cifras, por WhatsApp.</p>
+  </div>
+</section>

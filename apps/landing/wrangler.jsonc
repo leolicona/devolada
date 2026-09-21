@@ -1,0 +1,42 @@
+{
+  "$schema": "../api/node_modules/wrangler/config-schema.json",
+  "name": "devolada-landing",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-05-01",
+  /* The built page as static assets, with a script in front of them
+     (landing-page D1, D3). `run_worker_first` makes every request pass
+     through worker/index.ts — the `www` redirect, the channel tag and the
+     headers apply whether or not scripts run in the visitor's browser.
+     A path the build did not emit is answered by the build's own 404.html. */
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": true
+  },
+  /* landing-page D12: API_ORIGIN feeds the Content-Security-Policy the
+     Worker sets — `connect-src` for the page's script and `form-action` for
+     the plain form post. One value per environment (D14); never unset, so
+     the CSP never lacks it. Repeated in every env block because an env's
+     `vars` replaces the top-level one rather than merging with it. */
+  "vars": { "API_ORIGIN": "http://localhost:8787" },
+  "env": {
+    "dev": {
+      "name": "devolada-landing-dev",
+      /* landing-page D14: `custom_domain: true` creates the DNS record on
+         the first deploy (measured 2026-09-19: none exists yet). */
+      "routes": [{ "pattern": "dev.devoladapago.com", "custom_domain": true }],
+      "vars": { "API_ORIGIN": "https://api.dev.devoladapago.com" }
+    },
+    "prod": {
+      "name": "devolada-landing",
+      /* landing-page D3/D14: both hosts land here; the Worker answers the
+         `www` one with a 301 to the apex, path and query intact. */
+      "routes": [
+        { "pattern": "devoladapago.com", "custom_domain": true },
+        { "pattern": "www.devoladapago.com", "custom_domain": true }
+      ],
+      "vars": { "API_ORIGIN": "https://api.devoladapago.com" }
+    }
+  }
+}

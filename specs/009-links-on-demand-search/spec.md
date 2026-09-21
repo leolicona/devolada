@@ -56,29 +56,30 @@ so that this one stays small enough to land in days.
 
 - Q: What does a payment link remember about the customer? → A: Only the
   customer's identity — `customer_usuario` on a panel link, `customer_ref`
-  on an API link. Name, phone and service state are never stored on the
-  link; to operate, they are always read fresh.
+  on an API link — beside Devolada's own operational fields. Name, phone
+  and service state are never stored; to operate, they are always read
+  fresh.
+- Q: What fills the opening list, and where do its rows come from? → A:
+  WispHub's customer list, read live and paged on demand. The page asks for
+  the first block that fills the browser's viewport and asks for the next
+  as the operator scrolls. The search asks the provider directly.
 - Q: When WispHub cannot be reached, what can the operator still search
   for? → A: A short-lived cache of the customers seen in the last minutes
   answers a search by name; beyond that window the link itself answers by
-  usuario (panel) and by reference or label (API).
-- Q: What does the page show when it opens, now that no roster is read? →
-  A: The business's own payment links, delivered in blocks so the first
-  screen renders at once, with the search box above them.
+  usuario (panel) and by reference or label (API). A live answer always
+  outranks the cache.
 - Q: What remembers that a link was copied or sent? → A: The cache, as a
   visual mark on the row for the operator who acted. No delivery state is
   stored — that is the next piece.
 - Q: What happens to the links the roster already created, one per
-  customer? → A: The `roster` pass is retired and no background work
-  creates links again; the links it created are cleaned up where they can
-  be shown to be unused. What counts as unused is below — Devolada never
-  recorded a sending, so "unused" cannot mean "never sent".
-- Q: What fills the opening list, and where do its rows come from? → A:
-  WispHub's customer list, read live and paged on demand. The page asks for
-  the first block that fills the browser's viewport and asks for the next
-  as the operator scrolls. Nothing about the customer is stored: the link
-  keeps `customer_usuario` and Devolada's own operational fields, and
-  everything shown about the customer is read live.
+  customer? → A: The `roster` pass is retired, and no background work
+  creates a link again.
+- Q: Which links may the cleanup delete? → A: Every panel link created
+  before this feature ships that no payment and no clave attempt ever
+  referenced. Chosen with the cost known and accepted: Devolada never
+  recorded a sending, so a link an operator sent and the customer has not
+  paid yet is deleted with the rest, and that customer's copy stops
+  working.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -340,6 +341,16 @@ same note, and no error block is shown.
   marked visually as copied or sent. The mark lives in the cache for the
   operator who acted; no delivery state is stored, and nothing in the mark
   is promised to another operator or to a later session.
+- **FR-023**: Once, when this feature ships, every panel link created
+  before it that no payment and no clave attempt ever referenced MUST be
+  deleted. API links are untouched. The deletion MUST run once over links
+  that already existed — never as ongoing work, which would delete the
+  links FR-008 has just created. The business MUST be told how many were
+  deleted.
+- **FR-024**: A customer whose link was deleted MUST get a new one the
+  first time an operator acts on them, at a new address. Nothing MAY try
+  to preserve or reissue the old one: a copy the customer already holds
+  stops working, and the page does not pretend otherwise.
 
 ### Key Entities
 
@@ -381,6 +392,12 @@ same note, and no error block is shown.
 - **SC-006**: With WispHub unreachable, 100% of searches still answer with
   Devolada's own links and the page shows no error block.
 - **SC-007**: The "list may be incomplete" warning is never shown again.
+- **SC-008**: After the cleanup, the count of the business's panel links
+  equals the number of customers an operator has actually acted on — zero
+  for a business whose operators have not used the page since it shipped.
+- **SC-009**: No background work of any kind creates a payment link: over a
+  day in which no operator copies or sends, the business's link count does
+  not change.
 
 ## Assumptions
 
@@ -392,12 +409,13 @@ same note, and no error block is shown.
   that may be recycled (direct-payment D5) — unchanged.
 - Links created before this feature keep working unchanged: no link gains
   or loses a field, so there is nothing to migrate.
-- **Cobros is out of scope and unchanged**: it reads the links Devolada
-  already holds and hides the buttons on a debtor who has none, as today.
-  Until now, new links came only from the capped list on Links; from now
-  on they come from search-and-act. A debtor without a link gains one the
-  first time someone searches for them and acts; giving Cobros its own
-  "create on act" is the next piece.
+- **Cobros reads stored links only and hides the buttons on a debtor who
+  has none.** That was an edge case while the roster created a link per
+  customer. After FR-023 it becomes the normal case: almost every debtor
+  will have no link, so almost every Cobros row will show no buttons until
+  someone finds that customer on Links and acts. Whether Cobros gains its
+  own "create on act" is an open decision; leaving it as it is means Cobros
+  can send nothing for a while.
 - The roster read is no longer needed by the panel; whether it is retired
   is a plan decision. The paged list of links stays — it becomes the page's
   opening (FR-001, FR-020).

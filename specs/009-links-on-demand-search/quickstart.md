@@ -29,8 +29,10 @@ curl -X POST localhost:8787/dev/seed # demo@devolada.app / devolada123
 ```
 
 Sign in, open **Links**. The page should show a search box and one screenful of
-customers — no "la lista puede estar incompleta" warning, and nothing waiting on
-a whole-base read.
+customers — no "la lista puede estar incompleta" warning, no "consultado hace X
+min" (FR-027: a block is live when it renders, so there is no age to report),
+and nothing waiting on a whole-base read. Leaving the tab and returning should
+re-read the first block, at most once every 30 seconds.
 
 ## Proving each story
 
@@ -125,7 +127,16 @@ What the test must prove, and what to check by hand:
 - an API link is **never** touched;
 - a link created after the cutover is **never** touched;
 - a second run deletes nothing and writes no second row;
-- the business is told the count once, and dismissing it sticks.
+- the business is told the count once, and dismissing it sticks:
+
+```sh
+curl -s localhost:8787/direct-payments/prune-notice -b cookies.txt | jq '.data'
+curl -s -X POST localhost:8787/direct-payments/prune-notice/dismiss -b cookies.txt | jq '.data'
+curl -s localhost:8787/direct-payments/prune-notice -b cookies.txt | jq '.data'   # null
+```
+
+A viewer must be refused the dismiss — the record of deleted links is not
+theirs to silence.
 
 ## Full gates
 

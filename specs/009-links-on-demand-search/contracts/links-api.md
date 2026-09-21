@@ -119,9 +119,10 @@ per customer on every read (D12).
 ## `GET /direct-payments/links/roster` — removed
 
 `linksRoster` and `linksRosterResponse`. It is what this feature replaces
-(D12). Consumers to update: `apps/admin/src/features/links/LinksScreen.tsx`,
-`tests/e2e/stubs.ts`, `tests/design/review-foundations.spec.ts`,
-`tests/design/review-feedback.spec.ts`.
+(D12). **Consumers to update**: `apps/admin/src/features/links/LinksScreen.tsx`
+plus the twelve test files [research.md D12](../research.md) lists in three
+tiers — that list is the authoritative one, and it is what Phase 7 of
+[tasks.md](../tasks.md) works through before the door is removed.
 
 Also removed: the stale stub for `/direct-payments/links/search` in
 `tests/design/review-links.spec.ts` — that endpoint went in the pilot-UX round
@@ -140,6 +141,39 @@ and the stub outlived it.
 Nothing else about the door changes: the same rows, the same debt read, the
 same `complete` and `readAt`, the same 5-page window. The batch lookup of
 stored links stays — it saves a call for a debtor who already has one.
+
+---
+
+## `GET /direct-payments/prune-notice` — added
+
+What the one-time cleanup removed, for the business to be told once (FR-023,
+D13). Without this door the count reaches nobody.
+
+**Auth**: session + `requireArea("payments", "read")`.
+
+### Response
+
+```
+{ deletedCount: number, ranAt: number } | null
+```
+
+`null` when the prune has not run for this business yet, or when it has already
+been dismissed. `deletedCount` may be `0` — a business with no pre-cutover links
+is pruned too, and is told nothing.
+
+## `POST /direct-payments/prune-notice/dismiss` — added
+
+**Auth**: session + `requireArea("payments", "operate")` — stricter than the
+read on purpose: a viewer should not be able to silence, for everyone, the
+record of links that were deleted.
+
+### Response
+
+```
+{ dismissed: true }
+```
+
+Sets `link_prunes.notice_seen`. Idempotent: dismissing twice is not an error.
 
 ---
 

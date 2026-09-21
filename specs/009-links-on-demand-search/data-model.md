@@ -53,7 +53,7 @@ link_prunes
 | --- | --- |
 | The primary key is `business_id` alone | The pass runs **once** per business. The row's existence is what stops it running again (D13). |
 | `deleted_count` may be `0` | A business that had no pre-cutover links is pruned too — a row is written, nothing is deleted, and no notice is shown. |
-| `notice_seen` starts false and is set by the panel | FR-023's "the business MUST be told". A count nobody saw is not a telling. |
+| `notice_seen` starts false and is set through `POST /direct-payments/prune-notice/dismiss` | FR-023's "the business MUST be told". A count nobody saw is not a telling, so the count needs a door out of this table — see [contracts/links-api.md](./contracts/links-api.md). |
 | Nothing else joins this table | It is a ledger of a one-time event, not a relationship. |
 
 **Lifecycle**: absent → written by the cron pass (`ran_at`, `deleted_count`) →
@@ -149,4 +149,4 @@ None of this reaches Devolada, and nothing depends on it being there.
 | Search results | `sessionStorage`, keyed by normalised text | 2 minutes (FR-012) |
 | Recently seen names and phones | `sessionStorage` | short window; a live answer always overwrites it (FR-021) |
 | Copied / sent marks | `sessionStorage` | the session, for the operator who acted (FR-022) |
-| The prune notice's dismissal | `link_prunes.notice_seen` | permanent — it is a telling, not a preference |
+| The prune notice's dismissal | `link_prunes.notice_seen`, through the dismiss door | permanent, and server-side — it is a telling, not a per-browser preference |

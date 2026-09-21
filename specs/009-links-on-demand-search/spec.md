@@ -333,7 +333,7 @@ the same link is the one Links shows for that customer afterwards.
   the whole customer base, on open or ever.
 - **FR-002**: The page MUST search only when the trimmed text has at least
   three characters, and only after the operator pauses typing briefly
-  (about a third of a second); below three characters it MUST say so and
+  (300 ms); below three characters it MUST say so and
   search nothing.
 - **FR-003**: A search MUST ask WispHub live, with the text matched by
   *contains* against the customer's name, surname, usuario and phone at
@@ -414,6 +414,12 @@ the same link is the one Links shows for that customer afterwards.
   first time an operator acts on them, at a new address. Nothing MAY try
   to preserve or reissue the old one: a copy the customer already holds
   stops working, and the page does not pretend otherwise.
+- **FR-027**: The page MUST NOT show how old its rows are: a block is read
+  when it renders, so there is no shared age to report and no manual refresh to
+  offer. It MUST re-read its first block when the operator returns to the tab,
+  no more than once every 30 seconds. The only staleness it admits is the
+  provider being away, which the note of FR-014 already carries. This retires
+  the read-age indicator `presence-freshness` put on this page.
 - **FR-025**: Cobros MUST create the debtor's link on the first use of
   Copiar or WhatsApp, on the same terms as Links (FR-008, FR-009): never
   on being shown, and identified by the invoice row's usuario, so the link
@@ -492,6 +498,11 @@ the same link is the one Links shows for that customer afterwards.
   delivery, CSV export and WispHub webhooks are later pieces, in that
   order. The copied / sent mark of FR-022 is a cache, not their
   forerunner: the states piece is what gives delivery a stored life.
+- **`presence-freshness` loses one promise here, on purpose** (FR-027): the
+  Links page stops reporting its read's age, because every block is live when
+  it renders. The re-read on return to the tab and the absence of an
+  "Actualizar" button both stay. Nothing about the invoice reads, Cobros or the
+  payer's page changes.
 - The operation budget for a provider read stays what it is today; a
   search does not get a longer one. One block and one search are each a
   single round trip inside it, so neither needs the budget widened.

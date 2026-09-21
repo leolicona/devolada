@@ -247,6 +247,36 @@ identical in the data. The prune deletes both, and the first customer's copy
 stops working. FR-024 is the consequence: they get a new link at a new address
 the next time an operator acts, and nothing reissues the old one.
 
+## D15 — The page stops reporting its own age, because it no longer has one
+
+`presence-freshness` (D4, D7, US-P07, BUG-018) gave the Links page three
+things: *"consultado hace X min"*, a re-read on return to the tab above a
+30-second floor, and no *"Actualizar"* button. They existed because the page
+served a cache — 30 seconds at first, then a snapshot minutes old. The operator
+had to be told how old the list was.
+
+A block is read when it renders, so there is no shared age to report and
+nothing to refresh by hand. The three parts resolve differently:
+
+- **The age indicator goes.** A row was live when it appeared. Printing a
+  timestamp on a live read invents a doubt the page does not have.
+- **The re-read on return stays**, as the first block only, keeping the
+  30-second floor so a screen left open overnight does not show yesterday's
+  first page and returning does not hammer the provider.
+- **No "Actualizar" button**, unchanged — scrolling and searching are the
+  refresh.
+
+The one staleness the page ever admits is the provider being away: the cache
+serves names it read minutes ago, and *"Sin conexión a WispHub"* says so
+(FR-014, FR-021). That note is the whole of the honesty the old indicator used
+to carry.
+
+This retires a promise three earlier decisions made. It is recorded here rather
+than discovered at implementation time (constitution I: the gap is not
+tolerated silently), and the product creator may overturn it — the alternative
+is a per-row age, which costs a timestamp on every row for a doubt that only
+exists while the provider is away.
+
 ## D14 — Cobros gets one rule and nothing else
 
 `cobroRow.linkUrl` and `waLink` stay nullable, and stop meaning "hide the

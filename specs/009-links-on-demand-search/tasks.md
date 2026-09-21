@@ -16,10 +16,14 @@ is answered at; constitution VII requires every test file to cite its story as
 **Organization**: grouped by user story. Two stories are P1 — US1 and US4 — and
 they ship together with the prune (plan, *Dependencies and sequencing*).
 
-**Revised 2026-09-21 after `/speckit-analyze`**: sixteen findings applied. The
-largest was that retiring the roster breaks **twelve existing test files** no
-task touched — Phase 7 now migrates every one of them before the removal, because
-the constitution forbids skipping or quarantining a test to get green.
+**Revised 2026-09-21 after `/speckit-analyze`**, twice. The first pass found
+sixteen issues, the largest being that retiring the roster breaks **twelve
+existing test files** no task touched — Phase 7 now migrates every one before the
+removal, because the constitution forbids skipping or quarantining a test to get
+green. The second pass found seven more, two of them created by the first round
+of fixes: the prune's count had no door to reach the panel through (T049), and
+`presence-freshness` lost a cited promise with nothing recording it (FR-027,
+D15).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -79,10 +83,10 @@ types and fixtures from (constitution III).
 - [ ] T013 [US1] Implement `listCustomers` in `apps/api/src/routes/direct-payments/handler.ts`: browse in two phases (D2), search over four filters plus the business's API links (D4), merge and dedupe (D6), report `matched` as a floor (D5)
 - [ ] T014 [US1] Implement `createLink` in `apps/api/src/routes/direct-payments/handler.ts`: exact `usuario=` lookup for the numeric id and phone, then `ensureLink`, behind `requireArea("payments", "operate")` and the CLABE gate (D8, FR-016)
 - [ ] T015 [US1] Wire `GET /customers` and `POST /links` in `apps/api/src/routes/direct-payments/index.ts` with `zValidator` only — no logic in the router (constitution III); leave the old routes in place until Phase 7
-- [ ] T016 [P] [US1] Add `apps/admin/src/features/links/useCustomers.ts`: `useInfiniteQuery` over the cursor, block size measured from the viewport and clamped, an `IntersectionObserver` sentinel for the next block (FR-020, D3), a **300 ms** debounce before a search leaves the browser (FR-002), and discarding an in-flight answer whose text no longer matches the box (FR-013, US1 scenario 9)
+- [ ] T016 [P] [US1] Add `apps/admin/src/features/links/useCustomers.ts`: `useInfiniteQuery` over the cursor, block size measured from the viewport and clamped, an `IntersectionObserver` sentinel for the next block (FR-020, D3), a **300 ms** debounce before a search leaves the browser (FR-002, the figure the spec now carries), discarding an in-flight answer whose text no longer matches the box (FR-013, US1 scenario 9), and re-reading the **first block only** on return to the tab, no more than once every 30 seconds (FR-027, D15)
 - [ ] T017 [P] [US1] Add `apps/admin/src/features/links/useLinkAction.ts`: create-on-act for Copiar and WhatsApp, opening the WhatsApp window synchronously on the click and setting its location when the POST resolves, closing it on failure (D9), with the phone rules unchanged (FR-019: Mexico's code in front, the contact picker when the number cannot be read)
 - [ ] T018 [P] [US1] Add `apps/admin/src/features/links/seen.ts` with all three `sessionStorage` stores it will ever hold — search results, recently seen names and phones, and the copied/sent marks (D11) — so US2 and US3 consume one module rather than each editing it
-- [ ] T019 [US1] Rewrite `apps/admin/src/features/links/LinksScreen.tsx` around the search box and the scrolling blocks: no roster read, no "la lista puede estar incompleta" warning (FR-018), both buttons on every row the role allows, the copied/sent mark rendered from `seen.ts` (FR-022), tokens only and `StatusBadge` for the channel
+- [ ] T019 [US1] Rewrite `apps/admin/src/features/links/LinksScreen.tsx` around the search box and the scrolling blocks: no roster read, no "la lista puede estar incompleta" warning (FR-018), **no read-age indicator and no "Actualizar"** (FR-027, D15 — the `Freshness` component this screen renders today goes), both buttons on every row the role allows, the copied/sent mark rendered from `seen.ts` (FR-022), tokens only and `StatusBadge` for the channel
 
 **Checkpoint**: US1 is complete, including scenario 9 and the copied/sent mark. Nothing creates a link but an operator's press.
 
@@ -152,11 +156,11 @@ door first and the door is removed second.
 ### Test migration — real assertions to rewrite
 
 - [ ] T033 [US1] Rewrite `apps/api/test/direct-payments-links.test.ts` onto `GET /direct-payments/customers`, **keeping** the `bug: links-refused-key` case that asserts a refused key answers 503 with `WISPHUB_AUTH_FAILED`, and re-citing the roster-era `US-D07` cases as `links-on-demand-search US1`
-- [ ] T034 [US1] Rewrite the roster cases of `apps/api/test/presence-freshness.test.ts` (scenario 9: "two roster reads inside the window answer the same readAt"). A block carries no shared `readAt`, so state what replaces the freshness promise on this page, or retire the case with its reason in the file
+- [ ] T034 [US1] Retire the roster cases of `apps/api/test/presence-freshness.test.ts` (scenario 9: "two roster reads inside the window answer the same readAt"), recording in the file that FR-027 / D15 replaced the promise — a block is read when it renders, so no two blocks share a `readAt`. The invoice-read cases in the same file are untouched
 - [ ] T035 [US1] Move FR-017's proof in `apps/api/test/collections-api-test-mode.test.ts:175` from the roster to the new customers door, keeping the one-predicate rule (`realOnly`) with the same call-site coverage
 - [ ] T036 [US1] Fix the premise in `apps/api/test/payment-requests.test.ts:100` — "all of whom the roster had already given a link" is false after US4; the fixture must cover a debtor with no link
 - [ ] T037 [P] [US1] Rewrite `apps/admin/test/identity-round.test.tsx:110` ("Links: the roster reads, the share buttons wait for the CLABE") against the new screen; the CLABE gate itself is unchanged (FR-016)
-- [ ] T038 [P] [US1] Rebuild `apps/admin/test/presence-freshness.test.tsx` on blocks instead of rosters — it builds roster fixtures and asserts the 30-second read floor and the re-read on focus, neither of which survives a paged live read
+- [ ] T038 [P] [US1] Rebuild `apps/admin/test/presence-freshness.test.tsx` on blocks per FR-027 / D15: the age indicator is gone and its assertions with it, while the re-read on return to the tab and its 30-second floor **stay** and now apply to the first block only
 - [ ] T039 [US1] Rewrite `tests/e2e/keyboard.spec.ts` tab-order assertions, which rest on "the roster arrives alive on arrival" (lines 98–114); the first block arrives after a provider read, so the reading order and the wait both change
 
 ### Test migration — mechanical handler swaps
@@ -176,8 +180,9 @@ door first and the door is removed second.
 
 - [ ] T047 [US1] Add `apps/api/src/links/prune.ts`: `PRUNE_CUTOVER_MS` as a constant citing D13, the delete of pre-cutover panel links no payment and no clave attempt references, the deletion of orphaned `roster` sweep rows, and the `link_prunes` row it writes once
 - [ ] T048 [US1] Join the prune to the every-minute cron in `apps/api/src/index.ts` under `waitUntil`, speaking only when it did something (constitution: one trigger)
-- [ ] T049 [P] [US1] Write `apps/api/test/links-prune.test.ts` citing `links-on-demand-search US1`: a link with a payment is kept, a link with a clave attempt is kept, an API link is never touched, a post-cutover link is never touched, a second run deletes nothing and writes no second row, a deleted link's token is never reissued (FR-024), and the count lands on the row
-- [ ] T050 [US1] Add `apps/admin/src/features/links/PruneNotice.tsx` showing the deleted count once and setting `notice_seen` on dismissal (FR-023)
+- [ ] T049 [US1] Add the notice door so the count reaches the business (FR-023): `pruneNoticeResponse` in `apps/api/src/routes/direct-payments/schema.ts`, `GET /direct-payments/prune-notice` (`payments:read`) and `POST /direct-payments/prune-notice/dismiss` (`payments:operate`, so a viewer cannot silence it for everyone) wired in `index.ts` with handlers in `handler.ts`, per [contracts/links-api.md](./contracts/links-api.md)
+- [ ] T050 [P] [US1] Write `apps/api/test/links-prune.test.ts` citing `links-on-demand-search US1`: a link with a payment is kept, a link with a clave attempt is kept, an API link is never touched, a post-cutover link is never touched, a second run deletes nothing and writes no second row, a deleted link's token is never reissued (FR-024), the count lands on the row, the notice door answers it once and `null` after dismissal, and a viewer cannot dismiss
+- [ ] T051 [US1] Add `apps/admin/src/features/links/PruneNotice.tsx` reading `GET /direct-payments/prune-notice`, showing the deleted count once and calling the dismiss door (FR-023)
 
 **Checkpoint**: no test reads a roster, nothing creates a link in the background, and the pre-existing links are gone.
 
@@ -185,12 +190,12 @@ door first and the door is removed second.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T051 Write `tests/e2e/links.spec.ts` citing `links-on-demand-search US1`: scrolling loads a second block, no horizontal scroll at 360/768/1280, measured contrast in both themes, touch targets on Copiar and WhatsApp, and a measured focus indicator
-- [ ] T052 Measure SC-001, SC-002 and SC-003 in `tests/e2e/links.spec.ts` against the stubbed API with a realistic provider delay: the page interactive within 1 s, a search's results within 3 s of the pause, and find-and-send inside 15 s. Record the measured numbers in the file's header comment rather than asserting a wall-clock that will flake on CI
-- [ ] T053 [P] Update `apps/api/package.json` only if a new area export is needed, and check `apps/admin/src/lib/base.ts` still resolves the door in dev
-- [ ] T054 Run the full gates: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm e2e`
-- [ ] T055 Walk [quickstart.md](./quickstart.md) end to end, including the count-does-not-move check for SC-004 and the no-background-creation check for SC-009
-- [ ] T056 Set `PRUNE_CUTOVER_MS` to the real ship timestamp at the release commit, not before, and tell the connected ISP that roughly 6,513 links go and that a sent-but-unpaid link stops working (quickstart, *Pre-flight*)
+- [ ] T052 Write `tests/e2e/links.spec.ts` citing `links-on-demand-search US1`: scrolling loads a second block, no horizontal scroll at 360/768/1280, measured contrast in both themes, touch targets on Copiar and WhatsApp, and a measured focus indicator
+- [ ] T053 Measure SC-001, SC-002 and SC-003 in `tests/e2e/links.spec.ts` against the stubbed API with a realistic provider delay, and record the numbers in the file's header comment. Assert a **generous ceiling** — 3 s interactive, 6 s to results, 20 s to find-and-send — so a page that gets slow fails a gate, while the targets themselves (1 s / 3 s / 15 s) stay measurements rather than a wall-clock that flakes on CI
+- [ ] T054 [P] Update `apps/api/package.json` only if a new area export is needed, and check `apps/admin/src/lib/base.ts` still resolves the door in dev
+- [ ] T055 Run the full gates: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm e2e`
+- [ ] T056 Walk [quickstart.md](./quickstart.md) end to end, including the count-does-not-move check for SC-004 and the no-background-creation check for SC-009
+- [ ] T057 Set `PRUNE_CUTOVER_MS` to the real ship timestamp at the release commit, not before, and tell the connected ISP that roughly 6,513 links go and that a sent-but-unpaid link stops working (quickstart, *Pre-flight*)
 
 ---
 
@@ -203,8 +208,8 @@ door first and the door is removed second.
 - **US1 (Phase 3)**: needs Phase 2. T011 (`msw.ts`) blocks T012 and every admin task in Phase 7
 - **US4 (Phase 4)**: needs T014 and T017 from US1 — it reuses the create door and the action hook whole
 - **US2 (Phase 5)**: needs T016, T018 and T019 from US1
-- **US3 (Phase 6)**: needs T013, T018 and T019 from US1. T029 follows T025 — same file
-- **Phase 7**: needs Phases 3 and 4 complete. The migration (T033–T043) precedes the removal (T044–T045); the prune follows both. T047's constant is set at T056, not at T047
+- **US3 (Phase 6)**: needs T013, T018 and T019 from US1. T029 follows T025 (same test file) and T031 follows T027 (same hook)
+- **Phase 7**: needs Phases 3 and 4 complete. The migration (T033–T043) precedes the removal (T044–T045); the prune follows both. T047's constant is set at T057, not at T047
 - **Polish (Phase 8)**: needs everything
 
 ### User Story Dependencies
@@ -220,8 +225,8 @@ door first and the door is removed second.
 - T008, T009 and T010 together — three different API test files
 - T016, T017 and T018 together — three new modules, no shared file
 - T037, T038 and T040–T043 together — six different test files, once T011 has landed
-- T046 and T049 together
-- `seen.ts` is created once (T018) and only consumed afterwards, so US2 and US3 no longer contend for it and can be built by two people in parallel
+- T046 and T050 together
+- `seen.ts` is created once (T018), so nothing contends for it. **`useCustomers.ts` is the contended file now**: T016 creates it, and T027 (US2) and T031 (US3) each wire a store into it, so those two are sequential and US2 and US3 cannot be built in parallel end to end. Their tests (T025, T029) share `links.test.tsx` and are sequential for the same reason; the parallelism in these phases is between a story's test and another story's implementation, not between the stories
 
 ---
 
@@ -281,4 +286,7 @@ Task: "Add apps/admin/src/features/links/seen.ts"
   opens **before** the link exists (D9), the prune's boundary is a **constant**,
   never "when it ran" (D13), and `apps/admin/test/msw.ts` is shared by the whole
   admin suite, so T011 gates far more than the Links tests
+- FR-027 / D15 retires a promise `presence-freshness` made on this page. It is
+  a recorded decision, not an implementation detail — if the product creator
+  wants a per-row age instead, that changes T016, T019, T034 and T038
 - Commit per task or per logical group; stop at any checkpoint to validate

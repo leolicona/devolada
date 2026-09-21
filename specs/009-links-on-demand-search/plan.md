@@ -14,12 +14,14 @@ toward it, and answers a search by putting the text to the provider's four
 operator copies or sends one — never on being listed — and the same rule reaches
 Cobros, so the collections screen can send too.
 
-Behind it, three things are retired: the two link doors, the sweep's `roster`
-pass, and the bulk link writer. A one-shot cron pass then deletes the panel
+Behind it, four things are retired: the two link doors, the sweep's `roster`
+pass, the bulk link writer, and — recorded rather than discovered —
+`presence-freshness`'s read-age indicator on this page, which had nothing left
+to measure once every block is live when it renders (FR-027, D15). A one-shot cron pass then deletes the panel
 links the roster created before this feature that no payment ever referenced,
 and tells the business how many went.
 
-The technical decisions are in [research.md](./research.md), numbered `D1`–`D14`
+The technical decisions are in [research.md](./research.md), numbered `D1`–`D15`
 for citation in code.
 
 ## Technical Context
@@ -48,7 +50,7 @@ for citation in code.
 
 | Principle | Verdict | How |
 | --- | --- | --- |
-| I. Spec-Driven, Every Decision Cited | **Pass** | Spec clarified 2026-09-21 (six decisions); every non-obvious rule lands with `links-on-demand-search D<n>`. The measured provider facts carry their date. |
+| I. Spec-Driven, Every Decision Cited | **Pass** | Spec clarified 2026-09-21 (six decisions); every non-obvious rule lands with `links-on-demand-search D<n>`. The measured provider facts carry their date. The one promise this feature retires from an earlier spec — `presence-freshness`'s read-age indicator on this page — is amended openly in FR-027 and D15 rather than dropped silently. |
 | II. Money Law | **Pass** | No amount is read, written or displayed differently. `askCents` stays an integer on API rows; the prune's `deleted_count` is a count, not money. A panel link's ask is still read live from WispHub and never stored. |
 | III. One Contract, Pure Routers | **Pass** | Both new doors are `routes/direct-payments/{index,handler,schema}.ts` — the router does middleware, `zValidator` and wiring only. Schemas are zod, already exported as `@devolada/api/direct-payments-schema`, and the admin, MSW handlers and Playwright stubs all take their types and fixtures from them. One envelope throughout, including the provider-unavailable answer (D10). |
 | IV. Tests Run on the Real Runtime | **Pass** | API tests in workerd with a real local D1 and `fetchMock` at WispHub's pinned origin — including the four parallel filters, the cursor's two phases, and the prune. Component tests on happy-dom with MSW answering schema-validated fixtures. The browser layer owns what only it can answer: the infinite scroll at 360/768/1280, contrast in both themes, target size, focus. |
@@ -78,7 +80,7 @@ specs/009-links-on-demand-search/
 ├── checklists/
 │   └── requirements.md
 ├── spec.md
-└── tasks.md             # Phase 2 (/speckit-tasks — not created here)
+└── tasks.md             # Phase 2 (/speckit-tasks) — 57 tasks
 ```
 
 ### Source Code (repository root)
@@ -86,9 +88,11 @@ specs/009-links-on-demand-search/
 ```text
 apps/api/src/
 ├── routes/direct-payments/
-│   ├── index.ts              # + GET /customers, + POST /links;
+│   ├── index.ts              # + GET /customers, + POST /links,
+│   │                         #   + GET/POST /prune-notice;
 │   │                         #   − GET /links, − GET /links/roster
-│   ├── handler.ts            # + listCustomers, + createLink;
+│   ├── handler.ts            # + listCustomers, + createLink,
+│   │                         #   + pruneNotice, + dismissPruneNotice;
 │   │                         #   − listLinks, − linksRoster
 │   └── schema.ts             # + customersQuery, customersResponse,
 │                             #   createLinkRequest/Response;

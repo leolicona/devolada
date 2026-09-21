@@ -190,6 +190,30 @@ machinery), the whole `pending` pass that feeds invoice reads and Cobros, and
 the `sweep_kind` enum with both values — narrowing the enum would be a
 non-additive migration for no gain, and `KINDS` is what decides what runs.
 
+**Twelve existing test files read the roster**, and the constitution forbids
+skipping, disabling or quarantining any of them to get green. They migrate to
+the new door *before* the door is removed, in three tiers:
+
+1. **Shared, first**: `apps/admin/test/msw.ts:95` — the `linksRoster` handler the
+   whole admin suite renders against.
+2. **Real assertions to rewrite**: `apps/admin/test/links.test.tsx` and
+   `cobros.test.tsx`; `identity-round.test.tsx:110` (the CLABE gate);
+   `presence-freshness.test.tsx` (the 30-second read floor and the re-read on
+   focus, neither of which survives a paged live read);
+   `apps/api/test/direct-payments-links.test.ts` (including the
+   `bug: links-refused-key` 503 case, which must survive verbatim);
+   `apps/api/test/presence-freshness.test.ts:109` (a block carries no shared
+   `readAt`); `apps/api/test/collections-api-test-mode.test.ts:175`, which is
+   where FR-017's proof lives today — it moves to the new door rather than
+   disappearing with the roster; `apps/api/test/payment-requests.test.ts:100`,
+   whose premise "the roster had already given a link" is false after US4;
+   `tests/e2e/keyboard.spec.ts`, whose tab order rests on the roster being alive
+   on arrival.
+3. **Mechanical swaps**: `apps/admin/test/memberships.test.tsx:223`,
+   `shell.test.tsx:167`, a stale comment in `feedback.test.tsx:72`,
+   `tests/e2e/stubs.ts`, `tests/design/review-foundations.spec.ts` and
+   `review-feedback.spec.ts`.
+
 ## D13 — The prune is a one-shot cron pass with a cutover baked in code, and it tells the business once
 
 FR-023 deletes every panel link created before this feature shipped that no

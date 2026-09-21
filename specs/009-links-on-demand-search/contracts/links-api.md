@@ -59,7 +59,7 @@ one door (D1).
 | --- | --- |
 | Provider unreachable or past the operation budget | `200`, `wisphub: "unavailable"`, results = the business's API links only |
 | Business has no WispHub key | `200`, `wisphub: "not_configured"`, same shape |
-| Provider rejected the key (401/403) | `502` `WISPHUB_AUTH_FAILED` — a setup problem the ISP must fix, not an outage |
+| Provider rejected the key (401/403) | `503` `WISPHUB_AUTH_FAILED` — a setup problem the ISP must fix, not an outage. **503, not 502**: `wisphubFailure(c, e, "panel")` already answers this way and `bug: links-refused-key` asserts it (`apps/api/test/direct-payments-links.test.ts`) |
 
 `WISPHUB_READ_INCOMPLETE` retires with the roster: nothing is read whole, so
 nothing can be cut short (FR-018).
@@ -102,10 +102,10 @@ never a second one (FR-005, FR-009).
 | --- | --- |
 | `VALIDATION_ERROR` | empty or malformed usuario |
 | `AUTHENTICATION_ERROR` | no session |
-| `FORBIDDEN` | the role cannot operate payments |
+| `FORBIDDEN_FOR_ROLE` | the role cannot operate payments — the code `auth/middleware.ts` already returns, 403 |
 | `SPEI_NOT_CONFIGURED` | no CLABE — a link nobody can pay is not shared (FR-016) |
 | `WISPHUB_NOT_CONFIGURED` | no provider key; a panel link cannot be made without one |
-| `CUSTOMER_NOT_FOUND` | the provider does not know that usuario |
+| `CUSTOMER_NOT_FOUND` | the provider does not know that usuario. **A new code, deliberately**: the area's `NOT_FOUND` means "no such link or route", and the panel must tell that apart from "the provider has no such customer", which is an integration problem the operator can act on |
 | `WISPHUB_UNAVAILABLE` | the provider did not answer — this door **does** fail, unlike the read door: a link created from a stale identity would be a link to the wrong person |
 | `BUSINESS_SUSPENDED` | as everywhere else in the area |
 

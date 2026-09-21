@@ -110,19 +110,39 @@ apps/api/src/
 ├── db/schema.ts              # + link_prunes
 └── index.ts                  # the prune joins the every-minute cron
 
+apps/api/migrations/          # drizzle.config.ts writes here, not drizzle/
+
 apps/api/test/
 ├── links-customers.test.ts       # US1 — browse, search, merge, cap, dedupe
 ├── links-create-on-act.test.ts   # US1, US4 — born on act, never on sight
+├── links-identity-only.test.ts   # US1 — FR-010: the row keeps no customer
 ├── links-offline.test.ts         # US3 — provider down / not configured
 ├── links-prune.test.ts           # US1 — what goes, what stays, second run
-└── links-roster-cap.test.ts      # retired with the roster it tested
+├── links-roster-cap.test.ts      # deleted with the roster it tested
+│
+│   # migrated off the roster before it is removed:
+├── direct-payments-links.test.ts      # keeps bug: links-refused-key (503)
+├── presence-freshness.test.ts         # a block has no shared readAt
+├── collections-api-test-mode.test.ts  # FR-017's proof moves to the new door
+└── payment-requests.test.ts           # a debtor may now have no link
+
+apps/admin/test/                 # the admin suite is here, NOT co-located
+├── msw.ts                       # the shared handler — migrate this first
+├── links.test.tsx               # rewritten: US1, US2, US3
+├── cobros.test.tsx              # rewritten: US4
+├── identity-round.test.tsx      # the CLABE gate, on the new screen
+├── presence-freshness.test.tsx  # rebuilt on blocks
+├── memberships.test.tsx         # handler swap
+├── shell.test.tsx               # handler swap
+└── feedback.test.tsx            # stale comment only
 
 apps/admin/src/features/
 ├── links/
 │   ├── LinksScreen.tsx       # search box + infinite blocks; ?q= in the URL
 │   ├── useCustomers.ts       # useInfiniteQuery, cursor, viewport block size
 │   ├── useLinkAction.ts      # create-on-act + the WhatsApp window (D9)
-│   ├── seen.ts               # sessionStorage: names, marks, results (D11)
+│   ├── seen.ts               # sessionStorage: results, names, marks —
+│   │                         #   created once, consumed by US2 and US3 (D11)
 │   └── PruneNotice.tsx       # the one-time count (D13)
 └── cobros/
     └── CobrosScreen.tsx      # the same buttons and the same action (D14)
@@ -131,9 +151,13 @@ packages/ui/                  # no new atom expected; StatusBadge and the
                               # existing recipes carry the row
 
 tests/
-├── e2e/links.spec.ts         # scroll, 360/768/1280, contrast, target size
+├── e2e/links.spec.ts         # scroll, 360/768/1280, contrast, target size,
+│                             #   and the SC-001..003 measurements
+├── e2e/keyboard.spec.ts      # tab order no longer rests on a live roster
 ├── e2e/stubs.ts              # roster stub → customers stub
-└── design/review-links.spec.ts  # the dead /links/search stub goes (D12)
+├── design/review-foundations.spec.ts  # stub swap
+├── design/review-feedback.spec.ts     # stub swap
+└── design/review-links.spec.ts        # the dead /links/search stub goes (D12)
 ```
 
 **Structure Decision**: the workspace layout is unchanged. This feature lives in
@@ -158,8 +182,12 @@ the one-shot prune, which belongs to neither the route nor the provider adapter.
    a writer while the bulk writer is still there to delete.
 3. **The admin's Links screen**, then **Cobros** — Cobros reuses
    `useLinkAction` whole (D14), so it follows rather than leads.
-4. **Retirement** (D12) once nothing calls the old doors: the two routes, the
-   sweep kind, the adapter methods, the dead Playwright stub.
+4. **Test migration, then retirement** (D12). Twelve existing test files read
+   the roster; each moves to the new door *before* the door is removed, because
+   the constitution allows no test to be skipped, disabled or quarantined to
+   get green. `apps/admin/test/msw.ts` is shared by the whole admin suite and
+   goes first. Only then do the two routes, the sweep kind, the adapter methods
+   and the dead Playwright stub come out.
 5. **The prune last** (D13), because it is only safe once the code that stops
    recreating links is live. `PRUNE_CUTOVER_MS` is set to the ship date at this
    step, not before.
@@ -167,3 +195,6 @@ the one-shot prune, which belongs to neither the route nor the provider adapter.
 **US4 ships with the prune or the prune does not ship.** FR-023 empties the
 stored links Cobros reads; without FR-025/FR-026 the collections screen can send
 nothing. Steps 3 and 5 are one release.
+
+**The migration ships with the removal.** Taking the doors out first leaves
+twelve red test files and no legitimate way to park them.

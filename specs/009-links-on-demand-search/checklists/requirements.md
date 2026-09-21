@@ -51,6 +51,11 @@
 - The measured facts the spec leans on are from the connected ISP on
   2026-09-20 and the provider's own documentation read 2026-09-21; the
   Assumptions section says what happens if another installation differs.
+- `/speckit-analyze` ran on 2026-09-21 after tasks were generated and found
+  sixteen issues, one CRITICAL: retiring the roster broke twelve existing test
+  files no task covered, which the constitution's gate forbids parking. All
+  sixteen were applied to spec.md, plan.md, research.md, tasks.md and the
+  contract. No checklist item changed state as a result.
 - One correction the session made to the spec's own premise: the 1,000-row
   cap the first draft argued against was lifted on 2026-09-19 by #220. The
   Context now argues from what is actually wrong — a snapshot minutes old,

@@ -18,10 +18,11 @@ person.
 
 Today the page opens by reading the ISP's **whole** customer base from
 WispHub and then searching those rows in the browser. On the connected ISP
-that is 6,513 customers (measured 2026-09-18 and again 2026-09-20), which
+that is 6,513 customers (measured 2026-09-20; 6,509 two days earlier), which
 WispHub serves 100 at a time: 66 calls, 30–40 s at the measured 0.4–0.6 s
 each. No request can pay that, so the read was capped at ten pages and
-5,509 customers could not be found at all.
+5,513 customers could not be found at all. (The Input above says 5,509 — the
+same gap against the 6,509 of 2026-09-18.)
 
 That cap was lifted on 2026-09-19 (bug: links-roster-cap, #220) by moving
 the walk to the every-minute sweep: ten pages a tick, stored, swapped in
@@ -52,6 +53,16 @@ delivery states (pendiente / enviado / abierto) to the next Links piece,
 so that this one stays small enough to land in days.
 
 ## Clarifications
+
+The **Input** above is the description this feature started from, kept
+verbatim. Two of its sentences no longer hold and are superseded by the
+decisions below: the page does not open "with a search box and nothing else",
+and "Cobros keeps creating links for debtors as today" was wrong twice — Cobros
+never created links, and User Story 4 now makes it do so.
+
+Stories are numbered in the order they were written, not by priority. In
+priority order they are **US1 (P1), US4 (P1), US2 (P2), US3 (P3)** — which is
+the order [tasks.md](./tasks.md) builds them in.
 
 ### Session 2026-09-21
 

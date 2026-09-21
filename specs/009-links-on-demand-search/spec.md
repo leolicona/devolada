@@ -16,13 +16,23 @@ validate — the product's core value depends on this page finding the right
 person.
 
 Today the page opens by reading the ISP's **whole** customer base from
-WispHub and then searching those rows in the browser. That read is capped.
-On the connected ISP, measured 2026-09-18 and again 2026-09-20, WispHub
-reports 6,513 customers and the page shows 1,000 of them under a warning
-that the list may be incomplete. Which 1,000 is whatever order WispHub
-returns. The other 5,513 customers cannot be found on this page, so nobody
-can send them their link from it. The base also grows — four customers in
-two days — so any list read "once" is stale by the next morning.
+WispHub and then searching those rows in the browser. On the connected ISP
+that is 6,513 customers (measured 2026-09-18 and again 2026-09-20), which
+WispHub serves 100 at a time: 66 calls, 30–40 s at the measured 0.4–0.6 s
+each. No request can pay that, so the read was capped at ten pages and
+5,509 customers could not be found at all.
+
+That cap was lifted on 2026-09-19 (bug: links-roster-cap, #220) by moving
+the walk to the every-minute sweep: ten pages a tick, stored, swapped in
+when a pass finishes. The page now shows the whole tenant — but it pays
+for that in three ways. The list is a snapshot minutes old, not what
+WispHub says now. A pass over a 66-page tenant costs the provider sixty-odd
+calls every few minutes whether or not anyone opens the page. And the
+roster creates a link for every customer it stores, so the ISP holds
+roughly 6,513 links, nearly all of them never sent.
+
+The page reads a whole base to answer one question: *where is this
+customer?* That is the waste this feature removes.
 
 The page was built this way because WispHub's search was believed to match
 only exact values. That premise was wrong: measured 2026-09-20 on the
@@ -32,7 +42,9 @@ case and accents (`mar` and `MAR` both find 904 customers; `maria` and
 simply be asked, one question at a time, for exactly the customer the ISP
 is looking for.
 
-This feature replaces the capped list with on-demand search. It is the
+This feature replaces the whole-base read with a page that asks for
+exactly what it shows: the first screenful on open, one more as the
+operator scrolls, and the customer they name when they search. It is the
 first of three pieces agreed for the distribution and collection channels
 (Links search → Cobros → WispHub webhooks). It deliberately leaves the
 delivery states (pendiente / enviado / abierto) to the next Links piece,
@@ -56,6 +68,12 @@ so that this one stays small enough to land in days.
 - Q: What remembers that a link was copied or sent? → A: The cache, as a
   visual mark on the row for the operator who acted. No delivery state is
   stored — that is the next piece.
+- Q: What fills the opening list, and where do its rows come from? → A:
+  WispHub's customer list, read live and paged on demand. The page asks for
+  the first block that fills the browser's viewport and asks for the next
+  as the operator scrolls. Nothing about the customer is stored: the link
+  keeps `customer_usuario` and Devolada's own operational fields, and
+  everything shown about the customer is read live.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -68,8 +86,9 @@ or phone number, see the customer within a moment, and press WhatsApp or
 Copiar. The customer's link exists from that moment whether or not anyone
 had ever listed them before.
 
-This works for the 6,513th customer exactly as it works for the first. No
-list is read on arrival; the page is ready as soon as it opens.
+This works for the 6,513th customer exactly as it works for the first. The
+page reads one screenful on arrival and nothing more until the operator
+asks — by scrolling, or by typing.
 
 **Why this priority**: this is the whole feature. An ISP that cannot find
 most of its customers cannot distribute the link, and a link nobody
@@ -225,23 +244,33 @@ same note, and no error block is shown.
 - The operator types a fourth character while a three-character search is
   in flight: the in-flight answer is discarded if it no longer matches the
   text in the box.
+- The provider offers no way to order the customer list, so a base that
+  changes while the operator scrolls can show a customer twice or skip one
+  between blocks. The page promises that a customer can be *found*, never
+  that the list reads the same twice; a customer missed between blocks is
+  still reachable by search.
+- The operator scrolls faster than the blocks arrive: only the blocks asked
+  for are shown, in the order they were asked for, and a block that arrives
+  after the operator has searched is discarded.
+- A block comes back empty because the operator scrolled past the end: the
+  list stops, saying how many customers the ISP has.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The Links page MUST open with the search box and the
-  business's own payment links, and MUST NOT read any list of customers
-  from WispHub on open.
+- **FR-001**: The Links page MUST open with the search box and the first
+  block of the ISP's customers, read live from WispHub. It MUST NOT read
+  the whole customer base, on open or ever.
 - **FR-002**: The page MUST search only when the trimmed text has at least
   three characters, and only after the operator pauses typing briefly
   (about a third of a second); below three characters it MUST say so and
   search nothing.
-- **FR-003**: A search MUST look in Devolada's own links of the business
-  first — panel links by usuario and by the name held in the recently seen
-  cache (FR-021), API links by reference and label — and then in WispHub,
-  with the same text matched by *contains* against the customer's name,
-  surname, usuario and phone at once.
+- **FR-003**: A search MUST ask WispHub live, with the text matched by
+  *contains* against the customer's name, surname, usuario and phone at
+  once, and MUST ask Devolada's own rows for the API links the provider
+  cannot know about (by reference and label) and for what the recently seen
+  cache holds (FR-021).
 - **FR-004**: Matching MUST ignore case and accents on both sides, so that
   "maria", "María" and "MARIA" find the same customers whether the match
   comes from Devolada's links or from WispHub.
@@ -250,11 +279,10 @@ same note, and no error block is shown.
 - **FR-006**: The number of results shown MUST be capped; when more
   customers matched than are shown, the page MUST say how many matched and
   ask for a more specific search.
-- **FR-007**: Each panel result MUST show the customer's usuario, and their
-  name and phone whenever WispHub answered or the recently seen cache holds
-  them; each API result MUST show its label or reference, its asked amount
-  and its state, with its channel shown as icon + text — as the old list
-  did.
+- **FR-007**: Each panel row MUST show the customer's usuario, name and
+  phone as WispHub answers them now — never a stored copy; each API result
+  MUST show its label or reference, its asked amount and its state, with its
+  channel shown as icon + text — as the old list did.
 - **FR-008**: A result whose customer has no link yet MUST show the same
   Copiar and WhatsApp buttons as one who has; the link MUST be created on
   the first use of either button and MUST NOT be created merely because the
@@ -263,7 +291,8 @@ same note, and no error block is shown.
   permanent link, identified by usuario, so that a later search, a Cobros
   row or a payment finds the same link.
 - **FR-010**: A payment link MUST associate only the customer's identity —
-  `customer_usuario` on a panel link, `customer_ref` on an API link. It
+  `customer_usuario` on a panel link, `customer_ref` on an API link — beside
+  Devolada's own operational fields (when it was created, its own state). It
   MUST NOT store the customer's name, phone or service state: to operate,
   those are always read fresh from WispHub.
 - **FR-011**: The search text MUST survive navigating to another page and
@@ -285,18 +314,22 @@ same note, and no error block is shown.
   viewer sees results and nothing to press.
 - **FR-017**: Test links MUST never appear in results.
 - **FR-018**: The page MUST NOT show the "la lista puede estar incompleta"
-  warning any more: there is no list to be incomplete.
+  warning any more: nothing is read whole, so nothing can be cut short. It
+  MAY instead say how many customers the ISP has, which the provider
+  answers with every block.
 - **FR-019**: WhatsApp MUST open with the same message and the same phone
   handling as today (Mexico's country code in front, the contact picker
   when the number cannot be read or is absent).
-- **FR-020**: The opening list MUST be delivered in blocks: the first block
-  MUST render without waiting for the rest, and further blocks MUST arrive
-  as the operator reaches them.
+- **FR-020**: The list MUST be delivered in blocks, one provider read each:
+  the first block MUST be no larger than what fills the browser's viewport,
+  and the next MUST be asked for only when the operator scrolls toward it.
+  The page MUST never walk the list to its end on its own.
 - **FR-021**: The page MUST keep a short-lived cache of the customers it has
   seen — their name and phone as WispHub last answered — so that a search by
-  name and a row's name survive a moment without WispHub. The cache MUST NOT
-  be a stored field of the link, and what it holds MUST be replaced by a
-  fresh read whenever WispHub answers again.
+  name and a row's name survive a moment without WispHub. A live answer MUST
+  always outrank the cache: the cache is read only when WispHub does not
+  answer, it is replaced by every fresh answer, and it MUST NOT be a stored
+  field of the link.
 - **FR-022**: When the operator copies or sends a link, that row MUST be
   marked visually as copied or sent. The mark lives in the cache for the
   operator who acted; no delivery state is stored, and nothing in the mark
@@ -367,4 +400,20 @@ same note, and no error block is shown.
   order. The copied / sent mark of FR-022 is a cache, not their
   forerunner: the states piece is what gives delivery a stored life.
 - The operation budget for a provider read stays what it is today; a
-  search does not get a longer one.
+  search does not get a longer one. One block and one search are each a
+  single round trip inside it, so neither needs the budget widened.
+- The provider's customer list is measured (docs read 2026-09-21, behaviour
+  measured 2026-09-20 on the connected ISP): it pages by `limit` and
+  `offset` with no ordering parameter, answers a total count, and filters
+  each field either exactly or by `__contains` — `nombre`, `apellido`,
+  `usuario`, `telefono` among them, case- and accent-insensitive. It offers
+  **no** filter that takes several identities at once, so a block of rows
+  can never be resolved in one call: this is why the page shows what the
+  provider's own list gives it rather than enriching rows one by one.
+  Service state is a filter (`estado`: 1 active, 2 suspended, 3 cancelled,
+  4 free) the page does not use yet.
+- Retiring the roster sweep's `roster` pass and the links it creates per
+  page is what makes FR-008 and SC-004 true for the connected ISP, which
+  already holds a link per customer. Whether the pass is deleted or left
+  unused is a plan decision; the links it already created stay valid and
+  are not cleaned up here.

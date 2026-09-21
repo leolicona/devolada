@@ -4,7 +4,8 @@
 
 **Created**: 2026-09-20
 
-**Status**: Draft
+**Status**: Draft — clarified 2026-09-21 (six decisions; the provider's
+customer-list contract read the same day)
 
 **Input**: User description: "Links: on-demand customer search. The Links page today reads the whole WispHub customer roster on open (capped at 1,000 rows of a 6,513-customer ISP, measured 2026-09-18/20, shown with a "list may be incomplete" warning) and searches locally over those rows, so 5,509 customers can never receive their payment link. Replace the roster with on-demand search: the page opens with a search box and nothing else; from the third character, after a short debounce, it asks Devolada, which searches its own links first (name, usuario, customer reference, label — covers API-channel links) and then WispHub with the same text against nombre, apellido, usuario and telefono at once (WispHub's `__contains` filters, measured 2026-09-20 to be case- and accent-insensitive; the customer object carries only `nombre`, which in this ISP holds the full name), merged without duplicates; results are capped and, when there are more, the page says how many matched and asks for a more specific search. The search text lives in the URL (`?q=`) so it survives navigating to another page and back, the back button and a reload; results for the same text are reused for two minutes. A WispHub customer who has no link yet shows the same Copiar / WhatsApp buttons; the link is created on first use (copy or WhatsApp), never merely on being shown, so browsing results leaves no stray links. WispHub unavailable: the search still answers with Devolada's own links and shows a quiet "Sin conexión a WispHub" note instead of failing. Roles and CLABE gating unchanged: viewer sees results with no buttons; without a CLABE the buttons wait. Out of scope: delivery states (pendiente/enviado/abierto), counters, migration of existing links, mass delivery, webhooks — all later pieces. Cobros keeps creating links for debtors as today."
 
@@ -80,6 +81,11 @@ so that this one stays small enough to land in days.
   recorded a sending, so a link an operator sent and the customer has not
   paid yet is deleted with the rest, and that customer's copy stops
   working.
+- Q: After the cleanup, should Cobros create a link when the operator
+  presses Copiar or WhatsApp? → A: Yes — the same rule Links now has,
+  applied to the page where the ISP decides who to chase. It enters this
+  feature as User Story 4, because without it FR-023 leaves the
+  collections screen unable to send anything.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -228,6 +234,43 @@ same note, and no error block is shown.
 
 ---
 
+### User Story 4 - Cobros can send, not only show (Priority: P1)
+
+An operator opens Cobros to see who owes money this week. They find the
+debtor, press WhatsApp, and the message goes out with the customer's link —
+whether or not that customer had a link a second earlier. The link is born
+from the act, exactly as it is on Links.
+
+**Why this priority**: this ships with the cleanup or the cleanup must not
+ship. FR-023 deletes almost every stored panel link, and Cobros shows
+buttons only where a link exists. Without this story, the page that tells
+the ISP who owes money can send none of them their link — a regression on
+the collections path, not a missing nicety.
+
+**Independent Test**: delete every stored link for a business, open Cobros
+on a debtor, press WhatsApp — the message opens with a working link, and
+the same link is the one Links shows for that customer afterwards.
+
+**Acceptance Scenarios**:
+
+1. **Given** a debtor with no link, **When** the operator presses Copiar or
+   WhatsApp on their Cobros row, **Then** the link is created at that
+   moment and the action proceeds with it.
+2. **Given** a debtor who already has a link, **When** the operator acts on
+   their Cobros row, **Then** that same link is used — never a second one.
+3. **Given** a link created from Cobros, **When** the same customer is
+   found later on Links, **Then** Links shows that same link.
+4. **Given** debtors on screen, **When** the operator only reads the list,
+   **Then** no link is created for any of them.
+5. **Given** an invoice row, which carries no phone, **When** the operator
+   presses WhatsApp, **Then** WhatsApp's own contact picker opens with the
+   message ready — as today.
+6. **Given** a viewer, or a business with no CLABE configured, **When**
+   they open Cobros, **Then** the buttons are withheld exactly as they are
+   on Links.
+
+---
+
 ### Edge Cases
 
 - A customer present both among Devolada's links and in WispHub's answer
@@ -260,6 +303,15 @@ same note, and no error block is shown.
   after the operator has searched is discarded.
 - A block comes back empty because the operator scrolled past the end: the
   list stops, saying how many customers the ISP has.
+- The cleanup (FR-023) meets a link a payment or a clave attempt ever
+  referenced: it is kept, whatever its age and whoever created it.
+- The cleanup meets an API link: it is never touched, whatever its age.
+- A customer whose link the cleanup deleted had already been sent it: their
+  copy stops working, and the next act on them creates a link at a new
+  address. Nothing reissues the old one.
+- The cleanup runs a second time (a re-deploy, a re-run): it deletes
+  nothing, because it only ever covers links that existed before the
+  feature shipped.
 
 ## Requirements *(mandatory)*
 
@@ -351,6 +403,13 @@ same note, and no error block is shown.
   first time an operator acts on them, at a new address. Nothing MAY try
   to preserve or reissue the old one: a copy the customer already holds
   stops working, and the page does not pretend otherwise.
+- **FR-025**: Cobros MUST create the debtor's link on the first use of
+  Copiar or WhatsApp, on the same terms as Links (FR-008, FR-009): never
+  on being shown, and identified by the invoice row's usuario, so the link
+  is the one every other surface already knows.
+- **FR-026**: Cobros MUST show Copiar and WhatsApp on a debtor who has no
+  link, instead of hiding them, and MUST keep withholding them from a
+  viewer and from a business with no CLABE, exactly as Links does.
 
 ### Key Entities
 
@@ -409,13 +468,12 @@ same note, and no error block is shown.
   that may be recycled (direct-payment D5) — unchanged.
 - Links created before this feature keep working unchanged: no link gains
   or loses a field, so there is nothing to migrate.
-- **Cobros reads stored links only and hides the buttons on a debtor who
-  has none.** That was an edge case while the roster created a link per
-  customer. After FR-023 it becomes the normal case: almost every debtor
-  will have no link, so almost every Cobros row will show no buttons until
-  someone finds that customer on Links and acts. Whether Cobros gains its
-  own "create on act" is an open decision; leaving it as it is means Cobros
-  can send nothing for a while.
+- **Cobros is in scope, for one rule only** (US4, FR-025, FR-026): it
+  creates the link on the act, as Links does. Everything else about Cobros
+  is untouched — what it lists, how it reads debt, how it orders rows.
+  It is in scope because FR-023 makes it so: hiding the buttons on a debtor
+  with no link was an edge case while the roster made one per customer, and
+  after the cleanup it would be nearly every row.
 - The roster read is no longer needed by the panel; whether it is retired
   is a plan decision. The paged list of links stays — it becomes the page's
   opening (FR-001, FR-020).

@@ -6,7 +6,7 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [ ] No implementation details (languages, frameworks, APIs)
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -31,11 +31,28 @@
 
 ## Notes
 
-- Validated 2026-09-20 on the first pass. One assumption is a product
-  decision the creator may want to overturn before planning: Cobros stays
-  unchanged (a debtor without a link keeps hidden buttons until the Cobros
-  piece). The alternative — Cobros creating the link on Copiar/WhatsApp —
-  is small and could be a fourth story here.
-- The measured facts the spec leans on (contains matching, case and accent
-  insensitivity, 6,513 customers) are from the connected ISP on 2026-09-20;
-  the Assumptions section says what happens if another installation differs.
+- Re-validated 2026-09-21 after the clarification session (six decisions).
+  One item moved from passing to failing, deliberately.
+- **No implementation details — now failing, on purpose.** The spec names
+  the provider's query parameters (`limit`, `offset`, the `__contains`
+  filters, `estado`), two link fields (`customer_usuario`, `customer_ref`)
+  and one internal background pass (`roster`). Two of the session's
+  decisions cannot be stated without them: the creator's rule is *the link
+  associates an identity and nothing else*, which is about those fields,
+  and the page's shape follows from what the provider's list can and cannot
+  do — above all that no filter takes several identities at once. The
+  detail sits in Assumptions and in the two requirements it governs, not in
+  the user stories, which stay readable on their own. Decide at planning
+  whether to keep it here or move it to research.md.
+- The Cobros question this checklist flagged on the first pass is closed:
+  it became User Story 4. The cleanup (FR-023) deletes almost every stored
+  link, which would have left the collections screen unable to send
+  anything.
+- The measured facts the spec leans on are from the connected ISP on
+  2026-09-20 and the provider's own documentation read 2026-09-21; the
+  Assumptions section says what happens if another installation differs.
+- One correction the session made to the spec's own premise: the 1,000-row
+  cap the first draft argued against was lifted on 2026-09-19 by #220. The
+  Context now argues from what is actually wrong — a snapshot minutes old,
+  the provider calls a large tenant pays every few minutes, and a link
+  created for every customer stored.

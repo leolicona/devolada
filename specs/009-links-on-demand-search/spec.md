@@ -68,6 +68,11 @@ so that this one stays small enough to land in days.
 - Q: What remembers that a link was copied or sent? → A: The cache, as a
   visual mark on the row for the operator who acted. No delivery state is
   stored — that is the next piece.
+- Q: What happens to the links the roster already created, one per
+  customer? → A: The `roster` pass is retired and no background work
+  creates links again; the links it created are cleaned up where they can
+  be shown to be unused. What counts as unused is below — Devolada never
+  recorded a sending, so "unused" cannot mean "never sent".
 - Q: What fills the opening list, and where do its rows come from? → A:
   WispHub's customer list, read live and paged on demand. The page asks for
   the first block that fills the browser's viewport and asks for the next
@@ -283,10 +288,11 @@ same note, and no error block is shown.
   phone as WispHub answers them now — never a stored copy; each API result
   MUST show its label or reference, its asked amount and its state, with its
   channel shown as icon + text — as the old list did.
-- **FR-008**: A result whose customer has no link yet MUST show the same
+- **FR-008**: A row whose customer has no link yet MUST show the same
   Copiar and WhatsApp buttons as one who has; the link MUST be created on
   the first use of either button and MUST NOT be created merely because the
-  customer was shown.
+  customer was shown, listed or read. No background work MAY create a link:
+  an operator's act is the only thing that brings one into existence.
 - **FR-009**: The link created on first use MUST be the customer's
   permanent link, identified by usuario, so that a later search, a Cobros
   row or a payment finds the same link.
@@ -412,8 +418,17 @@ same note, and no error block is shown.
   provider's own list gives it rather than enriching rows one by one.
   Service state is a filter (`estado`: 1 active, 2 suspended, 3 cancelled,
   4 free) the page does not use yet.
-- Retiring the roster sweep's `roster` pass and the links it creates per
-  page is what makes FR-008 and SC-004 true for the connected ISP, which
-  already holds a link per customer. Whether the pass is deleted or left
-  unused is a plan decision; the links it already created stay valid and
-  are not cleaned up here.
+- The sweep's `roster` pass is retired with this feature. Its only two
+  readers are the Links page's own doors, and nothing else asks for a
+  tenant roster; the `pending` pass that feeds the invoice reads and Cobros
+  is untouched. Retiring it ends both the links born per stored page
+  (FR-008) and the sixty-odd provider calls a large tenant paid every few
+  minutes whether or not anyone opened the page.
+- **Devolada holds no evidence that a link was ever sent.** Nothing records
+  a copy, a send or a payer's visit, and FR-022 keeps the mark in the
+  browser. The only durable evidence a link was used is a payment against
+  it. So a cleanup of "unused" links cannot mean "never sent" — a link an
+  operator WhatsApped last week and a link the sweep created and nobody
+  touched look identical in the data, and deleting the first breaks a
+  payment address a customer already holds. What the cleanup may safely
+  delete is decided below.

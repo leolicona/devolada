@@ -38,6 +38,25 @@ first of three pieces agreed for the distribution and collection channels
 delivery states (pendiente / enviado / abierto) to the next Links piece,
 so that this one stays small enough to land in days.
 
+## Clarifications
+
+### Session 2026-09-21
+
+- Q: What does a payment link remember about the customer? → A: Only the
+  customer's identity — `customer_usuario` on a panel link, `customer_ref`
+  on an API link. Name, phone and service state are never stored on the
+  link; to operate, they are always read fresh.
+- Q: When WispHub cannot be reached, what can the operator still search
+  for? → A: A short-lived cache of the customers seen in the last minutes
+  answers a search by name; beyond that window the link itself answers by
+  usuario (panel) and by reference or label (API).
+- Q: What does the page show when it opens, now that no roster is read? →
+  A: The business's own payment links, delivered in blocks so the first
+  screen renders at once, with the search box above them.
+- Q: What remembers that a link was copied or sent? → A: The cache, as a
+  visual mark on the row for the operator who acted. No delivery state is
+  stored — that is the next piece.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Any customer can be found and sent their link (Priority: P1)
@@ -135,10 +154,16 @@ second visible wait when the search is recent.
 
 ### User Story 3 - Search keeps working when WispHub does not (Priority: P3)
 
-WispHub is slow or down. The operator searches anyway. Customers whose link
-Devolada already holds — including links created through the collections
-API, which have no WispHub customer at all — still appear, and the page says
+WispHub is slow or down. The operator searches anyway. The links Devolada
+already holds still answer — including links created through the
+collections API, which have no WispHub customer at all — and the page says
 quietly that WispHub could not be reached, instead of failing.
+
+What a search can match narrows while WispHub is away, and the page says so
+rather than pretending. A customer seen in the last minutes is still found
+by name, from the cache. Beyond that window the link knows only the
+customer's identity, so a panel customer is found by usuario and an API
+link by its reference or label.
 
 A business that never connected WispHub gets the same behaviour: its search
 covers its API links, and the empty state says where its links come from.
@@ -146,30 +171,35 @@ covers its API links, and the empty state says where its links come from.
 **Why this priority**: the page must never be a void. A quiet note keeps the
 operator working with what Devolada knows; an error block sends them away.
 
-**Independent Test**: with WispHub unreachable, search for a customer whose
-link Devolada holds and for an API link by its reference — both appear
-under a quiet note; search for a customer Devolada does not hold — the
-empty result carries the same note, and no error block is shown.
+**Independent Test**: with WispHub unreachable, search by usuario for a
+customer whose link Devolada holds, by name for one seen minutes earlier,
+and by reference for an API link — all three appear under a quiet note;
+search for a customer Devolada does not hold — the empty result carries the
+same note, and no error block is shown.
 
 **Acceptance Scenarios**:
 
-1. **Given** WispHub unreachable, **When** the operator searches for a
-   customer whose link Devolada already holds, **Then** that customer
+1. **Given** WispHub unreachable, **When** the operator searches by usuario
+   for a customer whose link Devolada already holds, **Then** that customer
    appears, with the note "Sin conexión a WispHub" and no error block.
-2. **Given** WispHub unreachable, **When** the operator searches for a
-   customer Devolada does not hold, **Then** the result is empty under the
-   same note, and the page never shows an error block.
-3. **Given** a search text that matches a link created through the
+2. **Given** WispHub unreachable and a customer seen minutes earlier,
+   **When** the operator searches for them by name, **Then** they appear
+   from the cache, under the same note.
+3. **Given** WispHub unreachable and a customer not seen recently, **When**
+   the operator searches for them by name, **Then** the result is empty
+   under the same note, the page says a name search needs WispHub, and it
+   never shows an error block.
+4. **Given** a search text that matches a link created through the
    collections API (by its reference or label), **When** it runs, **Then**
    that link appears with its channel shown as "API", its reference, its
    asked amount and its state, exactly as the old list showed it.
-4. **Given** a business without WispHub, **When** it searches, **Then** its
+5. **Given** a business without WispHub, **When** it searches, **Then** its
    API links answer and nothing mentions WispHub as a failure; **When** it
    has none, **Then** the empty state says links come from the API or from
    connecting WispHub in Integraciones.
-5. **Given** WispHub answering again, **When** the operator repeats the
-   search, **Then** the note disappears and WispHub's customers join the
-   results.
+6. **Given** WispHub answering again, **When** the operator repeats the
+   search, **Then** the note disappears, WispHub's customers join the
+   results, and what the cache held is replaced by the fresh answer.
 
 ---
 
@@ -200,16 +230,18 @@ empty result carries the same note, and no error block is shown.
 
 ### Functional Requirements
 
-- **FR-001**: The Links page MUST open with the search box and no customer
-  list, and MUST NOT read any list of customers from WispHub on open.
+- **FR-001**: The Links page MUST open with the search box and the
+  business's own payment links, and MUST NOT read any list of customers
+  from WispHub on open.
 - **FR-002**: The page MUST search only when the trimmed text has at least
   three characters, and only after the operator pauses typing briefly
   (about a third of a second); below three characters it MUST say so and
   search nothing.
 - **FR-003**: A search MUST look in Devolada's own links of the business
-  first — panel links by name and usuario, API links by reference and
-  label — and then in WispHub, with the same text matched by *contains*
-  against the customer's name, surname, usuario and phone at once.
+  first — panel links by usuario and by the name held in the recently seen
+  cache (FR-021), API links by reference and label — and then in WispHub,
+  with the same text matched by *contains* against the customer's name,
+  surname, usuario and phone at once.
 - **FR-004**: Matching MUST ignore case and accents on both sides, so that
   "maria", "María" and "MARIA" find the same customers whether the match
   comes from Devolada's links or from WispHub.
@@ -218,8 +250,9 @@ empty result carries the same note, and no error block is shown.
 - **FR-006**: The number of results shown MUST be capped; when more
   customers matched than are shown, the page MUST say how many matched and
   ask for a more specific search.
-- **FR-007**: Each panel result MUST show the customer's name, usuario and
-  phone; each API result MUST show its label or reference, its asked amount
+- **FR-007**: Each panel result MUST show the customer's usuario, and their
+  name and phone whenever WispHub answered or the recently seen cache holds
+  them; each API result MUST show its label or reference, its asked amount
   and its state, with its channel shown as icon + text — as the old list
   did.
 - **FR-008**: A result whose customer has no link yet MUST show the same
@@ -229,10 +262,10 @@ empty result carries the same note, and no error block is shown.
 - **FR-009**: The link created on first use MUST be the customer's
   permanent link, identified by usuario, so that a later search, a Cobros
   row or a payment finds the same link.
-- **FR-010**: A link MUST remember the customer's name and phone as last
-  seen in WispHub, refreshed each time the customer is seen again, so that
-  Devolada's own links can answer a search by name and show a name without
-  asking WispHub.
+- **FR-010**: A payment link MUST associate only the customer's identity —
+  `customer_usuario` on a panel link, `customer_ref` on an API link. It
+  MUST NOT store the customer's name, phone or service state: to operate,
+  those are always read fresh from WispHub.
 - **FR-011**: The search text MUST survive navigating to another page and
   back, the browser's back button and a reload, and a search MUST have an
   address that opens on that search.
@@ -256,15 +289,32 @@ empty result carries the same note, and no error block is shown.
 - **FR-019**: WhatsApp MUST open with the same message and the same phone
   handling as today (Mexico's country code in front, the contact picker
   when the number cannot be read or is absent).
+- **FR-020**: The opening list MUST be delivered in blocks: the first block
+  MUST render without waiting for the rest, and further blocks MUST arrive
+  as the operator reaches them.
+- **FR-021**: The page MUST keep a short-lived cache of the customers it has
+  seen — their name and phone as WispHub last answered — so that a search by
+  name and a row's name survive a moment without WispHub. The cache MUST NOT
+  be a stored field of the link, and what it holds MUST be replaced by a
+  fresh read whenever WispHub answers again.
+- **FR-022**: When the operator copies or sends a link, that row MUST be
+  marked visually as copied or sent. The mark lives in the cache for the
+  operator who acted; no delivery state is stored, and nothing in the mark
+  is promised to another operator or to a later session.
 
 ### Key Entities
 
 - **Payment link**: the customer's permanent address to pay. A panel link
   belongs to one WispHub customer, identified by usuario, with WispHub's
-  numeric id kept as a refreshable cache; from this feature on it also
-  remembers the customer's name and phone as last seen. An API link belongs
-  to the business's own system and carries a reference, an optional label,
-  an optional asked amount and a state (open, paid, expired).
+  numeric id kept as a refreshable cache. An API link belongs to the
+  business's own system and carries a reference, an optional label, an
+  optional asked amount and a state (open, paid, expired). The link
+  associates the customer's identity and nothing else about them.
+- **Recently seen customer**: what WispHub last answered about a customer —
+  name and phone — held for a short window so the page can show a name and
+  answer a search without asking again, plus whether this operator has
+  copied or sent that link. It is a cache, never a record: it expires, it
+  is replaced by any fresh answer, and nothing depends on it being there.
 - **Customer (WispHub)**: the ISP's record of a subscriber — usuario, numeric
   id, name (this ISP writes the full name in one field), phone, service
   state. Devolada never copies the base; it asks for the ones searched.
@@ -301,20 +351,20 @@ empty result carries the same note, and no error block is shown.
   promise (FR-004) does not change.
 - The usuario is the link's identity and WispHub's numeric id is a cache
   that may be recycled (direct-payment D5) — unchanged.
-- Links created before this feature keep working; they have no remembered
-  name or phone until their customer is seen again, so until then they
-  answer a search by usuario only. No migration is done for them.
+- Links created before this feature keep working unchanged: no link gains
+  or loses a field, so there is nothing to migrate.
 - **Cobros is out of scope and unchanged**: it reads the links Devolada
   already holds and hides the buttons on a debtor who has none, as today.
   Until now, new links came only from the capped list on Links; from now
   on they come from search-and-act. A debtor without a link gains one the
   first time someone searches for them and acts; giving Cobros its own
   "create on act" is the next piece.
-- The old paged list of links and the roster read are no longer needed by
-  the panel; whether they are retired is a plan decision.
+- The roster read is no longer needed by the panel; whether it is retired
+  is a plan decision. The paged list of links stays — it becomes the page's
+  opening (FR-001, FR-020).
 - Delivery states (pendiente / enviado / abierto), counters, mass
   delivery, CSV export and WispHub webhooks are later pieces, in that
-  order; nothing here precludes them, and FR-010 (the remembered name and
-  phone) is what the states piece will list.
+  order. The copied / sent mark of FR-022 is a cache, not their
+  forerunner: the states piece is what gives delivery a stored life.
 - The operation budget for a provider read stays what it is today; a
   search does not get a longer one.

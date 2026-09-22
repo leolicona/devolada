@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/r
 import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
-import { readResults, rowKey, writeResults } from "./seen";
+import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults } from "./seen";
 
 /* links-on-demand-search US1: the page asks for what it shows.
 
@@ -145,6 +145,8 @@ export function useCustomers(search: string): CustomersView {
   });
 
   const pages = query.data?.pages;
+  const provider = pages?.[0]?.wisphub ?? "ok";
+
   const rows = useMemo(() => {
     const all = pages?.flatMap((page) => page.results) ?? [];
     /* D6: the provider offers no ordering, so a base that changes while
@@ -160,8 +162,59 @@ export function useCustomers(search: string): CustomersView {
       seen.add(identity);
       out.push(row);
     }
+
+    /* FR-021: a live answer ALWAYS outranks the cache, so this runs
+       only when the provider did not answer.
+
+       Two jobs, both of them "the operator can still work": a row the
+       door could answer only from a link carries no name (FR-010 stores
+       none), and the cache puts back the name and phone WispHub last
+       gave for that usuario; and a customer the cache saw minutes ago
+       who has no link yet is not in the answer at all, so searching by
+       their NAME — which needs WispHub — still finds them. */
+    if (provider !== "ok") {
+      const remembered = new Map(recallCustomers(q ?? "").map((entry) => [entry.usuario, entry]));
+      for (const [i, row] of out.entries()) {
+        const entry = row.usuario === null ? undefined : remembered.get(row.usuario);
+        if (!entry) continue;
+        /* A copy: these rows are the query cache's own objects, and a
+           screen must not write into what the cache holds */
+        out[i] = { ...row, name: row.name ?? entry.name, phone: row.phone ?? entry.phone };
+        remembered.delete(entry.usuario);
+      }
+      if (q !== undefined) {
+        for (const entry of remembered.values()) {
+          if (seen.has(entry.usuario)) continue;
+          out.push({
+            channel: "panel",
+            usuario: entry.usuario,
+            wisphubId: entry.wisphubId,
+            customerRef: null,
+            label: null,
+            askCents: null,
+            linkState: null,
+            name: entry.name,
+            phone: entry.phone,
+            /* No link, and none can be born while the provider is away:
+               the act reads the customer fresh by design (D8). The
+               buttons still show — and say so if pressed. */
+            hasLink: false,
+            url: null,
+            waLink: null,
+          });
+        }
+      }
+    }
     return out;
-  }, [pages]);
+  }, [pages, provider, q]);
+
+  /* FR-021: every live answer overwrites what it covers. Written here
+     rather than in the query, because it is the RENDERED rows that the
+     operator saw and may need back. */
+  useEffect(() => {
+    if (provider !== "ok" || rows.length === 0) return;
+    rememberCustomers(rows);
+  }, [provider, rows]);
 
   const first = pages?.[0];
   const last = pages?.[pages.length - 1];
@@ -237,8 +290,8 @@ export function useCustomers(search: string): CustomersView {
     rows,
     total: first?.total ?? null,
     matched: last?.matched ?? first?.matched ?? null,
-    wisphub: first?.wisphub ?? "ok",
-    offline: first?.wisphub === "unavailable" || (background.failed && !background.refused && rows.length > 0),
+    wisphub: provider,
+    offline: provider === "unavailable" || (background.failed && !background.refused && rows.length > 0),
     answering: q ?? "",
     /* The text the operator has settled on, whatever its length — what
        the address carries (FR-011). `answering` is what the ROWS answer,

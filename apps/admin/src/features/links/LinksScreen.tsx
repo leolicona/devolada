@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Search, Share2, Link as LinkIcon, AlertCircle, Check, TriangleAlert, WifiOff } from "lucide-react";
 import { Alert, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
 import type { CustomerRow } from "@devolada/api/direct-payments-schema";
@@ -150,9 +150,31 @@ export function LinksScreen() {
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && speiConfigured;
   const wisphubConnected = actor?.integrationConfigured ?? true;
 
-  const [search, setSearch] = useState("");
+  /* FR-011 / D11: the address is where the search text lives, so a
+     pasted address opens on that search and the back button and a
+     reload both land on it. The box keeps its own state so typing stays
+     immediate; the address follows once the text settles — `replace`,
+     because a history entry per keystroke would make the back button
+     walk the word backwards instead of leaving the search. */
+  const { q } = useSearch({ from: "/app/links" });
+  const navigate = useNavigate();
+  const [search, setSearch] = useState(q ?? "");
   const customers = useCustomers(search);
   const action = useLinkAction();
+
+  /* The address changing from outside — back, forward, a pasted link */
+  useEffect(() => {
+    setSearch((current) => (current.trim() === (q ?? "") ? current : (q ?? "")));
+  }, [q]);
+
+  useEffect(() => {
+    if ((q ?? "") === customers.settled) return;
+    void navigate({
+      to: "/links",
+      search: customers.settled === "" ? {} : { q: customers.settled },
+      replace: true,
+    });
+  }, [customers.settled, q, navigate]);
 
   const typed = search.trim();
   const tooShort = typed.length > 0 && typed.length < SEARCH_MIN_CHARS;

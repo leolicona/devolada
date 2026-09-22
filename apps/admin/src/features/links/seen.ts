@@ -1,4 +1,4 @@
-import type { CustomerRow } from "@devolada/api/direct-payments-schema";
+import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-payments-schema";
 
 /* links-on-demand-search D11: the page's whole memory, in the browser.
 
@@ -72,25 +72,30 @@ function write(key: string, value: unknown): void {
 
 /* ---- 1. Search results (FR-012, US2) ---- */
 
-type StoredResults = { at: number; rows: CustomerRow[] };
+/* The whole first block, not just its rows: the count the page reports
+   and whether the provider answered are part of what the operator saw,
+   and restoring rows without them would redraw the screen wrong. */
+type StoredResults = { at: number; block: CustomersResponse };
 
-export function readResults(text: string): CustomerRow[] | null {
+/* Null past the two minutes, so an expired entry is simply a search
+   nobody stored — the caller asks the provider again (FR-012). */
+export function readResults(text: string): StoredResults | null {
   const stored = read<Record<string, StoredResults>>(RESULTS)?.[normalizeSearch(text)];
   if (!stored) return null;
-  return Date.now() - stored.at > RESULTS_TTL_MS ? null : stored.rows;
+  return Date.now() - stored.at > RESULTS_TTL_MS ? null : stored;
 }
 
-export function writeResults(text: string, rows: CustomerRow[]): void {
+export function writeResults(text: string, block: CustomersResponse): void {
   const key = normalizeSearch(text);
   /* An empty box leaves no entry behind: a browse is not a search */
   if (key === "") return;
   const all = read<Record<string, StoredResults>>(RESULTS) ?? {};
   /* Drop what has expired rather than growing forever */
   const now = Date.now();
-  for (const [text, entry] of Object.entries(all)) {
-    if (now - entry.at > RESULTS_TTL_MS) delete all[text];
+  for (const [stale, entry] of Object.entries(all)) {
+    if (now - entry.at > RESULTS_TTL_MS) delete all[stale];
   }
-  all[key] = { at: now, rows };
+  all[key] = { at: now, block };
   write(RESULTS, all);
 }
 

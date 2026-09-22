@@ -279,8 +279,11 @@ and a refused key sends the operator to Integraciones instead.
 - **A search matches a customer whose debt cannot be proven.** The row says
   it cannot be confirmed and shows no amount, rather than printing a zero
   that the operator would act on.
-- **An invoice row carries no due date.** It is a debt like any other and
-  must not disappear from the list because a tab filters by due date.
+- **An invoice row carries no due date.** It cannot belong to a due-date
+  bucket — there is no date to put it in one — so it appears under Todas and
+  in neither Vencidas nor Por vencer. It is a debt like any other: it is
+  never dropped from Todas, and it is always reachable by search. The page
+  states which question a tab answers rather than implying the three add up.
 - **The operator switches tab mid-scroll.** The loaded blocks are dropped and
   the new tab starts from its own first block — a tab is a different
   question, not a filter over the last one's rows.
@@ -296,8 +299,13 @@ and a refused key sends the operator to Integraciones instead.
 ### Functional Requirements
 
 - **FR-001**: The Cobros page MUST open with its search box and the first
-  block of the ISP's pending receipts. It MUST NOT read the whole
-  pending-invoice list, on open or ever.
+  block of the ISP's pending receipts, and MUST become usable without
+  waiting on anything beyond that block.
+- **FR-001a**: The whole pending-invoice list MUST NOT travel to the page,
+  on open or ever. The page receives the blocks it asked for and the results
+  of the searches it ran, and nothing else. *(What Devolada reads on the
+  server to answer a search is bounded by FR-007a; what the browser is sent
+  is bounded here.)*
 - **FR-002**: The list MUST be delivered in blocks, one provider read each:
   the first no larger than what fills the browser's viewport, the next asked
   for only when the operator scrolls toward it. The page MUST never walk the
@@ -317,6 +325,11 @@ and a refused key sends the operator to Integraciones instead.
   so that a customer who owes only through their running account, or only
   through an invoice outside the browse window, is found with the right
   amount.
+- **FR-007a**: Resolving what a matched customer owes MUST reuse the
+  tenant's pending list through the door the product already reads it by —
+  bounded, shared and cached as it is today — and MUST NOT open a new
+  unbounded read. A search therefore costs the ISP no more than opening the
+  page costs it today.
 - **FR-008**: A matched customer who owes nothing MUST appear, marked as
   owing nothing. A matched customer whose debt cannot be proven MUST appear
   saying so, with no amount. Neither MAY be omitted from results.
@@ -335,7 +348,9 @@ and a refused key sends the operator to Integraciones instead.
   without asking again; after that a repeat of the search asks again.
 - **FR-014**: The Vencidas and Por vencer filters MUST be answered by the
   provider, so that every block of a chosen filter belongs to it. They MUST
-  NOT be applied as a filter over the blocks that happen to have loaded.
+  NOT be applied as a filter over the blocks that happen to have loaded. A
+  receipt with no due date belongs to neither, and the page MUST NOT imply
+  that the two tabs together account for everything Todas holds.
 - **FR-015**: Changing the filter MUST start a new walk from its own first
   block; blocks read under the previous filter MUST NOT be carried over.
 - **FR-016**: The page MUST NOT show the "la lista puede estar incompleta"

@@ -1,4 +1,4 @@
-import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -35,19 +35,16 @@ beforeAll(() => {
   fetchMock.activate();
   fetchMock.disableNetConnect();
 });
-afterEach(() => {
-  vi.restoreAllMocks();
-  fetchMock.assertNoPendingInterceptors();
-});
+afterEach(() => fetchMock.assertNoPendingInterceptors());
 
 const db = () => drizzle(env.DB);
 const DAY = 86_400_000;
 const cutover = () => Date.now() - 7 * DAY;
 
-/* The constant, as the release commit will set it */
-function atCutover() {
-  vi.spyOn(prune, "PRUNE_CUTOVER_MS", "get").mockReturnValue(cutover());
-}
+/* The boundary this file tests, stated rather than reached for: the
+   constant is 0 until the release commit (T057), and an ESM export
+   cannot be replaced from outside anyway. */
+const run = () => prune.prunePanelLinks(testEnv, { cutoverMs: cutover() });
 
 const panelLink = async (businessId: string, over: Record<string, unknown> = {}) => {
   const [row] = await db()
@@ -70,12 +67,11 @@ const links = (businessId: string) =>
 
 describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
   it("deletes a pre-cutover panel link nobody ever used, and writes the count once", async () => {
-    atCutover();
     const business = await seedBusiness();
     await panelLink(business.id);
     await panelLink(business.id);
 
-    const report = await prune.prunePanelLinks(testEnv);
+    const report = await run();
     expect(report).toMatchObject({ businesses: 1, links: 2 });
     expect(await links(business.id)).toHaveLength(0);
 
@@ -86,7 +82,6 @@ describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
   });
 
   it("keeps a link a payment references — the only durable evidence it was used", async () => {
-    atCutover();
     const business = await seedBusiness();
     const doomed = await panelLink(business.id);
     /* seedConfirmedPayment makes its own link and points a payment at it */
@@ -96,14 +91,13 @@ describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
       .set({ createdAt: new Date(cutover() - 30 * DAY) })
       .where(eq(paymentLinks.businessId, business.id));
 
-    await prune.prunePanelLinks(testEnv);
+    await run();
     const kept = await links(business.id);
     expect(kept.map((l) => l.id)).not.toContain(doomed.id);
     expect(kept).toHaveLength(1);
   });
 
   it("keeps a link a clave attempt references", async () => {
-    atCutover();
     const business = await seedBusiness();
     const attempted = await panelLink(business.id);
     await panelLink(business.id);
@@ -113,13 +107,12 @@ describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
       trackingKey: "ABC123456789",
     });
 
-    await prune.prunePanelLinks(testEnv);
+    await run();
     const kept = await links(business.id);
     expect(kept.map((l) => l.id)).toEqual([attempted.id]);
   });
 
   it("never touches an API link, whatever its age (Edge Cases)", async () => {
-    atCutover();
     const business = await seedBusiness();
     await panelLink(business.id);
     const [api] = await db()
@@ -134,39 +127,36 @@ describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
       })
       .returning();
 
-    await prune.prunePanelLinks(testEnv);
+    await run();
     expect((await links(business.id)).map((l) => l.id)).toEqual([api.id]);
   });
 
   it("never touches a link born after the cutover — which is every link FR-008 creates", async () => {
-    atCutover();
     const business = await seedBusiness();
     const fresh = await panelLink(business.id, { createdAt: new Date(cutover() + DAY) });
 
-    const report = await prune.prunePanelLinks(testEnv);
+    const report = await run();
     expect(report.links).toBe(0);
     expect((await links(business.id)).map((l) => l.id)).toEqual([fresh.id]);
   });
 
   it("a second run deletes nothing and writes no second row (D13)", async () => {
-    atCutover();
     const business = await seedBusiness();
     await panelLink(business.id);
-    await prune.prunePanelLinks(testEnv);
+    await run();
 
     /* A link made after the pass — as the act makes them — survives it */
     const after = await panelLink(business.id, { createdAt: new Date() });
-    const second = await prune.prunePanelLinks(testEnv);
+    const second = await run();
     expect(second).toMatchObject({ businesses: 0, links: 0 });
     expect((await links(business.id)).map((l) => l.id)).toEqual([after.id]);
     expect(await db().select().from(linkPrunes)).toHaveLength(1);
   });
 
   it("FR-024: a deleted link's token is never reissued — the next act is a NEW address", async () => {
-    atCutover();
     const business = await seedBusiness();
     const gone = await panelLink(business.id, { customerUsuario: "greyes@wifiplus" });
-    await prune.prunePanelLinks(testEnv);
+    await run();
 
     /* The customer acts again: a new row, a new token */
     const [reborn] = await db()
@@ -185,12 +175,16 @@ describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
   });
 
   it("deletes the orphaned roster sweep rows D12 left behind, and leaves the pending pass alone", async () => {
-    atCutover();
     const business = await seedBusiness();
     for (const kind of ["roster", "pending"] as const) {
       const [sweep] = await db()
         .insert(wisphubSweeps)
-        .values({ businessId: business.id, kind, baseUrl: "https://api.wisphub.net/api" })
+        .values({
+          businessId: business.id,
+          kind,
+          baseUrl: "https://api.wisphub.net/api",
+          updatedAt: new Date(),
+        })
         .returning();
       await db().insert(wisphubPages).values({
         businessId: business.id,
@@ -202,7 +196,7 @@ describe("US1 (FR-023): what the prune takes, and what it leaves", () => {
       });
     }
 
-    const report = await prune.prunePanelLinks(testEnv);
+    const report = await run();
     expect(report.sweeps).toBe(1);
     expect((await db().select().from(wisphubSweeps)).map((r) => r.kind)).toEqual(["pending"]);
     expect((await db().select().from(wisphubPages)).map((r) => r.kind)).toEqual(["pending"]);
@@ -213,10 +207,9 @@ describe("US1 (FR-023): the count reaches the business, once", () => {
   const asOwner = async () => ({ headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } });
 
   it("the door answers the count, then null after it is dismissed", async () => {
-    atCutover();
     const business = await seedBusiness();
     await panelLink(business.id);
-    await prune.prunePanelLinks(testEnv);
+    await run();
 
     const first = await (await app()).request("/direct-payments/prune-notice", await asOwner(), env);
     expect(first.status).toBe(200);
@@ -234,19 +227,17 @@ describe("US1 (FR-023): the count reaches the business, once", () => {
   });
 
   it("a business the prune emptied nothing from is told nothing", async () => {
-    atCutover();
     await seedBusiness();
-    await prune.prunePanelLinks(testEnv);
+    await run();
 
     const res = await (await app()).request("/direct-payments/prune-notice", await asOwner(), env);
     expect((await res.json()).data).toBeNull();
   });
 
   it("a viewer cannot silence the record for everyone", async () => {
-    atCutover();
     const business = await seedBusiness();
     await panelLink(business.id);
-    await prune.prunePanelLinks(testEnv);
+    await run();
     await seedMember(business, "mirona@devolada.app", "viewer");
 
     const cookie = await sessionCookieHeader("mirona@devolada.app");

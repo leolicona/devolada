@@ -64,7 +64,18 @@ export type PruneReport = {
    with every other sweep on the trigger. */
 const PER_TICK = 25;
 
-export async function prunePanelLinks(env: Bindings, now: Date = new Date()): Promise<PruneReport> {
+/* `cutoverMs` is a parameter with the constant as its default, not a
+   value a caller is expected to supply: production passes nothing, and
+   the constant is the boundary. It exists so a test can state the
+   boundary it is testing instead of reaching into the module — an ESM
+   export is a read-only binding, and a test that tried to replace it
+   would silently get the real one and prove nothing. */
+export async function prunePanelLinks(
+  env: Bindings,
+  opts: { now?: Date; cutoverMs?: number } = {},
+): Promise<PruneReport> {
+  const now = opts.now ?? new Date();
+  const cutoverMs = opts.cutoverMs ?? PRUNE_CUTOVER_MS;
   const db = drizzle(env.DB);
   const report: PruneReport = { businesses: 0, links: 0, sweeps: 0 };
 
@@ -79,7 +90,7 @@ export async function prunePanelLinks(env: Bindings, now: Date = new Date()): Pr
   if (!pending.length) return report;
 
   for (const business of pending) {
-    const deleted = await pruneOne(db, business.id, now);
+    const deleted = await pruneOne(db, business.id, now, cutoverMs);
     report.businesses++;
     report.links += deleted.links;
     report.sweeps += deleted.sweeps;
@@ -91,6 +102,7 @@ async function pruneOne(
   db: DrizzleD1Database,
   businessId: string,
   now: Date,
+  cutoverMs: number,
 ): Promise<{ links: number; sweeps: number }> {
   /* The two foreign keys that point at `payment_links.id` are the only
      durable evidence a link was ever used. Read as id lists rather than
@@ -117,7 +129,7 @@ async function pruneOne(
            own software made it and still holds its address (Edge Cases) */
         eq(paymentLinks.source, "panel"),
         /* D13: the constant, never "when the prune ran" */
-        lt(paymentLinks.createdAt, new Date(PRUNE_CUTOVER_MS)),
+        lt(paymentLinks.createdAt, new Date(cutoverMs)),
         ...(used.length ? [notInArray(paymentLinks.id, used)] : []),
       ),
     );

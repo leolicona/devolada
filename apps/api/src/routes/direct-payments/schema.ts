@@ -324,8 +324,10 @@ export const customersQuery = z.object({
     .int()
     .default(CUSTOMERS_LIMIT_DEFAULT)
     .transform((n) => Math.min(CUSTOMERS_LIMIT_MAX, Math.max(CUSTOMERS_LIMIT_MIN, n))),
-  /* Opaque (D2). Only meaningful while `q` is absent — a search answers
-     one block and no cursor (D5). */
+  /* Opaque (D2). A browse and a search each have their own shape, and
+     a search walks exactly as a browse does (D5, amended 2026-09-23):
+     the cursor is how the operator reaches the 29 matches of «Leo» that
+     did not fit on the first screen. */
   cursor: z.string().optional(),
 });
 

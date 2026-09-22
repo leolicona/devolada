@@ -142,10 +142,18 @@ export const CUSTOMER_SEARCH_FIELDS = ["nombre", "apellido", "usuario", "telefon
 export type CustomerSearchField = (typeof CUSTOMER_SEARCH_FIELDS)[number];
 
 export type CustomerSearch = {
-  /* Merged and deduped by usuario, capped at the caller's limit */
+  /* Merged and deduped by usuario. Returned WHOLE, not cut to the
+     caller's limit: the four filters advance together, so a row fetched
+     and dropped would be a row the next block skips (D5, amended
+     2026-09-23). Up to four blocks' worth, usually far less — the
+     filters overlap heavily. */
   customers: WispHubCustomer[];
-  /* Each filter's own `count`, for the floor the page reports (D5) */
-  counts: Record<CustomerSearchField, number>;
+  /* Each ASKED filter's own `count`, for the floor the page reports
+     (D5). Partial because a narrowed walk asks fewer than four. */
+  counts: Partial<Record<CustomerSearchField, number>>;
+  /* Which filters still have rows past this block. Empty means the
+     search is walked out and the page can stop asking. */
+  more: CustomerSearchField[];
 };
 
 /* links-on-demand-search D3: the band a browse block is clamped to */
@@ -268,11 +276,22 @@ export class WispHub {
      `counts` is each filter's own `count`. The union's true size cannot
      be known without fetching all four whole, so the caller reports the
      largest as a FLOOR and says so in words (D5). */
-  async searchCustomers(q: string, limit = 10): Promise<CustomerSearch> {
+  async searchCustomers(
+    q: string,
+    limit = 10,
+    /* Where this block starts in every filter, and which filters are
+       still worth asking. `fields` is the walk narrowing itself: the
+       first block asks all four, later blocks only the ones that had
+       more, so a deep search costs ONE call a block rather than four
+       (D5, amended 2026-09-23). */
+    opts: { offset?: number; fields?: readonly CustomerSearchField[] } = {},
+  ): Promise<CustomerSearch> {
     const text = encodeURIComponent(q);
+    const offset = Math.max(0, Math.trunc(opts.offset ?? 0));
+    const fields = opts.fields?.length ? opts.fields : CUSTOMER_SEARCH_FIELDS;
     const pages = await Promise.all(
-      CUSTOMER_SEARCH_FIELDS.map((field) =>
-        this.listPage(`/clientes/?${field}__contains=${text}&limit=${limit}`),
+      fields.map((field) =>
+        this.listPage(`/clientes/?${field}__contains=${text}&limit=${limit}&offset=${offset}`),
       ),
     );
     /* Dedupe by identity, first filter to answer wins the row */
@@ -282,11 +301,16 @@ export class WispHub {
         if (!merged.has(customer.usuario)) merged.set(customer.usuario, customer);
       }
     }
-    const counts = {} as Record<CustomerSearchField, number>;
-    CUSTOMER_SEARCH_FIELDS.forEach((field, i) => {
+    const counts: Partial<Record<CustomerSearchField, number>> = {};
+    const more: CustomerSearchField[] = [];
+    fields.forEach((field, i) => {
       counts[field] = pages[i].count;
+      /* The provider's own `next` is the honest end-of-filter signal: a
+         count can drift while the operator scrolls, a missing `next`
+         cannot. */
+      if (pages[i].next !== null) more.push(field);
     });
-    return { customers: [...merged.values()].slice(0, limit), counts };
+    return { customers: [...merged.values()], counts, more };
   }
 
   /* links-on-demand-search D3: one block of the customer list, where

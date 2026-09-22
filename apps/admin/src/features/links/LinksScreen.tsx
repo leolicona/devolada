@@ -181,6 +181,11 @@ export function LinksScreen() {
   const tooShort = typed.length > 0 && typed.length < SEARCH_MIN_CHARS;
   const searching = customers.answering !== "";
   const shown = customers.rows.length;
+  /* The count line stays up while the NEXT block loads — it is the same
+     search, and a number that blinks out on every scroll reads as the
+     page losing its place. It hides only while a different search is on
+     its way, when the number on screen would be the last one's. */
+  const showCount = searching && shown > 0 && (!customers.searching || customers.loadingMore);
 
   /* automated-collections-api FR-011 / bug links-refused-key: a key the
      installation refused is SETUP, not weather. It gets the Integraciones
@@ -312,14 +317,19 @@ export function LinksScreen() {
         }
       >
         <div aria-live="polite">
-          {/* FR-006 / D5: the count is a FLOOR. The union of four filters
-              cannot be sized without fetching all four whole, so the page
-              says "más de N" and asks for more letters rather than
-              claiming a total it did not compute. */}
-          {searching && !customers.searching && shown > 0 && (
+          {/* FR-006 / D5 (amended 2026-09-23): while the walk continues the
+              count is a FLOOR — the union of four filters cannot be sized
+              without walking it — so the page says "más de N" and points
+              DOWN rather than telling the operator to type more letters.
+              It used to do the latter, which counted 39 matches for «Leo»
+              and left 29 of them unreachable.
+
+              When the walk ends there is nothing left to estimate: what
+              the page holds IS what the search found, so it says so. */}
+          {showCount && (
             <p className="mt-6 max-w-lg text-sm text-muted-foreground">
-              {customers.matched !== null && customers.matched > shown
-                ? `Más de ${COUNT.format(customers.matched)} clientes coinciden con «${customers.answering}». Mostramos los primeros ${COUNT.format(shown)}: escribe más letras para acotar la búsqueda.`
+              {customers.hasMore
+                ? `Más de ${COUNT.format(Math.max(customers.matched ?? 0, shown))} clientes coinciden con «${customers.answering}». Mostramos ${COUNT.format(shown)}: desplázate para ver más.`
                 : `${COUNT.format(shown)} ${shown === 1 ? "cliente coincide" : "clientes coinciden"} con «${customers.answering}».`}
             </p>
           )}
@@ -356,7 +366,10 @@ export function LinksScreen() {
 
         {/* FR-020: the next block is asked for when the operator scrolls
             toward this, and never by the page walking to the end on its
-            own. A search answers one block, so there is nothing below it. */}
+            own. A SEARCH hangs its blocks here too (D5, amended
+            2026-09-23) — the same sentinel, because reaching the bottom
+            of a search means the same thing as reaching the bottom of a
+            browse. */}
         {customers.hasMore && (
           <div ref={customers.sentinelRef} className="mt-4 min-h-10">
             {customers.loadingMore && (

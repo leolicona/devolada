@@ -56,15 +56,35 @@ function mockBlock(results: unknown[], count = results.length, match?: (path: st
 type Field = "nombre" | "apellido" | "usuario" | "telefono";
 const FIELDS: Field[] = ["nombre", "apellido", "usuario", "telefono"];
 
-/* All four filters answer, always — the saved call is not worth the
-   guess that `bug: customer-lookup-misses` is (D4) */
-function mockSearch(answers: Partial<Record<Field, { results: unknown[]; count?: number }>>) {
-  for (const field of FIELDS) {
+/* All four filters answer on the FIRST block — the saved call is not
+   worth the guess that `bug: customer-lookup-misses` is (D4).
+
+   `next` is how a filter says it has more rows past this block, and it
+   is what the walk reads rather than doing arithmetic on counts, which
+   drift while an operator scrolls (D5, amended 2026-09-23). `only`
+   narrows which filters are expected to be asked at all: a later block
+   asks just the ones that had more, and `assertNoPendingInterceptors`
+   turns that expectation into an assertion. */
+type Answer = { results: unknown[]; count?: number; next?: string };
+function mockSearch(
+  answers: Partial<Record<Field, Answer>>,
+  opts: { only?: Field[]; match?: (path: string) => boolean } = {},
+) {
+  for (const field of opts.only ?? FIELDS) {
     const answer = answers[field] ?? { results: [] };
     fetchMock
       .get(WISPHUB_ORIGIN)
-      .intercept({ method: "GET", path: (p) => p.includes(`${field}__contains=`) })
-      .reply(...json({ count: answer.count ?? answer.results.length, next: null, results: answer.results }));
+      .intercept({
+        method: "GET",
+        path: (p) => p.includes(`${field}__contains=`) && (opts.match?.(p) ?? true),
+      })
+      .reply(
+        ...json({
+          count: answer.count ?? answer.results.length,
+          next: answer.next ?? null,
+          results: answer.results,
+        }),
+      );
   }
 }
 
@@ -212,9 +232,101 @@ describe("US1: a search asks four filters at once", () => {
     /* D5: the union of four filters cannot be sized without fetching all
        four whole, so the page says "más de 904", never "904" as a total */
     expect(data.matched).toBe(904);
-    /* D5: a search answers one block and no cursor */
+    /* Every filter said `next: null`, so the walk is out — no cursor
+       because there is nothing left, not because a search refuses to
+       page (D5, amended 2026-09-23) */
     expect(data.nextCursor).toBeNull();
     expect(data.total).toBeNull();
+  });
+
+  it("keeps handing back blocks until the matches run out (FR-006, D5 amended)", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    const leo = (n: number) =>
+      customer({ id_servicio: n, usuario: `leo${n}@wifiplus`, nombre: `Leo ${n}` });
+
+    /* «Leo» matches 39 names. The operator sees two, and the other 37
+       used to be reachable by nothing but guessing a longer text. */
+    mockSearch({
+      nombre: {
+        results: [leo(1), leo(2)],
+        count: 39,
+        next: "https://api.wisphub.net/api/clientes/?nombre__contains=leo&limit=10&offset=10",
+      },
+    });
+    /* `limit` has a floor of 10 (D3), so the walk steps by 10 whatever
+       the caller asks for — which is what the next block's offset is */
+    const first = await (await read("?q=leo&limit=2")).json();
+    expect(first.data.results.map((r: { usuario: string }) => r.usuario)).toEqual([
+      "leo1@wifiplus",
+      "leo2@wifiplus",
+    ]);
+    expect(first.data.matched).toBe(39);
+    /* The whole point: there IS a next block */
+    expect(first.data.nextCursor).toBeTruthy();
+
+    /* The second block asks ONE filter — the three that came back empty
+       with no `next` are not worth asking again — and asks it at the
+       offset the first block stopped at. Registering only `nombre` is
+       the assertion: `assertNoPendingInterceptors` fails if the handler
+       asks for anything else, and net connect is off if it asks wider. */
+    mockSearch(
+      { nombre: { results: [leo(3)], count: 39 } },
+      { only: ["nombre"], match: (path) => path.includes("offset=10") },
+    );
+    const second = await (
+      await read(`?q=leo&limit=2&cursor=${encodeURIComponent(first.data.nextCursor)}`)
+    ).json();
+    expect(second.data.results.map((r: { usuario: string }) => r.usuario)).toEqual(["leo3@wifiplus"]);
+    /* The filter answered without a `next`, so the walk is done */
+    expect(second.data.nextCursor).toBeNull();
+  });
+
+  it("returns the merged block WHOLE, so a row fetched is never a row skipped (D5)", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    const at = (n: number) =>
+      customer({ id_servicio: n, usuario: `c${n}@wifiplus`, nombre: `Cliente ${n}` });
+    /* Four filters, ten rows each, no overlap: forty distinct customers
+       for a block of ten. Cutting to `limit` would drop thirty of them —
+       and the next block starts at offset 10, so it would never return
+       what this one threw away. */
+    const ten = (from: number) => Array.from({ length: 10 }, (_, i) => at(from + i));
+    mockSearch({
+      nombre: { results: ten(1), count: 99 },
+      apellido: { results: ten(11), count: 99 },
+      usuario: { results: ten(21), count: 99 },
+      telefono: { results: ten(31), count: 99 },
+    });
+
+    const { data } = await (await read("?q=cli&limit=10")).json();
+    expect(data.results).toHaveLength(40);
+  });
+
+  it("carries the business's API links on the first block only (D5)", async () => {
+    const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    await apiLink(business.id, { customerRef: "CLI-LEO", label: "Leo Ruiz" });
+    const leo = customer({ id_servicio: 5, usuario: "leo5@wifiplus", nombre: "Leo Cinco" });
+
+    mockSearch({
+      nombre: {
+        results: [leo],
+        count: 40,
+        next: "https://api.wisphub.net/api/clientes/?nombre__contains=leo&limit=10&offset=10",
+      },
+    });
+    const first = await (await read("?q=leo&limit=10")).json();
+    expect(first.data.results.map((r: { channel: string }) => r.channel)).toEqual(["api", "panel"]);
+
+    /* Block two repeats nothing: the API rows are the same every time,
+       and a page that re-sent them would make the operator's browser
+       dedupe on every scroll */
+    mockSearch(
+      { nombre: { results: [customer({ id_servicio: 6, usuario: "leo6@wifiplus" })], count: 40 } },
+      { only: ["nombre"], match: (path) => path.includes("offset=10") },
+    );
+    const second = await (
+      await read(`?q=leo&limit=10&cursor=${encodeURIComponent(first.data.nextCursor)}`)
+    ).json();
+    expect(second.data.results.map((r: { channel: string }) => r.channel)).toEqual(["panel"]);
   });
 
   it("finds an API link by its reference and by its label, which no provider filter can (FR-003)", async () => {

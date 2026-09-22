@@ -64,6 +64,10 @@ const row = (n: number, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/* The count from the operator's own report: «Leo» matched 39 and the
+   page showed 10 (2026-09-23) */
+const LEO_MATCHES = 39;
+
 const envelope = (data: unknown) => ({
   status: 200,
   contentType: "application/json",
@@ -88,6 +92,28 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
     await new Promise((r) => setTimeout(r, delay));
 
     if (q !== null) {
+      /* «leo» is the operator's report made reproducible: 39 matches,
+         one screenful at a time, every block handing back a cursor
+         until they run out. A search walks exactly as a browse does
+         (FR-006, D5 amended 2026-09-23). */
+      if (q.toLowerCase().startsWith("leo")) {
+        const seen = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
+        const size = Math.min(limit, LEO_MATCHES - seen);
+        return route.fulfill(
+          envelope({
+            results: Array.from({ length: size }, (_, i) =>
+              row(seen + i + 1, {
+                name: `Leo ${seen + i + 1} Hernández`,
+                usuario: `leo${seen + i + 1}@wifiplus`,
+              }),
+            ),
+            nextCursor: seen + size < LEO_MATCHES ? btoa(`sq:${seen + limit}:1`) : null,
+            matched: LEO_MATCHES,
+            total: null,
+            wisphub: "ok",
+          }),
+        );
+      }
       return route.fulfill(
         envelope({
           results: [row(1, { name: "María Fernanda López Ruiz", usuario: "maria.lopez@wifiplus" })],
@@ -166,6 +192,47 @@ test.describe("links-on-demand-search US1: the page holds in a real browser", ()
     await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
     await expect(page.getByRole("listitem")).not.toHaveCount(before, { timeout: 5_000 });
     expect(blocks).toBeGreaterThan(onArrival);
+  });
+
+  test("FR-006: a search that matches more than one screen is reachable by scrolling", async ({
+    page,
+  }) => {
+    /* The operator's report, 2026-09-23: «Leo» matched 39, the page
+       showed 10, and scrolling produced nothing — the other 29 were
+       reachable only by guessing a longer text. D5 used to say a search
+       answers one block; it now walks like a browse. */
+    await stubLinks(page, { delayMs: 50 });
+    await page.goto(`${ADMIN}/links`);
+    await expect(page.getByText("Cliente 1 Pérez Domínguez")).toBeVisible();
+
+    await page.getByRole("searchbox").fill("leo");
+    await expect(page.getByText("Leo 1 Hernández")).toBeVisible();
+
+    /* While there is more below, the page says so and points DOWN */
+    await expect(page.getByText(/más de 39 clientes coinciden con «leo»/i)).toBeVisible();
+    await expect(page.getByText(/desplázate para ver más/i)).toBeVisible();
+
+    const firstBlock = await page.getByRole("listitem").count();
+    expect(firstBlock).toBeLessThan(39);
+
+    /* Scroll to the end, as an operator looking for their customer
+       does, until the walk runs out */
+    for (let reach = 0; reach < 8; reach++) {
+      const rows = await page.getByRole("listitem").count();
+      if (rows >= 39) break;
+      await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
+      await expect(page.getByRole("listitem")).not.toHaveCount(rows, { timeout: 5_000 });
+    }
+
+    /* Every one of the 39 is on screen — including the last, which the
+       capped search could never reach */
+    await expect(page.getByRole("listitem")).toHaveCount(39);
+    await expect(page.getByText("Leo 39 Hernández")).toBeVisible();
+
+    /* And with the walk done there is nothing left to hedge: the count
+       stops being a floor and becomes what the search found */
+    await expect(page.getByText(/39 clientes coinciden con «leo»/i)).toBeVisible();
+    await expect(page.getByText(/desplázate para ver más/i)).toHaveCount(0);
   });
 
   for (const size of [PHONE, TABLET, DESKTOP]) {

@@ -321,3 +321,23 @@ spec and plan ask for and what the code currently does.
 - [X] T060 Report `matched` as a floor on the offline path too: `panelLinksMatching` in `apps/api/src/routes/direct-payments/handler.ts` caps at `limit` and discards the true count, so a search with the provider away over more stored panel links than fit in one block says "N clientes coinciden" instead of "Más de N" and never asks for more characters, per FR-006 and US3 (partial)
 - [X] T061 Reconcile the `POST /direct-payments/links` error table in `specs/009-links-on-demand-search/contracts/links-api.md` with what the door can actually answer: `BUSINESS_SUSPENDED` cannot reach it, because `apps/api/src/auth/middleware.ts` revokes a suspended business's session with `ACCOUNT_SUSPENDED` (403) before any handler runs, per `contracts/links-api.md` (contradicts)
 - [X] T062 Correct the stale forward-reference in `apps/admin/src/features/links/LinksScreen.tsx` — the offline-note comment still says "US3 (T030) makes the door answer `wisphub: 'unavailable'` … until then it is a background read that failed", which describes code that no longer exists — per Constitution I and FR-014 (partial)
+
+---
+
+## Phase 10: The search walks
+
+**Added 2026-09-23, from the operator's own report.** A search showed the
+first block and nothing more: *"Más de 39 clientes coinciden con «Leo».
+Mostramos los primeros 10"*, and scrolling produced nothing. The other 29
+were reachable by no means but guessing a longer text.
+
+That was FR-006 and D5 working as written, not a defect against them — so
+the amendment comes first and the code follows it.
+
+- [X] T063 Amend **FR-006** and US1 scenario 6 in [spec.md](./spec.md): a search is delivered in blocks and reachable to its end, no ceiling; the count is a floor while the walk continues and exact once it ends. Record the exchange under *Clarifications, Session 2026-09-23*
+- [X] T064 Amend **D5** in [research.md](./research.md) and the `GET /customers` section of [contracts/links-api.md](./contracts/links-api.md): the closing rule *"a search returns one block and `nextCursor: null`"* is withdrawn, with what replaced it and why
+- [X] T065 Add the `search` phase to `apps/api/src/routes/direct-payments/cursor.ts`: `sq:<offset>:<fields>`, the mask naming the filters still worth asking, refusing a mask this version never wrote
+- [X] T066 Give `searchCustomers` an `offset` and a narrowed `fields` in `apps/api/src/wisphub/client.ts`, returning the merged block **whole** and a `more` list read from the provider's own `next` rather than from arithmetic on counts
+- [X] T067 Make the search branch of `listCustomers` walk in `apps/api/src/routes/direct-payments/handler.ts`: the cursor's offset for all four filters, the API links on the first block only, the offline path as one in-memory list sliced by the same offset, and `matched` exact once the walk ends
+- [X] T068 Rewrite the count line in `apps/admin/src/features/links/LinksScreen.tsx`: *"desplázate para ver más"* while there is more, the plain number when there is not, and the line no longer blinks out while the next block loads
+- [X] T069 Prove it at all three layers: the API walk, the narrowing and the whole block in `apps/api/test/links-customers.test.ts`; the offline walk in `apps/api/test/links-offline.test.ts`; the copy in `apps/admin/test/links.test.tsx`; and the operator's own 39 matches scrolled to the end in `tests/e2e/links.spec.ts`

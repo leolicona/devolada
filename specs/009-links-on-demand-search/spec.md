@@ -118,6 +118,25 @@ the order [tasks.md](./tasks.md) builds them in.
   is a screen the operator cannot predict. The cost is accepted — one
   provider read per press, including a debtor who already had a link.
 
+### Session 2026-09-23
+
+- Q: A search matches more customers than fit on one screen — «Leo» found 39,
+  «771» found 5,441. Can the operator reach the ones below the first block?
+  → A: Yes, by scrolling, exactly as a browse. The first answer capped a
+  search at one block and asked for more letters (the original FR-006 and
+  D5), which left the other 29 of «Leo» reachable by nothing but guessing.
+  A search now walks its filters in blocks like the browse does and has no
+  ceiling. Decided against a ceiling of a hundred rows: it is a second rule
+  to explain and a second place where the page says no, for a saving the
+  provider does not need — every block after the first costs ONE call, not
+  four, because the counts are already known.
+- Q: What does the count line say now? → A: While there is more to load, the
+  floor and an invitation: *"Más de N clientes coinciden con «q». Mostramos
+  M: desplázate para ver más."* When the walk is done, the exact number the
+  search actually found, because a completed walk of all four filters IS the
+  union. The advice to type more letters goes: the operator can now reach
+  every match without it.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Any customer can be found and sent their link (Priority: P1)
@@ -163,7 +182,10 @@ and for nobody else who appeared in the results.
    characters are needed.
 6. **Given** a search that matches many customers (for example "mar",
    904 matches), **When** the results arrive, **Then** the page shows the
-   first ones, says how many matched, and asks for more characters.
+   first block and says how many matched; **When** the operator scrolls
+   toward the end of it, **Then** the next block arrives, and so on until
+   the matches run out — no count and no ceiling puts a matching customer
+   out of reach.
 7. **Given** a search typed with or without accents or capitals, **When**
    it runs, **Then** the same customers are found either way.
 8. **Given** a search by phone digits, **When** it runs, **Then** customers
@@ -375,9 +397,18 @@ shows for that customer afterwards.
   comes from Devolada's links or from WispHub.
 - **FR-005**: Results MUST be merged so that a customer appears once, and a
   customer who already has a link MUST carry that link, never a new one.
-- **FR-006**: The number of results shown MUST be capped; when more
-  customers matched than are shown, the page MUST say how many matched and
-  ask for a more specific search.
+- **FR-006**: A search MUST be reachable to its end: results are delivered
+  in blocks and the next block MUST be asked for only when the operator
+  scrolls toward it, exactly as a browse (FR-020). No ceiling MAY put a
+  matching customer out of reach. The page MUST say how many matched — a
+  floor while the walk continues, because the union of the provider's four
+  filters cannot be sized without walking it, and the exact number once the
+  walk is done.
+
+  *Amended 2026-09-23.* This requirement used to cap a search at one block
+  and ask for a more specific search instead. That left a customer the
+  operator could see counted and could not reach: «Leo» matched 39 and
+  showed 10, and the other 29 had no address but a luckier guess.
 - **FR-007**: Each panel row MUST show the customer's usuario, name and
   phone as WispHub answers them now — never a stored copy; each API result
   MUST show its label or reference, its asked amount and its state, with its

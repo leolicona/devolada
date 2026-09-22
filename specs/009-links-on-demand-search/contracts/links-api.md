@@ -24,14 +24,14 @@ one door (D1).
 | --- | --- |
 | `q` | optional. Trimmed. When present it must be ≥ 3 characters, otherwise `VALIDATION_ERROR` (FR-002). A text of only spaces is an absent `q` (Edge Cases). |
 | `limit` | optional, default 20, clamped to `10 ≤ limit ≤ 50` (D3). The client sends what fills its viewport. |
-| `cursor` | optional, opaque (D2). Only meaningful when `q` is absent. An unreadable cursor is `VALIDATION_ERROR`. |
+| `cursor` | optional, opaque (D2). A browse cursor and a search cursor are different shapes; passing one where the other belongs restarts the walk rather than guessing. An unreadable cursor is `VALIDATION_ERROR`. |
 
 ### Response
 
 ```
 {
   results: CustomerRow[],          // data-model.md
-  nextCursor: string | null,       // always null when q is present (D5)
+  nextCursor: string | null,       // the next block of a browse OR of a search (D2, D5)
   matched: number | null,          // search only: a floor, not a total (D5)
   total: number | null,            // browse only: the provider's count
   wisphub: "ok" | "unavailable" | "not_configured"
@@ -46,10 +46,19 @@ one door (D1).
   provider's own and is not promised (D6).
 - **Search** (`q` present): four provider filters — `nombre__contains`,
   `apellido__contains`, `usuario__contains`, `telefono__contains` — in
-  parallel, plus a D1 read of API links by reference and label. Merged, deduped
-  by identity, capped at `limit` (D4). `matched` is the largest of the four
-  provider counts; the page renders it as *"más de N coincidencias"* and asks
-  for more characters (FR-006).
+  parallel at one shared offset, plus a D1 read of API links by reference and
+  label on the FIRST block only (they are the same rows every block, and the
+  page would dedupe them away). Merged and deduped by identity (D4).
+
+  A search **pages like a browse** (D5, amended 2026-09-23): the merged block
+  is returned whole rather than cut to `limit`, so nothing fetched is
+  skipped, and `nextCursor` carries `sq:<offset>` until every filter is
+  exhausted. Only the first block asks all four — later blocks ask only the
+  filters that still have rows, so a deep search costs one call per block.
+
+  `matched` is the largest of the four provider counts while the walk
+  continues — a floor, rendered *"más de N"* — and the exact size of the
+  deduped union once `nextCursor` is null.
 - **Test links never appear** (FR-017) — the `realOnly` predicate on the API side.
 - **A customer without a usuario never appears** — nothing can be keyed to them.
 

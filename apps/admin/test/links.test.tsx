@@ -262,18 +262,30 @@ describe("US1: the search asks the provider, once the operator pauses", () => {
       const q = url.searchParams.get("q");
       if (q === null) return ok(block(twoCustomers()));
       asked.push(q);
-      return ok(block([panel({ name: "María Fernanda López" })], { matched: 904, total: null }));
+      /* A cursor means there are more blocks below this one */
+      return ok(
+        block([panel({ name: "María Fernanda López" })], {
+          matched: 904,
+          total: null,
+          nextCursor: "c3E6MTA6MQ",
+        }),
+      );
     });
     await screen.findByText("Janely Reyes");
     await userEvent.type(screen.getByLabelText(/buscar cliente/i), "mar");
 
     expect(await screen.findByText(/más de 904 clientes coinciden con «mar»/i)).toBeInTheDocument();
-    expect(screen.getByText(/escribe más letras para acotar la búsqueda/i)).toBeInTheDocument();
+    /* D5 amended 2026-09-23: the page points DOWN, because every one of
+       the 904 is now reachable by scrolling. It used to tell the
+       operator to type more letters, which was the only way to reach a
+       match below the first block — «Leo» counted 39 and showed 10. */
+    expect(screen.getByText(/desplázate para ver más/i)).toBeInTheDocument();
+    expect(screen.queryByText(/escribe más letras para acotar/i)).not.toBeInTheDocument();
     /* One request for the pause, not one per keystroke (FR-002) */
     expect(asked).toEqual(["mar"]);
   });
 
-  it("says plainly how many when everything that matched is on screen", async () => {
+  it("says plainly how many when the walk is done, with no floor left to hedge (FR-006)", async () => {
     arrange((url) =>
       url.searchParams.get("q") === null
         ? ok(block(twoCustomers()))

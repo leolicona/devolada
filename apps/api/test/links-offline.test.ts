@@ -98,13 +98,31 @@ describe("US3: a provider that does not answer is an answer", () => {
     }
     mockOutage();
 
-    const { data } = await (await read("?q=mar&limit=10")).json();
-    expect(data.wisphub).toBe("unavailable");
-    expect(data.results).toHaveLength(10);
+    const first = await (await read("?q=mar&limit=10")).json();
+    expect(first.data.wisphub).toBe("unavailable");
+    expect(first.data.results).toHaveLength(10);
     /* The number the operator decides on: how many MATCHED, not how
-       many were shown. Capping and forgetting the rest would say "10
-       clientes coinciden" and never ask for more letters (D5). */
-    expect(data.matched).toBe(25);
+       many were shown. With the provider away this is EXACT — what
+       Devolada holds is all there is to count, and the note already
+       says what cannot be asked (D5, amended 2026-09-23). */
+    expect(first.data.matched).toBe(25);
+
+    /* FR-006: and every one of them is reachable by scrolling, with the
+       provider away exactly as with it there */
+    expect(first.data.nextCursor).toBeTruthy();
+    const second = await (
+      await read(`?q=mar&limit=10&cursor=${encodeURIComponent(first.data.nextCursor)}`)
+    ).json();
+    expect(second.data.results).toHaveLength(10);
+    const third = await (
+      await read(`?q=mar&limit=10&cursor=${encodeURIComponent(second.data.nextCursor)}`)
+    ).json();
+    expect(third.data.results).toHaveLength(5);
+    /* Twenty-five walked, and the walk says it is done */
+    expect(third.data.nextCursor).toBeNull();
+
+    const walked = [...first.data.results, ...second.data.results, ...third.data.results];
+    expect(new Set(walked.map((r: { usuario: string }) => r.usuario)).size).toBe(25);
     fetchMock.get(WISPHUB_ORIGIN).cleanMocks();
   });
 

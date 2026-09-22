@@ -4,7 +4,12 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { creditSummary } from "../../credit";
-import { WispHubError, type WispHubCustomer } from "../../wisphub/client";
+import {
+  CUSTOMER_SEARCH_FIELDS,
+  WispHubError,
+  type CustomerSearchField,
+  type WispHubCustomer,
+} from "../../wisphub/client";
 /* provider-address-per-isp D4: every provider client in this file is
    addressed to the actor business's own installation, through the one
    factory. The constructor is never called here. */
@@ -1100,22 +1105,19 @@ async function panelLinksMatching(
   db: DrizzleD1Database,
   businessId: string,
   needle: string,
-  limit: number,
   baseUrl: string,
-): Promise<{ rows: CustomerRow[]; matched: number }> {
+): Promise<CustomerRow[]> {
   const all = await db
     .select()
     .from(paymentLinks)
     .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.source, "panel")));
-  /* FR-006: how many MATCHED, counted before the cap. Capping and
-     forgetting would let the page say "20 clientes coinciden" when
-     forty did — the one number the operator uses to decide whether to
-     type more letters (D5). */
-  const hits = all
+  /* FR-006: every match, not a capped handful. The caller pages this
+     list by the cursor's offset, so a cap here would be a customer the
+     operator can see counted and can never scroll to (D5, amended
+     2026-09-23). */
+  return all
     .filter(isPanelLink)
-    .filter((link) => foldText(link.customerUsuario).includes(needle));
-  const rows = hits
-    .slice(0, limit)
+    .filter((link) => foldText(link.customerUsuario).includes(needle))
     .map((link) => {
       const url = `${baseUrl}/p/${link.token}`;
       return {
@@ -1137,8 +1139,16 @@ async function panelLinksMatching(
         waLink: whatsAppLink(shareText(url), null),
       };
     });
-  return { rows, matched: hits.length };
 }
+
+/* The cursor's `fields` bitmask, both ways (D5, amended 2026-09-23).
+   `0` means "ask all four", which is where a walk starts and what a
+   restarted one falls back to. */
+const maskOf = (fields: readonly CustomerSearchField[]) =>
+  fields.reduce((mask, field) => mask | (1 << CUSTOMER_SEARCH_FIELDS.indexOf(field)), 0);
+
+const fieldsFromMask = (mask: number): readonly CustomerSearchField[] =>
+  mask === 0 ? CUSTOMER_SEARCH_FIELDS : CUSTOMER_SEARCH_FIELDS.filter((_, i) => mask & (1 << i));
 
 /* GET /direct-payments/customers — ISP session (links-on-demand-search
    D1, FR-001).
@@ -1171,19 +1181,41 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
 
   if (query.q !== undefined) {
     const needle = foldText(query.q);
-    /* D1's own rows first: the provider cannot know about an API link */
-    const apiMatches = (await apiLinksOf(db, actor.id)).filter(
-      (link) =>
-        foldText(link.customerRef).includes(needle) || foldText(link.label ?? "").includes(needle),
-    );
 
-    let customers: WispHubCustomer[] = [];
-    let matched = apiMatches.length;
+    /* D5 (amended 2026-09-23): a search WALKS, exactly as a browse does.
+       It used to answer one block and tell the operator to type more
+       letters — which counted 39 matches for «Leo», showed 10, and left
+       the other 29 reachable only by a luckier guess (FR-006).
+
+       The cursor says where the four filters are and which of them are
+       still worth asking. A BROWSE cursor arriving here is not an error
+       and not a guess: the walk restarts, because the two shapes mean
+       different positions and a search that silently resumed at a
+       browse's offset would skip rows without saying so. */
+    let offset = 0;
+    let mask = 0;
+    if (query.cursor !== undefined) {
+      const decoded = decodeCursor(query.cursor);
+      if (decoded === null) {
+        return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
+      }
+      if (decoded.phase === "search") {
+        offset = decoded.offset;
+        mask = decoded.fields;
+      }
+    }
+    const firstBlock = offset === 0;
+    const onward = (fields: number): string =>
+      encodeCursor({ phase: "search", offset: offset + limit, fields });
+
+    let search;
     let away = false;
     if (wisphub) {
-      let search;
       try {
-        search = await wisphub.searchCustomers(query.q, limit);
+        search = await wisphub.searchCustomers(query.q, limit, {
+          offset,
+          fields: fieldsFromMask(mask),
+        });
       } catch (e) {
         /* D10 / FR-014: the search still answers, with what Devolada
            has, under a quiet note. It never answers an error block —
@@ -1191,49 +1223,71 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
         if (!providerIsAway(e)) return wisphubFailure(c, e, "panel");
         away = true;
       }
-      if (search) {
-        customers = search.customers;
-        /* D5: the largest of the four counts, and never smaller than what
-           we are about to show. The true size of the union of four filters
-           cannot be known without fetching all four whole, so the page
-           says "más de N" and asks for more letters (FR-006). */
-        matched = Math.max(matched, ...Object.values(search.counts));
-      }
     }
 
-    /* The provider did not answer — by outage or by never having been
-       connected — so Devolada's own links answer for it (FR-003) */
-    const ownPanel =
-      away || !connected
-        ? await panelLinksMatching(db, actor.id, needle, limit, base)
-        : { rows: [] as CustomerRow[], matched: 0 };
-    /* FR-006 on the offline path. The two sets are disjoint — an API
-       link has no usuario, a panel link has nothing else — so their
-       counts add, and the sum is still a FLOOR: the provider is away,
-       and what it would have matched is exactly what cannot be counted.
-       Without this a search that found forty stored links reported the
-       twenty it showed and never asked for more letters. */
-    matched += ownPanel.matched;
+    /* D1's own rows: the provider cannot know about an API link. Read
+       only where they are actually needed — the first block of a live
+       search, or any block of one the provider is not answering. */
+    const apiRows =
+      firstBlock || away || !wisphub
+        ? (await apiLinksOf(db, actor.id))
+            .filter(
+              (link) =>
+                foldText(link.customerRef).includes(needle) ||
+                foldText(link.label ?? "").includes(needle),
+            )
+            .map((link) => apiCustomerRow(link, base, now))
+        : [];
 
+    /* The provider did not answer — by outage or by never having been
+       connected — so Devolada's own rows answer for it (FR-003).
+
+       Both sources are in memory here, so the walk is one list sliced by
+       the cursor: no filter offsets to keep in step, and `matched` is
+       the exact size of what Devolada can see rather than a floor. What
+       it cannot see is the provider's, and the note already says so. */
+    if (!wisphub || away) {
+      const all = [...apiRows, ...(await panelLinksMatching(db, actor.id, needle, base))];
+      const page = all.slice(offset, offset + limit);
+      return c.json({
+        success: true,
+        data: {
+          results: page,
+          nextCursor: offset + limit < all.length ? onward(0) : null,
+          matched: all.length,
+          total: null,
+          wisphub: !connected ? "not_configured" : "unavailable",
+        } satisfies CustomersResponse,
+      });
+    }
+
+    const customers = search?.customers ?? [];
     const tokens = await linksForUsuarios(db, actor.id, customers.map((customer) => customer.usuario));
     /* D6: dedupe by identity. The two channels cannot collide — an API
-       row has no usuario — so the cap is all the merge needs. */
+       row has no usuario — and the provider's own rows arrive deduped,
+       so the merge is a concatenation. The block is NOT cut to `limit`:
+       the four filters advance together, so a row fetched and dropped
+       here is a row the next block would skip (D5). */
     const results = [
-      ...apiMatches.map((link) => apiCustomerRow(link, base, now)),
-      ...ownPanel.rows,
+      ...apiRows,
       ...customers.map((customer) => panelCustomerRow(customer, tokens.get(customer.usuario) ?? null, base)),
-    ].slice(0, limit);
+    ];
 
+    /* D5: the largest of the counts asked for, and never smaller than
+       what we are about to show. The union of four filters cannot be
+       sized without walking it, so while the walk continues the page
+       says "más de N" — and when it ends, what it found IS the answer
+       (FR-006). */
+    const counts = Object.values(search?.counts ?? {});
+    const more = search?.more ?? [];
     return c.json({
       success: true,
       data: {
         results,
-        /* D5: a search answers one block. A cursor the search UI would
-           never use is dead weight in the contract. */
-        nextCursor: null,
-        matched: Math.max(matched, results.length),
+        nextCursor: more.length ? onward(maskOf(more)) : null,
+        matched: Math.max(apiRows.length, results.length, ...counts),
         total: null,
-        wisphub: !connected ? "not_configured" : away ? "unavailable" : "ok",
+        wisphub: "ok",
       } satisfies CustomersResponse,
     });
   }

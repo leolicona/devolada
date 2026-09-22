@@ -97,7 +97,13 @@ function mapCustomer(c: WispHubListItem): WispHubCustomer {
   };
 }
 
-/* D1: the query type is detected, not selected. */
+/* D1: the query type is detected, not selected.
+
+   Nothing calls this any more: links-on-demand-search D4 replaced the
+   guess with four `__contains` filters asked at once, and `getCustomer`
+   asks `usuario=` outright. It comes out with the roster it belonged to
+   (D12, tasks T045) rather than in the middle of a phase — left here so
+   that removal is one commit with one reason. */
 export function queryParamFor(q: string): "telefono" | "usuario" | "nombre" {
   if (/^\d+$/.test(q)) return "telefono";
   if (q.includes("@")) return "usuario";
@@ -132,6 +138,24 @@ export const PENDING_LIVE_PAGES = 5;
 
 export type PendingPage = { invoices: PendingInvoice[]; next: string | null };
 export type CustomersPage = { customers: WispHubCustomer[]; next: string | null };
+
+/* links-on-demand-search D4: the four filters a search is put to, in
+   the order they are asked. `__contains` is case- and accent-insensitive
+   (provider documentation read 2026-09-21), and no filter takes several
+   identities at once — which is why there are four calls and not one. */
+export const CUSTOMER_SEARCH_FIELDS = ["nombre", "apellido", "usuario", "telefono"] as const;
+export type CustomerSearchField = (typeof CUSTOMER_SEARCH_FIELDS)[number];
+
+export type CustomerSearch = {
+  /* Merged and deduped by usuario, capped at the caller's limit */
+  customers: WispHubCustomer[];
+  /* Each filter's own `count`, for the floor the page reports (D5) */
+  counts: Record<CustomerSearchField, number>;
+};
+
+/* links-on-demand-search D3: the band a browse block is clamped to */
+export const CUSTOMERS_BLOCK_MIN = 10;
+export const CUSTOMERS_BLOCK_MAX = 50;
 
 /* How deep a live read of the customer list goes before it says so:
    ten pages of 100 was "the pilot scale with room" (direct-payment D5),
@@ -225,15 +249,72 @@ export class WispHub {
     return this.request<T>(path);
   }
 
-  /* Uses the LIST endpoint on purpose: the detail endpoint returns
-     usuario as null (spike finding). D2: the mapping is an allow-list —
-     extra WispHub fields never leak to the frontend. */
-  async searchCustomers(q: string): Promise<WispHubCustomer[]> {
-    const param = queryParamFor(q);
-    const data = await this.get<{ results: WispHubListItem[] }>(
-      `/clientes/?${param}=${encodeURIComponent(q)}&limit=10`,
+  /* One page of `/clientes/`, mapped: the rows, the provider's own
+     `count` for that filter, and the path of the next page. Every read
+     of the customer list goes through here — the allow-list mapping (D2)
+     and the "no usuario, no link" rule (US-D07 review) are written once. */
+  private async listPage(path: string): Promise<CustomersPage & { count: number }> {
+    const data: { count?: number; next: string | null; results: WispHubListItem[] } =
+      await this.get(path);
+    const customers: WispHubCustomer[] = [];
+    for (const c of data.results) {
+      if (c.usuario) customers.push(mapCustomer(c));
+    }
+    /* WispHub's `next` is absolute; keep only the API path */
+    const next = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    return { customers, next, count: data.count ?? customers.length };
+  }
+
+  /* links-on-demand-search D4: a search asks FOUR filters at once and
+     merges what comes back. No parameter is chosen from the shape of
+     the text — that guess is `bug: customer-lookup-misses`, where a
+     usuario of digits was sent to the `telefono` filter and an existing
+     customer came back as "not found".
+
+     All four run for every search, including one that is plainly digits
+     or plainly letters: the saved call is not worth the bug. One round
+     trip for the operator, four requests on the wire, each capped at
+     `limit`, merged and deduped by usuario.
+
+     `counts` is each filter's own `count`. The union's true size cannot
+     be known without fetching all four whole, so the caller reports the
+     largest as a FLOOR and says so in words (D5). */
+  async searchCustomers(q: string, limit = 10): Promise<CustomerSearch> {
+    const text = encodeURIComponent(q);
+    const pages = await Promise.all(
+      CUSTOMER_SEARCH_FIELDS.map((field) =>
+        this.listPage(`/clientes/?${field}__contains=${text}&limit=${limit}`),
+      ),
     );
-    return data.results.map(mapCustomer);
+    /* Dedupe by identity, first filter to answer wins the row */
+    const merged = new Map<string, WispHubCustomer>();
+    for (const page of pages) {
+      for (const customer of page.customers) {
+        if (!merged.has(customer.usuario)) merged.set(customer.usuario, customer);
+      }
+    }
+    const counts = {} as Record<CustomerSearchField, number>;
+    CUSTOMER_SEARCH_FIELDS.forEach((field, i) => {
+      counts[field] = pages[i].count;
+    });
+    return { customers: [...merged.values()].slice(0, limit), counts };
+  }
+
+  /* links-on-demand-search D3: one block of the customer list, where
+     the browse is. `limit` is what fills the caller's viewport and
+     `offset` is where the last block stopped — the provider pages by
+     exactly these two and offers no ordering parameter, which is why
+     the order is never promised (D6).
+
+     The clamp lives here as well as in the contract: the floor keeps a
+     tall screen from paying four round trips to fill itself, the
+     ceiling keeps one block at one provider call. `total` is the
+     provider's own count of the base. */
+  async customersBlock(limit: number, offset: number): Promise<{ customers: WispHubCustomer[]; total: number }> {
+    const size = Math.min(CUSTOMERS_BLOCK_MAX, Math.max(CUSTOMERS_BLOCK_MIN, Math.trunc(limit)));
+    const start = Math.max(0, Math.trunc(offset));
+    const { customers, count } = await this.listPage(`/clientes/?limit=${size}&offset=${start}`);
+    return { customers, total: count };
   }
 
   /* The whole tenant, full shape — the Links roster (admin-links-view,
@@ -264,21 +345,26 @@ export class WispHub {
      the sweep stores and resumes from (bug: links-roster-cap). A row
      without `usuario` is nobody a link can be made for (US-D07 review). */
   async customersPage(path: string): Promise<CustomersPage> {
-    const data: { next: string | null; results: WispHubListItem[] } = await this.get(path);
-    const customers: WispHubCustomer[] = [];
-    for (const c of data.results) {
-      if (c.usuario) customers.push(mapCustomer(c));
-    }
-    /* WispHub's `next` is absolute; keep only the API path */
-    const next = data.next ? data.next.slice(data.next.indexOf("/clientes/")) : null;
+    const { customers, next } = await this.listPage(path);
     return { customers, next };
   }
 
   /* D1 (charge-confirm spec): one customer loads through the list filter.
-     The detail endpoint returns nombre/usuario as null (spike finding). */
+     The detail endpoint returns nombre/usuario as null (spike finding).
+
+     links-on-demand-search D4: identity is NOT a search. The exact
+     `usuario=` filter is what the provider documents for it, and asking
+     it directly is what closes the first half of
+     `bug: customer-lookup-misses` — the parameter used to be guessed
+     from the text's shape, so a usuario of digits went to `telefono` and
+     a plain-word usuario went to `nombre`, and an existing customer came
+     back null. A null customer is what files a confirmed payment as
+     "owes nothing". */
   async getCustomer(usuario: string): Promise<WispHubCustomer | null> {
-    const matches = await this.searchCustomers(usuario);
-    return matches.find((c) => c.usuario === usuario) ?? null;
+    const data = await this.get<{ results: WispHubListItem[] }>(
+      `/clientes/?usuario=${encodeURIComponent(usuario)}&limit=10`,
+    );
+    return data.results.map(mapCustomer).find((c) => c.usuario === usuario) ?? null;
   }
 
   /* D6 (charge-record spec): find the cash payment method by name. */

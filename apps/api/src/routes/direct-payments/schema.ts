@@ -325,6 +325,124 @@ export const linksRosterResponse = z.object({
   readAt: z.number().int(),
 });
 
+/* ---- links-on-demand-search: the doors that replace the roster ---- */
+
+/* GET /direct-payments/customers — ISP session (D1).
+
+   The resource is the ISP's CUSTOMERS, each with their link if one
+   exists — not a list of links. Browsing and searching are one door:
+   the rows have the same shape and differ only in how they were found,
+   so a page with one search box holds one query rather than swapping
+   between two mid-keystroke. */
+
+/* D3: the client sends what fills its viewport; the server decides what
+   it is willing to read. The floor keeps a tall screen from paying four
+   round trips to fill itself; the ceiling keeps one request at one
+   provider call (50 is well inside the `limit=300` WispHub honours, and
+   one call is 0.4–0.6 s measured). */
+export const CUSTOMERS_LIMIT_MIN = 10;
+export const CUSTOMERS_LIMIT_MAX = 50;
+export const CUSTOMERS_LIMIT_DEFAULT = 20;
+
+/* FR-002: three characters before anything leaves the browser. The page
+   never sends less; the door refuses it anyway, because a contract that
+   only holds while the client behaves is not a contract.
+   Edge case: a box holding only spaces is an ABSENT q — browse, not a
+   refusal. Trimmed to nothing therefore becomes undefined here rather
+   than a two-character search. */
+export const CUSTOMERS_SEARCH_MIN = 3;
+
+export const customersQuery = z.object({
+  q: z.preprocess(
+    (value) => {
+      if (typeof value !== "string") return value;
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    },
+    z.string().min(CUSTOMERS_SEARCH_MIN).optional(),
+  ),
+  /* Clamped, never refused: a viewport is the client's own measurement
+     and a number outside the band is not a malformed request. */
+  limit: z.coerce
+    .number()
+    .int()
+    .default(CUSTOMERS_LIMIT_DEFAULT)
+    .transform((n) => Math.min(CUSTOMERS_LIMIT_MAX, Math.max(CUSTOMERS_LIMIT_MIN, n))),
+  /* Opaque (D2). Only meaningful while `q` is absent — a search answers
+     one block and no cursor (D5). */
+  cursor: z.string().optional(),
+});
+
+/* One row shape for both channels and for both ways of finding one
+   (data-model.md). What it does NOT carry is the point of FR-010: the
+   link stores none of this — every field below is read live from the
+   provider, or from the row Devolada owns. */
+export const customerRow = z.object({
+  /* automated-collections-api FR-011: who collects. Rendered as icon +
+     text, never colour alone (constitution VI). */
+  channel: z.enum(["panel", "api"]),
+  /* Panel: the identity, and the only key any lookup uses. Null on an
+     API row, which has no WispHub customer at all. */
+  usuario: z.string().nullable(),
+  wisphubId: z.number().int().nullable(),
+  /* API: the caller's own reference, its display name and the stored ask */
+  customerRef: z.string().nullable(),
+  label: z.string().nullable(),
+  askCents: z.number().int().nullable(),
+  linkState: z.enum(["open", "paid", "expired"]).nullable(),
+  name: z.string().nullable(),
+  phone: z.string().nullable(),
+  /* D7: the row's link exists or it does not. Most rows have none now —
+     a link is born on the act (FR-008), not on being listed. */
+  hasLink: z.boolean(),
+  /* D7: null when `hasLink` is false. A null URL means *no link yet*;
+     it does NOT mean hide the buttons — that was the roster's rule and
+     it is what FR-026 ends. Pressing one creates the link (D8). */
+  url: z.string().nullable(),
+  waLink: z.string().nullable(),
+});
+
+export const customersResponse = z.object({
+  results: z.array(customerRow),
+  /* Null when the walk is exhausted, and always null on a search (D5) */
+  nextCursor: z.string().nullable(),
+  /* Search only: a FLOOR, not a total (D5). The union of four filters
+     cannot be sized without fetching all four whole, so the page says
+     "más de N coincidencias" rather than claiming a number it did not
+     compute. */
+  matched: z.number().int().nullable(),
+  /* Browse only: the provider's own count of the customer base */
+  total: z.number().int().nullable(),
+  /* D10, FR-014/FR-015: the provider being away is an ANSWER, never a
+     503. `not_configured` is the same shape for a business that never
+     connected WispHub — its API links, and the empty state says where
+     links come from (constitution VIII). */
+  wisphub: z.enum(["ok", "unavailable", "not_configured"]),
+});
+
+/* POST /direct-payments/links — the act FR-008 names (D8).
+
+   Creates the customer's permanent link, or returns the one that
+   already exists; it is never replaced (FR-005, FR-009). Links and
+   Cobros both press this one door (D14), which is what keeps the two
+   screens obeying one rule. */
+export const createLinkRequest = z.object({
+  usuario: z.string().trim().min(1),
+});
+
+export const createLinkResponse = z.object({
+  token: z.string(),
+  url: z.string(),
+  /* D16: built from the phone this act just read, so WhatsApp opens the
+     CUSTOMER'S OWN CHAT. `toWhatsAppPhone` still owns the rules and
+     still refuses a number it cannot read — that refusal falls back to
+     WhatsApp's picker, which is now the exception rather than the rule
+     (FR-019, FR-028). */
+  waLink: z.string(),
+  /* False when the link already existed: the same link came back */
+  created: z.boolean(),
+});
+
 export type LinkStatusResponse = z.infer<typeof linkStatusResponse>;
 export type PayRequest = z.infer<typeof payRequest>;
 export type PayResponse = z.infer<typeof payResponse>;
@@ -333,4 +451,9 @@ export type ProofUploadResponse = z.infer<typeof proofUploadResponse>;
 export type ProofReading = z.infer<typeof proofReadingResponse>;
 export type LinksListResponse = z.infer<typeof linksListResponse>;
 export type LinksRosterResponse = z.infer<typeof linksRosterResponse>;
+export type CustomersQuery = z.infer<typeof customersQuery>;
+export type CustomerRow = z.infer<typeof customerRow>;
+export type CustomersResponse = z.infer<typeof customersResponse>;
+export type CreateLinkRequest = z.infer<typeof createLinkRequest>;
+export type CreateLinkResponse = z.infer<typeof createLinkResponse>;
 export type PublicPaymentError = z.infer<typeof publicPaymentError>;

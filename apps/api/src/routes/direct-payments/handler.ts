@@ -9,7 +9,7 @@ import { WispHubError, type WispHubCustomer } from "../../wisphub/client";
    addressed to the actor business's own installation, through the one
    factory. The constructor is never called here. */
 import { wisphubFor } from "../../wisphub/factory";
-import { readPendingInvoices, readRoster } from "../../wisphub/snapshot";
+import { readPendingInvoices } from "../../wisphub/snapshot";
 import { NO_DEBT, debtFor, nothingOwedIsProven } from "../../wisphub/debt";
 import {
   askAvailable,
@@ -21,7 +21,6 @@ import {
 } from "../../direct-payments/validation";
 import {
   ensureLink,
-  ensureLinks,
   isApiLink,
   isPanelLink,
   linkAcceptsPayments,
@@ -43,6 +42,7 @@ import {
 import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { integrationOf } from "../../integrations/store";
+import { dismissPruneNotice, pruneNoticeFor } from "../../links/prune";
 import { consta, ConstaError } from "../../consta";
 import { enqueueAndDeliver } from "../../webhooks/queue";
 import { deferOf } from "../defer";
@@ -54,7 +54,7 @@ import {
   type CustomerRow,
   type CustomersQuery,
   type CustomersResponse,
-  type LinksRosterResponse,
+  type PruneNoticeResponse,
   type LinkStatusResponse,
   type PayRequest,
 } from "./schema";
@@ -960,168 +960,12 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
    Generation is lazy, in batch, on ISP request: listing IS what creates
    the missing links, so every WispHub customer has one without anybody
    creating them by hand. */
-export async function listLinks(c: Ctx, cursor?: string) {
-  const actor = c.get("actor");
-  if (actor.type !== "business") {
-    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
-  }
-  const db = drizzle(c.env.DB);
-  const integration = await integrationOf(db, actor.id);
-  if (!integration?.apiKey) {
-    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
-  }
-
-  try {
-    /* bug: links-roster-cap: the same read the roster uses — live for a
-       tenant that fits, the sweep's finished pass for one that does not
-       — so this door can no longer stop at 1,000 without saying so */
-    const roster = await readRoster(db, actor.id, wisphubFor(integration, c.env), new Date());
-    /* D5: the usuario is the identity — an existing usuario keeps its
-       token (the link is permanent while its usuario exists) and only
-       the numeric id, a cache WispHub may recycle, refreshes. */
-    await ensureLinks(db, actor.id, roster.customers);
-  } catch (e) {
-    return wisphubFailure(c, e, "panel");
-  }
-
-  const PAGE = 50;
-  const rows = await db
-    .select()
-    .from(paymentLinks)
-    .where(
-      and(
-        eq(paymentLinks.businessId, actor.id),
-        /* automated-collections-api D3: this is the WispHub list, keyed and
-           paged by usuario; API links join the panel through the roster
-           (US1, T076) */
-        eq(paymentLinks.source, "panel"),
-        ...(cursor ? [gt(paymentLinks.customerUsuario, cursor)] : []),
-      ),
-    )
-    .orderBy(asc(paymentLinks.customerUsuario))
-    .limit(PAGE + 1);
-  const page = rows.slice(0, PAGE).filter(isPanelLink);
-  return c.json({
-    success: true,
-    data: {
-      links: page.map((link) => ({
-        token: link.token,
-        usuario: link.customerUsuario,
-        url: `${c.env.PAGO_BASE_URL}/p/${link.token}`,
-      })),
-      nextCursor: rows.length > PAGE ? (page[page.length - 1]?.customerUsuario ?? null) : null,
-    },
-  });
-}
-
 /* What the customer reads when the ISP shares their link (US-D07 D3).
    Here, not in the admin, for the same reason the receipt's text lives
    in the API (receipt spec D2): the words reach the customer the same
    way whoever sends them. */
 const shareText = (url: string) =>
   `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
-
-/* GET /direct-payments/links/roster — ISP session (US-D07, amended by
-   the pilot-UX round). The WHOLE tenant with each customer's permanent
-   link: WispHub's own filters are exact-match and the old search
-   guessed one parameter from the text's shape, so finding "greyes" by
-   half a name was impossible. Now the list travels once (30s display
-   cache, Cobros' own pattern) and the browser searches it by contains.
-   Listing IS what creates missing links, exactly like /links (D5). */
-export async function linksRoster(c: Ctx) {
-  const actor = c.get("actor");
-  if (actor.type !== "business") {
-    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
-  }
-  const db = drizzle(c.env.DB);
-  const integration = await integrationOf(db, actor.id);
-  const now = new Date();
-  type RosterRow = LinksRosterResponse["results"][number];
-
-  /* automated-collections-api FR-011 (US1 scenario 11): the API's links
-     join the same list, read from the row — no provider, no cache. Test
-     rows never reach the panel (D12, FR-035): `realOnly` is the one rule. */
-  const apiRows = await db
-    .select()
-    .from(paymentLinks)
-    .where(and(eq(paymentLinks.businessId, actor.id), eq(paymentLinks.source, "api"), realOnly(paymentLinks)));
-  const apiResults: RosterRow[] = apiRows.filter(isApiLink).map((link) => {
-    const url = `${c.env.PAGO_BASE_URL}/p/${link.token}`;
-    return {
-      channel: "api",
-      wisphubId: null,
-      usuario: null,
-      customerRef: link.customerRef,
-      label: link.label,
-      askCents: link.askCents,
-      linkState: linkState(link, now),
-      name: link.label ?? link.customerRef,
-      phone: null,
-      url,
-      /* No phone on an API link — the contact picker, and a message that
-         names no service (FR-028 reaches the share text too) */
-      waLink: whatsAppLink(apiShareText(url), null),
-    };
-  });
-
-  /* A business without WispHub still sees its links (FR-011, research
-     D5): the API rows alone, no refusal. A provider that fails keeps its
-     503 — the screen shows the last reading with a quiet note. */
-  if (!integration?.apiKey) {
-    return c.json({
-      success: true,
-      data: { results: sortRoster(apiResults), complete: true, readAt: now.getTime() },
-    });
-  }
-
-  let roster;
-  try {
-    /* bug: links-roster-cap: a tenant the ten-page read cannot finish is
-       served the sweep's last finished pass, whole; `complete` and
-       `readAt` say which it was */
-    roster = await readRoster(db, actor.id, wisphubFor(integration, c.env), now, { display: true });
-  } catch (e) {
-    return wisphubFailure(c, e, "panel");
-  }
-  const customers = roster.customers.filter((customer) => customer.usuario !== "");
-  /* D5: the usuario keeps its token, the recycled numeric id only
-     refreshes the cache — and only the missing links are written. */
-  const linkMap = await ensureLinks(db, actor.id, customers);
-
-  const panelResults: RosterRow[] = customers.flatMap((customer) => {
-    const token = linkMap.get(customer.usuario);
-    /* No token means the insert above skipped this customer; a link to
-       `/p/undefined` is worse than one row missing from the results. */
-    if (!token) return [];
-    const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
-    return [
-      {
-        channel: "panel" as const,
-        wisphubId: customer.wisphubId,
-        usuario: customer.usuario,
-        name: customer.name,
-        phone: customer.phone,
-        url,
-        /* The API owns the message and the number (receipt spec D2, D3):
-           `toWhatsAppPhone` puts Mexico's 52 in front and refuses a
-           number it cannot read — wa.me/55… is Brazil. */
-        waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
-      },
-    ];
-  });
-
-  return c.json({
-    success: true,
-    /* presence-freshness D7 (BUG-018): the provider read's time */
-    data: { results: sortRoster([...panelResults, ...apiResults]), complete: roster.complete, readAt: roster.readAt },
-  });
-}
-
-/* One order for both channels: by the name the row shows */
-function sortRoster<T extends { name: string; usuario: string | null; customerRef?: string }>(rows: T[]): T[] {
-  const key = (row: T) => row.name || row.usuario || row.customerRef || "";
-  return rows.sort((a, b) => key(a).localeCompare(key(b), "es"));
-}
 
 /* The share text for an API link names no service: the business may be
    a gym or a school, and the link may be one-time (FR-028) */
@@ -1543,4 +1387,30 @@ export async function createLink(c: Ctx, body: CreateLinkRequest) {
       created,
     } satisfies CreateLinkResponse,
   });
+}
+
+/* GET /direct-payments/prune-notice — ISP session, `payments: read`.
+
+   FR-023's second half: the one-time cleanup must TELL the business how
+   many links went. Read once, dismissed once, and then silent forever —
+   there is no second transition. */
+export async function pruneNotice(c: Ctx) {
+  const actor = c.get("actor");
+  if (actor.type !== "business") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const notice = await pruneNoticeFor(drizzle(c.env.DB), actor.id);
+  return c.json({ success: true, data: notice satisfies PruneNoticeResponse });
+}
+
+/* POST /direct-payments/prune-notice/dismiss — `payments: operate`,
+   stricter than the read on purpose: a viewer should not be able to
+   silence, for everyone, the record of links that were deleted. */
+export async function dismissPrune(c: Ctx) {
+  const actor = c.get("actor");
+  if (actor.type !== "business") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  await dismissPruneNotice(drizzle(c.env.DB), actor.id);
+  return c.json({ success: true, data: { dismissed: true } });
 }

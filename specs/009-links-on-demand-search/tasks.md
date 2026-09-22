@@ -172,9 +172,9 @@ leaving the admin suite red for four phases. The API-side migration
 
 ### Test migration — real assertions to rewrite
 
-- [ ] T033 [US1] Rewrite `apps/api/test/direct-payments-links.test.ts` onto `GET /direct-payments/customers`, **keeping** the `bug: links-refused-key` case that asserts a refused key answers 503 with `WISPHUB_AUTH_FAILED`, and re-citing the roster-era `US-D07` cases as `links-on-demand-search US1`
-- [ ] T034 [US1] Retire the roster cases of `apps/api/test/presence-freshness.test.ts` (scenario 9: "two roster reads inside the window answer the same readAt"), recording in the file that FR-027 / D15 replaced the promise — a block is read when it renders, so no two blocks share a `readAt`. The invoice-read cases in the same file are untouched
-- [ ] T035 [US1] Move FR-017's proof in `apps/api/test/collections-api-test-mode.test.ts:175` from the roster to the new customers door, keeping the one-predicate rule (`realOnly`) with the same call-site coverage
+- [X] T033 [US1] Rewrite `apps/api/test/direct-payments-links.test.ts` onto `GET /direct-payments/customers`, **keeping** the `bug: links-refused-key` case that asserts a refused key answers 503 with `WISPHUB_AUTH_FAILED`, and re-citing the roster-era `US-D07` cases as `links-on-demand-search US1`
+- [X] T034 [US1] Retire the roster cases of `apps/api/test/presence-freshness.test.ts` (scenario 9: "two roster reads inside the window answer the same readAt"), recording in the file that FR-027 / D15 replaced the promise — a block is read when it renders, so no two blocks share a `readAt`. The invoice-read cases in the same file are untouched
+- [X] T035 [US1] Move FR-017's proof in `apps/api/test/collections-api-test-mode.test.ts:175` from the roster to the new customers door, keeping the one-predicate rule (`realOnly`) with the same call-site coverage
 - [X] T036 [US1] Fix the premise in `apps/api/test/payment-requests.test.ts:100` — "all of whom the roster had already given a link" is false after US4; the fixture must cover a debtor with no link
 - [X] T037 [P] [US1] Rewrite `apps/admin/test/identity-round.test.tsx:110` ("Links: the roster reads, the share buttons wait for the CLABE") against the new screen; the CLABE gate itself is unchanged (FR-016)
 - [X] T038 [P] [US1] Rebuild `apps/admin/test/presence-freshness.test.tsx` on blocks per FR-027 / D15: the age indicator is gone and its assertions with it, while the re-read on return to the tab and its 30-second floor **stay** and now apply to the first block only
@@ -183,23 +183,23 @@ leaving the admin suite red for four phases. The API-side migration
 ### Test migration — mechanical handler swaps
 
 - [X] T040 [P] [US1] Swap `handlers.linksRoster` for the customers handler in `apps/admin/test/memberships.test.tsx:223` and `apps/admin/test/shell.test.tsx:167`
-- [ ] T041 [P] [US1] Update the stale "client roster" comment in `apps/admin/test/feedback.test.tsx:72` — comment only, no assertion changes
+- [X] T041 [P] [US1] Update the stale "client roster" comment in `apps/admin/test/feedback.test.tsx:72` — comment only, no assertion changes
 - [X] T042 [P] [US1] Replace the roster stub with a customers stub in `tests/e2e/stubs.ts`, `tests/design/review-foundations.spec.ts` and `tests/design/review-feedback.spec.ts`
-- [ ] T043 [P] [US1] Remove the dead `/direct-payments/links/search` stub from `tests/design/review-links.spec.ts` — that endpoint went in the pilot-UX round and the stub outlived it — and point its shots at the new door (D12)
+- [X] T043 [P] [US1] Remove the dead `/direct-payments/links/search` stub from `tests/design/review-links.spec.ts` — that endpoint went in the pilot-UX round and the stub outlived it — and point its shots at the new door (D12)
 
 ### Retirement
 
-- [ ] T044 [US1] Remove `GET /direct-payments/links` and `GET /direct-payments/links/roster` from `apps/api/src/routes/direct-payments/index.ts`, and `listLinks`, `linksRoster` from its handler, with `linksListQuery`, `linksListResponse` and `linksRosterResponse` from its schema (D12)
-- [ ] T045 [US1] Remove `listCustomersFull`, `customersPath` and `queryParamFor` from `apps/api/src/wisphub/client.ts`, `rosterForDisplay` from `cache.ts`, and `readRoster` plus the `roster` entry of `KINDS` from `snapshot.ts`, leaving the `pending` pass and the `sweep_kind` enum untouched (D12)
-- [ ] T046 [P] [US1] Delete `apps/api/test/links-roster-cap.test.ts`, which tests the roster this feature retires, and add one line to `.specify/bugs/links-roster-cap/test.md` recording that the behaviour it verified was superseded by `009-links-on-demand-search` — the bug's history is not edited
+- [X] T044 [US1] Remove `GET /direct-payments/links` and `GET /direct-payments/links/roster` from `apps/api/src/routes/direct-payments/index.ts`, and `listLinks`, `linksRoster` from its handler, with `linksListQuery`, `linksListResponse` and `linksRosterResponse` from its schema (D12)
+- [X] T045 [US1] Remove `listCustomersFull`, `customersPath` and `queryParamFor` from `apps/api/src/wisphub/client.ts`, `rosterForDisplay` from `cache.ts`, and `readRoster` plus the `roster` entry of `KINDS` from `snapshot.ts`, leaving the `pending` pass and the `sweep_kind` enum untouched (D12)
+- [X] T046 [P] [US1] Delete `apps/api/test/links-roster-cap.test.ts`, which tests the roster this feature retires, and add one line to `.specify/bugs/links-roster-cap/test.md` recording that the behaviour it verified was superseded by `009-links-on-demand-search` — the bug's history is not edited
 
 ### The prune
 
-- [ ] T047 [US1] Add `apps/api/src/links/prune.ts`: `PRUNE_CUTOVER_MS` as a constant citing D13, the delete of pre-cutover panel links no payment and no clave attempt references, the deletion of orphaned `roster` sweep rows, and the `link_prunes` row it writes once
-- [ ] T048 [US1] Join the prune to the every-minute cron in `apps/api/src/index.ts` under `waitUntil`, speaking only when it did something (constitution: one trigger)
-- [ ] T049 [US1] Add the notice door so the count reaches the business (FR-023): `pruneNoticeResponse` in `apps/api/src/routes/direct-payments/schema.ts`, `GET /direct-payments/prune-notice` (`payments:read`) and `POST /direct-payments/prune-notice/dismiss` (`payments:operate`, so a viewer cannot silence it for everyone) wired in `index.ts` with handlers in `handler.ts`, per [contracts/links-api.md](./contracts/links-api.md)
-- [ ] T050 [P] [US1] Write `apps/api/test/links-prune.test.ts` citing `links-on-demand-search US1`: a link with a payment is kept, a link with a clave attempt is kept, an API link is never touched, a post-cutover link is never touched, a second run deletes nothing and writes no second row, a deleted link's token is never reissued (FR-024), the count lands on the row, the notice door answers it once and `null` after dismissal, and a viewer cannot dismiss
-- [ ] T051 [US1] Add `apps/admin/src/features/links/PruneNotice.tsx` reading `GET /direct-payments/prune-notice`, showing the deleted count once and calling the dismiss door (FR-023)
+- [X] T047 [US1] Add `apps/api/src/links/prune.ts`: `PRUNE_CUTOVER_MS` as a constant citing D13, the delete of pre-cutover panel links no payment and no clave attempt references, the deletion of orphaned `roster` sweep rows, and the `link_prunes` row it writes once
+- [X] T048 [US1] Join the prune to the every-minute cron in `apps/api/src/index.ts` under `waitUntil`, speaking only when it did something (constitution: one trigger)
+- [X] T049 [US1] Add the notice door so the count reaches the business (FR-023): `pruneNoticeResponse` in `apps/api/src/routes/direct-payments/schema.ts`, `GET /direct-payments/prune-notice` (`payments:read`) and `POST /direct-payments/prune-notice/dismiss` (`payments:operate`, so a viewer cannot silence it for everyone) wired in `index.ts` with handlers in `handler.ts`, per [contracts/links-api.md](./contracts/links-api.md)
+- [X] T050 [P] [US1] Write `apps/api/test/links-prune.test.ts` citing `links-on-demand-search US1`: a link with a payment is kept, a link with a clave attempt is kept, an API link is never touched, a post-cutover link is never touched, a second run deletes nothing and writes no second row, a deleted link's token is never reissued (FR-024), the count lands on the row, the notice door answers it once and `null` after dismissal, and a viewer cannot dismiss
+- [X] T051 [US1] Add `apps/admin/src/features/links/PruneNotice.tsx` reading `GET /direct-payments/prune-notice`, showing the deleted count once and calling the dismiss door (FR-023)
 
 **Checkpoint**: no test reads a roster, nothing creates a link in the background, and the pre-existing links are gone.
 

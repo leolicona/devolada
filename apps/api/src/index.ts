@@ -20,6 +20,7 @@ import { wellKnownRoute } from "./routes/v1/well-known";
 import { sweepWebhookDeliveries } from "./webhooks/queue";
 import { sweepWispHubLists } from "./wisphub/snapshot";
 import { sweepApiCounters } from "./routes/v1/middleware";
+import { prunePanelLinks } from "./links/prune";
 import { internalError } from "./routes/v1/envelope";
 import { landingPublicRoute } from "./routes/landing";
 
@@ -136,6 +137,16 @@ export default {
     ctx.waitUntil(
       sweepWispHubLists(env).then((report) => {
         if (report.pages || report.failed) console.log("wisphub list sweep:", JSON.stringify(report));
+      }),
+    );
+    /* links-on-demand-search D13 (FR-023): the one-time cleanup of the
+       panel links the retired roster created and nobody ever used. It
+       joins this trigger rather than adding one (constitution: one
+       trigger), runs once per business — the row it writes is what
+       stops it — and speaks only when it did something. */
+    ctx.waitUntil(
+      prunePanelLinks(env).then((report) => {
+        if (report.businesses) console.log("link prune:", JSON.stringify(report));
       }),
     );
     /* automated-collections-api D13/D14: the public API's housekeeping —

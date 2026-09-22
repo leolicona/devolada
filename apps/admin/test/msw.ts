@@ -99,6 +99,14 @@ export const handlers = {
     http.get("/direct-payments/customers", ({ request }) => r(new URL(request.url))),
   createLink: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/direct-payments/links", async ({ request }) => r(await request.json())),
+  /* links-on-demand-search D13 (FR-023): the one-time cleanup's count.
+     Every render of /links asks for it, so the whole admin suite needs
+     the handler — it answers `null` by default, which is what a
+     business with nothing to be told sees. */
+  pruneNotice: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/direct-payments/prune-notice", () => r()),
+  dismissPruneNotice: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/direct-payments/prune-notice/dismiss", () => r()),
   /* business-and-memberships (US-B01–B03) */
   getSession: (r: () => Response) => http.get("/auth/get-session", () => r()),
   logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),
@@ -149,4 +157,11 @@ export const handlers = {
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };
 
-export const server = setupServer();
+/* links-on-demand-search D13: the prune notice is a ONE-TIME platform
+   event, and every render of /links asks for it. Answering `null` by
+   default — "this business has nothing to be told" — keeps it out of
+   every other suite's arrangement; the tests that care about the notice
+   override it with `handlers.pruneNotice(...)`. */
+export const server = setupServer(
+  http.get("/direct-payments/prune-notice", () => ok(null)),
+);

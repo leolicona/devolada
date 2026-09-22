@@ -2,10 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { stubAdminApi } from "../e2e/stubs";
 
-/* Design-review captures for the Links screen (US-D07): the resting
-   state, a result list with and without phone, the no-results answer
-   and the missing-WispHub-key wall. Run just this file:
-   pnpm exec playwright test --config playwright.review.config.ts tests/design/review-links.spec.ts */
+/* Design-review captures for the Links screen
+   (links-on-demand-search US1): the resting state, a result list with
+   and without phone, the no-results answer and the missing-WispHub-key
+   wall. Run just this file:
+   pnpm exec playwright test --config playwright.review.config.ts tests/design/review-links.spec.ts
+
+   D12: this used to stub `/direct-payments/links/search`, an endpoint
+   the pilot-UX round removed — the stub outlived it by two features and
+   fulfilled nothing. The shots point at the customers door now, which
+   is what the screen actually reads. */
 
 const OUT = ".design/screenshots";
 
@@ -14,37 +20,57 @@ test.use({ permissions: ["clipboard-write"] });
 
 const results = [
   {
-    wisphubId: 101,
+    channel: "panel",
     usuario: "greyes",
+    wisphubId: 101,
+    customerRef: null,
+    label: null,
+    askCents: null,
+    linkState: null,
     name: "Janely Reyes",
     phone: "5551234567",
+    hasLink: true,
     url: "https://link.dev.devoladapago.com/p/tok-greyes",
     waLink: "https://wa.me/525551234567?text=hola",
   },
   {
-    wisphubId: 102,
+    channel: "panel",
     usuario: "mreyesf",
+    wisphubId: 102,
+    customerRef: null,
+    label: null,
+    askCents: null,
+    linkState: null,
     name: "Mario Reyes Flores",
     phone: null,
-    url: "https://link.dev.devoladapago.com/p/tok-mreyesf",
-    waLink: "https://wa.me/?text=hola",
+    /* FR-008: no link yet, and the buttons show all the same */
+    hasLink: false,
+    url: null,
+    waLink: null,
   },
   {
-    wisphubId: 103,
+    channel: "panel",
     usuario: "reyna01",
+    wisphubId: 103,
+    customerRef: null,
+    label: null,
+    askCents: null,
+    linkState: null,
     name: "Reyna Domínguez",
     phone: "5559876543",
+    hasLink: true,
     url: "https://link.dev.devoladapago.com/p/tok-reyna01",
     waLink: "https://wa.me/525559876543?text=hola",
   },
 ];
 
-/* One search stub for every shot: "reyes" finds the trio, anything
-   else finds nobody. Registered after stubAdminApi so it wins. */
+/* One customers stub for every shot: a browse hands back the trio,
+   "reyes" finds them, anything else finds nobody. Registered after
+   stubAdminApi so it wins. */
 async function stubLinks(page: Page, opts: { fail?: boolean } = {}) {
   await stubAdminApi(page);
   await page.route(
-    (url) => url.pathname.endsWith("/direct-payments/links/search"),
+    (url) => url.pathname.endsWith("/direct-payments/customers"),
     (route) => {
       if (route.request().resourceType() === "document") return route.fallback();
       if (opts.fail) {
@@ -54,13 +80,20 @@ async function stubLinks(page: Page, opts: { fail?: boolean } = {}) {
           body: JSON.stringify({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }),
         });
       }
-      const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+      const q = new URL(route.request().url()).searchParams.get("q");
+      const rows = q === null || q.toLowerCase().includes("reyes") ? results : [];
       return route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           success: true,
-          data: { results: q.toLowerCase().includes("reyes") ? results : [] },
+          data: {
+            results: rows,
+            nextCursor: null,
+            matched: q === null ? null : rows.length,
+            total: q === null ? 6513 : null,
+            wisphub: "ok",
+          },
         }),
       });
     },

@@ -277,53 +277,9 @@ export const proofUploadResponse = z.object({
   proofId: z.string(),
 });
 
-/* GET /direct-payments/links — ISP session (US-D05, US-D06) */
-export const linksListQuery = z.object({
-  cursor: z.string().optional(),
-});
-
-export const linksListResponse = z.object({
-  links: z.array(
-    z.object({
-      token: z.string(),
-      usuario: z.string(),
-      url: z.string(),
-    }),
-  ),
-  nextCursor: z.string().nullable(),
-});
-
-/* GET /direct-payments/links/roster — ISP session (US-D07, pilot-UX
-   round: the whole tenant, searched client-side by contains) */
-export const linksRosterResponse = z.object({
-  results: z.array(
-    z.object({
-      /* automated-collections-api FR-011 (US1 scenario 11): one list per
-         business, every row marked with the channel that collects. */
-      channel: z.enum(["panel", "api"]),
-      /* Panel rows: the WispHub customer. Null on an API row. */
-      wisphubId: z.number().nullable(),
-      usuario: z.string().nullable(),
-      /* API rows: the caller's reference, its display name and the ask
-         stored on the row. Absent on a panel row. */
-      customerRef: z.string().optional(),
-      label: z.string().nullable().optional(),
-      askCents: z.number().int().optional(),
-      linkState: z.enum(["open", "paid", "expired"]).optional(),
-      name: z.string(),
-      phone: z.string().nullable(),
-      url: z.string(),
-      /* Ready to open (D3): the API owns the message and the country
-         code, exactly like the receipt's wa.me link. Falls back to
-         WhatsApp's contact picker when the stored phone is unreadable —
-         better than opening a stranger's chat (receipt spec D3). */
-      waLink: z.string(),
-    }),
-  ),
-  /* cobros-live's honesty flag, same meaning: the page cap was hit */
-  complete: z.boolean(),
-  readAt: z.number().int(),
-});
+/* links-on-demand-search D12: `linksListQuery`, `linksListResponse`
+   and `linksRosterResponse` are REMOVED with the two doors they
+   described. What replaced them is below. */
 
 /* ---- links-on-demand-search: the doors that replace the roster ---- */
 
@@ -430,6 +386,21 @@ export const createLinkRequest = z.object({
   usuario: z.string().trim().min(1),
 });
 
+/* GET /direct-payments/prune-notice — what the one-time cleanup removed
+   (FR-023, D13). Null when the prune has not run for this business yet,
+   when it deleted nothing, or when an operator has already dismissed
+   it: a count nobody saw is not a telling, and a count of zero is not
+   news.
+
+   Without this door the number reaches nobody — a platform-operator
+   endpoint would tell the operator, not the ISP whose links went. */
+export const pruneNoticeResponse = z
+  .object({
+    deletedCount: z.number().int(),
+    ranAt: z.number().int(),
+  })
+  .nullable();
+
 export const createLinkResponse = z.object({
   token: z.string(),
   url: z.string(),
@@ -449,9 +420,8 @@ export type PayResponse = z.infer<typeof payResponse>;
 export type DirectPaymentStatusResponse = z.infer<typeof directPaymentStatusResponse>;
 export type ProofUploadResponse = z.infer<typeof proofUploadResponse>;
 export type ProofReading = z.infer<typeof proofReadingResponse>;
-export type LinksListResponse = z.infer<typeof linksListResponse>;
-export type LinksRosterResponse = z.infer<typeof linksRosterResponse>;
 export type CustomersQuery = z.infer<typeof customersQuery>;
+export type PruneNoticeResponse = z.infer<typeof pruneNoticeResponse>;
 export type CustomerRow = z.infer<typeof customerRow>;
 export type CustomersResponse = z.infer<typeof customersResponse>;
 export type CreateLinkRequest = z.infer<typeof createLinkRequest>;

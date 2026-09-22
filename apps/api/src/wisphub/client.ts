@@ -97,18 +97,13 @@ function mapCustomer(c: WispHubListItem): WispHubCustomer {
   };
 }
 
-/* D1: the query type is detected, not selected.
-
-   Nothing calls this any more: links-on-demand-search D4 replaced the
-   guess with four `__contains` filters asked at once, and `getCustomer`
-   asks `usuario=` outright. It comes out with the roster it belonged to
-   (D12, tasks T045) rather than in the middle of a phase — left here so
-   that removal is one commit with one reason. */
-export function queryParamFor(q: string): "telefono" | "usuario" | "nombre" {
-  if (/^\d+$/.test(q)) return "telefono";
-  if (q.includes("@")) return "usuario";
-  return "nombre";
-}
+/* links-on-demand-search D12: `queryParamFor` is REMOVED. It chose a
+   filter from the shape of the text — digits meant `telefono`, an `@`
+   meant `usuario`, anything else meant `nombre` — which sent a usuario
+   of digits to the phone filter and answered "not found" for customers
+   who exist (`bug: customer-lookup-misses`). A search asks all four
+   `__contains` filters at once now (D4), and `getCustomer` asks
+   `usuario=` outright. */
 
 export type PendingInvoice = {
   invoiceId: number;
@@ -156,12 +151,6 @@ export type CustomerSearch = {
 /* links-on-demand-search D3: the band a browse block is clamped to */
 export const CUSTOMERS_BLOCK_MIN = 10;
 export const CUSTOMERS_BLOCK_MAX = 50;
-
-/* How deep a live read of the customer list goes before it says so:
-   ten pages of 100 was "the pilot scale with room" (direct-payment D5),
-   and it is what one admin request can pay. A tenant past it is read by
-   the sweep (bug: links-roster-cap). */
-export const ROSTER_LIVE_PAGES = 10;
 
 type WispHubListItem = {
   id_servicio: number;
@@ -317,29 +306,12 @@ export class WispHub {
     return { customers, total: count };
   }
 
-  /* The whole tenant, full shape — the Links roster (admin-links-view,
-     amended by the pilot-UX round: WispHub's own filters are
-     exact-match and the param was guessed, so "search" moved client-side
-     over this list). Up to `ROSTER_LIVE_PAGES` of 100; `complete` says
-     whether the cap was hit — and bug: links-roster-cap reads a tenant
-     this cannot finish by the sweep instead (`snapshot.ts`), page by
-     page through `customersPage` below. */
-  async listCustomersFull(): Promise<{ customers: WispHubCustomer[]; complete: boolean }> {
-    const customers: WispHubCustomer[] = [];
-    let path: string | null = this.customersPath();
-    for (let page = 0; page < ROSTER_LIVE_PAGES && path; page++) {
-      const data: CustomersPage = await this.customersPage(path);
-      customers.push(...data.customers);
-      path = data.next;
-    }
-    return { customers, complete: path === null };
-  }
-
-  /* The first page of the customer list — where a pass begins, whether
-     the live read's or the sweep's. */
-  customersPath(): string {
-    return "/clientes/?limit=100";
-  }
+  /* links-on-demand-search D12: `listCustomersFull` and `customersPath`
+     are REMOVED. Reading the whole customer base — ten pages of a
+     hundred, and a link written for every row — is what this feature
+     exists to end (FR-001, FR-008). `customersPage` STAYS: the walk
+     unit is what `snapshot.ts` resumes from, and the `pending` pass
+     still uses the same machinery. */
 
   /* One page of the customer list and the path of the next — the unit
      the sweep stores and resumes from (bug: links-roster-cap). A row

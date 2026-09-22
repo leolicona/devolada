@@ -287,6 +287,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/integrations", integrationsHub);
   await apiRoute(page, "**/integrations/api", apiIntegration);
   await apiRoute(page, "**/direct-payments/customers*", customersBlock);
+  /* links-on-demand-search D13: nothing to be told, which is what every
+     business sees once the one-time cleanup has been dismissed */
+  await apiRoute(page, "**/direct-payments/prune-notice", null);
   await apiRoute(page, "**/direct-payments/links", createdLink);
   await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
 }

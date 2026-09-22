@@ -102,3 +102,20 @@ creator, neither blocking: confirm `limit=300` on `/clientes/` and take the
 one call, which means the **money path** of `pending-invoice-cap` could drop
 its snapshot for a live per-customer read and keep the sweep for Cobros
 alone. That is a separate decision on the merged fix, worth its own entry.
+
+---
+
+**Superseded by `009-links-on-demand-search` (D12).** The roster this
+verified is retired: `GET /direct-payments/links/roster`, `GET
+/direct-payments/links`, `WispHub.listCustomersFull`, `rosterForDisplay`,
+`readRoster`, the sweep's `roster` pass and the bulk link writer all went
+together. A page of customers is read from WispHub when it renders, and one
+block is one call — so a tenant too large to read whole is no longer a case
+that can arise, and the background pass that read it has nothing to read.
+
+`apps/api/test/links-roster-cap.test.ts` was deleted with them. What it proved
+that still matters lives on: the sweep machinery itself, its lease, its pages
+and its resume are unchanged and still proved by the `pending` pass, which is
+what Cobros and every money path read. The `sweep_kind` enum keeps both values;
+the orphaned `roster` sweep and page rows are deleted by the one-time prune
+(`apps/api/src/links/prune.ts`). The history above is not edited.

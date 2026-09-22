@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
-import { businessActor, cobros, feed, integrationsHub, linksRoster } from "../e2e/stubs";
+import { businessActor, cobros, feed, integrationsHub, customersBlock } from "../e2e/stubs";
 
 /* feedback-vocabulary-rollout US1/US2 — the screens a reviewer should look at.
 
@@ -35,7 +35,7 @@ async function stubAdmin(page: Page) {
   await json(page, "**/payments/feed*", feed);
   await json(page, "**/payment-requests", cobros);
   await json(page, "**/integrations", integrationsHub);
-  await json(page, "**/direct-payments/links/roster", linksRoster);
+  await json(page, "**/direct-payments/customers*", customersBlock);
 }
 
 /* The breath is an opacity animation, so a still frame of it is a coin toss.

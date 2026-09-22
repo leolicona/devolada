@@ -72,21 +72,21 @@ types and fixtures from (constitution III).
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Write `apps/api/test/links-customers.test.ts` citing `links-on-demand-search US1`: browse walks API links then the provider's list, the cursor carries its phase, `limit` is clamped, rows dedupe by identity, a search merges four filters, `matched` is the largest count, `q` under three characters is `VALIDATION_ERROR`, test links never appear (FR-017)
-- [ ] T009 [P] [US1] Write `apps/api/test/links-create-on-act.test.ts` citing `links-on-demand-search US1`: `POST /direct-payments/links` creates on first call and returns the same link on the second, a viewer gets `FORBIDDEN_FOR_ROLE`, no CLABE is `SPEI_NOT_CONFIGURED`, an unknown usuario is `CUSTOMER_NOT_FOUND`, and listing or searching creates nothing
-- [ ] T010 [P] [US1] Write `apps/api/test/links-identity-only.test.ts` citing `links-on-demand-search US1` for **FR-010**: after an act, the `payment_links` row carries `customer_usuario` and Devolada's own fields and **nothing about the customer** — no name, no phone, no service state — and a second act on a customer whose provider name changed writes no name either
-- [ ] T011 [US1] Replace the `linksRoster` handler at `apps/admin/test/msw.ts:95` with a `customers` handler answering `customersResponse`, plus a `createLink` handler. **This file is shared by the whole admin suite and must land before T012 and before every Phase 7 admin task**
-- [ ] T012 [US1] Rewrite `apps/admin/test/links.test.tsx` onto the new door, replacing its `US-D07` citation with `links-on-demand-search US1`: a row without a link still shows both buttons, pressing Copiar calls the create door once, and `axe` passes on the rendered screen
+- [X] T008 [P] [US1] Write `apps/api/test/links-customers.test.ts` citing `links-on-demand-search US1`: browse walks API links then the provider's list, the cursor carries its phase, `limit` is clamped, rows dedupe by identity, a search merges four filters, `matched` is the largest count, `q` under three characters is `VALIDATION_ERROR`, test links never appear (FR-017)
+- [X] T009 [P] [US1] Write `apps/api/test/links-create-on-act.test.ts` citing `links-on-demand-search US1`: `POST /direct-payments/links` creates on first call and returns the same link on the second, a viewer gets `FORBIDDEN_FOR_ROLE`, no CLABE is `SPEI_NOT_CONFIGURED`, an unknown usuario is `CUSTOMER_NOT_FOUND`, and listing or searching creates nothing
+- [X] T010 [P] [US1] Write `apps/api/test/links-identity-only.test.ts` citing `links-on-demand-search US1` for **FR-010**: after an act, the `payment_links` row carries `customer_usuario` and Devolada's own fields and **nothing about the customer** — no name, no phone, no service state — and a second act on a customer whose provider name changed writes no name either
+- [X] T011 [US1] Replace the `linksRoster` handler at `apps/admin/test/msw.ts:95` with a `customers` handler answering `customersResponse`, plus a `createLink` handler. **This file is shared by the whole admin suite and must land before T012 and before every Phase 7 admin task**
+- [X] T012 [US1] Rewrite `apps/admin/test/links.test.tsx` onto the new door, replacing its `US-D07` citation with `links-on-demand-search US1`: a row without a link still shows both buttons, pressing Copiar calls the create door once, and `axe` passes on the rendered screen
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Implement `listCustomers` in `apps/api/src/routes/direct-payments/handler.ts`: browse in two phases (D2), search over four filters plus the business's API links (D4), merge and dedupe (D6), report `matched` as a floor (D5)
-- [ ] T014 [US1] Implement `createLink` in `apps/api/src/routes/direct-payments/handler.ts`: exact `usuario=` lookup for the numeric id **and the phone**, then `ensureLink`, returning a `waLink` built from that phone through `toWhatsAppPhone` (FR-028, D16), behind `requireArea("payments", "operate")` and the CLABE gate (D8, FR-016)
-- [ ] T015 [US1] Wire `GET /customers` and `POST /links` in `apps/api/src/routes/direct-payments/index.ts` with `zValidator` only — no logic in the router (constitution III); leave the old routes in place until Phase 7
-- [ ] T016 [P] [US1] Add `apps/admin/src/features/links/useCustomers.ts`: `useInfiniteQuery` over the cursor, block size measured from the viewport and clamped, an `IntersectionObserver` sentinel for the next block (FR-020, D3), a **300 ms** debounce before a search leaves the browser (FR-002, the figure the spec now carries), discarding an in-flight answer whose text no longer matches the box (FR-013, US1 scenario 9), and re-reading the **first block only** on return to the tab, no more than once every 30 seconds (FR-027, D15)
-- [ ] T017 [P] [US1] Add `apps/admin/src/features/links/useLinkAction.ts`: create-on-act for Copiar and WhatsApp, opening the WhatsApp window synchronously on the click and setting its location to the door's `waLink` when the POST resolves, closing it on failure (D9). The `waLink` carries the phone the act read, so the customer's own chat opens (FR-028, D16); `toWhatsAppPhone`'s rules are unchanged, and the picker is the fallback only for a number it refuses (FR-019)
-- [ ] T018 [P] [US1] Add `apps/admin/src/features/links/seen.ts` with all three `sessionStorage` stores it will ever hold — search results, recently seen names and phones, and the copied/sent marks (D11) — so US2 and US3 consume one module rather than each editing it
-- [ ] T019 [US1] Rewrite `apps/admin/src/features/links/LinksScreen.tsx` around the search box and the scrolling blocks: no roster read, no "la lista puede estar incompleta" warning (FR-018), **no read-age indicator and no "Actualizar"** (FR-027, D15 — the `Freshness` component this screen renders today goes), both buttons on every row the role allows, the copied/sent mark rendered from `seen.ts` (FR-022), tokens only and `StatusBadge` for the channel
+- [X] T013 [US1] Implement `listCustomers` in `apps/api/src/routes/direct-payments/handler.ts`: browse in two phases (D2), search over four filters plus the business's API links (D4), merge and dedupe (D6), report `matched` as a floor (D5)
+- [X] T014 [US1] Implement `createLink` in `apps/api/src/routes/direct-payments/handler.ts`: exact `usuario=` lookup for the numeric id **and the phone**, then `ensureLink`, returning a `waLink` built from that phone through `toWhatsAppPhone` (FR-028, D16), behind `requireArea("payments", "operate")` and the CLABE gate (D8, FR-016)
+- [X] T015 [US1] Wire `GET /customers` and `POST /links` in `apps/api/src/routes/direct-payments/index.ts` with `zValidator` only — no logic in the router (constitution III); leave the old routes in place until Phase 7
+- [X] T016 [P] [US1] Add `apps/admin/src/features/links/useCustomers.ts`: `useInfiniteQuery` over the cursor, block size measured from the viewport and clamped, an `IntersectionObserver` sentinel for the next block (FR-020, D3), a **300 ms** debounce before a search leaves the browser (FR-002, the figure the spec now carries), discarding an in-flight answer whose text no longer matches the box (FR-013, US1 scenario 9), and re-reading the **first block only** on return to the tab, no more than once every 30 seconds (FR-027, D15)
+- [X] T017 [P] [US1] Add `apps/admin/src/features/links/useLinkAction.ts`: create-on-act for Copiar and WhatsApp, opening the WhatsApp window synchronously on the click and setting its location to the door's `waLink` when the POST resolves, closing it on failure (D9). The `waLink` carries the phone the act read, so the customer's own chat opens (FR-028, D16); `toWhatsAppPhone`'s rules are unchanged, and the picker is the fallback only for a number it refuses (FR-019)
+- [X] T018 [P] [US1] Add `apps/admin/src/features/links/seen.ts` with all three `sessionStorage` stores it will ever hold — search results, recently seen names and phones, and the copied/sent marks (D11) — so US2 and US3 consume one module rather than each editing it
+- [X] T019 [US1] Rewrite `apps/admin/src/features/links/LinksScreen.tsx` around the search box and the scrolling blocks: no roster read, no "la lista puede estar incompleta" warning (FR-018), **no read-age indicator and no "Actualizar"** (FR-027, D15 — the `Freshness` component this screen renders today goes), both buttons on every row the role allows, the copied/sent mark rendered from `seen.ts` (FR-022), tokens only and `StatusBadge` for the channel
 
 **Checkpoint**: US1 is complete, including scenario 9 and the copied/sent mark. Nothing creates a link but an operator's press.
 
@@ -153,21 +153,31 @@ existing test files read the roster. The constitution forbids skipping,
 disabling or quarantining any of them to get green, so each is moved to the new
 door first and the door is removed second.
 
+**Five of them moved in Phase 3, not here (2026-09-22).** T019 rewrites the
+Links *screen*, and five files render that screen: `apps/admin/test/msw.ts`
+(T011), `links.test.tsx` (T012), `identity-round.test.tsx` (T037),
+`presence-freshness.test.tsx` (T038), `memberships.test.tsx` and
+`shell.test.tsx` (T040), plus the Playwright stubs the screen reads through
+(T039, T042). The task list assumed the screen kept reading the roster until
+this phase; it does not, so those tasks came forward with it rather than
+leaving the admin suite red for four phases. The API-side migration
+(T033–T036) and the removals stay here, where the API doors still are.
+
 ### Test migration — real assertions to rewrite
 
 - [ ] T033 [US1] Rewrite `apps/api/test/direct-payments-links.test.ts` onto `GET /direct-payments/customers`, **keeping** the `bug: links-refused-key` case that asserts a refused key answers 503 with `WISPHUB_AUTH_FAILED`, and re-citing the roster-era `US-D07` cases as `links-on-demand-search US1`
 - [ ] T034 [US1] Retire the roster cases of `apps/api/test/presence-freshness.test.ts` (scenario 9: "two roster reads inside the window answer the same readAt"), recording in the file that FR-027 / D15 replaced the promise — a block is read when it renders, so no two blocks share a `readAt`. The invoice-read cases in the same file are untouched
 - [ ] T035 [US1] Move FR-017's proof in `apps/api/test/collections-api-test-mode.test.ts:175` from the roster to the new customers door, keeping the one-predicate rule (`realOnly`) with the same call-site coverage
 - [ ] T036 [US1] Fix the premise in `apps/api/test/payment-requests.test.ts:100` — "all of whom the roster had already given a link" is false after US4; the fixture must cover a debtor with no link
-- [ ] T037 [P] [US1] Rewrite `apps/admin/test/identity-round.test.tsx:110` ("Links: the roster reads, the share buttons wait for the CLABE") against the new screen; the CLABE gate itself is unchanged (FR-016)
-- [ ] T038 [P] [US1] Rebuild `apps/admin/test/presence-freshness.test.tsx` on blocks per FR-027 / D15: the age indicator is gone and its assertions with it, while the re-read on return to the tab and its 30-second floor **stay** and now apply to the first block only
-- [ ] T039 [US1] Rewrite `tests/e2e/keyboard.spec.ts` tab-order assertions, which rest on "the roster arrives alive on arrival" (lines 98–114); the first block arrives after a provider read, so the reading order and the wait both change
+- [X] T037 [P] [US1] Rewrite `apps/admin/test/identity-round.test.tsx:110` ("Links: the roster reads, the share buttons wait for the CLABE") against the new screen; the CLABE gate itself is unchanged (FR-016)
+- [X] T038 [P] [US1] Rebuild `apps/admin/test/presence-freshness.test.tsx` on blocks per FR-027 / D15: the age indicator is gone and its assertions with it, while the re-read on return to the tab and its 30-second floor **stay** and now apply to the first block only
+- [X] T039 [US1] Rewrite `tests/e2e/keyboard.spec.ts` tab-order assertions, which rest on "the roster arrives alive on arrival" (lines 98–114); the first block arrives after a provider read, so the reading order and the wait both change
 
 ### Test migration — mechanical handler swaps
 
-- [ ] T040 [P] [US1] Swap `handlers.linksRoster` for the customers handler in `apps/admin/test/memberships.test.tsx:223` and `apps/admin/test/shell.test.tsx:167`
+- [X] T040 [P] [US1] Swap `handlers.linksRoster` for the customers handler in `apps/admin/test/memberships.test.tsx:223` and `apps/admin/test/shell.test.tsx:167`
 - [ ] T041 [P] [US1] Update the stale "client roster" comment in `apps/admin/test/feedback.test.tsx:72` — comment only, no assertion changes
-- [ ] T042 [P] [US1] Replace the roster stub with a customers stub in `tests/e2e/stubs.ts`, `tests/design/review-foundations.spec.ts` and `tests/design/review-feedback.spec.ts`
+- [X] T042 [P] [US1] Replace the roster stub with a customers stub in `tests/e2e/stubs.ts`, `tests/design/review-foundations.spec.ts` and `tests/design/review-feedback.spec.ts`
 - [ ] T043 [P] [US1] Remove the dead `/direct-payments/links/search` stub from `tests/design/review-links.spec.ts` — that endpoint went in the pilot-UX round and the stub outlived it — and point its shots at the new door (D12)
 
 ### Retirement

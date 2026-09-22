@@ -107,23 +107,35 @@ describe("US-B01 / D5: a business born without a CLABE wears a banner and shares
     expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/settings/direct-payment#spei");
   });
 
-  it("Links: the roster reads, the share buttons wait for the CLABE", async () => {
+  /* links-on-demand-search US1: the roster became the customers door,
+     and most rows no longer carry a link at all (FR-008). The gate is
+     unchanged — a link nobody can pay is not shared (FR-016) — which is
+     the whole point of testing it against the new screen. */
+  it("Links: the customers read, the share buttons wait for the CLABE", async () => {
     server.use(
       handlers.session(() => ok({ ...businessActor, speiConfigured: false })),
-      handlers.linksRoster(() =>
+      handlers.customers(() =>
         ok({
           results: [
             {
-              wisphubId: 1,
+              channel: "panel",
               usuario: "greyes",
+              wisphubId: 1,
+              customerRef: null,
+              label: null,
+              askCents: null,
+              linkState: null,
               name: "Janely Reyes",
               phone: "5551234567",
-              url: "https://link.dev.devoladapago.com/p/tok",
-              waLink: "https://wa.me/525551234567?text=hola",
+              hasLink: false,
+              url: null,
+              waLink: null,
             },
           ],
-          complete: true,
-          readAt: Date.now(),
+          nextCursor: null,
+          matched: null,
+          total: 1,
+          wisphub: "ok",
         }),
       ),
     );

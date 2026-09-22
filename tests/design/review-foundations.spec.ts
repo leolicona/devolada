@@ -6,7 +6,7 @@ import {
   feed,
   cobros,
   integrationsHub,
-  linksRoster,
+  customersBlock,
   proofReading,
   stubPagoApi,
 } from "../e2e/stubs";
@@ -67,7 +67,7 @@ async function stubAdmin(page: Page) {
   await json(page, "**/payments/feed*", feed);
   await json(page, "**/payment-requests", cobros);
   await json(page, "**/integrations", integrationsHub);
-  await json(page, "**/direct-payments/links/roster", linksRoster);
+  await json(page, "**/direct-payments/customers*", customersBlock);
   await json(page, "**/businesses/members", members);
   await json(page, "**/payments/*/proof", proof);
 }

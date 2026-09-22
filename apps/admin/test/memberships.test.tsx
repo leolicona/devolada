@@ -220,19 +220,38 @@ describe("US-B03: roles hide, never tease", () => {
   it("scenario 8 (UI): a viewer sees the customer on Links and nothing to press", async () => {
     server.use(
       handlers.session(() => ok(asRole("viewer"))),
-      handlers.linksRoster(() =>
+      /* links-on-demand-search D1 (US1): the customers door, and a
+         customer whose link is not born yet — the viewer must see them
+         all the same, with nothing to press (FR-016) */
+      handlers.customers(() =>
         ok({
           results: [
-            { wisphubId: 6, usuario: "greyes@wifiplus", name: "Janely Reyes", phone: null, url: "https://pago.test/p/tok", waLink: "https://wa.me/?text=x" },
+            {
+              channel: "panel",
+              usuario: "greyes@wifiplus",
+              wisphubId: 6,
+              customerRef: null,
+              label: null,
+              askCents: null,
+              linkState: null,
+              name: "Janely Reyes",
+              phone: null,
+              hasLink: false,
+              url: null,
+              waLink: null,
+            },
           ],
-          complete: true,
-          readAt: Date.now(),
+          nextCursor: null,
+          matched: null,
+          total: 1,
+          wisphub: "ok",
         }),
       ),
     );
     renderApp("/links");
     expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /copiar/i })).not.toBeInTheDocument();
   });
 });
 

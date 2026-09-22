@@ -91,8 +91,14 @@ export const handlers = {
     http.patch("/settings", async ({ request }) => r(await request.json())),
   testWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/settings/wisphub/test", async ({ request }) => r(await request.json())),
-  linksRoster: (r: () => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/direct-payments/links/roster", () => r()),
+  /* links-on-demand-search D1 (US1): the roster is gone — one door for
+     browsing and searching the ISP's customers, and one for the act
+     that creates a link. Shared by the whole admin suite: every screen
+     that renders /links takes its rows from here. */
+  customers: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/direct-payments/customers", ({ request }) => r(new URL(request.url))),
+  createLink: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/direct-payments/links", async ({ request }) => r(await request.json())),
   /* business-and-memberships (US-B01–B03) */
   getSession: (r: () => Response) => http.get("/auth/get-session", () => r()),
   logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),

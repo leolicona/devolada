@@ -188,15 +188,30 @@ person with the real tenant in front of them:
 
 ## Pre-flight — the items only a person can do
 
-1. **Set `PRUNE_CUTOVER_MS` to the real ship timestamp** at the release step,
-   not before (D13). A cutover in the future deletes links the feature has just
-   created; a cutover long past leaves the roster's links in place.
+1. ~~**Set `PRUNE_CUTOVER_MS` to the real ship timestamp**~~ — **done
+   2026-09-22: `1790107200000`, which is `2026-09-22T20:00:00Z`.**
+
+   The two failure modes are not symmetrical, and that is what picked the
+   value. A cutover **after** the moment the new code went live deletes links
+   FR-008 has already created — links an operator made and may have sent, the
+   one outcome with a real cost. A cutover **before** it leaves roster-made
+   links behind, which costs almost nothing: the roster only ever created a
+   link for a customer it had never seen, so what survives is the handful
+   belonging to customers the ISP added between that instant and the deploy.
+
+   So the value is as late as it safely can be and no later — a release
+   commit's own timestamp, which cannot overshoot, because the commit has to
+   exist before CI can deploy it. Never `Date.now()` at run time (D13).
 2. **Clear any `link_prunes` row written before the cutover was set.** The row's
    existence is the only thing that stops the pass, so a row left from the unset
    window means that business is never pruned. The guard in `prunePanelLinks`
-   (T058) stops new ones being written, but dev already carries rows from before
-   it — every one of them `deleted_count: 0`. Delete them before the release, and
-   check none survive:
+   (T058) stops new ones being written.
+
+   **Done on dev 2026-09-22**: three rows, every one `deleted_count: 0`, written
+   in the same cron tick that followed the 009 deploy. Cleared, and the ledger
+   stayed empty across the following ticks — which is the guard proved on real
+   infrastructure rather than in a test. Prod never ran the pass under the old
+   code, so it should return nothing; if it does not, the same rule applies:
 
    ```sh
    # from apps/api, against dev's deployed D1 — read first, then delete

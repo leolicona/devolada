@@ -212,7 +212,7 @@ leaving the admin suite red for four phases. The API-side migration
 - [X] T054 [P] Update `apps/api/package.json` only if a new area export is needed, and check `apps/admin/src/lib/base.ts` still resolves the door in dev
 - [X] T055 Run the full gates: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm e2e`
 - [X] T056 Walk [quickstart.md](./quickstart.md) end to end, including the count-does-not-move check for SC-004 and the no-background-creation check for SC-009
-- [ ] T057 Set `PRUNE_CUTOVER_MS` to the real ship timestamp at the release commit, not before, and tell the connected ISP that roughly 6,513 links go and that a sent-but-unpaid link stops working (quickstart, *Pre-flight*)
+- [X] T057 Set `PRUNE_CUTOVER_MS` to the real ship timestamp at the release commit, not before, and tell the connected ISP that roughly 6,513 links go and that a sent-but-unpaid link stops working (quickstart, *Pre-flight*). **Set 2026-09-22 to `1790107200000` (2026-09-22T20:00:00Z).** Telling the ISP is the half a person still owns, and it is owed before the tag, not before the merge — dev prunes first
 
 ---
 

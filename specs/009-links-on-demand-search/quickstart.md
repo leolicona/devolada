@@ -152,6 +152,40 @@ node scripts/pending-lint.mjs
 pnpm e2e                       # scroll, 360/768/1280, both themes, axe
 ```
 
+## The walk, as taken (2026-09-22)
+
+Walked end to end against a local `wrangler dev --local` with the demo
+seed, on the implementation branches. What it proved, live:
+
+| Check | Result |
+| --- | --- |
+| `?limit=20` browse | `200`, the envelope, `wisphub: "not_configured"` — a business with no key is answered, never refused (FR-015) |
+| `?q=ma` | `VALIDATION_ERROR` — two characters never reach the provider (FR-002) |
+| `?q=mar` | `200`, the same shape |
+| **SC-004** | six searches and four browses moved the link count by **zero** |
+| **SC-009** | nine cron ticks created **zero** links |
+| The prune | ran once, wrote one row (`deleted_count: 0`, since `PRUNE_CUTOVER_MS` is still 0), and nine ticks later there is still exactly one row — idempotent by construction (D13) |
+| `GET /direct-payments/prune-notice` | `null` — a count of zero is not news (FR-023) |
+| `POST /direct-payments/links` with no key | `WISPHUB_NOT_CONFIGURED` — the act needs a fresh read and says so (D8) |
+| `GET /direct-payments/links/roster` | **404** — the roster is gone (D12) |
+
+**What this walk could not reach**, and what therefore still needs a
+person with the real tenant in front of them:
+
+- Anything that needs WispHub to answer. The environment this ran in
+  denies `wisphub.net` by policy, and the demo seed connects no
+  provider, so every read answered `not_configured`. The browse with
+  real rows, the four-filter search, the act creating a link from a live
+  customer, the WhatsApp window opening on the customer's own chat
+  (FR-028) and US3's *provider present but silent* half are all unproven
+  outside the test suites, which mock the provider at its own origin.
+- The three panel walks — US2's five ways of leaving the page, US4's
+  Cobros round trip, and the prune notice being dismissed on screen.
+- The SC-001/002/003 numbers against the REAL provider. The browser
+  layer measured them against a 500 ms stub
+  (`tests/e2e/links.spec.ts`): 0.25 s ready, 1.34 s to results, 2.41 s
+  to find-and-send, against targets of 1 s, 3 s and 15 s.
+
 ## Pre-flight — the items only a person can do
 
 1. **Set `PRUNE_CUTOVER_MS` to the real ship timestamp** at the release step,

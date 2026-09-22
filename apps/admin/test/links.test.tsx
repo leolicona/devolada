@@ -515,3 +515,79 @@ describe("US2: the text lives in the address and the results in the session", ()
     );
   });
 });
+
+/* links-on-demand-search US3: search keeps working when WispHub does
+   not.
+
+   A provider outage narrows what can be found and SAYS so; it never
+   empties the page and never raises an error block (FR-014). What
+   narrows: Devolada's own rows carry a usuario and a reference and
+   nothing about the person (FR-010), so a name only reaches someone
+   this session already saw — which is exactly what the recently-seen
+   cache is for (FR-021). */
+describe("US3: the provider is away, and the page says so instead of failing", () => {
+  const offline = (rows: unknown[] = []) =>
+    block(rows, { wisphub: "unavailable", total: null });
+
+  it("FR-014: the quiet note, the rows that remain, and no error block", async () => {
+    arrange(() => ok(offline([api()])));
+    expect(await screen.findByText("Ana Ruiz")).toBeInTheDocument();
+    expect(await screen.findByText(/sin conexión a wisphub/i)).toBeInTheDocument();
+    /* Never the error block: that one is for a failure with nothing to
+       show (list-states D1) */
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("FR-021: a customer seen minutes earlier is still found by name, from the cache", async () => {
+    let away = false;
+    arrange((url) => {
+      if (url.searchParams.get("q") === null) return ok(block(twoCustomers()));
+      /* The search leaves after the provider has gone */
+      away = true;
+      return ok(offline());
+    });
+    /* Seen while the provider was up */
+    await screen.findByText("Janely Reyes");
+
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "janely");
+
+    /* Wait for the ANSWER, not for a row: the browse's rows are still on
+       screen through the pause, and asserting on them would pass before
+       the search had left the browser */
+    expect(await screen.findByText(/sin conexión a wisphub/i)).toBeInTheDocument();
+    expect(away).toBe(true);
+    /* Nothing came back from the door, and she is on screen anyway */
+    expect(screen.getByText("Janely Reyes")).toBeInTheDocument();
+    /* And the page says plainly what a name can and cannot reach now */
+    expect(screen.getByText(/buscar por nombre necesita wisphub/i)).toBeInTheDocument();
+  });
+
+  it("FR-014: a text nobody matched while the provider is away is not 'nobody matched'", async () => {
+    arrange((url) => (url.searchParams.get("q") === null ? ok(block(twoCustomers())) : ok(offline())));
+    await screen.findByText("Janely Reyes");
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "zzz");
+
+    expect(await screen.findByText(/sin wisphub no encontramos a «zzz»/i)).toBeInTheDocument();
+    expect(screen.queryByText(/ningún cliente coincide/i)).not.toBeInTheDocument();
+  });
+
+  it("FR-015: a business that never connected WispHub is told where links come from, box empty or not", async () => {
+    server.use(
+      handlers.session(() => ok({ ...businessActor, integrationConfigured: false })),
+      handlers.customers(() => ok(block([], { wisphub: "not_configured", total: null }))),
+    );
+    renderApp("/links");
+    expect(await screen.findByText(/tu sistema puede crearlos desde la api de cobros/i)).toBeInTheDocument();
+
+    cleanup();
+    resetSeenForTests();
+    server.use(
+      handlers.session(() => ok({ ...businessActor, integrationConfigured: false })),
+      handlers.customers(() => ok(block([], { wisphub: "not_configured", total: null }))),
+    );
+    renderApp("/links?q=ana");
+    expect(await screen.findByText(/tu sistema puede crearlos desde la api de cobros/i)).toBeInTheDocument();
+  });
+});

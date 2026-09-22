@@ -133,11 +133,11 @@ types and fixtures from (constitution III).
 
 **Independent Test**: with WispHub unreachable, search by usuario for a customer whose link Devolada holds, by name for one seen minutes earlier, and by reference for an API link — all three appear under a quiet note; a customer not held gives an empty result under the same note and no error block.
 
-- [ ] T028 [P] [US3] Write `apps/api/test/links-offline.test.ts` citing `links-on-demand-search US3`: a provider timeout answers `200` with `wisphub: "unavailable"` and the API links only, a business with no key answers `"not_configured"`, a rejected key still answers `503 WISPHUB_AUTH_FAILED` (as `bug: links-refused-key` requires), and `POST /links` does fail when the provider is silent
-- [ ] T029 [US3] Add US3 cases to `apps/admin/test/links.test.tsx` citing `links-on-demand-search US3` — after T025, same file: the note renders, no error block appears, a name seen minutes earlier is still found from the cache, and the empty state names where links come from
-- [ ] T030 [US3] Make `listCustomers` answer a provider outage inside the envelope in `apps/api/src/routes/direct-payments/handler.ts` — never a 503 — while keeping `WISPHUB_AUTH_FAILED` its own 503 answer (D10, FR-014)
-- [ ] T031 [US3] Wire the seen-names store of `seen.ts` into `useCustomers.ts`: always overwritten by a live answer, read only when the provider did not answer (FR-021, D11)
-- [ ] T032 [US3] Render the quiet *"Sin conexión a WispHub"* note, the "a name search needs WispHub" line and the no-WispHub empty state in `apps/admin/src/features/links/LinksScreen.tsx` (FR-014, FR-015)
+- [X] T028 [P] [US3] Write `apps/api/test/links-offline.test.ts` citing `links-on-demand-search US3`: a provider timeout answers `200` with `wisphub: "unavailable"` and the API links only, a business with no key answers `"not_configured"`, a rejected key still answers `503 WISPHUB_AUTH_FAILED` (as `bug: links-refused-key` requires), and `POST /links` does fail when the provider is silent
+- [X] T029 [US3] Add US3 cases to `apps/admin/test/links.test.tsx` citing `links-on-demand-search US3` — after T025, same file: the note renders, no error block appears, a name seen minutes earlier is still found from the cache, and the empty state names where links come from
+- [X] T030 [US3] Make `listCustomers` answer a provider outage inside the envelope in `apps/api/src/routes/direct-payments/handler.ts` — never a 503 — while keeping `WISPHUB_AUTH_FAILED` its own 503 answer (D10, FR-014)
+- [X] T031 [US3] Wire the seen-names store of `seen.ts` into `useCustomers.ts`: always overwritten by a live answer, read only when the provider did not answer (FR-021, D11)
+- [X] T032 [US3] Render the quiet *"Sin conexión a WispHub"* note, the "a name search needs WispHub" line and the no-WispHub empty state in `apps/admin/src/features/links/LinksScreen.tsx` (FR-014, FR-015)
 
 **Checkpoint**: all four stories work; the retirement can begin.
 

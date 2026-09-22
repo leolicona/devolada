@@ -261,10 +261,23 @@ export function LinksScreen() {
       {customers.offline && (
         <p
           role="status"
-          className="mt-6 flex max-w-lg items-center gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
+          className="mt-6 flex max-w-lg items-start gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
         >
-          <WifiOff className="size-4 shrink-0" aria-hidden />
-          Sin conexión a WispHub. Mostrando la última lectura.
+          <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            Sin conexión a WispHub. Mostrando la última lectura.
+            {/* FR-014 / FR-021: what the operator can still do, said
+                once and plainly. Searching by name needs WispHub —
+                Devolada's own rows carry the usuario and the reference
+                and nothing about the person (FR-010) — so a name only
+                finds someone this session already saw. */}
+            {searching && (
+              <span className="block">
+                Buscar por nombre necesita WispHub: por ahora encontramos por usuario, por
+                referencia y a quienes ya viste en esta sesión.
+              </span>
+            )}
+          </span>
         </p>
       )}
 
@@ -308,13 +321,20 @@ export function LinksScreen() {
 
           {!customers.isPending && !customers.searching && shown === 0 && !customers.isError && (
             <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-              {searching
-                ? `Ningún cliente coincide con «${customers.answering}».`
-                : wisphubConnected
-                  ? "WispHub no devolvió clientes todavía."
-                  : /* FR-015: a business without WispHub — its links come
-                       from the API, or from connecting WispHub */
-                    "Todavía no hay links de pago. Tu sistema puede crearlos desde la API de cobros, o conecta WispHub en Integraciones."}
+              {customers.wisphub === "not_configured"
+                ? /* FR-015: a business without WispHub — its links come
+                     from the API, or from connecting WispHub. The same
+                     sentence whether the box is empty or not: what is
+                     missing is the connection, not the search. */
+                  "Todavía no hay links de pago. Tu sistema puede crearlos desde la API de cobros, o conecta WispHub en Integraciones."
+                : customers.offline && searching
+                  ? /* FR-014: not "nobody matched" — we could not ask */
+                    `Sin WispHub no encontramos a «${customers.answering}». Devolada solo puede buscar por usuario, por referencia y entre quienes ya viste.`
+                  : searching
+                    ? `Ningún cliente coincide con «${customers.answering}».`
+                    : wisphubConnected
+                      ? "WispHub no devolvió clientes todavía."
+                      : "Todavía no hay links de pago. Tu sistema puede crearlos desde la API de cobros, o conecta WispHub en Integraciones."}
             </p>
           )}
 

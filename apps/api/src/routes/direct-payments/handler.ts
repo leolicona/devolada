@@ -1231,6 +1231,65 @@ async function apiLinksOf(db: DrizzleD1Database, businessId: string): Promise<Ap
   return rows.filter(isApiLink);
 }
 
+/* links-on-demand-search D10: the provider being down is an ANSWER, not
+   a failure (FR-014). A rejected key is the one exception — it is a
+   setup problem the ISP must fix, not an outage to ride out, and
+   `bug: links-refused-key` asserts it keeps its own 503. Anything that
+   is not the adapter's own error is a bug in ours and is rethrown. */
+function providerIsAway(e: unknown): boolean {
+  if (!(e instanceof WispHubError)) throw e;
+  return e.code !== "WISPHUB_AUTH_FAILED";
+}
+
+/* What Devolada can still answer a search with when WispHub cannot
+   (FR-003, FR-014): its own panel links, matched by the identity they
+   carry. That identity is ALL they carry — FR-010 keeps the name, the
+   phone and the service state out of the row — so these come back
+   nameless, and the browser fills them in from the customers it saw
+   minutes ago (FR-021). Between the two, the operator can still find
+   and send to the customer whose link Devolada holds.
+
+   Panel links are only searched when the provider did not answer: when
+   it does, `usuario__contains` covers the same ground live, and merging
+   the two would mean deduping one customer against themselves. */
+async function panelLinksMatching(
+  db: DrizzleD1Database,
+  businessId: string,
+  needle: string,
+  limit: number,
+  baseUrl: string,
+): Promise<CustomerRow[]> {
+  const rows = await db
+    .select()
+    .from(paymentLinks)
+    .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.source, "panel")));
+  return rows
+    .filter(isPanelLink)
+    .filter((link) => foldText(link.customerUsuario).includes(needle))
+    .slice(0, limit)
+    .map((link) => {
+      const url = `${baseUrl}/p/${link.token}`;
+      return {
+        channel: "panel" as const,
+        usuario: link.customerUsuario,
+        wisphubId: Number(link.wisphubCustomerId) || null,
+        customerRef: null,
+        label: null,
+        askCents: null,
+        linkState: null,
+        /* Nothing about the person is stored, so nothing about the
+           person is returned (FR-010) */
+        name: null,
+        phone: null,
+        hasLink: true,
+        url,
+        /* No phone to dial without the provider: WhatsApp's own picker,
+           with the message ready (receipt spec D3, FR-019) */
+        waLink: whatsAppLink(shareText(url), null),
+      };
+    });
+}
+
 /* GET /direct-payments/customers — ISP session (links-on-demand-search
    D1, FR-001).
 
@@ -1270,29 +1329,38 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
 
     let customers: WispHubCustomer[] = [];
     let matched = apiMatches.length;
+    let away = false;
     if (wisphub) {
       let search;
       try {
         search = await wisphub.searchCustomers(query.q, limit);
       } catch (e) {
-        /* D10/FR-014 make this an answer rather than a refusal — that is
-           US3's work (tasks T030), and until it lands the area's own
-           failure shape stands rather than a half-built one. */
-        return wisphubFailure(c, e, "panel");
+        /* D10 / FR-014: the search still answers, with what Devolada
+           has, under a quiet note. It never answers an error block —
+           except for a refused key, which is setup, not weather. */
+        if (!providerIsAway(e)) return wisphubFailure(c, e, "panel");
+        away = true;
       }
-      customers = search.customers;
-      /* D5: the largest of the four counts, and never smaller than what
-         we are about to show. The true size of the union of four filters
-         cannot be known without fetching all four whole, so the page
-         says "más de N" and asks for more letters (FR-006). */
-      matched = Math.max(matched, ...Object.values(search.counts));
+      if (search) {
+        customers = search.customers;
+        /* D5: the largest of the four counts, and never smaller than what
+           we are about to show. The true size of the union of four filters
+           cannot be known without fetching all four whole, so the page
+           says "más de N" and asks for more letters (FR-006). */
+        matched = Math.max(matched, ...Object.values(search.counts));
+      }
     }
+
+    /* The provider did not answer — by outage or by never having been
+       connected — so Devolada's own links answer for it (FR-003) */
+    const ownPanel = away || !connected ? await panelLinksMatching(db, actor.id, needle, limit, base) : [];
 
     const tokens = await linksForUsuarios(db, actor.id, customers.map((customer) => customer.usuario));
     /* D6: dedupe by identity. The two channels cannot collide — an API
        row has no usuario — so the cap is all the merge needs. */
     const results = [
       ...apiMatches.map((link) => apiCustomerRow(link, base, now)),
+      ...ownPanel,
       ...customers.map((customer) => panelCustomerRow(customer, tokens.get(customer.usuario) ?? null, base)),
     ].slice(0, limit);
 
@@ -1305,7 +1373,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
         nextCursor: null,
         matched: Math.max(matched, results.length),
         total: null,
-        wisphub: connected ? "ok" : "not_configured",
+        wisphub: !connected ? "not_configured" : away ? "unavailable" : "ok",
       } satisfies CustomersResponse,
     });
   }
@@ -1358,19 +1426,26 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
     }
   }
 
+  let away = false;
   if (next.phase === "wisphub") {
-    if (!wisphub) {
-      /* Nothing else to walk: this business's links are all there is */
-      next = null;
+    const room = limit - results.length;
+    if (!wisphub || room <= 0) {
+      /* No key: this business's own links are all there is to walk */
+      if (!wisphub) next = null;
     } else {
-      const room = limit - results.length;
-      if (room > 0) {
-        let block;
-        try {
-          block = await wisphub.customersBlock(room, next.offset);
-        } catch (e) {
-          return wisphubFailure(c, e, "panel");
-        }
+      const offset = next.offset;
+      let block: { customers: WispHubCustomer[]; total: number } | null = null;
+      try {
+        block = await wisphub.customersBlock(room, offset);
+      } catch (e) {
+        /* D10 / FR-014: the walk answers with whatever it already has,
+           under a quiet note, and stops there. A refused key keeps its
+           own 503 (bug: links-refused-key). */
+        if (!providerIsAway(e)) return wisphubFailure(c, e, "panel");
+        away = true;
+        next = null;
+      }
+      if (block) {
         total = block.total;
         const tokens = await linksForUsuarios(db, actor.id, block.customers.map((customer) => customer.usuario));
         results.push(
@@ -1378,7 +1453,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
             panelCustomerRow(customer, tokens.get(customer.usuario) ?? null, base),
           ),
         );
-        const walked = next.offset + block.customers.length;
+        const walked = offset + block.customers.length;
         /* FR-020: the page never walks the list to its end on its own —
            it asks for the next block when the operator scrolls toward
            it, and the walk ends when the provider's count is reached. */
@@ -1398,7 +1473,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
          many customers the ISP has, which the provider answers with
          every block. */
       total,
-      wisphub: connected ? "ok" : "not_configured",
+      wisphub: !connected ? "not_configured" : away ? "unavailable" : "ok",
     } satisfies CustomersResponse,
   });
 }

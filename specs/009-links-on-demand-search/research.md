@@ -247,6 +247,38 @@ identical in the data. The prune deletes both, and the first customer's copy
 stops working. FR-024 is the consequence: they get a new link at a new address
 the next time an operator acts, and nothing reissues the old one.
 
+## D16 — The number rides the act, and Cobros stops carrying a wa.me link without one
+
+Cobros builds its `wa.me` link from the invoice row, which carries no phone, so
+today every send opens WhatsApp's contact picker and the operator finds the
+person by hand. On a list of debtors that is a few seconds and one
+wrong-chat risk per row — the whole cost of collecting in batch.
+
+`POST /direct-payments/links` (D8) already reads the customer from WispHub by
+exact usuario, because a panel link needs the numeric id. **That same answer
+carries the phone.** So the number is free: no extra provider call, no stored
+copy, and fresh by construction — which is the rule this feature is built on.
+The door's `waLink` therefore opens the customer's own chat, and Cobros uses it.
+
+`cobroRow.linkUrl` and `waLink` are **dropped**. Keeping them would leave a
+field that produces the worse behaviour: a link with no number, for a debtor who
+already has one, sending the operator back to the picker. With them gone, both
+buttons on both surfaces take exactly one path — the act — and the batch lookup
+of stored links (`chunks` under D1's parameter cap, `bug: cobros-links-lookup-params`)
+goes with them.
+
+**What it costs.** Every press is one provider read, where a debtor who already
+had a link used to cost none. At the measured 0.4–0.6 s that is well under the
+time it replaces, and the window opens on the click and fills when the answer
+lands (D9), so the operator waits inside WhatsApp rather than in front of a
+button. The alternative — a phone-less link for some rows and a real one for
+others — is a page whose behaviour the operator cannot predict.
+
+`toWhatsAppPhone` is unchanged and still owns the rules: Mexico's 52 in front,
+and a refusal for a number it cannot read (`receipt spec D2, D3`) — which is
+what keeps `wa.me/55…`, Brazil, from ever being dialled. A refusal falls back to
+the picker, which is now the exception rather than the rule.
+
 ## D15 — The page stops reporting its own age, because it no longer has one
 
 `presence-freshness` (D4, D7, US-P07, BUG-018) gave the Links page three

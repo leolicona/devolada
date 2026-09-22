@@ -130,17 +130,28 @@ and the stub outlived it.
 
 ---
 
-## `GET /payment-requests` — changed in meaning, not in shape
+## `GET /payment-requests` — two fields removed
 
-`cobroRow.linkUrl` and `waLink` stay `string | null`. What null means changes:
+`cobroRow.linkUrl` and `waLink` are **dropped** (D16). Both buttons now call
+`POST /direct-payments/links` and use what it returns: the permanent URL, and a
+`waLink` built from the phone that door read fresh — so WhatsApp opens the
+customer's own chat instead of the contact picker (FR-028).
 
 | Before | After |
 | --- | --- |
-| null → hide Copiar and WhatsApp | null → show them; pressing one calls `POST /direct-payments/links` and proceeds with what it returns (FR-025, FR-026, D14) |
+| `linkUrl: null` → hide Copiar and WhatsApp | the buttons always show; the act creates or fetches the link (FR-025, FR-026, D14) |
+| `waLink` built without a phone → the picker, every time | the act's `waLink` carries the number → the customer's chat (FR-028, D16) |
+
+The batch lookup of stored links goes with them — with it, the chunking under
+D1's parameter cap that `bug: cobros-links-lookup-params` exists for.
 
 Nothing else about the door changes: the same rows, the same debt read, the
-same `complete` and `readAt`, the same 5-page window. The batch lookup of
-stored links stays — it saves a call for a debtor who already has one.
+same `complete` and `readAt`, the same 5-page window.
+
+**What it costs**: a press on a debtor who already had a link now costs one
+provider read where it used to cost none. That is the price of a number that is
+correct at the moment it is dialled, and it is far less than the contact search
+it replaces.
 
 ---
 

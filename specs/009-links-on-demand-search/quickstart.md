@@ -103,7 +103,10 @@ pnpm --filter @devolada/api test -- test/links-offline.test.ts
 
 Delete every stored link for the demo business, then open **Cobros**. Every
 debtor row still shows Copiar and WhatsApp. Press WhatsApp on one: the window
-opens, the link is created, and the message is ready.
+opens, the link is created, and **that customer's own chat** is ready with the
+message — no contact picker, because the act's fresh read carried their number
+(FR-028). Seed a debtor with no phone in WispHub and press WhatsApp on them: the
+picker opens instead. That is the exception, and it should be the only one.
 
 Then find the same customer on Links — it is the **same** link.
 

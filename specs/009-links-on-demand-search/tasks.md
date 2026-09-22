@@ -43,8 +43,8 @@ review `tests/design/`.
 
 ## Phase 1: Setup
 
-- [ ] T001 Add the `link_prunes` table (`business_id` PK, `ran_at`, `deleted_count`, `notice_seen`) to `apps/api/src/db/schema.ts` per [data-model.md](./data-model.md), with a comment citing `links-on-demand-search D13`
-- [ ] T002 Generate and apply the migration: `pnpm --filter @devolada/api db:generate` then `db:migrate:local`, committing the generated file under `apps/api/migrations/` (the path `drizzle.config.ts` writes to)
+- [X] T001 Add the `link_prunes` table (`business_id` PK, `ran_at`, `deleted_count`, `notice_seen`) to `apps/api/src/db/schema.ts` per [data-model.md](./data-model.md), with a comment citing `links-on-demand-search D13`
+- [X] T002 Generate and apply the migration: `pnpm --filter @devolada/api db:generate` then `db:migrate:local`, committing the generated file under `apps/api/migrations/` (the path `drizzle.config.ts` writes to)
 
 ---
 

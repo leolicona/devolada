@@ -181,6 +181,34 @@ export const paymentLinks = sqliteTable(
   ],
 );
 
+/* links-on-demand-search D13: the one-time cleanup, one row per
+   business, written once. FR-023 deletes every panel link the retired
+   roster created before this feature shipped that no payment and no
+   clave attempt ever referenced, and the business must be told how many
+   went.
+
+   The primary key is `business_id` alone on purpose: the row's
+   EXISTENCE is what stops the pass running twice. The boundary it
+   compares `payment_links.created_at` against is never "when the prune
+   ran" — a deploy leaves the previous Worker serving, and that Worker
+   still ran the roster — but `PRUNE_CUTOVER_MS`, a constant in
+   `links/prune.ts`. That is also what protects every link FR-008
+   creates from the moment the feature is live.
+
+   `deleted_count` may be 0: a business with no pre-cutover links is
+   pruned too, a row is written, and it is told nothing. `notice_seen`
+   is the telling — set through the dismiss door, server-side and not
+   per browser, because a count nobody saw is not a telling. */
+export const linkPrunes = sqliteTable("link_prunes", {
+  businessId: text("business_id")
+    .primaryKey()
+    .references(() => businesses.id),
+  /* When the pass finished for this business, in ms */
+  ranAt: integer("ran_at", { mode: "timestamp_ms" }).notNull(),
+  deletedCount: integer("deleted_count").notNull().default(0),
+  noticeSeen: integer("notice_seen", { mode: "boolean" }).notNull().default(false),
+});
+
 /* One submitted SPEI proof and its validation lifecycle
    (direct-payment spec). The row is also the re-validation queue (D7):
    `nextValidationAt` is when the sweep may touch it again. */

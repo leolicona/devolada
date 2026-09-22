@@ -553,9 +553,13 @@ describe("US3: the provider is away, and the page says so instead of failing", (
 
     await userEvent.type(screen.getByLabelText(/buscar cliente/i), "janely");
 
-    expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
+    /* Wait for the ANSWER, not for a row: the browse's rows are still on
+       screen through the pause, and asserting on them would pass before
+       the search had left the browser */
+    expect(await screen.findByText(/sin conexión a wisphub/i)).toBeInTheDocument();
     expect(away).toBe(true);
-    expect(screen.getByText(/sin conexión a wisphub/i)).toBeInTheDocument();
+    /* Nothing came back from the door, and she is on screen anyway */
+    expect(screen.getByText("Janely Reyes")).toBeInTheDocument();
     /* And the page says plainly what a name can and cannot reach now */
     expect(screen.getByText(/buscar por nombre necesita wisphub/i)).toBeInTheDocument();
   });

@@ -164,7 +164,7 @@ seed, on the implementation branches. What it proved, live:
 | `?q=mar` | `200`, the same shape |
 | **SC-004** | six searches and four browses moved the link count by **zero** |
 | **SC-009** | nine cron ticks created **zero** links |
-| The prune | ran once, wrote one row (`deleted_count: 0`, since `PRUNE_CUTOVER_MS` is still 0), and nine ticks later there is still exactly one row — idempotent by construction (D13) |
+| The prune | ran once, wrote one row (`deleted_count: 0`, since `PRUNE_CUTOVER_MS` is still 0), and nine ticks later there is still exactly one row — idempotent by construction (D13). **Corrected 2026-09-22 (T058)**: writing that row was the bug, not the proof. It spends the business's one and only pass on a cutover that deletes nothing, so the release would find nothing left to prune. The pass now writes nothing while the cutover is unset, and the rows this walk left on dev have to go — see *Pre-flight* |
 | `GET /direct-payments/prune-notice` | `null` — a count of zero is not news (FR-023) |
 | `POST /direct-payments/links` with no key | `WISPHUB_NOT_CONFIGURED` — the act needs a fresh read and says so (D8) |
 | `GET /direct-payments/links/roster` | **404** — the roster is gone (D12) |
@@ -191,13 +191,31 @@ person with the real tenant in front of them:
 1. **Set `PRUNE_CUTOVER_MS` to the real ship timestamp** at the release step,
    not before (D13). A cutover in the future deletes links the feature has just
    created; a cutover long past leaves the roster's links in place.
-2. **Ship US4 with the prune.** FR-023 empties what Cobros reads; without
+2. **Clear any `link_prunes` row written before the cutover was set.** The row's
+   existence is the only thing that stops the pass, so a row left from the unset
+   window means that business is never pruned. The guard in `prunePanelLinks`
+   (T058) stops new ones being written, but dev already carries rows from before
+   it — every one of them `deleted_count: 0`. Delete them before the release, and
+   check none survive:
+
+   ```sh
+   # from apps/api, against dev's deployed D1 — read first, then delete
+   pnpm exec wrangler d1 execute devolada-db-dev --env dev --remote \
+     --command "SELECT business_id, deleted_count FROM link_prunes"
+   pnpm exec wrangler d1 execute devolada-db-dev --env dev --remote \
+     --command "DELETE FROM link_prunes WHERE deleted_count = 0"
+   ```
+
+   A row with a non-zero count is a real prune that really happened: leave it.
+   Prod has never run the pass with the old code, so it should return no rows at
+   all — if it does, the same rule applies.
+3. **Ship US4 with the prune.** FR-023 empties what Cobros reads; without
    FR-025/FR-026 the collections screen can send nothing (plan, *Dependencies
    and sequencing*).
-3. **Tell the connected ISP before the prune runs.** Roughly 6,513 links go, and
+4. **Tell the connected ISP before the prune runs.** Roughly 6,513 links go, and
    any link an operator sent that has not been paid stops working. The spec
    records this as chosen (FR-024, D13) — the operator should still hear it from
    a person, not from a notice.
-4. **Watch the provider's call volume after the deploy.** The roster's sweep was
+5. **Watch the provider's call volume after the deploy.** The roster's sweep was
    spending sixty-odd calls every few minutes per large tenant; that should fall
    to roughly one call per screenful an operator actually looks at.

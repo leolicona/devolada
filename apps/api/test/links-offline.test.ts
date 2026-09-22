@@ -89,6 +89,43 @@ describe("US3: a provider that does not answer is an answer", () => {
     fetchMock.get(WISPHUB_ORIGIN).cleanMocks();
   });
 
+  it("FR-006: more stored links match than fit in a block, and the count says so", async () => {
+    const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    /* Twenty-five customers whose usuario carries "mar" — more than the
+       ten-row block below can hold */
+    for (let i = 0; i < 25; i++) {
+      await panelLink(business.id, `mar${i}@wifiplus`, `tok-mar-${String(i).padStart(4, "0")}0`);
+    }
+    mockOutage();
+
+    const first = await (await read("?q=mar&limit=10")).json();
+    expect(first.data.wisphub).toBe("unavailable");
+    expect(first.data.results).toHaveLength(10);
+    /* The number the operator decides on: how many MATCHED, not how
+       many were shown. With the provider away this is EXACT — what
+       Devolada holds is all there is to count, and the note already
+       says what cannot be asked (D5, amended 2026-09-23). */
+    expect(first.data.matched).toBe(25);
+
+    /* FR-006: and every one of them is reachable by scrolling, with the
+       provider away exactly as with it there */
+    expect(first.data.nextCursor).toBeTruthy();
+    const second = await (
+      await read(`?q=mar&limit=10&cursor=${encodeURIComponent(first.data.nextCursor)}`)
+    ).json();
+    expect(second.data.results).toHaveLength(10);
+    const third = await (
+      await read(`?q=mar&limit=10&cursor=${encodeURIComponent(second.data.nextCursor)}`)
+    ).json();
+    expect(third.data.results).toHaveLength(5);
+    /* Twenty-five walked, and the walk says it is done */
+    expect(third.data.nextCursor).toBeNull();
+
+    const walked = [...first.data.results, ...second.data.results, ...third.data.results];
+    expect(new Set(walked.map((r: { usuario: string }) => r.usuario)).size).toBe(25);
+    fetchMock.get(WISPHUB_ORIGIN).cleanMocks();
+  });
+
   it("the customer whose link Devolada holds is still findable by usuario (FR-003, US3 scenario)", async () => {
     const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
     await panelLink(business.id, "greyes@wifiplus", "tok-greyes-held");

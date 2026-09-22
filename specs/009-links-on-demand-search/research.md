@@ -91,9 +91,33 @@ all four whole. Each answer carries its own `count`; the page reports
 `matched` as the largest of them and says so in words — *"más de N
 coincidencias"* — rather than claiming a total it did not compute.
 
-A search returns one block and `nextCursor: null`. The page shows the count
-and asks for more characters (FR-006). A cursor the search UI would never use
-is dead weight in the contract.
+**Amended 2026-09-23 — a search walks, and the floor becomes exact when it
+ends.** This decision used to close with: *"A search returns one block and
+`nextCursor: null`. The page shows the count and asks for more characters.
+A cursor the search UI would never use is dead weight in the contract."*
+
+That was wrong, and the operator found it: «Leo» matched 39, the page showed
+10, and the other 29 were reachable by nothing but guessing a longer text.
+A count the page prints and cannot deliver is worse than no count — it tells
+the operator the customer is there and refuses to show them.
+
+So a search now pages exactly as a browse does (D2, FR-020). Three things
+made it cheaper than the original reasoning assumed:
+
+1. **The four filters advance together.** One opaque `sq:<offset>` is the
+   whole cursor: every block asks each filter at the same offset, merges and
+   dedupes what comes back, and returns it WHOLE rather than cutting it to
+   the block size. Nothing fetched is discarded, so nothing is skipped.
+2. **Only the first block costs four calls.** The counts do not change
+   between blocks, so later blocks ask only the filters that still have rows.
+3. **The floor becomes exact.** When every filter is exhausted, the deduped
+   union IS the answer — so the page stops saying *"más de N"* and says what
+   it found.
+
+Duplicates across blocks remain possible: one customer can match two filters
+at different offsets. The page already dedupes by identity for the browse
+(D6), which covers this at no extra cost. The union's size still cannot be
+known in advance, so the floor is still a floor while the walk continues.
 
 ## D6 — The list has no order to promise, so the page does not promise one
 

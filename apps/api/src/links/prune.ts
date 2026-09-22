@@ -42,11 +42,13 @@ import {
    operator acts, and nothing reissues the old one. */
 
 /* The feature's ship timestamp. Set at the RELEASE commit (tasks T057),
-   never before: a value in the future makes the pass delete nothing,
-   which is exactly what every environment should do until the code that
-   stops recreating links is actually live.
-   `0` therefore means "not yet shipped" — no link was created before
-   the epoch, so nothing is in scope. */
+   never before: the code that stops recreating links has to be live
+   first, or the previous Worker refills what this deletes.
+
+   `0` means "not shipped yet", and the pass treats it as "do nothing at
+   all" — not as "a boundary that happens to match no links". The
+   difference is the whole of T058: a boundary of 0 would still write the
+   ledger row that spends the business's one pass. See `prunePanelLinks`. */
 export const PRUNE_CUTOVER_MS = 0;
 
 export type PruneReport = {
@@ -78,6 +80,23 @@ export async function prunePanelLinks(
   const cutoverMs = opts.cutoverMs ?? PRUNE_CUTOVER_MS;
   const db = drizzle(env.DB);
   const report: PruneReport = { businesses: 0, links: 0, sweeps: 0 };
+
+  /* links-on-demand-search D13: while the cutover is UNSET, the pass has
+     not run — and must leave no trace saying it did.
+
+     The row's existence is the only thing that stops a second pass, and
+     the code ships with the cutover at 0 on purpose (T057 sets it at the
+     release commit). Without this guard the every-minute cron spends each
+     business's one and only pass in that window: it deletes nothing,
+     because nothing predates the epoch, and writes the row anyway. T057
+     would then set the real timestamp and find no business left to prune,
+     so FR-023 would never happen and the count the business is owed would
+     be zero forever.
+
+     Returning here keeps the pass owed until there is a boundary to
+     measure against. A tick in this window costs one query and says
+     nothing, which is what "no work to do" should look like. */
+  if (cutoverMs <= 0) return report;
 
   /* The row's EXISTENCE is what stops a second run (D13), so the work
      list is "businesses with no row" */

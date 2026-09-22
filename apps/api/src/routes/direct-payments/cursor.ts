@@ -22,7 +22,20 @@ export type BrowseCursor =
   /* Still walking the business's API links: the last row handed out */
   | { phase: "api"; createdAt: number; id: string }
   /* Walking WispHub's list: the offset the next block starts at */
-  | { phase: "wisphub"; offset: number };
+  | { phase: "wisphub"; offset: number }
+  /* links-on-demand-search D5 (amended 2026-09-23): walking a SEARCH.
+     One offset for all four filters, because they advance together —
+     every block asks each of them at the same offset and returns the
+     merged answer whole, so nothing fetched is skipped. It is also
+     what the offline search slices its own rows by.
+
+     `fields` is a bitmask over CUSTOMER_SEARCH_FIELDS of the filters
+     that still had rows at this offset; `0` means "ask all four", which
+     is where a walk starts. It is what makes a deep search cost one
+     provider call a block instead of four: «771» matches 5,441 phone
+     numbers and almost no names, so after the first block only
+     `telefono` is worth asking. */
+  | { phase: "search"; offset: number; fields: number };
 
 /* Where a browse with no cursor begins */
 export const FIRST_CURSOR: BrowseCursor = { phase: "api", createdAt: 0, id: "" };
@@ -39,7 +52,9 @@ export function encodeCursor(cursor: BrowseCursor): string {
   const plain =
     cursor.phase === "api"
       ? `api:${cursor.createdAt}:${cursor.id}`
-      : `wh:${cursor.offset}`;
+      : cursor.phase === "search"
+        ? `sq:${cursor.offset}:${cursor.fields}`
+        : `wh:${cursor.offset}`;
   return toBase64Url(plain);
 }
 
@@ -68,6 +83,17 @@ export function decodeCursor(raw: string): BrowseCursor | null {
     const offset = Number(plain.slice("wh:".length));
     if (!Number.isSafeInteger(offset) || offset < 0) return null;
     return { phase: "wisphub", offset };
+  }
+  if (plain.startsWith("sq:")) {
+    const [rawOffset, rawFields, ...extra] = plain.slice("sq:".length).split(":");
+    if (extra.length) return null;
+    const offset = Number(rawOffset);
+    const fields = Number(rawFields);
+    if (!Number.isSafeInteger(offset) || offset < 0) return null;
+    /* Four filters, so four bits. Anything else is not a mask this
+       version wrote. */
+    if (!Number.isSafeInteger(fields) || fields < 0 || fields > 0b1111) return null;
+    return { phase: "search", offset, fields };
   }
   return null;
 }

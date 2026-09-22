@@ -274,6 +274,11 @@ lands (D9), so the operator waits inside WhatsApp rather than in front of a
 button. The alternative — a phone-less link for some rows and a real one for
 others — is a page whose behaviour the operator cannot predict.
 
+**Settled by the product creator on 2026-09-22**, against keeping `linkUrl` for
+Copiar alone: it would save a read on the rows that already have a link, at the
+price of two buttons on one row obeying different rules — and of keeping the
+batch lookup, and its parameter chunking, alive for that one saving.
+
 `toWhatsAppPhone` is unchanged and still owns the rules: Mexico's 52 in front,
 and a refusal for a number it cannot read (`receipt spec D2, D3`) — which is
 what keeps `wa.me/55…`, Brazil, from ever being dialled. A refusal falls back to
@@ -305,17 +310,22 @@ to carry.
 
 This retires a promise three earlier decisions made. It is recorded here rather
 than discovered at implementation time (constitution I: the gap is not
-tolerated silently), and the product creator may overturn it — the alternative
-is a per-row age, which costs a timestamp on every row for a doubt that only
-exists while the provider is away.
+tolerated silently). **Settled by the product creator on 2026-09-22**, against
+the alternative of a per-row age: a timestamp on every row would print a doubt
+that only exists while the provider is away.
 
 ## D14 — Cobros gets one rule and nothing else
 
-`cobroRow.linkUrl` and `waLink` stay nullable, and stop meaning "hide the
-buttons". The screen shows Copiar and WhatsApp on every row it is allowed to
-(FR-026) and calls `POST /direct-payments/links` on the act (FR-025, D8, D9).
+`cobroRow.linkUrl` and `waLink` stop meaning "hide the buttons". The screen
+shows Copiar and WhatsApp on every row it is allowed to (FR-026) and calls
+`POST /direct-payments/links` on the act (FR-025, D8, D9).
 
 Nothing else about Cobros changes: what it lists, how it reads debt, how it
-orders rows, its freshness note, its 5-page window. The batch lookup of stored
-links stays — it saves a call for debtors who already have one — but a miss is
-now a button, not a blank.
+orders rows, its freshness note, its 5-page window.
+
+**Partly superseded by D16.** This decision first kept the two fields nullable
+and kept the batch lookup of stored links, because it saved a call for a debtor
+who already had one. D16 drops both fields and the lookup with them: a stored
+`waLink` carries no phone, which is precisely what the act now provides. What
+survives here is the rule itself — the buttons always show, and the act is what
+creates the link.

@@ -207,9 +207,9 @@ leaving the admin suite red for four phases. The API-side migration
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T052 Write `tests/e2e/links.spec.ts` citing `links-on-demand-search US1`: scrolling loads a second block, no horizontal scroll at 360/768/1280, measured contrast in both themes, touch targets on Copiar and WhatsApp, and a measured focus indicator
-- [ ] T053 Measure SC-001, SC-002 and SC-003 in `tests/e2e/links.spec.ts` against the stubbed API with a realistic provider delay, and record the numbers in the file's header comment. Assert a **generous ceiling** — 3 s interactive, 6 s to results, 20 s to find-and-send — so a page that gets slow fails a gate, while the targets themselves (1 s / 3 s / 15 s) stay measurements rather than a wall-clock that flakes on CI
-- [ ] T054 [P] Update `apps/api/package.json` only if a new area export is needed, and check `apps/admin/src/lib/base.ts` still resolves the door in dev
+- [X] T052 Write `tests/e2e/links.spec.ts` citing `links-on-demand-search US1`: scrolling loads a second block, no horizontal scroll at 360/768/1280, measured contrast in both themes, touch targets on Copiar and WhatsApp, and a measured focus indicator
+- [X] T053 Measure SC-001, SC-002 and SC-003 in `tests/e2e/links.spec.ts` against the stubbed API with a realistic provider delay, and record the numbers in the file's header comment. Assert a **generous ceiling** — 3 s interactive, 6 s to results, 20 s to find-and-send — so a page that gets slow fails a gate, while the targets themselves (1 s / 3 s / 15 s) stay measurements rather than a wall-clock that flakes on CI
+- [X] T054 [P] Update `apps/api/package.json` only if a new area export is needed, and check `apps/admin/src/lib/base.ts` still resolves the door in dev
 - [ ] T055 Run the full gates: `pnpm -r --if-present typecheck`, `pnpm -r --if-present test`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `pnpm e2e`
 - [ ] T056 Walk [quickstart.md](./quickstart.md) end to end, including the count-does-not-move check for SC-004 and the no-background-creation check for SC-009
 - [ ] T057 Set `PRUNE_CUTOVER_MS` to the real ship timestamp at the release commit, not before, and tell the connected ISP that roughly 6,513 links go and that a sent-but-unpaid link stops working (quickstart, *Pre-flight*)

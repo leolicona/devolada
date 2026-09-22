@@ -54,11 +54,11 @@ review `tests/design/`.
 is what the admin, the MSW handlers and the Playwright stubs all take their
 types and fixtures from (constitution III).
 
-- [ ] T003 [P] Add `customersQuery`, `customerRow`, `customersResponse`, `createLinkRequest` and `createLinkResponse` to `apps/api/src/routes/direct-payments/schema.ts`, with `url`/`waLink` nullable and `hasLink` present (D7), per [contracts/links-api.md](./contracts/links-api.md)
-- [ ] T004 [P] Add the opaque cursor codec (`api:<createdAt>:<id>` / `wh:<offset>`, base64url) in `apps/api/src/routes/direct-payments/cursor.ts`, citing D2, rejecting an unreadable cursor
-- [ ] T005 Replace `searchCustomers` in `apps/api/src/wisphub/client.ts` with a four-filter parallel search (`nombre__contains`, `apellido__contains`, `usuario__contains`, `telefono__contains`), returning the merged rows and each filter's `count`, citing D4 and `bug: customer-lookup-misses`
-- [ ] T006 Add `customersBlock(limit, offset)` to `apps/api/src/wisphub/client.ts` returning `{ customers, total }` from `/clientes/?limit=&offset=`, with `limit` clamped 10..50, citing D3
-- [ ] T007 Replace `ensureLinks` (bulk) with `ensureLink` (one customer) in `apps/api/src/direct-payments/links.ts`, returning `{ token, created }` and never replacing an existing row, citing D8 and FR-005/FR-009
+- [X] T003 [P] Add `customersQuery`, `customerRow`, `customersResponse`, `createLinkRequest` and `createLinkResponse` to `apps/api/src/routes/direct-payments/schema.ts`, with `url`/`waLink` nullable and `hasLink` present (D7), per [contracts/links-api.md](./contracts/links-api.md)
+- [X] T004 [P] Add the opaque cursor codec (`api:<createdAt>:<id>` / `wh:<offset>`, base64url) in `apps/api/src/routes/direct-payments/cursor.ts`, citing D2, rejecting an unreadable cursor
+- [X] T005 Replace `searchCustomers` in `apps/api/src/wisphub/client.ts` with a four-filter parallel search (`nombre__contains`, `apellido__contains`, `usuario__contains`, `telefono__contains`), returning the merged rows and each filter's `count`, citing D4 and `bug: customer-lookup-misses`
+- [X] T006 Add `customersBlock(limit, offset)` to `apps/api/src/wisphub/client.ts` returning `{ customers, total }` from `/clientes/?limit=&offset=`, with `limit` clamped 10..50, citing D3
+- [X] T007 Replace `ensureLinks` (bulk) with `ensureLink` (one customer) in `apps/api/src/direct-payments/links.ts`, returning `{ token, created }` and never replacing an existing row, citing D8 and FR-005/FR-009
 
 **Checkpoint**: the contract exists and the adapter can answer a block and a search.
 

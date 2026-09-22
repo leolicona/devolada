@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { WispHubError } from "../../wisphub/client";
+import { CUSTOMERS_BLOCK_MIN, WispHubError } from "../../wisphub/client";
 /* provider-address-per-isp D4: the eleventh call site, and the only one
    that cannot read `integration.installation` — it tests a key and an
    installation that are not yet saved, so it resolves the catalogue
@@ -152,7 +152,12 @@ async function testKey(
     {
       name: "customers",
       run: async () => {
-        sampleCustomerCount = (await wisphub.searchCustomers("a")).length;
+        /* links-on-demand-search D3/D4: one block, not a search. The
+           probe asks "does this key reach this endpoint on this
+           installation" — one call, as the other two probes are. A
+           search is four calls now, and none of them is a better
+           answer to that question. */
+        sampleCustomerCount = (await wisphub.customersBlock(CUSTOMERS_BLOCK_MIN, 0)).customers.length;
       },
     },
     { name: "invoices", run: () => wisphub.probeInvoices() },

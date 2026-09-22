@@ -88,13 +88,23 @@ export function realOnly(table: typeof paymentLinks | typeof payments): SQL {
 
 /* Every customer of the roster has a link (direct-payment D5,
    admin-links-view D5): the usuario is the identity, the numeric id a
-   cache. Writes only what changed. Lives here, not in the route, since
+   cache.
+
+   **Retiring** (links-on-demand-search D8, D12): the bulk writer is
+   what made listing create links, and FR-008 ends that — a link is born
+   on an operator's act, which `ensureLink` below serves. It stays only
+   while its three callers do (the two link doors and the sweep's
+   `roster` pass), and goes with them in one commit (tasks T044, T045).
+   Nothing new may call it.
+
+   Writes only what changed. Lives here, not in the route, since
    bug: links-roster-cap — the sweep creates each page's links as it
-   stores it, and a sweep does not reach into a route handler. The upsert this replaces rewrote one
-   `payment_links` row per customer on every read, cache hit or not —
-   and the roster is read on every return to the Links tab (BUG-020).
-   Statements grow with the tenant, so each goes in chunks under D1's
-   parameter cap (BUG-021). Returns usuario → token. */
+   stores it, and a sweep does not reach into a route handler. The
+   upsert this replaces rewrote one `payment_links` row per customer on
+   every read, cache hit or not — and the roster is read on every return
+   to the Links tab (BUG-020). Statements grow with the tenant, so each
+   goes in chunks under D1's parameter cap (BUG-021). Returns
+   usuario → token. */
 export async function ensureLinks(
   db: DrizzleD1Database,
   businessId: string,
@@ -178,4 +188,75 @@ export async function ensureLinks(
     }
   }
   return tokens;
+}
+
+/* ONE customer's link, created by the act and by nothing else
+   (links-on-demand-search D8, FR-005/FR-008/FR-009).
+
+   This is the whole write path for a panel link from now on: it is
+   called only from `POST /direct-payments/links`, which only an
+   operator pressing Copiar or WhatsApp reaches. No list read, no sweep,
+   no background pass writes one — which is what SC-009 measures, and
+   what `ensureLinks` below stopped being allowed to do.
+
+   An existing link is RETURNED, never replaced: the usuario is the
+   identity and the link is permanent while it exists. Only the numeric
+   id refreshes, a cache WispHub may recycle to a different person
+   (`direct-payment D5`), which keys nothing.
+
+   `created` is what the door echoes to the operator's screen; it also
+   makes "a second press creates no second link" a fact the caller can
+   assert rather than infer. */
+export async function ensureLink(
+  db: DrizzleD1Database,
+  businessId: string,
+  customer: { usuario: string; wisphubId: number },
+): Promise<{ token: string; created: boolean }> {
+  const wisphubCustomerId = String(customer.wisphubId);
+  const [existing] = await db
+    .select({ token: paymentLinks.token, wisphubCustomerId: paymentLinks.wisphubCustomerId })
+    .from(paymentLinks)
+    .where(
+      and(
+        eq(paymentLinks.businessId, businessId),
+        /* automated-collections-api D3/D4: the usuario namespace is the
+           panel's; an API link never holds one */
+        eq(paymentLinks.source, "panel"),
+        eq(paymentLinks.customerUsuario, customer.usuario),
+      ),
+    );
+  if (existing) {
+    if (existing.wisphubCustomerId !== wisphubCustomerId) {
+      await db
+        .update(paymentLinks)
+        .set({ wisphubCustomerId })
+        .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.customerUsuario, customer.usuario)));
+    }
+    return { token: existing.token, created: false };
+  }
+
+  const [inserted] = await db
+    .insert(paymentLinks)
+    .values({ businessId, token: makeLinkToken(), wisphubCustomerId, customerUsuario: customer.usuario })
+    /* Two operators pressing at once: the first insert wins the usuario,
+       the second reads its token below. Untargeted for the reason
+       `ensureLinks` records — drizzle 0.40 cannot emit the WHERE that
+       SQLite needs to match the partial index by name. */
+    .onConflictDoNothing()
+    .returning({ token: paymentLinks.token });
+  if (inserted) return { token: inserted.token, created: true };
+
+  /* Lost the race: the row exists now and it is the one that counts */
+  const [raced] = await db
+    .select({ token: paymentLinks.token })
+    .from(paymentLinks)
+    .where(
+      and(
+        eq(paymentLinks.businessId, businessId),
+        eq(paymentLinks.source, "panel"),
+        eq(paymentLinks.customerUsuario, customer.usuario),
+      ),
+    );
+  if (!raced) throw new Error("ensureLink: the link neither inserted nor exists");
+  return { token: raced.token, created: false };
 }

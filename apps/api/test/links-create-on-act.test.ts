@@ -169,3 +169,91 @@ describe("US1 (FR-008): the act creates the link, and nothing else does", () => 
     fetchMock.get(WISPHUB_ORIGIN).cleanMocks();
   });
 });
+
+/* links-on-demand-search US4: Cobros can send, not only show.
+
+   The collections screen presses the SAME door (D8, D14) — there is one
+   rule for creating a link and both screens obey it. What these cases
+   prove is the part that only matters from Cobros: the invoice row
+   carries a usuario and no numeric id and no phone, and the act supplies
+   both from the read it had to make anyway (D16).
+
+   FR-023 is why this ships with US1: the prune empties the stored links
+   Cobros used to read, and a Cobros that cannot create one is a
+   collections screen that can send nothing. */
+describe("US4: the collections screen creates the debtor's link on the act", () => {
+  it("a debtor with no link gains one, and the same press twice gains no second", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    mockCustomer([customer()], 2);
+
+    const first = (await (await act("greyes@wifiplus")).json()).data;
+    expect(first.created).toBe(true);
+    const second = (await (await act("greyes@wifiplus")).json()).data;
+    expect(second.created).toBe(false);
+    expect(second.token).toBe(first.token);
+    expect(await links()).toHaveLength(1);
+  });
+
+  it("a debtor who already has one keeps it — the act never replaces a link", async () => {
+    const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    await drizzle(env.DB).insert(paymentLinks).values({
+      businessId: business.id,
+      token: "tok-already-there",
+      wisphubCustomerId: "6",
+      customerUsuario: "greyes@wifiplus",
+    });
+    mockCustomer([customer()]);
+
+    const { data } = await (await act("greyes@wifiplus")).json();
+    expect(data.created).toBe(false);
+    expect(data.token).toBe("tok-already-there");
+  });
+
+  it("the link Cobros creates is the link Links finds (FR-009)", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    /* The act, as Cobros makes it */
+    mockCustomer([customer()]);
+    const born = (await (await act("greyes@wifiplus")).json()).data;
+
+    /* Then the Links page browses, and the customer carries that link */
+    fetchMock
+      .get(WISPHUB_ORIGIN)
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/") && p.includes("offset=") })
+      .reply(...json({ count: 1, next: null, results: [customer()] }));
+    const browse = await (await app()).request(
+      "/direct-payments/customers",
+      { headers: { Cookie: ownerCookie } },
+      env,
+    );
+    const { data } = await browse.json();
+    expect(data.results[0]).toMatchObject({
+      usuario: "greyes@wifiplus",
+      hasLink: true,
+      url: born.url,
+    });
+  });
+
+  it("the waLink carries the phone the act read, so WhatsApp opens that customer's chat (FR-028, D16)", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    mockCustomer([customer({ telefono: "33 2145 9087" })]);
+
+    const { data } = await (await act("greyes@wifiplus")).json();
+    /* toWhatsAppPhone's rules are unchanged: Mexico's 52 in front, and
+       the spaces the provider stores are not the operator's problem */
+    expect(data.waLink).toContain("wa.me/523321459087?text=");
+    expect(data.waLink).toContain(encodeURIComponent(data.url));
+  });
+
+  it("falls back to WhatsApp's picker only for a number that is absent or unreadable (FR-019)", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    mockCustomer([customer({ telefono: null })]);
+    const none = (await (await act("greyes@wifiplus")).json()).data;
+    expect(none.waLink).toContain("wa.me/?text=");
+
+    /* Six digits is not a Mexican number, and `wa.me/551234` is Brazil —
+       the picker is better than a stranger's chat (receipt spec D3) */
+    mockCustomer([customer({ usuario: "mlopez@wifiplus", telefono: "551234" })]);
+    const unreadable = (await (await act("mlopez@wifiplus")).json()).data;
+    expect(unreadable.waLink).toContain("wa.me/?text=");
+  });
+});

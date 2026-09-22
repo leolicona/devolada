@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { paymentRequestsResponse } from "@devolada/api/payment-requests-schema";
 import { fail, handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { FOCUS_FLOOR_MS, resetPresenceForTests } from "../src/lib/presence";
+import { expectNoViolations } from "./a11y";
 
 /* docs/legacy/reconciliation/cobros-live.spec.md — the section (US-R01):
    grouped by customer, local search and filters, freshness, and the
@@ -23,8 +24,6 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
         amountCents: 49900,
         invoiceDate: day(-40),
         dueDate: day(-10),
-        linkUrl: null,
-        waLink: null,
       },
       {
         externalId: 57,
@@ -33,8 +32,6 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
         amountCents: 30000,
         invoiceDate: day(-9),
         dueDate: day(+5),
-        linkUrl: null,
-        waLink: null,
       },
       /* Abraham's single invoice is not due yet */
       {
@@ -44,8 +41,6 @@ const cobros = (over: Partial<{ complete: boolean }> = {}) =>
         amountCents: 19900,
         invoiceDate: day(-3),
         dueDate: day(+12),
-        linkUrl: null,
-        waLink: null,
       },
     ],
     complete: true,
@@ -199,9 +194,20 @@ describe("bug cobros-installation-fallback: a refused key is a setup problem, no
     expect(screen.queryByRole("link", { name: /ir a integraciones/i })).not.toBeInTheDocument();
   });
 });
-/* pilot-UX round: the debtor's link lives one expansion away. */
-describe("pilot-UX: Copiar link y WhatsApp por deudor", () => {
-  const withLink = (over: Record<string, unknown> = {}) =>
+/* links-on-demand-search US4: Cobros can send, not only show.
+
+   What this replaces: the buttons used to appear only for a debtor
+   whose link the roster had already created, and WhatsApp opened its
+   contact picker because the invoice row carries no phone. Once the
+   roster is gone that is almost nobody, and the picker was the whole
+   cost of collecting a list one press at a time.
+
+   Now both buttons show on every row the role allows, pressing either
+   one presses `POST /direct-payments/links` — the same door and the
+   same hook Links uses (D14) — and the answer carries the number that
+   act read, so WhatsApp opens the debtor's own chat (FR-028, D16). */
+describe("links-on-demand-search US4: the collections screen sends", () => {
+  const debtor = (over: Record<string, unknown> = {}) =>
     paymentRequestsResponse.parse({
       cobros: [
         {
@@ -211,8 +217,6 @@ describe("pilot-UX: Copiar link y WhatsApp por deudor", () => {
           amountCents: 49900,
           invoiceDate: day(-5),
           dueDate: day(5),
-          linkUrl: "https://link.dev.devoladapago.com/p/tokrowlink",
-          waLink: "https://wa.me/?text=hola",
         },
       ],
       complete: true,
@@ -220,23 +224,98 @@ describe("pilot-UX: Copiar link y WhatsApp por deudor", () => {
       ...over,
     });
 
-  it("an operator sees both actions in the expansion and copy answers", async () => {
+  const created = {
+    token: "tok-greyes",
+    url: "https://link.dev.devoladapago.com/p/tok-greyes",
+    waLink: "https://wa.me/525551234567?text=hola",
+    created: true,
+  };
+
+  it("FR-026: every permitted row shows both buttons, even a debtor with no link at all", async () => {
+    arrange(() => ok(debtor()));
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    expect(await screen.findByRole("button", { name: /copiar link/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /whatsapp/i })).toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("FR-025: Copiar creates the debtor's link through the act, and copies what it returns", async () => {
+    const copied: string[] = [];
     Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: () => Promise.resolve() },
+      value: {
+        writeText: (text: string) => {
+          copied.push(text);
+          return Promise.resolve();
+        },
+      },
       configurable: true,
     });
-    arrange(() => ok(withLink()));
+    let posted: unknown = null;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.paymentRequests(() => ok(debtor())),
+      pulse(),
+      handlers.createLink((body) => {
+        posted = body;
+        return ok(created);
+      }),
+    );
+    renderApp("/payment-requests");
 
     await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
     await userEvent.click(await screen.findByRole("button", { name: /copiar link/i }));
+
     expect(await screen.findByText("Copiado")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /whatsapp/i })).toBeInTheDocument();
+    /* The invoice row's usuario is the identity the act is given */
+    expect(posted).toEqual({ usuario: "greyes@wifiplus" });
+    expect(copied).toEqual([created.url]);
   });
 
-  it("a viewer reads the debt and sees no buttons", async () => {
+  it("FR-028: WhatsApp opens the debtor's OWN chat, with the number the act read", async () => {
+    const opened = { location: { href: "" }, close: vi.fn(), opener: {} as unknown };
+    const open = vi.spyOn(window, "open").mockReturnValue(opened as unknown as Window);
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.paymentRequests(() => ok(debtor())),
+      pulse(),
+      handlers.createLink(() => ok(created)),
+    );
+    renderApp("/payment-requests");
+
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /whatsapp/i }));
+
+    /* D9: the window opens on the click, before the link exists */
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    await waitFor(() => expect(opened.location.href).toBe(created.waLink));
+    /* Their chat, not the picker: that is the whole point of D16 */
+    expect(opened.location.href).toContain("wa.me/525551234567");
+    open.mockRestore();
+  });
+
+  it("FR-019: a record whose number the act cannot read falls back to the picker", async () => {
+    const opened = { location: { href: "" }, close: vi.fn(), opener: {} as unknown };
+    const open = vi.spyOn(window, "open").mockReturnValue(opened as unknown as Window);
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.paymentRequests(() => ok(debtor())),
+      pulse(),
+      /* The door answers what `toWhatsAppPhone` refused: no number */
+      handlers.createLink(() => ok({ ...created, waLink: "https://wa.me/?text=hola" })),
+    );
+    renderApp("/payment-requests");
+
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /whatsapp/i }));
+
+    await waitFor(() => expect(opened.location.href).toBe("https://wa.me/?text=hola"));
+    open.mockRestore();
+  });
+
+  it("FR-016: a viewer reads the debt and sees neither button", async () => {
     server.use(
       handlers.session(() => ok({ ...businessActor, role: "viewer" })),
-      handlers.paymentRequests(() => ok(withLink())),
+      handlers.paymentRequests(() => ok(debtor())),
       pulse(),
     );
     renderApp("/payment-requests");
@@ -244,5 +323,6 @@ describe("pilot-UX: Copiar link y WhatsApp por deudor", () => {
     await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
     expect(await screen.findByLabelText(/facturas de janely/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /copiar link/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PULSE_MS, liveReadOptions, usePresence } from "@/lib/presence";
 import { useDisplaySettings, useSession } from "../auth/session";
+import { useLinkAction } from "../links/useLinkAction";
 
 /* Cobros — who owes what, read live from WispHub (cobros-live spec,
    US-R01). No copy exists anywhere (D6): this screen holds WispHub's
@@ -93,24 +94,29 @@ function Freshness({ at }: { at: number }) {
   );
 }
 
-function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: boolean }) {
+function CustomerRow({
+  group,
+  canOperate,
+  action,
+}: {
+  group: CustomerGroup;
+  canOperate: boolean;
+  action: ReturnType<typeof useLinkAction>;
+}) {
   const n = group.cobros.length;
-  /* pilot-UX round: the link is per person — one pair of actions per
-     customer, in the expansion (the collapsed row is full at 360px).
-     Null (roster not visited yet) simply hides them. */
-  const linkUrl = group.cobros[0]?.linkUrl ?? null;
-  const waLink = group.cobros[0]?.waLink ?? null;
-  const [copied, setCopied] = useState<null | boolean>(null);
-  const copyLink = async () => {
-    let ok = true;
-    try {
-      await navigator.clipboard.writeText(linkUrl!);
-    } catch {
-      ok = false;
-    }
-    setCopied(ok);
-    setTimeout(() => setCopied(null), 2000);
-  };
+  /* links-on-demand-search US4 (FR-025, FR-026, D14): the buttons always
+     show now. They used to appear only for a debtor whose link the
+     roster had already created — which, once the roster is gone, is
+     almost nobody. Pressing either one creates the link, through the
+     same door and the same hook the Links page uses: one rule, no second
+     copy of it here.
+
+     The link is per person — one pair of actions per customer, in the
+     expansion, because the collapsed row is full at 360px. */
+  const debtor = { usuario: group.usuario };
+  const state = action.stateOf(debtor);
+  const mark = action.markOf(debtor);
+  const working = state === "working";
   return (
     <li>
       <Collapsible>
@@ -139,30 +145,45 @@ function CustomerRow({ group, canOperate }: { group: CustomerGroup; canOperate: 
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          {canOperate && linkUrl && (
+          {canOperate && (
             <div className="flex flex-wrap items-center gap-2 border-t border-line-soft bg-muted/50 px-4 pt-3">
-              <Button size="compact" variant="secondary" aria-live="polite" onClick={() => void copyLink()}>
-                {copied === null ? (
-                  <>
-                    <LinkIcon className="size-4" aria-hidden /> Copiar link
-                  </>
-                ) : copied ? (
+              <Button
+                size="compact"
+                variant="secondary"
+                aria-live="polite"
+                disabled={working}
+                onClick={() => void action.copy(debtor)}
+              >
+                {state === "copied" ? (
                   <>
                     <Check className="size-4" aria-hidden /> Copiado
                   </>
-                ) : (
+                ) : state === "not_copied" ? (
                   "No se copió"
+                ) : state === "failed" ? (
+                  "No se pudo"
+                ) : (
+                  <>
+                    <LinkIcon className="size-4" aria-hidden /> Copiar link
+                  </>
                 )}
               </Button>
-              {waLink && (
-                <Button size="compact" onClick={() => window.open(waLink, "_blank", "noopener,noreferrer")}>
-                  <Share2 className="size-4" aria-hidden /> WhatsApp
-                </Button>
+              <Button size="compact" disabled={working} onClick={() => void action.send(debtor)}>
+                <Share2 className="size-4" aria-hidden /> WhatsApp
+              </Button>
+              {/* FR-022: the mark this operator's own session remembers.
+                  Devolada records no delivery — "Enviado" means "you
+                  pressed it", and it is promised to nobody else. */}
+              {mark && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-line-soft bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  <Check className="size-3" aria-hidden />
+                  {mark === "copied" ? "Copiado" : "Enviado"}
+                </span>
               )}
             </div>
           )}
           <ul
-            className={cn(!(canOperate && linkUrl) && "border-t border-line-soft", "bg-muted/50 px-4 py-2")}
+            className={cn(!canOperate && "border-t border-line-soft", "bg-muted/50 px-4 py-2")}
             aria-label={`Facturas de ${group.name}`}
           >
             {group.cobros.map((c) => (
@@ -192,6 +213,8 @@ export function CobrosScreen() {
   const { data: actor } = useSession();
   /* D5 (2026-09-02): no CLABE, nothing to share */
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && (actor?.speiConfigured ?? true);
+  /* links-on-demand-search D14: the act is one hook, shared with Links */
+  const action = useLinkAction();
   const [filter, setFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState(1);
@@ -386,7 +409,7 @@ export function CobrosScreen() {
                 <Card className="mt-4 overflow-hidden p-0">
                   <ul className="divide-y divide-line-soft" aria-label="Cobros pendientes">
                     {shown.map((g) => (
-                      <CustomerRow key={g.usuario} group={g} canOperate={canOperate} />
+                      <CustomerRow key={g.usuario} group={g} canOperate={canOperate} action={action} />
                     ))}
                   </ul>
                 </Card>

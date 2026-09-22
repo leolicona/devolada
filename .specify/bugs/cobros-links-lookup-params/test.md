@@ -46,3 +46,17 @@ so the post-fix read on the pilot's 205 invoices is still to be seen.
 
 Merge and tag. Then switch the dev business back to **wisphub.io with the pilot's key**, open
 Cobros, and confirm the list — that closes this entry and, with it, the original report.
+
+---
+
+**Superseded on the Cobros path by `009-links-on-demand-search` (D16).** The
+batch lookup this bug was about — the business id, `source = 'panel'` and a
+chunk of usuarios in one bind — is gone: `cobroRow.linkUrl` and `waLink` went
+with it, because both buttons now press `POST /direct-payments/links`, which
+reads one customer and carries their number. The statement that overran D1's
+parameter cap therefore cannot run on this path any more.
+
+What stays: the cap made real for every statement in the suite
+(`apps/api/test/setup.ts`), the chunking helper and its other call sites, and
+the case in `apps/api/test/payment-requests.test.ts`, narrowed to the part that
+is still true — 120 debtors read in one page. The history above is not edited.

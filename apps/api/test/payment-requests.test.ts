@@ -63,15 +63,29 @@ describe("US-R01: the section reads WispHub live", () => {
       amountCents: 49900,
       invoiceDate: "2026-08-01",
       dueDate: "2026-08-11",
-      linkUrl: null,
-      waLink: null,
     });
     expect(data.complete).toBe(true);
     expect(data.readAt).toEqual(expect.any(Number));
   });
 
-  it("pilot-UX round: a debtor with a stored link carries it on the row; without one, nulls hide the buttons", async () => {
+  /* links-on-demand-search US4 (D16): this used to assert that a debtor
+     with a stored link carried it on the row and a debtor without one
+     got two nulls that hid the buttons. Both halves are retired.
+
+     The row carries NO link now, for either debtor. `linkUrl` existed
+     because the roster had already made a link for every customer;
+     under FR-008 most have none, and the surviving field would have
+     produced the worse behaviour — a link with no phone, for a debtor
+     who already has one, opening WhatsApp's contact picker instead of
+     their chat. Both buttons press the act instead, which reads the
+     customer fresh and carries their number (FR-025, FR-026, FR-028).
+
+     What replaces this case lives in `links-create-on-act.test.ts`,
+     where the act is: the debtor with no link gains one, the debtor who
+     has one keeps it, and the `waLink` carries the phone that read. */
+  it("D16: the row carries the debt and the identity, and no link at all", async () => {
     const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    /* Even a debtor whose link Devolada already holds */
     await drizzle(env.DB).insert(paymentLinks).values({
       businessId: business.id,
       token: "tokrowlink123456",
@@ -85,38 +99,29 @@ describe("US-R01: the section reads WispHub live", () => {
 
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
     const { data } = await res.json();
-    const janely = data.cobros.find((c: { customerUsuario: string }) => c.customerUsuario === "greyes@wifiplus");
-    const abraham = data.cobros.find((c: { customerUsuario: string }) => c.customerUsuario === "aflores@wifiplus");
-    expect(janely.linkUrl).toMatch(/\/p\/tokrowlink123456$/);
-    /* no phone on the invoice row: the wa.me link opens the picker with
-       the message ready, never a stranger's chat */
-    expect(janely.waLink).toContain("wa.me/?text=");
-    expect(janely.waLink).toContain(encodeURIComponent(janely.linkUrl));
-    expect(abraham.linkUrl).toBeNull();
-    expect(abraham.waLink).toBeNull();
+    for (const row of data.cobros) {
+      expect(row).not.toHaveProperty("linkUrl");
+      expect(row).not.toHaveProperty("waLink");
+      /* What the row DOES carry is the identity the act needs */
+      expect(row.customerUsuario).toEqual(expect.any(String));
+    }
   });
 
   /* bug: cobros-links-lookup-params — the pilot's 205 pending invoices
-     name more than 99 debtors, all of whom the roster had already given a
-     link. The lookup chunked by D1_MAX_PARAMS - 1 and bound the business
-     id, `source = 'panel'` AND 99 usuarios: 101, one over D1's cap, and
-     the read died as a generic 500. test/setup.ts makes the cap real, so
-     this test fails on the old chunk size the way production did. The
-     link INSERT below is chunked for the same reason. */
-  it("bug cobros-links-lookup-params: 120 debtors with stored links read in one page, every row carrying its link", async () => {
-    const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+     name more than 99 debtors. The lookup chunked by D1_MAX_PARAMS - 1
+     and bound the business id, `source = 'panel'` AND 99 usuarios: 101,
+     one over D1's cap, and the read died as a generic 500.
+
+     links-on-demand-search D16 retired the lookup itself, so the bind
+     that overran the cap cannot happen on this path any more. The case
+     stays, narrowed to what is still true and still worth guarding: a
+     tenant with more debtors than D1 will bind parameters for is read in
+     one page, whole. `test/setup.ts` still makes the cap real for every
+     statement the suite runs, so a new wide bind anywhere fails a test
+     rather than a tenant. */
+  it("bug cobros-links-lookup-params: 120 debtors read in one page, none of them costing a bound parameter", async () => {
+    await seedBusiness({ wisphubApiKey: "wh-key-1" });
     const usuarios = Array.from({ length: 120 }, (_, i) => `cliente${String(i).padStart(3, "0")}@wifiplus`);
-    const db = drizzle(env.DB);
-    for (let i = 0; i < usuarios.length; i += 10) {
-      await db.insert(paymentLinks).values(
-        usuarios.slice(i, i + 10).map((usuario, j) => ({
-          businessId: business.id,
-          token: `tok${String(i + j).padStart(13, "0")}`,
-          wisphubCustomerId: String(1000 + i + j),
-          customerUsuario: usuario,
-        })),
-      );
-    }
     mockFacturas(
       usuarios.map((usuario, i) =>
         invoiceRow({ id_factura: 5000 + i, cliente: { usuario, nombre: `Cliente ${i}` } }),
@@ -127,8 +132,6 @@ describe("US-R01: the section reads WispHub live", () => {
     expect(res.status).toBe(200);
     const { data } = await res.json();
     expect(data.cobros).toHaveLength(120);
-    const withLink = data.cobros.filter((c: { linkUrl: string | null }) => c.linkUrl !== null);
-    expect(withLink).toHaveLength(120);
   });
 
   it("scenario 4: two reads inside 30 seconds cost one provider call (the display cache)", async () => {

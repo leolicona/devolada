@@ -112,8 +112,6 @@ export const cobros = {
       amountCents: 49900,
       invoiceDate: "2026-08-01",
       dueDate: "2026-08-11",
-      linkUrl: null,
-      waLink: null,
     },
   ],
   complete: true,

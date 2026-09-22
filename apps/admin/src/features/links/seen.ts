@@ -46,8 +46,10 @@ export const foldText = (text: string) =>
 export const normalizeSearch = (text: string) => foldText(text.trim()).replace(/\s+/g, " ");
 
 /* The identity a row is remembered by: the usuario for a panel row, the
-   caller's reference for an API one (D6). */
-export const rowKey = (row: Pick<CustomerRow, "usuario" | "customerRef">) =>
+   caller's reference for an API one (D6). Cobros passes a debtor's
+   usuario through the same door (D14), so the shape is the narrow one
+   both screens can satisfy rather than a Links row. */
+export const rowKey = (row: { usuario: string | null; customerRef?: string | null }) =>
   row.usuario ?? row.customerRef ?? "";
 
 function read<T>(key: string): T | null {

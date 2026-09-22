@@ -45,8 +45,6 @@ const cobros = (names: string[]) =>
       amountCents: 49900,
       invoiceDate: day(-9),
       dueDate: day(+5),
-      linkUrl: null,
-      waLink: null,
     })),
     complete: true,
     readAt: Date.now(),

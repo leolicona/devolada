@@ -1,15 +1,11 @@
 import type { Context } from "hono";
-import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { paymentLinks } from "../../db/schema";
-import { D1_MAX_PARAMS, chunks } from "../../db/params";
 import { integrationOf } from "../../integrations/store";
 import { WispHubError } from "../../wisphub/client";
 /* provider-address-per-isp D4 */
 import { wisphubFor } from "../../wisphub/factory";
 import { readPendingInvoices } from "../../wisphub/snapshot";
-import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import type { PaymentRequestsResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -38,59 +34,23 @@ export async function listPaymentRequests(c: Ctx) {
        registration, so a payment registered anywhere is a miss here */
     const pending = await readPendingInvoices(db, actor.id, wisphub, now, { display: true });
 
-    /* pilot-UX round: the debtor's permanent link rides the row, so
-       "veo quién me debe → le mando su link" is one expansion away.
-       STORED links only — the invoice list carries no numeric id to
-       lazy-create with; the roster (which does) creates them all, and a
-       missing one simply hides the buttons. The wa.me link has no phone
-       here (the invoice row carries none): it opens WhatsApp's own
-       picker with the message ready, never a stranger's chat. */
-    const usuarios = [...new Set(pending.invoices.map((f) => f.usuario))];
-    /* Two fixed parameters — the business id and `source` — and the rest
-       are usuarios (BUG-021). It read "one" until bug
-       cobros-links-lookup-params: `source` joined the WHERE after the
-       chunk was sized, 99 debtors bound 101, and production D1 refused
-       what the local one let through. test/setup.ts now enforces the
-       cap in the suite, so the next such slip fails a test instead of a
-       tenant. */
-    const links: { customerUsuario: string; token: string }[] = [];
-    for (const part of chunks(usuarios, D1_MAX_PARAMS - 2)) {
-      /* automated-collections-api D3: panel links only — an API link has
-         no usuario, and only a panel link belongs on a WispHub invoice */
-      const rows = await db
-        .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
-        .from(paymentLinks)
-        .where(
-          and(
-            eq(paymentLinks.businessId, actor.id),
-            eq(paymentLinks.source, "panel"),
-            inArray(paymentLinks.customerUsuario, part),
-          ),
-        );
-      for (const row of rows) {
-        if (row.customerUsuario !== null) links.push({ customerUsuario: row.customerUsuario, token: row.token });
-      }
-    }
-    const urlByUsuario = new Map(
-      links.map((l) => [l.customerUsuario, `${c.env.PAGO_BASE_URL}/p/${l.token}`]),
-    );
-    const shareTextFor = (url: string) =>
-      `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
-
+    /* links-on-demand-search D16: the batch lookup of stored links is
+       GONE, and with it the chunking under D1's parameter cap that
+       `bug: cobros-links-lookup-params` exists for. The row carried a
+       link because the roster had already created one for every
+       customer; under FR-008 most debtors have none, and a link without
+       a phone is exactly the field that sent the operator to WhatsApp's
+       contact picker. Both buttons press `POST /direct-payments/links`
+       now — one read, one rule, and the number rides along with it. */
     const data: PaymentRequestsResponse = {
-      cobros: pending.invoices.map((f) => {
-        const linkUrl = urlByUsuario.get(f.usuario) ?? null;
-        return {
+      cobros: pending.invoices.map((f) => ({
         externalId: f.invoiceId,
         customerUsuario: f.usuario,
         customerName: f.customerName,
         amountCents: f.totalCents,
         invoiceDate: f.invoiceDate,
         dueDate: f.dueDate,
-        linkUrl,
-        waLink: linkUrl ? whatsAppLink(shareTextFor(linkUrl), toWhatsAppPhone(null)) : null,
-        };
-      }),
+      })),
       complete: pending.complete,
       /* presence-freshness D7 (BUG-018): when WispHub was asked, not now */
       readAt: pending.readAt,

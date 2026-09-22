@@ -131,10 +131,20 @@ const settingsCreditRoute = createRoute({ getParentRoute: () => settingsRoute, p
 const settingsUsersRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/users", component: UsersScreen });
 const settingsSecurityRoute = createRoute({ getParentRoute: () => settingsRoute, path: "/security", component: SecurityScreen });
 
+/* links-on-demand-search D11 (FR-011): the search text lives in the
+   ADDRESS. That is what makes it survive navigating away and back, the
+   browser's back button and a reload — and what gives a search an
+   address at all, so an operator can send one to a colleague. An empty
+   or blank `q` is no search: it becomes undefined, so the address of a
+   plain browse carries nothing. */
+export const linksSearch = (s: Record<string, unknown>): { q?: string } => ({
+  q: typeof s.q === "string" && s.q.trim() !== "" ? s.q : undefined,
+});
 const linksRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/links",
   component: LinksScreen,
+  validateSearch: linksSearch,
 });
 /* operator-panel D3: a route in the admin, hidden unless you are the operator */
 const operatorRoute = createRoute({

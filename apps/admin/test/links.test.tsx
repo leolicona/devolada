@@ -6,6 +6,7 @@ import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 import { FOCUS_FLOOR_MS, resetPresenceForTests } from "../src/lib/presence";
+import { RESULTS_TTL_MS, resetSeenForTests } from "../src/features/links/seen";
 
 /* links-on-demand-search US1: the page asks for one screenful instead
    of reading a customer base.
@@ -413,5 +414,104 @@ describe("bug links-refused-key: a refused key is a setup problem, not an outage
     expect(screen.queryByText("Janely Reyes")).not.toBeInTheDocument();
     expect(screen.queryByText(/sin conexión a wisphub/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
+  });
+});
+
+/* links-on-demand-search US2: the search survives leaving the page.
+
+   Three stores, no server state (D11): the URL carries the text, so a
+   pasted address opens on that search and the back button lands on it;
+   `sessionStorage` carries the results for two minutes, because a query
+   cache dies on reload and the operator should not pay a second visible
+   wait for the search they just did.
+
+   What is NOT promised: past two minutes the same text asks again, and
+   an empty box leaves nothing behind — a browse is not a search. */
+describe("US2: the text lives in the address and the results in the session", () => {
+  it("FR-011: the address carries the settled text, and a pasted address opens on that search", async () => {
+    const asked: string[] = [];
+    const answer = (url: URL) => {
+      const q = url.searchParams.get("q");
+      if (q === null) return ok(block(twoCustomers()));
+      asked.push(q);
+      return ok(block([panel({ name: "María Fernanda López" })], { matched: 1, total: null }));
+    };
+
+    /* Typed here: the address follows once the text settles */
+    server.use(handlers.session(() => ok(businessActor)), handlers.customers(answer));
+    const router = renderApp("/links");
+    await screen.findByText("Janely Reyes");
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "maria");
+    expect(await screen.findByText("María Fernanda López")).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: "maria" }));
+
+    /* Pasted there: the same search, with the box already filled */
+    cleanup();
+    resetSeenForTests();
+    server.use(handlers.session(() => ok(businessActor)), handlers.customers(answer));
+    renderApp("/links?q=maria");
+    expect(await screen.findByText("María Fernanda López")).toBeInTheDocument();
+    expect(screen.getByLabelText(/buscar cliente/i)).toHaveValue("maria");
+  });
+
+  it("FR-012: remounting inside two minutes restores the results without asking again", async () => {
+    let searches = 0;
+    const answer = (url: URL) => {
+      const q = url.searchParams.get("q");
+      if (q === null) return ok(block(twoCustomers()));
+      searches++;
+      return ok(block([panel({ name: "María Fernanda López" })], { matched: 1, total: null }));
+    };
+    server.use(handlers.session(() => ok(businessActor)), handlers.customers(answer));
+    renderApp("/links");
+    await screen.findByText("Janely Reyes");
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "maria");
+    expect(await screen.findByText("María Fernanda López")).toBeInTheDocument();
+    expect(searches).toBe(1);
+
+    /* Leave and come back — a fresh query cache, the session's memory
+       intact: the rows are there before anything is asked */
+    cleanup();
+    server.use(handlers.session(() => ok(businessActor)), handlers.customers(answer));
+    renderApp("/links?q=maria");
+    expect(await screen.findByText("María Fernanda López")).toBeInTheDocument();
+    expect(searches).toBe(1);
+  });
+
+  it("FR-012: a stored search older than two minutes is asked again", async () => {
+    let searches = 0;
+    const answer = (url: URL) => {
+      const q = url.searchParams.get("q");
+      if (q === null) return ok(block(twoCustomers()));
+      searches++;
+      return ok(block([panel({ name: "María Fernanda López" })], { matched: 1, total: null }));
+    };
+    server.use(handlers.session(() => ok(businessActor)), handlers.customers(answer));
+    renderApp("/links");
+    await screen.findByText("Janely Reyes");
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "maria");
+    await screen.findByText("María Fernanda López");
+    expect(searches).toBe(1);
+
+    /* Age the entry past its two minutes, in the store itself */
+    const raw = JSON.parse(sessionStorage.getItem("devolada.links.results.v1")!);
+    for (const entry of Object.values(raw) as { at: number }[]) {
+      entry.at = Date.now() - (RESULTS_TTL_MS + 1_000);
+    }
+    sessionStorage.setItem("devolada.links.results.v1", JSON.stringify(raw));
+
+    cleanup();
+    server.use(handlers.session(() => ok(businessActor)), handlers.customers(answer));
+    renderApp("/links?q=maria");
+    expect(await screen.findByText("María Fernanda López")).toBeInTheDocument();
+    expect(searches).toBe(2);
+  });
+
+  it("an empty box leaves no entry behind: a browse is not a search", async () => {
+    arrange();
+    await screen.findByText("Janely Reyes");
+    await waitFor(() =>
+      expect(sessionStorage.getItem("devolada.links.results.v1")).toBeNull(),
+    );
   });
 });

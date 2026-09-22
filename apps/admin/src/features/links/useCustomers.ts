@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/r
 import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
-import { rowKey } from "./seen";
+import { readResults, rowKey, writeResults } from "./seen";
 
 /* links-on-demand-search US1: the page asks for what it shows.
 
@@ -31,8 +31,9 @@ export const BLOCK_MAX = 50;
 export const SEARCH_MIN_CHARS = 3;
 export const SEARCH_DEBOUNCE_MS = 300;
 
-/* FR-012, inside this tab: the same text is not asked again for two
-   minutes. Surviving a RELOAD is US2's job (seen.ts, T027). */
+/* FR-012: the same text is not asked again for two minutes. The query
+   cache holds it inside this tab; `seen.ts` holds it across a reload,
+   which a query cache cannot survive (D11). Both use this figure. */
 const RESULTS_STALE_MS = 2 * 60_000;
 
 /* D3/FR-020: only the browser knows what fills its own viewport. The
@@ -66,6 +67,8 @@ export type CustomersView = {
   /* The text the rows on screen actually answer — never the one still
      being typed (FR-013) */
   answering: string;
+  /* The settled text, for the address to carry (FR-011) */
+  settled: string;
   searching: boolean;
   isPending: boolean;
   isError: boolean;
@@ -103,6 +106,14 @@ export function useCustomers(search: string): CustomersView {
      cost the two-minute memory (FR-012). */
   const key = useMemo(() => ["links-customers", q ?? ""] as const, [q]);
 
+  /* FR-012 / D11: what this exact search answered last time, if it was
+     within the two minutes. A TanStack cache dies on reload; this is
+     what brings a reloaded or re-entered search back without a second
+     visible wait (US2 scenarios 2 and 4). Only the FIRST block is
+     stored — the blocks below it are a scroll the operator can repeat,
+     and storing a session's whole scroll is not a two-minute memory. */
+  const stored = useMemo(() => (q === undefined ? null : readResults(q)), [q]);
+
   const url = useCallback(
     (cursor: string | null) => {
       const params = new URLSearchParams({ limit: String(limit) });
@@ -119,6 +130,12 @@ export function useCustomers(search: string): CustomersView {
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     staleTime: RESULTS_STALE_MS,
+    /* Seeded from the browser's own memory, with the age it really has:
+       inside the two minutes it renders at once and asks nothing, past
+       them `readResults` has already returned null and this is a normal
+       fetch (FR-012). */
+    initialData: stored ? { pages: [stored.block], pageParams: [null] } : undefined,
+    initialDataUpdatedAt: stored?.at,
     retry: false,
     /* FR-027 / D15: the return to the tab is handled by hand below, and
        only for the FIRST block. TanStack's own focus refetch would ask
@@ -148,6 +165,14 @@ export function useCustomers(search: string): CustomersView {
 
   const first = pages?.[0];
   const last = pages?.[pages.length - 1];
+
+  /* Store what the provider answered, never what we restored: writing
+     the restored block back would give it a fresh timestamp and the
+     two-minute memory would never expire (FR-012). */
+  useEffect(() => {
+    if (q === undefined || !first || first === stored?.block) return;
+    writeResults(q, first);
+  }, [q, first, stored]);
 
   /* FR-027 / D15: the page no longer reports its own age — a block is
      read when it renders, so there is nothing to print and nothing to
@@ -215,6 +240,10 @@ export function useCustomers(search: string): CustomersView {
     wisphub: first?.wisphub ?? "ok",
     offline: first?.wisphub === "unavailable" || (background.failed && !background.refused && rows.length > 0),
     answering: q ?? "",
+    /* The text the operator has settled on, whatever its length — what
+       the address carries (FR-011). `answering` is what the ROWS answer,
+       which is empty until three characters. */
+    settled: trimmed,
     /* The pause is part of the search: the page says it is working from
        the moment the operator stops typing, not only once the request
        is on the wire */

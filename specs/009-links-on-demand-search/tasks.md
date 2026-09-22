@@ -119,9 +119,9 @@ types and fixtures from (constitution III).
 
 **Independent Test**: search, navigate away and back, press back, reload — each time the same text is in the box and the same results are on screen, with no second visible wait inside two minutes.
 
-- [ ] T025 [P] [US2] Add US2 cases to `apps/admin/test/links.test.tsx` citing `links-on-demand-search US2`: the URL carries the text, remounting restores text and results from `seen.ts`, a stored entry older than two minutes is re-fetched, and an empty box leaves no entry behind
-- [ ] T026 [US2] Add `?q=` as a validated search param on the Links route in `apps/admin/src/routes/`, so the text lives in the address and a pasted address opens on that search (FR-011, D11)
-- [ ] T027 [US2] Wire the result store of `seen.ts` into `useCustomers.ts`: persist by normalised text, two-minute TTL, reset cleanly in tests (FR-012, D11)
+- [X] T025 [P] [US2] Add US2 cases to `apps/admin/test/links.test.tsx` citing `links-on-demand-search US2`: the URL carries the text, remounting restores text and results from `seen.ts`, a stored entry older than two minutes is re-fetched, and an empty box leaves no entry behind
+- [X] T026 [US2] Add `?q=` as a validated search param on the Links route in `apps/admin/src/routes/`, so the text lives in the address and a pasted address opens on that search (FR-011, D11)
+- [X] T027 [US2] Wire the result store of `seen.ts` into `useCustomers.ts`: persist by normalised text, two-minute TTL, reset cleanly in tests (FR-012, D11)
 
 **Checkpoint**: the search is durable across every way of leaving the page.
 

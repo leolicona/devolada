@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { CreateLinkResponse, CustomerRow } from "@devolada/api/direct-payments-schema";
+import type { CreateLinkResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
 import { readMarks, rowKey, writeMark, type Mark } from "./seen";
 
@@ -17,6 +17,18 @@ import { readMarks, rowKey, writeMark, type Mark } from "./seen";
    it is promised to nobody else. */
 
 export type ActionState = "idle" | "working" | "copied" | "sent" | "failed" | "not_copied";
+
+/* What the hook needs of a row, and no more (D14): an identity, and the
+   link it already carries if it carries one. A Links customer row
+   satisfies this; so does a Cobros debtor, who carries an identity and
+   never a link. One hook, one rule, and no second copy of it on the
+   collections screen (FR-025). */
+export type Shareable = {
+  usuario: string | null;
+  customerRef?: string | null;
+  url?: string | null;
+  waLink?: string | null;
+};
 
 /* How long the answer stays on the button before the row goes quiet
    again. The MARK survives the session; this is just the confirmation. */
@@ -73,7 +85,7 @@ export function useLinkAction() {
   );
 
   const linkOf = useCallback(
-    (row: CustomerRow): Acted | null => {
+    (row: Shareable): Acted | null => {
       const key = rowKey(row);
       if (acted[key]) return acted[key];
       return row.url && row.waLink ? { url: row.url, waLink: row.waLink } : null;
@@ -82,7 +94,7 @@ export function useLinkAction() {
   );
 
   const copy = useCallback(
-    async (row: CustomerRow) => {
+    async (row: Shareable) => {
       const key = rowKey(row);
       setState((all) => ({ ...all, [key]: "working" }));
       try {
@@ -101,7 +113,7 @@ export function useLinkAction() {
   );
 
   const send = useCallback(
-    async (row: CustomerRow) => {
+    async (row: Shareable) => {
       const key = rowKey(row);
       const known = linkOf(row);
       if (known) {
@@ -147,7 +159,7 @@ export function useLinkAction() {
     send,
     /* What the row shows right now, and what it remembers from earlier
        in this session (FR-022) */
-    stateOf: (row: CustomerRow): ActionState => state[rowKey(row)] ?? "idle",
-    markOf: (row: CustomerRow): Mark | null => marks[rowKey(row)] ?? null,
+    stateOf: (row: Shareable): ActionState => state[rowKey(row)] ?? "idle",
+    markOf: (row: Shareable): Mark | null => marks[rowKey(row)] ?? null,
   };
 }

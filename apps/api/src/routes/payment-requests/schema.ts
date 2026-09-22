@@ -16,10 +16,20 @@ export const cobroRow = z.object({
      field (verified against the live tenant per the spec's contract) */
   invoiceDate: z.string().nullable(),
   dueDate: z.string().nullable(),
-  /* pilot-UX round: the debtor's permanent link, when it already exists
-     (the roster lazy-creates them); null hides the buttons */
-  linkUrl: z.string().nullable(),
-  waLink: z.string().nullable(),
+  /* links-on-demand-search D16: `linkUrl` and `waLink` are GONE.
+
+     They existed because the roster had already made a link for every
+     customer, so the row could carry one. Under FR-008 most debtors have
+     none, and the field that remained would produce the worse behaviour:
+     a link with no phone, for a debtor who already has one, sending the
+     operator to WhatsApp's contact picker to find them by hand.
+
+     Both buttons now take one path — `POST /direct-payments/links`, the
+     act — which reads the customer fresh and therefore carries their
+     NUMBER, so WhatsApp opens their own chat (FR-025, FR-026, FR-028).
+     The batch lookup of stored links went with these two fields, and the
+     chunking under D1's parameter cap it needed with it
+     (`bug: cobros-links-lookup-params`). */
 });
 
 export const paymentRequestsResponse = z.object({

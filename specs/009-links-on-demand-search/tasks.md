@@ -100,14 +100,14 @@ types and fixtures from (constitution III).
 
 ### Tests for User Story 4
 
-- [ ] T020 [P] [US4] Extend `apps/api/test/links-create-on-act.test.ts` with cases citing `links-on-demand-search US4`: a debtor with no link gains one from the act, a debtor who has one keeps it, the link Cobros creates is the link Links finds, and the returned `waLink` **carries the phone the act read** — with the picker fallback only for a record whose number is absent or unreadable (FR-028, D16)
-- [ ] T021 [US4] Rewrite `apps/admin/test/cobros.test.tsx` citing `links-on-demand-search US4`: every permitted row shows both buttons, pressing one calls the create door and opens the customer's own chat, a record without a readable phone falls back to the picker, a viewer sees neither button, and `axe` passes
+- [X] T020 [P] [US4] Extend `apps/api/test/links-create-on-act.test.ts` with cases citing `links-on-demand-search US4`: a debtor with no link gains one from the act, a debtor who has one keeps it, the link Cobros creates is the link Links finds, and the returned `waLink` **carries the phone the act read** — with the picker fallback only for a record whose number is absent or unreadable (FR-028, D16)
+- [X] T021 [US4] Rewrite `apps/admin/test/cobros.test.tsx` citing `links-on-demand-search US4`: every permitted row shows both buttons, pressing one calls the create door and opens the customer's own chat, a record without a readable phone falls back to the picker, a viewer sees neither button, and `axe` passes
 
 ### Implementation for User Story 4
 
-- [ ] T022 [US4] Remove `linkUrl` and `waLink` from `cobroRow` in `apps/api/src/routes/payment-requests/schema.ts`, citing D16: a stored `waLink` has no phone and would send the operator to the picker for a debtor who already has a link
-- [ ] T023 [US4] Update `apps/api/src/routes/payment-requests/handler.ts`: drop the batch lookup of stored links and the chunking under D1's parameter cap it needed (`bug: cobros-links-lookup-params`), since neither field survives. The debt read, the 5-page window, `complete` and `readAt` are untouched (D14, D16)
-- [ ] T024 [US4] Update `apps/admin/src/features/cobros/CobrosScreen.tsx` to show Copiar and WhatsApp on every permitted row and call `useLinkAction` on the act, opening the chat with the `waLink` the door returns — reusing the hook whole, adding no second copy of the rule (FR-028)
+- [X] T022 [US4] Remove `linkUrl` and `waLink` from `cobroRow` in `apps/api/src/routes/payment-requests/schema.ts`, citing D16: a stored `waLink` has no phone and would send the operator to the picker for a debtor who already has a link
+- [X] T023 [US4] Update `apps/api/src/routes/payment-requests/handler.ts`: drop the batch lookup of stored links and the chunking under D1's parameter cap it needed (`bug: cobros-links-lookup-params`), since neither field survives. The debt read, the 5-page window, `complete` and `readAt` are untouched (D14, D16)
+- [X] T024 [US4] Update `apps/admin/src/features/cobros/CobrosScreen.tsx` to show Copiar and WhatsApp on every permitted row and call `useLinkAction` on the act, opening the chat with the `waLink` the door returns — reusing the hook whole, adding no second copy of the rule (FR-028)
 
 **Checkpoint**: US1 and US4 both work; the collections path survives the prune that follows.
 
@@ -153,6 +153,13 @@ existing test files read the roster. The constitution forbids skipping,
 disabling or quarantining any of them to get green, so each is moved to the new
 door first and the door is removed second.
 
+**T036 moved to Phase 4 (2026-09-22).** T022 drops `linkUrl` and `waLink` from
+`cobroRow` in that phase, so the two cases in
+`apps/api/test/payment-requests.test.ts` that assert them cannot wait here: one
+asserted the stored link rode the row, the other that 120 debtors each carried
+one. Both were rewritten with US4, and `.specify/bugs/cobros-links-lookup-params`
+records that the bind which overran D1's cap left with the lookup.
+
 **Five of them moved in Phase 3, not here (2026-09-22).** T019 rewrites the
 Links *screen*, and five files render that screen: `apps/admin/test/msw.ts`
 (T011), `links.test.tsx` (T012), `identity-round.test.tsx` (T037),
@@ -168,7 +175,7 @@ leaving the admin suite red for four phases. The API-side migration
 - [ ] T033 [US1] Rewrite `apps/api/test/direct-payments-links.test.ts` onto `GET /direct-payments/customers`, **keeping** the `bug: links-refused-key` case that asserts a refused key answers 503 with `WISPHUB_AUTH_FAILED`, and re-citing the roster-era `US-D07` cases as `links-on-demand-search US1`
 - [ ] T034 [US1] Retire the roster cases of `apps/api/test/presence-freshness.test.ts` (scenario 9: "two roster reads inside the window answer the same readAt"), recording in the file that FR-027 / D15 replaced the promise — a block is read when it renders, so no two blocks share a `readAt`. The invoice-read cases in the same file are untouched
 - [ ] T035 [US1] Move FR-017's proof in `apps/api/test/collections-api-test-mode.test.ts:175` from the roster to the new customers door, keeping the one-predicate rule (`realOnly`) with the same call-site coverage
-- [ ] T036 [US1] Fix the premise in `apps/api/test/payment-requests.test.ts:100` — "all of whom the roster had already given a link" is false after US4; the fixture must cover a debtor with no link
+- [X] T036 [US1] Fix the premise in `apps/api/test/payment-requests.test.ts:100` — "all of whom the roster had already given a link" is false after US4; the fixture must cover a debtor with no link
 - [X] T037 [P] [US1] Rewrite `apps/admin/test/identity-round.test.tsx:110` ("Links: the roster reads, the share buttons wait for the CLABE") against the new screen; the CLABE gate itself is unchanged (FR-016)
 - [X] T038 [P] [US1] Rebuild `apps/admin/test/presence-freshness.test.tsx` on blocks per FR-027 / D15: the age indicator is gone and its assertions with it, while the re-read on return to the tab and its 30-second floor **stay** and now apply to the first block only
 - [X] T039 [US1] Rewrite `tests/e2e/keyboard.spec.ts` tab-order assertions, which rest on "the roster arrives alive on arrival" (lines 98–114); the first block arrives after a provider read, so the reading order and the wait both change

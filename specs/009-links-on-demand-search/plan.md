@@ -75,7 +75,7 @@ reviewer meets it rather than discovers it.
 ```text
 specs/009-links-on-demand-search/
 ├── plan.md              # This file
-├── research.md          # Phase 0 — D1–D14
+├── research.md          # Phase 0 — D1–D16
 ├── data-model.md        # Phase 1
 ├── quickstart.md        # Phase 1
 ├── contracts/

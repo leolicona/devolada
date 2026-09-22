@@ -103,6 +103,21 @@ the order [tasks.md](./tasks.md) builds them in.
   feature as User Story 4, because without it FR-023 leaves the
   collections screen unable to send anything.
 
+### Session 2026-09-22
+
+- Q: Should the Links page still tell the operator how old what they see is?
+  → A: No. A block is read when it renders, so there is no age to report
+  (FR-027). The re-read on returning to the tab stays with its 30-second
+  floor, and "Sin conexión a WispHub" remains the only staleness the page
+  admits. Decided against a per-row timestamp, which would print a doubt the
+  page does not have.
+- Q: How far does the direct-chat change go in Cobros? → A: All the way —
+  `cobroRow.linkUrl` and `waLink` are dropped, and both buttons take the one
+  path that reads the customer fresh (FR-028). Decided against keeping
+  `linkUrl` for Copiar alone: two buttons on one row obeying different rules
+  is a screen the operator cannot predict. The cost is accepted — one
+  provider read per press, including a debtor who already had a link.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Any customer can be found and sent their link (Priority: P1)
@@ -523,9 +538,9 @@ shows for that customer afterwards.
   delivery, CSV export and WispHub webhooks are later pieces, in that
   order. The copied / sent mark of FR-022 is a cache, not their
   forerunner: the states piece is what gives delivery a stored life.
-- **`presence-freshness` loses one promise here, on purpose** (FR-027): the
-  Links page stops reporting its read's age, because every block is live when
-  it renders. The re-read on return to the tab and the absence of an
+- **`presence-freshness` loses one promise here, on purpose** (FR-027,
+  confirmed 2026-09-22): the Links page stops reporting its read's age,
+  because every block is live when it renders. The re-read on return to the tab and the absence of an
   "Actualizar" button both stay. Nothing about the invoice reads, Cobros or the
   payer's page changes.
 - The operation budget for a provider read stays what it is today; a

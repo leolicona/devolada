@@ -3,14 +3,14 @@ import { zValidator } from "@hono/zod-validator";
 import type { Context } from "hono";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
-import { createLinkRequest, customersQuery, linksListQuery, payRequest, readProofRequest } from "./schema";
+import { createLinkRequest, customersQuery, payRequest, readProofRequest } from "./schema";
 import {
   createLink,
+  dismissPrune,
   getDirectPaymentStatus,
   getLinkStatus,
   listCustomers,
-  linksRoster,
-  listLinks,
+  pruneNotice,
   readProof,
   serveProof,
   submitPayment,
@@ -61,16 +61,28 @@ directPaymentsRoute.post(
   },
 );
 
-/* Static /links first: it must win over /links/:token */
-directPaymentsRoute.get("/links", requireSession, requireArea("payments", "read"), zValidator("query", linksListQuery), (c) => {
-  return listLinks(c, c.req.valid("query").cursor);
+/* links-on-demand-search D13 (FR-023): the one-time cleanup's count,
+   and the dismissal that ends it. The read is `payments: read`; the
+   dismissal is `payments: operate`, stricter on purpose — a viewer
+   should not silence, for everyone, the record of links that went. */
+directPaymentsRoute.get("/prune-notice", requireSession, requireArea("payments", "read"), (c) => {
+  return pruneNotice(c);
 });
 
-/* pilot-UX round: the roster replaced the parameter-guessing search */
-directPaymentsRoute.get("/links/roster", requireSession, requireArea("payments", "read"), (c) => {
-  return linksRoster(c);
-});
+directPaymentsRoute.post(
+  "/prune-notice/dismiss",
+  requireSession,
+  requireArea("payments", "operate"),
+  (c) => {
+    return dismissPrune(c);
+  },
+);
 
+/* links-on-demand-search D12: `GET /links` and `GET /links/roster` are
+   REMOVED. Both read the whole customer base and wrote a link for every
+   row on every read — the cost this feature exists to end (FR-008). The
+   customers door above replaces them; the payer's `/links/:token` below
+   is a different resource entirely and is untouched. */
 directPaymentsRoute.get("/links/:token", (c) => {
   return getLinkStatus(c, c.req.param("token"));
 });

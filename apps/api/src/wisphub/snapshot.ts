@@ -3,17 +3,14 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { payments, wisphubPages, wisphubSweeps } from "../db/schema";
 import { integrationOf } from "../integrations/store";
-import { ensureLinks } from "../direct-payments/links";
 import {
   PENDING_LIVE_PAGES,
-  ROSTER_LIVE_PAGES,
   WispHubError,
   type PendingInvoice,
   type PendingInvoices,
   type WispHub,
-  type WispHubCustomer,
 } from "./client";
-import { pendingInvoicesForDisplay, pendingVersion, rosterForDisplay } from "./cache";
+import { pendingInvoicesForDisplay, pendingVersion } from "./cache";
 /* provider-address-per-isp D4: the sweep's clients come from the factory */
 import { wisphubFor } from "./factory";
 
@@ -23,7 +20,7 @@ import { wisphubFor } from "./factory";
    WispHub's invoice list has no customer filter, so "what does this
    customer owe" is answered by reading the whole tenant — and "who are
    my customers" is the whole tenant by definition. A request can pay a
-   few pages (`PENDING_LIVE_PAGES`, `ROSTER_LIVE_PAGES`); a 6,509-customer
+   few pages (`PENDING_LIVE_PAGES`); a 6,509-customer
    ISP needs sixty-odd, 30–40 s at the measured 0.4–0.6 s per call. So
    the reads split by size, decided by data and never by config:
 
@@ -83,7 +80,12 @@ type KindSpec = {
   onPage?: (db: DB, businessId: string, rows: unknown[]) => Promise<void>;
 };
 
-const KINDS: Record<SweepKind, KindSpec> = {
+/* Partial on purpose (links-on-demand-search D12): the `sweep_kind`
+   enum keeps both values — narrowing it would be a non-additive
+   migration for no gain — and THIS map is what decides what runs. A row
+   of a kind nobody sweeps any more is an orphan the one-time prune
+   deletes (D13); until it does, it is skipped rather than crashed on. */
+const KINDS: Partial<Record<SweepKind, KindSpec>> = {
   pending: {
     kind: "pending",
     livePages: PENDING_LIVE_PAGES,
@@ -93,23 +95,15 @@ const KINDS: Record<SweepKind, KindSpec> = {
       return { rows: invoices, next };
     },
   },
-  roster: {
-    kind: "roster",
-    livePages: ROSTER_LIVE_PAGES,
-    firstPath: (wisphub) => wisphub.customersPath(),
-    page: async (wisphub, path) => {
-      const { customers, next } = await wisphub.customersPage(path);
-      return { rows: customers, next };
-    },
-    /* bug: links-roster-cap: the links are created where the list is
-       read — a hundred customers a page, a handful of chunked statements
-       — so the first open of Links on a 6,509-customer tenant is a read,
-       not six hundred inserts inside one request (direct-payment D5:
-       listing is what creates the missing links; now the sweep lists). */
-    onPage: async (db, businessId, rows) => {
-      await ensureLinks(db, businessId, rows as WispHubCustomer[]);
-    },
-  },
+  /* links-on-demand-search D12: the `roster` pass is REMOVED. It read
+     the whole customer base in the background and created a link for
+     every page as it landed, which is precisely what FR-008 ends — a
+     link is born on an operator's act and on nothing else (SC-009).
+
+     The `sweep_kind` ENUM keeps both values: narrowing it would be a
+     non-additive migration for no gain, and `KINDS` is what decides
+     what runs. The orphaned `roster` sweep and page rows are deleted by
+     the one-time prune (D13, `links/prune.ts`). */
 };
 
 export type PendingRead = PendingInvoices & {
@@ -118,12 +112,6 @@ export type PendingRead = PendingInvoices & {
   readAt: number;
 };
 
-export type RosterRead = {
-  customers: WispHubCustomer[];
-  complete: boolean;
-  source: "live" | "snapshot";
-  readAt: number;
-};
 
 async function sweepRowOf(db: DB, businessId: string, kind: SweepKind): Promise<SweepRow | undefined> {
   const [row] = await db
@@ -179,38 +167,11 @@ export async function readPendingInvoices(
   return { ...live, source: live.source ?? "live" };
 }
 
-/* Every reader of the customer list comes through here — the Links
-   roster and the paged links door (bug: links-roster-cap). `display`
-   takes the 30-second cache on the live path, as the roster always has;
-   the paged door leaves it false and reads the adapter directly, as
-   `listCustomers` did before it (US-D07 D5's recycled-id scenario pins
-   that it sees WispHub's change at once). */
-export async function readRoster(
-  db: DB,
-  businessId: string,
-  wisphub: WispHub,
-  now: Date,
-  opts: { display?: boolean } = {},
-): Promise<RosterRead> {
-  const row = await sweepRowOf(db, businessId, "roster");
-  if (row && servesSnapshot(row, wisphub)) {
-    const snapshot = await snapshotRows<WispHubCustomer>(db, row, now, (c) => c.usuario);
-    if (snapshot) {
-      return {
-        customers: [...snapshot.byKey.values()],
-        complete: snapshot.complete,
-        source: "snapshot",
-        readAt: snapshot.readAt,
-      };
-    }
-  }
-
-  const live = opts.display
-    ? await rosterForDisplay(businessId, wisphub, now)
-    : { ...(await wisphub.listCustomersFull()), readAt: now.getTime() };
-  if (!live.complete) await wakeSweep(db, businessId, "roster", wisphub.baseUrl, now);
-  return { ...live, source: "live" };
-}
+/* links-on-demand-search D12: `readRoster` is REMOVED. Every reader of
+   the customer list came through it; there are no readers now — the
+   customers door asks WispHub for one block and renders it (FR-001).
+   `readPendingInvoices` above is untouched, and so is the whole
+   `pending` pass: Cobros and every money path still read it. */
 
 /* A finished pass longer than the kind's live budget, read from the
    address the tenant is on today (provider-address-per-isp T046). A
@@ -219,7 +180,7 @@ function servesSnapshot(row: SweepRow, wisphub: WispHub): boolean {
   return (
     row.baseUrl === wisphub.baseUrl &&
     row.servedPassId !== null &&
-    (row.servedPages ?? 0) > KINDS[row.kind].livePages
+    (row.servedPages ?? 0) > (KINDS[row.kind]?.livePages ?? Infinity)
   );
 }
 
@@ -327,6 +288,8 @@ export async function sweepWispHubLists(env: Bindings, now: Date = new Date()): 
 
 async function tick(db: DB, env: Bindings, row: SweepRow, now: Date, report: SweepReport): Promise<void> {
   const spec = KINDS[row.kind];
+  /* An orphaned `roster` row, left by D12 for the prune to delete */
+  if (!spec) return;
   const patch = (set: Partial<typeof wisphubSweeps.$inferInsert>) =>
     db
       .update(wisphubSweeps)
@@ -441,7 +404,7 @@ async function tick(db: DB, env: Bindings, row: SweepRow, now: Date, report: Swe
       }
 
       /* After the cursor moved: a failure here costs this page's side
-         effect one tick, never the page. `ensureLinks` is idempotent
+         effect one tick, never the page. The page write is idempotent
          (BUG-020) and the roster read repeats it, so nothing is lost. */
       if (spec.onPage) {
         try {

@@ -171,9 +171,15 @@ describe("FR-035: not one test record reaches anything real", () => {
     expect((await (await app()).request(`/payments/${id}/proof`, panel, testEnv)).status).toBe(404);
     expect((await (await app()).request(`/payments/${id}/execute-action`, { ...panel, method: "POST" }, testEnv)).status).toBe(404);
     expect((await (await app()).request(`/payments/${id}/retry-action`, { ...panel, method: "POST" }, testEnv)).status).toBe(404);
-    /* the panel's link roster (a gym: no WispHub, API rows only) */
-    const roster = (await (await (await app()).request("/direct-payments/links/roster", panel, testEnv)).json()) as { data: { results: unknown[] } };
-    expect(roster.data.results).toEqual([]);
+    /* the panel's customers door (a gym: no WispHub, API rows only).
+       links-on-demand-search D12 retired the roster this used to read;
+       FR-017 is the same rule on the door that replaced it, and it is
+       the same one predicate — `realOnly` — at the same call site. */
+    const customers = (await (await (await app()).request("/direct-payments/customers", panel, testEnv)).json()) as { data: { results: unknown[] } };
+    expect(customers.data.results).toEqual([]);
+    /* And on a search, which reads the business's own rows too */
+    const searched = (await (await (await app()).request("/direct-payments/customers?q=cli", panel, testEnv)).json()) as { data: { results: unknown[] } };
+    expect(searched.data.results).toEqual([]);
     /* the panel's webhook health: two deliveries happened, none of them real */
     const health = (await (await (await app()).request("/integrations/webhook", panel, testEnv)).json()) as { data: { deliveries: unknown[] } };
     expect(health.data.deliveries).toEqual([]);

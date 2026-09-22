@@ -69,7 +69,7 @@ describe("feedback-vocabulary-rollout US1: one wait, one voice", () => {
        say so. Filtering to regions that are SPEAKING would pass just as
        happily with an idle empty one still in the DOM, which is the exact
        thing that made findByRole reach the wrong element on the charge feed
-       and the client roster.
+       and the customer list.
 
        Verified by mutation: make Pending render its live region
        unconditionally again and this turns red. */

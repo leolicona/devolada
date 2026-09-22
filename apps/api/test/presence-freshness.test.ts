@@ -106,16 +106,21 @@ describe("US-P07: the colo cache is keyed by the last registration, and readAt i
     expect(third.readAt).toBeGreaterThanOrEqual(first.readAt);
   });
 
-  it("scenario 9: two roster reads inside the window answer the same readAt", async () => {
-    await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    const a = await app();
+  /* Scenario 9 — "two roster reads inside the window answer the same
+     readAt" — is RETIRED by links-on-demand-search FR-027 / D15.
 
-    mockClientes([{ id_servicio: 101, usuario: "greyes", nombre: "Janely Reyes", telefono: "5551234567" }]);
-    const first = (await (await a.request("/direct-payments/links/roster", await asBusiness(), env)).json()).data;
-    expect(first.results).toHaveLength(1);
+     It measured a promise that no longer has anything to measure. The
+     Links page served a cache, so two reads inside the window were the
+     same bytes and had to say so with one `readAt`. There is no cache
+     and no roster now: a block is read from WispHub when it RENDERS, so
+     no two blocks share a read time and the customers door reports none
+     at all. Printing a timestamp on a live read invents a doubt the
+     page does not have.
 
-    const second = (await (await a.request("/direct-payments/links/roster", await asBusiness(), env)).json()).data;
-    expect(second.results).toHaveLength(1);
-    expect(second.readAt).toBe(first.readAt);
-  });
+     What survives of presence-freshness on that page is the re-read on
+     returning to the tab, first block only, above its 30-second floor —
+     proved in `apps/admin/test/presence-freshness.test.tsx`, which is
+     where the floor lives. Scenario 8 above, the invoice read's own
+     cache and its honest `readAt`, is untouched: Cobros still serves a
+     cache and still says how old it is. */
 });

@@ -257,3 +257,54 @@ describe("US4: the collections screen creates the debtor's link on the act", () 
     expect(unreadable.waLink).toContain("wa.me/?text=");
   });
 });
+
+/* Moved here from the roster's own file with the roster (D12). Both
+   facts belong to the act now: it is what reads the phone the WhatsApp
+   link carries (D16), and what reads the numeric id a panel link needs
+   (D8). Neither had a home while listing was what created links. */
+describe("US1: the number and the numeric id, as the act reads them", () => {
+  /* receipt spec D3 — a wrong number is worse than none. Built
+     server-side, so a 10-digit Mexican phone cannot go out as
+     wa.me/55… (Brazil). */
+  it("accepts the phone shapes an ISP actually types", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    for (const telefono of ["5512345678", "+52 55 1234 5678", "5215512345678"]) {
+      mockCustomer([customer({ telefono })]);
+      const { data } = await (await act("greyes@wifiplus")).json();
+      expect(new URL(data.waLink).pathname).toBe("/525512345678");
+    }
+  });
+
+  it("an unreadable phone opens the contact picker instead of a stranger's chat", async () => {
+    await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    mockCustomer([customer({ telefono: "55 1234 5678 ext 3" })]);
+
+    const { data } = await (await act("greyes@wifiplus")).json();
+    expect(new URL(data.waLink).pathname).toBe("/");
+    expect(data.waLink).toContain("text=");
+  });
+
+  /* D5, measured live on dev (2026-08-30): the demo tenant reseeds daily
+     and recycles numeric ids, so a link keyed by the id answered
+     "no debt" for a customer who owed. The usuario is the identity. */
+  it("a recycled numeric id belongs to a different person, and never to their token", async () => {
+    const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
+    /* Yesterday's tenant: id 13 is 0011 */
+    mockCustomer([customer({ id_servicio: 13, usuario: "0011@wifiplus", nombre: "Leo Licona" })]);
+    const old = (await (await act("0011@wifiplus")).json()).data;
+
+    /* Reseeded: id 13 is Esteban now, a different person */
+    mockCustomer([customer({ id_servicio: 13, usuario: "esteban@wifiplus", nombre: "Esteban" })]);
+    const fresh = (await (await act("esteban@wifiplus")).json()).data;
+
+    expect(fresh.token).not.toBe(old.token);
+    /* The dead link survives with its own token: its payment history
+       points at it */
+    const rows = await drizzle(env.DB)
+      .select()
+      .from(paymentLinks)
+      .where(eq(paymentLinks.businessId, business.id));
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.customerUsuario === "0011@wifiplus")?.token).toBe(old.token);
+  });
+});

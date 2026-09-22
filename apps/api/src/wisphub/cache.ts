@@ -158,25 +158,12 @@ export async function pendingInvoicesForDisplay(
   return { ...fresh, readAt };
 }
 
-type Roster = { customers: WispHubCustomer[]; complete: boolean };
-
-/* The tenant roster for the Links page — display only, same TTL and
-   the same rule as the pending list above: money paths never read it.
-   bug: links-roster-cap: reached through `readRoster` (snapshot.ts),
-   which serves the sweep's finished pass to a tenant this walk cannot
-   finish and comes here for one it can. */
-export async function rosterForDisplay(
-  businessId: string,
-  wisphub: WispHub,
-  now: Date,
-): Promise<Roster & { readAt: number }> {
-  const hit = await read<Roster>("roster", businessId, wisphub.baseUrl, null, now);
-  if (hit) return { ...hit.value, readAt: hit.readAt };
-  const fresh = await wisphub.listCustomersFull();
-  const readAt = now.getTime();
-  await write("roster", businessId, wisphub.baseUrl, null, { value: fresh, readAt, expiresAt: readAt + PENDING_TTL_MS });
-  return { ...fresh, readAt };
-}
+/* links-on-demand-search D12: `rosterForDisplay` is REMOVED with the
+   roster it served. A block is read from WispHub when it RENDERS, so
+   there is nothing left to serve from a thirty-second cache and
+   nothing left to be stale about (FR-027). The pending-invoice cache
+   above is untouched: Cobros still serves one, and still says how old
+   it is. */
 
 /* D5: the cash payment-method id, on the charge path every single time
    and unchanged for the life of a tenant. */

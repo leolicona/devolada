@@ -99,7 +99,7 @@ export const businesses = sqliteTable("businesses", {
    payer path and every reader. Existing rows are panel links and stay
    exactly as they were.
 
-   Invariants, enforced at the write path (the panel's `ensureLinks`, the
+   Invariants, enforced at the write path (the panel's `ensureLink`, the
    API's create handler) and narrowed by `direct-payments/links.ts`:
      source = 'api'    ⟹ customer_ref and ask_cents are present
      source = 'panel'  ⟹ customer_usuario and wisphub_customer_id are present

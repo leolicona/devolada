@@ -5,6 +5,7 @@ import { Alert, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, 
 import type { CustomerRow } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { useSession } from "../auth/session";
+import { PruneNotice } from "./PruneNotice";
 import { rowKey } from "./seen";
 import { SEARCH_MIN_CHARS, useCustomers } from "./useCustomers";
 import { useLinkAction, type ActionState } from "./useLinkAction";
@@ -225,6 +226,10 @@ export function LinksScreen() {
           </span>
         )}
       </div>
+
+      {/* FR-023: the one-time cleanup's count, above the search, because
+          it explains a link a customer may already be holding */}
+      <PruneNotice />
 
       <div className="mt-6">
         <label className="relative block max-w-md">

@@ -81,10 +81,10 @@ types and fixtures from (constitution III).
 ### Implementation for User Story 1
 
 - [ ] T013 [US1] Implement `listCustomers` in `apps/api/src/routes/direct-payments/handler.ts`: browse in two phases (D2), search over four filters plus the business's API links (D4), merge and dedupe (D6), report `matched` as a floor (D5)
-- [ ] T014 [US1] Implement `createLink` in `apps/api/src/routes/direct-payments/handler.ts`: exact `usuario=` lookup for the numeric id and phone, then `ensureLink`, behind `requireArea("payments", "operate")` and the CLABE gate (D8, FR-016)
+- [ ] T014 [US1] Implement `createLink` in `apps/api/src/routes/direct-payments/handler.ts`: exact `usuario=` lookup for the numeric id **and the phone**, then `ensureLink`, returning a `waLink` built from that phone through `toWhatsAppPhone` (FR-028, D16), behind `requireArea("payments", "operate")` and the CLABE gate (D8, FR-016)
 - [ ] T015 [US1] Wire `GET /customers` and `POST /links` in `apps/api/src/routes/direct-payments/index.ts` with `zValidator` only — no logic in the router (constitution III); leave the old routes in place until Phase 7
 - [ ] T016 [P] [US1] Add `apps/admin/src/features/links/useCustomers.ts`: `useInfiniteQuery` over the cursor, block size measured from the viewport and clamped, an `IntersectionObserver` sentinel for the next block (FR-020, D3), a **300 ms** debounce before a search leaves the browser (FR-002, the figure the spec now carries), discarding an in-flight answer whose text no longer matches the box (FR-013, US1 scenario 9), and re-reading the **first block only** on return to the tab, no more than once every 30 seconds (FR-027, D15)
-- [ ] T017 [P] [US1] Add `apps/admin/src/features/links/useLinkAction.ts`: create-on-act for Copiar and WhatsApp, opening the WhatsApp window synchronously on the click and setting its location when the POST resolves, closing it on failure (D9), with the phone rules unchanged (FR-019: Mexico's code in front, the contact picker when the number cannot be read)
+- [ ] T017 [P] [US1] Add `apps/admin/src/features/links/useLinkAction.ts`: create-on-act for Copiar and WhatsApp, opening the WhatsApp window synchronously on the click and setting its location to the door's `waLink` when the POST resolves, closing it on failure (D9). The `waLink` carries the phone the act read, so the customer's own chat opens (FR-028, D16); `toWhatsAppPhone`'s rules are unchanged, and the picker is the fallback only for a number it refuses (FR-019)
 - [ ] T018 [P] [US1] Add `apps/admin/src/features/links/seen.ts` with all three `sessionStorage` stores it will ever hold — search results, recently seen names and phones, and the copied/sent marks (D11) — so US2 and US3 consume one module rather than each editing it
 - [ ] T019 [US1] Rewrite `apps/admin/src/features/links/LinksScreen.tsx` around the search box and the scrolling blocks: no roster read, no "la lista puede estar incompleta" warning (FR-018), **no read-age indicator and no "Actualizar"** (FR-027, D15 — the `Freshness` component this screen renders today goes), both buttons on every row the role allows, the copied/sent mark rendered from `seen.ts` (FR-022), tokens only and `StatusBadge` for the channel
 
@@ -100,14 +100,14 @@ types and fixtures from (constitution III).
 
 ### Tests for User Story 4
 
-- [ ] T020 [P] [US4] Extend `apps/api/test/links-create-on-act.test.ts` with cases citing `links-on-demand-search US4`: a debtor with no link gains one from the act, a debtor who has one keeps it, and the link Cobros creates is the link Links finds
-- [ ] T021 [US4] Rewrite `apps/admin/test/cobros.test.tsx` citing `links-on-demand-search US4`: a row with `linkUrl: null` shows both buttons, pressing one calls the create door, a viewer sees neither, and `axe` passes
+- [ ] T020 [P] [US4] Extend `apps/api/test/links-create-on-act.test.ts` with cases citing `links-on-demand-search US4`: a debtor with no link gains one from the act, a debtor who has one keeps it, the link Cobros creates is the link Links finds, and the returned `waLink` **carries the phone the act read** — with the picker fallback only for a record whose number is absent or unreadable (FR-028, D16)
+- [ ] T021 [US4] Rewrite `apps/admin/test/cobros.test.tsx` citing `links-on-demand-search US4`: every permitted row shows both buttons, pressing one calls the create door and opens the customer's own chat, a record without a readable phone falls back to the picker, a viewer sees neither button, and `axe` passes
 
 ### Implementation for User Story 4
 
-- [ ] T022 [US4] Update `apps/api/src/routes/payment-requests/schema.ts` so the comment on `linkUrl`/`waLink` says a null means *no link yet*, not *hide the buttons* (D14, FR-026)
-- [ ] T023 [US4] Update `apps/api/src/routes/payment-requests/handler.ts`: keep the batch lookup of stored links, drop the assumption that the roster created them all, citing D14
-- [ ] T024 [US4] Update `apps/admin/src/features/cobros/CobrosScreen.tsx` to show Copiar and WhatsApp on every permitted row and call `useLinkAction` on the act — reusing the hook whole, adding no second copy of the rule
+- [ ] T022 [US4] Remove `linkUrl` and `waLink` from `cobroRow` in `apps/api/src/routes/payment-requests/schema.ts`, citing D16: a stored `waLink` has no phone and would send the operator to the picker for a debtor who already has a link
+- [ ] T023 [US4] Update `apps/api/src/routes/payment-requests/handler.ts`: drop the batch lookup of stored links and the chunking under D1's parameter cap it needed (`bug: cobros-links-lookup-params`), since neither field survives. The debt read, the 5-page window, `complete` and `readAt` are untouched (D14, D16)
+- [ ] T024 [US4] Update `apps/admin/src/features/cobros/CobrosScreen.tsx` to show Copiar and WhatsApp on every permitted row and call `useLinkAction` on the act, opening the chat with the `waLink` the door returns — reusing the hook whole, adding no second copy of the rule (FR-028)
 
 **Checkpoint**: US1 and US4 both work; the collections path survives the prune that follows.
 
@@ -215,7 +215,7 @@ door first and the door is removed second.
 ### User Story Dependencies
 
 - **US1 (P1)**: independent once Phase 2 is done. This is the MVP, and it is now complete on its own — scenario 9 (T016) and the copied/sent mark (T018, T019) sit in this phase rather than leaking into US2 and US3
-- **US4 (P1)**: depends on US1's create door. Independently testable — delete every link and open Cobros
+- **US4 (P1)**: depends on US1's create door, whose fresh read is where both the link and the number come from (D16). Independently testable — delete every link and open Cobros
 - **US2 (P2)**: depends on US1's screen and `seen.ts`. Independently testable — navigate, back, reload
 - **US3 (P3)**: depends on US1's handler, screen and `seen.ts`. Independently testable — take the provider away
 

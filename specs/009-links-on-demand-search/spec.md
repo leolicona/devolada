@@ -86,6 +86,11 @@ the order [tasks.md](./tasks.md) builds them in.
 - Q: What happens to the links the roster already created, one per
   customer? → A: The `roster` pass is retired, and no background work
   creates a link again.
+- Q: Where does the number come from when Cobros sends a link? → A: From the
+  same fresh read that creates the link. The act already asks WispHub for the
+  customer by usuario, and that answer carries the phone — so WhatsApp opens
+  that customer's chat rather than the contact picker Cobros shows today. This
+  is what makes collecting a list of debtors worth doing one press at a time.
 - Q: Which links may the cleanup delete? → A: Every panel link created
   before this feature ships that no payment and no clave attempt ever
   referenced. Chosen with the cost known and accepted: Devolada never
@@ -248,9 +253,13 @@ same note, and no error block is shown.
 ### User Story 4 - Cobros can send, not only show (Priority: P1)
 
 An operator opens Cobros to see who owes money this week. They find the
-debtor, press WhatsApp, and the message goes out with the customer's link —
-whether or not that customer had a link a second earlier. The link is born
-from the act, exactly as it is on Links.
+debtor, press WhatsApp, and **that customer's chat opens** with the message and
+their link ready — whether or not they had a link a second earlier. The link is
+born from the act, exactly as it is on Links, and so is the number.
+
+Collecting is batch work: an operator goes down a list of debtors, one after
+another. Every contact they have to find by hand is a few seconds and a chance
+to send the wrong person someone else's link.
 
 **Why this priority**: this ships with the cleanup or the cleanup must not
 ship. FR-023 deletes almost every stored panel link, and Cobros shows
@@ -258,9 +267,10 @@ buttons only where a link exists. Without this story, the page that tells
 the ISP who owes money can send none of them their link — a regression on
 the collections path, not a missing nicety.
 
-**Independent Test**: delete every stored link for a business, open Cobros
-on a debtor, press WhatsApp — the message opens with a working link, and
-the same link is the one Links shows for that customer afterwards.
+**Independent Test**: delete every stored link for a business, open Cobros on a
+debtor whose WispHub record has a phone, press WhatsApp — that customer's chat
+opens with a working link, no picker appears, and the same link is the one Links
+shows for that customer afterwards.
 
 **Acceptance Scenarios**:
 
@@ -273,10 +283,13 @@ the same link is the one Links shows for that customer afterwards.
    found later on Links, **Then** Links shows that same link.
 4. **Given** debtors on screen, **When** the operator only reads the list,
    **Then** no link is created for any of them.
-5. **Given** an invoice row, which carries no phone, **When** the operator
-   presses WhatsApp, **Then** WhatsApp's own contact picker opens with the
-   message ready — as today.
-6. **Given** a viewer, or a business with no CLABE configured, **When**
+5. **Given** a debtor whose WispHub record carries a readable phone, **When**
+   the operator presses WhatsApp, **Then** that customer's own chat opens with
+   the message ready — no contact to search for, no picker.
+6. **Given** a debtor whose WispHub record has no phone, or one that cannot be
+   read, **When** the operator presses WhatsApp, **Then** WhatsApp's contact
+   picker opens with the message ready, as today — never a stranger's chat.
+7. **Given** a viewer, or a business with no CLABE configured, **When**
    they open Cobros, **Then** the buttons are withheld exactly as they are
    on Links.
 
@@ -298,9 +311,11 @@ the same link is the one Links shows for that customer afterwards.
 - WispHub takes longer than the operation budget: that search is treated
   as WispHub unreachable (US3), and the next search asks again.
 - Test links created through the collections API never appear.
-- A customer with no phone in WispHub keeps the WhatsApp button, which
-  opens WhatsApp's own contact picker with the message ready, as Cobros
-  does today.
+- A customer with no phone in WispHub, or whose number cannot be read, keeps
+  the WhatsApp button: it opens WhatsApp's own contact picker with the message
+  ready, never a stranger's chat. This is the exception now, not the rule —
+  every customer whose record carries a readable number gets their own chat
+  (FR-028).
 - The operator types a fourth character while a three-character search is
   in flight: the in-flight answer is discarded if it no longer matches the
   text in the box.
@@ -424,6 +439,11 @@ the same link is the one Links shows for that customer afterwards.
   Copiar or WhatsApp, on the same terms as Links (FR-008, FR-009): never
   on being shown, and identified by the invoice row's usuario, so the link
   is the one every other surface already knows.
+- **FR-028**: WhatsApp MUST open the customer's own chat, using the phone read
+  from WispHub at the moment of the act — on Cobros as on Links. The contact
+  picker is reserved for a record with no phone or an unreadable one. No
+  surface MAY send an operator to the picker for a customer whose number could
+  have been read.
 - **FR-026**: Cobros MUST show Copiar and WhatsApp on a debtor who has no
   link, instead of hiding them, and MUST keep withholding them from a
   viewer and from a business with no CLABE, exactly as Links does.
@@ -471,6 +491,9 @@ the same link is the one Links shows for that customer afterwards.
 - **SC-008**: After the cleanup, the count of the business's panel links
   equals the number of customers an operator has actually acted on — zero
   for a business whose operators have not used the page since it shipped.
+- **SC-010**: Collecting a list of debtors needs no manual contact search: for
+  every debtor whose WispHub record carries a readable phone, pressing WhatsApp
+  in Cobros opens that customer's chat directly, 100% of the time.
 - **SC-009**: No background work of any kind creates a payment link: over a
   day in which no operator copies or sends, the business's link count does
   not change.
@@ -485,9 +508,11 @@ the same link is the one Links shows for that customer afterwards.
   that may be recycled (direct-payment D5) — unchanged.
 - Links created before this feature keep working unchanged: no link gains
   or loses a field, so there is nothing to migrate.
-- **Cobros is in scope, for one rule only** (US4, FR-025, FR-026): it
-  creates the link on the act, as Links does. Everything else about Cobros
-  is untouched — what it lists, how it reads debt, how it orders rows.
+- **Cobros is in scope, for two rules** (US4, FR-025, FR-026, FR-028): it
+  creates the link on the act, as Links does, and the act's fresh read of the
+  customer also gives it the number, so WhatsApp opens that customer's chat
+  instead of a picker. Everything else about Cobros is untouched — what it
+  lists, how it reads debt, how it orders rows.
   It is in scope because FR-023 makes it so: hiding the buttons on a debtor
   with no link was an edge case while the roster made one per customer, and
   after the cleanup it would be nearly every row.

@@ -12,7 +12,10 @@ read live from WispHub, asks for the next block only when the operator scrolls
 toward it, and answers a search by putting the text to the provider's four
 `__contains` filters at once. A payment link is created the first time an
 operator copies or sends one — never on being listed — and the same rule reaches
-Cobros, so the collections screen can send too.
+Cobros, so the collections screen can send too. Because that act already reads
+the customer fresh, it also carries their number: WhatsApp opens the customer's
+own chat instead of the contact picker Cobros shows today, which is what makes
+collecting a list of debtors worth doing one press at a time.
 
 Behind it, four things are retired: the two link doors, the sweep's `roster`
 pass, the bulk link writer, and — recorded rather than discovered —
@@ -21,7 +24,7 @@ to measure once every block is live when it renders (FR-027, D15). A one-shot cr
 links the roster created before this feature that no payment ever referenced,
 and tells the business how many went.
 
-The technical decisions are in [research.md](./research.md), numbered `D1`–`D15`
+The technical decisions are in [research.md](./research.md), numbered `D1`–`D16`
 for citation in code.
 
 ## Technical Context
@@ -98,8 +101,8 @@ apps/api/src/
 │                             #   createLinkRequest/Response;
 │                             #   − linksListQuery/Response, linksRosterResponse
 ├── routes/payment-requests/
-│   ├── handler.ts            # a link miss stops hiding the buttons (D14)
-│   └── schema.ts             # cobroRow: linkUrl/waLink keep null, new meaning
+│   ├── handler.ts            # the batch link lookup goes (D14, D16)
+│   └── schema.ts             # cobroRow: linkUrl and waLink removed (D16)
 ├── wisphub/
 │   ├── client.ts             # + searchCustomers (four filters, D4),
 │   │                         #   + customersBlock (limit/offset, D2/D3);

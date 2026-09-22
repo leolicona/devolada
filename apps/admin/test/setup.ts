@@ -26,5 +26,14 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
   cleanup();
+  /* A test starts from empty or it is not a test (constitution IV).
+     Links remembers its search, the customers it saw and the rows the
+     operator copied in `sessionStorage` (links-on-demand-search D11),
+     and module state outlives a render. */
+  try {
+    sessionStorage.clear();
+  } catch {
+    /* no store in this environment */
+  }
 });
 afterAll(() => server.close());

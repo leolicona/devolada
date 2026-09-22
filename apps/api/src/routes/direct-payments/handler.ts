@@ -1,10 +1,10 @@
 import type { Context } from "hono";
-import { and, asc, eq, gt, gte, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { and, asc, eq, gt, gte, inArray, or, sql } from "drizzle-orm";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { creditSummary } from "../../credit";
-import { WispHubError } from "../../wisphub/client";
+import { WispHubError, type WispHubCustomer } from "../../wisphub/client";
 /* provider-address-per-isp D4: every provider client in this file is
    addressed to the actor business's own installation, through the one
    factory. The constructor is never called here. */
@@ -20,6 +20,7 @@ import {
   validationAvailable,
 } from "../../direct-payments/validation";
 import {
+  ensureLink,
   ensureLinks,
   isApiLink,
   isPanelLink,
@@ -27,6 +28,7 @@ import {
   linkState,
   makeLinkToken,
   realOnly,
+  type ApiLink,
   type PaymentLink,
 } from "../../direct-payments/links";
 import {
@@ -45,7 +47,18 @@ import { consta, ConstaError } from "../../consta";
 import { enqueueAndDeliver } from "../../webhooks/queue";
 import { deferOf } from "../defer";
 import type { DirectPayment } from "../../direct-payments/validation";
-import { publicPaymentError, type LinksRosterResponse, type LinkStatusResponse, type PayRequest } from "./schema";
+import {
+  publicPaymentError,
+  type CreateLinkRequest,
+  type CreateLinkResponse,
+  type CustomerRow,
+  type CustomersQuery,
+  type CustomersResponse,
+  type LinksRosterResponse,
+  type LinkStatusResponse,
+  type PayRequest,
+} from "./schema";
+import { decodeCursor, encodeCursor, FIRST_CURSOR, type BrowseCursor } from "./cursor";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -1113,3 +1126,346 @@ function sortRoster<T extends { name: string; usuario: string | null; customerRe
 /* The share text for an API link names no service: the business may be
    a gym or a school, and the link may be one-time (FR-028) */
 const apiShareText = (url: string) => `Hola, aquí está tu link de pago:\n\n${url}`;
+
+/* ---- links-on-demand-search: the customers door and the act ---- */
+
+/* Case- and accent-insensitive on OUR side too (FR-004): the provider's
+   `__contains` already ignores both, and a search that found "María" in
+   WispHub and missed "María" in an API link would be one promise kept
+   twice differently. */
+const foldText = (s: string) => s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+/* An API link as a customer row: the caller's reference is the identity,
+   and the ask is the one this channel stores (automated-collections-api
+   D3). No provider is involved — these are Devolada's own rows, which is
+   why a business with no WispHub still has something to show (FR-015). */
+function apiCustomerRow(link: ApiLink, baseUrl: string, now: Date): CustomerRow {
+  const url = `${baseUrl}/p/${link.token}`;
+  return {
+    channel: "api",
+    usuario: null,
+    wisphubId: null,
+    customerRef: link.customerRef,
+    label: link.label,
+    askCents: link.askCents,
+    linkState: linkState(link, now),
+    name: link.label ?? link.customerRef,
+    phone: null,
+    /* An API link exists by construction — it was created by the call
+       that made it, not by an operator's act */
+    hasLink: true,
+    url,
+    /* No phone on an API link: the contact picker, and a message that
+       names no service (receipt spec D3) */
+    waLink: whatsAppLink(apiShareText(url), null),
+  };
+}
+
+/* A WispHub customer as a customer row. `token` is the link they already
+   have, or null — and null does NOT hide the buttons (D7, FR-026): it
+   means the link is not born yet, and pressing Copiar or WhatsApp is
+   what gives birth to it (FR-008, D8). */
+function panelCustomerRow(customer: WispHubCustomer, token: string | null, baseUrl: string): CustomerRow {
+  const url = token ? `${baseUrl}/p/${token}` : null;
+  return {
+    channel: "panel",
+    usuario: customer.usuario,
+    wisphubId: customer.wisphubId,
+    customerRef: null,
+    label: null,
+    askCents: null,
+    linkState: null,
+    /* FR-007/FR-010: read live, every time. The link stores none of it. */
+    name: customer.name,
+    phone: customer.phone,
+    hasLink: token !== null,
+    url,
+    waLink: url ? whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)) : null,
+  };
+}
+
+/* usuario → token, for the customers of one block. One statement: a
+   block is at most CUSTOMERS_LIMIT_MAX rows, well under D1's parameter
+   cap, which is the whole point of reading a block instead of a base. */
+async function linksForUsuarios(
+  db: DrizzleD1Database,
+  businessId: string,
+  usuarios: string[],
+): Promise<Map<string, string>> {
+  const tokens = new Map<string, string>();
+  if (!usuarios.length) return tokens;
+  const rows = await db
+    .select({ customerUsuario: paymentLinks.customerUsuario, token: paymentLinks.token })
+    .from(paymentLinks)
+    .where(
+      and(
+        eq(paymentLinks.businessId, businessId),
+        eq(paymentLinks.source, "panel"),
+        inArray(paymentLinks.customerUsuario, usuarios),
+      ),
+    );
+  for (const row of rows) {
+    if (row.customerUsuario !== null) tokens.set(row.customerUsuario, row.token);
+  }
+  return tokens;
+}
+
+/* The business's own API links, real ones only.
+
+   FR-017 is this one predicate: a test credential's links exist — the
+   caller reads them through /v1 to test its own polling — and never
+   reach a business-facing read. It is spelled here rather than
+   remembered, exactly as `realOnly`'s comment asks.
+
+   Read whole rather than filtered in SQL: FR-004 promises accent- and
+   case-insensitive matching on BOTH sides, and SQLite's LIKE folds
+   neither. These are Devolada's own rows for one business — the roster
+   read them the same way — and the volume that would make this wrong is
+   an API-only business with thousands of links, which is a different
+   door's problem the day it exists. */
+async function apiLinksOf(db: DrizzleD1Database, businessId: string): Promise<ApiLink[]> {
+  const rows = await db
+    .select()
+    .from(paymentLinks)
+    .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.source, "api"), realOnly(paymentLinks)));
+  return rows.filter(isApiLink);
+}
+
+/* GET /direct-payments/customers — ISP session (links-on-demand-search
+   D1, FR-001).
+
+   The ISP's customers, with their link if one exists. Browsing and
+   searching are one door because they answer the same question with the
+   same rows and differ only in how the rows were found — a page with one
+   search box should not hold two queries with two caches.
+
+   What it never does is read the customer base. A browse is ONE provider
+   call for ONE block (D3, FR-020); a search is four filters asked at once
+   (D4). The roster this replaces read 6,513 customers and wrote a link
+   for every one of them, on every return to the tab. */
+export async function listCustomers(c: Ctx, query: CustomersQuery) {
+  const actor = c.get("actor");
+  if (actor.type !== "business") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const integration = await integrationOf(db, actor.id);
+  const base = c.env.PAGO_BASE_URL;
+  const now = new Date();
+  const limit = query.limit;
+
+  /* constitution VIII: no key is a state of the world, not a failure.
+     The business sees its API links and the page says where links come
+     from (FR-015). */
+  const connected = Boolean(integration?.apiKey);
+  const wisphub = connected ? wisphubFor(integration!, c.env) : null;
+
+  if (query.q !== undefined) {
+    const needle = foldText(query.q);
+    /* D1's own rows first: the provider cannot know about an API link */
+    const apiMatches = (await apiLinksOf(db, actor.id)).filter(
+      (link) =>
+        foldText(link.customerRef).includes(needle) || foldText(link.label ?? "").includes(needle),
+    );
+
+    let customers: WispHubCustomer[] = [];
+    let matched = apiMatches.length;
+    if (wisphub) {
+      let search;
+      try {
+        search = await wisphub.searchCustomers(query.q, limit);
+      } catch (e) {
+        /* D10/FR-014 make this an answer rather than a refusal — that is
+           US3's work (tasks T030), and until it lands the area's own
+           failure shape stands rather than a half-built one. */
+        return wisphubFailure(c, e, "panel");
+      }
+      customers = search.customers;
+      /* D5: the largest of the four counts, and never smaller than what
+         we are about to show. The true size of the union of four filters
+         cannot be known without fetching all four whole, so the page
+         says "más de N" and asks for more letters (FR-006). */
+      matched = Math.max(matched, ...Object.values(search.counts));
+    }
+
+    const tokens = await linksForUsuarios(db, actor.id, customers.map((customer) => customer.usuario));
+    /* D6: dedupe by identity. The two channels cannot collide — an API
+       row has no usuario — so the cap is all the merge needs. */
+    const results = [
+      ...apiMatches.map((link) => apiCustomerRow(link, base, now)),
+      ...customers.map((customer) => panelCustomerRow(customer, tokens.get(customer.usuario) ?? null, base)),
+    ].slice(0, limit);
+
+    return c.json({
+      success: true,
+      data: {
+        results,
+        /* D5: a search answers one block. A cursor the search UI would
+           never use is dead weight in the contract. */
+        nextCursor: null,
+        matched: Math.max(matched, results.length),
+        total: null,
+        wisphub: connected ? "ok" : "not_configured",
+      } satisfies CustomersResponse,
+    });
+  }
+
+  /* Browse (D2). The cursor says which source the walk is in: Devolada's
+     own API links by keyset first — Devolada owns that order, so it is
+     stable — then the provider's list by offset, which is all the
+     provider offers and why no order is promised (D6). */
+  const cursor = query.cursor === undefined ? FIRST_CURSOR : decodeCursor(query.cursor);
+  if (cursor === null) {
+    return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
+  }
+
+  const results: CustomerRow[] = [];
+  let next: BrowseCursor | null = cursor;
+  let total: number | null = null;
+
+  if (next.phase === "api") {
+    const after = next;
+    const rows = (await db
+      .select()
+      .from(paymentLinks)
+      .where(
+        and(
+          eq(paymentLinks.businessId, actor.id),
+          eq(paymentLinks.source, "api"),
+          realOnly(paymentLinks),
+          or(
+            gt(paymentLinks.createdAt, new Date(after.createdAt)),
+            and(eq(paymentLinks.createdAt, new Date(after.createdAt)), gt(paymentLinks.id, after.id)),
+          ),
+        ),
+      )
+      .orderBy(asc(paymentLinks.createdAt), asc(paymentLinks.id))
+      .limit(limit + 1)) as PaymentLink[];
+    const page = rows.slice(0, limit).filter(isApiLink);
+    results.push(...page.map((link) => apiCustomerRow(link, base, now)));
+    if (rows.length > limit) {
+      const last = rows[limit - 1];
+      next = { phase: "api", createdAt: last.createdAt.getTime(), id: last.id };
+    } else {
+      /* The API links are drained. The walk crosses into the provider's
+         list HERE, inside this request, rather than answering a block of
+         three rows to a business that holds three API links and six
+         thousand customers (FR-001 asks for a screenful). D2's rule that
+         the phases never interleave is what keeps the cursor meaningful,
+         and it still holds: nothing of phase one is left, so `wh:<offset>`
+         says everything about where the walk is. */
+      next = { phase: "wisphub", offset: 0 };
+    }
+  }
+
+  if (next.phase === "wisphub") {
+    if (!wisphub) {
+      /* Nothing else to walk: this business's links are all there is */
+      next = null;
+    } else {
+      const room = limit - results.length;
+      if (room > 0) {
+        let block;
+        try {
+          block = await wisphub.customersBlock(room, next.offset);
+        } catch (e) {
+          return wisphubFailure(c, e, "panel");
+        }
+        total = block.total;
+        const tokens = await linksForUsuarios(db, actor.id, block.customers.map((customer) => customer.usuario));
+        results.push(
+          ...block.customers.map((customer) =>
+            panelCustomerRow(customer, tokens.get(customer.usuario) ?? null, base),
+          ),
+        );
+        const walked = next.offset + block.customers.length;
+        /* FR-020: the page never walks the list to its end on its own —
+           it asks for the next block when the operator scrolls toward
+           it, and the walk ends when the provider's count is reached. */
+        next = walked >= block.total || block.customers.length === 0 ? null : { phase: "wisphub", offset: walked };
+      }
+    }
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      results,
+      nextCursor: next === null ? null : encodeCursor(next),
+      matched: null,
+      /* FR-018: no "la lista puede estar incompleta" — nothing is read
+         whole, so nothing can be cut short. What the page MAY say is how
+         many customers the ISP has, which the provider answers with
+         every block. */
+      total,
+      wisphub: connected ? "ok" : "not_configured",
+    } satisfies CustomersResponse,
+  });
+}
+
+/* POST /direct-payments/links — the act (links-on-demand-search D8,
+   FR-008).
+
+   This is the ONLY thing that creates a panel link. Not a list read, not
+   a sweep, not a return to the tab: an operator pressing Copiar or
+   WhatsApp, on Links or on Cobros (D14). SC-009 is the measurement of
+   that sentence, and `ensureLink` is where it is enforced.
+
+   The customer is read by exact `usuario=` because a panel link needs
+   the provider's numeric id — and that same answer carries the PHONE,
+   which is what makes `waLink` open the customer's own chat instead of
+   WhatsApp's contact picker (D16, FR-028). No extra call, no stored
+   copy, fresh by construction.
+
+   Unlike the read door, this one DOES fail when the provider is silent:
+   a link created from a stale identity would be a link to the wrong
+   person. */
+export async function createLink(c: Ctx, body: CreateLinkRequest) {
+  const actor = c.get("actor");
+  if (actor.type !== "business") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
+  if (!business) {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  /* FR-016: a link nobody can pay is not shared. The same gate the
+     screen shows one storey above — the buttons wait for the CLABE. */
+  if (!businessConfigured(business)) {
+    return c.json({ success: false, error: { code: "SPEI_NOT_CONFIGURED" } }, 409);
+  }
+  const integration = await integrationOf(db, actor.id);
+  if (!integration?.apiKey) {
+    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 503);
+  }
+
+  let customer;
+  try {
+    customer = await wisphubFor(integration, c.env).getCustomer(body.usuario);
+  } catch (e) {
+    return wisphubFailure(c, e, "panel");
+  }
+  if (!customer) {
+    /* A NEW code, deliberately: the area's NOT_FOUND means "no such link
+       or route", and the panel must tell that apart from "the provider
+       has no such customer" — an integration problem an operator can act
+       on (contract, POST /direct-payments/links). */
+    return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
+  }
+
+  const { token, created } = await ensureLink(db, actor.id, customer);
+  const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
+  return c.json({
+    success: true,
+    data: {
+      token,
+      url,
+      /* FR-019/FR-028: `toWhatsAppPhone` still owns the rules — Mexico's
+         52 in front, a refusal for a number it cannot read, which falls
+         back to the picker. That fallback is now the exception. */
+      waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
+      created,
+    } satisfies CreateLinkResponse,
+  });
+}

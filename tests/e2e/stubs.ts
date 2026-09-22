@@ -161,38 +161,58 @@ export const apiIntegration = {
   validationAvailable: true,
 };
 
-/* automated-collections-api FR-011: both channels in one list */
-export const linksRoster = {
+/* links-on-demand-search D1 (US1): one block of the ISP's customers,
+   both channels, each with their link if one exists. The roster this
+   replaces handed back the whole tenant with a link for every row; here
+   the panel customer has one and could equally have none — the buttons
+   show either way (FR-008, D7). */
+export const customersBlock = {
   results: [
     {
       channel: "panel",
-      wisphubId: 6,
       usuario: "greyes@wifiplus",
+      wisphubId: 6,
+      customerRef: null,
+      label: null,
+      askCents: null,
+      linkState: null,
       name: "Janely Guadalupe Reyes",
       phone: "5551234567",
+      hasLink: true,
       url: "https://link.dev.devoladapago.com/p/tok-greyes",
       waLink: "https://wa.me/525551234567?text=hola",
     },
     {
       channel: "api",
-      wisphubId: null,
       usuario: null,
+      wisphubId: null,
       customerRef: "CLI-4471",
       label: "Ana Ruiz",
       askCents: 49900,
       linkState: "open",
       name: "Ana Ruiz",
       phone: null,
+      hasLink: true,
       url: "https://link.dev.devoladapago.com/p/tok-cli4471",
       waLink: "https://wa.me/?text=hola",
     },
   ],
-  complete: true,
-  readAt: at,
+  nextCursor: null,
+  matched: null,
+  total: 6513,
+  wisphub: "ok",
+};
+
+/* links-on-demand-search D8: what the act answers (FR-008) */
+export const createdLink = {
+  token: "tok-greyes",
+  url: "https://link.dev.devoladapago.com/p/tok-greyes",
+  waLink: "https://wa.me/525551234567?text=hola",
+  created: true,
 };
 
 /* What the business's software receives from POST /v1/payment-links
-   (automated-collections-api US1, T036) — the same row the roster above
+   (automated-collections-api US1, T036) — the same row the block above
    shows as its API entry */
 export const apiPaymentLink = {
   id: "lnk_0123456789abcdef0123456789abcdef",
@@ -268,7 +288,8 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/payment-requests", cobros);
   await apiRoute(page, "**/integrations", integrationsHub);
   await apiRoute(page, "**/integrations/api", apiIntegration);
-  await apiRoute(page, "**/direct-payments/links/roster", linksRoster);
+  await apiRoute(page, "**/direct-payments/customers*", customersBlock);
+  await apiRoute(page, "**/direct-payments/links", createdLink);
   await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
 }
 

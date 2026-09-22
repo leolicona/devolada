@@ -93,13 +93,18 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
     await stubAdminApi(page);
     await page.goto(`${ADMIN}/links`);
     await expect(page.getByPlaceholder(/buscar por nombre/i)).toBeVisible();
+    /* links-on-demand-search FR-001: the first block is a provider read,
+       so it does NOT arrive with the page — the walk waits for the rows
+       rather than racing them */
+    await expect(page.getByRole("button", { name: /whatsapp/i }).first()).toBeVisible();
 
     /* Sidebar first (the dashboard's spine), then the screen's controls
-       in reading order: the roster arrives alive (pilot-UX round) and
-       the search is the first control — "Actualizar" retired with
-       presence-freshness D1 (2026-09-03); the freshness label is text,
-       not a stop. (The store-era walk retired with the network,
-       2026-08-31.) */
+       in reading order: the search box is the first control on the
+       screen — "Actualizar" retired with presence-freshness D1
+       (2026-09-03), and the freshness label retired with it
+       (links-on-demand-search FR-027 / D15), so nothing stands between
+       the box and the first customer's actions. (The store-era walk
+       retired with the network, 2026-08-31.) */
     await snapshotRestingStyles(page);
     await expectTabOrder(page, [
       /^Saldo:/ /* the credit chip (prepaid-credit D7) sits under the business name, before the spine */,
@@ -109,9 +114,9 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /^Integraciones$/ /* the hub (integrations-hub D1), owner-only */,
       /Cuenta$/ /* the account hub (US-A05): the avatar (its initials precede the word) is the fifth section; the sidebar's Cerrar sesión lives inside it now */,
       /Buscar por nombre/,
-      /Copiar/ /* the first customer's actions: the roster is alive on arrival */,
+      /Copiar/ /* the first customer's actions — shown whether or not their link exists yet (FR-008) */,
       /WhatsApp/ /* one word for the channel (pilot-UX review) */,
-      /Copiar/ /* automated-collections-api FR-011 (T076): the API link joins the same roster, with the same two actions */,
+      /Copiar/ /* automated-collections-api FR-011 (T076): the API link joins the same block, with the same two actions */,
       /WhatsApp/,
     ]);
   });

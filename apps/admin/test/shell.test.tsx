@@ -164,7 +164,10 @@ describe("D3: the guard sends session-less visits to login", () => {
         return baOk();
       }),
       handlers.session(() => (loggedIn ? ok(businessActor) : failResponse("AUTHENTICATION_ERROR", 401))),
-      handlers.linksRoster(() => ok({ results: [], complete: true, readAt: Date.now() })),
+      /* links-on-demand-search D1: the roster's door is the customers' now */
+      handlers.customers(() =>
+        ok({ results: [], nextCursor: null, matched: null, total: 0, wisphub: "ok" }),
+      ),
     );
     const router = renderApp("/login?next=/links");
 

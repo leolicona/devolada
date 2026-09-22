@@ -1102,14 +1102,19 @@ async function panelLinksMatching(
   needle: string,
   limit: number,
   baseUrl: string,
-): Promise<CustomerRow[]> {
-  const rows = await db
+): Promise<{ rows: CustomerRow[]; matched: number }> {
+  const all = await db
     .select()
     .from(paymentLinks)
     .where(and(eq(paymentLinks.businessId, businessId), eq(paymentLinks.source, "panel")));
-  return rows
+  /* FR-006: how many MATCHED, counted before the cap. Capping and
+     forgetting would let the page say "20 clientes coinciden" when
+     forty did — the one number the operator uses to decide whether to
+     type more letters (D5). */
+  const hits = all
     .filter(isPanelLink)
-    .filter((link) => foldText(link.customerUsuario).includes(needle))
+    .filter((link) => foldText(link.customerUsuario).includes(needle));
+  const rows = hits
     .slice(0, limit)
     .map((link) => {
       const url = `${baseUrl}/p/${link.token}`;
@@ -1132,6 +1137,7 @@ async function panelLinksMatching(
         waLink: whatsAppLink(shareText(url), null),
       };
     });
+  return { rows, matched: hits.length };
 }
 
 /* GET /direct-payments/customers — ISP session (links-on-demand-search
@@ -1197,14 +1203,24 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
 
     /* The provider did not answer — by outage or by never having been
        connected — so Devolada's own links answer for it (FR-003) */
-    const ownPanel = away || !connected ? await panelLinksMatching(db, actor.id, needle, limit, base) : [];
+    const ownPanel =
+      away || !connected
+        ? await panelLinksMatching(db, actor.id, needle, limit, base)
+        : { rows: [] as CustomerRow[], matched: 0 };
+    /* FR-006 on the offline path. The two sets are disjoint — an API
+       link has no usuario, a panel link has nothing else — so their
+       counts add, and the sum is still a FLOOR: the provider is away,
+       and what it would have matched is exactly what cannot be counted.
+       Without this a search that found forty stored links reported the
+       twenty it showed and never asked for more letters. */
+    matched += ownPanel.matched;
 
     const tokens = await linksForUsuarios(db, actor.id, customers.map((customer) => customer.usuario));
     /* D6: dedupe by identity. The two channels cannot collide — an API
        row has no usuario — so the cap is all the merge needs. */
     const results = [
       ...apiMatches.map((link) => apiCustomerRow(link, base, now)),
-      ...ownPanel,
+      ...ownPanel.rows,
       ...customers.map((customer) => panelCustomerRow(customer, tokens.get(customer.usuario) ?? null, base)),
     ].slice(0, limit);
 

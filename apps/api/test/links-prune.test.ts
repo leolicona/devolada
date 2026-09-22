@@ -259,3 +259,85 @@ describe("US1 (FR-023): the count reaches the business, once", () => {
     expect((await still.json()).data).toMatchObject({ deletedCount: 1 });
   });
 });
+
+/* The sequence the release actually takes (links-on-demand-search D13,
+   tasks T057).
+
+   Every case above states its own boundary, which proves the pass is
+   right ONCE the constant is right. This one asks the question those
+   cannot: what does the pass do between the deploy and the release
+   commit, while `PRUNE_CUTOVER_MS` is still unset?
+
+   That window is not hypothetical — it is every deploy of this feature
+   before its own release, dev included. The pass runs on the
+   every-minute cron from the moment the code lands, and the row it
+   writes is the ONLY thing that stops it running again. So a row
+   written in this window would spend the business's one and only pass
+   on a cutover that deletes nothing, and T057 would set the real
+   timestamp to find no business left to prune. FR-023 would be
+   unreachable, silently, and the count the business is owed would be
+   zero forever.
+
+   Hence the rule this file now pins: while the cutover is unset, the
+   pass writes NOTHING. It has not run. */
+describe("US1 (FR-023): the pass keeps its one shot until the cutover is set", () => {
+  it("deletes nothing and writes NO row while PRUNE_CUTOVER_MS is unset", async () => {
+    const business = await seedBusiness();
+    const old = await panelLink(business.id);
+
+    /* No `cutoverMs`: the constant as it actually ships */
+    const report = await prune.prunePanelLinks(testEnv);
+    expect(prune.PRUNE_CUTOVER_MS).toBe(0);
+    expect(report).toMatchObject({ businesses: 0, links: 0, sweeps: 0 });
+
+    expect((await links(business.id)).map((l) => l.id)).toEqual([old.id]);
+    /* The one that matters: no ledger row, so the pass is still owed */
+    expect(await db().select().from(linkPrunes)).toHaveLength(0);
+  });
+
+  it("still prunes at the release commit, after ticking unset for a while", async () => {
+    const business = await seedBusiness();
+    await panelLink(business.id);
+    await panelLink(business.id);
+
+    /* The cron ticking between the deploy and the release */
+    for (let tick = 0; tick < 3; tick++) await prune.prunePanelLinks(testEnv);
+    expect(await db().select().from(linkPrunes)).toHaveLength(0);
+
+    /* T057 sets the real ship timestamp and the pass finds its work */
+    const report = await run();
+    expect(report).toMatchObject({ businesses: 1, links: 2 });
+    expect(await links(business.id)).toHaveLength(0);
+
+    const [row] = await db().select().from(linkPrunes).where(eq(linkPrunes.businessId, business.id));
+    expect(row.deletedCount).toBe(2);
+  });
+
+  it("an orphaned roster sweep row survives the unset window too", async () => {
+    const business = await seedBusiness();
+    const [sweep] = await db()
+      .insert(wisphubSweeps)
+      .values({
+        businessId: business.id,
+        kind: "roster",
+        baseUrl: "https://api.wisphub.net/api",
+        updatedAt: new Date(),
+      })
+      .returning();
+    await db().insert(wisphubPages).values({
+      businessId: business.id,
+      kind: "roster",
+      passId: sweep.id,
+      page: 0,
+      rows: "[]",
+      fetchedAt: new Date(),
+    });
+
+    await prune.prunePanelLinks(testEnv);
+    expect(await db().select().from(wisphubSweeps)).toHaveLength(1);
+
+    /* and goes with the rest once the cutover is set */
+    expect((await run()).sweeps).toBe(1);
+    expect(await db().select().from(wisphubSweeps)).toHaveLength(0);
+  });
+});

@@ -259,10 +259,10 @@ export function LinksScreen() {
 
       {/* FR-014 / D9: the provider being away is a quiet note over the
           rows that are already there — never the error block, which is
-          for a failure with nothing to show. US3 (T030) makes the door
-          answer `wisphub: "unavailable"` inside the envelope; until then
-          it is a background read that failed, which reads the same to
-          the operator. */}
+          for a failure with nothing to show. The door says so itself,
+          inside the envelope (`wisphub: "unavailable"`, D10); a
+          background read that failed reads the same way to the operator
+          and lands here too. */}
       {customers.offline && (
         <p
           role="status"

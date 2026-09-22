@@ -107,7 +107,7 @@ never a second one (FR-005, FR-009).
 | `WISPHUB_NOT_CONFIGURED` | no provider key; a panel link cannot be made without one |
 | `CUSTOMER_NOT_FOUND` | the provider does not know that usuario. **A new code, deliberately**: the area's `NOT_FOUND` means "no such link or route", and the panel must tell that apart from "the provider has no such customer", which is an integration problem the operator can act on |
 | `WISPHUB_UNAVAILABLE` | the provider did not answer — this door **does** fail, unlike the read door: a link created from a stale identity would be a link to the wrong person |
-| `BUSINESS_SUSPENDED` | as everywhere else in the area |
+| `ACCOUNT_SUSPENDED` | a suspended business, answered 403 by `requireSession` before any handler runs — so this door never returns `BUSINESS_SUSPENDED` itself, unlike the payer's `/links/:token` and its `/pay`, which resolve by token and have no session to revoke |
 
 ---
 

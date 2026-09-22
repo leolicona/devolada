@@ -41,15 +41,28 @@ import {
    consequence: they get a new link at a new address the next time an
    operator acts, and nothing reissues the old one. */
 
-/* The feature's ship timestamp. Set at the RELEASE commit (tasks T057),
-   never before: the code that stops recreating links has to be live
-   first, or the previous Worker refills what this deletes.
+/* The feature's ship timestamp — set at the release commit (tasks T057).
 
-   `0` means "not shipped yet", and the pass treats it as "do nothing at
-   all" — not as "a boundary that happens to match no links". The
-   difference is the whole of T058: a boundary of 0 would still write the
-   ledger row that spends the business's one pass. See `prunePanelLinks`. */
-export const PRUNE_CUTOVER_MS = 0;
+   **2026-09-22T20:00:00Z.** Chosen as late as a value safely can be and
+   no later, because the two failure modes are not symmetrical:
+
+   - A cutover AFTER the moment this code went live deletes links
+     FR-008 has already created — links an operator made and may have
+     sent. That is the outcome with a real cost.
+   - A cutover BEFORE it leaves roster-made links behind. That costs
+     almost nothing: the roster only ever created a link for a customer
+     it had never seen, so what survives is the handful belonging to
+     customers the ISP added between this instant and the deploy.
+
+   A release commit's own timestamp cannot overshoot, because the commit
+   must exist before CI can deploy it. Measured on dev the same day: all
+   6,532 panel links predate this by at least twenty hours, and none was
+   made by an operator's act.
+
+   `0` still means "not shipped yet" wherever this constant is not set,
+   and the pass treats it as "do nothing at all" rather than as a
+   boundary that happens to match no links — see `prunePanelLinks`. */
+export const PRUNE_CUTOVER_MS = 1790107200000;
 
 export type PruneReport = {
   /* Businesses pruned this tick */

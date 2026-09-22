@@ -26,8 +26,9 @@ import type { Bindings } from "../src/env";
    roster, so a migration would have what it deleted recreated within
    the minute — and a boundary of "now" would delete the links FR-008
    has just created. A fixed past timestamp makes a second run a no-op
-   by construction. `PRUNE_CUTOVER_MS` is 0 until the release commit
-   (T057), so these tests move it themselves. */
+   by construction. These tests state the boundary they are testing
+   rather than leaning on `PRUNE_CUTOVER_MS`, which the release commit
+   (T057) set to the real ship moment. */
 
 const testEnv = env as typeof env & Bindings;
 
@@ -41,9 +42,9 @@ const db = () => drizzle(env.DB);
 const DAY = 86_400_000;
 const cutover = () => Date.now() - 7 * DAY;
 
-/* The boundary this file tests, stated rather than reached for: the
-   constant is 0 until the release commit (T057), and an ESM export
-   cannot be replaced from outside anyway. */
+/* The boundary this file tests, stated rather than reached for: an ESM
+   export cannot be replaced from outside, and a test that depended on
+   the shipped value would have to be rewritten at every release. */
 const run = () => prune.prunePanelLinks(testEnv, { cutoverMs: cutover() });
 
 const panelLink = async (businessId: string, over: Record<string, unknown> = {}) => {
@@ -264,30 +265,34 @@ describe("US1 (FR-023): the count reaches the business, once", () => {
    tasks T057).
 
    Every case above states its own boundary, which proves the pass is
-   right ONCE the constant is right. This one asks the question those
-   cannot: what does the pass do between the deploy and the release
-   commit, while `PRUNE_CUTOVER_MS` is still unset?
+   right ONCE the constant is right. These ask the question those
+   cannot: what does the pass do while `PRUNE_CUTOVER_MS` is UNSET —
+   the window between a deploy and its release commit?
 
-   That window is not hypothetical — it is every deploy of this feature
-   before its own release, dev included. The pass runs on the
+   That window is not hypothetical. It was every deploy of this feature
+   before 2026-09-22, dev included, and it is every future feature that
+   ships a cutover it has not chosen yet. The pass runs on the
    every-minute cron from the moment the code lands, and the row it
    writes is the ONLY thing that stops it running again. So a row
-   written in this window would spend the business's one and only pass
+   written in that window would spend the business's one and only pass
    on a cutover that deletes nothing, and T057 would set the real
    timestamp to find no business left to prune. FR-023 would be
    unreachable, silently, and the count the business is owed would be
-   zero forever.
+   zero forever. It very nearly was: dev carried three such rows until
+   they were cleared by hand.
 
-   Hence the rule this file now pins: while the cutover is unset, the
-   pass writes NOTHING. It has not run. */
+   Hence the rule this file pins: while the cutover is unset, the pass
+   writes NOTHING. It has not run. The cases state `cutoverMs: 0`
+   rather than leaning on the constant, which now carries the real ship
+   moment — the last case below is what guards that. */
+const UNSET = { cutoverMs: 0 };
+
 describe("US1 (FR-023): the pass keeps its one shot until the cutover is set", () => {
-  it("deletes nothing and writes NO row while PRUNE_CUTOVER_MS is unset", async () => {
+  it("deletes nothing and writes NO row while the cutover is unset", async () => {
     const business = await seedBusiness();
     const old = await panelLink(business.id);
 
-    /* No `cutoverMs`: the constant as it actually ships */
-    const report = await prune.prunePanelLinks(testEnv);
-    expect(prune.PRUNE_CUTOVER_MS).toBe(0);
+    const report = await prune.prunePanelLinks(testEnv, UNSET);
     expect(report).toMatchObject({ businesses: 0, links: 0, sweeps: 0 });
 
     expect((await links(business.id)).map((l) => l.id)).toEqual([old.id]);
@@ -301,7 +306,7 @@ describe("US1 (FR-023): the pass keeps its one shot until the cutover is set", (
     await panelLink(business.id);
 
     /* The cron ticking between the deploy and the release */
-    for (let tick = 0; tick < 3; tick++) await prune.prunePanelLinks(testEnv);
+    for (let tick = 0; tick < 3; tick++) await prune.prunePanelLinks(testEnv, UNSET);
     expect(await db().select().from(linkPrunes)).toHaveLength(0);
 
     /* T057 sets the real ship timestamp and the pass finds its work */
@@ -311,6 +316,16 @@ describe("US1 (FR-023): the pass keeps its one shot until the cutover is set", (
 
     const [row] = await db().select().from(linkPrunes).where(eq(linkPrunes.businessId, business.id));
     expect(row.deletedCount).toBe(2);
+  });
+
+  it("the shipped constant is a real moment in the past, not a placeholder (T057)", () => {
+    /* The release set it. Zero would mean the prune never runs for
+       anybody; a value in the FUTURE would mean it deletes links
+       FR-008 created after the deploy — the one failure with a real
+       cost, and the reason the constant is a release commit's own
+       timestamp and never `Date.now()`. */
+    expect(prune.PRUNE_CUTOVER_MS).toBeGreaterThan(0);
+    expect(prune.PRUNE_CUTOVER_MS).toBeLessThan(Date.now());
   });
 
   it("an orphaned roster sweep row survives the unset window too", async () => {
@@ -333,7 +348,7 @@ describe("US1 (FR-023): the pass keeps its one shot until the cutover is set", (
       fetchedAt: new Date(),
     });
 
-    await prune.prunePanelLinks(testEnv);
+    await prune.prunePanelLinks(testEnv, UNSET);
     expect(await db().select().from(wisphubSweeps)).toHaveLength(1);
 
     /* and goes with the rest once the cutover is set */

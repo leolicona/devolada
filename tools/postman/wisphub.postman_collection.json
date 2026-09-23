@@ -1,0 +1,2220 @@
+{
+  "info": {
+    "name": "WispHub API v1.2.0",
+    "description": "Endpoints del API de WispHub (api-main.yaml v1.2.0).\n\n- `baseUrl`: sandbox por defecto (`https://sandbox-api.wisphub.net`); producción es `https://api.wisphub.net`.\n- Autenticación: cabecera `Authorization: Api-Key {{wisphub_api_key}}`, heredada por todas las peticiones. La clave se genera en https://wisphub.net/staff/ y va en un entorno, nunca en la colección.\n- Las peticiones marcadas \"Medido por Devolada\" copian lo que el cliente de Devolada usa en producción; el resto se infirió de las rutas del spec y hay que verificarlo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "Authorization",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "Api-Key {{wisphub_api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://sandbox-api.wisphub.net"
+    },
+    {
+      "key": "wisphub_api_key",
+      "value": ""
+    },
+    {
+      "key": "id_servicio",
+      "value": ""
+    },
+    {
+      "key": "usuario",
+      "value": ""
+    },
+    {
+      "key": "id_zona",
+      "value": ""
+    },
+    {
+      "key": "id_factura",
+      "value": ""
+    },
+    {
+      "key": "id_gasto",
+      "value": ""
+    },
+    {
+      "key": "folio",
+      "value": ""
+    },
+    {
+      "key": "id_ticket",
+      "value": ""
+    },
+    {
+      "key": "task_id",
+      "value": ""
+    },
+    {
+      "key": "id_ficha",
+      "value": ""
+    },
+    {
+      "key": "id_plan",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Clientes",
+      "item": [
+        {
+          "name": "Listar clientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/?limit=20&offset=0&usuario=&nombre__contains=&estado=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                },
+                {
+                  "key": "usuario",
+                  "value": "",
+                  "description": "Filtro exacto por usuario",
+                  "disabled": true
+                },
+                {
+                  "key": "nombre__contains",
+                  "value": "",
+                  "description": "Búsqueda por nombre",
+                  "disabled": true
+                },
+                {
+                  "key": "estado",
+                  "value": "",
+                  "description": "Activo / Suspendido / Cancelado",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista paginada de servicios. `next` es una URL absoluta. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts)."
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener servicio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/{{id_servicio}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{id_servicio}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar servicio (auto_activar_servicio)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/{{id_servicio}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{id_servicio}}",
+                ""
+              ]
+            },
+            "description": "Persistencia del PATCH verificada 2026-08-16. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auto_activar_servicio\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Perfil del cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/{{id_servicio}}/perfil/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{id_servicio}}",
+                "perfil",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Saldo del cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/{{id_servicio}}/saldo/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{id_servicio}}",
+                "saldo",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Activar servicios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/activar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "activar",
+                ""
+              ]
+            },
+            "description": "Ruta `/clientes/{accion}/` con accion=activar. Devuelve un task_id (consultar en Tareas). Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicios\": [\n    \"{{id_servicio}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Desactivar servicios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/desactivar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "desactivar",
+                ""
+              ]
+            },
+            "description": "Ruta `/clientes/{accion}/` con accion=desactivar. Devuelve un task_id. Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicios\": [\n    \"{{id_servicio}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agregar cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/agregar-cliente/{{id_zona}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "agregar-cliente",
+                "{{id_zona}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"apellidos\": \"\",\n  \"usuario\": \"\",\n  \"password\": \"\",\n  \"ip\": \"\",\n  \"plan_internet\": 0,\n  \"router\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar clientes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/eliminar-clientes/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "eliminar-clientes",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicios\": [\n    \"{{id_servicio}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ping al cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/{{id_servicio}}/ping/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{id_servicio}}",
+                "ping",
+                ""
+              ]
+            },
+            "description": "Devuelve un task_id. Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar instalaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/instalaciones/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "instalaciones",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Solicitar instalación",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/solicitar-instalacion/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "solicitar-instalacion",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"telefono\": \"\",\n  \"direccion\": \"\",\n  \"zona\": 0,\n  \"plan_internet\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar servicios adicionales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicios-adicionales/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicios-adicionales",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Agregar servicio de telefonía",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agregar-servicio-telefonia/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "agregar-servicio-telefonia",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_servicio\": \"{{id_servicio}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agregar servicio de televisión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agregar-servicio-television/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "agregar-servicio-television",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_servicio\": \"{{id_servicio}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Activar servicio adicional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicio-adicional/activar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicio-adicional",
+                "activar",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicios\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Desactivar servicio adicional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/servicio-adicional/desactivar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "servicio-adicional",
+                "desactivar",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicios\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tarjetas de Cobranza",
+      "item": [
+        {
+          "name": "Listar tarjetas de cobranza",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tarjeta-cobranza/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tarjeta-cobranza",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "QR CoDi del cliente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/{{id_servicio}}/qr-codi/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{id_servicio}}",
+                "qr-codi",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar tarjetas de cobranza CoDi",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/clientes/tarjetas-cobranza/codi/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "tarjetas-cobranza",
+                "codi",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Facturas",
+      "item": [
+        {
+          "name": "Sugerencias",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/_/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "_",
+                ""
+              ]
+            },
+            "description": "Ruta `/_/` del spec (sugerencias). Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Formas de pago",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/formas-de-pago/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "formas-de-pago",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Devolada busca aquí la forma de pago en efectivo por nombre. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts)."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar facturas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/?limit=20&offset=0&estado=1&tipo_fecha=fecha_emision&desde=2026-01-01&hasta=2026-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                },
+                {
+                  "key": "estado",
+                  "value": "1",
+                  "description": "1 = pendiente, 2 = pagada, 3 = cancelada",
+                  "disabled": false
+                },
+                {
+                  "key": "tipo_fecha",
+                  "value": "fecha_emision",
+                  "description": "Campo de fecha que filtran desde/hasta",
+                  "disabled": true
+                },
+                {
+                  "key": "desde",
+                  "value": "2026-01-01",
+                  "description": "YYYY-MM-DD",
+                  "disabled": true
+                },
+                {
+                  "key": "hasta",
+                  "value": "2026-12-31",
+                  "description": "YYYY-MM-DD",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts)."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear factura",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                ""
+              ]
+            },
+            "description": "Responde con un mensaje (`la factura N`), no con un id. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": \"{{usuario}}\",\n  \"tipo_factura\": 1,\n  \"articulos\": [\n    {\n      \"descripcion\": \"Mensualidad de internet\",\n      \"precio\": 100,\n      \"cantidad\": 1\n    }\n  ],\n  \"fecha_emision\": \"2026-09-23\",\n  \"fecha_vencimiento\": \"2026-09-23\",\n  \"fecha_pago\": \"2026-09-23\",\n  \"estado\": 1,\n  \"sub_total\": 100,\n  \"total\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener factura",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/{{id_factura}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "{{id_factura}}",
+                ""
+              ]
+            },
+            "description": "404 = la factura ya no existe. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts)."
+          },
+          "response": []
+        },
+        {
+          "name": "Registrar pago",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/{{id_factura}}/registrar-pago/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "{{id_factura}}",
+                "registrar-pago",
+                ""
+              ]
+            },
+            "description": "`accion`: 1 reconecta (responde task_id), 0 solo registra el dinero (task_id null). Solo acepta 0 o 1. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"forma_pago\": 0,\n  \"accion\": 1,\n  \"fecha_pago\": \"2026-09-23 12:00\",\n  \"total_cobrado\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Promesa de pago",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/promesa-pago/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "promesa-pago",
+                ""
+              ]
+            },
+            "description": "Con `accion: 1` reactiva en el router al momento. Solo creación (GET responde 405); rechaza facturas pagadas con 400. Medido por Devolada contra la API real (ver apps/api/src/wisphub/client.ts).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_factura\": \"{{id_factura}}\",\n  \"fecha_limite\": \"2026-09-30\",\n  \"accion\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar facturas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/eliminar-facturas/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "eliminar-facturas",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facturas\": [\n    \"{{id_factura}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Servicios de internet (prorrateo)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/servicios-internet-prorrateo/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "servicios-internet-prorrateo",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Lista de artículos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/lista-articulos/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "lista-articulos",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Reportar pago de factura",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/reportar-pago/{{id_factura}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "reportar-pago",
+                "{{id_factura}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "forma_pago",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "total",
+                  "value": "",
+                  "type": "text"
+                },
+                {
+                  "key": "comprobante",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Facturas Electrónicas",
+      "item": [
+        {
+          "name": "Listar facturas DIAN (Sigma)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/facturas/sigma/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "facturas",
+                "sigma",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gastos",
+      "item": [
+        {
+          "name": "Listar gastos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/gastos/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "gastos",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Agregar gasto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/gastos/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "gastos",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"\",\n  \"total\": 0,\n  \"categoria\": 0,\n  \"proveedor\": 0,\n  \"fecha\": \"2026-09-23\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener gasto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/gastos/{{id_gasto}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "gastos",
+                "{{id_gasto}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Editar gasto",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/gastos/editar/{{folio}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "gastos",
+                "editar",
+                "{{folio}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"\",\n  \"total\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar gasto",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/gastos/eliminar/{{folio}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "gastos",
+                "eliminar",
+                "{{folio}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tickets",
+      "item": [
+        {
+          "name": "Listar tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicio\": \"{{id_servicio}}\",\n  \"asunto\": \"\",\n  \"departamento\": \"\",\n  \"descripcion\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener ticket",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{id_ticket}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{id_ticket}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Asuntos de tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/asuntos-tickets/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "asuntos-tickets",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Departamentos de tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/departamentos-tickets/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "departamentos-tickets",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Responder ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{id_ticket}}/respuesta/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tickets",
+                "{{id_ticket}}",
+                "respuesta",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"respuesta\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tareas",
+      "item": [
+        {
+          "name": "Estado de una tarea",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{task_id}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{task_id}}",
+                ""
+              ]
+            },
+            "description": "Consulta el resultado de las acciones que devuelven `task_id` (activar, desactivar, registrar pago con accion 1, ping)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Fichas Hotspot",
+      "item": [
+        {
+          "name": "Listar fichas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/fichas/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fichas",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear fichas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/fichas/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fichas",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cantidad\": 1,\n  \"perfil\": \"\",\n  \"router\": 0,\n  \"punto_venta\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Detalle de ficha",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/fichas/{{id_ficha}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fichas",
+                "{{id_ficha}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Ficha por prefijo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/fichas/ficha-prefijo/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fichas",
+                "ficha-prefijo",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Puntos de venta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/fichas/puntos-venta/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fichas",
+                "puntos-venta",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar fichas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/fichas/eliminar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fichas",
+                "eliminar",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fichas\": [\n    \"{{id_ficha}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sistema",
+      "item": [
+        {
+          "name": "Modelos de antena",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/modelo-antena/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "modelo-antena",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Planes de internet",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Routers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/router/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "router",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Zonas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/zonas/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "zonas",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Proveedores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/proveedores/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "proveedores",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Categorías de gastos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categorias-gastos/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "categorias-gastos",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Usuarios staff",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/staff/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "staff",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Sectoriales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/sectorial/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sectorial",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Planes adicionales",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/planes-adicionales/?limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "planes-adicionales",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Tamaño de página",
+                  "disabled": false
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desplazamiento",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Planes de Internet",
+      "item": [
+        {
+          "name": "Crear plan Queue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/queue/agregar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "queue",
+                "agregar",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"precio\": 0,\n  \"router\": 0,\n  \"velocidad_subida\": \"\",\n  \"velocidad_bajada\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener plan Queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/queue/{{id_plan}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "queue",
+                "{{id_plan}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar plan Queue",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/queue/{{id_plan}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "queue",
+                "{{id_plan}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"precio\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar plan Queue",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/queue/{{id_plan}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "queue",
+                "{{id_plan}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Crear plan PPPoE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/pppoe/agregar/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "pppoe",
+                "agregar",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"precio\": 0,\n  \"router\": 0,\n  \"perfil\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener plan PPPoE",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/pppoe/{{id_plan}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "pppoe",
+                "{{id_plan}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar plan PPPoE",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/pppoe/{{id_plan}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "pppoe",
+                "{{id_plan}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"precio\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar plan PPPoE",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/plan-internet/pppoe/{{id_plan}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "plan-internet",
+                "pppoe",
+                "{{id_plan}}",
+                ""
+              ]
+            },
+            "description": "Método/cuerpo inferido: el api-main.yaml recibido solo trae las rutas ($ref externos). Verificar contra https://wisphub.net/documentacion/home-1/."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

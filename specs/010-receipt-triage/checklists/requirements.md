@@ -46,3 +46,7 @@
   names the matching candidate), the institution Banxico records for Spin's
   SPEI transfers, and whether the reader can read a receipt's destination and
   tell a Spin SPEI transfer from a movement inside Spin.
+- Re-validated 2026-09-23 after `/speckit-plan` amended the spec (SC-003, the
+  bank-hint and Spin assumptions — research R8, R9: production has no traffic
+  yet, and Spin is a SPEI participant of its own with older accounts on STP).
+  Every item still passes; no marker introduced.

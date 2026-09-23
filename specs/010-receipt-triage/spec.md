@@ -426,7 +426,8 @@ spent. Needs nothing from the other stories.
 - **Ask**: a request to the payer for data, with the fields it names and how
   it ended.
 - **Bank hint**: for a bank or app, where it shows the clave de rastreo and
-  what to tap; es-MX copy kept by hand, used by the ask and by the tips.
+  what to tap, with the receipt or document it was verified against; es-MX
+  copy kept by hand, used by the ask and by the tips.
 - **Spin classification**: whether a Spin receipt is a SPEI transfer, a
   movement inside Spin, or cash put into Spin.
 
@@ -439,8 +440,11 @@ spent. Needs nothing from the other stories.
 - **SC-002**: When the payer is asked, the number of fields asked is exactly
   the number missing or in doubt — never the whole form.
 - **SC-003**: For every bank on the hint list, a payer asked for the clave is
-  told where that bank's app shows it. At launch the list covers every sending
-  bank that appears in the product's confirmed payments.
+  told where that bank's app shows it, and every entry on the list names the
+  real receipt or the bank's own documentation it was verified against. At
+  launch the list holds every bank whose detail screen has been seen that way
+  (amended 2026-09-23, research R9: production has no confirmed payments yet,
+  so "every bank in the product's confirmed payments" could not be measured).
 - **SC-004**: The share of payers who, once asked, send a new capture or type
   the data — rather than abandon — can be read from the records, so the ask
   can be judged on numbers.
@@ -471,17 +475,21 @@ spent. Needs nothing from the other stories.
 - **The ISP's phone number receives transfers** — it is registered with its
   bank for transfers to a phone — and its card is a debit card that receives
   SPEI. The setup says so; the ISP answers for it.
-- **The institution Banxico records for Spin's SPEI transfers** (Spin by OXXO
-  or STP) MUST be measured on real Spin receipts before FR-018 relies on it.
-  Until it is, FR-019 applies to every Spin receipt.
+- **The institution Banxico records for Spin's SPEI transfers** depends on
+  the payer's own account: Spin is a SPEI participant in its own right (code
+  90728, `SPIN BY OXXO`), and accounts not yet moved send through STP (90646).
+  So FR-018 applies only when the receipt shows which of the two the origin
+  account belongs to; otherwise FR-019 applies (amended 2026-09-23, research
+  R8, from public sources on Spin's direct connection to SPEI).
 - **The reader can read the destination** (its kind and the digits shown)
   **and tell a Spin SPEI transfer from a movement inside Spin.** Both MUST be
   measured on real receipts at plan time; when the reader cannot tell, the
   receipt takes today's flow.
 - **"Clear" is the reader's own "fully legible"** (two-eyes-receipt D2): a
   field the bank did not print is not a legibility problem.
-- **The bank hints are kept by hand**, as es-MX copy, starting with the banks
-  that appear in the product's confirmed payments.
+- **The bank hints are kept by hand**, as es-MX copy, and an entry is added
+  only from a real receipt or the bank's own documentation. The first entry is
+  Banorte, from receipt 1 (amended 2026-09-23, research R9).
 - **The capture guide is part of the existing step**, not a screen of its
   own (D3), so that no payer takes an extra tap to reach the upload.
 - **One card and one phone per business.** More identifiers, or a second

@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -32,16 +32,17 @@
 ## Notes
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`
-- Validated 2026-09-23, first pass. Two issues found and fixed in the same
-  pass: Story 1 scenario 1 named two ways forward where FR-004 names three;
-  an Assumption quoted the provider's HTTP status, now said in words.
-- Three `[NEEDS CLARIFICATION]` markers remain, each a decision for the
-  product creator with no safe default: Q1 (FR-016, the customer's service
-  while a same-bank or cash payment waits), Q2 (FR-027, the paid-call cap per
-  receipt), Q3 (FR-022, the fee on a hand confirmation).
-- The provider is named (apiCEP) only in Assumptions and Dependencies, as in
-  two-eyes-receipt: its documented modes are what makes Stories 2 and 6
+- First pass, 2026-09-23: the six-item draft failed "No [NEEDS
+  CLARIFICATION] markers remain" with three open questions (Q1–Q3).
+- Second pass, 2026-09-23, after the product creator narrowed the scope to
+  four items (spec Clarifications): Q1–Q3 belonged to items now out of scope
+  and are withdrawn; every item passes. One fix in the same pass: a file path
+  in Dependencies was replaced by what it names.
+- The provider is named (apiCEP) only in Assumptions, Dependencies and D1, as
+  in two-eyes-receipt: its documented identifier types are what makes Story 3
   possible, and the plan's research must measure them.
-- Two proposed defaults are flagged as such in Assumptions, not taken as the
-  creator's decisions: the "cash or same-bank" way out of the ask, and reviews
-  that never expire.
+- Three things the plan's research MUST measure before design, all named in
+  Assumptions: apiCEP with a card or phone identifier (and whether its answer
+  names the matching candidate), the institution Banxico records for Spin's
+  SPEI transfers, and whether the reader can read a receipt's destination and
+  tell a Spin SPEI transfer from a movement inside Spin.

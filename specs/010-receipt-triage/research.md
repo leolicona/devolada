@@ -5,24 +5,29 @@
 
 Phase 0. Each entry: what had to be known, what was found and where, the
 decision, and what else was weighed. Decisions are numbered in the plan
-(`receipt-triage D9`–`D19`); the spec holds D1–D8. This file replaces the
-research of 2026-09-23, whose card, phone and Spin entries left the scope with
-the spec (Clarifications, 2026-09-24); no code cites their numbers.
+(`receipt-triage D11`–`D26`); the spec holds D1–D10. This file replaces the
+research of 2026-09-23. Its Spin entries left the scope with the spec
+(Clarifications, 2026-09-24); its card and phone entries came back the same
+day and are R12–R16 here. No code cites the old numbers.
 
 ## What was measured, and what could not be
 
 - **Production has no traffic yet.** Measured 2026-09-23 on
   `devolada-db-prod`: zero rows in `payments`, zero in `extractions`. The dev
   database holds two confirmed payments, both `NUBANK`. So how often a capture
-  lacks both keys cannot be read from our records today; FR-022 makes it
+  lacks both keys cannot be read from our records today; FR-028 makes it
   countable from the first real week.
 - **The provider's documentation is not reachable from the build
   environment** (`apicep.cloud`, `www.apicep.cloud`: blocked by the egress
   proxy, 2026-09-23). What is known of the reference search comes from the
   text the product creator pasted in session: "`referenceNumber` — Payment
   reference number. Required if `trackingKey` is not sent", with the example
-  `"referenceNumber": "0170126"`. The design below needs nothing only that page
-  could settle (R4, R6).
+  `"referenceNumber": "0170126"`; and of the card, phone and account-list
+  modes, the same pasted text (exactly one of `clabe` 18, `phoneNumber` 10,
+  `cardNumber` 16 per account; `potentialBeneficiaries` only when the
+  provider reads the picture). Whether the provider's answer names the
+  account it matched is **unknown**. The design below needs nothing only that
+  page could settle (R3, R7, R12).
 - **Bank help pages are not reachable either** (`www.bbva.mx` blocked,
   2026-09-23), and third-party round-ups disagree with each other. Where a
   bank's app shows its clave is known for sure only from receipt 1 (Banorte,
@@ -52,7 +57,7 @@ the lifecycle's `accepted` test and its transfer request (`trackingKey:
 payment.trackingKey ?? ""`), the pay contract (`transfer.trackingKey`
 required) and the page's form.
 
-**Decision (D9).** The reference is threaded through every one of those
+**Decision (D11).** The reference is threaded through every one of those
 layers as an optional sibling of the clave, with one rule everywhere: **a key
 is a clave or a reference; the reference travels when there is no clave; both
 travel when both exist.** Nothing about the clave's own path changes.
@@ -66,7 +71,7 @@ prints six ("038195", a leading zero). Receipt 3 — out of scope, but a good
 warning — prints a ten-digit "Folio de operación" (0082918812), exactly the
 kind of number a reader might mistake for a reference.
 
-**Decision (D10).** The reader asks for the field labelled "Referencia" or
+**Decision (D12).** The reader asks for the field labelled "Referencia" or
 "Referencia numérica" and is told, in the prompt, not to take a folio, an
 authorisation number, a clave or an account for it. The gate accepts a
 reference only as `^\d{1,7}$`, as printed — leading zeros kept, never parsed
@@ -86,7 +91,7 @@ disputed or blind on the clave and the amount, uses the bank's clave shape as
 tiebreaker, and returns `accepted: { trackingKey, senderBank, amountCents,
 date }`. It is pure and already receives the provider's reading.
 
-**Decision (D11).** The comparison's key is **the clave when either reading
+**Decision (D13).** The comparison's key is **the clave when either reading
 found one, the reference otherwise**. When the key is the reference: equal
 references (as text) agree; different ones dispute, and the disputed field is
 `referenceNumber`; one side with none is blind. The shape rules have no
@@ -110,7 +115,7 @@ confirm with `tracking_key` NULL, outside the unique index
 could pay twice. The index's own race handling (`isUniqueViolation` →
 `invalid`, already used) is what makes adoption safe.
 
-**Decision (D12).** Adoption also covers a row that has a reference and no
+**Decision (D14).** Adoption also covers a row that has a reference and no
 clave, whatever its `proof_mode`: the CEP's clave is written, and the unique
 index refuses the second claimant exactly as it does today. This is FR-006,
 and it is not optional: without it, the reference would reopen the double
@@ -126,12 +131,16 @@ declares `RECEIPT_INCOMPLETE` — "no door throws this since two-eyes-receipt
 D3 … the code stays declared because callers still switch on it"
 (`consta/failure.ts`).
 
-**Decision (D13).** One pure function, `askBeforeCredit(extracted)`, returns
-`null` or `{ fields }`, where `fields` lists `key`, `amount`, `date`,
-`senderBank` — every field the typing form will need that the capture did not
-show, the key first. Both callers use it: `extract()` puts it on the reading
-`/read` returns (the page renders it), and the receipt door throws
-`RECEIPT_INCOMPLETE` on it before the provider call, carrying the fields.
+**Decision (D15).** One pure function, `askBeforeCredit(extracted,
+accounts)`, returns `null`, `{ reason: "no_key", fields }` or `{ reason:
+"wrong_destination" }` (R14). `fields` lists `key`, `amount`, `date`,
+`senderBank`, `account` — every field the typing form will need that the
+capture did not show, the key first; `account` only when the ISP has more
+than one and the destination did not tie to one. Both callers use it:
+`extract()` puts it on the reading `/read` returns (the page renders it), and
+the receipt door throws on it before the provider call — `RECEIPT_INCOMPLETE`
+for `no_key`, carrying the fields; `RECEIPT_WRONG_DESTINATION` for the
+other.
 Nothing is billed; the lifecycle's catch already turns an engine failure into
 `retryLater(code)`, and the draft's reading is reused on each slot
 (two-eyes D14), so a client that skipped the page costs Workers AI calls at
@@ -149,7 +158,7 @@ means the model omitted it, or the reading is a PDF's text, and both "read as
 `full`, because the bias is to let files through" (`reader.ts`). The gate
 says `ok | malformed | missing` per field.
 
-**Decision (D14).** The ask fires only when both keys are **missing** — not
+**Decision (D16).** The ask fires only when both keys are **missing** — not
 malformed — and the reading is **certain**: `legibility === "full"` on a
 picture, or any text reading of a PDF. A picture whose legibility the model
 omitted goes through, as today: the stop flips two-eyes D2's bias, so it may
@@ -164,7 +173,7 @@ failure, calls `retryLater(code)` — so today the next slot would send the same
 request, and a rejected request bills like any call (measured 2026-08-19 on
 the same-institution 400). Nothing asks the payer.
 
-**Decision (D15).** On that hint the lifecycle records the ask — the
+**Decision (D17).** On that hint the lifecycle records the ask — the
 payment's `disputed_fields` becomes `["trackingKey"]` and its `last_error`
 `REFERENCE_AMBIGUOUS` — and every later slot of that row **skips the
 provider** while the row has no clave, riding the schedule to an honest
@@ -187,7 +196,7 @@ from a draft and leaves a field empty when the draft has no value. The later
 asks already name the disputed field (`disputedSet`), with per-field
 sentences.
 
-**Decision (D16).** The ask reuses that `Alert`, in the same place, and the
+**Decision (D18).** The ask reuses that `Alert`, in the same place, and the
 same `TransferForm`:
 
 - the `Alert` carries three sentences built from `ask.fields` (key first,
@@ -198,9 +207,15 @@ same `TransferForm`:
 - the form gains a key block — "Clave de rastreo" and "Número de referencia",
   with "Escribe al menos uno." — and, under each field the capture lacked,
   the text "No aparece en tu captura";
+- when the ISP has more than one account, the form gains "¿A cuál cuenta
+  transferiste?" (R13), pre-selected when the reading tied the destination;
 - the count of keyless readings in one visit is page state; at two, the form
   renders first (a reload resets it, costing at most one more upload, never a
-  credit — the server still stops).
+  credit — the server still stops);
+- `wrong_destination` uses the same `Alert`: "Esta transferencia fue a otra
+  cuenta, no a una de {ISP}. Revisa tu comprobante." with the same two
+  buttons — typing is the way out of a misread digit, because typed data is
+  never second-guessed (two-eyes FR-015).
 
 The later asks keep their sentences and gain `referenceNumber` and the
 `REFERENCE_AMBIGUOUS` sentence ("Tu número de referencia coincide con más de
@@ -209,7 +224,7 @@ plus the bank hint line when the payment's bank has one.
 
 ## R9 — The bank hints
 
-**Decision (D17).** es-MX copy in the payer app
+**Decision (D19).** es-MX copy in the payer app
 (`apps/pago/src/features/pago/bank-hints.ts`), keyed by the `Bank` type the
 schema re-exports so a name outside the vocabulary cannot compile, each entry
 carrying its source and verification date. An entry is added only from a real
@@ -229,7 +244,7 @@ its own shadcn primitives (`collapsible`, `native-select`) and the shared
 atoms. Constitution VI: tokens only, status never colour alone, 360px floor,
 no horizontal scroll, reduced motion.
 
-**Decision (D18).** An app-local `CaptureGuide` (only this page renders it,
+**Decision (D20).** An app-local `CaptureGuide` (only this page renders it,
 so it is not an atom): an inline SVG of a generic receipt drawn with token
 classes (`fill-*`, `stroke-*` from `tokens.css` through Tailwind), four
 numbered markers named in text beside the drawing, the three rules as a list,
@@ -241,17 +256,136 @@ control.
 
 **Found.** `extractions` records every reading with its outcome, bank, gate
 and legibility, but not which proof it read (so an ask cannot be joined to
-what the payer did next) and not the references.
+what the payer did next), not the references, and not the destination.
 
-**Decision (D19).** `extractions` gains `proof_key` (its prefix is the link
+**Decision (D21).** `extractions` gains `proof_key` (its prefix is the link
 id), `reference_number` (ours, as read) and `provider_reference_number`
-(theirs); its `outcome` vocabulary gains `key_missing` (TypeScript only, the
-column is text). "How an ask ended" is then a query: the next extraction on
+(theirs), `destination_kind` and `destination_digits` (as the reader saw
+them); its `outcome` vocabulary gains `key_missing` and `wrong_destination`
+(TypeScript only, the column is text). Payments by the account that received
+them are `payments.beneficiary` (R15). "How an ask ended" is then a query: the next extraction on
 the same link, a payment on the link with `proof_mode = 'transfer'`, or
 neither. Searches by reference are `validations` rows with
 `reference_number` set and `tracking_key` NULL, already recorded.
 
-## R12 — Tests that assert what this feature changes
+## R12 — Card and phone at the provider, and who picks the account
+
+**Found.** The engine already accepts every shape the provider documents:
+`beneficiarySchema` takes exactly one of `clabe` (18), `phoneNumber` (10),
+`cardNumber` (16), and the receipt door takes `potentialBeneficiaries`
+(`consta/request.ts`); the adapter passes both through unchanged
+(`provider/apicep.ts`, `requestBody`). The transfer door takes exactly one
+beneficiary. The same-institution guard (`senderBank !== beneficiary.bank`,
+validation.spec.md D17) applies to any account. Three gaps: (1) the facade's
+`ConstaBeneficiary` type knows only a CLABE (`consta/index.ts`); (2) our
+reader only runs on the receipt door when a single `beneficiary` is given
+(`readable = … Boolean(body.beneficiary) …`), so a list today silences our
+reading; (3) whether the provider's answer names the matching account is
+unknown — `cepDetails` carries `receiverBank` and `beneficiaryName`, never an
+account.
+
+**Decision (D22).** The lifecycle hands the engine the ISP's accounts:
+`beneficiary` when there is one, `potentialBeneficiaries` when there are more.
+The engine reads the file in both cases (gap 2 closed), ties the reading's
+destination to one account (R14), sends `beneficiary` when it could and
+`potentialBeneficiaries` when it could not, and returns on the verdict the
+account it used (`beneficiaryUsed`, null when it sent the list). The
+lifecycle stores it on the payment (R15). `ConstaBeneficiary` is widened to
+the three shapes (gap 1).
+
+**Decision (D23).** A payment whose ISP has more than one account and whose
+account is still unknown **keeps the receipt door** on every attempt, with
+the list — exactly as a missing date keeps it (two-eyes plan D20). Accepted
+data is "accepted" for the transfer door only once the account is known.
+This removes the dependency on the provider naming the account (gap 3): the
+design never needs it.
+
+**Alternatives.** Tie the destination in the lifecycle before calling the
+engine — rejected: the reading is the engine's (two-eyes D14 reuse), and
+matching outside it would call the reader twice or move the reader's output
+across the facade. Try the accounts one after another on the transfer door —
+rejected by D10: a credit each, to learn nothing.
+
+## R13 — The manual door with more than one account
+
+**Found.** The manual door's `transfer` carries the key, bank, date and
+amount; the beneficiary is server-side ("the client never sends its own
+money", direct-payment D1). A typed row always takes the transfer door
+(two-eyes FR-015), which needs one beneficiary.
+
+**Decision.** `transfer` gains an optional `receivingAccount: "clabe" | "card"
+| "phone"`, required by the server when the link offers more than one account
+(`VALIDATION_ERROR` otherwise) and ignored when it offers one. It names
+*which of the ISP's own accounts*; the number still comes from the server, so
+direct-payment D1 holds. The page shows each choice with its last four
+digits — none pre-selected on the manual door, the tied one pre-selected when
+the form opens from a reading whose destination tied to an account.
+
+## R14 — Reading the destination and tying it to an account
+
+**Found.** The four receipts print the destination four ways: "CLABE
+Internet.sis ****8195" (receipt 1), "Bbva Mexico ***195" (receipt 2),
+"internet NETSIS •3819 Cuenta" (receipt 3 — the account number, not the
+CLABE), "CUENTA/TARJETA DE ABONO ****3819" (receipt 4). A CLABE is
+institution (3) + plaza (3) + account (11) + check digit (1); the ISP's CLABE
+…8195 carries its account …3819 in positions 7–17, which is why receipt 3's
+"•3819" is the same account.
+
+**Decision (D24).** The reader gains `destino: { tipo: "clabe" | "tarjeta" |
+"celular" | "cuenta" | null, digitos: "<the digits it can see, masks
+removed>" }`. Tying is a pure function over **visible trailing digits**
+against every form of each account: the whole CLABE, the CLABE's 11-digit
+account segment, the card, the phone. Fewer than three visible digits is
+*unknown*, never a mismatch (FR-020: hidden digits are not a mismatch). A
+match on exactly one account ties it; a match on more than one — possible
+with three digits — is unknown. A destination is a *mismatch* only when the
+reading is clear (D16), at least three digits are visible, and they end none
+of the forms. `tipo`, when known, narrows the forms tried (`tarjeta` tries the
+card only; `cuenta` the CLABE's account segment only).
+
+**Alternatives.** Match on the destination bank's name — rejected: receipts
+print it a dozen ways ("BBVA MEXICO", "Bbva Mexico") and it cannot tell a card
+from a CLABE at the same bank. Require four digits — rejected: receipt 2
+shows three.
+
+## R15 — What the payment remembers
+
+**Found.** Today the beneficiary is rebuilt from the business on every
+attempt (`direct-payments/validation.ts`, `const beneficiary = { bank:
+business.speiBank, clabe: business.speiClabe, … }`), so a CLABE change already
+moves in-flight payments — the case FR-021 now forbids for every account.
+
+**Decision (D25).** Two additive JSON columns on `payments`:
+`beneficiary_candidates` (the ISP's accounts at submission, when there were
+more than one) and `beneficiary` (the one the money went to, once known — at
+submission when the ISP has one account or the payer chose; from the
+engine's `beneficiaryUsed` otherwise). Attempts read the payment, never the
+business. A row with neither — every row born before this feature — keeps
+today's fallback to the business's CLABE, so nothing in flight changes
+(FR-027).
+
+**Alternatives.** A `receiving_accounts` table with ids — rejected for now:
+one card and one phone per ISP fit in columns, and a snapshot must not follow
+an edit anyway.
+
+## R16 — The card and the phone in the ISP's setup
+
+**Found.** The CLABE lives on `businesses` (`spei_clabe`, `spei_bank`), is
+edited in Cuenta (`apps/admin/src/features/settings/SettingsScreen.tsx`,
+the bank chosen with the searchable `Combobox` over `BANK_OPTIONS`) through
+`PATCH /settings`, and belongs to the `clabe` area, which only the owner holds
+(`auth/role-matrix.ts`, business-and-memberships D3); roles that cannot update
+settings read it masked to the last four.
+
+**Decision (D26).** Four nullable columns on `businesses`: `spei_card`,
+`spei_card_bank`, `spei_phone`, `spei_phone_bank`. They belong to the `clabe`
+area (owner only) and are masked like the CLABE. Validation: the card is 16
+digits and passes the Luhn check; the phone is 10 digits; each number travels
+with its bank (both or neither); the bank is from the provider's vocabulary.
+The CLABE stays required: `configured` keeps its meaning, so an ISP with only
+a card is not "configured".
+
+## R17 — Tests that assert what this feature changes
 
 Two-eyes-receipt tests that assert a **fully legible picture with no clave**
 reaches the provider are rewritten to assert the ask, cited
@@ -260,6 +394,6 @@ reaches the provider are rewritten to assert the ask, cited
 `test/direct-payment.test.ts`. Tests of a *malformed* clave ("scenario 4: the
 gate catches a clave's shape") and of a *partly legible* hole ("a partly
 legible photo with a hole in it still buys the paid call (FR-005)") stay as
-they are (D14). The pure `compareReadings` tests stay and gain reference
+they are (D16). The pure `compareReadings` tests stay and gain reference
 cases. The comment in `provider/apicep.ts` that says Devolada "cannot hit"
 the 422 is rewritten.

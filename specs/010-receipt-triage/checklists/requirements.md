@@ -41,10 +41,15 @@
   how the feedback works; that design is D5–D6, written as decisions rather
   than as a `[NEEDS CLARIFICATION]` marker, and flagged in Clarifications as
   the part most worth the creator's review.
-- The provider is named (apiCEP) only in D1, Assumptions and Dependencies, as
-  in two-eyes-receipt: its documented reference search is what makes Story 1
-  possible, and it is unmeasured.
+- 2026-09-24, fourth pass, after the creator added back one card and one
+  phone beside the CLABE, with Banxico asked about the account the receipt
+  shows as destination (spec Clarifications; D9, D10; Story 3): every item
+  still passes; no marker introduced.
+- The provider is named (apiCEP) only in D1, D9, Assumptions and
+  Dependencies, as in two-eyes-receipt: its documented reference search and
+  card/phone accounts are what make Stories 1 and 3 possible, and both are
+  unmeasured.
 - What the implementation MUST measure first (quickstart Step 0): the reader
   on receipts 1 and 2 with the new prompt — both keys null on receipt 1, the
-  reference `038195` with its leading zero on receipt 2, and no folio taken
-  for a reference.
+  reference `038195` with its leading zero on receipt 2, no folio taken for a
+  reference, and the destination digits read as printed.

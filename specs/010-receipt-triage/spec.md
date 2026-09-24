@@ -4,13 +4,16 @@
 
 **Created**: 2026-09-23 · **Rescoped**: 2026-09-24
 
-**Status**: Draft — scope narrowed twice by the product creator; ready for
-`/speckit-plan`
+**Status**: Draft — scope settled by the product creator on 2026-09-24;
+ready for `/speckit-plan`
 
 **Input**: User description: "1. Previous guide on how to upload a payment
 receipt. 2. Validate transfer receipts by payment reference number. Mandatory
 if trackingKey is not sent. 3. Feedback of missing data to the user. You have
-to define the how."
+to define the how." — then, the same day: "The ISP can register in the system
+1 16-digit card and 1 10-digit phone in addition to its 18-digit CLABE. The
+consultation in Banxico will use the data that appears as destination on the
+receipt."
 
 ## Clarifications
 
@@ -26,12 +29,14 @@ to define the how."
 
 ### Session 2026-09-24
 
-- Q: What is in scope now? → A: Three things only — the capture guide before
-  the upload, validation by the referencia numérica (required when there is
-  no clave de rastreo), and feedback that tells the payer which data is
-  missing. Card and phone identifiers and Spin leave the scope; the
-  referencia numérica, out of scope on 2026-09-23, comes back. Everything
+- Q: What is in scope now? → A: Four things — the capture guide before the
+  upload; validation by the referencia numérica, required when there is no
+  clave de rastreo; feedback that tells the payer which data is missing; and
+  one debit card (16 digits) and one phone (10 digits) that the ISP can
+  register beside its CLABE (18 digits). Spin leaves the scope. Everything
   dropped is listed under Out of Scope.
+- Q: Which of the ISP's accounts does the check ask Banxico about? → A: The
+  one the receipt shows as its destination.
 - Q: How should the missing-data feedback work? → A: The creator left the
   design to this spec ("you have to define the how"). It is decided in D5 and
   D6 below and is the part of this spec most worth the creator's review.
@@ -59,20 +64,26 @@ already accepts one. The payer is then asked to "confirm the clave de rastreo
 looking at your receipt" — a receipt that does not show it — and is never told
 where it is. Meanwhile the payment re-sends the same picture at every retry.
 
+Both receipts also show where the money went — "CLABE ****8195", "***195" —
+and that is all the product has to tell which of an ISP's accounts received
+a payment. Today an ISP can only publish a CLABE; many small ISPs also tell
+their customers "transfiere a mi tarjeta" or share a phone number for
+transfers, and those payments cannot be checked at all.
+
 The other two receipts — a BBVA-to-BBVA transfer and two cash deposits — never
 touched SPEI and are out of scope.
 
 ## Decisions taken in session (2026-09-23, 2026-09-24)
 
 Recorded here so the plan and the code can cite them as
-`receipt-triage D<n>`. This list replaces the one of 2026-09-23; no code cites
-the earlier numbers.
+`receipt-triage D<n>`. This list replaces the earlier ones; no code cites the
+earlier numbers.
 
 - **D1 — Two keys find a transfer: the clave de rastreo or the referencia
   numérica.** Every check carries at least one. The reference is required
   when there is no clave; when both exist, both travel and the clave leads.
   This is the provider's own rule for its direct mode ("`referenceNumber` —
-  required if `trackingKey` is not sent"), made the product's. (Input item 2.)
+  required if `trackingKey` is not sent"), made the product's.
 - **D2 — A reference is the SPEI referencia numérica: up to seven digits, as
   printed.** Leading zeros are kept ("038195" stays "038195"). A longer
   number on a receipt — a folio, an authorisation number, an account — is not
@@ -87,7 +98,7 @@ the earlier numbers.
   not printed. This narrows two-eyes-receipt D2 and FR-005 for that one case:
   a partly legible receipt, a malformed clave, and a picture whose legibility
   the reader did not judge still go to the provider as today.
-- **D5 — How the missing-data feedback works.** (Input item 3, designed here.)
+- **D5 — How the missing-data feedback works.** (Designed here.)
   - *When*: the moment the free reading comes back, before any payment
     exists and before any credit; and later, whenever the check needs a field
     from the payer, with the same pattern.
@@ -119,7 +130,21 @@ the earlier numbers.
   same data; it asks the payer for the clave de rastreo alone.
 - **D8 — The capture guide lives inside the upload step.** Above the upload
   button, a small drawing of a receipt marks what the capture must show, with
-  three short rules. It adds no tap before the upload. (Input item 1.)
+  three short rules. It adds no tap before the upload.
+- **D9 — An ISP may register one debit card and one phone beside its CLABE.**
+  A card of 16 digits and a phone of 10, each with its bank; the CLABE of 18
+  stays required. A SPEI transfer to any of the three is recorded by Banxico,
+  and the provider can check it when told which one received the money
+  (apiCEP's documented beneficiary types: CLABE, card, phone).
+- **D10 — The check asks Banxico about the account the receipt shows as its
+  destination.** The digits the receipt shows tie the payment to one of the
+  ISP's accounts. When they cannot — too few digits, or digits that fit more
+  than one — the provider's own reading of the picture receives all of the
+  ISP's accounts to choose from, and a payer who types their data says which
+  one they sent to. A credit is never spent trying accounts one after
+  another. When a clear capture's destination fits none of the ISP's accounts,
+  the payer is told before any credit that the transfer went to a different
+  account.
 
 ## Summary
 
@@ -135,6 +160,10 @@ as well as the clave and searches Banxico with whichever the receipt shows. A
 clear capture with neither is caught for free, and the payer is told exactly
 what is missing, where their bank shows it, and that they can type it
 instead.
+
+It also widens what can be checked. An ISP can publish a debit card and a
+phone next to its CLABE, and the check asks Banxico about the account the
+receipt shows the money went to.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -252,7 +281,61 @@ Needs Story 1 only for the reference-only case.
 
 ---
 
-### User Story 3 - The payer sees what a good capture shows before taking it (Priority: P3)
+### User Story 3 - An ISP can be paid at a debit card or a phone as well as its CLABE (Priority: P2)
+
+An ISP adds its debit card and its phone in Cuenta, next to the CLABE it
+already has. The payment page shows all three. A payer who transfers to the
+card or the phone is checked with Banxico exactly like one who transfers to
+the CLABE, because the check asks about the account the receipt shows as its
+destination.
+
+**Why this priority**: those payments cannot be checked at all today. It
+ranks with Story 2 and not above it because it is larger — the ISP's setup,
+the page and the check all change — and serves fewer payers at first.
+
+**Independent Test**: configure an ISP with a CLABE, a card and a phone
+against an intercepted provider; submit a receipt to each and check which
+account each search names; submit a receipt whose destination cannot be
+read, and a typed submission; submit a clear receipt to an account that is
+none of the three. Needs nothing from the other stories.
+
+**Acceptance Scenarios**:
+
+1. **Given** an ISP with only a CLABE, **When** this feature ships, **Then**
+   nothing changes for it or its payers.
+2. **Given** an ISP member who may change the CLABE, **When** they open
+   Cuenta, **Then** they can add, change or remove one debit card (16 digits)
+   and one phone (10 digits), each with its bank; the CLABE stays required.
+3. **Given** a card number of the wrong length or with a failing check digit,
+   a phone that is not 10 digits, or a number without its bank, **When** it
+   is saved, **Then** it is refused with a message that names the problem.
+4. **Given** a member who may not change the CLABE, **When** they open
+   Cuenta, **Then** they cannot change the card or the phone, and they see
+   them exactly as they see the CLABE — masked to the last four digits when
+   their role cannot update the settings.
+5. **Given** an ISP with a card or a phone, **When** the payment page renders,
+   **Then** it shows the CLABE and, labelled and copyable, the card and the
+   phone.
+6. **Given** a receipt whose destination the reader ties to the card, the
+   phone or the CLABE, **When** it is checked, **Then** the search names that
+   account.
+7. **Given** a receipt whose destination cannot be tied to one account,
+   **When** the provider reads the picture, **Then** it receives every account
+   of the ISP to choose from.
+8. **Given** a payer who types their data and an ISP with more than one
+   account, **When** they fill the form, **Then** they choose which one they
+   sent to, shown with its last four digits.
+9. **Given** a fully legible receipt whose destination fits none of the ISP's
+   accounts, **When** it is uploaded, **Then** no credit is spent and the
+   payer is told the transfer went to a different account. Digits the
+   receipt hides are not a mismatch.
+10. **Given** an account changed or removed, **When** a payment already
+    submitted to it is checked, **Then** it is checked against the account it
+    was sent to.
+
+---
+
+### User Story 4 - The payer sees what a good capture shows before taking it (Priority: P3)
 
 On the "Envía tu comprobante" step, above the upload button, the payer sees a
 small drawing of a receipt with the data that matters marked — the clave de
@@ -302,10 +385,19 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **A payer who types a reference whose Banxico record carries a clave
   already used by this business.** Refused as already used (D3), exactly as
   if they had typed that clave.
+- **A receipt that shows the ISP's account number, not its CLABE** (receipt 3
+  prints "•3819 Cuenta"). The account number is part of the CLABE, so it ties
+  the payment to the CLABE; it is never a mismatch.
+- **A transfer to the ISP's card or phone from the same bank.** It never goes
+  through SPEI, so Banxico has no record of it. This feature does not change
+  what happens to it (Out of Scope: same-bank payments).
+- **A card that is a credit card.** It cannot be told apart by its digits. The
+  setup labels the field "tarjeta de débito" and says it must receive
+  transfers; the ISP answers for it.
 - **A platform top-up with neither key.** The stop applies in the engine, as
   the two-eyes refusals do for top-ups: no provider credit; the top-up rides
   its schedule and the remedy is a new upload. A top-up with a reference only
-  keeps today's flow; top-ups do not search by reference in this feature.
+  keeps today's flow, and top-ups keep the platform's single CLABE.
 - **A payment born before this feature, validating at cut-over.** It finishes
   under the flow it started in.
 
@@ -363,28 +455,54 @@ is one tap from the start of the step. Needs nothing from the other stories.
   not judge, one with a malformed clave, and any capture read while the
   reader is down or answering nonsense MUST follow today's flow.
 
-**The capture guide (Story 3, D8)**
+**The ISP's card and phone (Story 3, D9, D10)**
 
-- **FR-016**: The upload step MUST show, above the upload button, a drawing of
+- **FR-016**: A member who may change the CLABE MUST be able to add, change
+  or remove one debit card (16 digits, passing the card check digit) and one
+  phone (10 digits), each with a bank from the provider's vocabulary; any
+  other member MUST see them exactly as they see the CLABE, masked to the last
+  four digits when their role cannot update the settings. The CLABE MUST stay
+  required for the channel.
+- **FR-017**: The payment page MUST show the CLABE and, when registered, the
+  card and the phone, each labelled and copyable. An ISP with only a CLABE
+  MUST see no change on its page.
+- **FR-018**: A search MUST name the account the receipt shows as its
+  destination.
+- **FR-019**: When the destination cannot be tied to one account and the ISP
+  has more than one, the provider's reading of the picture MUST receive every
+  account of the ISP to choose from, and a typed submission MUST ask the payer
+  which account they sent to, shown with its last four digits. No credit MUST
+  be spent trying accounts one after another.
+- **FR-020**: A fully legible receipt whose destination fits none of the ISP's
+  accounts MUST be refused before any credit, telling the payer the transfer
+  went to a different account. Hidden digits MUST NOT count as a mismatch.
+- **FR-021**: Changing or removing an account MUST NOT change the account a
+  submitted payment is checked against.
+
+**The capture guide (Story 4, D8)**
+
+- **FR-022**: The upload step MUST show, above the upload button, a drawing of
   a receipt marking with numbers, named in text, the clave de rastreo or
   número de referencia, the amount, the date and the destination account.
-- **FR-017**: The drawing MUST be legible at 360px in both themes, cause no
+- **FR-023**: The drawing MUST be legible at 360px in both themes, cause no
   horizontal scroll, and mark nothing by colour alone.
-- **FR-018**: The step MUST show three rules: the detail, not the summary; the
+- **FR-024**: The step MUST show three rules: the detail, not the summary; the
   whole screen; a photo without glare.
-- **FR-019**: Tips on where each bank shows the data MUST be one tap away, and
+- **FR-025**: Tips on where each bank shows the data MUST be one tap away, and
   MUST come from the same hints as FR-010.
-- **FR-020**: Nothing this story adds may stand in front of the upload button.
+- **FR-026**: Nothing this story adds may stand in front of the upload button.
 
 **Across the feature**
 
-- **FR-021**: Payments validating at cut-over MUST finish under the flow they
+- **FR-027**: Payments validating at cut-over MUST finish under the flow they
   started in.
-- **FR-022**: The product MUST make countable from its records, with no
+- **FR-028**: The product MUST make countable from its records, with no
   further instrumentation: captures stopped for having no key, by bank; how
   each ask ended (new capture, typed data, abandoned); searches by reference
-  and how they ended (found, not found, matched more than one).
-- **FR-023**: Nothing else changes: what a Banxico verdict means, the fee,
+  and how they ended (found, not found, matched more than one); payments by
+  the account that received them; destinations that fit none of the ISP's
+  accounts.
+- **FR-029**: Nothing else changes: what a Banxico verdict means, the fee,
   partial settlement, the schedule, and the top-up flow apart from the stop
   (Edge Cases).
 
@@ -393,6 +511,9 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **Key**: what finds a transfer in Banxico — a clave de rastreo, a
   referencia numérica, or both — with where each came from: our reading, the
   provider's, the payer's hand, or Banxico's record.
+- **Receiving account**: where an ISP is paid — its CLABE (required), and
+  optionally one debit card and one phone — each with its bank. A payment
+  remembers the account it was sent to.
 - **Ask**: a request to the payer for data, with the fields it named and how
   it ended.
 - **Bank hint**: for a bank, where its app shows the clave and the reference,
@@ -414,18 +535,25 @@ is one tap from the start of the step. Needs nothing from the other stories.
   Banxico clave is zero, whatever key found them.
 - **SC-005**: A reference that matches more than one transfer costs at most
   one paid call before the payer is asked for the clave.
-- **SC-006**: Every entry on the bank-hint list names the real receipt or the
+- **SC-006**: A transfer to an ISP's card or phone that Banxico has published
+  is confirmed with the same number of paid calls as a transfer to its CLABE.
+- **SC-007**: A clear receipt whose destination fits none of the ISP's
+  accounts spends zero credits.
+- **SC-008**: An ISP with only a CLABE sees no change in its setup, and its
+  payers see no change on the transfer step.
+- **SC-009**: Every entry on the bank-hint list names the real receipt or the
   bank's own document it was verified against. At launch the list holds
   Banorte (receipt 1) and every bank whose detail screen has been seen that
   way before implementation.
-- **SC-007**: On the upload step, the upload button is one tap from the start
+- **SC-010**: On the upload step, the upload button is one tap from the start
   of the step, and the page has no horizontal scroll at 360, 768 and 1280px in
   either theme.
-- **SC-008**: The share of payers who, once asked, send a new capture or type
+- **SC-011**: The share of payers who, once asked, send a new capture or type
   the data — rather than abandon — can be read from the records.
-- **SC-009**: For every outcome that exists today, a receipt that shows its
-  clave ends in the same status with the same words as today.
-- **SC-010**: Every new test carries its story citation (`receipt-triage
+- **SC-012**: For every outcome that exists today, a receipt that shows its
+  clave and was sent to the CLABE ends in the same status with the same words
+  as today.
+- **SC-013**: Every new test carries its story citation (`receipt-triage
   US<n>`), and the count of decision citations lost in the change is zero.
 
 ## Assumptions
@@ -439,6 +567,13 @@ is one tap from the start of the step. Needs nothing from the other stories.
   is unknown. The design does not depend on it: if it does not, the reference
   both readings agree on travels on the next attempt, which is why SC-002
   allows two paid calls.
+- **The provider accepts a debit card and a phone as the receiving account**,
+  and a list of accounts to choose from when it reads a picture. Documented,
+  unmeasured. Whether its answer says which account matched is unknown; the
+  design does not depend on it.
+- **The ISP's phone is registered with its bank to receive transfers**, and
+  its card is a debit card that receives SPEI. The setup says so; the ISP
+  answers for it.
 - **The referencia numérica has at most seven digits**, as SPEI defines it and
   as bank apps ask for it; the provider's own example carries seven.
 - **"Clear" is the reader's own "fully legible"**, or the text of a PDF: a
@@ -448,16 +583,18 @@ is one tap from the start of the step. Needs nothing from the other stories.
   Banorte, from receipt 1.
 - **The capture guide is part of the existing step**, not a screen of its
   own, so no payer takes an extra tap to reach the upload.
+- **One card and one phone per ISP.** More accounts, or a second CLABE, are
+  out of scope.
 - **Production has no traffic yet** (measured 2026-09-23), so how often a
-  capture lacks both keys is unknown today; FR-022 makes it countable.
+  capture lacks both keys is unknown today; FR-028 makes it countable.
 
 ## Out of Scope
 
 Narrowed on 2026-09-23 and 2026-09-24 (Clarifications). Kept here so none of
 it is lost:
 
-- A debit card or a phone number as receiving identifiers, and more than one
-  receiving account per business.
+- A second CLABE, more than one card or phone, and steering payers to an
+  account at another bank.
 - Spin by OXXO and other fintechs: checking against the institution Banxico
   records for them.
 - Same-bank transfers and cash deposits: sorting them, keeping them away from
@@ -465,15 +602,19 @@ it is lost:
 - Flags for a capture used twice, and a cap on the paid calls a receipt can
   buy.
 - A reference assigned by the page to each customer.
-- Searching by reference for platform top-ups.
+- Searching by reference, and receiving at a card or phone, for platform
+  top-ups.
 - Reading the ISP's own bank movements.
 
 ## Dependencies
 
-- The provider (apiCEP): its direct mode with a `referenceNumber`, and the
-  reference its picture reading returns.
+- The provider (apiCEP): its direct mode with a `referenceNumber`, the
+  reference its picture reading returns, the card and phone receiving
+  accounts, and the list of accounts it chooses from when it reads a picture.
 - The two-eyes flow (two-eyes-receipt D1–D8 and plan D20), which this feature
   narrows in one case (D4) and whose asks it rewords (D6).
 - The one-transfer-pays-once rule (direct-payment D8), extended to every key
   (D3).
+- The Cuenta settings where the CLABE is configured today, and the role
+  allowed to change it.
 - The receipt reader and its PDF text route (two-eyes-receipt D1, D2).

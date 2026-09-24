@@ -12,13 +12,15 @@ pnpm --filter @devolada/api db:migrate:local      # applies 0036
 pnpm --filter @devolada/api sandbox               # apiCEP mock on :8789
 pnpm --filter @devolada/api dev                   # API on :8787, AI binding remote
 pnpm --filter @devolada/pago dev                  # payment page on :5175
+pnpm --filter @devolada/admin dev                 # panel on :5174
 curl -X POST localhost:8787/dev/seed              # demo ISP + a link
 ```
 
 `apps/api/.dev.vars` needs `APICEP_BASE_URL=http://localhost:8789` and any
 `APICEP_TOKEN`. The `AI` binding runs against the real Workers AI in
 `wrangler dev`, so the reader behaves as in dev. The sandbox gains a
-reference trigger (a reference it "finds", and one it answers 422 for).
+reference it "finds", a reference it answers 422 for, and acceptance of card,
+phone and account-list bodies.
 
 ## The gates, in CI order
 
@@ -32,19 +34,20 @@ pnpm -r --if-present test
 pnpm -r --if-present build
 ```
 
-## Step 0 — measure the reader on the receipts at hand (research R2)
+## Step 0 — measure the reader on the receipts at hand (research R2, R14)
 
 Before any engine work, against the real binding, with receipts 1 and 2 of
 the spec and any other captures the product creator supplies:
 
 1. Upload each to a dev link and call `/read` with the new prompt.
-2. Record, per receipt, `claveDeRastreo`, `referenciaNumerica` and
-   `legibilidad`. Expected: receipt 1 — both keys null, `completa`;
-   receipt 2 — reference `038195` (leading zero kept), clave null.
+2. Record, per receipt, `claveDeRastreo`, `referenciaNumerica`, `destino` and
+   `legibilidad`. Expected: receipt 1 — both keys null, `completa`,
+   destination `clabe` / `8195`; receipt 2 — reference `038195` (leading zero
+   kept), clave null, destination digits `195`.
 3. Write the table, dated, into the header comment of
    `consta/extraction/reader.ts`, the way the model choice is recorded there.
-   If the reader takes a folio for a reference on any capture, the prompt is
-   tightened before the gate is relied on.
+   If the reader takes a folio for a reference, or misreads destination
+   digits, the prompt is tightened before the gate is relied on.
 
 ## User Story 1 — the referencia numérica
 
@@ -82,10 +85,10 @@ pnpm --filter @devolada/pago test -- -t "receipt-triage US2"
 Expected:
 
 - A stub reading with both keys null and `legibilidad: "completa"`: `/read`
-  answers `ask: { fields: ["key"] }`; the receipt door throws
-  `RECEIPT_INCOMPLETE`; **no request reaches the intercepted provider**; the
-  reading row's outcome is `key_missing`. With the date null too:
-  `fields: ["key", "date"]`.
+  answers `ask: { reason: "no_key", fields: ["key"] }`; the receipt door
+  throws `RECEIPT_INCOMPLETE`; **no request reaches the intercepted
+  provider**; the reading row's outcome is `key_missing`. With the date null
+  too: `fields: ["key", "date"]`.
 - The same with `legibilidad: "parcial"`, with no `legibilidad`, or with a
   malformed clave: no ask, one provider call. With a reference only: no ask.
 - A text PDF with neither key: asked like a picture.
@@ -99,11 +102,45 @@ Expected:
 
 By hand: upload receipt 1 to the seeded link at 360px and read the screen.
 
-## User Story 3 — the capture guide
+## User Story 3 — the card and the phone
 
 ```sh
+pnpm --filter @devolada/api test -- test/settings.test.ts -t "receipt-triage US3"
+pnpm --filter @devolada/api test -- test/consta/validate.test.ts -t "receipt-triage US3"
+pnpm --filter @devolada/api test -- test/direct-payment.test.ts -t "receipt-triage US3"
 pnpm --filter @devolada/pago test -- -t "receipt-triage US3"
-pnpm e2e -- tests/e2e/pago.spec.ts -g "receipt-triage US3"
+pnpm --filter @devolada/admin test -- -t "receipt-triage US3"
+```
+
+Expected:
+
+- Settings: the owner saves a Luhn-valid card with its bank and a 10-digit
+  phone with its bank; a failing check digit, a 9-digit phone, a number
+  without its bank are refused; an admin gets `FORBIDDEN_FOR_ROLE` on either;
+  an operator reads both masked.
+- Link payload carries `speiCard*` / `speiPhone*` only when set; an ISP with a
+  CLABE alone gets today's payload, field for field.
+- Engine: a reading whose destination is `tarjeta` / `1234` against a card
+  ending 1234 sends `beneficiary.cardNumber`; unreadable destination with
+  three accounts sends `potentialBeneficiaries`; `beneficiaryUsed` says which.
+  Receipt 2's `***195` ends the CLABE …8195 and receipt 3's `•3819` ends its
+  account segment, so both tie to the CLABE; a clear `****9999` ties to
+  nothing and throws `RECEIPT_WRONG_DESTINATION` with no provider request.
+- Lifecycle: the payment stores `beneficiary`; a later attempt uses it even
+  after the ISP changed its card (FR-021); with candidates and no known
+  account, retries stay on the receipt door with the list (D23); a typed
+  submission to a link with more than one account and no `receivingAccount`
+  is a 400.
+- Page: the transfer step lists the card and the phone, copyable; the form
+  offers the account choice, pre-selecting the tied account from a reading.
+
+By hand, with the sandbox: add a card in Cuenta, open the link, copy the card.
+
+## User Story 4 — the capture guide
+
+```sh
+pnpm --filter @devolada/pago test -- -t "receipt-triage US4"
+pnpm e2e -- tests/e2e/pago.spec.ts -g "receipt-triage US4"
 ```
 
 Expected: the component test finds the four numbered items named in text,
@@ -111,30 +148,36 @@ the three rules and the tips trigger, with axe clean, and the upload control
 reachable without any other tap. The browser test measures no horizontal
 scroll at 360, 768 and 1280px and the guide's contrast in both themes.
 
-## Regression — what must not move (SC-009, FR-023)
+## Regression — what must not move (SC-012, FR-029)
 
 ```sh
 pnpm --filter @devolada/api test
 pnpm --filter @devolada/pago test
+pnpm --filter @devolada/admin test
 ```
 
-Every two-eyes-receipt, direct-payment and top-up scenario passes unchanged,
-except the ones research R12 names as rewritten, which now cite
+Every two-eyes-receipt, direct-payment, settings and top-up scenario passes
+unchanged, except the ones research R17 names as rewritten, which now cite
 `receipt-triage US2`.
 
-## The numbers (FR-022)
+## The numbers (FR-028)
 
 After a week of traffic, from the dev or prod database:
 
 ```sql
--- captures asked about before a credit, by bank
-SELECT sender_bank, COUNT(*) FROM extractions
-WHERE outcome = 'key_missing' GROUP BY sender_bank;
+-- captures stopped before a credit, by reason and bank
+SELECT outcome, sender_bank, COUNT(*) FROM extractions
+WHERE outcome IN ('key_missing', 'wrong_destination')
+GROUP BY outcome, sender_bank;
 
 -- searches by reference alone, and how they ended
 SELECT status, reason, provider_http_status, COUNT(*) FROM validations
 WHERE reference_number IS NOT NULL AND tracking_key IS NULL
 GROUP BY status, reason, provider_http_status;
+
+-- payments by the account that received them
+SELECT json_extract(beneficiary, '$.kind') AS kind, status, COUNT(*)
+FROM payments GROUP BY kind, status;
 ```
 
 How an ask ended is the join from `extractions.proof_key` (the link id is its

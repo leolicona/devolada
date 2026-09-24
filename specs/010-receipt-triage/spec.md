@@ -40,6 +40,11 @@ receipt."
 - Q: How should the missing-data feedback work? → A: The creator left the
   design to this spec ("you have to define the how"). It is decided in D5 and
   D6 below and is the part of this spec most worth the creator's review.
+- After `/speckit-analyze` (2026-09-24), the creator decided the two open
+  points: the message also names a missing account ("ni a cuál cuenta
+  transferiste", finding I1), and the capture guide labels the reference
+  "número de referencia (Referencia numérica)", the words most banks print
+  (finding T2). Findings G3 and I4 were folded in below with this date.
 
 ## Where this comes from
 
@@ -239,7 +244,9 @@ provider, a clear SPEI capture with no key from Banorte, one from a bank
 without a hint, a partly legible one, one with a malformed clave, and one
 with a reference only. Count the credits and read the payer's screen in each
 case; then upload a second capture without a key and read the screen again.
-Needs Story 1 only for the reference-only case.
+Needs nothing from the other stories: that a reference counts as a key is
+part of reading the capture, which every story shares (amended 2026-09-24,
+analyze I4).
 
 **Acceptance Scenarios**:
 
@@ -394,9 +401,11 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **A card that is a credit card.** It cannot be told apart by its digits. The
   setup labels the field "tarjeta de débito" and says it must receive
   transfers; the ISP answers for it.
-- **A platform top-up with neither key.** The stop applies in the engine, as
-  the two-eyes refusals do for top-ups: no provider credit; the top-up rides
-  its schedule and the remedy is a new upload. A top-up with a reference only
+- **A platform top-up with neither key, or sent to another account.** Both
+  stops apply in the engine, as the two-eyes refusals do for top-ups, with the
+  platform's CLABE as the only account: no provider credit; the top-up rides
+  its schedule and the remedy is a new upload (amended 2026-09-24, analyze
+  G3). A top-up with a reference only
   keeps today's flow, and top-ups keep the platform's single CLABE.
 - **A payment born before this feature, validating at cut-over.** It finishes
   under the flow it started in.

@@ -107,6 +107,10 @@ lifecycle, ~5 settings, ~15 page, ~3 panel, 1 browser — all cited
 The spec fixes D1–D10. The plan adds the ones below; code comments cite them
 as `receipt-triage D<n>` (constitution I).
 
+**Amended 2026-09-24** after `/speckit-analyze`: D27 added (finding G1); the
+other findings were folded into the spec, the contracts, the data model and
+the tasks with dated notes.
+
 | # | Decision | Made in |
 | --- | --- | --- |
 | D1–D10 | A key is a clave or a reference; a reference is up to seven digits as printed; Banxico's clave kept for every confirmation; a clear capture with neither key asked about before any credit; the feedback's when, where, words and ways forward; the same pattern for later asks; a reference matching more than one transfer asks for the clave; the capture guide inside the step; one card and one phone beside the CLABE; the check asks about the account the receipt shows as destination | spec |
@@ -126,6 +130,7 @@ as `receipt-triage D<n>` (constitution I).
 | D24 | The destination is tied by visible trailing digits against every form of each account — whole CLABE, its 11-digit account segment, card, phone. Fewer than three digits, or more than one fit, is *unknown*; only a clear reading that fits nothing is a mismatch | research R14 |
 | D25 | The payment snapshots the accounts at submission (`beneficiary_candidates`) and the one it was sent to (`beneficiary`); attempts read the payment, never the business. Rows with neither keep today's fallback | research R15 |
 | D26 | Card and phone are columns on `businesses` in the `clabe` area (owner only), shown to other roles exactly as the CLABE is; the CLABE stays required and `configured` keeps its meaning | research R16 |
+| D27 | A payment with neither `beneficiary` nor `beneficiary_candidates` was born before this feature; its receipt-door requests carry `legacy`, and the engine skips the ask and the destination tie for it (FR-027) | `/speckit-analyze` 2026-09-24, finding G1 |
 
 ## Constitution Check
 
@@ -136,7 +141,7 @@ Phase 1 (below the table).
 
 | # | Principle | Gate | Verdict |
 | --- | --- | --- | --- |
-| I | Spec-Driven, Every Decision Cited | Twenty-six decisions with the place each was made. Every new rule in code cites `receipt-triage D<n>`. Comments that say a hole never refuses (`consta/validate.ts` D2/D3 block, `consta/failure.ts` on `RECEIPT_INCOMPLETE`, `reader.ts` on legibility, the `/read` handler's header), that the beneficiary is the business's CLABE (`direct-payments/validation.ts`), and that Devolada "cannot hit" the 422 (`provider/apicep.ts`) are rewritten, not left contradicting the code. The two-eyes spec carries a dated note pointing at receipt-triage D4 (done with this plan) | PASS |
+| I | Spec-Driven, Every Decision Cited | Twenty-seven decisions with the place each was made. Every new rule in code cites `receipt-triage D<n>`. Comments that say a hole never refuses (`consta/validate.ts` D2/D3 block, `consta/failure.ts` on `RECEIPT_INCOMPLETE`, `reader.ts` on legibility, the `/read` handler's header), that the beneficiary is the business's CLABE (`direct-payments/validation.ts`), and that Devolada "cannot hit" the 422 (`provider/apicep.ts`) are rewritten, not left contradicting the code. The two-eyes spec carries a dated note pointing at receipt-triage D4 (done with this plan) | PASS |
 | II | Money Law | No amount is added or converted. A reference and a destination are text, never parsed as numbers, so leading zeros survive. The amount the ask names as missing is a field name, not a value | PASS |
 | III | One Contract, Pure Routers | `linkStatusResponse`, `proofReadingResponse`, `payRequest`, `directPaymentStatusResponse`, `publicPaymentError`, `settingsResponse` and `settingsPatchRequest` change additively (contracts/). Routers untouched; the logic is in handlers. The engine's facade changes are internal (contracts/engine.md). The bank hints and the account banks are keyed by the `Bank` type the schemas re-export, so the vocabulary keeps one source (`gen-banks`) | PASS |
 | IV | Tests Run on the Real Runtime | apiCEP stays intercepted at its pinned origin, answering reference searches, the 422 and card, phone and list bodies as the adapter already parses them; the reader stays the one binding a test stands in for; migrations applied per test. The guide's contrast and width are measured in the browser layer | PASS |

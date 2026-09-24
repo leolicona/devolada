@@ -6,6 +6,12 @@
 `apps/pago/src/features/pago/PaymentPage.tsx`, and two new files beside it,
 `CaptureGuide.tsx` and `bank-hints.ts`
 
+**Design**: the canvas "Receipt triage screens",
+https://claude.ai/artifact/HjmxGRx5YA9vZDsXoqR9HU (private to the product
+creator; read it with the Artifact tool), draws every state below at 390px.
+Where the canvas and this file disagree, this file wins and the canvas is
+redrawn.
+
 The zod schema is the contract (constitution III): the page derives its types
 from it, and its MSW handlers validate fixtures against it. Every change below
 is additive — an optional field, an optional property, or a new enum value —
@@ -68,7 +74,8 @@ transfer: z
     referenceNumber: z.string().trim().regex(/^\d{1,7}$/).optional(),
     /* receipt-triage D10/R13: which of the ISP's own accounts — a name,
        never a number (direct-payment D1: the beneficiary is server-side).
-       Required when the link offers more than one, ignored when one. */
+       Required when the link offers more than one; naming an account the
+       ISP does not have is refused either way. */
     receivingAccount: z.enum(["clabe", "card", "phone"]).optional(),
     senderBank: …,  // unchanged
     date: …,        // unchanged
@@ -80,8 +87,10 @@ transfer: z
   .optional(),
 ```
 
-The handler answers `VALIDATION_ERROR` (400) when the link offers more than
-one account and a `transfer` names none, or names one the ISP does not have.
+One rule, amended 2026-09-24 (analyze A1): the handler answers
+`VALIDATION_ERROR` (400) when a `transfer` names an account the ISP does not
+have, or names none while the ISP has more than one. Naming the one account a
+CLABE-only ISP has, or naming none, is accepted.
 An older page that always sends a clave to a CLABE-only ISP keeps working
 unchanged.
 
@@ -103,7 +112,8 @@ the page asks for the clave alone. `RECEIPT_INCOMPLETE` and
 
 The CLABE as today; then, labelled and copyable with the existing
 `CopyField`, "Tarjeta de débito" and "Celular", each with its bank. Nothing is
-shown for an account that is not set.
+shown for an account that is not set. When there is more than one account,
+the list has the heading "Transfiere a cualquiera de estas cuentas".
 
 ### The capture guide (Story 4, D8, D20)
 
@@ -111,8 +121,9 @@ Above the upload control on "Envía tu comprobante", in this order:
 
 1. "Tu captura debe mostrar:" and a small drawing of a receipt with four
    numbered markers, each named in text beside it: **1** Clave de rastreo o
-   número de referencia · **2** Monto · **3** Fecha · **4** Cuenta a la que
-   transferiste.
+   número de referencia (Referencia numérica) · **2** Monto · **3** Fecha ·
+   **4** Cuenta a la que transferiste. "(Referencia numérica)" is the label
+   most banks print (amended 2026-09-24, analyze T2).
 2. Three rules: "Captura el detalle de la transferencia, no el resumen." ·
    "Que se vea toda la pantalla, sin recortar." · "Si tomas una foto, que no
    tenga reflejos."
@@ -124,15 +135,17 @@ Nothing that needs a tap is placed before the upload control (FR-026).
 ### The ask at the upload (Story 2, D5, D18)
 
 Rendered from `reading.ask`, in the existing warning `Alert` (icon + text) at
-the top of the step — the place today's two refusals use — which receives
-focus when it appears.
+the top of the step — the place today's two refusals use. The warning `Alert`
+already carries `role="status"` (`packages/ui/src/components/alert.tsx`), so it
+is announced politely; it also receives focus when it appears (`tabIndex={-1}`,
+then `focus()`), so a keyboard or screen-reader user starts from it.
 
 **`no_key`** — three sentences:
 
 | Part | Rule | Example |
 | --- | --- | --- |
 | The key | Always, first | "Tu captura no muestra la clave de rastreo ni el número de referencia." |
-| The rest | Only the fields in `ask.fields` besides `key` and `account`, in form order; omitted when there are none | "Tampoco vemos la fecha." · "Tampoco vemos el monto ni la fecha." |
+| The rest | Every field in `ask.fields` besides `key`, in form order, the account last as "a cuál cuenta transferiste" (amended 2026-09-24, analyze I1); omitted when there are none | "Tampoco vemos la fecha." · "Tampoco vemos el monto ni la fecha." · "Tampoco vemos la fecha ni a cuál cuenta transferiste." |
 | Where | The entry in `bank-hints.ts` for `reading.senderBank` when there is one; the general sentence otherwise | "En Banorte, toca «Ver más detalles» y captura esa pantalla." · "Abre el detalle de la transferencia en tu app y captura la pantalla donde aparecen estos datos." |
 
 **`wrong_destination`** — one sentence: "Esta transferencia fue a otra
@@ -146,16 +159,19 @@ control stays open.
 
 - is pre-filled with every field the reading passed (amount, date, bank);
 - shows the key as two fields, "Clave de rastreo" and "Número de referencia",
-  with the line "Escribe al menos uno."; the reference field takes digits
-  only (`inputMode="numeric"`) and keeps leading zeros;
+  with the line "Clave de rastreo o número de referencia. Escribe al menos
+  uno."; the reference field takes digits only (`inputMode="numeric"`), keeps
+  leading zeros, and says so: "Hasta 7 dígitos, con los ceros del inicio.";
 - when the link offers more than one account, asks "¿A cuál cuenta
   transferiste?" — one option per account with its kind, last four digits
   and bank ("Tarjeta ••••1234 · BANORTE") — pre-selecting `reading.tiedAccount`
-  when there is one;
+  when there is one, with "la que muestra tu captura" under it;
 - under each field the capture lacked, shows "No aparece en tu captura" in
   text;
 - sends `transfer` with the proof attached, as the manual door already does
-  when a proof exists.
+  when a proof exists;
+- ends with the text button "Mejor subo otra captura", which closes the form
+  and moves focus to the picker.
 
 **Lead with typing** (FR-012): when a second `no_key` ask arrives in the same
 visit, the form renders first — "Tu captura tampoco muestra la clave de

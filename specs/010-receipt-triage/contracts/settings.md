@@ -1,4 +1,4 @@
-# Contract: the business's receiving identifiers in Cuenta
+# Contract: the business's receiving accounts in Cuenta
 
 **Feature**: receipt-triage · **Schema**: `apps/api/src/routes/settings/schema.ts`
 (`@devolada/api/settings-schema`) · **Screen**:
@@ -42,7 +42,13 @@ half and rely on the stored other half):
 
 ## Screen
 
-In Cuenta, below the CLABE and inside the same owner-only block:
+In Cuenta, below the CLABE and inside the same section, under the subheading
+"Otras cuentas para recibir pagos" with the line "Opcional. Tus clientes las
+verán junto a tu CLABE en su link de pago, y cada pago se verifica con la
+cuenta que muestra su comprobante." and, with a lock icon, "Solo la persona
+dueña del negocio puede cambiarlas." (from the design canvas, 2026-09-24).
+The section keeps its one save button, "Guardar pago directo"; no discard
+button is added:
 
 - "Tarjeta de débito (opcional)" — 16 digits and a bank picker. Help text:
   "Debe ser una tarjeta de débito que reciba transferencias."

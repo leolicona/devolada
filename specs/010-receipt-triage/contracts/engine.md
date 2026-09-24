@@ -49,6 +49,10 @@ receipt: { proofKey: string };
 beneficiary?: ConstaBeneficiary;              // exactly one of the two
 potentialBeneficiaries?: ConstaBeneficiary[]; // ≥ 2
 providerOcr?: true;                           // unchanged: the legacy cross only
+/* receipt-triage D27 (FR-027): a payment born before this feature — the
+   engine reads as today but skips the ask and the destination tie, so the
+   row finishes under the flow it started in */
+legacy?: true;
 ```
 
 With a list, the engine (1) reads the file exactly as with one account (the
@@ -84,7 +88,9 @@ extract(input: {
   proofKey: string;
   /* receipt-triage D15: the ISP's accounts, so the ask can judge the
      destination. Omitted → the destination is never a mismatch and never
-     asked for (the top-up path). */
+     asked for. The receipt door always has them in its request — a
+     top-up's is the platform's CLABE, so a top-up receipt sent to another
+     account is stopped too (spec Edge Cases). */
   receivingAccounts?: ConstaBeneficiary[];
 }): Promise<ConstaReading>;
 ```

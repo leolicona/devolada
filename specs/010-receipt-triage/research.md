@@ -5,7 +5,8 @@
 
 Phase 0. Each entry: what had to be known, what was found and where, the
 decision, and what else was weighed. Decisions are numbered in the plan
-(`receipt-triage D11`–`D26`); the spec holds D1–D10. This file replaces the
+(`receipt-triage D11`–`D26`; D27 came from `/speckit-analyze`, 2026-09-24);
+the spec holds D1–D10. This file replaces the
 research of 2026-09-23. Its Spin entries left the scope with the spec
 (Clarifications, 2026-09-24); its card and phone entries came back the same
 day and are R12–R16 here. No code cites the old numbers.
@@ -314,8 +315,9 @@ money", direct-payment D1). A typed row always takes the transfer door
 (two-eyes FR-015), which needs one beneficiary.
 
 **Decision.** `transfer` gains an optional `receivingAccount: "clabe" | "card"
-| "phone"`, required by the server when the link offers more than one account
-(`VALIDATION_ERROR` otherwise) and ignored when it offers one. It names
+| "phone"`, required when the link offers more than one account; naming an
+account the ISP does not have is a `VALIDATION_ERROR` either way (amended
+2026-09-24, analyze A1). It names
 *which of the ISP's own accounts*; the number still comes from the server, so
 direct-payment D1 holds. The page shows each choice with its last four
 digits — none pre-selected on the manual door, the tied one pre-selected when

@@ -138,3 +138,9 @@ No payment status is added or renamed.
 - **An unknown account** (D23): the row rides the receipt door with the list
   until an attempt ties it (`beneficiary` written from `beneficiaryUsed`) or a
   typed correction names it.
+- **A row born before this feature** (D27, FR-027): `beneficiary` and
+  `beneficiary_candidates` are both NULL — no row born after can have that
+  shape, because every submission snapshots one of the two. Its receipt-door
+  requests carry `legacy: true`; the engine reads the file as today and skips
+  the ask and the destination tie, so the row finishes under today's flow
+  (amended 2026-09-24, analyze G1).

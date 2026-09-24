@@ -53,3 +53,8 @@
   on receipts 1 and 2 with the new prompt — both keys null on receipt 1, the
   reference `038195` with its leading zero on receipt 2, no folio taken for a
   reference, and the destination digits read as printed.
+- 2026-09-24, after `/speckit-analyze` (0 critical, 1 high, 6 medium, 5 low):
+  every finding folded into the spec, plan (D27), research, data model,
+  contracts and tasks with dated notes; the creator decided I1 (the message
+  names a missing account) and T2 (the guide says "(Referencia numérica)").
+  Every item still passes; no marker introduced.

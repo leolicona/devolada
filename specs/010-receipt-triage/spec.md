@@ -97,6 +97,13 @@ receipt."
   **last four digits** against the ISP's registered accounts. D9, D10,
   Story 3, FR-016–FR-021, SC-006 and the Receiving account entity rewritten
   below; the plan and tasks follow once the open points are settled.
+- Q: Is a transfer to a registered account other than the cuenta de cobro
+  accepted? → A: Yes, and it is checked against that account — but only if
+  that account is registered when the payment is submitted. A number the ISP
+  removed is "a different account" (D10, FR-019, FR-020).
+- Q: Must an ISP paid at its card or phone still register a CLABE? → A: No.
+  An ISP can collect by SPEI once its cuenta de cobro is registered, whatever
+  its kind (D9, FR-016).
 
 ## Where this comes from
 
@@ -206,10 +213,9 @@ earlier numbers.
   payment page shows, so a payer never has to choose where to send the money.
   A SPEI transfer to any of the three is recorded by Banxico, and the
   provider can check it when told which account received it (apiCEP's
-  documented beneficiary types: CLABE, card, phone). Whether the CLABE stays
-  required when the chosen account is the card or the phone:
-  [NEEDS CLARIFICATION: must an ISP that is paid at its card or phone still register a CLABE?]
-  (rescoped 2026-09-24).
+  documented beneficiary types: CLABE, card, phone). The CLABE is no longer
+  required: an ISP can collect by SPEI once its cuenta de cobro is
+  registered, whatever its kind (rescoped and clarified 2026-09-24).
 - **D10 — The check asks Banxico about the cuenta de cobro, and the
   receipt's last four digits must match what the ISP registered.** The last
   four visible digits of the receipt's destination are compared with the end
@@ -217,12 +223,13 @@ earlier numbers.
   it, as receipt 3 prints it). Fewer than four visible digits prove nothing
   and stop nothing. When a clear capture's four digits fit none of the ISP's
   accounts, the payer is told before any credit that the transfer went to a
-  different account. A receipt whose digits fit a registered account that is
-  **not** the cuenta de cobro — a customer paying where they always paid:
-  [NEEDS CLARIFICATION: is a transfer to a registered account other than the
-  cuenta de cobro accepted and checked against that account, or treated as a
-  transfer to a different account?] A credit is never spent trying accounts
-  one after another (rescoped 2026-09-24). The digits are compared with every account the ISP registered —
+  different account. A receipt whose four digits fit a registered account
+  that is **not** the cuenta de cobro — a customer paying where they always
+  paid — is accepted and checked against that account, but only if it is
+  registered when the payment is submitted; a number the ISP removed is a
+  different account. Otherwise every check names the cuenta de cobro. A
+  credit is never spent trying accounts one after another (rescoped and
+  clarified 2026-09-24). The digits are compared with every account the ISP registered —
   CLABE, card and phone — whatever kind of account the receipt's label seems
   to name, so a misread label never turns the ISP's own account into
   "another account" (clarified 2026-09-24).
@@ -414,15 +421,25 @@ digits. Needs nothing from the other stories.
    "Tarjeta de débito", "Celular") with its bank, copyable — and asks the
    payer to choose nothing.
 6. **Given** a receipt, **When** it is checked, **Then** the search names the
-   cuenta de cobro the payment was submitted under.
-7. **Given** a fully legible receipt whose last four visible digits fit none
+   cuenta de cobro the payment was submitted under — unless its last four
+   digits fit another of the ISP's registered accounts, in which case the
+   search names that account.
+7. **Given** an ISP that registered a card but collects at its CLABE, and a
+   customer who still pays to the card, **When** their clear receipt shows
+   the card's last four digits, **Then** the payment is accepted and checked
+   against the card; **and when** the ISP had removed the card before the
+   payment was submitted, **Then** the payer is told the transfer went to a
+   different account, before any credit.
+8. **Given** a fully legible receipt whose last four visible digits fit none
    of the ISP's registered accounts, **When** it is uploaded, **Then** no
    credit is spent and the payer is told the transfer went to a different
    account.
-8. **Given** a receipt that shows fewer than four digits of its destination,
+9. **Given** a receipt that shows fewer than four digits of its destination,
    **When** it is checked, **Then** the destination neither stops it nor
    confirms it; the check goes on with the cuenta de cobro.
-9. **Given** the ISP changes its cuenta de cobro, **When** a payment already
+10. **Given** an ISP with only a card or only a phone, **When** it chooses it
+    as its cuenta de cobro, **Then** it can collect by SPEI with no CLABE.
+11. **Given** the ISP changes its cuenta de cobro, **When** a payment already
    submitted is checked, **Then** it is checked against the account it was
    submitted under.
 
@@ -489,6 +506,13 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **A transfer to the ISP's card or phone from the same bank.** It never goes
   through SPEI, so Banxico has no record of it. This feature does not change
   what happens to it (Out of Scope: same-bank payments).
+- **A customer pays to a registered account that is not the cuenta de cobro
+  and either types their data or sends a receipt showing fewer than four
+  digits.** Nothing tells the product which account received the money, so
+  the check names the cuenta de cobro and Banxico finds nothing; the payment
+  rides its schedule and ends in the usual way. The payer was never shown
+  that account, so this is the rare case, and it asks the payer no extra
+  question by design (rescoped 2026-09-24).
 - **A card that is a credit card.** It cannot be told apart by its digits. The
   setup labels the field "tarjeta de débito" and says it must receive
   transfers; the ISP answers for it.
@@ -581,11 +605,16 @@ is one tap from the start of the step. Needs nothing from the other stories.
   vocabulary, and MUST choose exactly one registered account as the cuenta de
   cobro. Any other member MUST see them exactly as they see the CLABE today,
   masked to the last four digits when their role cannot update the settings.
+  No kind of account is required: the channel is available once the cuenta
+  de cobro is registered, whatever its kind.
 - **FR-017**: The payment page MUST show exactly one account — the cuenta de
   cobro — labelled by its kind, with its bank, copyable, and MUST NOT ask the
   payer to choose an account. An ISP with only a CLABE MUST see no change.
 - **FR-018**: Every search MUST name the cuenta de cobro the payment was
-  submitted under.
+  submitted under, except when the receipt's last four digits fit another
+  account the ISP had registered when the payment was submitted: then the
+  search MUST name that account. Typed data MUST be checked against the
+  cuenta de cobro.
 - **FR-019**: The last four visible digits of a receipt's destination MUST be
   compared with the end of every account the ISP registered (a CLABE also by
   the account number inside it). Fewer than four visible digits MUST neither
@@ -593,8 +622,10 @@ is one tap from the start of the step. Needs nothing from the other stories.
   after another.
 - **FR-020**: A fully legible receipt whose last four visible digits fit none
   of the ISP's registered accounts MUST be refused before any credit, telling
-  the payer the transfer went to a different account. The kind of account a
-  receipt's label seems to name MUST NOT turn a fit into a mismatch.
+  the payer the transfer went to a different account. An account the ISP had
+  removed before the payment was submitted counts as a different account.
+  The kind of account a receipt's label seems to name MUST NOT turn a fit
+  into a mismatch.
 - **FR-021**: Changing the cuenta de cobro, or changing or removing any
   account, MUST NOT change the account a submitted payment is checked
   against.

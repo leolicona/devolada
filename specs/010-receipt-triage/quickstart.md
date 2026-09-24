@@ -1,5 +1,15 @@
 # Quickstart: receipt-triage
 
+> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
+> chooses one *cuenta de cobro*, the only account the payment page shows;
+> the CLABE is no longer required; a receipt's destination is checked by its
+> last four digits; a transfer to another account registered at submission
+> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
+> Everything here about showing several accounts, the account choice on the
+> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
+> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
+> required is superseded until the plan is redone for Story 3.
+
 How to prove the feature works, story by story, with the commands a
 contributor runs. The shapes are in [contracts/](./contracts/) and
 [data-model.md](./data-model.md); the steps to build them are in `tasks.md`.

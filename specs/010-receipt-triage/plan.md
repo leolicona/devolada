@@ -1,5 +1,15 @@
 # Implementation Plan: receipt-triage
 
+> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
+> chooses one *cuenta de cobro*, the only account the payment page shows;
+> the CLABE is no longer required; a receipt's destination is checked by its
+> last four digits; a transfer to another account registered at submission
+> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
+> Everything here about showing several accounts, the account choice on the
+> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
+> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
+> required is superseded until the plan is redone for Story 3.
+
 **Branch**: `claude/payment-receipt-info-handling-bhqn5o` | **Date**: 2026-09-24 (first planned 2026-09-23) | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/010-receipt-triage/spec.md`

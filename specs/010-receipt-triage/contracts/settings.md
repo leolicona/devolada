@@ -1,5 +1,15 @@
 # Contract: the business's receiving accounts in Cuenta
 
+> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
+> chooses one *cuenta de cobro*, the only account the payment page shows;
+> the CLABE is no longer required; a receipt's destination is checked by its
+> last four digits; a transfer to another account registered at submission
+> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
+> Everything here about showing several accounts, the account choice on the
+> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
+> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
+> required is superseded until the plan is redone for Story 3.
+
 **Feature**: receipt-triage · **Schema**: `apps/api/src/routes/settings/schema.ts`
 (`@devolada/api/settings-schema`) · **Screen**:
 `apps/admin/src/features/settings/SettingsScreen.tsx`

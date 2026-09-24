@@ -136,6 +136,13 @@ No payment status is added or renamed.
   REFERENCE_AMBIGUOUS`; no further provider call until the payer's correction
   supersedes the row with a clave (two-eyes D18), or the schedule ends in
   `expired`.
+- **A disputed clave that fell back to the reference** (D13, clarified
+  2026-09-24): `validating` → `validating` with `tracking_key` NULL,
+  `reference_number` set and `disputed_fields` NULL; the next slot takes the
+  transfer door with the reference. Banxico confirms → the clave is adopted
+  (D14). The search returns `not_found`, or the 422 (D17) → `disputed_fields
+  = ["trackingKey"]` and the payer is asked for the clave, as today; on
+  `not_found` the slots keep searching with the reference meanwhile.
 - **An unknown account** (D23): the row rides the receipt door with the list
   until an attempt ties it (`beneficiary` written from `beneficiaryUsed`) or a
   typed correction names it.

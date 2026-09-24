@@ -101,6 +101,18 @@ reference tie — a disputed reference goes to the payer. `accepted` carries
 `trackingKey | null` and `referenceNumber | null`, at least one set.
 `DisputedField` gains `referenceNumber`.
 
+**Amended 2026-09-24 (`/speckit-clarify`).** Retries keep the clave when
+there is one; the reference is only recorded. The one fallback: the clave is
+the only disputed field, the shape rules do not settle it, and both readings
+read the same reference with gate `ok`. Then the classification stays
+`disputed` with no field asked, and `accepted` carries the reference with
+`trackingKey: null` — the shape the D7 tiebreak already returns, with the
+reference in the clave's place. The next attempt takes the transfer door
+with that reference (costing only the slot the schedule was going to spend),
+and the adoption of Banxico's clave (R4) closes the loop. When that search
+comes back `not_found` or ambiguous (R7), the lifecycle writes
+`disputed_fields = ["trackingKey"]`, and the payer gets today's question.
+
 **Alternatives.** Compare both keys whenever both exist — rejected: a clave
 already identifies the transfer, and a second axis of dispute adds questions
 without adding certainty.

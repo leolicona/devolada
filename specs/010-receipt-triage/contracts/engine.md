@@ -141,7 +141,14 @@ Definitions of the ask and of `tieDestination`:
   are never consulted for a reference; a disputed reference is asked of the
   payer.
 - Key = clave: exactly today's rules. The reference, when read, rides along
-  in `accepted` from whichever side read it (ours first).
+  in `accepted` from whichever side read it (ours first), and never travels
+  while the clave does (D1).
+- **The fallback (clarified 2026-09-24).** Key = clave, the claves disagree,
+  the shape rules settle nothing, the clave is the only field in doubt, and
+  both readings hold the same reference with gate `ok` → `readingCheck:
+  "disputed"`, `disputedFields: []`, `accepted: { trackingKey: null,
+  referenceNumber, … }`. Anything short of that — one side's reference, two
+  different ones, the amount also in doubt — is today's dispute.
 
 ## The provider's "more than one" answer — D17
 

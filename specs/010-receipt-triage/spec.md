@@ -48,6 +48,14 @@ receipt."
 - Q: When a payment has both a clave and a reference, which one travels to
   Banxico? → A: Only the clave de rastreo. The reference travels only when
   there is no clave (D1, FR-003).
+- Q: When a payment has both keys and Banxico finds nothing with the clave,
+  do the retries try the reference? → A: No — retries keep the clave, as
+  today, and the reference stays on the payment as a record. One exception:
+  when the two readings disagree on the clave (and the bank's clave shape
+  does not settle it) but agree on a reference that passed the gate, that
+  reference is a trustworthy key and the next attempt searches with it,
+  asking the payer nothing. If that search does not confirm either, the
+  payer gets today's question for the clave (D1, FR-003, FR-004).
 
 ## Where this comes from
 
@@ -89,8 +97,12 @@ earlier numbers.
 
 - **D1 — Two keys find a transfer: the clave de rastreo or the referencia
   numérica.** Every check carries exactly one. The reference travels only
-  when there is no clave; when both exist, only the clave travels
-  (clarified 2026-09-24).
+  when there is no clave; when both exist, only the clave travels, and the
+  retries keep it — the reference stays on the payment as a record. A clave
+  the two readings dispute, with no tiebreak, counts as no clave: when both
+  readings agree on a reference that passed the gate, the next attempt
+  searches with it before the payer is asked anything (clarified
+  2026-09-24).
   This is the provider's own rule for its direct mode ("`referenceNumber` —
   required if `trackingKey` is not sent"), made the product's.
 - **D2 — A reference is the SPEI referencia numérica: up to seven digits, as
@@ -226,6 +238,16 @@ other stories.
    transfer, **When** the answer arrives, **Then** no further paid call is
    made with the same data, and the payer is asked for the clave de rastreo
    alone.
+9. **Given** a receipt with both keys whose clave search finds nothing,
+   **When** the payment retries, **Then** every retry carries the clave, as
+   today, and the reference is only recorded on the payment.
+10. **Given** the two readings disagree on the clave, the bank's clave shape
+    does not settle it, and both read the same reference that passed the
+    gate, **When** the next attempt runs, **Then** it searches with that
+    reference and the payer is asked nothing; **and when** that search does
+    not confirm the transfer (Banxico has nothing, or the reference matches
+    more than one transfer), **Then** the payer is asked for the clave, as
+    for a disputed clave today (two-eyes D8).
 
 ---
 
@@ -426,11 +448,17 @@ is one tap from the start of the step. Needs nothing from the other stories.
   NOT be taken as a reference.
 - **FR-003**: Every search of Banxico's transfer records MUST carry exactly one
   key: the clave when there is one, the reference only when there is no
-  clave. When both exist, the reference MUST NOT travel.
+  clave. When both exist, the reference MUST NOT travel, and retries MUST
+  keep the clave; the reference is recorded on the payment. A clave the two
+  readings dispute with no tiebreak counts as no clave (FR-004).
 - **FR-004**: The comparison of the two readings (two-eyes-receipt D5–D8)
   MUST treat the reference as it treats the clave when neither reading found
   a clave: agreed, disputed or blind, and the payer asked only for the field
-  in doubt.
+  in doubt. When the readings dispute the clave, the bank's clave shape does
+  not settle it and the clave is the only field in doubt, a reference both
+  readings agree on and that passed the gate MUST be the next attempt's key
+  before the payer is asked; the payer MUST be asked for the clave only if
+  that search does not confirm the transfer.
 - **FR-005**: The manual door and the typing form MUST accept a clave, a
   reference or both, and MUST require at least one.
 - **FR-006**: Every payment Banxico confirms MUST record the clave from

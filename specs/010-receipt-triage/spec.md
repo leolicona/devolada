@@ -100,7 +100,8 @@ receipt."
 - Q: Is a transfer to a registered account other than the cuenta de cobro
   accepted? → A: Yes, and it is checked against that account — but only if
   that account is registered when the payment is submitted. A number the ISP
-  removed is "a different account" (D10, FR-019, FR-020).
+  removed is "a different account" (D10, FR-019, FR-020) — superseded below:
+  a removed account goes to the ISP's decision.
 - Q: Must an ISP paid at its card or phone still register a CLABE? → A: No.
   An ISP can collect by SPEI once its cuenta de cobro is registered, whatever
   its kind (D9, FR-016).
@@ -110,6 +111,21 @@ receipt."
   nothing. A clear receipt whose digits fit none of the ISP's accounts is
   discarded before any credit, and the payer is told so honestly and kindly,
   with a way forward (D10, FR-019, FR-020).
+- Q: What happens when the digits fit an account the ISP has removed? → A:
+  The check runs against that removed account (one credit). If Banxico
+  confirms the transfer, the payment is held for the ISP, who decides once,
+  with Banxico's confirmation in hand, whether to accept it (and collect the
+  service) or reject it. Nothing is reconnected until the ISP decides; the
+  payer is told the payment is being reviewed by the ISP (D10, FR-020a).
+- Q: On the typing form, must the payer enter the destination account? →
+  A: No. Typed data is always checked against the cuenta de cobro (FR-018).
+- Q: Should the typing form ask for the reference rather than the clave? →
+  A: Yes: the reference is shorter and easier to type, so the form leads with
+  "Número de referencia" and offers the clave as the alternative ("¿No
+  tienes número de referencia? Escribe tu clave de rastreo"). Either one is
+  enough; the clave becomes required only where the reference cannot find
+  the transfer alone — a generic reference (D2) or one already used that day
+  (D7) (FR-005).
 
 ## Where this comes from
 
@@ -233,8 +249,11 @@ earlier numbers.
   different account. A receipt whose digits fit a registered account
   that is **not** the cuenta de cobro — a customer paying where they always
   paid — is accepted and checked against that account, but only if it is
-  registered when the payment is submitted; a number the ISP removed is a
-  different account. Otherwise every check names the cuenta de cobro. A
+  registered when the payment is submitted. A receipt whose digits fit an
+  account the ISP has **removed** is checked against that account, and a
+  transfer Banxico confirms is held for the ISP to accept or reject — the
+  money may or may not still reach the ISP, and only the ISP knows.
+  Otherwise every check names the cuenta de cobro. A
   credit is never spent trying accounts one after another (rescoped and
   clarified 2026-09-24). The digits are compared with every account the ISP registered —
   CLABE, card and phone — whatever kind of account the receipt's label seems
@@ -435,8 +454,10 @@ ISP's accounts, and one showing only two digits. Needs nothing from the other st
    customer who still pays to the card, **When** their clear receipt shows
    the card's last digits, **Then** the payment is accepted and checked
    against the card; **and when** the ISP had removed the card before the
-   payment was submitted, **Then** the payer is told the transfer went to a
-   different account, before any credit.
+   payment was submitted, **Then** the check runs against the removed card,
+   and a transfer Banxico confirms is held until the ISP accepts it (the
+   service is collected) or rejects it; the payer is told "Tu pago está en
+   revisión con {ISP}", and nothing is reconnected before the ISP decides.
 8. **Given** a fully legible receipt whose last three or four visible digits
    fit none of the ISP's registered accounts, **When** it is uploaded,
    **Then** it is discarded with no credit spent, and the payer is told —
@@ -563,7 +584,11 @@ is one tap from the start of the step. Needs nothing from the other stories.
   payer be asked, and then for the clave or the reference, either one being
   enough.
 - **FR-005**: The manual door and the typing form MUST accept a clave, a
-  reference or both, and MUST require at least one.
+  reference or both, and MUST require at least one. The form MUST lead with
+  the reference ("Número de referencia") and offer the clave as the
+  alternative; it MUST require the clave only when the reference cannot find
+  the transfer alone (a generic reference, D2; one already used that day,
+  D7). The form MUST NOT ask for the destination account (FR-018).
 - **FR-006**: Every payment Banxico confirms MUST record the clave from
   Banxico's record, whatever key found it, read or typed. Before the payment
   is confirmed, the product MUST check that no other payment of the same
@@ -635,10 +660,15 @@ is one tap from the start of the step. Needs nothing from the other stories.
   credit. The payer MUST be told honestly and kindly — never as an
   accusation — that the transfer seems to have gone to another account,
   shown the account the ISP receives at, and offered another capture or
-  typing their data. An account the ISP had
-  removed before the payment was submitted counts as a different account.
-  The kind of account a receipt's label seems to name MUST NOT turn a fit
+  typing their data. The kind of account a receipt's label seems to name MUST NOT turn a fit
   into a mismatch.
+- **FR-020a**: A receipt whose digits fit an account the ISP removed MUST be
+  checked against that account. When Banxico confirms the transfer, the
+  payment MUST be held — no reconnection, no settlement of the debt — until
+  a member who may operate payments accepts or rejects it, seeing Banxico's
+  confirmation and which removed account received it; the payer MUST be
+  told the payment is being reviewed by the ISP. When Banxico does not
+  confirm it, the payment follows the usual schedule.
 - **FR-021**: Changing the cuenta de cobro, or changing or removing any
   account, MUST NOT change the account a submitted payment is checked
   against.

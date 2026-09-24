@@ -56,6 +56,13 @@ receipt."
   reference is a trustworthy key and the next attempt searches with it,
   asking the payer nothing. If that search does not confirm either, the
   payer gets today's question for the clave (D1, FR-003, FR-004).
+- Q: What counts as the reference "failing", and what is the payer asked
+  then? → A: Failing is Banxico finding nothing with the reference (most
+  often, not published yet). The payer is then asked to correct the clave
+  **or** the reference — whichever they find easier; the reference is
+  shorter to type. When Banxico confirms, its real clave is stored only
+  after checking this business has not used it already (D3, FR-006). A
+  reference matching more than one transfer is a separate case (D7).
 
 ## Where this comes from
 
@@ -244,10 +251,11 @@ other stories.
 10. **Given** the two readings disagree on the clave, the bank's clave shape
     does not settle it, and both read the same reference that passed the
     gate, **When** the next attempt runs, **Then** it searches with that
-    reference and the payer is asked nothing; **and when** that search does
-    not confirm the transfer (Banxico has nothing, or the reference matches
-    more than one transfer), **Then** the payer is asked for the clave, as
-    for a disputed clave today (two-eyes D8).
+    reference and the payer is asked nothing; **and when** Banxico finds
+    nothing with it, **Then** the payer is asked to correct the clave or the
+    reference, either one being enough, while the retries keep searching
+    with the reference. (A reference that matches more than one transfer is
+    scenario 8.)
 
 ---
 
@@ -457,14 +465,16 @@ is one tap from the start of the step. Needs nothing from the other stories.
   in doubt. When the readings dispute the clave, the bank's clave shape does
   not settle it and the clave is the only field in doubt, a reference both
   readings agree on and that passed the gate MUST be the next attempt's key
-  before the payer is asked; the payer MUST be asked for the clave only if
-  that search does not confirm the transfer.
+  before the payer is asked; only when Banxico finds nothing with it MUST the
+  payer be asked, and then for the clave or the reference, either one being
+  enough.
 - **FR-005**: The manual door and the typing form MUST accept a clave, a
   reference or both, and MUST require at least one.
 - **FR-006**: Every payment Banxico confirms MUST record the clave from
-  Banxico's record, whatever key found it, read or typed; a second payment of
-  the same business whose check returns that clave MUST be refused as already
-  used.
+  Banxico's record, whatever key found it, read or typed. Before the payment
+  is confirmed, the product MUST check that no other payment of the same
+  business already holds that clave; a payment whose check returns a clave
+  already used MUST be refused as already used, and never confirmed.
 - **FR-007**: When the provider answers that a reference matches more than one
   transfer, the product MUST NOT make another paid call with the same data
   and MUST ask the payer for the clave de rastreo alone.

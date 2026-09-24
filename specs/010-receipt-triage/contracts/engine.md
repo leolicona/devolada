@@ -148,7 +148,9 @@ Definitions of the ask and of `tieDestination`:
   both readings hold the same reference with gate `ok` → `readingCheck:
   "disputed"`, `disputedFields: []`, `accepted: { trackingKey: null,
   referenceNumber, … }`. Anything short of that — one side's reference, two
-  different ones, the amount also in doubt — is today's dispute.
+  different ones, the amount also in doubt — is today's dispute. When the
+  reference's search then finds nothing, the lifecycle asks for the clave
+  or the reference (data-model.md, State and transitions).
 
 ## The provider's "more than one" answer — D17
 

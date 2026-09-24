@@ -187,6 +187,12 @@ The existing per-field sentences stay. Added:
 - `error === "REFERENCE_AMBIGUOUS"`: "Tu número de referencia coincide con más
   de una transferencia. Escribe tu clave de rastreo para encontrar la tuya." —
   the form asks for the clave only, everything else pre-filled.
+- `trackingKey` and `referenceNumber` both disputed — the clave fell back to
+  the reference and Banxico found nothing with it (spec FR-004, clarified
+  2026-09-24): "No encontramos tu transferencia todavía. Confirma tu clave de
+  rastreo o tu número de referencia mirando tu comprobante; con uno basta." —
+  the form's key block with both fields, "Escribe al menos uno.", everything
+  else pre-filled.
 - When a key is asked for and `status.senderBank` has an entry in
   `bank-hints.ts`, one more line: "En {banco}: {dónde}".
 

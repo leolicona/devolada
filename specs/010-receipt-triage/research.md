@@ -110,8 +110,10 @@ read the same reference with gate `ok`. Then the classification stays
 reference in the clave's place. The next attempt takes the transfer door
 with that reference (costing only the slot the schedule was going to spend),
 and the adoption of Banxico's clave (R4) closes the loop. When that search
-comes back `not_found` or ambiguous (R7), the lifecycle writes
-`disputed_fields = ["trackingKey"]`, and the payer gets today's question.
+comes back `not_found`, the lifecycle writes `disputed_fields =
+["trackingKey", "referenceNumber"]` — the page asks for the clave **or** the
+reference, either one enough — and the slots keep searching with the
+reference meanwhile. An ambiguous answer is R7's case, not this one.
 
 **Alternatives.** Compare both keys whenever both exist — rejected: a clave
 already identifies the transfer, and a second axis of dispute adds questions

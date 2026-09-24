@@ -140,9 +140,11 @@ No payment status is added or renamed.
   2026-09-24): `validating` → `validating` with `tracking_key` NULL,
   `reference_number` set and `disputed_fields` NULL; the next slot takes the
   transfer door with the reference. Banxico confirms → the clave is adopted
-  (D14). The search returns `not_found`, or the 422 (D17) → `disputed_fields
-  = ["trackingKey"]` and the payer is asked for the clave, as today; on
-  `not_found` the slots keep searching with the reference meanwhile.
+  (D14) — written before the confirmation, so the unique index refuses a
+  clave already used before the row can confirm (FR-006). The search returns
+  `not_found` → `disputed_fields = ["trackingKey", "referenceNumber"]`: the
+  payer is asked for the clave or the reference, either one enough, and the
+  slots keep searching with the reference meanwhile. The 422 is D17's case.
 - **An unknown account** (D23): the row rides the receipt door with the list
   until an attempt ties it (`beneficiary` written from `beneficiaryUsed`) or a
   typed correction names it.

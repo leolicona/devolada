@@ -444,3 +444,35 @@ legible photo with a hole in it still buys the paid call (FR-005)") stay as
 they are (D16). The pure `compareReadings` tests stay and gain reference
 cases. The comment in `provider/apicep.ts` that says Devolada "cannot hit"
 the 422 is rewritten.
+
+## R18 — The reused reading must carry what this feature reads
+
+**Found** (review of the plan against `main`, 2026-09-24). The receipt door
+reuses the draft's reading instead of calling the reader again
+(`recentReading`, `consta/extract.ts`, two-eyes D14). It rebuilds the
+reading from the `extractions` row: clave, bank, amount, date, legibility —
+and recomputes `passes` as clave **and** bank **and** amount. It filters
+`outcome IN ('passed', 'gated')`. Nothing in the plan or the tasks touched
+it, so after this feature:
+
+- receipt 2 read at `/read` (reference `038195`, no clave) would come back
+  from reuse with no reference — the ask (D15) would see two missing keys
+  and stop the pay with `RECEIPT_INCOMPLETE`, the exact receipt Story 1
+  exists to confirm;
+- without the ask, the comparison would lose our reference and go `blind`;
+- the destination would be lost too, so the account could never tie from a
+  reused reading (D24).
+
+**Decision (D28).** `recentReading` rebuilds everything the reader now
+returns, from the columns D21 adds: `referenceNumber` from
+`extractions.reference_number`, with its gate verdict re-derived by the
+same pure function the gate uses (`ok | malformed | generic | missing` is a
+function of the stored text, so nothing is lost — unlike the clave's gate,
+which is stored because its shape rules can change); `destination` from
+`destination_kind` and `destination_digits`; `passes` with the new rule
+(either key). The outcome filter also admits `key_missing` and
+`wrong_destination`: they hold a full reading, and a client that skipped the
+page and pays with the same file inside the window must meet the same stop
+without a second model call. A row written before the migration reads NULL
+in the new columns — no reference, unknown destination — which is exactly
+what it saw.

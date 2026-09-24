@@ -130,6 +130,7 @@ the tasks with dated notes.
 | D24 | The destination is tied by visible trailing digits against every form of each account — whole CLABE, its 11-digit account segment, card, phone. Fewer than three digits, or more than one fit, is *unknown*; only a clear reading that fits nothing is a mismatch | research R14 |
 | D25 | The payment snapshots the accounts at submission (`beneficiary_candidates`) and the one it was sent to (`beneficiary`); attempts read the payment, never the business. Rows with neither keep today's fallback | research R15 |
 | D26 | Card and phone are columns on `businesses` in the `clabe` area (owner only), shown to other roles exactly as the CLABE is; the CLABE stays required and `configured` keeps its meaning | research R16 |
+| D28 | `recentReading` rebuilds the reference (gate re-derived from the stored text), the destination and `passes` with the new rule, and also reuses `key_missing` and `wrong_destination` rows — or a reused reading silently drops the reference and the ask stops receipt 2 | research R18 (review 2026-09-24) |
 | D27 | A payment with neither `beneficiary` nor `beneficiary_candidates` was born before this feature; its receipt-door requests carry `legacy`, and the engine skips the ask and the destination tie for it (FR-027) | `/speckit-analyze` 2026-09-24, finding G1 |
 
 ## Constitution Check

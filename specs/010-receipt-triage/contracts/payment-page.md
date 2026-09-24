@@ -173,8 +173,10 @@ then `focus()`), so a keyboard or screen-reader user starts from it.
 | The rest | Every field in `ask.fields` besides `key`, in form order, the account last as "a cuál cuenta transferiste" (amended 2026-09-24, analyze I1); omitted when there are none | "Tampoco vemos la fecha." · "Tampoco vemos el monto ni la fecha." · "Tampoco vemos la fecha ni a cuál cuenta transferiste." |
 | Where | The entry in `bank-hints.ts` for `reading.senderBank` when there is one; the general sentence otherwise | "En Banorte, toca «Ver más detalles» y captura esa pantalla." · "Abre el detalle de la transferencia en tu app y captura la pantalla donde aparecen estos datos." |
 
-**`wrong_destination`** — one sentence: "Esta transferencia fue a otra
-cuenta, no a una de {ispName}. Revisa tu comprobante."
+**`wrong_destination`** — honest and kind, never an accusation (clarified
+2026-09-24): "Parece que esta transferencia se hizo a otra cuenta, no a la de {ispName}.
+{ispName} recibe pagos en {kind} terminada en {last4}. Si leímos mal tu
+comprobante, sube otra captura o escribe tus datos."
 
 Below either, two buttons at the touch size: **"Subir otra captura"** (moves
 focus to the picker) and **"Escribir los datos"** (opens the form). The upload

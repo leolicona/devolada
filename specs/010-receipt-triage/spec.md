@@ -94,7 +94,7 @@ receipt."
   register a CLABE, a debit card and a phone, and **chooses one** — its
   *cuenta de cobro* — which is the only one its payers see and the one every
   check asks Banxico about. The destination on a receipt is checked by its
-  **last four digits** against the ISP's registered accounts. D9, D10,
+  **last digits** (three or four) against the ISP's registered accounts. D9, D10,
   Story 3, FR-016–FR-021, SC-006 and the Receiving account entity rewritten
   below; the plan and tasks follow once the open points are settled.
 - Q: Is a transfer to a registered account other than the cuenta de cobro
@@ -104,6 +104,12 @@ receipt."
 - Q: Must an ISP paid at its card or phone still register a CLABE? → A: No.
   An ISP can collect by SPEI once its cuenta de cobro is registered, whatever
   its kind (D9, FR-016).
+- Q: How many digits are enough, and what does the payer hear when they fit
+  nothing? → A: Three or four: the last visible digits of the destination,
+  up to four and at least three, are compared; fewer than three stop
+  nothing. A clear receipt whose digits fit none of the ISP's accounts is
+  discarded before any credit, and the payer is told so honestly and kindly,
+  with a way forward (D10, FR-019, FR-020).
 
 ## Where this comes from
 
@@ -217,13 +223,14 @@ earlier numbers.
   required: an ISP can collect by SPEI once its cuenta de cobro is
   registered, whatever its kind (rescoped and clarified 2026-09-24).
 - **D10 — The check asks Banxico about the cuenta de cobro, and the
-  receipt's last four digits must match what the ISP registered.** The last
-  four visible digits of the receipt's destination are compared with the end
-  of the ISP's registered accounts (a CLABE also by the account number inside
-  it, as receipt 3 prints it). Fewer than four visible digits prove nothing
-  and stop nothing. When a clear capture's four digits fit none of the ISP's
+  receipt's last digits must match what the ISP registered.** The last
+  visible digits of the receipt's destination — up to four, at least three —
+  are compared with the end of the ISP's registered accounts (a CLABE also by
+  the account number inside it, as receipt 3 prints it; receipt 2's "***195"
+  counts). Fewer than three visible digits prove nothing and stop nothing.
+  When a clear capture's digits fit none of the ISP's
   accounts, the payer is told before any credit that the transfer went to a
-  different account. A receipt whose four digits fit a registered account
+  different account. A receipt whose digits fit a registered account
   that is **not** the cuenta de cobro — a customer paying where they always
   paid — is accepted and checked against that account, but only if it is
   registered when the payment is submitted; a number the ISP removed is a
@@ -388,7 +395,7 @@ An ISP registers in Cuenta the accounts it has — a CLABE, a debit card, a
 phone — and picks one as its *cuenta de cobro*. The payment page shows that
 one account, so the payer copies one number and never has to decide where to
 send the money. Every check asks Banxico about that account, and the receipt's
-last four digits confirm the money went to the ISP.
+last three or four digits confirm the money went to the ISP.
 
 **Why this priority**: many small ISPs are paid at a card or a phone today,
 and those payments cannot be checked at all. It ranks with Story 2 and not
@@ -398,8 +405,8 @@ above it because the ISP's setup, the page and the check all change.
 choose each in turn as the cuenta de cobro, against an intercepted provider;
 check which account the page shows and which account each search names;
 submit a clear receipt whose last four digits fit the cuenta de cobro, one
-whose four digits fit none of the ISP's accounts, and one showing only three
-digits. Needs nothing from the other stories.
+showing only three digits that fit it, one whose digits fit none of the
+ISP's accounts, and one showing only two digits. Needs nothing from the other stories.
 
 **Acceptance Scenarios**:
 
@@ -421,20 +428,22 @@ digits. Needs nothing from the other stories.
    "Tarjeta de débito", "Celular") with its bank, copyable — and asks the
    payer to choose nothing.
 6. **Given** a receipt, **When** it is checked, **Then** the search names the
-   cuenta de cobro the payment was submitted under — unless its last four
-   digits fit another of the ISP's registered accounts, in which case the
+   cuenta de cobro the payment was submitted under — unless its last digits
+   fit another of the ISP's registered accounts, in which case the
    search names that account.
 7. **Given** an ISP that registered a card but collects at its CLABE, and a
    customer who still pays to the card, **When** their clear receipt shows
-   the card's last four digits, **Then** the payment is accepted and checked
+   the card's last digits, **Then** the payment is accepted and checked
    against the card; **and when** the ISP had removed the card before the
    payment was submitted, **Then** the payer is told the transfer went to a
    different account, before any credit.
-8. **Given** a fully legible receipt whose last four visible digits fit none
-   of the ISP's registered accounts, **When** it is uploaded, **Then** no
-   credit is spent and the payer is told the transfer went to a different
-   account.
-9. **Given** a receipt that shows fewer than four digits of its destination,
+8. **Given** a fully legible receipt whose last three or four visible digits
+   fit none of the ISP's registered accounts, **When** it is uploaded,
+   **Then** it is discarded with no credit spent, and the payer is told —
+   honestly and kindly, never as an accusation — that the transfer seems to
+   have gone to another account, which account the ISP receives at, and that
+   they can send another capture or type their data if the reading is wrong.
+9. **Given** a receipt that shows fewer than three digits of its destination,
    **When** it is checked, **Then** the destination neither stops it nor
    confirms it; the check goes on with the cuenta de cobro.
 10. **Given** an ISP with only a card or only a phone, **When** it chooses it
@@ -507,7 +516,7 @@ is one tap from the start of the step. Needs nothing from the other stories.
   through SPEI, so Banxico has no record of it. This feature does not change
   what happens to it (Out of Scope: same-bank payments).
 - **A customer pays to a registered account that is not the cuenta de cobro
-  and either types their data or sends a receipt showing fewer than four
+  and either types their data or sends a receipt showing fewer than three
   digits.** Nothing tells the product which account received the money, so
   the check names the cuenta de cobro and Banxico finds nothing; the payment
   rides its schedule and ends in the usual way. The payer was never shown
@@ -611,18 +620,22 @@ is one tap from the start of the step. Needs nothing from the other stories.
   cobro — labelled by its kind, with its bank, copyable, and MUST NOT ask the
   payer to choose an account. An ISP with only a CLABE MUST see no change.
 - **FR-018**: Every search MUST name the cuenta de cobro the payment was
-  submitted under, except when the receipt's last four digits fit another
+  submitted under, except when the receipt's last digits fit another
   account the ISP had registered when the payment was submitted: then the
   search MUST name that account. Typed data MUST be checked against the
   cuenta de cobro.
-- **FR-019**: The last four visible digits of a receipt's destination MUST be
-  compared with the end of every account the ISP registered (a CLABE also by
-  the account number inside it). Fewer than four visible digits MUST neither
+- **FR-019**: The last visible digits of a receipt's destination — up to
+  four, at least three — MUST be compared with the end of every account the
+  ISP registered (a CLABE also by the account number inside it). Fewer than
+  three visible digits MUST neither
   stop nor confirm anything. No credit MUST be spent trying accounts one
   after another.
-- **FR-020**: A fully legible receipt whose last four visible digits fit none
-  of the ISP's registered accounts MUST be refused before any credit, telling
-  the payer the transfer went to a different account. An account the ISP had
+- **FR-020**: A fully legible receipt whose last three or four visible digits
+  fit none of the ISP's registered accounts MUST be discarded before any
+  credit. The payer MUST be told honestly and kindly — never as an
+  accusation — that the transfer seems to have gone to another account,
+  shown the account the ISP receives at, and offered another capture or
+  typing their data. An account the ISP had
   removed before the payment was submitted counts as a different account.
   The kind of account a receipt's label seems to name MUST NOT turn a fit
   into a mismatch.

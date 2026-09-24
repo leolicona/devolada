@@ -32,7 +32,7 @@ amended, as two-eyes-receipt did for `0030`.)
 | Column | Type | Null | Meaning |
 | --- | --- | --- | --- |
 | `reference_number` | text | yes | The referencia numérica this payment searches with: typed by the payer, or accepted from the readings. One to seven digits, as printed — leading zeros kept, never cast to a number (D12) |
-| `beneficiary` | text (JSON) | yes | `{ kind, value, bank }` — the account this payment is checked against. Set at submission when the ISP has one account, or when the payer chose one; set from the engine's `beneficiaryUsed` otherwise |
+| `beneficiary` | text (JSON) | yes | `{ kind, value, bank }` — the account this payment is checked against. Set at submission when the ISP has one account, or when the payer chose one; set from the engine's `beneficiaryUsed` otherwise, and overwritten on `valid` by the account Banxico's CEP names (`cepDetails.beneficiaryAccount`) when it ties to one of the payment's accounts (D22, amended 2026-09-24) |
 | `beneficiary_candidates` | text (JSON) | yes | Array of the same objects: the ISP's accounts **at submission**, set only when there were more than one |
 
 Rules:

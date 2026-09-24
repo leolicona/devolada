@@ -68,6 +68,11 @@ account tied → the provider call carries `beneficiary`; otherwise it carries
    call carried the list; absent on the transfer door, whose caller chose.
    The lifecycle stores it on the payment (D25). */
 beneficiaryUsed?: ConstaBeneficiary | null;
+/* receipt-triage D22 (amended 2026-09-24): on `valid`, `cep` also carries
+   Banxico's own word on the receiving account — documented by the
+   provider, dropped by the adapter until now. Whole or masked is
+   unmeasured, so the lifecycle ties it with `tieDestination`. */
+cep?: { …; beneficiaryAccount: string | null; beneficiaryAccountType: string | null } | null;
 /* receipt-triage D13: the accepted data carries both keys */
 accepted?: {
   trackingKey: string | null;

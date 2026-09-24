@@ -26,9 +26,20 @@ day and are R12–R16 here. No code cites the old numbers.
   `"referenceNumber": "0170126"`; and of the card, phone and account-list
   modes, the same pasted text (exactly one of `clabe` 18, `phoneNumber` 10,
   `cardNumber` 16 per account; `potentialBeneficiaries` only when the
-  provider reads the picture). Whether the provider's answer names the
-  account it matched is **unknown**. The design below needs nothing only that
-  page could settle (R3, R7, R12).
+  provider reads the picture).
+- **The provider's documentation, read in full on 2026-09-24** — still not
+  reachable from here; the product creator pasted the whole validation page
+  in session. What it settles: the 422 is "referencia duplicada en Banxico
+  (requiere clave de rastreo)", with no list of candidates (R7);
+  `potentialBeneficiaries` works only when the provider reads the picture,
+  and when no candidate fits the answer is `status: "error"` (R12); `sender`
+  may carry both keys, at least one; and, once Banxico confirms,
+  `cepDetails` carries **`beneficiaryAccount`** and `beneficiaryAccountType`
+  — the account that received the money (R12, amended). Still unmeasured:
+  whether a 422 bills, and whether `beneficiaryAccount` comes whole or
+  masked. Its response example prints a nine-digit `referenceNumber`
+  ("987654321"); SPEI's referencia numérica has at most seven, so D12's gate
+  stands and a longer provider reading counts as no reference.
 - **Bank help pages are not reachable either** (`www.bbva.mx` blocked,
   2026-09-23), and third-party round-ups disagree with each other. Where a
   bank's app shows its clave is known for sure only from receipt 1 (Banorte,
@@ -314,6 +325,26 @@ the list — exactly as a missing date keeps it (two-eyes plan D20). Accepted
 data is "accepted" for the transfer door only once the account is known.
 This removes the dependency on the provider naming the account (gap 3): the
 design never needs it.
+
+**Amended 2026-09-24 — the provider does name it, once Banxico confirms.**
+The documentation (read in session, "What was measured") lists
+`cepDetails.beneficiaryAccount` and `beneficiaryAccountType`; the adapter
+drops both today (`provider/apicep.ts`, the `cepDetails` type and `cep`
+mapping). Decision (plan D22, amended): the adapter keeps them on `cep`
+(`beneficiaryAccount`, `beneficiaryAccountType`), and on a `valid` verdict
+the lifecycle ties `beneficiaryAccount` to the payment's accounts with the
+same `tieDestination` (R14) — Banxico's record outranks the receipt's
+trailing digits:
+
+- tied to one account → that account is written to `payments.beneficiary`,
+  whatever `beneficiaryUsed` said;
+- absent, or too few digits to tie → `beneficiaryUsed` stands, as before;
+- whole enough to judge and fitting none of the payment's accounts → the
+  payment is not confirmed: `invalid` with `TRANSFER_CONTRADICTED`, the
+  code that already means "the CEP contradicts the claim".
+
+D23 is unchanged: before a `valid` there is no `cepDetails`, so an unknown
+account still keeps the receipt door with the list.
 
 **Alternatives.** Tie the destination in the lifecycle before calling the
 engine — rejected: the reading is the engine's (two-eyes D14 reuse), and

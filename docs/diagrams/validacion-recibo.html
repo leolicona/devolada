@@ -120,8 +120,8 @@ footer { color: var(--ink-2); font-size: 13px; }
   <h1>Cómo se valida un recibo de transferencia, de la foto a la reconexión</h1>
   <p>El pagador sube la foto o el PDF de su comprobante. Devolada lo lee, pregunta a Banxico (vía apiCEP) si la transferencia existe, y mientras Banxico no responde decide si le devuelve el servicio de forma provisional. Los reintentos siguen un calendario fijo que se ajusta con la latencia medida por banco.</p>
   <nav class="map" aria-label="Fases">
-    <a href="#fase-a"><i>A · gratis</i><b>Subir y leer</b><span>foto, lectura previa, fila en <code>validating</code></span></a>
-    <a href="#fase-b"><i>B · minuto 0</i><b>Primer intento</b><span>dos lecturas + consulta pagada a Banxico</span></a>
+    <a href="#fase-a"><i>A · gratis</i><b>Subir y leer</b><span>foto, lectura, compuerta por campo y por banco</span></a>
+    <a href="#fase-b"><i>B · minuto 0</i><b>Primer intento</b><span>OCR solo al inicio, luego directo a Banxico</span></a>
     <a href="#fase-c"><i>C · mientras espera</i><b>Liberación provisional</b><span>9 filtros antes de reconectar</span></a>
     <a href="#fase-d"><i>D · hasta 12 h</i><b>Reintentos</b><span>calendario + latencia aprendida</span></a>
     <a href="#fase-e"><i>E · veredicto</i><b>Cierre</b><span>conciliar, registrar, reconectar</span></a>
@@ -146,6 +146,23 @@ footer { color: var(--ink-2); font-size: 13px; }
       <p>Workers AI lee clave de rastreo, banco emisor, monto, fecha y qué tan legible es la foto. Un PDF con texto se convierte a texto primero. La lectura pasa por una compuerta: un campo mal formado se trata como vacío, nunca como dato.</p>
       <div class="chips"><span class="chip free">✓ cuesta IA, no un crédito</span><span class="chip info">se reutiliza en el pago (D14)</span></div>
       <div class="ref">routes/direct-payments/handler.ts · readProof · consta/extract.ts · consta/extraction/gate.ts · proof-extraction D6, D14 · two-eyes-receipt D1</div>
+    </div>
+    <div class="step gate" id="compuerta"><span class="gl">?</span>
+      <h3>Compuerta de la lectura: campo por campo</h3>
+      <p>Cada campo que leyó la IA recibe un veredicto. Un campo que no pasa se trata como <b>vacío</b>, nunca como dato: una clave mal leída no puede discutir con la lectura del proveedor ni gastar un crédito buscando algo que no existe. Esto importa porque apiCEP responde igual a una clave mal escrita, a un banco desconocido y a una transferencia que no existe: un <code>invalid</code> sin detalle.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Campo</th><th>Regla</th><th>Veredictos</th><th>Si no pasa</th></tr></thead>
+          <tbody>
+            <tr><td><b>Clave de rastreo</b></td><td>6 a 30 letras y dígitos, sin espacios ni saltos de línea. Es un rango, no una longitud fija: el ejemplo de apiCEP trae 10 y Nu trae 28.</td><td><code>ok</code> · <code>malformed</code> · <code>missing</code></td><td>queda vacía; la puede aportar el OCR del proveedor</td></tr>
+            <tr><td><b>Banco emisor</b></td><td>Debe resolver a un nombre del catálogo de bancos de apiCEP (sin importar acentos, mayúsculas ni puntuación). "Nu" no se adivina como "NUBANK".</td><td><code>ok</code> · <code>unknown</code> · <code>missing</code></td><td>queda vacío; se toma el del proveedor si resuelve</td></tr>
+            <tr><td><b>Monto</b></td><td>Mayor que cero, convertido a centavos leyendo el texto (nunca multiplicando × 100). Es solo criterio de búsqueda: lo que decide el dinero es el monto del CEP.</td><td><code>ok</code> · <code>malformed</code> · <code>missing</code></td><td>queda vacío; se toma el del proveedor</td></tr>
+            <tr><td><b>Fecha</b></td><td>No tiene compuerta: se reporta tal cual. Nunca genera desacuerdo, porque cada banco la imprime distinto.</td><td>—</td><td>si ninguna lectura trae fecha, se le pide al pagador solo la fecha (D20)</td></tr>
+            <tr><td><b>Forma de la clave según su banco</b></td><td>Regla aprendida de las claves que Banxico dio por <code>valid</code>: un banco "gradúa" con 10 claves distintas de la misma longitud. Por posición: siempre dígito → <code>\d</code>; siempre la misma letra → esa letra (el <code>NU</code> de Nu, el <code>MBAN</code> de BBVA, la <code>I</code> final de Azteca); siempre letra → <code>[A-Z]</code>. Los dígitos nunca se fijan porque llevan fecha y secuencia. Si aparece una clave de otra longitud, la regla se retira sola. Se recalcula cada minuto, con todos los negocios.</td><td><code>ok</code> · <code>mismatch</code> · <code>unknown</code></td><td><b>nunca bloquea</b>: es una señal. Desempata cuando las dos lecturas no coinciden, y hace preguntar al pagador si el proveedor leyó una clave que contradice la forma de su banco</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="ref">consta/extraction/gate.ts · gateReading, resolveBank · consta/extraction/shape.ts · deriveShapeRules, checkShape, GRADUATION_SAMPLES · proof-extraction D4, D13–D16 · validation spec D12, D13 · medido 2026-08-30 (claves de Azteca tecleadas a mano)</div>
     </div>
     <div class="step gate"><span class="gl">?</span>
       <h3>Filtro de la página: ¿vale la pena gastar un crédito?</h3>
@@ -186,10 +203,11 @@ footer { color: var(--ink-2); font-size: 13px; }
       </div>
       <div class="ref">direct-payments/validation.ts · runValidation · consta/request.ts · validation spec D12, D13, D17 · consta-api-merge D8 · BUG-008</div>
     </div>
-    <div class="step" data-n="5">
-      <h3>¿Por qué puerta va este intento?</h3>
-      <p>Si la fila ya tiene clave, banco, monto <em>y fecha</em> (los tecleó el pagador, los reveló el CEP o las dos lecturas coincidieron), va por la <b>puerta de transferencia</b>. Si no, va por la <b>puerta de imagen</b>: el archivo se manda a apiCEP y nuestra lectura viaja al lado. Nunca se inventa la fecha con "hoy".</p>
-      <div class="ref">validation.ts · receiptDoor / accepted · two-eyes-receipt D3, D17, D20</div>
+    <div class="step" data-n="5" id="puertas">
+      <h3>¿Por qué puerta va este intento? Normalmente solo el primero pasa por OCR</h3>
+      <p>apiCEP tiene dos puertas y las dos cuestan un crédito. La <b>puerta de imagen</b> recibe el archivo: el OCR de apiCEP lo lee y busca en Banxico. La <b>puerta de transferencia</b> recibe datos ya escritos (clave, banco, monto, fecha) y va directo a Banxico. La puerta de cada intento se decide leyendo la fila: si ya tiene clave, banco, monto <em>y</em> fecha, va directo.</p>
+      <p>En el caso común, el primer intento va por imagen, las dos lecturas se comparan, y los datos aceptados se escriben en la fila. Desde el segundo intento todo va directo, sin OCR. Hay casos en que un intento posterior vuelve a pasar por OCR (ver abajo). Nunca se inventa la fecha con "hoy".</p>
+      <div class="ref">validation.ts · accepted / receiptDoor · two-eyes-receipt D3, D6, D7, D17, D20</div>
     </div>
     <div class="step" data-n="6">
       <h3>Llamada a apiCEP con plazo de 25 s</h3>
@@ -266,6 +284,63 @@ footer { color: var(--ink-2); font-size: 13px; }
       </div>
       <div class="ref">consta/extraction/compare.ts · compareReadings · two-eyes-receipt D5–D8, D12, FR-013 · un acuerdo ya tomado no se revierte (FR-010)</div>
     </div>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 780 270" role="img" aria-label="El primer intento va por la puerta de imagen con OCR. Si Banxico aún no tiene nada, se comparan las lecturas y los datos aceptados se escriben en la fila. Los intentos siguientes van por la puerta de transferencia, directo a Banxico, sin OCR. Sin datos aceptados, el siguiente intento vuelve a pasar por imagen.">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+        </defs>
+        <!-- row 1 -->
+        <g fill="currentColor">
+          <rect x="10" y="30" width="160" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="90" y="56" text-anchor="middle" font-size="13" font-weight="600">Intento 1</text>
+          <text x="90" y="74" text-anchor="middle" font-size="11.5" opacity="0.7">minuto 0</text>
+          <rect x="210" y="30" width="240" height="60" rx="6" fill="#c98a1c" fill-opacity="0.12" stroke="#c98a1c" stroke-width="1.5"/>
+          <text x="330" y="56" text-anchor="middle" font-size="13" font-weight="600" fill="#c98a1c">Puerta de imagen · con OCR</text>
+          <text x="330" y="74" text-anchor="middle" font-size="11.5" opacity="0.75">archivo → OCR apiCEP + nuestra lectura</text>
+          <rect x="490" y="30" width="280" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="630" y="56" text-anchor="middle" font-size="13" font-weight="600">not_found → comparar lecturas</text>
+          <text x="630" y="74" text-anchor="middle" font-size="11.5" opacity="0.7">agreed, o desempate por forma de clave</text>
+        </g>
+        <!-- row 2 -->
+        <g fill="currentColor">
+          <rect x="10" y="190" width="160" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="90" y="216" text-anchor="middle" font-size="13" font-weight="600">Intentos 2…n</text>
+          <text x="90" y="234" text-anchor="middle" font-size="11.5" opacity="0.7">+2, +8, +20 … min</text>
+          <rect x="210" y="190" width="240" height="60" rx="6" fill="#2c8f73" fill-opacity="0.12" stroke="#2c8f73" stroke-width="1.5"/>
+          <text x="330" y="216" text-anchor="middle" font-size="13" font-weight="600" fill="#2c8f73">Puerta de transferencia · sin OCR</text>
+          <text x="330" y="234" text-anchor="middle" font-size="11.5" opacity="0.75">clave · banco · monto · fecha → Banxico</text>
+          <rect x="490" y="190" width="280" height="60" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="630" y="216" text-anchor="middle" font-size="13" font-weight="600">valid · pending · not_found · contradicted</text>
+          <text x="630" y="234" text-anchor="middle" font-size="11.5" opacity="0.7">el mismo trato que en el intento 1</text>
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar3)">
+          <path d="M170 60 H206"/><path d="M450 60 H486"/>
+          <path d="M170 220 H206"/><path d="M450 220 H486"/>
+          <path d="M630 90 V130 H370 V186"/>
+          <path d="M90 186 V150 H270 V94" stroke-dasharray="4 3"/>
+        </g>
+        <text x="382" y="124" font-size="11.5" fill="currentColor">datos aceptados escritos en la fila (D17)</text>
+        <text x="100" y="166" font-size="11.5" fill="currentColor" opacity="0.8">sin datos aceptados</text>
+        <text x="100" y="180" font-size="11.5" fill="currentColor" opacity="0.8">→ otra vez por imagen</text>
+      </svg>
+    </div>
+    <figcaption>El cambio de puerta no depende del número de intento, sino de lo que la fila ya sabe. En el caso común eso ocurre después del primer intento: por eso normalmente solo el primero pasa por OCR. La flecha punteada son las excepciones de abajo.</figcaption>
+  </figure>
+
+  <div class="card">
+    <h3>Cuándo un intento vuelve a pasar por OCR, o cuándo ninguno pasa</h3>
+    <ul>
+      <li><b>El intento 1 no trajo veredicto</b> (error del proveedor, 429, o se venció el plazo de 25 s): no hubo comparación, así que el siguiente se repite por imagen.</li>
+      <li><b>Banxico respondió <code>pending</code></b>: no hay comparación en <code>pending</code>, y la fila sigue sin datos aceptados. El siguiente va por imagen.</li>
+      <li><b>Desacuerdo sin desempate, o ninguna lectura completa</b>: se le piden al pagador solo los campos en duda. Mientras no conteste, cada ranura vuelve a pasar por imagen. Su respuesta crea una fila nueva que ya va directo.</li>
+      <li><b>Acuerdo, pero ninguna lectura trae fecha</b> (D20): sigue por imagen hasta que el pagador dé la fecha. El acuerdo no se revierte; un intento posterior solo puede agregar la fecha.</li>
+      <li><b>El pagador tecleó los datos</b> (formulario manual o corrección): va directo desde el intento 1, sin OCR y sin comparación, porque son datos de una persona (FR-015).</li>
+      <li><b>Filas creadas antes del cambio</b>: todavía hacen un cruce con OCR en el minuto dos. Es deuda registrada y desaparece con la última fila vieja.</li>
+    </ul>
+    <div class="ref">validation.ts · accepted, receiptDoor, crossCheck, settled · two-eyes-receipt D16, D17, D20, FR-010, FR-015 · .specify/debt/legacy-minute-two-cross/</div>
   </div>
 </section>
 

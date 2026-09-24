@@ -135,6 +135,12 @@ receipt."
   sending bank, amount and account. When the provider cannot say, the
   payment is held for the ISP to accept or reject, as in FR-020a. When
   either guard finds it used, it is refused as already used (FR-006).
+  Amended the same day: the clave is **expected** in every confirmation — the
+  provider's documentation lists `cepDetails.trackingKey`, SPEI assigns one to
+  every transfer, and both confirmed payments in the dev database carry it
+  (measured 2026-09-24). The rule is a guard for a case never observed; each
+  occurrence is recorded as unexpected, and the first real confirmation by
+  reference checks that the clave arrives.
 
 ## Where this comes from
 
@@ -602,8 +608,10 @@ is one tap from the start of the step. Needs nothing from the other stories.
   Banxico's record, whatever key found it, read or typed. Before the payment
   is confirmed, the product MUST check that no other payment of the same
   business already holds that clave; a payment whose check returns a clave
-  already used MUST be refused as already used, and never confirmed. When
-  Banxico's record carries no clave, the product MUST NOT invent one: the
+  already used MUST be refused as already used, and never confirmed. Banxico's
+  record is expected to carry the clave in every confirmation (provider
+  documentation; SPEI). As a guard for a case never observed, when it does
+  not, the occurrence MUST be recorded as unexpected, and the product MUST NOT invent one: the
   payment keeps its clave empty and MUST confirm only when the provider says
   the CEP was never validated before and no other confirmed payment of the
   business holds the same reference, date, sending bank, amount and account;

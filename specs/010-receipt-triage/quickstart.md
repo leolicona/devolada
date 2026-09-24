@@ -87,6 +87,12 @@ Expected:
   the next slot makes **no** provider request.
 - Page: the manual form accepts a reference alone and refuses both empty.
 
+- **The first real confirmation by reference** (spec FR-006, amended
+  2026-09-24): once a payment found by its reference alone confirms on dev,
+  read its row — `tracking_key` MUST hold Banxico's clave. If it is empty,
+  the guard fired: find the "unexpected" record, and take the provider's raw
+  answer to apiCEP before relying on the reference door in prod.
+
 ## User Story 2 — the missing-data feedback
 
 ```sh

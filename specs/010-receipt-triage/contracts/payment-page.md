@@ -138,22 +138,33 @@ One account, the cuenta de cobro, in the existing `CopyField`, labelled by
 its kind — "CLABE", "Tarjeta de débito" or "Celular" — with its bank. No
 list, no heading, no choice. A CLABE renders exactly as today.
 
-### The capture guide (Story 4, D8, D20)
+### The capture guide (Story 4, D8, D20 — compact, re-planned 2026-09-24)
 
-Above the upload control on "Envía tu comprobante", in this order:
+**On the transfer step**, one line under the account, in the muted body
+style with a small camera icon: "Al terminar, captura el detalle de tu
+transferencia." Nothing else.
 
-1. "Tu captura debe mostrar:" and a small drawing of a receipt with four
-   numbered markers, each named in text beside it: **1** Clave de rastreo o
-   número de referencia (Referencia numérica) · **2** Monto · **3** Fecha ·
-   **4** Cuenta a la que transferiste. "(Referencia numérica)" is the label
-   most banks print (amended 2026-09-24, analyze T2).
-2. Three rules: "Captura el detalle de la transferencia, no el resumen." ·
-   "Que se vea toda la pantalla, sin recortar." · "Si tomas una foto, que no
-   tenga reflejos."
-3. A `Collapsible`: "¿Dónde encuentro estos datos en mi banco?" — one line per
-   entry in `bank-hints.ts`.
+**On "Envía tu comprobante"**, above the upload control:
 
-Nothing that needs a tap is placed before the upload control (FR-026).
+1. "Tu captura debe mostrar:" and four items on one or two lines at 360px,
+   each a small neutral icon + its word: **Clave o referencia** · **Monto** ·
+   **Fecha** · **Cuenta**. A text button "Ver ejemplo" at the end.
+2. "Ver ejemplo" opens in place (the existing `Collapsible`, closed by
+   default): the small drawing with the four items marked by number and
+   named in text, the three rules ("Captura el detalle de la transferencia,
+   no el resumen." · "Que se vea toda la pantalla, sin recortar." · "Si
+   tomas una foto, que no tenga reflejos.") and "¿Dónde los encuentro en mi
+   banco?" with the entries of `bank-hints.ts`.
+3. **After a reading**, the same four items take their state from the
+   reading — each icon becomes a check ("se ve") or an open circle ("no se
+   ve"), with that word beside it for assistive technology and in text,
+   never colour alone. The swap is the vocabulary's outcome cross-fade
+   (`--duration-*` tokens); reduced motion keeps only the opacity change.
+   The `Alert` of the ask (below) still carries the sentences; the
+   checklist is the at-a-glance version of the same facts.
+
+Nothing that needs a tap is placed before the upload control (FR-026), and
+the closed guide takes no more than the checklist's lines.
 
 ### The ask at the upload (Story 2, D5, D18)
 

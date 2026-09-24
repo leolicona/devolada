@@ -126,6 +126,19 @@ receipt."
   enough; the clave becomes required only where the reference cannot find
   the transfer alone — a generic reference (D2) or one already used that day
   (D7) (FR-005).
+- Q: How and when does the payer learn what the capture must show? → A: On
+  the page, minimal, elegant and dynamic, taking little space: one line on
+  the transfer step, before the payer leaves for their bank ("Al terminar,
+  captura el detalle de tu transferencia."), and a compact four-item
+  checklist on the upload step, with the example drawing behind "Ver
+  ejemplo". After the free reading, the same four items show what the
+  capture showed and what it lacks. The WhatsApp share text is unchanged;
+  Devolada sends no reminders (D8, FR-022–FR-026).
+- Q: Should the reader report more (which screen it is, the label of a
+  "details" button) and the feedback adapt to it, or the model write the
+  feedback? → A: No — out of scope. The reader reports the fields it already
+  reads plus the reference and the destination; every message is fixed
+  es-MX copy.
 - Q: What if Banxico confirms a transfer found by its reference and its
   record carries no clave? → A: No clave is ever invented: the payment keeps
   its clave empty and records the reference, date, amount, sending bank and
@@ -241,9 +254,14 @@ earlier numbers.
   another of the ISP's payments with the same date, sending bank, amount and
   receiving account is asked about the same way, before any credit
   (clarified 2026-09-24).
-- **D8 — The capture guide lives inside the upload step.** Above the upload
-  button, a small drawing of a receipt marks what the capture must show, with
-  three short rules. It adds no tap before the upload.
+- **D8 — The capture guide is small, and it comes twice.** One line on the
+  transfer step, before the payer leaves for their bank, says to capture the
+  transfer's detail. On the upload step, a compact checklist of the four
+  things the capture must show — clave or reference, amount, date, account —
+  sits above the upload button; the example drawing, the three rules and the
+  bank tips wait behind "Ver ejemplo". After the free reading the same four
+  items turn into the answer: each says, in icon and text, whether the
+  capture showed it. It adds no tap before the upload (rescoped 2026-09-24).
 - **D9 — An ISP registers up to three receiving accounts and chooses one to
   be paid at.** A CLABE (18 digits), a debit card (16) and a phone (10), each
   with its bank. One of them is the *cuenta de cobro*: the only account the
@@ -492,12 +510,15 @@ ISP's accounts, and one showing only two digits. Needs nothing from the other st
 
 ### User Story 4 - The payer sees what a good capture shows before taking it (Priority: P3)
 
-On the "Envía tu comprobante" step, above the upload button, the payer sees a
-small drawing of a receipt with the data that matters marked — the clave de
-rastreo or the número de referencia, the amount, the date and the account the
-money went to — and three short rules: capture the transfer's detail, not the
-summary; the whole screen, without cropping; and if it is a photo, without
-glare.
+Before leaving for their bank, on the transfer step, the payer reads one
+line: capture the transfer's detail when you finish. On "Envía tu
+comprobante", a compact checklist above the upload button names the four
+things the capture must show — clave de rastreo or número de referencia,
+amount, date, account — and "Ver ejemplo" opens a small drawing of a receipt
+with them marked, three short rules (the detail, not the summary; the whole
+screen; a photo without glare) and the bank tips. Once the capture is read,
+the same four items show which ones it showed and which it lacks. Little
+space, no noise: the guide never pushes the upload button down the screen.
 
 **Why this priority**: it prevents what Story 2 repairs, at no cost per
 payment. It comes last because some payers will still send the summary
@@ -509,20 +530,22 @@ is one tap from the start of the step. Needs nothing from the other stories.
 
 **Acceptance Scenarios**:
 
-1. **Given** the upload step, **When** it renders, **Then** above the upload
-   button a drawing of a receipt marks, with numbers named in text, the clave
-   de rastreo or número de referencia, the amount, the date and the
-   destination account.
-2. **Given** the drawing, **When** it renders at 360px in either theme,
-   **Then** it is legible, causes no horizontal scroll, and marks nothing by
-   colour alone.
-3. **Given** the step, **When** it renders, **Then** it shows the three
-   rules.
-4. **Given** a payer who wants to know where their bank shows the data,
-   **When** they open the tips, **Then** they reach them in one tap, with the
-   same hints Story 2 uses.
-5. **Given** the drawing, the rules and the tips, **When** the step renders,
-   **Then** the upload button is still one tap from the start of the step.
+1. **Given** the transfer step, **When** it renders, **Then** one line under
+   the account says to capture the transfer's detail on finishing.
+2. **Given** the upload step, **When** it renders, **Then** a compact
+   checklist above the upload button names the clave de rastreo or número de
+   referencia, the amount, the date and the account, in at most two lines at
+   360px.
+3. **Given** the checklist, **When** the payer taps "Ver ejemplo", **Then**
+   the drawing with the four items marked by number and named in text, the
+   three rules and the bank tips open in place, and close the same way.
+4. **Given** a capture that was read, **When** the reading returns, **Then**
+   each checklist item shows, with an icon and a word, whether the capture
+   showed it — the change a cross-fade, nothing that moves or bounces.
+5. **Given** the step at 360px in either theme, **When** it renders, **Then**
+   everything is legible, nothing scrolls sideways, nothing is marked by
+   colour alone, and the upload button is one tap from the start of the
+   step.
 
 ---
 
@@ -699,16 +722,23 @@ is one tap from the start of the step. Needs nothing from the other stories.
 
 **The capture guide (Story 4, D8)**
 
-- **FR-022**: The upload step MUST show, above the upload button, a drawing of
-  a receipt marking with numbers, named in text, the clave de rastreo or
-  número de referencia, the amount, the date and the destination account.
-- **FR-023**: The drawing MUST be legible at 360px in both themes, cause no
-  horizontal scroll, and mark nothing by colour alone.
-- **FR-024**: The step MUST show three rules: the detail, not the summary; the
-  whole screen; a photo without glare.
-- **FR-025**: Tips on where each bank shows the data MUST be one tap away, and
-  MUST come from the same hints as FR-010.
+- **FR-022**: The transfer step MUST show one line, under the account, telling
+  the payer to capture the transfer's detail when they finish. The upload
+  step MUST show, above the upload button, a compact checklist of the clave
+  de rastreo or número de referencia, the amount, the date and the account —
+  at most two lines at 360px.
+- **FR-023**: "Ver ejemplo" MUST open, in place and in one tap, a drawing of a
+  receipt marking the four items with numbers named in text, legible at
+  360px in both themes, with no horizontal scroll and nothing marked by
+  colour alone.
+- **FR-024**: The opened example MUST show three rules: the detail, not the
+  summary; the whole screen; a photo without glare.
+- **FR-025**: Tips on where each bank shows the data MUST be inside the opened
+  example, and MUST come from the same hints as FR-010.
 - **FR-026**: Nothing this story adds may stand in front of the upload button.
+  After a reading, each checklist item MUST show, with an icon and a word,
+  whether the capture showed it; the change is a cross-fade and, with reduced
+  motion, an opacity change only.
 
 **Across the feature**
 
@@ -826,6 +856,11 @@ it is lost:
 - Searching by reference, and receiving at a card or phone, for platform
   top-ups.
 - Reading the ISP's own bank movements.
+- Feedback written by the model, and new reader fields to adapt it (which
+  screen the capture is, the label of a "details" button) — every message is
+  fixed es-MX copy (2026-09-24).
+- Changing the WhatsApp share text, and reminders: Devolada sends neither
+  today (2026-09-24).
 
 ## Dependencies
 

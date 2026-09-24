@@ -199,7 +199,10 @@ earlier numbers.
   one they sent to. A credit is never spent trying accounts one after
   another. When a clear capture's destination fits none of the ISP's accounts,
   the payer is told before any credit that the transfer went to a different
-  account.
+  account. The digits are compared with every account the ISP registered —
+  CLABE, card and phone — whatever kind of account the receipt's label seems
+  to name, so a misread label never turns the ISP's own account into
+  "another account" (clarified 2026-09-24).
 
 ## Summary
 
@@ -568,7 +571,10 @@ is one tap from the start of the step. Needs nothing from the other stories.
   be spent trying accounts one after another.
 - **FR-020**: A fully legible receipt whose destination fits none of the ISP's
   accounts MUST be refused before any credit, telling the payer the transfer
-  went to a different account. Hidden digits MUST NOT count as a mismatch.
+  went to a different account. Hidden digits MUST NOT count as a mismatch,
+  and neither may a kind of account read from the receipt's label: a
+  destination is a mismatch only when its visible digits fit none of the
+  ISP's accounts, of any kind.
 - **FR-021**: Changing or removing an account MUST NOT change the account a
   submitted payment is checked against.
 

@@ -124,9 +124,13 @@ AskField[] } | { reason: "wrong_destination" }`, with `AskField = "key" |
 `tieDestination(destination, accounts)` → `{ tied: account } | "unknown" |
 "none"`: visible digits with everything but digits removed; fewer than three
 → `"unknown"`; forms per account — the CLABE's 18 digits and its 11-digit
-account segment (positions 7–17), the card's 16, the phone's 10, narrowed by
-`destination.kind` when known; the visible digits must **end** a form; exactly
-one account → `tied`, more than one → `"unknown"`, none → `"none"`.
+account segment (positions 7–17), the card's 16, the phone's 10; the visible
+digits must **end** a form. `destination.kind`, when known, only decides the
+order: the forms of that kind are tried first, and exactly one fit among them
+ties it; otherwise every form of every account is tried — exactly one
+account → `tied`, more than one → `"unknown"`, none → `"none"`. A kind the
+reader got wrong can never turn a fit into a mismatch (D24, clarified
+2026-09-24).
 
 ## State and transitions
 

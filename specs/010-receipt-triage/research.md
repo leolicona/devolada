@@ -387,8 +387,16 @@ account segment, the card, the phone. Fewer than three visible digits is
 match on exactly one account ties it; a match on more than one — possible
 with three digits — is unknown. A destination is a *mismatch* only when the
 reading is clear (D16), at least three digits are visible, and they end none
-of the forms. `tipo`, when known, narrows the forms tried (`tarjeta` tries the
-card only; `cuenta` the CLABE's account segment only).
+of the forms — **all** the forms of **all** the ISP's accounts. `tipo`, when
+known, only orders the search (`tarjeta` tries the card first; `cuenta` the
+CLABE's account segment first); it never rules an account out.
+
+**Amended 2026-09-24 (`/speckit-clarify`, the product creator).** The first
+version let `tipo` narrow the forms tried. Receipts print "CUENTA/TARJETA DE
+ABONO ****3819": a reader that calls it `tarjeta` while the digits end the
+CLABE's account would have stopped a payment made to the ISP. The ISP's
+accounts are known; if the visible digits end any of them, the destination
+is the ISP's.
 
 **Alternatives.** Match on the destination bank's name — rejected: receipts
 print it a dozen ways ("BBVA MEXICO", "Bbva Mexico") and it cannot tell a card

@@ -77,6 +77,12 @@ receipt."
   upload for a capture, on the form (the clave becomes required) for typed
   data. Finding nothing proves nothing: the product only knows the payments
   it received, so the provider's answer stays the last word (D7).
+- Q: When the reader says what kind of account the destination is (card,
+  CLABE, phone), is the destination compared only with that kind? → A: No.
+  The ISP's CLABE, card and phone are all known; if the visible digits end
+  any of them, the destination is the ISP's. The kind only decides which is
+  tried first. A mismatch means the digits fit none of the ISP's accounts
+  (D10, FR-020).
 
 ## Where this comes from
 

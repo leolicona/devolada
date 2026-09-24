@@ -89,7 +89,8 @@ what the reading itself saw.
   null` (`"referenciaNumerica"`) and `destination: { kind, digits }`
   (`"destino": { "tipo", "digitos" }`), asked in the same prompt — both
   prompts share `FIELDS`, so a PDF's text is asked the same questions.
-- `Gate` gains `referenceNumber: "ok" | "malformed" | "missing"`;
+- `Gate` gains `referenceNumber: "ok" | "malformed" | "generic" | "missing"`
+  — `generic` is a well-formed reference that is a single digit repeated ("0", "0000", "1111111") or a run of consecutive digits ("123", "1234567", "7654321") (D2, clarified 2026-09-24);
   `GatedReading` gains `referenceNumber: string | null` (only when `ok`).
   `passes` becomes: (`trackingKey === "ok"` or `referenceNumber === "ok"`) and
   `senderBank === "ok"` and `amount === "ok"`.
@@ -109,8 +110,9 @@ AskField[] } | { reason: "wrong_destination" }`, with `AskField = "key" |
    "full"` on a picture, or a PDF's text (D16) → `null`.
 2. `tieDestination(reading.destination, accounts)` (D24) is `"none"` →
    `wrong_destination`.
-3. The gate's `trackingKey` is not `missing`, or its `referenceNumber` is not
-   `missing` → `null`. (A malformed key is a reading, not an absence.)
+3. The gate's `trackingKey` is not `missing`, or its `referenceNumber` is
+   neither `missing` nor `generic` → `null`. (A malformed key is a reading,
+   not an absence; a generic reference is an absence — D2.)
 4. Otherwise → `no_key` with `fields`: `"key"` first, then each of `amount`,
    `date`, `senderBank` the reading lacks, then `account` when the ISP has
    more than one and the destination did not tie — in the form's order.

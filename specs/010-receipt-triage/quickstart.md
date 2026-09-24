@@ -65,7 +65,10 @@ Expected:
 - Engine: an accepted row with a reference and no clave sends
   `sender.referenceNumber` and no `trackingKey` to the intercepted provider;
   with both, only `trackingKey` travels.
-- Gate: `038195` passes; `0082918812` (ten digits) is `malformed`, never sent.
+- Gate: `038195` passes; `0082918812` (ten digits) is `malformed`, never sent;
+  `0000`, `1234567` and `1` are `generic` — no key, so a clear capture showing
+  only one is asked about before any credit; a typed `1234567` without a
+  clave is a `VALIDATION_ERROR`.
 - Lifecycle: a typed submission with only a reference is accepted; Banxico
   confirms and the row now carries the CEP's clave; a second submission whose
   search returns that clave ends `invalid` with `TRANSFER_ALREADY_USED`.

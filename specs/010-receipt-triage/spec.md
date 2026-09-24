@@ -63,6 +63,13 @@ receipt."
   shorter to type. When Banxico confirms, its real clave is stored only
   after checking this business has not used it already (D3, FR-006). A
   reference matching more than one transfer is a separate case (D7).
+- Q: What happens with a generic reference — the default a bank app fills
+  in, which payers rarely change? → A: The reading gate discards it: a single digit repeated ("0", "0000", "1111111") or a run of consecutive digits ("123", "1234567", "7654321") is not a reference (letters already are not, D2). A
+  capture whose only key is a generic reference therefore has no key, and is
+  asked about before any credit, for the clave (D4). On the typing form the
+  page says so beside the field and requires the clave. If a reference that
+  passed still matches more than one transfer, the payer is asked for the
+  clave (D7).
 
 ## Where this comes from
 
@@ -115,7 +122,10 @@ earlier numbers.
 - **D2 — A reference is the SPEI referencia numérica: up to seven digits, as
   printed.** Leading zeros are kept ("038195" stays "038195"). A longer
   number on a receipt — a folio, an authorisation number, an account — is not
-  a reference, and is never sent as one.
+  a reference, and is never sent as one. Nor is a **generic reference** —
+  a single digit repeated ("0", "0000", "1111111") or a run of consecutive digits ("123", "1234567", "7654321") — the default many bank apps fill in and payers rarely change: it
+  would match many transfers of the same day and amount, so it never counts
+  as a key and never travels (clarified 2026-09-24).
 - **D3 — Banxico's own clave is kept for every confirmation.** A transfer
   found by its reference comes back from Banxico with its real clave de
   rastreo. The payment records it, so the rule "one transfer pays once"
@@ -453,7 +463,11 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **FR-001**: The reader MUST read the referencia numérica as well as the
   clave de rastreo, as printed, leading zeros kept.
 - **FR-002**: A reference MUST be one to seven digits; a longer number MUST
-  NOT be taken as a reference.
+  NOT be taken as a reference. A generic reference — a single digit repeated ("0", "0000", "1111111") or a run of consecutive digits ("123", "1234567", "7654321") — MUST NOT count
+  as a key, whether read or typed: a capture whose only key is one is asked
+  about as a capture with no key (FR-008), naming the clave; on the typing
+  form the page MUST say beside the field that this reference is shared by
+  many transfers and MUST require the clave de rastreo.
 - **FR-003**: Every search of Banxico's transfer records MUST carry exactly one
   key: the clave when there is one, the reference only when there is no
   clave. When both exist, the reference MUST NOT travel, and retries MUST
@@ -482,7 +496,8 @@ is one tap from the start of the step. Needs nothing from the other stories.
 **Missing-data feedback (Story 2, D4–D6)**
 
 - **FR-008**: A capture the reader calls fully legible, a SPEI receipt, that
-  shows neither a clave nor a reference MUST NOT reach a paid call.
+  shows neither a clave nor a reference — a generic reference counting as
+  none (FR-002) — MUST NOT reach a paid call.
 - **FR-009**: The payer MUST be told on the same screen, at the top of the
   step, that the capture shows neither key; the message MUST also name every
   other field the typing form needs that the capture did not show, and MUST

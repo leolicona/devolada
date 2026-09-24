@@ -84,6 +84,12 @@ transfer: z
   .refine((t) => t.trackingKey || t.referenceNumber, {
     message: "trackingKey or referenceNumber is required",
   })
+  /* receipt-triage D2 (clarified 2026-09-24): a generic reference is no
+     key — the clave is required beside it. `isGenericReference` lives in
+     this schema so the page and the handler share one rule. */
+  .refine((t) => t.trackingKey || !isGenericReference(t.referenceNumber), {
+    message: "a generic referenceNumber needs a trackingKey",
+  })
   .optional(),
 ```
 
@@ -144,7 +150,7 @@ then `focus()`), so a keyboard or screen-reader user starts from it.
 
 | Part | Rule | Example |
 | --- | --- | --- |
-| The key | Always, first | "Tu captura no muestra la clave de rastreo ni el número de referencia." |
+| The key | Always, first; the second form when the reading's `gate.referenceNumber` is `generic` | "Tu captura no muestra la clave de rastreo ni el número de referencia." · "El número de referencia de tu captura ({ref}) lo usan muchas transferencias y no muestra la clave de rastreo." |
 | The rest | Every field in `ask.fields` besides `key`, in form order, the account last as "a cuál cuenta transferiste" (amended 2026-09-24, analyze I1); omitted when there are none | "Tampoco vemos la fecha." · "Tampoco vemos el monto ni la fecha." · "Tampoco vemos la fecha ni a cuál cuenta transferiste." |
 | Where | The entry in `bank-hints.ts` for `reading.senderBank` when there is one; the general sentence otherwise | "En Banorte, toca «Ver más detalles» y captura esa pantalla." · "Abre el detalle de la transferencia en tu app y captura la pantalla donde aparecen estos datos." |
 
@@ -177,6 +183,15 @@ control stays open.
 visit, the form renders first — "Tu captura tampoco muestra la clave de
 rastreo ni el número de referencia. Escribe los datos de tu transferencia." —
 and the upload becomes the second option. The count lives in the page.
+
+### A generic reference on the typing form (D2, clarified 2026-09-24)
+
+As the payer types a reference that `isGenericReference` matches, the field
+shows, in text under it: "Esta referencia la usan muchas transferencias.
+Escribe tu clave de rastreo para encontrar la tuya." — and the clave field
+becomes required ("Escribe tu clave de rastreo."). Submitting without it is
+refused on the page and, for a client that skipped the page, by the schema
+(`VALIDATION_ERROR`).
 
 ### The later asks (D6, D17)
 

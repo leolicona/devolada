@@ -126,6 +126,15 @@ receipt."
   enough; the clave becomes required only where the reference cannot find
   the transfer alone — a generic reference (D2) or one already used that day
   (D7) (FR-005).
+- Q: What if Banxico confirms a transfer found by its reference and its
+  record carries no clave? → A: No clave is ever invented: the payment keeps
+  its clave empty and records the reference, date, amount, sending bank and
+  account, and Banxico's confirmation. It confirms only when two guards
+  agree it is new — the provider says this CEP was never validated before,
+  and no other confirmed payment of the ISP holds the same reference, date,
+  sending bank, amount and account. When the provider cannot say, the
+  payment is held for the ISP to accept or reject, as in FR-020a. When
+  either guard finds it used, it is refused as already used (FR-006).
 
 ## Where this comes from
 
@@ -593,7 +602,14 @@ is one tap from the start of the step. Needs nothing from the other stories.
   Banxico's record, whatever key found it, read or typed. Before the payment
   is confirmed, the product MUST check that no other payment of the same
   business already holds that clave; a payment whose check returns a clave
-  already used MUST be refused as already used, and never confirmed.
+  already used MUST be refused as already used, and never confirmed. When
+  Banxico's record carries no clave, the product MUST NOT invent one: the
+  payment keeps its clave empty and MUST confirm only when the provider says
+  the CEP was never validated before and no other confirmed payment of the
+  business holds the same reference, date, sending bank, amount and account;
+  when the provider cannot say, the payment MUST be held for the ISP as in
+  FR-020a; when either guard finds it used, it MUST be refused as already
+  used.
 - **FR-007**: When the provider answers that a reference matches more than one
   transfer, the product MUST NOT make another paid call with the same data
   and MUST ask the payer for the clave de rastreo alone. Before any paid call

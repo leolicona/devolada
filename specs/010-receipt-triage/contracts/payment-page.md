@@ -108,7 +108,16 @@ gains `"referenceNumber"`.
 ## `publicPaymentError`
 
 Gains `"REFERENCE_AMBIGUOUS"` (D17): the payment is still `validating`, and
-the page asks for the clave alone. `RECEIPT_INCOMPLETE` and
+the page asks for the clave alone. Gains `"REFERENCE_SHARED"` (D7, clarified
+2026-09-24): the pay route refused typed data whose reference another
+payment of the ISP already holds with the same date, sending bank, amount
+and account, and no clave beside it — nothing was created or billed; the
+page shows the generic-reference note under the field ("Esta referencia la
+usan muchas transferencias. Escribe tu clave de rastreo para encontrar la
+tuya.") and requires the clave. On the upload, `/read` reports the same
+finding as `ask: { reason: "no_key", fields: ["key", …], shared: true }` and
+the first sentence becomes "El número de referencia de tu captura ({ref}) ya
+lo usó otra transferencia de ese día y no muestra la clave de rastreo." `RECEIPT_INCOMPLETE` and
 `RECEIPT_WRONG_DESTINATION` stay internal: a page never pays a reading its
 `ask` stopped.
 

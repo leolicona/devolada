@@ -70,6 +70,13 @@ receipt."
   page says so beside the field and requires the clave. If a reference that
   passed still matches more than one transfer, the payer is asked for the
   clave (D7).
+- Q: Should the product look in its own records for a reference already used
+  on the same day, before asking Banxico? → A: Yes, with the five data
+  Banxico searches by. When another payment of the same business, from another link and not `superseded`, with the same reference, transfer date, sending bank, amount and receiving account (the account ruling nothing out while either side's is unknown) exists, Banxico would find more than
+  one transfer: the payer is asked for the clave before any credit — at the
+  upload for a capture, on the form (the clave becomes required) for typed
+  data. Finding nothing proves nothing: the product only knows the payments
+  it received, so the provider's answer stays the last word (D7).
 
 ## Where this comes from
 
@@ -165,7 +172,11 @@ earlier numbers.
   pre-filled form. It never asks for a field it already has.
 - **D7 — A reference that matches more than one transfer asks for the clave.**
   The provider says so explicitly. The product does not ask again with the
-  same data; it asks the payer for the clave de rastreo alone.
+  same data; it asks the payer for the clave de rastreo alone. It also
+  foresees the case from its own records: a reference already used by
+  another of the ISP's payments with the same date, sending bank, amount and
+  receiving account is asked about the same way, before any credit
+  (clarified 2026-09-24).
 - **D8 — The capture guide lives inside the upload step.** Above the upload
   button, a small drawing of a receipt marks what the capture must show, with
   three short rules. It adds no tap before the upload.
@@ -427,6 +438,11 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **A reference of "0" or "1234567".** Common defaults. The search still
   carries the date, amount, banks and account; if the provider says it
   matches more than one transfer, the payer is asked for the clave (D7).
+- **Two customers of one ISP pay the same amount, the same day, from the same
+  bank, with the same reference** (an app that fills in the same default for
+  everyone). The second is asked for the clave before any credit, because
+  the first is already in the ISP's records (FR-007). A payer re-uploading
+  or correcting their own payment is the same link, never a match.
 - **A receipt with a reference and a malformed clave.** The reference is a
   key, so nothing is asked at the upload; the clave travels as read, and the
   comparison treats it as today.
@@ -491,7 +507,12 @@ is one tap from the start of the step. Needs nothing from the other stories.
   already used MUST be refused as already used, and never confirmed.
 - **FR-007**: When the provider answers that a reference matches more than one
   transfer, the product MUST NOT make another paid call with the same data
-  and MUST ask the payer for the clave de rastreo alone.
+  and MUST ask the payer for the clave de rastreo alone. Before any paid call
+  that would search by a reference, the product MUST look for another payment of the same business, from another link and not `superseded`, with the same reference, transfer date, sending bank, amount and receiving account (the account ruling nothing out while either side's is unknown); when
+  one exists it MUST ask the payer for the clave instead of calling —
+  at the upload for a capture, and on the typing form, where the clave then
+  becomes required. Finding none MUST NOT be read as proof the reference is
+  unique.
 
 **Missing-data feedback (Story 2, D4–D6)**
 

@@ -3,7 +3,8 @@
 **Date**: 2026-09-24 · **Plan**: [plan.md](./plan.md) · **Research**: [research.md](./research.md)
 
 One additive migration, `0036_receipt_triage.sql`: twelve `ADD COLUMN` on
-three existing tables, no new table, nothing dropped, renamed or rebuilt. The
+three existing tables and one non-unique index (amended 2026-09-24), no new
+table, nothing dropped, renamed or rebuilt. The
 PR preview applies it to the live dev database; every existing row reads NULL
 on the new columns and keeps today's meaning. (If `0036` is taken between
 planning and implementation, the next free number is used and this line is
@@ -54,8 +55,11 @@ Rules:
   `payments_business_tracking_idx` then refuses a second row with that clave,
   racing ones included (direct-payment D8); the existing unique-violation
   branch turns the loser `invalid` with `TRANSFER_ALREADY_USED`.
-- No index on `reference_number` (references repeat by design) or on
-  `beneficiary` (nothing looks a payment up by account).
+- One non-unique index, `payments_business_reference_idx` on
+  (`business_id`, `reference_number`, `transfer_date`), for the shared
+  reference lookup (D7, clarified 2026-09-24): another payment of the same business, from another link and not `superseded`, with the same reference, transfer date, sending bank, amount and receiving account (the account ruling nothing out while either side's is unknown).
+  Never unique — references repeat by design. No index on `beneficiary`
+  (nothing looks a payment up by account).
 - **`disputed_fields`** (JSON, existing) gains `"referenceNumber"` (D13).
   **`last_error`** (existing) gains `REFERENCE_AMBIGUOUS` (D17): while it is
   set and the row has no clave, a slot does not call the provider.

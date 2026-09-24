@@ -42,7 +42,8 @@ Rules:
   `reference_number`) **and** `sender_bank` **and** `claimed_amount_cents`
   **and** `transfer_date` — **and**, when `beneficiary_candidates` is set,
   `beneficiary` (D23). An accepted row takes the transfer door with whichever
-  keys it has; both travel when both are set.
+  keys it has; when both are set only the clave travels (D1, clarified
+  2026-09-24) and the reference stays on the row.
 - **An attempt reads the account from the payment, never the business**
   (FR-021). `beneficiary` set → that account on either door; else
   `beneficiary_candidates` → the receipt door with the list; else — a row

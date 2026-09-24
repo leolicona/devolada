@@ -114,7 +114,7 @@ the tasks with dated notes.
 | # | Decision | Made in |
 | --- | --- | --- |
 | D1–D10 | A key is a clave or a reference; a reference is up to seven digits as printed; Banxico's clave kept for every confirmation; a clear capture with neither key asked about before any credit; the feedback's when, where, words and ways forward; the same pattern for later asks; a reference matching more than one transfer asks for the clave; the capture guide inside the step; one card and one phone beside the CLABE; the check asks about the account the receipt shows as destination | spec |
-| D11 | The reference is threaded through every layer as an optional sibling of the clave, with one rule: the reference travels when there is no clave, both when both exist | research R1 |
+| D11 | The reference is threaded through every layer as an optional sibling of the clave, with one rule: the reference travels only when there is no clave; when both exist, only the clave travels (clarified 2026-09-24) | research R1 |
 | D12 | The reader asks for "Referencia"/"Referencia numérica" and is told what is not one; the gate accepts `^\d{1,7}$` as printed. The engine's guard stays at 20 digits for other callers | research R2 |
 | D13 | The comparison's key is the clave when either side read one, the reference otherwise; the shape rules never judge a reference; a disputed reference goes to the payer | research R3 |
 | D14 | A confirmed row with a reference and no clave adopts the CEP's clave whatever its `proof_mode`, under the existing unique index | research R4 |

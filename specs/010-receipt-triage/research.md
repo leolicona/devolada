@@ -60,8 +60,8 @@ required) and the page's form.
 
 **Decision (D11).** The reference is threaded through every one of those
 layers as an optional sibling of the clave, with one rule everywhere: **a key
-is a clave or a reference; the reference travels when there is no clave; both
-travel when both exist.** Nothing about the clave's own path changes.
+is a clave or a reference; the reference travels only when there is no
+clave; when both exist, only the clave travels** (clarified 2026-09-24). Nothing about the clave's own path changes.
 
 ## R2 — What counts as a reference
 

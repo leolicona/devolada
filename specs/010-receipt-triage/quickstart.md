@@ -64,7 +64,7 @@ Expected:
   a clave on either side → today's result, the reference riding along.
 - Engine: an accepted row with a reference and no clave sends
   `sender.referenceNumber` and no `trackingKey` to the intercepted provider;
-  with both, both travel.
+  with both, only `trackingKey` travels.
 - Gate: `038195` passes; `0082918812` (ten digits) is `malformed`, never sent.
 - Lifecycle: a typed submission with only a reference is accepted; Banxico
   confirms and the row now carries the CEP's clave; a second submission whose

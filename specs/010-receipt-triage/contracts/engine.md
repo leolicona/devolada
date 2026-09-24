@@ -33,8 +33,8 @@ transfer: {
   date: string;
   amountCents: number;
   senderBank: string;
-  trackingKey?: string;      // receipt-triage D1: at least one of the two,
-  referenceNumber?: string;  // both when both exist
+  trackingKey?: string;      // receipt-triage D1: exactly one of the two —
+  referenceNumber?: string;  // the reference only when there is no clave
   beneficiary: ConstaBeneficiary;
 };
 ```

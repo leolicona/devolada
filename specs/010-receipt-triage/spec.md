@@ -45,6 +45,9 @@ receipt."
   transferiste", finding I1), and the capture guide labels the reference
   "número de referencia (Referencia numérica)", the words most banks print
   (finding T2). Findings G3 and I4 were folded in below with this date.
+- Q: When a payment has both a clave and a reference, which one travels to
+  Banxico? → A: Only the clave de rastreo. The reference travels only when
+  there is no clave (D1, FR-003).
 
 ## Where this comes from
 
@@ -85,8 +88,9 @@ Recorded here so the plan and the code can cite them as
 earlier numbers.
 
 - **D1 — Two keys find a transfer: the clave de rastreo or the referencia
-  numérica.** Every check carries at least one. The reference is required
-  when there is no clave; when both exist, both travel and the clave leads.
+  numérica.** Every check carries exactly one. The reference travels only
+  when there is no clave; when both exist, only the clave travels
+  (clarified 2026-09-24).
   This is the provider's own rule for its direct mode ("`referenceNumber` —
   required if `trackingKey` is not sent"), made the product's.
 - **D2 — A reference is the SPEI referencia numérica: up to seven digits, as
@@ -199,8 +203,8 @@ other stories.
    the check reaches Banxico's transfer search, **Then** the search carries
    the reference with the date, the amount, the sending bank and the
    receiving account, and the payer is asked nothing.
-2. **Given** a receipt with both, **When** it is checked, **Then** the clave
-   leads and the reference travels beside it.
+2. **Given** a receipt with both, **When** it is checked, **Then** the search
+   carries the clave alone; the reference does not travel.
 3. **Given** neither reading found a clave, and both read the same reference,
    **When** Banxico has nothing yet, **Then** the readings count as agreed,
    exactly as two matching claves do today (two-eyes-receipt D5–D6), and the
@@ -420,9 +424,9 @@ is one tap from the start of the step. Needs nothing from the other stories.
   clave de rastreo, as printed, leading zeros kept.
 - **FR-002**: A reference MUST be one to seven digits; a longer number MUST
   NOT be taken as a reference.
-- **FR-003**: Every search of Banxico's transfer records MUST carry a clave or
-  a reference; the reference MUST be sent when there is no clave; when both
-  exist both MUST travel.
+- **FR-003**: Every search of Banxico's transfer records MUST carry exactly one
+  key: the clave when there is one, the reference only when there is no
+  clave. When both exist, the reference MUST NOT travel.
 - **FR-004**: The comparison of the two readings (two-eyes-receipt D5–D8)
   MUST treat the reference as it treats the clave when neither reading found
   a clave: agreed, disputed or blind, and the payer asked only for the field

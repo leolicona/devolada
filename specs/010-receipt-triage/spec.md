@@ -84,6 +84,20 @@ receipt."
   tried first. A mismatch means the digits fit none of the ISP's accounts
   (D10, FR-020).
 
+### Session 2026-09-24 (`/speckit-specify`, rescoping Story 3)
+
+- Input: "Validar los últimos 4 dígitos de la cuenta destino; esto debe
+  coincidir con lo que tiene registrado el negocio. Incluir las tres opciones
+  (CLABE, tarjeta y teléfono) incrementa las decisiones del usuario que paga
+  y con esto la dificultad. Sería más factible dar la opción de registrarlas,
+  pero el negocio debería elegir una." → Story 3 rescoped: the ISP may
+  register a CLABE, a debit card and a phone, and **chooses one** — its
+  *cuenta de cobro* — which is the only one its payers see and the one every
+  check asks Banxico about. The destination on a receipt is checked by its
+  **last four digits** against the ISP's registered accounts. D9, D10,
+  Story 3, FR-016–FR-021, SC-006 and the Receiving account entity rewritten
+  below; the plan and tasks follow once the open points are settled.
+
 ## Where this comes from
 
 On 2026-09-23 the product creator brought four real receipts that customers
@@ -186,20 +200,29 @@ earlier numbers.
 - **D8 — The capture guide lives inside the upload step.** Above the upload
   button, a small drawing of a receipt marks what the capture must show, with
   three short rules. It adds no tap before the upload.
-- **D9 — An ISP may register one debit card and one phone beside its CLABE.**
-  A card of 16 digits and a phone of 10, each with its bank; the CLABE of 18
-  stays required. A SPEI transfer to any of the three is recorded by Banxico,
-  and the provider can check it when told which one received the money
-  (apiCEP's documented beneficiary types: CLABE, card, phone).
-- **D10 — The check asks Banxico about the account the receipt shows as its
-  destination.** The digits the receipt shows tie the payment to one of the
-  ISP's accounts. When they cannot — too few digits, or digits that fit more
-  than one — the provider's own reading of the picture receives all of the
-  ISP's accounts to choose from, and a payer who types their data says which
-  one they sent to. A credit is never spent trying accounts one after
-  another. When a clear capture's destination fits none of the ISP's accounts,
-  the payer is told before any credit that the transfer went to a different
-  account. The digits are compared with every account the ISP registered —
+- **D9 — An ISP registers up to three receiving accounts and chooses one to
+  be paid at.** A CLABE (18 digits), a debit card (16) and a phone (10), each
+  with its bank. One of them is the *cuenta de cobro*: the only account the
+  payment page shows, so a payer never has to choose where to send the money.
+  A SPEI transfer to any of the three is recorded by Banxico, and the
+  provider can check it when told which account received it (apiCEP's
+  documented beneficiary types: CLABE, card, phone). Whether the CLABE stays
+  required when the chosen account is the card or the phone:
+  [NEEDS CLARIFICATION: must an ISP that is paid at its card or phone still register a CLABE?]
+  (rescoped 2026-09-24).
+- **D10 — The check asks Banxico about the cuenta de cobro, and the
+  receipt's last four digits must match what the ISP registered.** The last
+  four visible digits of the receipt's destination are compared with the end
+  of the ISP's registered accounts (a CLABE also by the account number inside
+  it, as receipt 3 prints it). Fewer than four visible digits prove nothing
+  and stop nothing. When a clear capture's four digits fit none of the ISP's
+  accounts, the payer is told before any credit that the transfer went to a
+  different account. A receipt whose digits fit a registered account that is
+  **not** the cuenta de cobro — a customer paying where they always paid:
+  [NEEDS CLARIFICATION: is a transfer to a registered account other than the
+  cuenta de cobro accepted and checked against that account, or treated as a
+  transfer to a different account?] A credit is never spent trying accounts
+  one after another (rescoped 2026-09-24). The digits are compared with every account the ISP registered —
   CLABE, card and phone — whatever kind of account the receipt's label seems
   to name, so a misread label never turns the ISP's own account into
   "another account" (clarified 2026-09-24).
@@ -352,57 +375,56 @@ analyze I4).
 
 ---
 
-### User Story 3 - An ISP can be paid at a debit card or a phone as well as its CLABE (Priority: P2)
+### User Story 3 - An ISP chooses the account it is paid at: CLABE, debit card or phone (Priority: P2)
 
-An ISP adds its debit card and its phone in Cuenta, next to the CLABE it
-already has. The payment page shows all three. A payer who transfers to the
-card or the phone is checked with Banxico exactly like one who transfers to
-the CLABE, because the check asks about the account the receipt shows as its
-destination.
+An ISP registers in Cuenta the accounts it has — a CLABE, a debit card, a
+phone — and picks one as its *cuenta de cobro*. The payment page shows that
+one account, so the payer copies one number and never has to decide where to
+send the money. Every check asks Banxico about that account, and the receipt's
+last four digits confirm the money went to the ISP.
 
-**Why this priority**: those payments cannot be checked at all today. It
-ranks with Story 2 and not above it because it is larger — the ISP's setup,
-the page and the check all change — and serves fewer payers at first.
+**Why this priority**: many small ISPs are paid at a card or a phone today,
+and those payments cannot be checked at all. It ranks with Story 2 and not
+above it because the ISP's setup, the page and the check all change.
 
-**Independent Test**: configure an ISP with a CLABE, a card and a phone
-against an intercepted provider; submit a receipt to each and check which
-account each search names; submit a receipt whose destination cannot be
-read, and a typed submission; submit a clear receipt to an account that is
-none of the three. Needs nothing from the other stories.
+**Independent Test**: configure an ISP with a CLABE, a card and a phone and
+choose each in turn as the cuenta de cobro, against an intercepted provider;
+check which account the page shows and which account each search names;
+submit a clear receipt whose last four digits fit the cuenta de cobro, one
+whose four digits fit none of the ISP's accounts, and one showing only three
+digits. Needs nothing from the other stories.
 
 **Acceptance Scenarios**:
 
 1. **Given** an ISP with only a CLABE, **When** this feature ships, **Then**
-   nothing changes for it or its payers.
+   nothing changes for it or its payers: the CLABE is its cuenta de cobro.
 2. **Given** an ISP member who may change the CLABE, **When** they open
-   Cuenta, **Then** they can add, change or remove one debit card (16 digits)
-   and one phone (10 digits), each with its bank; the CLABE stays required.
+   Cuenta, **Then** they can add, change or remove a debit card (16 digits)
+   and a phone (10 digits), each with its bank, and choose which registered
+   account is the cuenta de cobro.
 3. **Given** a card number of the wrong length or with a failing check digit,
    a phone that is not 10 digits, or a number without its bank, **When** it
    is saved, **Then** it is refused with a message that names the problem.
 4. **Given** a member who may not change the CLABE, **When** they open
-   Cuenta, **Then** they cannot change the card or the phone, and they see
-   them exactly as they see the CLABE — masked to the last four digits when
-   their role cannot update the settings.
-5. **Given** an ISP with a card or a phone, **When** the payment page renders,
-   **Then** it shows the CLABE and, labelled and copyable, the card and the
-   phone.
-6. **Given** a receipt whose destination the reader ties to the card, the
-   phone or the CLABE, **When** it is checked, **Then** the search names that
+   Cuenta, **Then** they cannot change the accounts or the choice, and they
+   see them exactly as they see the CLABE — masked to the last four digits
+   when their role cannot update the settings.
+5. **Given** any ISP, **When** the payment page renders, **Then** it shows
+   exactly one account — the cuenta de cobro, labelled by its kind ("CLABE",
+   "Tarjeta de débito", "Celular") with its bank, copyable — and asks the
+   payer to choose nothing.
+6. **Given** a receipt, **When** it is checked, **Then** the search names the
+   cuenta de cobro the payment was submitted under.
+7. **Given** a fully legible receipt whose last four visible digits fit none
+   of the ISP's registered accounts, **When** it is uploaded, **Then** no
+   credit is spent and the payer is told the transfer went to a different
    account.
-7. **Given** a receipt whose destination cannot be tied to one account,
-   **When** the provider reads the picture, **Then** it receives every account
-   of the ISP to choose from.
-8. **Given** a payer who types their data and an ISP with more than one
-   account, **When** they fill the form, **Then** they choose which one they
-   sent to, shown with its last four digits.
-9. **Given** a fully legible receipt whose destination fits none of the ISP's
-   accounts, **When** it is uploaded, **Then** no credit is spent and the
-   payer is told the transfer went to a different account. Digits the
-   receipt hides are not a mismatch.
-10. **Given** an account changed or removed, **When** a payment already
-    submitted to it is checked, **Then** it is checked against the account it
-    was sent to.
+8. **Given** a receipt that shows fewer than four digits of its destination,
+   **When** it is checked, **Then** the destination neither stops it nor
+   confirms it; the check goes on with the cuenta de cobro.
+9. **Given** the ISP changes its cuenta de cobro, **When** a payment already
+   submitted is checked, **Then** it is checked against the account it was
+   submitted under.
 
 ---
 
@@ -551,32 +573,31 @@ is one tap from the start of the step. Needs nothing from the other stories.
   not judge, one with a malformed clave, and any capture read while the
   reader is down or answering nonsense MUST follow today's flow.
 
-**The ISP's card and phone (Story 3, D9, D10)**
+**The cuenta de cobro (Story 3, D9, D10)**
 
-- **FR-016**: A member who may change the CLABE MUST be able to add, change
-  or remove one debit card (16 digits, passing the card check digit) and one
-  phone (10 digits), each with a bank from the provider's vocabulary; any
-  other member MUST see them exactly as they see the CLABE, masked to the last
-  four digits when their role cannot update the settings. The CLABE MUST stay
-  required for the channel.
-- **FR-017**: The payment page MUST show the CLABE and, when registered, the
-  card and the phone, each labelled and copyable. An ISP with only a CLABE
-  MUST see no change on its page.
-- **FR-018**: A search MUST name the account the receipt shows as its
-  destination.
-- **FR-019**: When the destination cannot be tied to one account and the ISP
-  has more than one, the provider's reading of the picture MUST receive every
-  account of the ISP to choose from, and a typed submission MUST ask the payer
-  which account they sent to, shown with its last four digits. No credit MUST
-  be spent trying accounts one after another.
-- **FR-020**: A fully legible receipt whose destination fits none of the ISP's
-  accounts MUST be refused before any credit, telling the payer the transfer
-  went to a different account. Hidden digits MUST NOT count as a mismatch,
-  and neither may a kind of account read from the receipt's label: a
-  destination is a mismatch only when its visible digits fit none of the
-  ISP's accounts, of any kind.
-- **FR-021**: Changing or removing an account MUST NOT change the account a
-  submitted payment is checked against.
+- **FR-016**: A member who may change the CLABE MUST be able to register,
+  change or remove a CLABE, a debit card (16 digits, passing the card check
+  digit) and a phone (10 digits), each with a bank from the provider's
+  vocabulary, and MUST choose exactly one registered account as the cuenta de
+  cobro. Any other member MUST see them exactly as they see the CLABE today,
+  masked to the last four digits when their role cannot update the settings.
+- **FR-017**: The payment page MUST show exactly one account — the cuenta de
+  cobro — labelled by its kind, with its bank, copyable, and MUST NOT ask the
+  payer to choose an account. An ISP with only a CLABE MUST see no change.
+- **FR-018**: Every search MUST name the cuenta de cobro the payment was
+  submitted under.
+- **FR-019**: The last four visible digits of a receipt's destination MUST be
+  compared with the end of every account the ISP registered (a CLABE also by
+  the account number inside it). Fewer than four visible digits MUST neither
+  stop nor confirm anything. No credit MUST be spent trying accounts one
+  after another.
+- **FR-020**: A fully legible receipt whose last four visible digits fit none
+  of the ISP's registered accounts MUST be refused before any credit, telling
+  the payer the transfer went to a different account. The kind of account a
+  receipt's label seems to name MUST NOT turn a fit into a mismatch.
+- **FR-021**: Changing the cuenta de cobro, or changing or removing any
+  account, MUST NOT change the account a submitted payment is checked
+  against.
 
 **The capture guide (Story 4, D8)**
 
@@ -610,9 +631,10 @@ is one tap from the start of the step. Needs nothing from the other stories.
 - **Key**: what finds a transfer in Banxico — a clave de rastreo, a
   referencia numérica, or both — with where each came from: our reading, the
   provider's, the payer's hand, or Banxico's record.
-- **Receiving account**: where an ISP is paid — its CLABE (required), and
-  optionally one debit card and one phone — each with its bank. A payment
-  remembers the account it was sent to.
+- **Receiving account**: an account an ISP registered — a CLABE, a debit
+  card or a phone — each with its bank. Exactly one is the **cuenta de
+  cobro**, the only one its payers see. A payment remembers the account it
+  was submitted under.
 - **Ask**: a request to the payer for data, with the fields it named and how
   it ended.
 - **Bank hint**: for a bank, where its app shows the clave and the reference,
@@ -634,8 +656,10 @@ is one tap from the start of the step. Needs nothing from the other stories.
   Banxico clave is zero, whatever key found them.
 - **SC-005**: A reference that matches more than one transfer costs at most
   one paid call before the payer is asked for the clave.
-- **SC-006**: A transfer to an ISP's card or phone that Banxico has published
-  is confirmed with the same number of paid calls as a transfer to its CLABE.
+- **SC-006**: A transfer to an ISP's cuenta de cobro that Banxico has
+  published is confirmed with the same number of paid calls whether that
+  account is a CLABE, a card or a phone; the payer makes zero choices about
+  where to send the money.
 - **SC-007**: A clear receipt whose destination fits none of the ISP's
   accounts spends zero credits.
 - **SC-008**: An ISP with only a CLABE sees no change in its setup, and its

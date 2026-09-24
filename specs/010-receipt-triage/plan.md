@@ -130,13 +130,13 @@ the tasks with dated notes.
 | D15 | One pure `askBeforeCredit(extracted, accounts)` in the engine — `no_key` or `wrong_destination`: `/read` reports it, the receipt door throws `RECEIPT_INCOMPLETE` or `RECEIPT_WRONG_DESTINATION` on it before the provider call | research R5 |
 | D16 | The ask fires only on a *certain* reading — `legibility === "full"` on a picture, or a PDF's text — and `no_key` only when both keys are *missing*. Omitted legibility, `partial`, and a malformed clave go through | research R6 |
 | D17 | On the provider's `provide_tracking_key`, the row asks for the clave (`disputed_fields`, `REFERENCE_AMBIGUOUS`) and skips the provider on later slots until it has one | research R7 |
-| D18 | The ask reuses the refusal `Alert` and `TransferForm`: the sentences, focus on arrival, two buttons, the key block, the account choice, "No aparece en tu captura", the form first on a second ask in one visit | research R8 |
+| D18 | The ask reuses the refusal `Alert` and `TransferForm`: the sentences, focus on arrival, two buttons, the key block (reference first; no account choice since 2026-09-24), "No aparece en tu captura", the form first on a second ask in one visit | research R8 |
 | D19 | Bank hints are es-MX copy in the payer app, keyed by `Bank`, each with its source and date; an entry only from a real receipt or the bank's own documentation. Launch: Banorte | research R9 |
 | D20 | The capture guide is app-local and compact (re-planned 2026-09-24): one line on the transfer step; on the upload step a four-item checklist with "Ver ejemplo" opening, in the existing `Collapsible`, the inline-SVG drawing in token classes, the rules and the bank tips; after a reading the items show seen / not seen by icon + word, cross-faded; no other motion | research R10, spec D8 |
 | D21 | `extractions` gains `proof_key`, both references, the destination and two outcomes, so every count in FR-028 is one query | research R11 |
 | D22 | The lifecycle hands the engine the cuenta de cobro and the payment's registered accounts; the engine reads the file, ties the destination, names the tied account (else the cuenta de cobro) and reports `beneficiaryUsed`. On `valid`, Banxico's `cepDetails.beneficiaryAccount` — kept by the adapter — is tied too and outranks `beneficiaryUsed`; a whole account that fits none is `TRANSFER_CONTRADICTED` (amended and re-planned 2026-09-24) | research R12, R19 |
 | D23 | ~~While a payment's account is unknown, its retries keep the receipt door with the list~~ — **retired 2026-09-24** with the list door (R19) | research R12 |
-| D24 | The destination is tied by visible trailing digits against every form of each account — whole CLABE, its 11-digit account segment, card, phone. Fewer than three digits, or more than one fit, is *unknown*; only a clear reading that fits nothing is a mismatch | research R14 |
+| D24 | The destination is tied by its last visible digits — four, or three when only three show — against every form of each registered account, retired ones included (D30): whole CLABE, its 11-digit account segment, card, phone. The kind read from the label only orders the search. Fewer than three digits, or more than one fit, is *unknown*; only a clear reading that fits nothing is a mismatch (amended 2026-09-24) | research R14 |
 | D25 | The payment snapshots, at submission, `beneficiary` (the cuenta de cobro, or the account the draft reading tied) and `registered_accounts` (current and retired); attempts read the payment, never the business. Rows with neither keep today's fallback (simplified 2026-09-24) | research R15, R20 |
 | D26 | Card and phone are columns on `businesses` in the `clabe` area (owner only), masked like the CLABE — **their "CLABE stays required" half is replaced by D32** | research R16 |
 | D28 | `recentReading` rebuilds the reference (gate re-derived from the stored text), the destination and `passes` with the new rule, and also reuses `key_missing` and `wrong_destination` rows — or a reused reading silently drops the reference and the ask stops receipt 2 | research R18 (review 2026-09-24) |
@@ -167,9 +167,10 @@ Phase 1 (below the table).
 **Post-design re-check (after Phase 1).** Still PASS on all eight. Re-read on
 purpose: (II) references and destination digits are `text` and compared as
 strings, so `038195` and `38195` never merge. (III) the payer page receives
-the card and phone because they are public on the transfer step by design,
-like the CLABE; the panel shows them to other roles exactly as it shows the
-CLABE. (V) the adoption of Banxico's clave (D14) is scoped by the existing
+only the cuenta de cobro (`collectAccount`), public on the transfer step by
+design like the CLABE today; the ISP's other and retired accounts never leave
+the server; the panel shows them to other roles exactly as it shows the CLABE
+(re-checked 2026-09-24). (V) the adoption of Banxico's clave (D14) is scoped by the existing
 index, which is per business — one business's reference search can never
 collide with another's row.
 
@@ -187,7 +188,8 @@ specs/010-receipt-triage/
 ├── contracts/
 │   ├── engine.md        # facade types, the ask, tying, the comparison, the 422
 │   ├── payment-page.md  # link payload, /read, pay, status, errors, page behaviour and copy
-│   └── settings.md      # card and phone in Cuenta
+│   ├── review.md        # a payment held for the ISP's decision (D31)
+│   └── settings.md      # the three accounts and the cuenta de cobro in Cuenta
 ├── checklists/requirements.md
 └── tasks.md             # Phase 2 (/speckit-tasks)
 ```
@@ -213,6 +215,7 @@ apps/api/
 │   │       ├── ask.ts                          # + askBeforeCredit (pure)
 │   │       └── destination.ts                  # + tieDestination (pure)
 │   ├── direct-payments/
+│   │   ├── accounts.ts                         # + collectAccount, registeredAccounts (D29, D30, D32)
 │   │   └── validation.ts                       # ~ account from the row (D25); accepted needs a key; adoption and the no-clave guard (D14, FR-006); the 422 (D17); review hold (D31)
 │   └── routes/
 │       ├── direct-payments/
@@ -241,7 +244,7 @@ apps/pago/
 
 apps/admin/
 ├── src/features/settings/SettingsScreen.tsx    # ~ three accounts and the cuenta de cobro choice (D29)
-├── src/features/payments/…                     # ~ "En revisión" row: Aceptar / Rechazar (contracts/review.md)
+├── src/features/feed/…                         # ~ "En revisión" row: Aceptar / Rechazar (contracts/review.md)
 └── test/settings.test.tsx, payments test       # + scenarios
 
 tests/e2e/pago.spec.ts                          # + the guide at 360/768/1280, both themes

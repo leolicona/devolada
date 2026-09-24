@@ -3,7 +3,7 @@
 
 **Date**: 2026-09-24 · **Plan**: [plan.md](./plan.md) · **Research**: [research.md](./research.md)
 
-One additive migration, `0036_receipt_triage.sql`: `ADD COLUMN`s on four
+One additive migration, `0036_receipt_triage.sql`: `ADD COLUMN`s on three
 existing tables and one non-unique index, no new table, nothing dropped,
 renamed or rebuilt (re-planned 2026-09-24 for the rescoped Story 3). The PR
 preview applies it to the live dev database; every existing row reads NULL
@@ -60,7 +60,8 @@ Rules:
   carries **no** clave (never observed; FR-006 guard): `tracking_key` stays
   NULL, the occurrence is logged as unexpected, and the row confirms only if
   the provider's replay flag is `false` **and** the shared-reference lookup
-  finds no *confirmed* payment with the same five data; the flag `true` or a
+  finds no *confirmed* payment with the same five data — the same link
+  included (analyze 2026-09-24, I1); the flag `true` or a
   match → `invalid`, `TRANSFER_ALREADY_USED`; the flag unknown (`null`) →
   held, `review_reason = "no_clave"` (D31).
 - **A retired account**: a row whose `beneficiary` is a `retired` entry and

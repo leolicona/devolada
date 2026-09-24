@@ -2,7 +2,7 @@
 
 **Feature**: receipt-triage · **Decisions**: D31 (plan), spec FR-006,
 FR-020a · **Route**: `apps/api/src/routes/payments/{index,handler,schema}.ts`
-· **Screen**: the payments feed in `apps/admin`
+· **Screen**: the payments feed, `apps/admin/src/features/feed/`
 
 Two confirmations are held instead of settled: a transfer Banxico confirmed
 to an account the ISP had **removed** (FR-020a), and one found by reference

@@ -216,6 +216,11 @@ missing.
 
 ## R8 — The feedback, on the page
 
+> **Amended 2026-09-24 (R19; spec FR-005, FR-018).** The form never asks
+> which account and the message never names one; the key block leads with
+> the reference; the wrong-destination copy is the kind one in
+> contracts/payment-page.md. The rest below stands.
+
 **Found.** The step "Envía tu comprobante" already shows a warning `Alert`
 (icon + text) above the upload control for the two two-eyes refusals, from
 `/read`'s answer, before any payment exists. `TransferForm` already pre-fills

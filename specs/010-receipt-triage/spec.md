@@ -4,8 +4,8 @@
 
 **Created**: 2026-09-23 · **Rescoped**: 2026-09-24
 
-**Status**: Draft — scope settled by the product creator on 2026-09-24;
-ready for `/speckit-plan`
+**Status**: Planned — spec, plan and tasks aligned on 2026-09-24
+(`/speckit-analyze` findings folded in); ready for `/speckit-implement`
 
 **Input**: User description: "1. Previous guide on how to upload a payment
 receipt. 2. Validate transfer receipts by payment reference number. Mandatory
@@ -42,7 +42,8 @@ receipt."
   D6 below and is the part of this spec most worth the creator's review.
 - After `/speckit-analyze` (2026-09-24), the creator decided the two open
   points: the message also names a missing account ("ni a cuál cuenta
-  transferiste", finding I1), and the capture guide labels the reference
+  transferiste", finding I1 — superseded the same day: with one cuenta de
+  cobro the form never asks for the account, FR-005, FR-018), and the capture guide labels the reference
   "número de referencia (Referencia numérica)", the words most banks print
   (finding T2). Findings G3 and I4 were folded in below with this date.
 - Q: When a payment has both a clave and a reference, which one travels to
@@ -790,8 +791,10 @@ is one tap from the start of the step. Needs nothing from the other stories.
   where to send the money.
 - **SC-007**: A clear receipt whose destination fits none of the ISP's
   accounts spends zero credits.
-- **SC-008**: An ISP with only a CLABE sees no change in its setup, and its
-  payers see no change on the transfer step.
+- **SC-008**: An ISP with only a CLABE needs to do nothing: its CLABE is its
+  cuenta de cobro, its channel stays configured, and its payers see no change
+  on the transfer step (amended 2026-09-24: the Cuenta section itself gains
+  the card, the phone and the choice).
 - **SC-009**: Every entry on the bank-hint list names the real receipt or the
   bank's own document it was verified against. At launch the list holds
   Banorte (receipt 1) and every bank whose detail screen has been seen that

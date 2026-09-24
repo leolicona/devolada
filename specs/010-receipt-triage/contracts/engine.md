@@ -1,140 +1,96 @@
 # Contract: the validation engine facade
 
-**Feature**: receipt-triage · **File**: `apps/api/src/consta/index.ts`
+**Feature**: receipt-triage · **Files**: `apps/api/src/consta/index.ts`
 (types), `consta/validate.ts`, `consta/extract.ts`,
-`consta/extraction/{reader,gate,stop,destination}.ts`
+`consta/extraction/{reader,gate,compare,ask}.ts`, `consta/provider/apicep.ts`
+(one comment)
 
-The engine is a component of `apps/api`, not a surface (constitution III): this
-contract is between the engine and its two callers in the same Worker — the
-payment lifecycle (`direct-payments/validation.ts`) and the `/read` route —
-plus the top-up lifecycle, which does not change. Additions only; nothing is
-renamed and no field changes meaning.
+The engine is a component of `apps/api`, not a surface (constitution III):
+this contract is between the engine and its callers in the same Worker — the
+payment lifecycle (`direct-payments/validation.ts`), the `/read` route, and the
+top-up lifecycle (`credit/topups.ts`), which changes only as the Edge Cases
+say. Additions only; nothing is renamed and no field changes meaning.
 
-## `ConstaBeneficiary` — widened (D1)
-
-```ts
-export type ConstaBeneficiary =
-  | { bank: string; clabe: string; name?: string }
-  | { bank: string; cardNumber: string; name?: string }   // 16 digits
-  | { bank: string; phoneNumber: string; name?: string }; // 10 digits
-```
-
-Exactly the shapes `beneficiarySchema` already validates
-(`consta/request.ts`) and the adapter already passes through unchanged. The
-same-institution guard (validation.spec.md D17) applies to all three: a
-transfer-door request whose `senderBank` equals `beneficiary.bank` is refused
-before any credit, as today.
-
-## `ConstaRequest` receipt variant — a list is allowed (D9)
+## `ConstaRequest` transfer variant — a key, not a clave (D1, D9)
 
 ```ts
-| {
-    receipt: { proofKey: string };
-    /* exactly one of the two */
-    beneficiary?: ConstaBeneficiary;
-    potentialBeneficiaries?: ConstaBeneficiary[]; // ≥ 2
-    providerOcr?: true; // unchanged: the legacy minute-two cross only
-  }
-```
-
-Behaviour with `potentialBeneficiaries`:
-
-1. The engine **reads the file** exactly as with one beneficiary (the
-   `readable` test gains "or `potentialBeneficiaries`").
-2. It runs the stop (below) against the list.
-3. It **narrows** by the reading's destination (`matchDestination`, D11): one
-   match → the provider call carries `beneficiary` (that one); no single match
-   → the provider call carries `potentialBeneficiaries` (the list).
-4. The verdict reports what was sent in `beneficiaryUsed`.
-
-The transfer variant still takes exactly one `beneficiary`.
-
-## `ConstaVerdict` — one field added
-
-```ts
-/* receipt-triage D9: the identifier the provider call named. Null when
-   the call carried the candidate list; absent on the transfer door, whose
-   caller already chose. The lifecycle stores it on the payment (D12). */
-beneficiaryUsed?: ConstaBeneficiary | null;
-/* receipt-triage D14: the sending bank the engine established for a
-   Spin reading from the origin account's prefix — "SPIN BY OXXO" or
-   "STP" — or null when it could not. Absent for any other bank. The
-   lifecycle accepts machine data with a Spin bank only when this is
-   non-null. */
-spinInstitution?: "SPIN BY OXXO" | "STP" | null;
-```
-
-## `ConstaReading` (`extract`) — the stop and the new fields
-
-`extract(input)` gains an optional list:
-
-```ts
-extract(input: {
-  proofKey: string;
-  /* receipt-triage D6: the business's receiving identifiers, so the stop
-     can judge the destination. Omitted → the destination is never a
-     mismatch (the top-up path, and any caller that does not know). */
-  receivingAccounts?: ConstaBeneficiary[];
-}): Promise<ConstaReading>;
-```
-
-and the reading gains:
-
-```ts
-destination: { kind: "clabe" | "card" | "phone" | "account" | null; digits: string | null };
-operation: "spei" | "same_institution" | "cash" | null;
-/* receipt-triage D6: the one rule, reported. Null when the capture may
-   buy a paid call. */
-stop: null | {
-  reason: "key_missing" | "not_spei" | "wrong_destination";
-  /* every field Banxico needs that the capture does not show */
-  fields: ("trackingKey" | "amount" | "date" | "senderBank")[];
+transfer: {
+  date: string;
+  amountCents: number;
+  senderBank: string;
+  /* receipt-triage D1: at least one of the two; both when both exist */
+  trackingKey?: string;
+  referenceNumber?: string;
+  beneficiary: ConstaBeneficiary;
 };
 ```
 
-`extract` never throws on a stop: it reports it, and records the reading with
-the stop's outcome (`key_missing`, `not_spei`, `wrong_destination`).
+The request guard already enforces "at least one" (`transferSchema.refine`)
+and refuses a request with neither as `REQUEST_REJECTED` before any credit.
+The receipt variant is unchanged.
 
-## New engine failures (receipt door only)
+## `ConstaVerdict` — the accepted data carries both keys (D11)
 
-| Code | Thrown when | `retryable` | Billed |
+```ts
+accepted?: {
+  trackingKey: string | null;
+  referenceNumber: string | null; // at least one of the two is set
+  senderBank: string;
+  amountCents: number;
+  date: string | null;
+} | null;
+disputedFields?: ("trackingKey" | "referenceNumber" | "amount" | "date")[];
+```
+
+`ourReading` (the payload the lifecycle stores) gains `referenceNumber`.
+
+## `ConstaReading` (`extract`) — the reference and the ask (D13)
+
+```ts
+referenceNumber: string | null;                 // only when the gate says ok
+gate: {
+  trackingKey: "ok" | "malformed" | "missing";
+  referenceNumber: "ok" | "malformed" | "missing"; // + new
+  senderBank: "ok" | "unknown" | "missing";
+  amount: "ok" | "malformed" | "missing";
+};
+/* receipt-triage D13: the one rule, reported. Null when the capture may
+   go on to the paid call. */
+ask: null | { fields: ("key" | "amount" | "date" | "senderBank")[] };
+```
+
+`extract` never throws on an ask: it reports it, and records the reading with
+outcome `key_missing`.
+
+## The receipt door enforces the ask
+
+Before the provider call, after reading (or reusing the draft's reading,
+two-eyes D14): when `askBeforeCredit(extracted)` is not null, the engine
+records the reading (`key_missing`) and throws
+
+| Code | `retryable` | Billed | `extra` |
 | --- | --- | --- | --- |
-| `RECEIPT_INCOMPLETE` | `stop.reason === "key_missing"` — revived; declared since proof-extraction D4, thrown by no door since two-eyes D3 | `false` | no |
-| `RECEIPT_NOT_SPEI` | `stop.reason === "not_spei"` | `false` | no |
-| `RECEIPT_WRONG_DESTINATION` | `stop.reason === "wrong_destination"` | `false` | no |
+| `RECEIPT_INCOMPLETE` — revived; declared since proof-extraction D4, thrown by no door since two-eyes D3 | `false` | no | `reading` (the payload a human can be shown) and `missingFields` = `ask.fields` |
 
-Each carries `extra.reading` (the payload a human can be shown), as
-`RECEIPT_UNREADABLE` does. The lifecycle's catch is unchanged: every engine
-failure is `retryLater(code)` (consta-api-merge D6); `retryable: false` is
-still carried and not acted on (`consta/failure.ts`).
+The lifecycle's catch is unchanged: every engine failure is
+`retryLater(code)` (consta-api-merge D6).
 
-## The stop — `stopBeforeCredit(extracted, receivingAccounts)`
+## The comparison (`compareReadings`, pure) — D11
 
-Pure; `consta/extraction/stop.ts`. Order and definitions in
-[data-model.md](../data-model.md#stop-verdict-no-storage-beyond-the-outcome).
-"Clear" (D7): `legibility === "full"` on a picture, or a text reading of a
-PDF; a picture with `legibility` null, `partial` or `none` is never stopped
-by this function (`none` keeps its own two-eyes refusal).
+- The **key** of a comparison is the clave when either reading found one; the
+  reference otherwise.
+- Key = reference: equal (as text) → `agreed`; different → `disputed` with
+  `referenceNumber`; one side missing → `blind` on that side. The shape rules
+  are never consulted for a reference; a disputed reference is asked of the
+  payer.
+- Key = clave: exactly today's rules. The reference, when read, rides along in
+  `accepted` from whichever side read it (ours first).
 
-## Destination matching — `matchDestination(destination, accounts)`
+## The provider's "more than one" answer — D15
 
-Pure; `consta/extraction/destination.ts`. Returns `{ match: account } |
-"none" | "unknown"`.
-
-- Visible digits: `destination.digits` with everything but digits removed.
-  Fewer than 3 → `"unknown"`.
-- Forms of each account: a CLABE's 18 digits **and** its 11-digit account
-  segment (positions 7–17); a card's 16; a phone's 10.
-- The visible digits must **end** a form to match it. Exactly one account
-  matched → `{ match }`; more than one → `"unknown"`; none → `"none"`.
-- `destination.kind` narrows which forms are tried when it is known (`card`
-  tries cards only, `account` tries CLABE account segments only); null tries
-  all.
-
-## Spin institution — `spinInstitution(reading)`
-
-Pure. For a reading whose resolved sender bank is `SPIN BY OXXO`:
-`bankForClabe(originAccount)` when the origin shows at least its first three
-digits and they are `728` or `646`; otherwise `null`. For any other bank —
-`STP` included, which carries many fintechs besides Spin's older accounts —
-the field is absent and nothing changes (SC-010).
+Unchanged in the engine: a 422 on the transfer door throws `REQUEST_REJECTED`
+with `retryable: false` and `hint: "provide_tracking_key"`. What changes is
+the caller (see [payment-page.md](./payment-page.md) and the data model): the
+lifecycle reads the hint, asks for the clave, and stops calling. The comment
+in `provider/apicep.ts` that says Devolada "cannot hit" this answer is
+rewritten: it can now.

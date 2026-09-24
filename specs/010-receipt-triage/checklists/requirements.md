@@ -1,7 +1,7 @@
 # Specification Quality Checklist: receipt-triage
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-09-23
+**Created**: 2026-09-23 · **Re-validated**: 2026-09-24
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -32,21 +32,19 @@
 ## Notes
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`
-- First pass, 2026-09-23: the six-item draft failed "No [NEEDS
-  CLARIFICATION] markers remain" with three open questions (Q1–Q3).
-- Second pass, 2026-09-23, after the product creator narrowed the scope to
-  four items (spec Clarifications): Q1–Q3 belonged to items now out of scope
-  and are withdrawn; every item passes. One fix in the same pass: a file path
-  in Dependencies was replaced by what it names.
-- The provider is named (apiCEP) only in Assumptions, Dependencies and D1, as
-  in two-eyes-receipt: its documented identifier types are what makes Story 3
-  possible, and the plan's research must measure them.
-- Three things the plan's research MUST measure before design, all named in
-  Assumptions: apiCEP with a card or phone identifier (and whether its answer
-  names the matching candidate), the institution Banxico records for Spin's
-  SPEI transfers, and whether the reader can read a receipt's destination and
-  tell a Spin SPEI transfer from a movement inside Spin.
-- Re-validated 2026-09-23 after `/speckit-plan` amended the spec (SC-003, the
-  bank-hint and Spin assumptions — research R8, R9: production has no traffic
-  yet, and Spin is a SPEI participant of its own with older accounts on STP).
-  Every item still passes; no marker introduced.
+- 2026-09-23, first pass: the six-item draft failed only on three open
+  questions (Q1–Q3). Second pass, after the scope was narrowed to four
+  items: every item passed.
+- 2026-09-24, third pass, after the creator narrowed the scope to three items
+  (capture guide, referencia numérica, missing-data feedback — spec
+  Clarifications): every item passes. The creator asked this spec to define
+  how the feedback works; that design is D5–D6, written as decisions rather
+  than as a `[NEEDS CLARIFICATION]` marker, and flagged in Clarifications as
+  the part most worth the creator's review.
+- The provider is named (apiCEP) only in D1, Assumptions and Dependencies, as
+  in two-eyes-receipt: its documented reference search is what makes Story 1
+  possible, and it is unmeasured.
+- What the implementation MUST measure first (quickstart Step 0): the reader
+  on receipts 1 and 2 with the new prompt — both keys null on receipt 1, the
+  reference `038195` with its leading zero on receipt 2, and no folio taken
+  for a reference.

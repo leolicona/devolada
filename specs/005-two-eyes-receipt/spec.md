@@ -37,11 +37,12 @@
 ### Amended 2026-09-23
 
 - D2 and FR-005 are narrowed by `receipt-triage D4` (specs/010-receipt-triage):
-  a receipt the reader calls fully legible, a SPEI receipt, that simply does
-  not print a clave de rastreo is stopped before the first paid call and the
-  payer is asked. "Missing fields go to the provider" still holds for a
-  partly legible receipt, a malformed clave, and a picture whose legibility
-  the model omitted (receipt-triage D7, D8).
+  a receipt the reader calls fully legible, a SPEI receipt, that prints
+  neither a clave de rastreo nor a referencia numérica is stopped before the
+  first paid call and the payer is asked. "Missing fields go to the provider"
+  still holds for a partly legible receipt, a malformed clave, and a picture
+  whose legibility the model omitted (receipt-triage D14, amended 2026-09-24
+  when the reference joined the scope).
 
 ## Decisions taken in session (2026-09-17)
 

@@ -1,308 +1,265 @@
 # Research: receipt-triage
 
-**Date**: 2026-09-23 · **Spec**: [spec.md](./spec.md) · **Plan**: [plan.md](./plan.md)
+**Date**: 2026-09-23, rescoped 2026-09-24 · **Spec**: [spec.md](./spec.md) ·
+**Plan**: [plan.md](./plan.md)
 
 Phase 0. Each entry: what had to be known, what was found and where, the
 decision, and what else was weighed. Decisions are numbered in the plan
-(`receipt-triage D6`–`D19`); the spec holds D1–D5.
+(`receipt-triage D9`–`D19`); the spec holds D1–D8. This file replaces the
+research of 2026-09-23, whose card, phone and Spin entries left the scope with
+the spec (Clarifications, 2026-09-24); no code cites their numbers.
 
 ## What was measured, and what could not be
 
 - **Production has no traffic yet.** Measured 2026-09-23 on
   `devolada-db-prod`: zero rows in `payments`, zero in `extractions`. The dev
-  database holds two confirmed payments, both `NUBANK`. So no rate in this
-  feature (how often the clave is missing, which banks send the summary
-  screen) can be read from our records today; FR-023 exists so that it can be
-  from the first real week.
+  database holds two confirmed payments, both `NUBANK`. So how often a capture
+  lacks both keys cannot be read from our records today; FR-022 makes it
+  countable from the first real week.
 - **The provider's documentation is not reachable from the build
-  environment** (`apicep.cloud` and `www.apicep.cloud` are blocked by the
-  egress proxy, 2026-09-23). What is known of the card, phone and candidate
-  modes comes from the text the product creator pasted in session and from a
-  search-engine summary of the same page. Nothing in the design below depends
-  on a detail only that page could settle (R3, R4).
-- **Spin by OXXO is a SPEI participant in its own right.** Public sources
-  (FEMSA and El Universal on the authorisation, Milenio, STP's own page;
-  2026-09-23) say Spin was authorised by Banxico for a direct connection to
-  SPEI and appears as its own institution (code 90728), while STP is 90646;
-  customers keep sending from their STP CLABE until they are assigned a Spin
-  one. So a Spin transfer may be recorded under either institution, and the
-  one that applies is the one the payer's own account belongs to (R8).
+  environment** (`apicep.cloud`, `www.apicep.cloud`: blocked by the egress
+  proxy, 2026-09-23). What is known of the reference search comes from the
+  text the product creator pasted in session: "`referenceNumber` — Payment
+  reference number. Required if `trackingKey` is not sent", with the example
+  `"referenceNumber": "0170126"`. The design below needs nothing only that page
+  could settle (R4, R6).
+- **Bank help pages are not reachable either** (`www.bbva.mx` blocked,
+  2026-09-23), and third-party round-ups disagree with each other. Where a
+  bank's app shows its clave is known for sure only from receipt 1 (Banorte,
+  "Ver más detalles").
 
-## R1 — Where the stop-before-credit rule lives
+## R1 — The engine already speaks reference; the product does not
 
-**Question.** The spec stops three kinds of receipt before any paid call: a
-clear capture with no clave (FR-001), a Spin movement that is not SPEI
-(FR-020), and a clear capture whose destination matches none of the ISP's
-identifiers (FR-016). The page must show them, and the server must not spend
-on them if a client skips the page.
+**Found.**
+
+- The request guard accepts it: `transferSchema` takes `trackingKey` and
+  `referenceNumber`, both optional, with `.refine(t => t.trackingKey ||
+  t.referenceNumber)` (`consta/request.ts`); the reference is `^\d{1,20}$`
+  because the provider's maximum is undocumented.
+- The adapter sends it (`provider/apicep.ts`, `requestBody`), records it on
+  the billing log (`validations.reference_number`), and parses the one the
+  provider's picture reading returns (`reading.referenceNumber`).
+- The provider's 422 is already classified: `REQUEST_REJECTED`, not
+  retryable, `hint: "provide_tracking_key"` — "Devolada cannot hit it (it
+  always sends the key), a future integrator searching by reference alone
+  can." This feature is that integrator.
+
+What stops the reference today, in order: the facade type
+(`ConstaRequest.transfer.trackingKey: string`), the reader (no field for
+it), the gate, the comparison (`ProviderReading` drops the provider's
+reference; `accepted.trackingKey` is required), the payment row (no column),
+the lifecycle's `accepted` test and its transfer request (`trackingKey:
+payment.trackingKey ?? ""`), the pay contract (`transfer.trackingKey`
+required) and the page's form.
+
+**Decision (D9).** The reference is threaded through every one of those
+layers as an optional sibling of the clave, with one rule everywhere: **a key
+is a clave or a reference; the reference travels when there is no clave; both
+travel when both exist.** Nothing about the clave's own path changes.
+
+## R2 — What counts as a reference
+
+**Found.** SPEI's referencia numérica is a number of up to seven digits,
+entered by the sender (bank apps ask for "Referencia numérica — hasta 7
+dígitos"); the provider's own example carries seven (`0170126`). Receipt 2
+prints six ("038195", a leading zero). Receipt 3 — out of scope, but a good
+warning — prints a ten-digit "Folio de operación" (0082918812), exactly the
+kind of number a reader might mistake for a reference.
+
+**Decision (D10).** The reader asks for the field labelled "Referencia" or
+"Referencia numérica" and is told, in the prompt, not to take a folio, an
+authorisation number, a clave or an account for it. The gate accepts a
+reference only as `^\d{1,7}$`, as printed — leading zeros kept, never parsed
+as a number — and reports `ok | malformed | missing` like the clave. The
+engine's own guard stays at 20 digits (it serves any caller); the product is
+stricter.
+
+**Alternatives.** Accept up to 20 like the engine — rejected: it would send
+folios to Banxico as references, a paid `not_found` each. Normalise leading
+zeros away — rejected: the reference is text on the receipt; what Banxico
+stores is what the sender typed.
+
+## R3 — The comparison with two keys
+
+**Found.** `compareReadings` (`consta/extraction/compare.ts`) decides agreed,
+disputed or blind on the clave and the amount, uses the bank's clave shape as
+tiebreaker, and returns `accepted: { trackingKey, senderBank, amountCents,
+date }`. It is pure and already receives the provider's reading.
+
+**Decision (D11).** The comparison's key is **the clave when either reading
+found one, the reference otherwise**. When the key is the reference: equal
+references (as text) agree; different ones dispute, and the disputed field is
+`referenceNumber`; one side with none is blind. The shape rules have no
+opinion on a reference (they are learned from claves) and never break a
+reference tie — a disputed reference goes to the payer. `accepted` carries
+`trackingKey | null` and `referenceNumber | null`, at least one set.
+`DisputedField` gains `referenceNumber`.
+
+**Alternatives.** Compare both keys whenever both exist — rejected: a clave
+already identifies the transfer, and a second axis of dispute adds questions
+without adding certainty.
+
+## R4 — Banxico's clave for every confirmation
+
+**Found.** When the check confirms, the lifecycle adopts the CEP's clave onto
+the row only in some cases: `adoptKey = cep.trackingKey && (!payment.trackingKey
+? payment.proofMode === "receipt" : …)` (`direct-payments/validation.ts`). A
+typed row with no clave — possible for the first time with this feature — would
+confirm with `tracking_key` NULL, outside the unique index
+`payments_business_tracking_idx` (direct-payment D8), so the same transfer
+could pay twice. The index's own race handling (`isUniqueViolation` →
+`invalid`, already used) is what makes adoption safe.
+
+**Decision (D12).** Adoption also covers a row that has a reference and no
+clave, whatever its `proof_mode`: the CEP's clave is written, and the unique
+index refuses the second claimant exactly as it does today. This is FR-006,
+and it is not optional: without it, the reference would reopen the double
+payment direct-payment D8 closed.
+
+## R5 — Where the stop lives
 
 **Found.** Two-eyes-receipt already has this shape for its two refusals:
 `/read` *reports* `isReceipt` and `legibility` and "cannot reject anybody";
-the page refuses; and the engine's receipt door enforces the same rule
-server-side, throwing `RECEIPT_UNREADABLE` before the provider call
-(`consta/validate.ts`, the `!reading.isReceipt || reading.legibility ===
-"none"` branch). The engine also still declares `RECEIPT_INCOMPLETE` — "No
-door throws this since two-eyes-receipt D3 … the code stays declared because
-callers still switch on it" (`consta/failure.ts`).
+the page refuses; and the engine's receipt door enforces the same rule,
+throwing `RECEIPT_UNREADABLE` before the provider call. The engine still
+declares `RECEIPT_INCOMPLETE` — "no door throws this since two-eyes-receipt
+D3 … the code stays declared because callers still switch on it"
+(`consta/failure.ts`).
 
-**Decision (D6).** One function in the engine,
-`stopBeforeCredit(extracted, receivingAccounts)`, returns `null` or
-`{ reason, fields }`, with reason `key_missing | not_spei |
-wrong_destination`. Both callers use it: `extract()` puts it on the reading
-the `/read` route returns (the page renders it), and the receipt door throws
-on it before the provider call — `RECEIPT_INCOMPLETE` revived for
-`key_missing`, two new codes `RECEIPT_NOT_SPEI` and
-`RECEIPT_WRONG_DESTINATION`. The lifecycle's catch already turns any engine
-failure into `retryLater(code)`; nothing is billed on these, and the row
-carries the code the page can map.
+**Decision (D13).** One pure function, `askBeforeCredit(extracted)`, returns
+`null` or `{ fields }`, where `fields` lists `key`, `amount`, `date`,
+`senderBank` — every field the typing form will need that the capture did not
+show, the key first. Both callers use it: `extract()` puts it on the reading
+`/read` returns (the page renders it), and the receipt door throws
+`RECEIPT_INCOMPLETE` on it before the provider call, carrying the fields.
+Nothing is billed; the lifecycle's catch already turns an engine failure into
+`retryLater(code)`, and the draft's reading is reused on each slot
+(two-eyes D14), so a client that skipped the page costs Workers AI calls at
+most, never credits.
 
-**Alternatives.** Page-only (as the two-eyes refusal *messages* are) — rejected:
-FR-001 says "MUST NOT reach a paid call", and a direct caller of the pay route
-would spend. Server-only, the page learning it from the status poll —
-rejected: the payer would see "verificando" and then an ask, instead of the
-ask at once (SC-001 says "within the same interaction").
+**Alternatives.** Page-only — rejected: FR-008 says "MUST NOT reach a paid
+call" and a direct caller of the pay route would spend. Server-only, learned
+from the status poll — rejected: the payer would see "verificando" and then
+an ask, instead of the ask at once (SC-001).
 
-## R2 — What "clear" and "missing" mean for the key stop
+## R6 — "Clear", "missing" and "no key"
 
 **Found.** The reader's `legibility` is `full | partial | none | null`; null
-means the model omitted it, or the reading came from a PDF's text, and "both
-read as `full`, because the bias is to let files through" (`reader.ts`). The
-gate's `trackingKey` is `ok | malformed | missing`. A `malformed` clave is
-something the model read that failed the shape check — the two-line wrap, a
-27-character misread — and the provider may read it right.
+means the model omitted it, or the reading is a PDF's text, and both "read as
+`full`, because the bias is to let files through" (`reader.ts`). The gate
+says `ok | malformed | missing` per field.
 
-**Decision (D7).** The key stop fires only when **the gate says `missing`**
-and the reading is **certain**: `legibility === "full"` on a picture, or any
-text reading of a PDF (a PDF's text has no blur to hide a clave under). A
-picture whose legibility the model omitted goes through, as today: the stop
-flips two-eyes D2's bias, so it may only fire where the verdict is explicit.
+**Decision (D14).** The ask fires only when both keys are **missing** — not
+malformed — and the reading is **certain**: `legibility === "full"` on a
+picture, or any text reading of a PDF. A picture whose legibility the model
+omitted goes through, as today: the stop flips two-eyes D2's bias, so it may
+only fire where the verdict is explicit. A malformed clave is a reading the
+provider may fix for the same credit, so it never stops.
 
-**Decision (D8).** `malformed` never stops. It is a reading, not an absence,
-and the provider's own reading is the cheap way to fix it (two-eyes D5 already
-keeps a malformed clave from arguing with the provider's).
+## R7 — A reference that matches more than one transfer
 
-**Alternatives.** Treat null as full (the reader's own convention) — rejected
-for this one rule: a convention chosen to *let files through* cannot be reused
-to *stop* them. Stop on `malformed` too — rejected: it would send the payer to
-type a clave the provider could have read for the same credit.
+**Found.** On the transfer door, the provider's 422 becomes `REQUEST_REJECTED`
+with `hint: "provide_tracking_key"`; the lifecycle, like for every engine
+failure, calls `retryLater(code)` — so today the next slot would send the same
+request, and a rejected request bills like any call (measured 2026-08-19 on
+the same-institution 400). Nothing asks the payer.
 
-## R3 — Card and phone at the provider, and who picks the identifier
+**Decision (D15).** On that hint the lifecycle records the ask — the
+payment's `disputed_fields` becomes `["trackingKey"]` and its `last_error`
+`REFERENCE_AMBIGUOUS` — and every later slot of that row **skips the
+provider** while the row has no clave, riding the schedule to an honest
+expiry unless the payer answers. The payer's answer is a correction like any
+other (two-eyes D18 supersede) and takes the transfer door with the clave.
+`REFERENCE_AMBIGUOUS` joins `publicPaymentError`, so the page can say why it
+asks.
 
-**Found.** The engine already accepts every shape the provider documents:
-`beneficiarySchema` takes exactly one of `clabe` (18), `phoneNumber` (10),
-`cardNumber` (16), and the receipt door takes `potentialBeneficiaries`
-(`consta/request.ts`); the adapter passes both through unchanged
-(`provider/apicep.ts`, `requestBody`). The transfer door takes exactly one
-beneficiary. The same-institution guard (`senderBank !== beneficiary.bank`,
-validation.spec.md D17) applies to any identifier. Two gaps: (1) our reader
-only runs on the receipt door when a single `beneficiary` is given (`readable
-= … Boolean(body.beneficiary) …`), so a candidate list today silences our
-reading; (2) whether the provider's answer names the matching candidate is
-**unknown** (see "What was measured") — `cepDetails` carries `receiverBank` and
-`beneficiaryName`, never an account.
+**Alternatives.** Retry with the image door — rejected: the provider's
+picture reading would search by the same reference. Stop the row as
+`invalid` — rejected: nothing is wrong with the payment; one field is
+missing.
 
-**Decision (D9).** The lifecycle hands the engine the ISP's identifiers:
-`beneficiary` when there is one, `potentialBeneficiaries` when there are more.
-The engine reads the file in both cases (gap 1 closed), narrows the list to
-one identifier by the reading's destination (R5), sends `beneficiary` when it
-narrowed and `potentialBeneficiaries` when it could not, and returns on the
-verdict the identifier it used (`beneficiaryUsed`, null when it sent the
-list). The lifecycle stores it on the payment.
+## R8 — The feedback, on the page
 
-**Decision (D10).** An ISP with more than one identifier and a payment whose
-identifier is still unknown **keeps the receipt door** on every attempt, with
-the candidate list — exactly as a missing date keeps it (two-eyes plan D20).
-Accepted data is only "accepted" for the transfer door once the identifier is
-known. This removes the dependency on the provider naming the candidate: the
-design never needs it.
+**Found.** The step "Envía tu comprobante" already shows a warning `Alert`
+(icon + text) above the upload control for the two two-eyes refusals, from
+`/read`'s answer, before any payment exists. `TransferForm` already pre-fills
+from a draft and leaves a field empty when the draft has no value. The later
+asks already name the disputed field (`disputedSet`), with per-field
+sentences.
 
-**Alternatives.** A lifecycle-side match before calling the engine — rejected:
-the reading is the engine's (D14 reuse), and matching outside it would call
-the reader twice or move the reader's output across the facade. Trying the
-identifiers one after another on the transfer door — rejected by D2 of the
-spec: a credit each, to learn nothing.
+**Decision (D16).** The ask reuses that `Alert`, in the same place, and the
+same `TransferForm`:
 
-## R4 — The manual door with more than one identifier
+- the `Alert` carries three sentences built from `ask.fields` (key first,
+  then the others in form order, then the hint), receives focus when it
+  appears, and is announced;
+- two buttons below it: "Subir otra captura" (focuses the picker) and
+  "Escribir los datos" (opens the form);
+- the form gains a key block — "Clave de rastreo" and "Número de referencia",
+  with "Escribe al menos uno." — and, under each field the capture lacked,
+  the text "No aparece en tu captura";
+- the count of keyless readings in one visit is page state; at two, the form
+  renders first (a reload resets it, costing at most one more upload, never a
+  credit — the server still stops).
 
-**Found.** The manual door's `transfer` carries clave, bank, date and amount;
-the beneficiary is server-side ("the client never sends its own money",
-direct-payment D1). A typed row always takes the transfer door (two-eyes
-FR-015), which needs one beneficiary.
-
-**Decision.** `transfer` gains an optional `receivingAccount: "clabe" | "card"
-| "phone"`, required by the server when the link offers more than one
-identifier (a `VALIDATION_ERROR` otherwise) and ignored when it offers one. It
-names *which of the ISP's own identifiers*; the number still comes from the
-server, so the rule of direct-payment D1 holds. The page shows the choice
-masked (last four digits).
-
-## R5 — Reading the destination and matching it
-
-**Found.** The four receipts print the destination four ways: "CLABE
-Internet.sis ****8195" (receipt 1), "Bbva Mexico ***195" (receipt 2),
-"internet NETSIS •3819 Cuenta" (receipt 3 — the account number, not the
-CLABE), "CUENTA/TARJETA DE ABONO ****3819" (receipt 4). A CLABE is
-institution (3) + plaza (3) + account (11) + check digit (1); the ISP's CLABE
-…8195 carries its account …3819 in positions 7–17 — which is why receipt 3's
-"•3819" is the same account.
-
-**Decision (D11).** The reader gains `destino: { tipo: "clabe" | "tarjeta" |
-"celular" | "cuenta" | null, digitos: "<the digits it can see, masks
-removed>" }`. Matching is a pure function over **visible trailing digits**
-against every form of each identifier: the whole CLABE, the CLABE's 11-digit
-account segment, the card, the phone. Fewer than three visible digits is
-*unknown*, never a mismatch (FR-016: masked digits are not a mismatch). A
-destination is a *mismatch* only when the reading is clear (D7's
-definition), at least three digits are visible, and they end none of the
-forms. A *match* on exactly one identifier narrows (D9); a match on more than
-one — possible with three digits — is unknown.
-
-**Alternatives.** Match on the destination bank name — rejected: receipts
-print it a dozen ways ("BBVA MEXICO", "Bbva Mexico") and it cannot tell a
-card from a CLABE at the same bank. Require four digits — rejected: receipt 2
-shows three.
-
-## R6 — What the payment remembers
-
-**Found.** Today the beneficiary is rebuilt from the business on every
-attempt (`direct-payments/validation.ts`, `const beneficiary = { bank:
-business.speiBank, clabe: business.speiClabe, … }`), so a CLABE change today
-already moves in-flight payments — the case FR-017 now forbids for every
-identifier.
-
-**Decision (D12).** Two additive JSON columns on `payments`:
-`beneficiary_candidates` (the ISP's identifiers at submission) and
-`beneficiary` (the one the money went to, once known — at submission when the
-ISP has one identifier or the payer chose; from the engine's `beneficiaryUsed`
-otherwise). Attempts read the payment, never the business. A row with neither
-— every row born before this feature — keeps today's fallback to the
-business's CLABE, so nothing in flight changes (FR-022).
-
-**Alternatives.** A `receiving_accounts` table with ids — rejected for now:
-one card and one phone per business (spec Assumptions) fit in columns, and a
-snapshot must not follow an edit anyway.
-
-## R7 — The card and the phone in the ISP's setup
-
-**Found.** The CLABE lives on `businesses` (`spei_clabe`, `spei_bank`), is
-edited in Cuenta (`apps/admin/src/features/settings/SettingsScreen.tsx`)
-through `PATCH /settings`, and belongs to the `clabe` area, which only the
-owner holds (`auth/role-matrix.ts`, business-and-memberships D3); roles that
-cannot update settings read it masked to the last four. `bankForClabe`
-pre-selects the bank from the CLABE's prefix.
-
-**Decision (D13).** Four nullable columns on `businesses`: `spei_card`,
-`spei_card_bank`, `spei_phone`, `spei_phone_bank`. They belong to the `clabe`
-area (owner only) and are masked like the CLABE. Validation: the card is 16
-digits and passes the Luhn check; the phone is 10 digits; each number travels
-with its bank (both or neither); the bank is from the provider's vocabulary.
-The CLABE stays required: `configured` keeps its meaning, so a business with
-only a card is not "configured" (spec Assumptions).
-
-## R8 — Spin: which institution, and which movements
-
-**Found.** As measured above, Spin is institution 90728 (`SPIN BY OXXO` in the provider's
-vocabulary), and accounts not yet migrated send from STP (90646, `STP`).
-`bankForClabe` already maps both prefixes (`728`, `646`). The reader names
-the sending bank from the vocabulary, so a Spin receipt reads as `SPIN BY
-OXXO` whatever account it came from. The provider answers a wrong sending
-bank with a faceless `not_found` (validation.spec.md D12, measured
-2026-08-19).
-
-**Decision (D14).** The reader gains `cuentaOrigen` — the origin account's
-digits as printed, leading digits included when visible. For a Spin reading,
-the institution is **established** only when the origin shows a full CLABE
-prefix: `bankForClabe` gives `SPIN BY OXXO` (728) or `STP` (646), and that is
-the bank the accepted data carries. Otherwise it is **not established**: the
-first call is the image door as for every receipt (two-eyes D3), and the
-accepted data is not "accepted" for the transfer door (the D10 rule, applied
-to the sending side), so no retry ever names a guessed Spin bank. On the
-manual door the payer's pick stands (two-eyes FR-015); the picker's `SPIN BY
-OXXO` entry says, in es-MX, that a CLABE starting with 646 is `STP`.
-
-**Decision (D15).** The reader gains `operacion: "spei" | "misma_institucion"
-| "efectivo" | null`. It is **recorded for every receipt** (countable, and
-the ground a same-bank feature will stand on) and **acted on only for Spin**
-(spec scope): a clear Spin reading with `misma_institucion` or `efectivo`
-stops as `not_spei` (R1), unless it prints a clave (spec Edge Cases: a clave
-on the receipt means Banxico may have it).
-
-**Alternatives.** Map `SPIN BY OXXO` → `STP` by default — rejected: new
-accounts are 728, and a default is a guess. Send both institutions — rejected:
-two credits per Spin receipt.
+The later asks keep their sentences and gain `referenceNumber` and the
+`REFERENCE_AMBIGUOUS` sentence ("Tu número de referencia coincide con más de
+una transferencia. Escribe tu clave de rastreo para encontrar la tuya."),
+plus the bank hint line when the payment's bank has one.
 
 ## R9 — The bank hints
 
-**Found.** No confirmed traffic to count (see "What was measured"), so SC-003's first version ("the
-list at launch covers every sending bank in the product's confirmed payments")
-cannot be met or tested today. Where each app shows the clave is only known
-for sure from a real receipt or from the bank's own help. Receipt 1 shows
-Banorte's summary with "Ver más detalles". BBVA's own help page ("Cómo
-rastrear una transferencia bancaria paso a paso", bbva.mx) exists but could
-not be read from the build environment (egress blocked, 2026-09-23), and
-third-party round-ups disagree with each other and age with every app
-release.
+**Decision (D17).** es-MX copy in the payer app
+(`apps/pago/src/features/pago/bank-hints.ts`), keyed by the `Bank` type the
+schema re-exports so a name outside the vocabulary cannot compile, each entry
+carrying its source and verification date. An entry is added only from a real
+receipt or the bank's own documentation, read by a person. Launch: `BANORTE`
+("toca «Ver más detalles» y captura esa pantalla", receipt 1, 2026-09-23),
+plus any bank whose detail screen the product creator supplies before
+implementation — BBVA, Azteca, Santander, Banamex, Nu and Spin are the
+obvious next captures.
 
-**Decision (D16).** The hints are es-MX copy in the payer app
-(`apps/pago/src/features/pago/bank-hints.ts`), keyed by the `Bank` type so a
-name the vocabulary does not know cannot compile, each entry carrying its
-source and the date it was verified. An entry is added only from a real
-receipt or the bank's own documentation, read by a person; every other bank
-gets the generic hint. Launch list: Banorte (receipt 1), plus every bank whose
-detail screen the product creator supplies before implementation — BBVA,
-Azteca, Santander, Banamex, Nu and Spin are the obvious next captures. SC-003
-is amended accordingly (spec, amended 2026-09-23).
+**Alternatives.** Seeding from third-party round-ups — rejected: a hint that
+sends a payer to the wrong button is worse than the general one.
 
-**Alternatives.** A table in D1 editable from the operator panel — rejected
-for now: copy with a deploy is how every other es-MX string ships, and the
-list is small. Seeding from third-party round-ups — rejected: a hint that
-sends a payer to the wrong button is worse than the generic one.
+## R10 — The capture guide
 
-## R10 — "A second capture still has no clave"
+**Found.** The step renders `ReceiptForm` inside the step card; the page has
+its own shadcn primitives (`collapsible`, `native-select`) and the shared
+atoms. Constitution VI: tokens only, status never colour alone, 360px floor,
+no horizontal scroll, reduced motion.
 
-**Decision (D17).** Page state, not server state: before the payer pays there
-is no payment row, and the `/read` calls of one visit are the only captures
-that count. The proof step counts keyless readings; at two, the typing form
-leads and the upload becomes the second option. A reload resets the count —
-acceptable, because the cost of a reset is one more upload, never a credit
-(the stop still holds on the server).
+**Decision (D18).** An app-local `CaptureGuide` (only this page renders it,
+so it is not an atom): an inline SVG of a generic receipt drawn with token
+classes (`fill-*`, `stroke-*` from `tokens.css` through Tailwind), four
+numbered markers named in text beside the drawing, the three rules as a list,
+the bank tips in the existing `Collapsible`. No motion. It sits above
+`ReceiptForm`; nothing needing a tap is placed in front of the upload
+control.
 
-## R11 — The capture guide
-
-**Found.** The step renders `ReceiptForm` inside the step card; the payer
-page has its own shadcn primitives (`collapsible`, `native-select`) and the
-shared atoms from `@devolada/ui`. Constitution VI: tokens only, status never
-colour alone, 360px floor, no horizontal scroll, reduced motion.
-
-**Decision (D18).** An app-local `CaptureGuide` component (only this page
-renders it, so it is not an atom): an inline SVG of a generic receipt drawn
-with token classes (`fill-*`, `stroke-*` from `tokens.css` through Tailwind),
-with numbered markers whose labels are text beside the picture — so nothing
-is marked by colour alone; three rules as a list; the bank tips in the
-existing `Collapsible`. No motion. It sits above `ReceiptForm`; nothing is
-placed in front of the upload control.
-
-## R12 — Countability
+## R11 — Countability
 
 **Found.** `extractions` records every reading with its outcome, bank, gate
-and legibility, but not which link or proof it read, so "how did an ask end"
-cannot be joined to what the payer did next.
+and legibility, but not which proof it read (so an ask cannot be joined to
+what the payer did next) and not the references.
 
-**Decision (D19).** `extractions` gains `proof_key` (the link id is its
-prefix), `destination_kind`, `destination_digits` and `operation`; its
-`outcome` vocabulary gains `key_missing`, `not_spei` and `wrong_destination`
-(a TypeScript enum on a text column — no DDL). "How an ask ended" is then a
-query: the next extraction on the same link (new capture), a payment on the
-link with `proof_mode = 'transfer'` (typing), or neither (abandoned).
+**Decision (D19).** `extractions` gains `proof_key` (its prefix is the link
+id), `reference_number` (ours, as read) and `provider_reference_number`
+(theirs); its `outcome` vocabulary gains `key_missing` (TypeScript only, the
+column is text). "How an ask ended" is then a query: the next extraction on
+the same link, a payment on the link with `proof_mode = 'transfer'`, or
+neither. Searches by reference are `validations` rows with
+`reference_number` set and `tracking_key` NULL, already recorded.
 
-## R13 — Tests that assert what this feature changes
+## R12 — Tests that assert what this feature changes
 
 Two-eyes-receipt tests that assert a **fully legible picture with no clave**
-reaches the provider must be rewritten to assert the stop, cited
-`receipt-triage US1`; the implementation finds them by the stub readings
-with `claveDeRastreo: null` and `legibilidad: "completa"` in
-`test/consta/validate.test.ts` and `test/direct-payment.test.ts`. Tests of a
-*malformed* clave (e.g. "scenario 4: the gate catches a clave's shape") and
-of a *partly legible* hole ("a partly legible photo with a hole in it still
-buys the paid call (FR-005)") stay as they are: D7 and D8 keep both paths.
-The pure comparison tests in the same file (`compareReadings`) are untouched.
+reaches the provider are rewritten to assert the ask, cited
+`receipt-triage US2` — found by stub readings with `claveDeRastreo: null` and
+`legibilidad: "completa"` in `test/consta/validate.test.ts` and
+`test/direct-payment.test.ts`. Tests of a *malformed* clave ("scenario 4: the
+gate catches a clave's shape") and of a *partly legible* hole ("a partly
+legible photo with a hole in it still buys the paid call (FR-005)") stay as
+they are (D14). The pure `compareReadings` tests stay and gain reference
+cases. The comment in `provider/apicep.ts` that says Devolada "cannot hit"
+the 422 is rewritten.

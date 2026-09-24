@@ -2,35 +2,39 @@
 
 **Feature Branch**: `claude/payment-receipt-info-handling-bhqn5o`
 
-**Created**: 2026-09-23
+**Created**: 2026-09-23 · **Rescoped**: 2026-09-24
 
-**Status**: Draft — scope narrowed by the product creator on 2026-09-23;
-ready for `/speckit-plan`
+**Status**: Draft — scope narrowed twice by the product creator; ready for
+`/speckit-plan`
 
-**Input**: User description: "The scope would be summarized in integrating
-the additional receiving accounts (16-digit card and 10-digit phone) as new
-valid identifiers for the SPEI consultation in Banxico; implement a
-preventive UI screen that visually instructs the user on the correct capture
-before uploading it; display a clear and contextual feedback indicating which
-specific fields are missing or if you should enter the data manually; and
-enable the verification of SPIN transfers only when they operate as SPEI/STP
-interbank transfers registered in Banxico."
+**Input**: User description: "1. Previous guide on how to upload a payment
+receipt. 2. Validate transfer receipts by payment reference number. Mandatory
+if trackingKey is not sent. 3. Feedback of missing data to the user. You have
+to define the how."
 
 ## Clarifications
 
 ### Session 2026-09-23
 
-- The first draft of this spec (commit on this branch, same day) carried six
-  items: search by tracking key, reference or phone/card; early detection;
-  fintech support; a review flow for same-bank and cash payments; fraud and
-  cost control; a preventive capture guide. Q: What is in scope? → A: Four
-  things only — the card and the phone as receiving identifiers, the
-  preventive capture guide, feedback that names the missing fields or sends
-  the payer to typing, and Spin verified only when it went through SPEI.
-  Everything else is listed under Out of Scope, so it is not lost.
-- The three questions the first draft asked (the service while a same-bank or
-  cash payment waits, the paid-call cap per receipt, the fee on a hand
-  confirmation) belonged to items now out of scope, and are withdrawn.
+- The first draft carried six items (search by tracking key, reference or
+  phone/card; early detection; fintech support; a review flow for same-bank
+  and cash payments; fraud and cost control; a capture guide). The creator
+  narrowed it to four: card and phone as receiving identifiers, the capture
+  guide, missing-field feedback, and Spin verified only as SPEI. The three
+  questions the first draft asked belonged to items dropped then, and were
+  withdrawn.
+
+### Session 2026-09-24
+
+- Q: What is in scope now? → A: Three things only — the capture guide before
+  the upload, validation by the referencia numérica (required when there is
+  no clave de rastreo), and feedback that tells the payer which data is
+  missing. Card and phone identifiers and Spin leave the scope; the
+  referencia numérica, out of scope on 2026-09-23, comes back. Everything
+  dropped is listed under Out of Scope.
+- Q: How should the missing-data feedback work? → A: The creator left the
+  design to this spec ("you have to define the how"). It is decided in D5 and
+  D6 below and is the part of this spec most worth the creator's review.
 
 ## Where this comes from
 
@@ -39,293 +43,269 @@ of one ISP sent as proof of payment. Two of them are what this feature is
 for:
 
 1. **Banorte, summary screen.** "¡Tu transferencia fue exitosa!", $300.00, to
-   BBVA CLABE ****8195, 09/09/2026 18:10:02. A SPEI transfer, clear and
-   readable, with no clave de rastreo on screen: the app shows it one tap
-   away, behind "Ver más detalles".
-2. **Banco Azteca, photographed with a second phone.** $350.00, 09/Sep/2026,
-   to "Bbva Mexico ***195". A SPEI transfer with no clave de rastreo on
-   screen, photographed through glare and a cracked screen.
+   BBVA CLABE ****8195, 09/09/2026 18:10:02, concepto "Sin información". A SPEI
+   transfer, clear and readable, with **neither a clave de rastreo nor a
+   referencia** on screen: the app shows them one tap away, behind "Ver más
+   detalles".
+2. **Banco Azteca, photographed with a second phone.** $350.00, 09/Sep/2026
+   18:05:43, to "Bbva Mexico ***195", concepto "Cf354", **"Referencia
+   038195"** and no clave de rastreo. Banxico can find a transfer by its
+   referencia numérica.
 
-Today, read from the code on 2026-09-23: both go to the provider anyway
-(two-eyes-receipt D2, D3), because missing fields are not a reason to stop.
-The provider finds no clave either. The payer is then asked to "confirm the
-clave de rastreo looking at your receipt" — a receipt that does not show it —
-and is never told where their bank keeps it. Meanwhile the payment re-sends
-the same picture at every retry.
+Today, read from the code on 2026-09-23: both go to the provider (two-eyes-
+receipt D2, D3). The provider finds no clave in either. The reference printed
+on receipt 2 is never read, compared or sent, although the validation engine
+already accepts one. The payer is then asked to "confirm the clave de rastreo
+looking at your receipt" — a receipt that does not show it — and is never told
+where it is. Meanwhile the payment re-sends the same picture at every retry.
 
 The other two receipts — a BBVA-to-BBVA transfer and two cash deposits — never
-touched SPEI. Handling them is out of scope here (see Out of Scope).
+touched SPEI and are out of scope.
 
-## Decisions taken in session (2026-09-23)
+## Decisions taken in session (2026-09-23, 2026-09-24)
 
 Recorded here so the plan and the code can cite them as
-`receipt-triage D<n>`.
+`receipt-triage D<n>`. This list replaces the one of 2026-09-23; no code cites
+the earlier numbers.
 
-- **D1 — A debit card and a phone number join the CLABE as receiving
-  identifiers.** An ISP may register a 16-digit debit card and a 10-digit
-  phone number next to its CLABE, each with its bank. A SPEI transfer to any
-  of them is recorded by Banxico, and the provider can check it when told
-  which identifier received the money (apiCEP's documented beneficiary types,
-  read in session). The CLABE stays required; the card and the phone are
-  optional, at most one of each.
-- **D2 — The check learns the identifier from the receipt, never by
-  guessing.** The destination the receipt shows ties the payment to one
-  identifier. When it cannot, the provider's own reading of the capture
-  receives every identifier as a candidate, and a payer who types their data
-  is asked which one they sent to. A credit is never spent trying identifiers
-  one after another.
-- **D3 — The payer sees a good capture before taking one.** The "Envía tu
-  comprobante" step shows, above the upload button, what the capture must
-  include and how to take it. It is part of the step, not a screen in front
-  of it: the upload stays one tap away.
-- **D4 — Missing fields are named, with where to find them, and typing is
-  always offered.** When the payer is asked for something, the page names
-  each field that is missing or in doubt — and only those — says where the
-  payer's bank shows it when the product knows, and offers typing with
-  everything else already filled in. A clear capture that does not show the
-  clave de rastreo is asked about *before* any paid call: this narrows
-  two-eyes-receipt D2 and FR-005 for that one case. "Missing fields go to the
-  provider" stays true when the clave may be hidden under a blur, and stops
-  being true when the receipt simply does not print it — the provider cannot
-  read what is not there. (Carried from the creator's first input:
-  "detect when the image lacks a key before spending credits".)
-- **D5 — Spin is verified only as SPEI.** A Spin transfer that went out
-  through SPEI is checked against the institution Banxico records for Spin's
-  transfers, which may be Spin by OXXO or STP. A movement that stays inside
-  Spin, or cash put into Spin, has no Banxico record: it is never sent to the
-  provider and costs no credit, and the payer is told to contact their
-  provider.
+- **D1 — Two keys find a transfer: the clave de rastreo or the referencia
+  numérica.** Every check carries at least one. The reference is required
+  when there is no clave; when both exist, both travel and the clave leads.
+  This is the provider's own rule for its direct mode ("`referenceNumber` —
+  required if `trackingKey` is not sent"), made the product's. (Input item 2.)
+- **D2 — A reference is the SPEI referencia numérica: up to seven digits, as
+  printed.** Leading zeros are kept ("038195" stays "038195"). A longer
+  number on a receipt — a folio, an authorisation number, an account — is not
+  a reference, and is never sent as one.
+- **D3 — Banxico's own clave is kept for every confirmation.** A transfer
+  found by its reference comes back from Banxico with its real clave de
+  rastreo. The payment records it, so the rule "one transfer pays once"
+  (direct-payment D8) holds whatever key found it, typed or read.
+- **D4 — A clear capture with neither key is asked about before any credit.**
+  A receipt the reader can read in full that shows no clave and no reference
+  is stopped before the first paid call — the provider cannot read what is
+  not printed. This narrows two-eyes-receipt D2 and FR-005 for that one case:
+  a partly legible receipt, a malformed clave, and a picture whose legibility
+  the reader did not judge still go to the provider as today.
+- **D5 — How the missing-data feedback works.** (Input item 3, designed here.)
+  - *When*: the moment the free reading comes back, before any payment
+    exists and before any credit; and later, whenever the check needs a field
+    from the payer, with the same pattern.
+  - *Where*: at the top of the "Envía tu comprobante" step, in the same
+    warning message that already refuses a picture that is not a receipt,
+    with icon and text; the upload control stays open under it, and focus
+    moves to the message so a screen reader announces it.
+  - *What it says*, in three short sentences: which key is missing ("Tu
+    captura no muestra la clave de rastreo ni el número de referencia."); which
+    other data the typing form will need that the capture did not show, and
+    only those ("Tampoco vemos la fecha."); and where to find it — the payer's
+    bank's own screen when the product has a verified hint for it ("En
+    Banorte, toca «Ver más detalles» y captura esa pantalla."), the general
+    one otherwise ("Abre el detalle de la transferencia en tu app y captura la
+    pantalla donde aparecen estos datos.").
+  - *What the payer can do*: two buttons. "Subir otra captura" comes first.
+    "Escribir los datos" opens the form with everything the capture did show
+    already filled in; each empty field says in text, under it, that it was
+    missing from the capture.
+  - *When one capture is not enough*: a second capture without a key in the
+    same visit puts the form first, with the upload as the second option.
+- **D6 — The same pattern later.** When the check needs something from the
+  payer after the paid call — a field the two readings disagree on, a date
+  nobody read (two-eyes D8, D20), or a reference that matches more than one
+  transfer — the page names the field, says where to find it, and offers the
+  pre-filled form. It never asks for a field it already has.
+- **D7 — A reference that matches more than one transfer asks for the clave.**
+  The provider says so explicitly. The product does not ask again with the
+  same data; it asks the payer for the clave de rastreo alone.
+- **D8 — The capture guide lives inside the upload step.** Above the upload
+  button, a small drawing of a receipt marks what the capture must show, with
+  three short rules. It adds no tap before the upload. (Input item 1.)
 
 ## Summary
 
 Payers send what their bank app shows them, and many apps show a summary
-without the clave de rastreo. Today the product pays to learn that, then asks
-the payer for a field their capture does not have, without telling them where
-to find it.
+without the clave de rastreo. Some show a referencia numérica instead, which
+Banxico can also search by, but the product ignores it. So today the product
+pays to learn that a capture has no clave, then asks the payer for a field
+their capture does not have, without telling them where to find it.
 
-This feature works on both sides of the upload. Before it, the payer sees
-what a good capture looks like. After it, a clear capture with no clave is
-caught for free, and the payer is told exactly what is missing, where their
-bank shows it, and that they can type it instead.
-
-It also widens what can be checked. An ISP can publish a debit card and a
-phone number next to its CLABE, and transfers to them are checked with
-Banxico like transfers to the CLABE. And Spin receipts are checked against
-the institution Banxico actually records — when, and only when, the Spin
-movement went through SPEI.
+This feature works on both sides of the upload. **Before it**, the payer sees
+what a good capture looks like. **After it**, the product reads the reference
+as well as the clave and searches Banxico with whichever the receipt shows. A
+clear capture with neither is caught for free, and the payer is told exactly
+what is missing, where their bank shows it, and that they can type it
+instead.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - The payer is told exactly what is missing, and how to fix it (Priority: P1)
+### User Story 1 - The referencia numérica finds the transfer when the clave is missing (Priority: P1)
 
-A payer uploads the summary screen of their bank app. It is clear, and it
-does not show the clave de rastreo. Before anything is spent, the page says
-so: "Tu captura no muestra la clave de rastreo." If the product knows the
-bank, it says where the clave is ("En Banorte, toca *Ver más detalles* y
-captura esa pantalla"). The payer can upload that screen, or type the clave
-with the amount, date and bank already filled in. The same kind of message
-appears whenever the product later needs a field from the payer: it names the
-field and says where to find it.
+A payer uploads a receipt that shows a referencia numérica and no clave de
+rastreo, like receipt 2. The product reads the reference and asks Banxico with
+it, along with the date, the amount, the sending bank and the ISP's account.
+The payment confirms, and the payer is asked nothing. A payer who types their
+data can give the short reference instead of a clave of up to 30 characters.
 
-**Why this priority**: it fixes the most common gap in the receipts at hand,
-it stops a credit being spent to learn nothing, and it replaces a question
-the payer cannot answer with one they can.
+**Why this priority**: it turns a receipt the product cannot use today into a
+confirmation, with a search the engine already supports. It comes first
+because Story 2's rule — stop when a capture shows *no key* — depends on the
+reference counting as a key; built in the other order, receipt 2 would be
+stopped instead of confirmed.
 
-**Independent Test**: upload, against a stubbed reader and an intercepted
-provider, a clear SPEI capture with no clave from a bank with a hint, one
-from a bank without a hint, a partly legible one, and one with a clave. Count
-the credits spent and read the payer's screen in each case. Then upload a
-second capture without a clave for the same payment and read the screen
-again. Needs nothing from the other stories.
+**Independent Test**: submit, against a stubbed reader and an intercepted
+provider, a receipt read with a reference and no clave; a typed submission
+with only a reference; a receipt where the provider says the reference matches
+more than one transfer; and a second payment whose search returns a clave
+already used. Count the paid calls and the questions. Needs nothing from the
+other stories.
 
 **Acceptance Scenarios**:
 
-1. **Given** a capture the reader calls fully legible, a SPEI receipt, with no
-   clave de rastreo, **When** the payer uploads it, **Then** no credit is
-   spent, and the page says that the clave de rastreo is missing, with two
-   ways forward: upload another capture, or type the data.
-2. **Given** that capture, and the reader recognises a bank the product holds
-   a hint for, **When** the payer sees the message, **Then** it says where
-   that bank's app shows the clave.
-3. **Given** a bank the product holds no hint for, **When** the payer sees
-   the message, **Then** it gives the generic hint: open the detail of the
-   transfer in the app and capture the screen that shows the clave de
-   rastreo.
-4. **Given** the payer chooses to type, **When** the form opens, **Then** the
-   amount, date and bank the capture showed are filled in, and only the
-   missing field is asked for.
-5. **Given** a second capture for the same payment that still does not show
-   the clave, **When** it is uploaded, **Then** the page leads with typing:
-   the form comes first, with another capture as the second option.
-6. **Given** a check that later needs a field from the payer — a field in
-   dispute or missing after the provider's reading (two-eyes-receipt D8, plan
-   D20) — **When** the page asks, **Then** it names each field in doubt, and
-   only those, with where the payer's bank shows it when known, and offers
-   typing with the rest filled in.
-7. **Given** a capture the reader calls partly legible, with no clave read,
-   **When** the payer submits it, **Then** it goes to the provider as today:
-   the clave may be under the blur (two-eyes-receipt D2 stands for this
-   case).
-8. **Given** the reader is down, or its answer cannot be parsed, **When** the
-   payer uploads, **Then** nothing is asked and the file follows today's flow
-   (constitution VIII).
-9. **Given** a text PDF whose text shows no clave, **When** it is uploaded,
-   **Then** it is handled exactly like a picture (two-eyes-receipt D1); a
-   scanned PDF with no text follows today's silent path to the provider.
+1. **Given** a receipt whose reading shows a reference and no clave, **When**
+   the check reaches Banxico's transfer search, **Then** the search carries
+   the reference with the date, the amount, the sending bank and the
+   receiving account, and the payer is asked nothing.
+2. **Given** a receipt with both, **When** it is checked, **Then** the clave
+   leads and the reference travels beside it.
+3. **Given** neither reading found a clave, and both read the same reference,
+   **When** Banxico has nothing yet, **Then** the readings count as agreed,
+   exactly as two matching claves do today (two-eyes-receipt D5–D6), and the
+   retries carry the reference.
+4. **Given** neither reading found a clave and they disagree on the
+   reference, **When** Banxico has nothing yet, **Then** the payer is asked
+   for the reference alone, as for a disputed clave today (two-eyes D8).
+5. **Given** a number on the receipt longer than seven digits — a folio, an
+   authorisation number — **When** it is read, **Then** it is not taken as a
+   reference.
+6. **Given** a payer on the manual door ("No tengo el comprobante a la mano"),
+   **When** they fill the form, **Then** they may give a clave, a reference or
+   both, and at least one is required.
+7. **Given** Banxico finds the transfer by its reference, **When** the
+   payment confirms, **Then** the payment records the clave from Banxico's
+   record; **and when** a later payment of the same business finds the same
+   transfer by any key, **Then** it is refused as already used.
+8. **Given** the provider answers that the reference matches more than one
+   transfer, **When** the answer arrives, **Then** no further paid call is
+   made with the same data, and the payer is asked for the clave de rastreo
+   alone.
 
 ---
 
-### User Story 2 - The payer sees what a good capture shows before taking it (Priority: P2)
+### User Story 2 - The payer is told exactly what is missing, and how to fix it (Priority: P2)
+
+A payer uploads the summary screen of their bank app, like receipt 1. It is
+clear, and it shows neither a clave de rastreo nor a referencia. Before
+anything is spent, the page says so, names anything else the capture lacks,
+and says where the payer's bank shows it. The payer can upload the right
+screen or type the data, with everything the capture did show already filled
+in. The same kind of message appears whenever the check later needs a field
+from the payer.
+
+**Why this priority**: it stops a credit being spent to learn nothing, and it
+replaces a question the payer cannot answer with one they can. It follows
+Story 1 because its rule needs the reference to count as a key.
+
+**Independent Test**: upload, against a stubbed reader and an intercepted
+provider, a clear SPEI capture with no key from Banorte, one from a bank
+without a hint, a partly legible one, one with a malformed clave, and one
+with a reference only. Count the credits and read the payer's screen in each
+case; then upload a second capture without a key and read the screen again.
+Needs Story 1 only for the reference-only case.
+
+**Acceptance Scenarios**:
+
+1. **Given** a capture the reader calls fully legible, a SPEI receipt, with
+   no clave and no reference, **When** the payer uploads it, **Then** no
+   credit is spent, and the message at the top of the step says that the
+   capture shows neither the clave de rastreo nor the número de referencia,
+   with two buttons: "Subir otra captura" and "Escribir los datos".
+2. **Given** that capture also lacks the date, **When** the message renders,
+   **Then** it names the date as well; **and given** it shows the amount and
+   the bank, **Then** it does not mention them.
+3. **Given** the reader recognises a bank the product holds a verified hint
+   for (Banorte), **When** the message renders, **Then** it says where that
+   bank's app shows the data; **and given** a bank with no hint, **Then** it
+   gives the general hint.
+4. **Given** the payer chooses to type, **When** the form opens, **Then**
+   every field the capture showed is filled in, and each empty field says, in
+   text under it, that it was missing from the capture.
+5. **Given** a second capture in the same visit that still shows no key,
+   **When** it is read, **Then** the form comes first and the upload is the
+   second option.
+6. **Given** the message appears, **When** it renders, **Then** focus moves
+   to it and it is announced to assistive technology; it carries an icon and
+   text, never colour alone.
+7. **Given** a capture that shows a reference and no clave, **When** it is
+   uploaded, **Then** nothing is asked: it goes on to the check (Story 1).
+8. **Given** a capture the reader calls partly legible, or whose legibility
+   it did not judge, or with a malformed clave, **When** the payer submits
+   it, **Then** it goes to the provider as today (two-eyes D2 stands for
+   these).
+9. **Given** the reader is down, or its answer cannot be parsed, **When** the
+   payer uploads, **Then** nothing is asked and the file follows today's flow
+   (constitution VIII).
+10. **Given** the check later needs a field from the payer — a disputed
+    field, a missing date, or a reference that matched more than one
+    transfer — **When** the page asks, **Then** it names each field it needs,
+    and only those, says where to find them when it knows the bank, and
+    offers the pre-filled form.
+
+---
+
+### User Story 3 - The payer sees what a good capture shows before taking it (Priority: P3)
 
 On the "Envía tu comprobante" step, above the upload button, the payer sees a
-small picture of a receipt with the fields that matter marked — the clave de
-rastreo first, then the amount, the date and the account the money went to —
-and three short rules: capture the transfer's detail, not the summary; the
-whole screen, without cropping; and if it is a photo, without glare. Tips for
-the common banks are one tap away.
+small drawing of a receipt with the data that matters marked — the clave de
+rastreo or the número de referencia, the amount, the date and the account the
+money went to — and three short rules: capture the transfer's detail, not the
+summary; the whole screen, without cropping; and if it is a photo, without
+glare.
 
-**Why this priority**: it prevents what Story 1 repairs, at no cost per
-payment. It ranks below Story 1 because some payers will still send the
-summary screen, so the repair must exist first.
+**Why this priority**: it prevents what Story 2 repairs, at no cost per
+payment. It comes last because some payers will still send the summary
+screen, so the repair must exist first.
 
 **Independent Test**: render the step at 360px, 768px and 1280px in both
-themes; check the visual, the rules and the tips, and that the upload button
+themes; check the drawing, the text and the rules, and that the upload button
 is one tap from the start of the step. Needs nothing from the other stories.
 
 **Acceptance Scenarios**:
 
 1. **Given** the upload step, **When** it renders, **Then** above the upload
-   button it shows a visual of a receipt with the clave de rastreo, the
-   amount, the date and the destination account marked, and says in text what
-   the capture must include.
-2. **Given** the visual, **When** it renders at 360px in either theme,
-   **Then** it is legible, it causes no horizontal scroll, and no field is
-   marked by colour alone.
-3. **Given** the step, **When** it renders, **Then** it shows the three rules:
-   the detail, not the summary; the whole screen; a photo without glare.
-4. **Given** a payer who wants to know where their bank shows the clave,
-   **When** they open the tips, **Then** they reach the common banks in one
-   tap, with the same hints Story 1 uses.
-5. **Given** the visual, the rules and the tips, **When** the step renders,
-   **Then** the upload button is still one tap from the start of the step;
-   nothing is placed in front of it.
-
----
-
-### User Story 3 - An ISP can be paid at a debit card or a phone number as well as its CLABE (Priority: P2)
-
-An ISP adds its debit card and its phone number in Cuenta, next to the CLABE
-it already has. The payment page shows all three. A payer who transfers to
-the card or to the phone is checked with Banxico exactly like a payer who
-transfers to the CLABE, because the check names the identifier the money went
-to.
-
-**Why this priority**: many small ISPs already tell customers "transfiere a
-mi tarjeta" or share a number for transfers; today those payments cannot be
-checked at all. It ranks with Story 2 and not above Story 1 because it is
-larger — the ISP's setup, the page and the check all change — and serves
-fewer payers at first.
-
-**Independent Test**: configure an ISP with a CLABE, a card and a phone at an
-intercepted provider; submit a receipt to each and check the identifier each
-search names; submit a receipt whose destination cannot be read, and a typed
-submission; submit a clear receipt to an account that is none of the three.
-Needs nothing from the other stories.
-
-**Acceptance Scenarios**:
-
-1. **Given** an ISP with only a CLABE, **When** this feature ships, **Then**
-   nothing changes for it or its payers.
-2. **Given** an ISP member who may configure the business, **When** they open
-   Cuenta, **Then** they can add, change or remove one debit card (16 digits)
-   and one phone number (10 digits), each with its bank; the CLABE stays
-   required.
-3. **Given** a card number with the wrong length or a failing check digit, or
-   a phone number that is not 10 digits, **When** it is saved, **Then** it is
-   refused with a message that names the problem.
-4. **Given** an ISP with a card or a phone, **When** the payment page renders,
-   **Then** it shows the CLABE and, labelled and copyable, the card and the
-   phone.
-5. **Given** a receipt whose destination the reader ties to the card, the
-   phone or the CLABE, **When** it is checked, **Then** the search names that
-   identifier.
-6. **Given** a receipt whose destination cannot be tied to one identifier,
-   **When** the provider reads the capture, **Then** it receives every
-   identifier of the ISP as a candidate.
-7. **Given** a payer who types their data and an ISP with more than one
-   identifier, **When** they fill the form, **Then** they choose which one
-   they sent to, shown masked.
-8. **Given** a fully legible receipt whose destination matches none of the
-   ISP's identifiers, **When** it is uploaded, **Then** no credit is spent and
-   the payer is told the transfer went to a different account. Digits the
-   receipt masks are not a mismatch.
-9. **Given** an identifier changed or removed, **When** a payment already
-   submitted to it is checked, **Then** it is checked against the identifier
-   it was sent to.
-
----
-
-### User Story 4 - Spin transfers are verified when, and only when, they went through SPEI (Priority: P3)
-
-A payer sends a receipt from Spin by OXXO. When the transfer left Spin through
-SPEI, the check asks Banxico with the institution Banxico records for Spin's
-transfers — which may not be the name printed on the receipt. When the
-movement stayed inside Spin, or was cash put into Spin, Banxico has no record
-of it: the product spends nothing and tells the payer to contact their
-provider.
-
-**Why this priority**: a wrong sending bank is answered by the provider with
-the same faceless "not found" a missing transfer gets (measured 2026-08-19,
-validation.spec.md D12), so every Spin payment sent under the wrong name is
-lost silently, at a credit each. It ranks P3 because the institution Banxico
-records must be measured on real Spin receipts first.
-
-**Independent Test**: submit, against a stubbed reader and an intercepted
-provider, a Spin SPEI receipt, a Spin receipt of a movement inside Spin, and
-a Spin cash-in; check the institution the first search names and the credits
-spent. Needs nothing from the other stories.
-
-**Acceptance Scenarios**:
-
-1. **Given** a Spin receipt of a SPEI transfer, **When** it is checked,
-   **Then** the search names the institution Banxico records for Spin's SPEI
-   transfers.
-2. **Given** a Spin receipt for which that institution is not established,
-   **When** it is checked, **Then** no institution is guessed for a paid
-   search; the first call is the provider's own reading of the capture, as
-   today.
-3. **Given** a Spin receipt of a movement inside Spin, or of cash put into
-   Spin, **When** it is uploaded, **Then** it is not sent to the provider, no
-   credit is spent, and the payer is told in es-MX that Banxico does not
-   record this kind of Spin movement and to contact their provider with the
-   receipt.
-4. **Given** a confirmed Spin payment, **When** its record is read, **Then**
-   it shows the name printed on the receipt and the institution Banxico
-   returned.
-5. **Given** a Spin receipt that does not show the clave, **When** it is
-   uploaded, **Then** Story 1 applies unchanged.
+   button a drawing of a receipt marks, with numbers named in text, the clave
+   de rastreo or número de referencia, the amount, the date and the
+   destination account.
+2. **Given** the drawing, **When** it renders at 360px in either theme,
+   **Then** it is legible, causes no horizontal scroll, and marks nothing by
+   colour alone.
+3. **Given** the step, **When** it renders, **Then** it shows the three
+   rules.
+4. **Given** a payer who wants to know where their bank shows the data,
+   **When** they open the tips, **Then** they reach them in one tap, with the
+   same hints Story 2 uses.
+5. **Given** the drawing, the rules and the tips, **When** the step renders,
+   **Then** the upload button is still one tap from the start of the step.
 
 ---
 
 ### Edge Cases
 
-- **A receipt that prints a clave de rastreo but looks like a movement inside
-  Spin.** A clave on the receipt means Banxico may have it: the SPEI road
-  wins.
-- **The ISP registers a Spin card or phone as an identifier.** A payer
-  sending from Spin to it moves money inside Spin: Story 4, scenario 3.
-- **A transfer to the ISP's card or phone from the same bank.** It never goes
-  through SPEI, so Banxico has no record of it. This feature does not change
-  what happens to it (Out of Scope: same-bank and cash payments).
-- **A receipt that shows a referencia numérica and no clave** (receipt 2's
-  kind). The reference is not used here (Out of Scope); the payer is asked
-  for the clave as in Story 1.
-- **The bank the reader recognises is not the bank that sent the money** (a
-  fintech inside a bank's app). The hint may point to the wrong app; typing is
-  always one tap away.
-- **A card that is a credit card.** It cannot be told apart by its digits. The
-  setup labels the field "tarjeta de débito" and says that the card must
-  receive transfers; the ISP answers for it.
+- **A reference of "0" or "1234567".** Common defaults. The search still
+  carries the date, amount, banks and account; if the provider says it
+  matches more than one transfer, the payer is asked for the clave (D7).
+- **A receipt with a reference and a malformed clave.** The reference is a
+  key, so nothing is asked at the upload; the clave travels as read, and the
+  comparison treats it as today.
+- **The reader takes a folio for a reference.** Anything longer than seven
+  digits is dropped (D2); a seven-digit folio could still pass, and then the
+  search finds nothing and the comparison asks the payer, as for any misread.
+- **A payer who types a reference whose Banxico record carries a clave
+  already used by this business.** Refused as already used (D3), exactly as
+  if they had typed that clave.
+- **A platform top-up with neither key.** The stop applies in the engine, as
+  the two-eyes refusals do for top-ups: no provider credit; the top-up rides
+  its schedule and the remedy is a new upload. A top-up with a reference only
+  keeps today's flow; top-ups do not search by reference in this feature.
 - **A payment born before this feature, validating at cut-over.** It finishes
   under the flow it started in.
 
@@ -333,192 +313,167 @@ spent. Needs nothing from the other stories.
 
 ### Functional Requirements
 
-**Saying what is missing (Story 1, D4)**
+**The referencia numérica (Story 1, D1–D3, D7)**
 
-- **FR-001**: A capture the reader calls fully legible, a SPEI receipt, that
-  shows no clave de rastreo MUST NOT reach a paid call; the payer MUST be told
-  on the same screen that the clave de rastreo is missing.
-- **FR-002**: Whenever the payer is asked for data — at the upload (FR-001) or
-  later in the check (two-eyes-receipt D8, plan D20) — the page MUST name each
-  field that is missing or in doubt, and only those.
-- **FR-003**: When the reader recognises the bank or app and a hint exists
-  for it, the message MUST say where that app shows the field; otherwise it
-  MUST give the generic hint.
-- **FR-004**: The message MUST offer two ways forward: another capture, or
-  typing. The typing form MUST be filled in with what the capture showed and
-  MUST ask only for the fields named.
-- **FR-005**: When a second capture for the same payment still does not show
-  the clave de rastreo, the page MUST lead with typing.
-- **FR-006**: A partly legible capture with no clave read MUST still go to the
-  provider (two-eyes-receipt D2). When the reader is down, its answer cannot
-  be parsed, or a PDF yields no text, nothing is asked and the file MUST
-  follow today's flow.
+- **FR-001**: The reader MUST read the referencia numérica as well as the
+  clave de rastreo, as printed, leading zeros kept.
+- **FR-002**: A reference MUST be one to seven digits; a longer number MUST
+  NOT be taken as a reference.
+- **FR-003**: Every search of Banxico's transfer records MUST carry a clave or
+  a reference; the reference MUST be sent when there is no clave; when both
+  exist both MUST travel.
+- **FR-004**: The comparison of the two readings (two-eyes-receipt D5–D8)
+  MUST treat the reference as it treats the clave when neither reading found
+  a clave: agreed, disputed or blind, and the payer asked only for the field
+  in doubt.
+- **FR-005**: The manual door and the typing form MUST accept a clave, a
+  reference or both, and MUST require at least one.
+- **FR-006**: Every payment Banxico confirms MUST record the clave from
+  Banxico's record, whatever key found it, read or typed; a second payment of
+  the same business whose check returns that clave MUST be refused as already
+  used.
+- **FR-007**: When the provider answers that a reference matches more than one
+  transfer, the product MUST NOT make another paid call with the same data
+  and MUST ask the payer for the clave de rastreo alone.
 
-**Before the upload (Story 2, D3)**
+**Missing-data feedback (Story 2, D4–D6)**
 
-- **FR-007**: The upload step MUST show, above the upload button, a visual of
-  a receipt marking the clave de rastreo, the amount, the date and the
-  destination account, with text saying what the capture must include.
-- **FR-008**: The visual MUST be legible at 360px in both themes, cause no
-  horizontal scroll, and mark no field by colour alone.
-- **FR-009**: The step MUST show three rules: the detail, not the summary; the
+- **FR-008**: A capture the reader calls fully legible, a SPEI receipt, that
+  shows neither a clave nor a reference MUST NOT reach a paid call.
+- **FR-009**: The payer MUST be told on the same screen, at the top of the
+  step, that the capture shows neither key; the message MUST also name every
+  other field the typing form needs that the capture did not show, and MUST
+  NOT name fields the capture showed.
+- **FR-010**: The message MUST say where to find the data: the bank's own
+  screen when a verified hint exists for the bank the reader recognised, the
+  general hint otherwise.
+- **FR-011**: The message MUST offer "Subir otra captura" first and "Escribir
+  los datos" second; the form MUST be filled in with every field the capture
+  showed, and each empty field MUST say in text that it was missing from the
+  capture.
+- **FR-012**: A second capture with no key in the same visit MUST put the form
+  first.
+- **FR-013**: The message MUST receive focus and be announced to assistive
+  technology, with an icon and text.
+- **FR-014**: When the check later needs a field from the payer (two-eyes D8,
+  D20, and FR-007), the page MUST name each field it needs and only those,
+  say where to find them when it knows the bank, and offer the pre-filled
+  form.
+- **FR-015**: A partly legible capture, one whose legibility the reader did
+  not judge, one with a malformed clave, and any capture read while the
+  reader is down or answering nonsense MUST follow today's flow.
+
+**The capture guide (Story 3, D8)**
+
+- **FR-016**: The upload step MUST show, above the upload button, a drawing of
+  a receipt marking with numbers, named in text, the clave de rastreo or
+  número de referencia, the amount, the date and the destination account.
+- **FR-017**: The drawing MUST be legible at 360px in both themes, cause no
+  horizontal scroll, and mark nothing by colour alone.
+- **FR-018**: The step MUST show three rules: the detail, not the summary; the
   whole screen; a photo without glare.
-- **FR-010**: Tips for the common banks MUST be one tap away, and MUST come
-  from the same hints as FR-003.
-- **FR-011**: Nothing this story adds may stand in front of the upload button:
-  it stays one tap from the start of the step.
-
-**Card and phone (Story 3, D1, D2)**
-
-- **FR-012**: A member who may configure the business MUST be able to add,
-  change or remove one debit card (16 digits, passing the card check digit)
-  and one phone number (10 digits), each with a bank from the provider's
-  vocabulary. The CLABE MUST stay required for the channel.
-- **FR-013**: The payment page MUST show the CLABE and, when registered, the
-  card and the phone, each labelled and copyable. An ISP with only a CLABE
-  MUST see no change on its page.
-- **FR-014**: A search MUST name the identifier the receipt shows as
-  destination.
-- **FR-015**: When the destination cannot be tied to one identifier, the
-  provider's reading of the capture MUST receive every identifier of the ISP
-  as a candidate, and a typed submission MUST ask the payer which identifier
-  they sent to, shown masked.
-- **FR-016**: A fully legible receipt whose destination matches none of the
-  ISP's identifiers MUST be refused before any credit, telling the payer the
-  transfer went to a different account. Masked digits MUST NOT count as a
-  mismatch.
-- **FR-017**: Changing or removing an identifier MUST NOT change the
-  identifier a submitted payment is checked against.
-
-**Spin (Story 4, D5)**
-
-- **FR-018**: A Spin receipt of a SPEI transfer MUST be searched with the
-  institution Banxico records for Spin's SPEI transfers, never with the name
-  printed when the two differ.
-- **FR-019**: When that institution is not established for the receipt, no
-  institution MUST be guessed for a paid search; the first call MUST be the
-  provider's own reading of the capture.
-- **FR-020**: A Spin movement that stayed inside Spin, or cash put into Spin,
-  MUST NOT be sent to the provider and MUST spend no credit; the payer MUST be
-  told in es-MX that Banxico does not record it and to contact their provider
-  with the receipt.
-- **FR-021**: A confirmed Spin payment MUST record the name printed on the
-  receipt and the institution Banxico returned.
+- **FR-019**: Tips on where each bank shows the data MUST be one tap away, and
+  MUST come from the same hints as FR-010.
+- **FR-020**: Nothing this story adds may stand in front of the upload button.
 
 **Across the feature**
 
-- **FR-022**: Payments validating at cut-over MUST finish under the flow they
+- **FR-021**: Payments validating at cut-over MUST finish under the flow they
   started in.
-- **FR-023**: The product MUST make countable from its records, with no
-  further instrumentation: captures stopped for a missing clave, by bank;
-  asks by field and how they ended (new capture, typing, abandoned);
-  payments by the identifier that received them; destinations that matched
-  no identifier; Spin receipts by kind (SPEI, inside Spin, cash).
-- **FR-024**: Nothing else changes: what a Banxico verdict means, the fee,
-  partial settlement, the schedule, the platform's top-ups, and the fields of
-  the manual door apart from the identifier choice (FR-015).
+- **FR-022**: The product MUST make countable from its records, with no
+  further instrumentation: captures stopped for having no key, by bank; how
+  each ask ended (new capture, typed data, abandoned); searches by reference
+  and how they ended (found, not found, matched more than one).
+- **FR-023**: Nothing else changes: what a Banxico verdict means, the fee,
+  partial settlement, the schedule, and the top-up flow apart from the stop
+  (Edge Cases).
 
 ### Key Entities
 
-- **Receiving identifier**: where a business is paid — its CLABE (required),
-  and optionally one debit card and one phone number — each with its bank. A
-  payment remembers the identifier it was sent to.
-- **Ask**: a request to the payer for data, with the fields it names and how
+- **Key**: what finds a transfer in Banxico — a clave de rastreo, a
+  referencia numérica, or both — with where each came from: our reading, the
+  provider's, the payer's hand, or Banxico's record.
+- **Ask**: a request to the payer for data, with the fields it named and how
   it ended.
-- **Bank hint**: for a bank or app, where it shows the clave de rastreo and
-  what to tap, with the receipt or document it was verified against; es-MX
-  copy kept by hand, used by the ask and by the tips.
-- **Spin classification**: whether a Spin receipt is a SPEI transfer, a
-  movement inside Spin, or cash put into Spin.
+- **Bank hint**: for a bank, where its app shows the clave and the reference,
+  with the real receipt or the bank's own document it was verified against;
+  es-MX copy kept by hand, used by the ask and by the guide's tips.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: A clear SPEI capture that shows no clave spends zero credits,
+- **SC-001**: A clear SPEI capture that shows neither key spends zero credits,
   and the payer learns what is missing within the same interaction.
-- **SC-002**: When the payer is asked, the number of fields asked is exactly
+- **SC-002**: A receipt that shows a reference and no clave, for a transfer
+  Banxico has published, is confirmed with no question to the payer and at
+  most two paid calls.
+- **SC-003**: When the payer is asked, the number of fields named is exactly
   the number missing or in doubt — never the whole form.
-- **SC-003**: For every bank on the hint list, a payer asked for the clave is
-  told where that bank's app shows it, and every entry on the list names the
-  real receipt or the bank's own documentation it was verified against. At
-  launch the list holds every bank whose detail screen has been seen that way
-  (amended 2026-09-23, research R9: production has no confirmed payments yet,
-  so "every bank in the product's confirmed payments" could not be measured).
-- **SC-004**: The share of payers who, once asked, send a new capture or type
-  the data — rather than abandon — can be read from the records, so the ask
-  can be judged on numbers.
-- **SC-005**: A transfer to an ISP's card or phone that Banxico has published
-  is confirmed with the same number of paid calls as a transfer to its CLABE.
-- **SC-006**: A clear receipt whose destination matches none of the ISP's
-  identifiers spends zero credits.
-- **SC-007**: A Spin movement that did not go through SPEI spends zero
-  credits.
-- **SC-008**: On the upload step, the upload button is one tap from the start
+- **SC-004**: The count of payments of one business confirmed with the same
+  Banxico clave is zero, whatever key found them.
+- **SC-005**: A reference that matches more than one transfer costs at most
+  one paid call before the payer is asked for the clave.
+- **SC-006**: Every entry on the bank-hint list names the real receipt or the
+  bank's own document it was verified against. At launch the list holds
+  Banorte (receipt 1) and every bank whose detail screen has been seen that
+  way before implementation.
+- **SC-007**: On the upload step, the upload button is one tap from the start
   of the step, and the page has no horizontal scroll at 360, 768 and 1280px in
   either theme.
-- **SC-009**: An ISP with only a CLABE sees no change in its setup, and its
-  payers see no change on the transfer step.
-- **SC-010**: For every outcome that exists today, a receipt that shows its
-  clave and was sent to the CLABE ends in the same status with the same words
-  as today.
-- **SC-011**: Every new test carries its story citation (`receipt-triage
+- **SC-008**: The share of payers who, once asked, send a new capture or type
+  the data — rather than abandon — can be read from the records.
+- **SC-009**: For every outcome that exists today, a receipt that shows its
+  clave ends in the same status with the same words as today.
+- **SC-010**: Every new test carries its story citation (`receipt-triage
   US<n>`), and the count of decision citations lost in the change is zero.
 
 ## Assumptions
 
-- **apiCEP accepts a debit card and a phone as the receiving identifier**, and
-  a list of candidates when it reads the picture. Documented by the provider
-  and read in session on 2026-09-23; never measured by us. Whether its answer
-  says which candidate matched is unknown; the plan MUST find out, because a
-  later retry that types the data needs to name one identifier.
-- **The ISP's phone number receives transfers** — it is registered with its
-  bank for transfers to a phone — and its card is a debit card that receives
-  SPEI. The setup says so; the ISP answers for it.
-- **The institution Banxico records for Spin's SPEI transfers** depends on
-  the payer's own account: Spin is a SPEI participant in its own right (code
-  90728, `SPIN BY OXXO`), and accounts not yet moved send through STP (90646).
-  So FR-018 applies only when the receipt shows which of the two the origin
-  account belongs to; otherwise FR-019 applies (amended 2026-09-23, research
-  R8, from public sources on Spin's direct connection to SPEI).
-- **The reader can read the destination** (its kind and the digits shown)
-  **and tell a Spin SPEI transfer from a movement inside Spin.** Both MUST be
-  measured on real receipts at plan time; when the reader cannot tell, the
-  receipt takes today's flow.
-- **"Clear" is the reader's own "fully legible"** (two-eyes-receipt D2): a
+- **The provider's direct mode finds a transfer by reference alone.**
+  Documented by the provider and read in session on 2026-09-23 ("required if
+  `trackingKey` is not sent"); never measured by us. Its answer to a
+  reference that matches more than one transfer — published as a refusal that
+  asks for the tracking key — is likewise unmeasured.
+- **Whether the provider's picture reading searches by a reference it reads**
+  is unknown. The design does not depend on it: if it does not, the reference
+  both readings agree on travels on the next attempt, which is why SC-002
+  allows two paid calls.
+- **The referencia numérica has at most seven digits**, as SPEI defines it and
+  as bank apps ask for it; the provider's own example carries seven.
+- **"Clear" is the reader's own "fully legible"**, or the text of a PDF: a
   field the bank did not print is not a legibility problem.
 - **The bank hints are kept by hand**, as es-MX copy, and an entry is added
-  only from a real receipt or the bank's own documentation. The first entry is
-  Banorte, from receipt 1 (amended 2026-09-23, research R9).
+  only from a real receipt or the bank's own documentation. The first is
+  Banorte, from receipt 1.
 - **The capture guide is part of the existing step**, not a screen of its
-  own (D3), so that no payer takes an extra tap to reach the upload.
-- **One card and one phone per business.** More identifiers, or a second
-  CLABE, are out of scope.
+  own, so no payer takes an extra tap to reach the upload.
+- **Production has no traffic yet** (measured 2026-09-23), so how often a
+  capture lacks both keys is unknown today; FR-022 makes it countable.
 
 ## Out of Scope
 
-Narrowed on 2026-09-23 (Clarifications). Kept here so none of it is lost:
+Narrowed on 2026-09-23 and 2026-09-24 (Clarifications). Kept here so none of
+it is lost:
 
-- Searching Banxico by the referencia numérica.
+- A debit card or a phone number as receiving identifiers, and more than one
+  receiving account per business.
+- Spin by OXXO and other fintechs: checking against the institution Banxico
+  records for them.
 - Same-bank transfers and cash deposits: sorting them, keeping them away from
-  Banxico, and a review flow for the ISP in the panel (receipts 3 and 4). They
-  keep today's flow.
-- Keeping Banxico's clave for every key, flags for a capture used twice, and a
-  cap on the paid calls a receipt can buy.
-- A second CLABE, more than one card or phone, and steering payers to an
-  account at another bank.
-- Fintechs other than Spin by OXXO.
+  Banxico, and a review flow for the ISP (receipts 3 and 4).
+- Flags for a capture used twice, and a cap on the paid calls a receipt can
+  buy.
 - A reference assigned by the page to each customer.
+- Searching by reference for platform top-ups.
 - Reading the ISP's own bank movements.
 
 ## Dependencies
 
-- The provider (apiCEP): the card and phone receiving identifiers, and the
-  candidate list when it reads a picture.
-- The two-eyes flow (two-eyes-receipt D1–D3, D8 and plan D20), which this
-  feature narrows in one case (D4) and whose asks it rewords.
-- The provider's bank vocabulary, which already names both SPIN BY OXXO and
-  STP.
-- The Cuenta settings where the CLABE is configured today, and the role
-  allowed to change them.
+- The provider (apiCEP): its direct mode with a `referenceNumber`, and the
+  reference its picture reading returns.
+- The two-eyes flow (two-eyes-receipt D1–D8 and plan D20), which this feature
+  narrows in one case (D4) and whose asks it rewords (D6).
+- The one-transfer-pays-once rule (direct-payment D8), extended to every key
+  (D3).
 - The receipt reader and its PDF text route (two-eyes-receipt D1, D2).

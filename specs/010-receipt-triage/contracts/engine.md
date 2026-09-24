@@ -1,14 +1,5 @@
 # Contract: the validation engine facade
 
-> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
-> chooses one *cuenta de cobro*, the only account the payment page shows;
-> the CLABE is no longer required; a receipt's destination is checked by its
-> last four digits; a transfer to another account registered at submission
-> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
-> Everything here about showing several accounts, the account choice on the
-> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
-> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
-> required is superseded until the plan is redone for Story 3.
 
 **Feature**: receipt-triage · **Files**: `apps/api/src/consta/index.ts`
 (types), `consta/validate.ts`, `consta/extract.ts`, `consta/failure.ts`,
@@ -52,12 +43,16 @@ transfer: {
 The request guard already enforces "at least one" and refuses a request with
 neither as `REQUEST_REJECTED` before any credit.
 
-**Receipt variant — a list is allowed (D22):**
+**Receipt variant — one account, and the accounts to tie against (D22,
+re-planned 2026-09-24):**
 
 ```ts
 receipt: { proofKey: string };
-beneficiary?: ConstaBeneficiary;              // exactly one of the two
-potentialBeneficiaries?: ConstaBeneficiary[]; // ≥ 2
+beneficiary: ConstaBeneficiary;               // the cuenta de cobro snapshot
+/* receipt-triage D30: the payment's registered accounts at submission,
+   current and retired — what the destination is tied against. Never sent
+   to the provider. Omitted by a top-up (its one CLABE is `beneficiary`). */
+receivingAccounts?: (ConstaBeneficiary & { retired?: true })[];
 providerOcr?: true;                           // unchanged: the legacy cross only
 /* receipt-triage D27 (FR-027): a payment born before this feature — the
    engine reads as today but skips the ask and the destination tie, so the
@@ -65,19 +60,23 @@ providerOcr?: true;                           // unchanged: the legacy cross onl
 legacy?: true;
 ```
 
-With a list, the engine (1) reads the file exactly as with one account (the
-`readable` test gains "or `potentialBeneficiaries`"); (2) runs the ask
-against the list; (3) ties the reading's destination (`tieDestination`): one
-account tied → the provider call carries `beneficiary`; otherwise it carries
-`potentialBeneficiaries`; (4) reports what it sent in `beneficiaryUsed`.
+The engine (1) reads the file as today; (2) runs the ask against
+`receivingAccounts` (or `[beneficiary]` when omitted); (3) ties the reading's
+destination (`tieDestination`): tied to one account → the provider call
+names **that** account, retired ones included (FR-020a); unknown → it names
+`beneficiary`; (4) reports what it named in `beneficiaryUsed`, with
+`retired: true` when it was a retired account. The product no longer sends
+`potentialBeneficiaries`: the engine keeps accepting it for other callers
+(its guard and adapter are unchanged), and D23's list door is retired.
 
 ## `ConstaVerdict` — additions
 
 ```ts
-/* receipt-triage D22: the account the provider call named. Null when the
-   call carried the list; absent on the transfer door, whose caller chose.
-   The lifecycle stores it on the payment (D25). */
-beneficiaryUsed?: ConstaBeneficiary | null;
+/* receipt-triage D22/D30: the account the provider call named on the
+   receipt door, `retired` when it was one the ISP removed; absent on the
+   transfer door, whose caller chose. The lifecycle stores it on the
+   payment (D25) and holds a `retired` confirmation for the ISP (D31). */
+beneficiaryUsed?: (ConstaBeneficiary & { retired?: true }) | null;
 /* receipt-triage D22 (amended 2026-09-24): on `valid`, `cep` also carries
    Banxico's own word on the receiving account — documented by the
    provider, dropped by the adapter until now. Whole or masked is
@@ -106,7 +105,7 @@ extract(input: {
      asked for. The receipt door always has them in its request — a
      top-up's is the platform's CLABE, so a top-up receipt sent to another
      account is stopped too (spec Edge Cases). */
-  receivingAccounts?: ConstaBeneficiary[];
+  receivingAccounts?: (ConstaBeneficiary & { retired?: true })[];
 }): Promise<ConstaReading>;
 ```
 
@@ -115,16 +114,17 @@ The reading gains:
 ```ts
 referenceNumber: string | null;   // only when the gate says ok
 destination: { kind: "clabe" | "card" | "phone" | "account" | null; digits: string | null };
-gate: { …, referenceNumber: "ok" | "malformed" | "missing" };
+gate: { …, referenceNumber: "ok" | "malformed" | "generic" | "missing" };
 /* receipt-triage D15: the one rule, reported. Null when the capture may
    go on to the paid call. */
 ask:
   | null
-  | { reason: "no_key"; fields: ("key" | "amount" | "date" | "senderBank" | "account")[] }
+  | { reason: "no_key"; fields: ("key" | "amount" | "date" | "senderBank")[]; shared?: true }
   | { reason: "wrong_destination" };
-/* receipt-triage D24: the account the destination tied to, when it did —
-   the page pre-selects it in the form */
-tiedAccount: "clabe" | "card" | "phone" | null;
+/* receipt-triage D24/D30: the account the destination tied to, when it
+   did — used by the pay handler to snapshot `beneficiary`; never sent to
+   the page (re-planned 2026-09-24) */
+tiedAccount: (ConstaBeneficiary & { retired?: true }) | null;
 ```
 
 `extract` never throws on an ask: it reports it, and records the reading with

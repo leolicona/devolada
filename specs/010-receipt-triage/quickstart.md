@@ -1,14 +1,5 @@
 # Quickstart: receipt-triage
 
-> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
-> chooses one *cuenta de cobro*, the only account the payment page shows;
-> the CLABE is no longer required; a receipt's destination is checked by its
-> last four digits; a transfer to another account registered at submission
-> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
-> Everything here about showing several accounts, the account choice on the
-> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
-> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
-> required is superseded until the plan is redone for Story 3.
 
 How to prove the feature works, story by story, with the commands a
 contributor runs. The shapes are in [contracts/](./contracts/) and
@@ -121,7 +112,7 @@ Expected:
 
 By hand: upload receipt 1 to the seeded link at 360px and read the screen.
 
-## User Story 3 — the card and the phone
+## User Story 3 — the cuenta de cobro (re-planned 2026-09-24)
 
 ```sh
 pnpm --filter @devolada/api test -- test/settings.test.ts -t "receipt-triage US3"
@@ -133,27 +124,39 @@ pnpm --filter @devolada/admin test -- -t "receipt-triage US3"
 
 Expected:
 
-- Settings: the owner saves a Luhn-valid card with its bank and a 10-digit
-  phone with its bank; a failing check digit, a 9-digit phone, a number
-  without its bank are refused; an admin gets `FORBIDDEN_FOR_ROLE` on either;
-  an operator reads both masked.
-- Link payload carries `speiCard*` / `speiPhone*` only when set; an ISP with a
-  CLABE alone gets today's payload, field for field.
-- Engine: a reading whose destination is `tarjeta` / `1234` against a card
-  ending 1234 sends `beneficiary.cardNumber`; unreadable destination with
-  three accounts sends `potentialBeneficiaries`; `beneficiaryUsed` says which.
-  Receipt 2's `***195` ends the CLABE …8195 and receipt 3's `•3819` ends its
-  account segment, so both tie to the CLABE; a clear `****9999` ties to
-  nothing and throws `RECEIPT_WRONG_DESTINATION` with no provider request.
-- Lifecycle: the payment stores `beneficiary`; a later attempt uses it even
-  after the ISP changed its card (FR-021); with candidates and no known
-  account, retries stay on the receipt door with the list (D23); a typed
-  submission to a link with more than one account and no `receivingAccount`
-  is a 400.
-- Page: the transfer step lists the card and the phone, copyable; the form
-  offers the account choice, pre-selecting the tied account from a reading.
+- Settings: the owner saves a Luhn-valid card and a 10-digit phone, each with
+  its bank, and chooses one as the cuenta de cobro; choosing an unregistered
+  kind, or clearing the cuenta de cobro, is refused with its message; an ISP
+  with only a card is `configured`; changing the card appends the old number
+  to `spei_retired_accounts`; an admin gets `FORBIDDEN_FOR_ROLE`; an
+  operator reads the numbers masked. A business with a CLABE and no
+  `spei_collect_kind` reads `collectKind: "clabe"` and today's `configured`.
+- Link payload: exactly one `collectAccount`; an ISP collecting at its CLABE
+  gets today's payload plus that field, and the page renders today's step.
+- Engine: a reading whose destination ends the cuenta de cobro names it; one
+  whose last digits end the (non-cobro) card names the card and reports it
+  in `beneficiaryUsed`; `tarjeta ****3819` whose digits end the CLABE's
+  account segment ties to the CLABE (D24); receipt 2's `***195` (three
+  digits) ties; two visible digits tie nothing and name the cuenta de cobro;
+  a clear `****9999` throws `RECEIPT_WRONG_DESTINATION` with no provider
+  request; digits ending a **retired** card name it with `retired: true`.
+- Lifecycle: the payment stores `beneficiary` and `registered_accounts` at
+  submission; a later attempt uses them after the ISP changed its card
+  (FR-021); a `valid` to a retired account ends `confirmed` with
+  `action_outcome = "review"`, `review_reason = "retired_account"`, no queue
+  entry and no webhook; `POST /payments/:id/review` `accept` queues it,
+  `reject` ends it `invalid` with `REJECTED_BY_BUSINESS`; a typed
+  submission never carries an account and is checked against the cuenta de
+  cobro.
+- Page: the transfer step shows one account, labelled by its kind; the form
+  leads with "Número de referencia" and never asks for an account; a held
+  payment reads "Tu pago está en revisión con {ISP}."; the wrong-destination
+  message names the account the ISP receives at.
+- Panel: the held row shows "En revisión" with Aceptar / Rechazar.
 
-By hand, with the sandbox: add a card in Cuenta, open the link, copy the card.
+By hand, with the sandbox: register a card, choose it as the cuenta de
+cobro, open the link — only the card shows; then choose the CLABE and pay to
+the card: the payment is checked against the card.
 
 ## User Story 4 — the capture guide
 

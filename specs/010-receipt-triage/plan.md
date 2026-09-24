@@ -1,14 +1,5 @@
 # Implementation Plan: receipt-triage
 
-> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
-> chooses one *cuenta de cobro*, the only account the payment page shows;
-> the CLABE is no longer required; a receipt's destination is checked by its
-> last four digits; a transfer to another account registered at submission
-> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
-> Everything here about showing several accounts, the account choice on the
-> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
-> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
-> required is superseded until the plan is redone for Story 3.
 
 **Branch**: `claude/payment-receipt-info-handling-bhqn5o` | **Date**: 2026-09-24 (first planned 2026-09-23) | **Spec**: [spec.md](./spec.md)
 
@@ -24,8 +15,9 @@ its destination, which can now be the ISP's CLABE, debit card or phone.
 **After the reading**, a clear capture that shows neither key is stopped
 before any paid call, and the payer is told exactly which data is missing,
 where their bank shows it, and that they can type it — with everything the
-capture did show already filled in. **In Cuenta**, the owner can register one
-card and one phone beside the CLABE.
+capture did show already filled in. **In Cuenta**, the owner registers a
+CLABE, a card and a phone and chooses one — the *cuenta de cobro* — which is
+the only account the payer sees (re-planned 2026-09-24: D29–D32).
 
 Phase 0 found that the engine already speaks both new languages: the request
 guard, the provider adapter and the billing log carry the reference, and the
@@ -44,10 +36,12 @@ Three things are genuinely new and named:
 - the provider's "this reference matches more than one transfer" stops the
   retries and asks for the clave, or every slot would buy the same refusal
   (R7);
-- a payment remembers the account it was sent to, and while that account is
-  unknown its retries keep the picture door with the list of accounts, so the
-  design never depends on the provider saying which account matched —
-  something its documentation, unreachable from here, may or may not promise
+- a payment remembers the accounts registered when it was submitted and is
+  always checked against **one** of them — the one its receipt's digits name,
+  else the cuenta de cobro — so the design never depends on the provider
+  choosing among candidates (re-planned 2026-09-24, R19; the list door and
+  D23 are retired); a confirmation to a removed account, or one with no
+  clave the provider cannot vouch for, is held for the ISP (D31)
   (R12, R15).
 
 Production has no traffic yet (measured 2026-09-23), so the feature's rates
@@ -67,13 +61,13 @@ default); apiCEP at `https://api.apicep.cloud`, whose direct mode takes
 CLABE, a card or a phone, with a list of candidates when it reads a picture
 (documented, unmeasured — research, "What was measured")
 
-**Storage**: one D1 (`devolada-db`); one additive migration `0036`: four
+**Storage**: one D1 (`devolada-db`); one additive migration `0036` (columns listed in data-model.md, re-planned 2026-09-24): four
 columns on `businesses`, three on `payments`, five on `extractions`, no new
 table. R2 `PROOFS` unchanged
 
 **Testing**: Vitest 3.2 in workerd with a real local D1; apiCEP intercepted
 with `fetchMock` at its pinned origin, now also answering reference searches,
-the 422, and card, phone and list bodies; the reader stubbed at the binding
+the 422, and card and phone bodies; the reader stubbed at the binding
 (`aiReturning`) with `referenciaNumerica` and `destino`; component tests for
 the payer page and the panel on happy-dom with MSW, axe on every state; the
 capture guide's contrast and width in Playwright (`tests/e2e/pago.spec.ts`)
@@ -117,6 +111,11 @@ lifecycle, ~5 settings, ~15 page, ~3 panel, 1 browser — all cited
 The spec fixes D1–D10. The plan adds the ones below; code comments cite them
 as `receipt-triage D<n>` (constitution I).
 
+**Re-planned 2026-09-24** for the rescoped Story 3 (spec D9, D10, FR-016–
+FR-021, FR-020a) and the clarified FR-005/FR-006: D29–D32 added; D22, D25
+and D26 amended; D23 retired with the list door. Contracts: payment-page,
+settings, engine updated; review.md added.
+
 **Amended 2026-09-24** after `/speckit-analyze`: D27 added (finding G1); the
 other findings were folded into the spec, the contracts, the data model and
 the tasks with dated notes.
@@ -135,13 +134,17 @@ the tasks with dated notes.
 | D19 | Bank hints are es-MX copy in the payer app, keyed by `Bank`, each with its source and date; an entry only from a real receipt or the bank's own documentation. Launch: Banorte | research R9 |
 | D20 | The capture guide is an app-local component: an inline SVG in token classes, numbered markers named in text, the rules as a list, the tips in the existing `Collapsible`, no motion | research R10 |
 | D21 | `extractions` gains `proof_key`, both references, the destination and two outcomes, so every count in FR-028 is one query | research R11 |
-| D22 | The lifecycle hands the engine every account; the engine reads the file even with a list, ties the destination, sends one account or the list, and reports `beneficiaryUsed`. On `valid`, Banxico's `cepDetails.beneficiaryAccount` — kept by the adapter — is tied to the payment's accounts and outranks `beneficiaryUsed`; a whole account that fits none is `TRANSFER_CONTRADICTED` (amended 2026-09-24, provider documentation) | research R12 |
-| D23 | While a payment's account is unknown and the ISP has more than one, its retries keep the receipt door with the list, as a missing date does (two-eyes plan D20) | research R12 |
+| D22 | The lifecycle hands the engine the cuenta de cobro and the payment's registered accounts; the engine reads the file, ties the destination, names the tied account (else the cuenta de cobro) and reports `beneficiaryUsed`. On `valid`, Banxico's `cepDetails.beneficiaryAccount` — kept by the adapter — is tied too and outranks `beneficiaryUsed`; a whole account that fits none is `TRANSFER_CONTRADICTED` (amended and re-planned 2026-09-24) | research R12, R19 |
+| D23 | ~~While a payment's account is unknown, its retries keep the receipt door with the list~~ — **retired 2026-09-24** with the list door (R19) | research R12 |
 | D24 | The destination is tied by visible trailing digits against every form of each account — whole CLABE, its 11-digit account segment, card, phone. Fewer than three digits, or more than one fit, is *unknown*; only a clear reading that fits nothing is a mismatch | research R14 |
-| D25 | The payment snapshots the accounts at submission (`beneficiary_candidates`) and the one it was sent to (`beneficiary`); attempts read the payment, never the business. Rows with neither keep today's fallback | research R15 |
-| D26 | Card and phone are columns on `businesses` in the `clabe` area (owner only), shown to other roles exactly as the CLABE is; the CLABE stays required and `configured` keeps its meaning | research R16 |
+| D25 | The payment snapshots, at submission, `beneficiary` (the cuenta de cobro, or the account the draft reading tied) and `registered_accounts` (current and retired); attempts read the payment, never the business. Rows with neither keep today's fallback (simplified 2026-09-24) | research R15, R20 |
+| D26 | Card and phone are columns on `businesses` in the `clabe` area (owner only), masked like the CLABE — **their "CLABE stays required" half is replaced by D32** | research R16 |
 | D28 | `recentReading` rebuilds the reference (gate re-derived from the stored text), the destination and `passes` with the new rule, and also reuses `key_missing` and `wrong_destination` rows — or a reused reading silently drops the reference and the ask stops receipt 2 | research R18 (review 2026-09-24) |
-| D27 | A payment with neither `beneficiary` nor `beneficiary_candidates` was born before this feature; its receipt-door requests carry `legacy`, and the engine skips the ask and the destination tie for it (FR-027) | `/speckit-analyze` 2026-09-24, finding G1 |
+| D29 | One cuenta de cobro: `spei_collect_kind` (NULL = `clabe`); the link payload carries one `collectAccount`; the pay contract has no `receivingAccount`; the ask never names the account | research R19 |
+| D30 | `spei_retired_accounts` keeps every number the ISP changed or cleared; the pay handler snapshots current + retired into `registered_accounts`; the tie runs against the snapshot, 3–4 trailing digits, retired ones included | research R20 |
+| D31 | A confirmation to a retired account, or with no clave and an unknown replay flag, is held: `confirmed` + `action_outcome = "review"` + `review_reason`, no queue, no webhook, until `POST /payments/:id/review` accepts (queue, announce) or rejects (`invalid`, `REJECTED_BY_BUSINESS`). Every reader that settles on `confirmed` — the queue, the link's paid state, provisional release, the webhooks — is audited to skip `review` | research R21 |
+| D32 | No CLABE required: `configured` = the cuenta de cobro is set with a known bank; one helper `collectAccount(business)` replaces every `speiClabe!` beneficiary read | research R22 |
+| D27 | A payment with neither `beneficiary` nor `registered_accounts` was born before this feature; its receipt-door requests carry `legacy`, and the engine skips the ask and the destination tie for it (FR-027) | `/speckit-analyze` 2026-09-24, finding G1 |
 
 ## Constitution Check
 
@@ -154,9 +157,9 @@ Phase 1 (below the table).
 | --- | --- | --- | --- |
 | I | Spec-Driven, Every Decision Cited | Twenty-seven decisions with the place each was made. Every new rule in code cites `receipt-triage D<n>`. Comments that say a hole never refuses (`consta/validate.ts` D2/D3 block, `consta/failure.ts` on `RECEIPT_INCOMPLETE`, `reader.ts` on legibility, the `/read` handler's header), that the beneficiary is the business's CLABE (`direct-payments/validation.ts`), and that Devolada "cannot hit" the 422 (`provider/apicep.ts`) are rewritten, not left contradicting the code. The two-eyes spec carries a dated note pointing at receipt-triage D4 (done with this plan) | PASS |
 | II | Money Law | No amount is added or converted. A reference and a destination are text, never parsed as numbers, so leading zeros survive. The amount the ask names as missing is a field name, not a value | PASS |
-| III | One Contract, Pure Routers | `linkStatusResponse`, `proofReadingResponse`, `payRequest`, `directPaymentStatusResponse`, `publicPaymentError`, `settingsResponse` and `settingsPatchRequest` change additively (contracts/). Routers untouched; the logic is in handlers. The engine's facade changes are internal (contracts/engine.md). The bank hints and the account banks are keyed by the `Bank` type the schemas re-export, so the vocabulary keeps one source (`gen-banks`) | PASS |
-| IV | Tests Run on the Real Runtime | apiCEP stays intercepted at its pinned origin, answering reference searches, the 422 and card, phone and list bodies as the adapter already parses them; the reader stays the one binding a test stands in for; migrations applied per test. The guide's contrast and width are measured in the browser layer | PASS |
-| V | Tenant Isolation and Authorization by Area | Every new column sits on a table that already carries `business_id`, or on `businesses` itself. Card and phone use the existing `clabe` area — no new area or action. The destination is tied only against the ISP's own accounts, and those accounts are never written on `extractions`. No new cross-business read; the shape rules are not consulted for references | PASS |
+| III | One Contract, Pure Routers | `linkStatusResponse`, `proofReadingResponse`, `payRequest`, `directPaymentStatusResponse`, `publicPaymentError`, `settingsResponse`, `settingsPatchRequest` and the new `reviewDecisionRequest` change additively (`configured` changes meaning — D32, owned by this spec) (contracts/). Routers untouched; the logic is in handlers. The engine's facade changes are internal (contracts/engine.md). The bank hints and the account banks are keyed by the `Bank` type the schemas re-export, so the vocabulary keeps one source (`gen-banks`) | PASS |
+| IV | Tests Run on the Real Runtime | apiCEP stays intercepted at its pinned origin, answering reference searches, the 422 and card and phone bodies as the adapter already parses them; the reader stays the one binding a test stands in for; migrations applied per test. The guide's contrast and width are measured in the browser layer | PASS |
+| V | Tenant Isolation and Authorization by Area | Every new column sits on a table that already carries `business_id`, or on `businesses` itself. Card, phone and the cuenta de cobro use the existing `clabe` area; the review decision uses `payments/operate` — no new area or action. Retired accounts live on the business row and are snapshotted per payment. The destination is tied only against the ISP's own accounts, and those accounts are never written on `extractions`. No new cross-business read; the shape rules are not consulted for references | PASS |
 | VI | Visual Foundations (NON-NEGOTIABLE) | The guide draws with token classes; markers are numbered and named in text, never colour alone; the ask reuses the existing `Alert` (icon + text) and the form's fields; buttons at the 48px touch size on the page, 40px compact in the panel; no motion; checked at 360/768/1280 in both themes. es-MX copy throughout. The guide is app-local because only one surface renders it | PASS |
 | VII | Every Test Cites Its Story | New and rewritten tests cite `receipt-triage US1`…`US4`; research R17 names the two-eyes assertions that change, so none disappears unnamed | PASS |
 | VIII | Absent Configuration Degrades, Never Breaks | No `AI` binding → no reading, so no ask, no reference from our side and no tied account: the file goes to the provider with the whole list of accounts, and the provider's own reference, when it reads one, still counts. An ISP with no card or phone → today's payload and today's single account. No `APICEP_TOKEN` → unchanged. The `AI` comment in `env.ts` gains the sentence saying so | PASS |
@@ -196,11 +199,11 @@ apps/api/
 ├── migrations/0036_receipt_triage.sql          # + additive columns (data-model.md)
 ├── src/
 │   ├── db/schema.ts                            # ~ businesses, payments, extractions columns; outcome vocabulary
-│   ├── env.ts                                  # ~ AI comment: no reading → no ask, the whole list
+│   ├── env.ts                                  # ~ AI comment: no reading → no ask, the cuenta de cobro
 │   ├── consta/
-│   │   ├── index.ts                            # ~ ConstaBeneficiary widened; transfer keys; receipt list; verdict and reading fields
+│   │   ├── index.ts                            # ~ ConstaBeneficiary widened; transfer keys; receivingAccounts; verdict and reading fields
 │   │   ├── failure.ts                          # ~ RECEIPT_INCOMPLETE thrown again; + RECEIPT_WRONG_DESTINATION
-│   │   ├── validate.ts                         # ~ read with a list; ask before the provider; tie the account; beneficiaryUsed
+│   │   ├── validate.ts                         # ~ ask before the provider; tie the account (retired included); name it; beneficiaryUsed
 │   │   ├── extract.ts                          # ~ ask on the reading; two outcomes; proof_key, references, destination on the row
 │   │   ├── provider/apicep.ts                  # ~ the 422 comment: Devolada can hit it now
 │   │   └── extraction/
@@ -210,31 +213,36 @@ apps/api/
 │   │       ├── ask.ts                          # + askBeforeCredit (pure)
 │   │       └── destination.ts                  # + tieDestination (pure)
 │   ├── direct-payments/
-│   │   └── validation.ts                       # ~ account from the row (D25); accepted needs a key and a known account (D23); adoption (D14); the 422 (D17)
+│   │   └── validation.ts                       # ~ account from the row (D25); accepted needs a key; adoption and the no-clave guard (D14, FR-006); the 422 (D17); review hold (D31)
 │   └── routes/
 │       ├── direct-payments/
-│       │   ├── handler.ts                      # ~ link payload accounts; /read: accounts in, ask out; pay: reference, receivingAccount, snapshot; status: reference
+│       │   ├── handler.ts                      # ~ link payload collectAccount; /read: accounts in, ask out; pay: reference, snapshot (D30); status: reference, inReview
 │       │   └── schema.ts                       # ~ contracts/payment-page.md
+│       ├── payments/
+│       │   ├── index.ts                        # + POST /:id/review (payments/operate)
+│       │   ├── handler.ts                      # + reviewDecision (D31)
+│       │   └── schema.ts                       # ~ contracts/review.md
 │       └── settings/
-│           ├── handler.ts                      # ~ card/phone: clabe area, pairs, masking
+│           ├── handler.ts                      # ~ card/phone, cuenta de cobro, retired accounts, configured (D29, D30, D32)
 │           └── schema.ts                       # ~ contracts/settings.md
-├── sandbox/apicep-mock.mjs                     # ~ reference found / 422; card, phone and list bodies
+├── sandbox/apicep-mock.mjs                     # ~ reference found / 422; card and phone bodies
 └── test/
     ├── consta/helpers.ts                       # ~ stub readings carry referenciaNumerica and destino
     ├── consta/validate.test.ts                 # ~ R17 rewrites; + reference comparison, the ask, tying
-    ├── direct-payment.test.ts                  # + reference door, adoption, the 422, account snapshot
-    └── settings.test.ts                        # + card and phone
+    ├── direct-payment.test.ts                  # + reference door, adoption, the 422, account snapshot, review hold
+    └── settings.test.ts                        # + card, phone, cuenta de cobro, retired accounts
 
 apps/pago/
 ├── src/features/pago/
-│   ├── PaymentPage.tsx                         # ~ accounts on the transfer step; the ask; the key block; the account choice; lead with typing; later asks
+│   ├── PaymentPage.tsx                         # ~ one account on the transfer step; the ask; the key block (reference first); lead with typing; later asks; in review
 │   ├── CaptureGuide.tsx                        # + the guide (D20)
 │   └── bank-hints.ts                           # + BANK_HINTS (D19)
 └── test/pago.test.tsx                          # + US1–US4 scenarios
 
 apps/admin/
-├── src/features/settings/SettingsScreen.tsx    # ~ card and phone in the owner-only block
-└── test/settings.test.tsx                      # + card and phone scenarios
+├── src/features/settings/SettingsScreen.tsx    # ~ three accounts and the cuenta de cobro choice (D29)
+├── src/features/payments/…                     # ~ "En revisión" row: Aceptar / Rechazar (contracts/review.md)
+└── test/settings.test.tsx, payments test       # + scenarios
 
 tests/e2e/pago.spec.ts                          # + the guide at 360/768/1280, both themes
 specs/005-two-eyes-receipt/spec.md              # ~ dated note: D2/FR-005 narrowed by receipt-triage D4 (done with this plan)

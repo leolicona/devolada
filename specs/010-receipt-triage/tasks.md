@@ -1,14 +1,9 @@
 ---
 
-> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
-> chooses one *cuenta de cobro*, the only account the payment page shows;
-> the CLABE is no longer required; a receipt's destination is checked by its
-> last four digits; a transfer to another account registered at submission
-> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
-> Everything here about showing several accounts, the account choice on the
-> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
-> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
-> required is superseded until the plan is redone for Story 3.
+> **Behind the plan since 2026-09-24.** The spec and the plan were re-planned
+> for the rescoped Story 3 (plan D29–D32; D23 retired). Regenerate with
+> `/speckit-tasks` before implementing; until then no task here about the
+> account choice, the candidate list or three accounts on the page applies.
 
 description: "Task list for receipt-triage"
 ---

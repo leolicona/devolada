@@ -1,14 +1,5 @@
 # Contract: the public payment page
 
-> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
-> chooses one *cuenta de cobro*, the only account the payment page shows;
-> the CLABE is no longer required; a receipt's destination is checked by its
-> last four digits; a transfer to another account registered at submission
-> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
-> Everything here about showing several accounts, the account choice on the
-> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
-> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
-> required is superseded until the plan is redone for Story 3.
 
 **Feature**: receipt-triage · **Schema**:
 `apps/api/src/routes/direct-payments/schema.ts` (exported as
@@ -29,17 +20,24 @@ and the routers do not change.
 
 ## `GET /direct-payments/links/:token` — `linkStatusResponse`
 
-Added, all optional, present only when the ISP registered them (D9):
+Added (re-planned 2026-09-24, D29): the one account the payer sends money
+to — the cuenta de cobro — whatever its kind:
 
 ```ts
-speiCard: z.string().optional(),      // 16 digits, shown whole: the payer copies it
-speiCardBank: z.string().optional(),
-speiPhone: z.string().optional(),     // 10 digits, shown whole
-speiPhoneBank: z.string().optional(),
+/* receipt-triage D29: exactly one account, never a list — the payer makes
+   no choice about where to send the money (spec D9, FR-017) */
+collectAccount: z.object({
+  kind: z.enum(["clabe", "card", "phone"]),
+  value: z.string(),   // 18, 16 or 10 digits, shown whole: the payer copies it
+  bank: z.string(),
+}),
 ```
 
-Both branches of `getLinkStatus` (panel links and API links) set them. An ISP
-with only a CLABE produces exactly today's payload (SC-008).
+`speiClabe` and `speiBank` stay in the payload for an older page, filled only
+when the cuenta de cobro is the CLABE. Both branches of `getLinkStatus` set
+it. An ISP whose cuenta de cobro is its CLABE (every ISP before this feature)
+renders exactly today's transfer step (SC-008). The ISP's other registered
+accounts never leave the server.
 
 ## `POST /direct-payments/links/:token/read` — `proofReadingResponse`
 
@@ -57,23 +55,27 @@ ask: z
   .discriminatedUnion("reason", [
     z.object({
       reason: z.literal("no_key"),
-      fields: z.array(z.enum(["key", "amount", "date", "senderBank", "account"])).min(1),
+      fields: z.array(z.enum(["key", "amount", "date", "senderBank"])).min(1),
+      /* D7 (clarified 2026-09-24): the reference is one another payment of
+         the ISP already holds that day */
+      shared: z.boolean().optional(),
     }),
     z.object({ reason: z.literal("wrong_destination") }),
   ])
   .nullable(),
-/* receipt-triage D24: which of the ISP's accounts the destination tied
-   to, for the form to pre-select */
-tiedAccount: z.enum(["clabe", "card", "phone"]).nullable(),
 ```
 
-The route passes the ISP's accounts to the engine's `extract`. The endpoint
+`ask.fields` never holds `"account"` (re-planned 2026-09-24): the form never
+asks which account (FR-005, FR-018). `tiedAccount` is not sent to the page.
+The route passes the ISP's registered accounts, current and retired, to the
+engine's `extract` so it can judge the destination (D24, D30). The endpoint
 still "cannot reject anybody" (two-eyes D2): it reports, and the page acts.
 
 ## `POST /direct-payments/links/:token/pay` — `payRequest`
 
-`transfer` changes from "a clave is required" to "a key is required", and
-learns which account the payer sent to:
+`transfer` changes from "a clave is required" to "a key is required". It
+never names an account: typed data is checked against the cuenta de cobro
+(FR-018; re-planned 2026-09-24, the `receivingAccount` field is dropped):
 
 ```ts
 transfer: z
@@ -82,11 +84,6 @@ transfer: z
     /* receipt-triage D1/D12: the SPEI referencia numérica — 1 to 7 digits,
        as printed; required when there is no clave */
     referenceNumber: z.string().trim().regex(/^\d{1,7}$/).optional(),
-    /* receipt-triage D10/R13: which of the ISP's own accounts — a name,
-       never a number (direct-payment D1: the beneficiary is server-side).
-       Required when the link offers more than one; naming an account the
-       ISP does not have is refused either way. */
-    receivingAccount: z.enum(["clabe", "card", "phone"]).optional(),
     senderBank: …,  // unchanged
     date: …,        // unchanged
     amountCents: …, // unchanged
@@ -103,17 +100,19 @@ transfer: z
   .optional(),
 ```
 
-One rule, amended 2026-09-24 (analyze A1): the handler answers
-`VALIDATION_ERROR` (400) when a `transfer` names an account the ISP does not
-have, or names none while the ISP has more than one. Naming the one account a
-CLABE-only ISP has, or naming none, is accepted.
+The handler snapshots the cuenta de cobro and the ISP's registered accounts
+onto the row at submission (D30).
 An older page that always sends a clave to a CLABE-only ISP keeps working
 unchanged.
 
 ## `GET /direct-payments/:id/status` — `directPaymentStatusResponse`
 
 Added: `referenceNumber: z.string().nullable().optional()`; `disputedFields`
-gains `"referenceNumber"`.
+gains `"referenceNumber"`; `inReview: z.boolean().optional()` — true while
+the ISP decides on the payment (FR-006, FR-020a; D31), and the page then
+shows, in the existing info `Alert`: "Tu pago está en revisión con
+{ispName}. Te avisaremos aquí cuando lo confirme." — no success state, no
+reconnection copy.
 
 ## `publicPaymentError`
 
@@ -133,12 +132,11 @@ lo usó otra transferencia de ese día y no muestra la clave de rastreo." `RECEI
 
 ## Page behaviour
 
-### The ISP's accounts on the transfer step (Story 3)
+### The account on the transfer step (Story 3, D29)
 
-The CLABE as today; then, labelled and copyable with the existing
-`CopyField`, "Tarjeta de débito" and "Celular", each with its bank. Nothing is
-shown for an account that is not set. When there is more than one account,
-the list has the heading "Transfiere a cualquiera de estas cuentas".
+One account, the cuenta de cobro, in the existing `CopyField`, labelled by
+its kind — "CLABE", "Tarjeta de débito" or "Celular" — with its bank. No
+list, no heading, no choice. A CLABE renders exactly as today.
 
 ### The capture guide (Story 4, D8, D20)
 
@@ -170,7 +168,7 @@ then `focus()`), so a keyboard or screen-reader user starts from it.
 | Part | Rule | Example |
 | --- | --- | --- |
 | The key | Always, first; the second form when the reading's `gate.referenceNumber` is `generic` | "Tu captura no muestra la clave de rastreo ni el número de referencia." · "El número de referencia de tu captura ({ref}) lo usan muchas transferencias y no muestra la clave de rastreo." |
-| The rest | Every field in `ask.fields` besides `key`, in form order, the account last as "a cuál cuenta transferiste" (amended 2026-09-24, analyze I1); omitted when there are none | "Tampoco vemos la fecha." · "Tampoco vemos el monto ni la fecha." · "Tampoco vemos la fecha ni a cuál cuenta transferiste." |
+| The rest | Every field in `ask.fields` besides `key`, in form order; omitted when there are none (the account is never asked — re-planned 2026-09-24) | "Tampoco vemos la fecha." · "Tampoco vemos el monto ni la fecha." |
 | Where | The entry in `bank-hints.ts` for `reading.senderBank` when there is one; the general sentence otherwise | "En Banorte, toca «Ver más detalles» y captura esa pantalla." · "Abre el detalle de la transferencia en tu app y captura la pantalla donde aparecen estos datos." |
 
 **`wrong_destination`** — honest and kind, never an accusation (clarified
@@ -185,14 +183,13 @@ control stays open.
 **The form** (`TransferForm`) opened from the ask:
 
 - is pre-filled with every field the reading passed (amount, date, bank);
-- shows the key as two fields, "Clave de rastreo" and "Número de referencia",
-  with the line "Clave de rastreo o número de referencia. Escribe al menos
-  uno."; the reference field takes digits only (`inputMode="numeric"`), keeps
-  leading zeros, and says so: "Hasta 7 dígitos, con los ceros del inicio.";
-- when the link offers more than one account, asks "¿A cuál cuenta
-  transferiste?" — one option per account with its kind, last four digits
-  and bank ("Tarjeta ••••1234 · BANORTE") — pre-selecting `reading.tiedAccount`
-  when there is one, with "la que muestra tu captura" under it;
+- leads with the reference (FR-005, clarified 2026-09-24): "Número de
+  referencia" first — digits only (`inputMode="numeric"`), leading zeros
+  kept, "Hasta 7 dígitos, con los ceros del inicio." — then, as the
+  alternative, "¿No tienes número de referencia? Escribe tu clave de
+  rastreo" and the "Clave de rastreo" field; "Con uno basta." The clave is
+  required only by the generic and shared rules below;
+- never asks for the destination account (FR-018);
 - under each field the capture lacked, shows "No aparece en tu captura" in
   text;
 - sends `transfer` with the proof attached, as the manual door already does
@@ -227,7 +224,7 @@ The existing per-field sentences stay. Added:
   the reference and Banxico found nothing with it (spec FR-004, clarified
   2026-09-24): "No encontramos tu transferencia todavía. Confirma tu clave de
   rastreo o tu número de referencia mirando tu comprobante; con uno basta." —
-  the form's key block with both fields, "Escribe al menos uno.", everything
+  the form's key block with both fields, reference first, "Escribe al menos uno.", everything
   else pre-filled.
 - When a key is asked for and `status.senderBank` has an entry in
   `bank-hints.ts`, one more line: "En {banco}: {dónde}".
@@ -235,8 +232,7 @@ The existing per-field sentences stay. Added:
 ### The manual door
 
 "No tengo el comprobante a la mano" opens the same form, with the same key
-block and, when the link offers more than one account, the account choice
-with nothing pre-selected.
+block, reference first. It never asks for an account (FR-018).
 
 ## `bank-hints.ts`
 

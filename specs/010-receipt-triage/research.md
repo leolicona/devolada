@@ -1,14 +1,5 @@
 # Research: receipt-triage
 
-> **Story 3 rescoped 2026-09-24 — this file is behind the spec.** The ISP now
-> chooses one *cuenta de cobro*, the only account the payment page shows;
-> the CLABE is no longer required; a receipt's destination is checked by its
-> last four digits; a transfer to another account registered at submission
-> is checked against that account (spec D9, D10, Story 3, FR-016–FR-021).
-> Everything here about showing several accounts, the account choice on the
-> form (`receivingAccount`), the candidate list (`potentialBeneficiaries`,
-> `beneficiary_candidates`, D23), three visible digits, or the CLABE staying
-> required is superseded until the plan is redone for Story 3.
 
 **Date**: 2026-09-23, rescoped 2026-09-24 · **Spec**: [spec.md](./spec.md) ·
 **Plan**: [plan.md](./plan.md)
@@ -306,6 +297,8 @@ neither. Searches by reference are `validations` rows with
 
 ## R12 — Card and phone at the provider, and who picks the account
 
+> **Re-planned 2026-09-24 (R19).** The page now shows one account, so the list door and D23 are retired; D22 keeps only "tie the destination, name the tied account". The findings below still hold.
+
 **Found.** The engine already accepts every shape the provider documents:
 `beneficiarySchema` takes exactly one of `clabe` (18), `phoneNumber` (10),
 `cardNumber` (16), and the receipt door takes `potentialBeneficiaries`
@@ -364,6 +357,8 @@ rejected by D10: a credit each, to learn nothing.
 
 ## R13 — The manual door with more than one account
 
+> **Superseded 2026-09-24 (R19, R21).** The form never asks for an account; `receivingAccount` is dropped. Kept as history.
+
 **Found.** The manual door's `transfer` carries the key, bank, date and
 amount; the beneficiary is server-side ("the client never sends its own
 money", direct-payment D1). A typed row always takes the transfer door
@@ -415,6 +410,8 @@ shows three.
 
 ## R15 — What the payment remembers
 
+> **Simplified 2026-09-24 (R20).** `beneficiary_candidates` becomes `registered_accounts`, set on every new row; D25's "attempts read the payment" stands.
+
 **Found.** Today the beneficiary is rebuilt from the business on every
 attempt (`direct-payments/validation.ts`, `const beneficiary = { bank:
 business.speiBank, clabe: business.speiClabe, … }`), so a CLABE change already
@@ -434,6 +431,8 @@ one card and one phone per ISP fit in columns, and a snapshot must not follow
 an edit anyway.
 
 ## R16 — The card and the phone in the ISP's setup
+
+> **Superseded 2026-09-24 (R19, R22).** The CLABE is no longer required and `configured` changes meaning. Kept as history.
 
 **Found.** The CLABE lives on `businesses` (`spei_clabe`, `spei_bank`), is
 edited in Cuenta (`apps/admin/src/features/settings/SettingsScreen.tsx`,
@@ -494,3 +493,74 @@ page and pays with the same file inside the window must meet the same stop
 without a second model call. A row written before the migration reads NULL
 in the new columns — no reference, unknown destination — which is exactly
 what it saw.
+
+## R19 — One cuenta de cobro (the rescoped Story 3)
+
+**Found** (spec session 2026-09-24, `/speckit-specify`). Three accounts on the
+page add a decision for the payer. The ISP registers up to three and chooses
+one; the page shows that one; other registered accounts are still accepted
+when a receipt's digits say so.
+
+**Decision (D29).** `businesses.spei_collect_kind` names the cuenta de cobro;
+NULL reads `clabe`, so no existing business moves. The link payload carries
+one `collectAccount`; the pay contract loses `receivingAccount`; the ask
+loses the `account` field. The provider always receives **one**
+beneficiary: the account the destination tied to, else the cuenta de cobro.
+D23 (the list door and its retries) and R13 are retired — the product never
+sends `potentialBeneficiaries` again, which also removes the dependency on
+the provider's candidate matching (documented, unmeasured).
+
+**Alternatives.** Keep the list door for untied receipts — rejected: it buys
+a case the spec accepts as rare (a customer paying where they were never
+shown, with fewer than three visible digits) at the price of the unknown-
+account retry state.
+
+## R20 — Registered and retired accounts at submission
+
+**Found.** FR-019/FR-020a need the accounts "registered when the payment is
+submitted" and the ones the ISP removed. The business row only holds the
+current numbers.
+
+**Decision (D30).** `businesses.spei_retired_accounts` (JSON) collects every
+number the settings handler changes or clears, in the same write; a number
+set again leaves the list. At submission the pay handler snapshots
+`payments.registered_accounts` — current accounts plus retired ones marked
+`retired` — and `beneficiary` = the cuenta de cobro, or the account the
+draft reading already tied. The engine ties against the snapshot, never the
+business (FR-021). A JSON column, not a table: an ISP retires a handful of
+numbers in its life, nothing queries them across businesses, and the
+snapshot must not follow an edit anyway.
+
+## R21 — Holding a confirmation for the ISP
+
+**Found.** The panel already holds a verdict's action for a person:
+`action_outcome = "observation"` and `POST /payments/:id/execute-action`
+(integrations-hub D4/D5), `requireArea("payments", "operate")`. Webhooks are
+announced from one writer (`announcingWriter`, automated-collections-api D7).
+
+**Decision (D31).** Two confirmations are held: a transfer to a retired
+account (FR-020a) and a no-clave confirmation whose replay flag is unknown
+(FR-006). The row confirms (`status = confirmed`, the verdict is Banxico's)
+with `action_outcome = "review"` and `review_reason`; the queue skips it;
+`announcingWriter` does not announce a held row. `POST /payments/:id/review`
+with `accept` queues the action (as an accepted observation) and announces;
+`reject` writes `invalid`, `REJECTED_BY_BUSINESS`, and announces that. The
+payer's status carries `inReview`. Contract: contracts/review.md.
+
+**Alternatives.** A new payment status `held` — rejected: every status is
+read by the feed, the webhooks, the release rules and the admin filters; an
+action outcome is read only by the queue and the feed, which is exactly the
+blast radius wanted.
+
+## R22 — No CLABE required
+
+**Found.** `configured = Boolean(business.speiClabe) && speiBankIsKnown(...)`
+(`routes/settings/handler.ts`), and the direct-payments handler builds the
+beneficiary from `speiClabe!`.
+
+**Decision (D32).** `configured` = the cuenta de cobro is set and its bank is
+known; `speiBankIsKnown` reads the cuenta de cobro's bank. Every read of
+`speiClabe!` for the beneficiary goes through one helper,
+`collectAccount(business)`. The lifecycle's legacy fallback (a row with no
+`beneficiary`) still reads the CLABE, which every such row's business has.
+Top-ups keep the platform's CLABE.

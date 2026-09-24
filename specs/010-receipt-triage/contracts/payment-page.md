@@ -65,6 +65,10 @@ ask: z
   .nullable(),
 ```
 
+`proofReadingResponse` also gains `destinationSeen: z.boolean()` — at least
+three digits of the destination were read — for the checklist's "Cuenta"
+item (Story 4, D8); the digits themselves never reach the page.
+
 `ask.fields` never holds `"account"` (re-planned 2026-09-24): the form never
 asks which account (FR-005, FR-018). `tiedAccount` is not sent to the page.
 The route passes the ISP's registered accounts, current and retired, to the

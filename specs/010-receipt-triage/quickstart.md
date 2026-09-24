@@ -165,10 +165,15 @@ pnpm --filter @devolada/pago test -- -t "receipt-triage US4"
 pnpm e2e -- tests/e2e/pago.spec.ts -g "receipt-triage US4"
 ```
 
-Expected: the component test finds the four numbered items named in text,
-the three rules and the tips trigger, with axe clean, and the upload control
-reachable without any other tap. The browser test measures no horizontal
-scroll at 360, 768 and 1280px and the guide's contrast in both themes.
+Expected (compact guide, re-planned 2026-09-24): the transfer step shows the
+one line "Al terminar, captura el detalle de tu transferencia."; the upload
+step shows the four items in at most two lines at 360px, and "Ver ejemplo"
+opens the drawing, the three rules and the bank tips in one tap; after a
+keyless reading the key item reads "no se ve" and the others their state, by
+icon and word; axe clean; the upload control reachable without any other
+tap. The browser test measures the closed guide's height, no horizontal
+scroll at 360, 768 and 1280px with the example open, and contrast in both
+themes.
 
 ## Regression — what must not move (SC-012, FR-029)
 

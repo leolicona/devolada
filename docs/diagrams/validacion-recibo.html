@@ -1,0 +1,443 @@
+<title>Ruta de un recibo SPEI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --surface-2: #eaefed;
+  --ink: #15212b;
+  --ink-2: #4a5963;
+  --line: #cfd8d5;
+  --accent: #0d6e57;
+  --accent-soft: #dcefe8;
+  --ok: #1f7a3e;
+  --warn: #9a5b00;
+  --warn-soft: #fbefd9;
+  --bad: #a83232;
+  --bad-soft: #f7e1e0;
+  --info: #2c5c98;
+  --info-soft: #e1eaf6;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1417; --surface: #162026; --surface-2: #1d2a31; --ink: #e2e9e6; --ink-2: #9fb0b3;
+    --line: #2d3c43; --accent: #4cc39c; --accent-soft: #173a31; --ok: #5ccf84; --warn: #e3a94b;
+    --warn-soft: #3a2c14; --bad: #ef8181; --bad-soft: #3d1f21; --info: #85acea; --info-soft: #1b2a40;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1417; --surface: #162026; --surface-2: #1d2a31; --ink: #e2e9e6; --ink-2: #9fb0b3;
+  --line: #2d3c43; --accent: #4cc39c; --accent-soft: #173a31; --ok: #5ccf84; --warn: #e3a94b;
+  --warn-soft: #3a2c14; --bad: #ef8181; --bad-soft: #3d1f21; --info: #85acea; --info-soft: #1b2a40;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body); padding-inline: 16px; padding-block: 32px 64px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 5vw, 42px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.1; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+code, .ref { font-family: var(--mono); font-size: 12.5px; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+header { display: grid; gap: 14px; }
+header p { color: var(--ink-2); font-size: 16px; }
+
+/* phase map */
+.map { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.map a { display: grid; gap: 4px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); text-decoration: none; }
+.map a:hover, .map a:focus-visible { border-color: var(--accent); outline: none; }
+.map b { font: 700 13px/1.2 var(--display); }
+.map span { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.map i { font: 500 11px/1 var(--mono); font-style: normal; color: var(--accent); }
+@media (max-width: 760px) { .map { grid-template-columns: 1fr 1fr; } }
+
+/* phases */
+.phase { display: grid; gap: 18px; scroll-margin-top: 16px; }
+.phase-head { display: grid; gap: 6px; }
+.phase-head p { color: var(--ink-2); }
+.rail { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 14px; }
+.step { position: relative; padding: 0 0 22px 28px; display: grid; gap: 6px; }
+.step:last-child { padding-bottom: 0; }
+.step::before { content: attr(data-n); position: absolute; left: -15px; top: -2px; width: 28px; height: 28px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); color: var(--accent); font: 700 12px/24px var(--display); text-align: center; }
+.step.gate::before { border-radius: 4px; transform: rotate(45deg) scale(0.86); content: ""; }
+.step.gate > .gl { position: absolute; left: -15px; top: -2px; width: 28px; height: 28px; font: 700 12px/28px var(--display); text-align: center; color: var(--accent); }
+.step p { color: var(--ink-2); }
+.ref { color: var(--ink-2); opacity: 0.9; }
+.ref::before { content: "↳ "; color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font: 500 12.5px/1.2 var(--body); padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
+.chip.ok { color: var(--ok); border-color: currentColor; }
+.chip.warn { color: var(--warn); border-color: currentColor; background: var(--warn-soft); }
+.chip.bad { color: var(--bad); border-color: currentColor; background: var(--bad-soft); }
+.chip.info { color: var(--info); border-color: currentColor; background: var(--info-soft); }
+.chip.free { color: var(--accent); border-color: currentColor; background: var(--accent-soft); }
+
+figure { margin: 0; display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 80ch; }
+.scroll { overflow-x: auto; }
+.scroll svg { display: block; min-width: 720px; width: 100%; height: auto; color: var(--ink); }
+svg text { font-family: var(--body); }
+
+/* filters */
+.gates { display: grid; gap: 8px; counter-reset: g; list-style: none; padding: 0; margin: 0; }
+.gates li { counter-increment: g; display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.gates li::before { content: counter(g); font: 700 14px/26px var(--display); text-align: center; width: 26px; height: 26px; border-radius: 4px; background: var(--surface-2); color: var(--ink); }
+.gates b { font-weight: 600; }
+.gates .no { font: 500 12px/1.3 var(--mono); color: var(--warn); text-align: right; white-space: nowrap; }
+.gates small { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+@media (max-width: 560px) { .gates li { grid-template-columns: 30px 1fr; } .gates .no { grid-column: 2; text-align: left; } }
+.result { display: grid; gap: 6px; padding: 14px 16px; border-radius: 6px; background: var(--accent-soft); border: 1px solid var(--accent); }
+.result p { color: var(--ink); }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.card ol, .card ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.card li { color: var(--ink-2); }
+.card li b { color: var(--ink); font-weight: 600; }
+.num { font-variant-numeric: tabular-nums; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 12px/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); }
+td code { color: var(--accent); }
+footer { color: var(--ink-2); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { .map a { transition: border-color 0.15s; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Devolada · canal SPEI directo</div>
+  <h1>Cómo se valida un recibo de transferencia, de la foto a la reconexión</h1>
+  <p>El pagador sube la foto o el PDF de su comprobante. Devolada lo lee, pregunta a Banxico (vía apiCEP) si la transferencia existe, y mientras Banxico no responde decide si le devuelve el servicio de forma provisional. Los reintentos siguen un calendario fijo que se ajusta con la latencia medida por banco.</p>
+  <nav class="map" aria-label="Fases">
+    <a href="#fase-a"><i>A · gratis</i><b>Subir y leer</b><span>foto, lectura previa, fila en <code>validating</code></span></a>
+    <a href="#fase-b"><i>B · minuto 0</i><b>Primer intento</b><span>dos lecturas + consulta pagada a Banxico</span></a>
+    <a href="#fase-c"><i>C · mientras espera</i><b>Liberación provisional</b><span>9 filtros antes de reconectar</span></a>
+    <a href="#fase-d"><i>D · hasta 12 h</i><b>Reintentos</b><span>calendario + latencia aprendida</span></a>
+    <a href="#fase-e"><i>E · veredicto</i><b>Cierre</b><span>conciliar, registrar, reconectar</span></a>
+  </nav>
+</header>
+
+<!-- ============ FASE A ============ -->
+<section class="phase" id="fase-a">
+  <div class="phase-head">
+    <div class="eyebrow">Fase A · en la página de pago · no gasta créditos</div>
+    <h2>Subir, leer y crear el pago</h2>
+  </div>
+  <div class="rail">
+    <div class="step" data-n="1">
+      <h3>El pagador sube su comprobante</h3>
+      <p>Imagen o PDF, máximo 1 MB (el límite de apiCEP). Cada liga admite hasta 20 subidas por hora. El archivo queda en el bucket <code>PROOFS</code>, ligado al token de la liga.</p>
+      <div class="chips"><span class="chip free">✓ gratis</span><span class="chip bad">✕ &gt; 1 MB o tipo no soportado</span><span class="chip bad">✕ 429 TOO_MANY_ATTEMPTS</span></div>
+      <div class="ref">apps/api/src/direct-payments/proofs.ts · PROOF_MAX_BYTES, UPLOAD_HOURLY_BUDGET · direct-payment D12, D13</div>
+    </div>
+    <div class="step" data-n="2">
+      <h3>Lectura previa (borrador)</h3>
+      <p>Workers AI lee clave de rastreo, banco emisor, monto, fecha y qué tan legible es la foto. Un PDF con texto se convierte a texto primero. La lectura pasa por una compuerta: un campo mal formado se trata como vacío, nunca como dato.</p>
+      <div class="chips"><span class="chip free">✓ cuesta IA, no un crédito</span><span class="chip info">se reutiliza en el pago (D14)</span></div>
+      <div class="ref">routes/direct-payments/handler.ts · readProof · consta/extract.ts · consta/extraction/gate.ts · proof-extraction D6, D14 · two-eyes-receipt D1</div>
+    </div>
+    <div class="step gate"><span class="gl">?</span>
+      <h3>Filtro de la página: ¿vale la pena gastar un crédito?</h3>
+      <p>Solo dos casos se rechazan antes de pagar a apiCEP: el archivo no es un comprobante, o no se puede leer nada (<code>legibility: none</code>). Un comprobante legible a medias sí pasa: el proveedor puede leer lo que nosotros no.</p>
+      <div class="chips"><span class="chip bad">✕ no es comprobante</span><span class="chip bad">✕ ilegible</span><span class="chip ok">✓ legible o parcial → sigue</span></div>
+      <div class="ref">two-eyes-receipt D2, FR-004, FR-005</div>
+    </div>
+    <div class="step" data-n="3">
+      <h3>Se crea el pago: una fila para toda su vida</h3>
+      <p>La fila nace en <code>validating</code> y ya es dueña del barrido: su primera ranura es +2 min. Un índice único sobre la clave de rastreo hace que una transferencia pague una sola vez. Si otra liga ya usa esa clave, se responde 409 y el rechazo queda registrado (cuenta para revocar la liberación provisional).</p>
+      <div class="chips"><span class="chip info">validating</span><span class="chip warn">queued_for_credit si el negocio no tiene saldo</span><span class="chip bad">✕ 409 TRANSFER_ALREADY_USED</span></div>
+      <div class="ref">routes/direct-payments/handler.ts · pay · direct-payment D7, D8 · provisional-release D6 · validation-status-ux D9</div>
+    </div>
+    <div class="step" data-n="4">
+      <h3>El pagador recibe respuesta de inmediato</h3>
+      <p>El primer intento corre en segundo plano (<code>waitUntil</code>). La página no espera los 6–10 s del proveedor: pregunta por el resultado en su primer sondeo. El contador de intentos se escribe <em>antes</em> de llamar al proveedor, así un veredicto perdido se reconoce como propio en el reintento.</p>
+      <div class="ref">two-eyes-receipt D4 · direct-payment D8 carve-out (a), encontrado en vivo 2026-08-18</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FASE B ============ -->
+<section class="phase" id="fase-b">
+  <div class="phase-head">
+    <div class="eyebrow">Fase B · intento en línea, minuto 0 · motor Consta</div>
+    <h2>Dos lecturas y una consulta pagada a Banxico</h2>
+  </div>
+  <div class="rail">
+    <div class="step gate"><span class="gl">?</span>
+      <h3>Filtros gratuitos antes del crédito</h3>
+      <p>Si falla alguno, no se llama al proveedor. Los que puede arreglar el tiempo esperan en el calendario; los de configuración se nombran para que el ISP los vea.</p>
+      <div class="chips">
+        <span class="chip warn">sin APICEP_TOKEN → PROVIDER_NOT_CONFIGURED</span>
+        <span class="chip warn">sin CLABE/banco → SPEI_NOT_CONFIGURED</span>
+        <span class="chip warn">banco fuera del catálogo → SPEI_BANK_UNKNOWN</span>
+        <span class="chip bad">clave no alfanumérica de 6–30</span>
+        <span class="chip bad">mismo banco emisor y receptor (no hay CEP)</span>
+      </div>
+      <div class="ref">direct-payments/validation.ts · runValidation · consta/request.ts · validation spec D12, D13, D17 · consta-api-merge D8 · BUG-008</div>
+    </div>
+    <div class="step" data-n="5">
+      <h3>¿Por qué puerta va este intento?</h3>
+      <p>Si la fila ya tiene clave, banco, monto <em>y fecha</em> (los tecleó el pagador, los reveló el CEP o las dos lecturas coincidieron), va por la <b>puerta de transferencia</b>. Si no, va por la <b>puerta de imagen</b>: el archivo se manda a apiCEP y nuestra lectura viaja al lado. Nunca se inventa la fecha con "hoy".</p>
+      <div class="ref">validation.ts · receiptDoor / accepted · two-eyes-receipt D3, D17, D20</div>
+    </div>
+    <div class="step" data-n="6">
+      <h3>Llamada a apiCEP con plazo de 25 s</h3>
+      <p>Una llamada = un crédito. Cada respuesta queda en la tabla <code>validations</code> con su latencia (<code>providerMs</code>), estado HTTP y cuota restante, aun si falló. Sin respuesta (red o plazo vencido) no hay fila: no se cobró.</p>
+      <div class="ref">consta/provider/apicep.ts · DEFAULT_DEADLINE_MS · consta/validate.ts · validation spec D14, D15, D16</div>
+    </div>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 780 320" role="img" aria-label="La consulta a Banxico tiene cinco respuestas posibles y cada una lleva a una acción distinta: valid concilia, pending libera y reintenta, not_found compara lecturas y reintenta, contradicted rechaza, y un error del proveedor solo reintenta.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+        </defs>
+        <!-- source -->
+        <rect x="10" y="130" width="200" height="64" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="110" y="156" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">apiCEP · Banxico</text>
+        <text x="110" y="176" text-anchor="middle" font-size="11.5" fill="currentColor" opacity="0.7">1 crédito · plazo 25 s</text>
+        <!-- branches -->
+        <g fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)">
+          <path d="M210 162 H250 V42 H296"/>
+          <path d="M210 162 H250 V102 H296"/>
+          <path d="M210 162 H296"/>
+          <path d="M210 162 H250 V222 H296"/>
+          <path d="M210 162 H250 V282 H296" stroke-dasharray="4 3"/>
+        </g>
+        <!-- answers -->
+        <g font-size="12.5">
+          <rect x="300" y="22" width="190" height="40" rx="5" fill="none" stroke="#2e9a5a" stroke-width="1.5"/>
+          <text x="312" y="39" font-weight="600" fill="#2e9a5a">valid</text>
+          <text x="312" y="55" font-size="11.5" fill="currentColor" opacity="0.75">el CEP existe</text>
+          <rect x="300" y="82" width="190" height="40" rx="5" fill="none" stroke="#c98a1c" stroke-width="1.5"/>
+          <text x="312" y="99" font-weight="600" fill="#c98a1c">pending</text>
+          <text x="312" y="115" font-size="11.5" fill="currentColor" opacity="0.75">existe, en proceso</text>
+          <rect x="300" y="142" width="190" height="40" rx="5" fill="none" stroke="#c98a1c" stroke-width="1.5"/>
+          <text x="312" y="159" font-weight="600" fill="#c98a1c">invalid · not_found</text>
+          <text x="312" y="175" font-size="11.5" fill="currentColor" opacity="0.75">Banxico aún no tiene nada</text>
+          <rect x="300" y="202" width="190" height="40" rx="5" fill="none" stroke="#c94a4a" stroke-width="1.5"/>
+          <text x="312" y="219" font-weight="600" fill="#c94a4a">invalid · contradicted</text>
+          <text x="312" y="235" font-size="11.5" fill="currentColor" opacity="0.75">p. ej. DEVUELTO</text>
+          <rect x="300" y="262" width="190" height="40" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <text x="312" y="279" font-weight="600" fill="currentColor">error / sin respuesta</text>
+          <text x="312" y="295" font-size="11.5" fill="currentColor" opacity="0.75">429, 5xx, plazo vencido</text>
+        </g>
+        <g fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)">
+          <path d="M490 42 H546"/><path d="M490 102 H546"/><path d="M490 162 H546"/><path d="M490 222 H546"/><path d="M490 282 H546"/>
+        </g>
+        <!-- outcomes -->
+        <g font-size="12" fill="currentColor">
+          <text x="552" y="38" font-weight="600">Conciliar con el adeudo</text>
+          <text x="552" y="54" opacity="0.75">→ fase E</text>
+          <text x="552" y="98" font-weight="600">Evidencia «pending»</text>
+          <text x="552" y="114" opacity="0.75">→ filtros de liberación · reintento</text>
+          <text x="552" y="158" font-weight="600">Comparar las dos lecturas</text>
+          <text x="552" y="174" opacity="0.75">→ liberación si «agreed» · reintento +12 h</text>
+          <text x="552" y="218" font-weight="600">Rechazo definitivo</text>
+          <text x="552" y="234" opacity="0.75">→ invalid · TRANSFER_CONTRADICTED</text>
+          <text x="552" y="278" font-weight="600">Solo reintentar</text>
+          <text x="552" y="294" opacity="0.75">→ sin ranura de 12 h (es falla nuestra)</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Las cinco respuestas posibles de la consulta pagada. Solo <code>contradicted</code> rechaza. <code>not_found</code> nunca se trata como fraude: medido el 2026-08-19, una transferencia ya liquidada seguía sin CEP a los 62 minutos (validation.ts, D17 / BUG-003).</figcaption>
+  </figure>
+
+  <div class="rail">
+    <div class="step" data-n="7">
+      <h3>En <code>not_found</code>: se comparan las dos lecturas</h3>
+      <p>Nuestra lectura y la del OCR de apiCEP se comparan en el mismo instante. Solo la clave y el monto (en centavos exactos) pueden generar desacuerdo; banco y fecha no.</p>
+      <div class="chips">
+        <span class="chip ok">agreed · misma clave y monto → datos aceptados, siguiente intento por puerta de transferencia, cuenta como evidencia de liberación</span>
+        <span class="chip warn">disputed · desempata la forma de clave aprendida del banco; si nada decide, se le piden al pagador solo esos campos</span>
+        <span class="chip info">blind · un lado no leyó nada; si nuestra lectura está completa, se usa</span>
+      </div>
+      <div class="ref">consta/extraction/compare.ts · compareReadings · two-eyes-receipt D5–D8, D12, FR-013 · un acuerdo ya tomado no se revierte (FR-010)</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FASE C ============ -->
+<section class="phase" id="fase-c">
+  <div class="phase-head">
+    <div class="eyebrow">Fase C · mientras Banxico confirma</div>
+    <h2>Filtros para activar el servicio antes del veredicto</h2>
+    <p>La liberación provisional crea una <b>promesa de pago en WispHub</b> (<code>accion: 1</code>). Reconecta a un cliente suspendido en el mismo segundo, o protege del corte a uno activo. WispHub la borra sola cuando se registra el pago, y si vence, el corte vuelve a ser de WispHub. Devolada nunca toca un router ni registra dinero sin confirmar.</p>
+  </div>
+
+  <div class="card">
+    <h3>Primero: ¿hay evidencia? (nunca basta con subir la foto)</h3>
+    <div class="chips">
+      <span class="chip ok">pending · apiCEP dice que la transferencia existe</span>
+      <span class="chip ok">agreed · dos máquinas leyeron lo mismo</span>
+      <span class="chip ok">human · datos tecleados o corregidos por el pagador</span>
+      <span class="chip">history · historial del pagador; inactivo mientras <code>GRADUATION_K = null</code></span>
+    </div>
+    <div class="ref">direct-payments/provisional.ts · releaseEvidenceFor, historyVouches · provisional-release D1, D12</div>
+  </div>
+
+  <ol class="gates" aria-label="Filtros de liberación provisional, en orden">
+    <li><div><b>La liga es de panel (cliente WispHub)</b><small>Una liga de API no tiene usuario WispHub: se omite, no falla.</small></div><span class="no">API → omitir</span></li>
+    <li><div><b>El ISP activó la liberación provisional</b><small><code>provisionalReleaseEnabled</code> en la integración.</small></div><span class="no">apagado → omitir</span></li>
+    <li><div><b>Las acciones están activas</b><small>En modo observación hay cero escrituras a WispHub.</small></div><span class="no">observación → omitir</span></li>
+    <li><div><b>Este pago no se liberó antes</b><small>Se actúa una sola vez por pago.</small></div><span class="no">ya liberado → omitir</span></li>
+    <li><div><b>Hay llave de WispHub</b></div><span class="no">sin llave → omitir</span></li>
+    <li><div><b>El cliente no está revocado</b><small>Revocan: una liberación que terminó en <code>expired</code> sin resolverse (90 días); un DEVUELTO o un CEP ya usado (12 meses); una clave rechazada que era de <em>otro</em> cliente (12 meses). Una reescritura por error de lectura nuestro (<code>superseded</code>) nunca cuenta.</small></div><span class="no">revocado → omitir</span></li>
+    <li><div><b>Hay un adeudo con factura pendiente</b><small>La promesa vive sobre una factura; un adeudo de cero o sin factura no tiene dónde vivir.</small></div><span class="no">sin factura → omitir</span></li>
+    <li><div><b>El monto reclamado cumple la política de reconexión del ISP</b><small>La misma regla que en el veredicto real: porcentaje del adeudo <em>y</em> piso mínimo en pesos, con aritmética entera.</small></div><span class="no">no alcanza → omitir</span></li>
+    <li><div><b>La llamada a WispHub funciona</b><small>Cualquier error salta la liberación; nunca hace fallar la validación.</small></div><span class="no">error → omitir</span></li>
+  </ol>
+
+  <div class="result">
+    <h3>Pasan los 9: promesa de pago creada</h3>
+    <p>Fecha límite = creación + 6 h del calendario + 1 día (WispHub solo guarda el día). La fila guarda <code>provisionalReleaseAt</code>, la evidencia y si fue <code>reconnect</code> (estaba suspendido) o <code>protect</code> (estaba activo). Si al final el pago vence, Devolada vuelve a leer el adeudo y solo le escribe al ISP si el dinero nunca llegó.</p>
+    <div class="ref">provisional.ts · maybeProvisionalRelease, isRevoked, promiseDeadline, notifyProvisionalExpiry · partial.ts · settle · provisional-release D2, D3, D5, D6, D8 (medido 2026-08-27)</div>
+  </div>
+</section>
+
+<!-- ============ FASE D ============ -->
+<section class="phase" id="fase-d">
+  <div class="phase-head">
+    <div class="eyebrow">Fase D · barrido cada minuto</div>
+    <h2>Reintentos y medición de latencia</h2>
+    <p>El cron de cada minuto toma hasta 20 pagos vencidos, los aparta 2 minutos (para que un worker caído no los pierda) y repite el mismo intento. El calendario fijo es el piso; la latencia medida de Banxico por par de bancos mueve el centro.</p>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 780 240" role="img" aria-label="Calendario de reintentos: intento en línea en el minuto 0, ranuras fijas a +2, +8, +20, +45, +120 y +360 minutos, y una ranura tardía a +720 solo para not_found. Entre +2 y el horizonte, la sugerencia aprendida puede adelantar o atrasar el siguiente intento.">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+        </defs>
+        <!-- learned band -->
+        <rect x="140" y="40" width="485" height="92" rx="4" fill="#2c8f73" fill-opacity="0.12" stroke="#2c8f73" stroke-dasharray="5 4"/>
+        <text x="382" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="#2c8f73">zona de la sugerencia aprendida (retryAfter)</text>
+        <!-- axis -->
+        <line x1="30" y1="100" x2="740" y2="100" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="625" y1="100" x2="735" y2="100" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <g fill="currentColor" font-size="12" text-anchor="middle">
+          <circle cx="45" cy="100" r="7" fill="#2c8f73"/>
+          <text x="45" y="126" font-weight="600">0</text><text x="45" y="142" font-size="11" opacity="0.7">en línea</text>
+          <circle cx="140" cy="100" r="6"/><text x="140" y="126" font-weight="600">+2</text><text x="140" y="142" font-size="11" opacity="0.7">siempre corre</text>
+          <circle cx="237" cy="100" r="5"/><text x="237" y="126">+8</text>
+          <circle cx="334" cy="100" r="5"/><text x="334" y="126">+20</text>
+          <circle cx="431" cy="100" r="5"/><text x="431" y="126">+45</text>
+          <circle cx="528" cy="100" r="5"/><text x="528" y="126">+120</text>
+          <circle cx="625" cy="100" r="6"/><text x="625" y="126" font-weight="600">+360</text><text x="625" y="142" font-size="11" opacity="0.7">horizonte (6 h)</text>
+          <circle cx="720" cy="100" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="720" y="126" font-weight="600">+720</text><text x="720" y="142" font-size="11" opacity="0.7">solo not_found</text>
+        </g>
+        <!-- clamp -->
+        <path d="M625 58 V88" stroke="#c98a1c" stroke-width="2"/>
+        <text x="618" y="54" text-anchor="end" font-size="11.5" fill="#c98a1c">tope: nunca después de la última ranura</text>
+        <!-- expired -->
+        <path d="M720 150 V180" stroke="currentColor" marker-end="url(#ar2)" fill="none"/>
+        <text x="720" y="200" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">expired</text>
+        <text x="30" y="226" font-size="11" fill="currentColor" opacity="0.65">minutos desde la creación del pago · posiciones no a escala</text>
+      </svg>
+    </div>
+    <figcaption>Calendario fijo <code>[2, 8, 20, 45, 120, 360]</code> + ranura tardía de 720 min solo cuando la única falla es <code>not_found</code>. La sugerencia aprendida solo actúa después de +2 (la mayoría rápida nunca espera al percentil de un banco lento), nunca pasa del horizonte y nunca apunta al pasado (schedule.ts · nextValidationSlot · direct-payment D7, validation-status-ux D4, learned-retry D6).</figcaption>
+  </figure>
+
+  <div class="two">
+    <div class="card">
+      <h3>Lo que se mide en cada llamada</h3>
+      <ul>
+        <li><b>providerMs</b>: tiempo de proceso que apiCEP reporta en <code>X-Processing-Time</code>. En un <code>invalid</code> sin detalle es la única pista de si Banxico fue consultado: 1–2 s es falla temprana, 6–7 s es búsqueda real.</li>
+        <li><b>providerHttpStatus</b> y <b>quotaRemaining</b> (<code>X-RateLimit-Remaining</code>).</li>
+        <li><b>Plazo de 25 s</b> por llamada (<code>AbortSignal.timeout</code>). Sin respuesta, sin fila.</li>
+        <li><b>Cada llamada cobrada es una fila</b>, también las fallidas (<code>status: null</code>), con <code>customerRef</code> y <code>paymentRef</code> para encadenar los intentos de un mismo pago.</li>
+        <li><b>createdAt</b> de cada intento: de aquí sale la latencia de publicación de Banxico.</li>
+      </ul>
+      <div class="ref">consta/provider/apicep.ts · readTelemetry · consta/validate.ts · validation spec D14, D15, D16 · trust-layer D1</div>
+    </div>
+    <div class="card">
+      <h3>Cómo se aprende cuándo reintentar</h3>
+      <ol>
+        <li><b>Ventana de 28 días</b> sobre todos los negocios: la latencia de Banxico por par de bancos no es dato de un solo ISP.</li>
+        <li><b>Regla 1</b>: solo cuentan transferencias cuyo <em>primer</em> intento falló. Un CEP que ya estaba no mide nada de Banxico.</li>
+        <li><b>Regla 2</b>: solo cuentan intentos con el mismo monto y fecha que al final validaron. Un error de lectura mide al humano, no a Banxico.</li>
+        <li><b>Latencia</b> = primer <code>valid</code> − primer intento honesto, redondeada hacia arriba.</li>
+        <li><b>Escalera de celdas</b>: par emisor→receptor, luego receptor, luego emisor, luego global. Gana la más específica con al menos <span class="num">30</span> muestras.</li>
+        <li><b>p50 y p90</b>, redondeados a pasos de <span class="num">5</span> min. Antes de p50 sugiere p50; entre p50 y p90 sugiere p90; después de p90, o sin datos, <b>silencio</b> y manda el calendario fijo.</li>
+      </ol>
+      <div class="ref">consta/retry/suggest.ts · suggestRetryAfter · MIN_CELL_SAMPLES, WINDOW_DAYS, STEP_MINUTES · learned-retry D1–D5 (enmienda medida en vivo, 2026-08-28)</div>
+    </div>
+  </div>
+  <p class="ref">Historial del pagador (trust block: tasa de validez eventual, mediana de minutos hasta valid, incidentes) viaja en <code>pending</code>/<code>not_found</code> y se guarda como sombra en <code>trustSnapshot</code>. Hoy no decide nada. consta/trust/history.ts · trust-layer D5 · provisional-release D12.</p>
+</section>
+
+<!-- ============ FASE E ============ -->
+<section class="phase" id="fase-e">
+  <div class="phase-head">
+    <div class="eyebrow">Fase E · veredicto final</div>
+    <h2>De <code>valid</code> al servicio de vuelta</h2>
+    <p>Un CEP válido es necesario, no suficiente: todavía debe corresponder al adeudo.</p>
+  </div>
+  <div class="rail">
+    <div class="step gate"><span class="gl">?</span>
+      <h3>Filtros del CEP</h3>
+      <div class="chips">
+        <span class="chip bad">validado fuera de Devolada y sin rastro propio → TRANSFER_ALREADY_USED</span>
+        <span class="chip bad">CEP de hace más de 30 días → STALE_TRANSFER</span>
+        <span class="chip bad">otra fila ya tiene esa clave → TRANSFER_ALREADY_USED</span>
+      </div>
+      <div class="ref">validation.ts · tracesToOwnAttempt, STALE_TRANSFER_DAYS · direct-payment D8, D11 · validation-status-ux D8</div>
+    </div>
+    <div class="step" data-n="8">
+      <h3>Adeudo fresco y conciliación</h3>
+      <p>Se lee el adeudo en WispHub en ese momento (pudo pagarse por otro lado). Lo que dice el CEP que llegó es lo que liquida. Adeudo cero comprobado → <code>unapplied</code>. Si no, <code>confirmed</code> o <code>partial</code>, y clase <code>exact</code> / <code>short</code> / <code>over</code> contra la tolerancia del negocio.</p>
+      <div class="ref">validation.ts · debtFor, settle, classifyPayment · partial-payment D1, D5, D6 · payments-and-classes D1, D3 · debt-truth D7</div>
+    </div>
+    <div class="step" data-n="9">
+      <h3>Acción en WispHub, en la misma fila</h3>
+      <p>Se registra el pago; se reconecta solo si el monto cumple porcentaje y piso, y si la acción configurada es <code>register_and_reconnect</code>. En modo observación nada se escribe y la fila guarda qué se <em>habría</em> hecho. Una falla de WispHub nunca rechaza el pago: queda en cola con estado visible.</p>
+      <div class="chips"><span class="chip ok">done</span><span class="chip warn">queued</span><span class="chip">observation</span><span class="chip bad">failed</span></div>
+      <div class="ref">wisphub/reconnection.ts · attemptReconnection · reconnection/queue.ts · integrations-hub D3–D6 · reconnection-queue D2</div>
+    </div>
+    <div class="step" data-n="10">
+      <h3>Liga de API (no WispHub)</h3>
+      <p>Concilia contra el monto pedido al crear la liga, cierra una liga de un solo uso al confirmarse y avisa por webhook cada cambio de estado.</p>
+      <div class="ref">validation.ts · settleApiPayment · automated-collections-api D7, D8, D17</div>
+    </div>
+  </div>
+</section>
+
+<section class="phase" id="refs">
+  <div class="phase-head">
+    <div class="eyebrow">Referencias</div>
+    <h2>Dónde vive cada pieza</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pieza</th><th>Archivo</th><th>Decisiones</th></tr></thead>
+      <tbody>
+        <tr><td>Envío del pago, lectura previa</td><td><code>apps/api/src/routes/direct-payments/handler.ts</code></td><td>direct-payment D7, D8 · two-eyes-receipt D2, D4</td></tr>
+        <tr><td>Un intento de validación (en línea y barrido)</td><td><code>apps/api/src/direct-payments/validation.ts</code></td><td>direct-payment D11, D17 · two-eyes-receipt D17, D20</td></tr>
+        <tr><td>Motor Consta: filtros, dos lecturas, registro</td><td><code>apps/api/src/consta/validate.ts</code>, <code>request.ts</code></td><td>consta-api-merge D2, D8 · validation spec D12–D17</td></tr>
+        <tr><td>Comparación de lecturas</td><td><code>apps/api/src/consta/extraction/compare.ts</code></td><td>two-eyes-receipt D5–D8, D11</td></tr>
+        <tr><td>Cliente apiCEP, plazo y telemetría</td><td><code>apps/api/src/consta/provider/apicep.ts</code></td><td>validation spec D9, D14, D16</td></tr>
+        <tr><td>Liberación provisional</td><td><code>apps/api/src/direct-payments/provisional.ts</code></td><td>provisional-release D1–D8, D12</td></tr>
+        <tr><td>Calendario de reintentos</td><td><code>apps/api/src/direct-payments/schedule.ts</code></td><td>direct-payment D7 · validation-status-ux D4 · learned-retry D6</td></tr>
+        <tr><td>Reintento aprendido</td><td><code>apps/api/src/consta/retry/suggest.ts</code></td><td>learned-retry D1–D5</td></tr>
+        <tr><td>Historial del pagador</td><td><code>apps/api/src/consta/trust/history.ts</code></td><td>trust-layer D1, D3, D5</td></tr>
+        <tr><td>Umbral y piso de reconexión</td><td><code>apps/api/src/direct-payments/partial.ts</code></td><td>partial-payment D2–D6</td></tr>
+        <tr><td>Especificación vigente</td><td><code>specs/005-two-eyes-receipt/</code>, <code>specs/004-consta-api-merge/</code></td><td>las decisiones anteriores a Spec Kit están en el archivo <code>leolicona/devoladapago-legacy-documentation</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <footer>Construido a partir del código de <code>main</code> al 2026-09-24 (commit 9fe2fa9).</footer>
+</section>
+
+</div>

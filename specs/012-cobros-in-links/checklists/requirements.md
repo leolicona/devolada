@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,9 +31,10 @@
 
 ## Notes
 
-- Two open questions, three markers: the chip's label (FR-002) and what a
-  search does in the Cobros view (FR-010, and US3, which depends on it).
-  Both go to the creator before `/speckit-plan`.
+- Both open questions were answered by the creator on 2026-09-25 and are
+  recorded under Clarifications: the chip is **Por cobrar** (FR-002), and a
+  search in its view finds customers as Links does and says what each one
+  owes (FR-010, FR-017, FR-018, US3). Every item now passes.
 - Provider facts (invoice fields, the default date window, the one-call
   balance answer) are named where they change a product promise. This
   repo's specs record measurements this way (constitution: every

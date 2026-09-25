@@ -151,27 +151,29 @@ list, no heading, no choice. A CLABE renders exactly as today.
 a camera icon: "Al terminar, toma captura del detalle" / "Ahí aparecen la
 clave de rastreo o el número de referencia que necesitamos."
 
-**On "Envía tu comprobante"**, above the upload control, a section in the
-well surface titled "Tu captura debe mostrar":
+**On "Envía tu comprobante"**, above the upload control, a light card
+(`card` surface, 1px `line` border, 10px radius — refined 2026-09-25, no
+receipt drawing) titled "Tu captura debe mostrar", with "4 datos" at the
+right:
 
-1. The small inline-SVG receipt (token classes, `aria-hidden`) beside an
-   ordered list of four items, each a numbered marker, its name and one
-   line: **Clave de rastreo o número de referencia** — "Aparecen en el
+1. An ordered list of four rows divided by `line-soft` hairlines, each a
+   32px `well` tile holding the item's icon (lucide `Hash`, `Banknote`,
+   `Calendar`, `Landmark`), its name and one line: **Clave de rastreo o número de referencia** — "Aparecen en el
    detalle, no en el resumen"; **Monto** — the amount due ("$300.00");
    **Fecha** — "Del día que transferiste"; **Cuenta destino** — "{Tipo} que
    termina en {últimos 4}" from `collectAccount`.
-2. One line with a camera icon: "Captura la pantalla de **detalle**,
-   completa y sin reflejos."
+2. At the card's foot, one quiet line with a camera icon: "Pantalla de
+   **detalle**, completa y sin reflejos."
 3. The existing `Collapsible` "¿Dónde lo encuentro en mi banco?" (closed by
    default) with the entries of `bank-hints.ts`.
 
 **Feedback states** (all opacity, the design system's own motion):
 
-- *Reading* — the file row says "Leyendo tu captura…" and each marker and a
+- *Reading* — the file row says "Leyendo tu captura…" and each icon tile and a
   "Revisando…" word carry `data-motion="breath"` (`--duration-breath`,
   `--opacity-breath`), which keeps running under reduced motion.
 - *Read* — the section title becomes "Lo que vimos en tu captura"; each
-  marker becomes a check on `accent-soft` with "Se ve", or an open circle on
+  tile becomes a check on `accent-soft` with "Se ve", or an open circle on
   `warning-soft` with "No se ve" (and its line turns to the fix: "Busca «Ver
   más detalles» en tu app"; for the account, "Tu captura muestra ••••9999;
   esperábamos ••••1234"); each swap wrapped in `Reveal` (`animate-reveal`,

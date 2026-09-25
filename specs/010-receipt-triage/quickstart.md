@@ -166,8 +166,8 @@ pnpm e2e -- tests/e2e/pago.spec.ts -g "receipt-triage US4"
 ```
 
 Expected (redesigned 2026-09-25): the transfer step shows the note "Al
-terminar, toma captura del detalle"; the upload step shows the drawing and
-the four items with their lines (the account's names the last four digits
+terminar, toma captura del detalle"; the upload step shows the four items
+(no drawing) with their lines (the account's names the last four digits
 of the cuenta de cobro) and one line of rules; the bank tips open in one
 tap; while a capture is read the items breathe with "Revisando…", and after
 a keyless reading the key item reads "No se ve" with its fix line; axe

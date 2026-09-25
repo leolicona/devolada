@@ -138,13 +138,16 @@ receipt."
 - Q: How should the guide feel, and how does the payer see the reading
   happen? → A (2026-09-25, design review): the project's design system, and
   neither saturated nor minimal — intuitive and precise, elegant, focused on
-  the upload. The drawing and the four items stay visible (no "Ver
+  the upload. The four items stay visible (no "Ver
   ejemplo"), each item with one precise line — where the key appears, the
   amount due, the day, and the last four digits of the cuenta de cobro; the
   three rules become one line; the bank tips stay one tap away. Feedback is
   animated within the design system's motion: while the capture is read the
   items breathe ("Revisando…"), then each outcome cross-fades in ("Se ve" /
-  "No se ve") and the ask enters (D8, FR-022–FR-026).
+  "No se ve") and the ask enters (D8, FR-022–FR-026). Refined the same day:
+  subtler, and without the receipt drawing — a light bordered card, one row
+  per item with a small icon (#, $, calendar, bank) that becomes the item's
+  state, a "4 datos" count, and the rules and bank tips at its foot.
 - Q: Should the reader report more (which screen it is, the label of a
   "details" button) and the feedback adapt to it, or the model write the
   feedback? → A: No — out of scope. The reader reports the fields it already
@@ -268,7 +271,7 @@ earlier numbers.
 - **D8 — The capture guide comes twice, precise and unhurried.** On the
   transfer step, before the payer leaves for their bank, a short note says
   to capture the transfer's detail and why. On the upload step, a guide
-  above the upload control shows a small drawing of a receipt and the four
+  above the upload control lists, in a light bordered card, the four
   things the capture must show — clave or reference, amount, date, account —
   each with one precise line (where the key appears; the amount due; the
   day; the last four digits of the cuenta de cobro), one line with the
@@ -528,8 +531,8 @@ ISP's accounts, and one showing only two digits. Needs nothing from the other st
 Before leaving for their bank, on the transfer step, the payer reads a short
 note: when you finish, capture the transfer's detail — that is where the
 clave or the reference appears. On "Envía tu comprobante", a guide above the
-upload control shows a small drawing of a receipt and the four things the
-capture must show, each with one precise line: the clave de rastreo or the
+upload control lists, in a light card, the four things the capture must
+show, each with one precise line: the clave de rastreo or the
 número de referencia (in the detail, not the summary), the amount due, the
 date, and the account — "the card that ends in 1234". One line gives the
 rules (the detail screen, complete, without glare), and "¿Dónde lo encuentro
@@ -543,7 +546,7 @@ payment. It comes last because some payers will still send the summary
 screen, so the repair must exist first.
 
 **Independent Test**: render the step at 360px, 768px and 1280px in both
-themes; check the drawing, the text and the rules, and that the upload button
+themes; check the four items, their lines and the rules, and that the upload button
 is one tap from the start of the step. Needs nothing from the other stories.
 
 **Acceptance Scenarios**:
@@ -552,9 +555,9 @@ is one tap from the start of the step. Needs nothing from the other stories.
    under the account says to capture the transfer's detail on finishing, and
    why.
 2. **Given** the upload step, **When** it renders, **Then** above the upload
-   control a drawing of a receipt and four items — the clave de rastreo or
-   número de referencia, the amount, the date and the account — are visible,
-   each numbered, named in text, with one precise line (the account's line
+   control four items — the clave de rastreo or número de referencia, the
+   amount, the date and the account — are visible, one row each with a small
+   icon and its name in text, with one precise line (the account's line
    names the last four digits of the cuenta de cobro), plus one line of
    capture rules.
 3. **Given** a payer who wants to know where their bank shows the data,
@@ -746,12 +749,11 @@ is one tap from the start of the step. Needs nothing from the other stories.
 
 - **FR-022**: The transfer step MUST show, under the account, a short note
   telling the payer to capture the transfer's detail when they finish, and
-  why. The upload step MUST show, above the upload control, a drawing of a
-  receipt and the four items — clave de rastreo or número de referencia,
-  amount, date, account — each numbered, named in text, with one precise
-  line; the account's line MUST name the last four digits of the cuenta de
+  why. The upload step MUST show, above the upload control, the four items
+  — clave de rastreo or número de referencia, amount, date, account — one
+  row each, with a small icon, its name in text and one precise line; the account's line MUST name the last four digits of the cuenta de
   cobro.
-- **FR-023**: The drawing and the items MUST be legible at 360px in both
+- **FR-023**: The items MUST be legible at 360px in both
   themes, with no horizontal scroll and nothing marked by colour alone.
 - **FR-024**: The guide MUST give the capture rules in one line: the detail
   screen, complete, without glare.

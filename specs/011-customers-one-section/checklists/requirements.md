@@ -64,3 +64,14 @@ SC-008 measures it. It is the only requirement in this spec that exists for a
 feature not yet written. It earns its place because the alternative — learning
 after the merge that the debtor set only exists as a screen's shape — is a
 rewrite, not an addition.
+
+**Amended 2026-09-23** after the demo-tenant billing-cycle case (spec,
+*How a balance moves through one billing cycle*). Two clarifications were
+recorded as the creator's decisions (the row shows balance and open invoices
+by name; the default filter is *Con facturas abiertas*), and FR-002, FR-006,
+FR-007, FR-008, FR-016, FR-017 and FR-027 were revised to match. Re-checked:
+16/16 still pass, and there are still no [NEEDS CLARIFICATION] markers. The one
+new open question (a total on the row) is recorded in **Assumptions**.
+
+**Amended 2026-09-25**: the creator chose this feature over
+cobros-on-demand-search (Clarifications). Nothing in the checklist changes.

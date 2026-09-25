@@ -75,9 +75,47 @@ customers. So the second screen goes and the reading beneath it stays.
 
 It also settles the shape of the debt: on the one sampled record carrying a
 non-zero balance, the customer list said 600.00 while the same customer's
-own balance call said 0 and listed no invoices. A balance alone is therefore
-not the debt (FR-007), and a screen built on it would have told the ISP that
-a paid-up customer owed money.
+own balance call said 0 and listed no invoices. The case built on the demo
+tenant the same day (next section) explains it: that customer paid short,
+and the one-call door does not count a carried balance. Neither source is
+the debt alone (FR-007).
+
+### How a balance moves through one billing cycle (measured 2026-09-23, demo tenant)
+
+Built step by step on WispHub's demo tenant (`api.wisphub.net`, one customer
+on a 499.00 plan, zone "Zona dia 15"), reading the customer record, the
+invoice list and the one-call balance door after each step:
+
+| Step | Customer record `saldo` | Pending invoices | One-call door `saldo` | Invoices + `saldo` |
+| --- | --- | --- | --- | --- |
+| Invoice of 499.00 issued, paid 200.00 | **299.00**, "Pagadas" | none — the invoice closed as *Pagada*, `saldo_nuevo` 299.00 | **0**, no invoices | **299.00** |
+| The zone's monthly "crear facturas" run | **0.00**, "Pendiente de Pago" | one: `sub_total` 499.00 + `saldo` 299.00 = `total` **798.00** | **798.00**, that invoice | **798.00** |
+
+What it answers:
+
+1. **The carried balance never counts twice.** The monthly run folds the
+   carried balance into the new invoice and sets the customer's balance back
+   to zero in the same moment. Pending invoices plus balance is right on both
+   sides of the run. The invoice's own `saldo` field is the part of it that
+   came from before; its line items show only the plan ("Plan de Internet:
+   Plan 3M/1M 499.00 · Periodo del 15/Sept./2026 al 15/Oct./2026").
+2. **The customer's balance does not include open invoices.** With 798.00
+   open, the record said 0.00; the four other invoices of the same run carry
+   `saldo` 0.
+3. **The one-call balance door answers open invoices only.** It said 0 while
+   the customer owed 299.00 — the 600.00-against-0 row above is that state
+   on the pilot. It is never a source of what a customer owes. (Its payment
+   URL also came back without a host, `http:///saldo/…`.)
+
+What it settles for this feature: a customer whose whole debt is a carried
+balance is invisible to any list drawn from pending invoices, **but only
+until the next billing run** of their zone, which puts them back on it with
+the balance inside the new invoice. WispHub's documentation adds that the
+automatic cut needs an issued, pending invoice, so such a customer is not at
+risk of suspension meanwhile (read from the docs, not measured). The gap is
+bounded and not urgent, which is why the debt filter is named for what it
+finds — open invoices — rather than read as "everyone who owes"
+(Clarifications, 2026-09-23).
 
 ### Its relationship to 010, and one measurement that may change both
 
@@ -85,9 +123,10 @@ a paid-up customer owed money.
 `claude/clientes-facturas-endpoint-pafr4i`, specified 2026-09-22, planned
 and broken into 47 tasks) proposes the opposite move: it **keeps** Cobros as
 a screen and gives it its own on-demand search and paged blocks. This
-feature removes that screen. **The two cannot both ship.** Which one
-survives is the creator's decision, and it must be taken before either is
-planned further.
+feature removes that screen. **The two cannot both ship.** The creator
+chose this feature on 2026-09-25 (Clarifications); cobros-on-demand-search
+is set aside and is not planned further. Its number no longer names it on
+`main`, where `specs/010-receipt-triage` landed (#238).
 
 010 carries one finding this feature depends on and does not restate: a
 customer who pays less than their invoice has that invoice closed as *Pagada*
@@ -96,10 +135,11 @@ appear on no list drawn from pending invoices. The row measured here on
 2026-09-23, a balance of 600.00 against a billing status of *Pagadas*, is
 that case and not a stray test record.
 
-What fits neither spec: the same customer's own balance call answered 0 and
-listed no invoices. If that one-call door omits the carried balance, it
-under-reports exactly the short-payment case, and neither feature may use it
-alone as the source of what a customer owes.
+What looked like it fit neither spec — the same customer's own balance call
+answering 0 with no invoices — was explained the same day: the one-call door
+counts open invoices only and leaves the carried balance out (previous
+section). It under-reports exactly the short-payment case, and neither
+feature may use it as the source of what a customer owes.
 
 010's premise is that the invoice list has no customer filter — two
 measurements, 2026-09-01 and 2026-08-16, agree. A probe on 2026-09-23 found
@@ -122,6 +162,27 @@ call and 010's central premise weakens.
   time, with the billing facts added to a row and a card that opens to the
   customer's invoices. Measured the same day: 193 unpaid invoices against
   6,522 customers, so how the debtor set travels is not a design problem.
+- Q: How does a row show what a customer owes, when the two halves come
+  from two readings that can disagree in freshness? → A: As its two parts,
+  each by name, never folded into one figure: the carried balance (*Saldo*,
+  from the customer record, which is never truncated) and the open invoices
+  (how many and how much, or *no se puede confirmar*). Creator's decision.
+- Q: What does the debt filter select, given that no provider list can find
+  a customer whose only debt is a carried balance? → A: Customers with open
+  invoices, and it is named that way (*Con facturas abiertas*), not
+  "Deben". A balance-only customer is reached by search or by the
+  whole-base list, where their row shows the balance. Measured the same day
+  that this state ends at the zone's next billing run, which folds the
+  balance into the new invoice. No background read of the whole customer
+  base is added for it; that read belongs to the scheduled-reminder feature,
+  if it needs one. Creator's decision.
+
+### Session 2026-09-25
+
+- Q: This feature and `cobros-on-demand-search` propose opposite moves for
+  Cobros and cannot both ship — which one goes ahead? → A: This one. Links
+  and Cobros become Clientes; the on-demand Cobros screen is not planned
+  further. Creator's decision.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -255,11 +316,17 @@ confirm where it lands.
 
 ### Edge Cases
 
-- **The tenant's invoice read could not be finished.** The amount on a row
-  is then not knowable. A row MUST say it cannot be confirmed. It MUST NOT
-  show zero, and it MUST NOT show a guessed number such as the plan's price.
-  (The rule `bug: pending-invoice-cap` established; this feature inherits
-  it rather than re-deciding it.)
+- **The tenant's invoice read could not be finished.** The open-invoice
+  part of a row is then not knowable. It MUST say it cannot be confirmed. It
+  MUST NOT show zero, and it MUST NOT show a guessed number such as the
+  plan's price. (The rule `bug: pending-invoice-cap` established; this
+  feature inherits it rather than re-deciding it.) The carried balance still
+  shows: it comes from the customer record, which is never cut short.
+- **A zone's billing run has just happened.** For a few minutes the
+  customer record already reads balance 0 and "Pendiente de Pago" while the
+  last finished invoice reading does not yet hold the new invoice. The open
+  invoices part reads *no se puede confirmar*, never zero — the rule
+  `nothingOwedIsProven` already applies (`apps/api/src/wisphub/debt.ts`).
 - **The business never connected WispHub.** There is no debt to filter by
   and no customer base to browse. The section shows the links the business
   created through the API, says where links come from, and offers no debt
@@ -293,11 +360,15 @@ confirm where it lands.
   returns all 6,522 of them, with nothing in the answer to say the filter
   was dropped. A count that equals the unfiltered whole MUST be treated as
   "not filtered", never as "everyone owes".
-- **A customer's balance and their invoices disagree.** Measured
-  2026-09-23 on one record: the list said 600.00, the customer's own
-  balance call said 0 with no invoices. The debt is what FR-007 defines;
-  neither source overrules it alone, and a card read at the moment of
-  opening is what the operator is shown when they need to be sure.
+- **A customer owes only a carried balance.** Measured 2026-09-23: after a
+  short payment the invoice closes as *Pagada* and the remainder lives in
+  the customer's balance, so no open invoice names them. They are not in
+  *Con facturas abiertas*; search and the whole-base list find them, and
+  their row reads the balance. At the zone's next billing run the balance
+  moves into the new invoice and they are back in the filter.
+- **The one-call balance door disagrees with the customer record.** It
+  counts open invoices only (measured 2026-09-23: 0 against a record
+  balance of 299.00). The section never reads it as what a customer owes.
 
 ## Requirements *(mandatory)*
 
@@ -309,8 +380,10 @@ confirm where it lands.
   copy, in place of the two sections previously named *Links* and *Cobros*.
   Navigation MUST offer four sections, not five.
 - **FR-002**: Clientes MUST open with the debt filter already applied, so
-  that an operator who opens the section is looking at the customers who owe
-  without having set anything.
+  that an operator who opens the section is looking at the customers with
+  open invoices without having set anything. The filter MUST be named for
+  what it selects (*Con facturas abiertas*), because a customer whose only
+  debt is a carried balance is not in it.
 - **FR-003**: The operator MUST be able to widen the list to every customer
   of the ISP, and to narrow it to customers whose debt is past due.
 - **FR-004**: A business with no WispHub connection MUST NOT be offered the
@@ -324,16 +397,21 @@ confirm where it lands.
   and which channel they belong to, rendered as icon and text and never as
   colour alone.
 - **FR-006**: Every customer row MUST show what that customer owes,
-  regardless of which filter is applied. A customer who owes nothing MUST
-  read as owing nothing, in words, and not as a blank.
-- **FR-007**: What a customer owes MUST be the sum of their pending invoices
-  and their carried balance. It MUST NOT be the plan's list price, and it
-  MUST NOT be either half presented as the whole. (Measured 2026-09-23: the
-  customer list reported a balance of 600.00 for a customer whose own
-  balance call reported 0 with no invoices. Either half alone can be wrong.)
+  regardless of which filter is applied, as its two parts named separately:
+  the carried balance and the open invoices (how many, and what they add up
+  to). A customer who owes nothing MUST read as owing nothing, in words, and
+  not as a blank.
+- **FR-007**: What a customer owes MUST be their open invoices plus their
+  carried balance. It MUST NOT be the plan's list price, it MUST NOT be
+  either part presented as the whole, and it MUST NOT be read from the
+  provider's one-call balance door, which counts open invoices only.
+  (Measured 2026-09-23 on the demo tenant: the monthly billing run folds the
+  balance into the new invoice and resets it to zero at once, so the sum
+  never counts it twice.)
 - **FR-008**: When the underlying invoice reading could not be completed,
-  a row MUST say the amount cannot be confirmed. It MUST NOT show zero and
-  MUST NOT show a substitute number.
+  the open-invoice part of a row MUST say it cannot be confirmed. It MUST
+  NOT show zero and MUST NOT show a substitute number. The carried balance
+  is shown regardless.
 - **FR-009**: Every customer row MUST carry the same two actions — copy the
   link, and open WhatsApp with the link in the message — with the same
   behaviour they have today, including creating the link on first use and
@@ -360,10 +438,14 @@ confirm where it lands.
 **The card**
 
 - **FR-016**: The operator MUST be able to open a customer and see the
-  pending invoices that make up their debt, each with what it is for and
-  what it is worth, plus any carried balance.
+  pending invoices that make up their debt, each with what it is for (the
+  period the invoice states), what it is worth, and — where an invoice
+  carries a balance from before — that part named separately (*saldo
+  anterior*), so its line items and its total never appear to disagree;
+  plus any carried balance and the total they add up to.
 - **FR-017**: The card MUST be read at the moment it is opened, so it is
-  exact even when the list behind it is older. Where the card and the row
+  exact even when the list behind it is older. Its carried balance MUST come
+  from the same customer record the row uses. Where the card and the row
   disagree, the card is right and the row MUST be corrected to agree.
 - **FR-018**: The card MUST carry the same two actions as the row, behaving
   identically.
@@ -404,7 +486,10 @@ confirm where it lands.
   server on its own, independently of any screen having asked for it, so
   that a later scheduled reminder can walk that set without a browser. This
   feature MUST NOT build the reminder, the queue, the schedule, the channel,
-  bulk selection or any delivery state.
+  bulk selection or any delivery state. In this feature that set is the
+  customers with open invoices; a customer whose only debt is a carried
+  balance joins it at their zone's next billing run (measured 2026-09-23).
+  Whether a reminder needs them sooner is that feature's decision.
 - **FR-028**: This feature MUST NOT send anything to a customer and MUST NOT
   record that a message was sent. The operator's own device sends, as today.
 
@@ -468,8 +553,8 @@ candidate for `/speckit-clarify`.
   workflow, whose second step is "filter to customers with outstanding
   balances" — opening pre-filtered removes that step. An operator who wants
   everyone is one press away.
-- **The filter offers four states**: customers who owe (default), those past
-  due, those not yet due, and everyone. The first three are the filters
+- **The filter offers four states**: customers with open invoices
+  (default, *Con facturas abiertas*), those past due, those not yet due, and everyone. The first three are the filters
   Cobros has today, kept so the merge loses nothing; the fourth is what
   Links was. They read as one strip because the operator thinks of them as
   one axis, even though the first three and the fourth are answered from
@@ -478,6 +563,11 @@ candidate for `/speckit-clarify`.
   browsing the whole customer base. The premise of the merge is that debt is
   a fact about a customer, not a separate list, so a row without it would
   reopen the split this feature closes.
+- **The row shows the two parts and no total; the card shows the total
+  beside its breakdown.** A total on the row would fold two readings of
+  different freshness into one figure (Clarifications, 2026-09-23); in the
+  card, read fresh, the total is explained by the lines above it. Whether
+  the row should also carry a total is open for `/speckit-clarify`.
 - **The card has its own address** rather than appearing only as a layer
   over the list (FR-020), following the panel's existing rule that anything
   an operator would send to a colleague can be sent as an address.
@@ -497,9 +587,12 @@ candidate for `/speckit-clarify`.
 
 ### Dependencies
 
-- The provider reading that lists customers, the reading that lists the
-  tenant's pending invoices, and the per-customer reading that answers one
-  customer's balance and invoices in a single call.
+- The provider reading that lists customers (which carries the balance),
+  the reading that lists the tenant's pending invoices, the per-customer
+  reading that lists one customer's open invoices in a single call — useful
+  for the card's invoices, never for the balance, which it leaves out
+  (measured 2026-09-23) — and the invoice detail, which separates a
+  folded-in previous balance from the plan line.
 - The existing act that creates a customer's payment link and prepares the
   WhatsApp message — shared by both merged sections today and unchanged by
   this feature.

@@ -4,7 +4,17 @@ import type { PendingInvoices, WispHubCustomer } from "./client";
      total = Σ(pending invoice totals) + `saldo`
    WispHub keeps a running account, so neither half is the whole answer —
    a partly paid invoice closes as "Pagada" and its remainder lives in
-   `saldo`, where the invoice list cannot see it. */
+   `saldo`, where the invoice list cannot see it.
+
+   Measured 2026-09-23 on the demo tenant, across one billing cycle: a
+   499.00 invoice paid 200.00 left `saldo` 299.00 and no pending invoice;
+   the zone's monthly "crear facturas" run then issued 798.00 (invoice
+   `saldo` 299.00 + `sub_total` 499.00) and set the customer's `saldo` back
+   to 0.00 in the same moment. The sum never counts the carry twice.
+
+   Never read the debt from `GET /clientes/{id}/saldo/`: the same day it
+   answered 0 while `saldo` held 299.00 — it counts open invoices only
+   (customers-one-section FR-007). */
 export type Debt = {
   /* What the pending invoices bill. Also where a credit is absorbed (D12). */
   invoiceCents: number;

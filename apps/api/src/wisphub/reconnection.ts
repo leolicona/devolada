@@ -1,5 +1,6 @@
 import { WispHubError, type WispHub } from "./client";
 import { cashPaymentMethodId } from "./cache";
+import { businessWallClock } from "../time/business-day";
 
 /* One reconnection attempt (charge-record D3, reconnection-queue spec).
    Two phases, and the split is the point (D8): the payment happens at
@@ -27,8 +28,10 @@ export type AttemptResult = AttemptState & {
 
 export async function attemptReconnection(
   wisphub: WispHub,
-  /* The tenant, for the payment-method cache (provider-latency D5) */
-  businessId: string,
+  /* The tenant: its id keys the payment-method cache (provider-latency
+     D5), its timezone is the clock WispHub's dates are written on
+     (bug: wisphub-payment-utc-time) */
+  business: { id: string; timezone: string },
   /* usuario for every lookup; the numeric id only for the PATCH (D8) */
   customer: { usuario: string; wisphubId: string },
   /* The whole debt this payment settles — pending invoices plus the
@@ -45,8 +48,12 @@ export async function attemptReconnection(
   let { invoiceId, paymentRegistered } = state;
   try {
     if (!paymentRegistered) {
-      const date = now.toISOString().slice(0, 10);
-      const dateTime = `${date} ${now.toISOString().slice(11, 16)}`;
+      /* bug: wisphub-payment-utc-time — on the ISP's wall clock, because
+         WispHub reads a date without a zone as its tenant's local time.
+         This assumes the tenant's WispHub runs in the zone the ISP saved
+         in Devolada's settings: two systems, set apart. The moment is
+         still this attempt's, so a retry registers the retry's time. */
+      const { date, dateTime } = businessWallClock(business.timezone, now);
 
       /* D9: the opt-in for payment-triggered reactivation, ensured
          before the payment that should trigger it. Non-fatal: a failed
@@ -59,7 +66,7 @@ export async function attemptReconnection(
         wisphub.ensureAutoActivate(customer.wisphubId).catch((e: unknown) => {
           console.warn(`auto_activar_servicio PATCH failed for ${customer.usuario}:`, e);
         }),
-        cashPaymentMethodId(businessId, wisphub, now),
+        cashPaymentMethodId(business.id, wisphub, now),
       ]);
 
       /* D1 (pays TD-009): reuse before creating. The id we already

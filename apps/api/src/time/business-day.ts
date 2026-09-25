@@ -61,6 +61,26 @@ export function businessMonthKey(timezone: string, instant: Date): string {
   return `${read(list, "year")}-${month}`;
 }
 
+/* The ISP's wall clock at one instant, in the two naive shapes WispHub's
+   dates take: "YYYY-MM-DD" and "YYYY-MM-DD HH:MM" (bug:
+   wisphub-payment-utc-time). WispHub reads a date without a zone as its
+   tenant's local time — measured 2026-09-23 on the demo tenant:
+   `fecha_pago` "2026-08-20 12:00" came back "2026-08-20T12:00:00-05:00".
+   A UTC string filed an evening payment under the next day, and a
+   month-end one under the next month. Cut to the minute, never rounded,
+   as the UTC strings it replaces were. */
+export function businessWallClock(
+  timezone: string,
+  instant: Date,
+): { date: string; dateTime: string } {
+  const list = formatterFor(timezone).formatToParts(instant);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const date = `${read(list, "year")}-${two(read(list, "month"))}-${two(read(list, "day"))}`;
+  /* en-CA writes midnight as 24, as in offsetMsAt */
+  const time = `${two(read(list, "hour") % 24)}:${two(read(list, "minute"))}`;
+  return { date, dateTime: `${date} ${time}` };
+}
+
 /* Midnight of an arbitrary calendar date on the business's wall clock
    (payments-and-classes D4: the feed's date range filters in the
    business's timezone). Same two-pass offset dance as below. */

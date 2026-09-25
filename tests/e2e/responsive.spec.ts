@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
-import { stubAdminApi } from "./stubs";
+import { stubAdminApi, stubOperatorReaderApi } from "./stubs";
 
 /* docs/legacy/polish/responsive.spec.md — US-P03.
 
@@ -196,4 +196,27 @@ test.describe("provider-address-per-isp US1: the installation picker in a real b
       expect((await option.boundingBox())!.height, `${label} is too small to hit`).toBeGreaterThanOrEqual(32);
     }
   });
+});
+
+/* receipt-reader-tuning US3 (D19): the Lector tab and a bench receipt's
+   side-by-side detail hold at the three widths — the columns stack under
+   the picture below 768px, and nothing scrolls sideways. */
+test.describe("receipt-reader-tuning US3: Lector at 360/768/1280", () => {
+  for (const size of [PHONE, TABLET, DESKTOP]) {
+    test(`Lector and the bench detail fit ${size.width}px`, async ({ page }) => {
+      await stubOperatorReaderApi(page);
+      await page.setViewportSize(size);
+      await page.goto(`${ADMIN}/operador`);
+      await page.getByRole("tab", { name: "Lector" }).click();
+      await expect(page.getByText("Modelo que lee los comprobantes")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+
+      await page.getByRole("button", { name: /Mistral Small 3\.1: leído/ }).click();
+      await expect(page.getByRole("region", { name: "Mistral Small 3.1 · v2" })).toBeVisible();
+      await expect(page.getByAltText("El comprobante de prueba")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+    });
+  }
 });

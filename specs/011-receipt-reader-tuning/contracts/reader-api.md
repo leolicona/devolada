@@ -197,8 +197,11 @@ Compact size (40 px), tokens only, status as icon + text, keyboard-complete
 
 **Detail** (a receipt)
 
-- The image (or "Abrir PDF") beside one column per reading; below 768 px the
-  columns stack under the image.
+- The image (or "Abrir PDF") above one column per reading; the columns sit
+  side by side from 768 px and stack below it. (Amended 2026-09-25 at
+  implementation: `/operador` is `max-w-4xl`, and with the image beside
+  them each column measured ~170 px, stacking every mark control's three
+  buttons — screenshot at 1280 px.)
 - Rows: "¿Es comprobante?", "Legibilidad", "Clave de rastreo",
   "Referencia", "Banco emisor", "Banco receptor", "Monto", "Fecha",
   "Destino". A value not shown reads "No se ve". "Mismo banco" appears as an

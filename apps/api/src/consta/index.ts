@@ -343,8 +343,11 @@ export type ConstaEngine = {
 };
 
 /* Obtain an engine for one owner. It reads `APICEP_*`, `AI`,
-   `EXTRACTION_MODEL` and `PROOFS` from the env, and `API_BASE_URL` +
-   `BETTER_AUTH_SECRET` only to sign a proof link for the provider. */
+   `EXTRACTION_MODEL`, `EXTRACTION_MODELS`, `READER_TIMEOUT_MS` and
+   `PROOFS` from the env, and `API_BASE_URL` + `BETTER_AUTH_SECRET` only to
+   sign a proof link for the provider. receipt-reader-tuning D8, D9: it also
+   reads the operator's `reader_model` row, once per reading, to know which
+   model reads. */
 export function consta(
   env: Bindings,
   /* The callers hold their Drizzle handle under two schema generics

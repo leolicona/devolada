@@ -397,3 +397,8 @@ Task: "T029 e2e stubs + responsive/contrast for Lector"
 4. Measurement (T036–T039) → the prod decision and the debt closed.
 
 Recommended release: US1 + US2 + US3 together, so version "1" is never written to a row (research R7) and the creator can measure the moment dev deploys.
+
+## Phase 7: Convergence
+
+- [ ] T040 Show who chose each reader model in the Modelo card's "Cambios recientes": add the chooser's email to each `readerStateResponse.history` entry (join `user` on `author_user_id` in `platform/reader-model.ts::readerHistory`), render it in `apps/admin/src/features/operator/ReaderTab.tsx` in place of the raw user id, update `contracts/reader-api.md`, the MSW and e2e fixtures, and assert it in `apps/api/test/reader-model.test.ts` and `apps/admin/test/operator-reader.test.tsx` per FR-002, US1/AC2 (partial)
+- [ ] T041 Add a test in `apps/api/test/reader-model.test.ts` (cites `receipt-reader-tuning US1`): with a non-default model chosen and both models failing on the receipt door (`consta(...).validate` with a `receipt`), the file still goes to the provider unread, and the paid call's `extractions` row has `source = 'provider-ocr'`, `model` NULL and `fallback_from` = the chosen model, per FR-006, FR-007 (partial)

@@ -155,7 +155,7 @@ default model exactly as today, plus four new columns on its row.
   - Both fail: `/read` answers `503 READER_UNAVAILABLE` as today, and the `unreadable`/`refused` row records `fallback_from`.
   - With the default chosen, a failure makes exactly one call and no fallback.
   - A reused draft (the pay right after `/read` on the same file) keeps the draft's `model` and `question_version` even after the choice changed in between (spec US1 scenario 6).
-  - `fallbacksLast7Days` counts only payer rows with `fallback_from` in the window.
+  - `fallbacksLast7Days` counts only payer rows in the window where the chosen model failed **and the default read** (`fallback_from` set and a reading made). A row where both failed is not counted (constitution V, v1.6.0; analyze C3).
 - [ ] T014 [P] [US1] `apps/admin/test/operator-reader.test.tsx` (new; cites `receipt-reader-tuning US1`), with schema-parsed fixtures (`@devolada/api/reader-schema`) and new handlers in `apps/admin/test/msw.ts` (`readerState`, `readerChoose`).
   - The Lector tab is present only for the operator (the screen already redirects others).
   - The Modelo card shows the label and "Por defecto"; the stale `Alert` with the stale id; "Respaldos en los últimos 7 días: n"; the history.
@@ -169,7 +169,7 @@ default model exactly as today, plus four new columns on its row.
 - [ ] T015 [US1] `apps/api/src/platform/reader-model.ts` (new, D8):
   - `chooseReaderModel(db, list, modelId, authorUserId)` — refuse an id outside `list` (return `{ ok: false }`), else insert a `platform_settings` row with key `reader_model`.
   - `readerHistory(db, limit = 5)`.
-  - `fallbacksSince(db, sinceMs)` — `count(*)` of `extractions` with `fallback_from IS NOT NULL` and `created_at >= since`. This is the third cross-business statistic constitution V admits since v1.6.0; the comment cites it. It returns a number, never a row, and reads only `fallback_from` and `created_at`.
+  - `fallbacksSince(db, sinceMs)` — `count(*)` of `extractions` with `fallback_from IS NOT NULL AND model IS NOT NULL` and `created_at >= since`. A row where both models failed has no `model` and is not counted, so the number is exactly the statistic constitution V admits since v1.6.0: readings where the chosen model failed and the default read instead (analyze C3). The comment cites it. It returns a number, never a row, and reads only `fallback_from`, `model` and `created_at`.
   - Keep `reader_model` out of `SETTINGS`, with a comment saying why (D8).
 - [ ] T016 [US1] `apps/api/src/routes/reader/handler.ts` (new) `getReaderState` and `postReaderModel`, per contracts/reader-api.md: compose `readerModels`, `readerChoice`, `readerHistory`, `fallbacksSince(now − 7 days)`, `QUESTIONS_VERSION` and `readerAvailable = Boolean(env.AI)`. Answer `201` with the fresh state after a choice, or `400 INVALID_MODEL`.
 - [ ] T017 [US1] `apps/api/src/routes/reader/index.ts` (new): a pure router (`GET /`, `POST /model` with `zValidator("json", chooseModelRequest)`). Mount it in `apps/api/src/routes/platform/index.ts` with `platformRoute.route("/reader", readerOperatorRoute)`, next to the landing mount, with a comment citing D18.

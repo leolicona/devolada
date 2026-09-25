@@ -199,7 +199,9 @@ default; a wrong answer is not a failure.
   (the panel shows the count of the last 7 days next to the choice, FR-002,
   edge case "a model stops existing"). That count reads across businesses,
   and constitution V admits it as its third such statistic since v1.6.0
-  (analyze C1).
+  (analyze C1). It counts only rows where the default then read
+  (`model IS NOT NULL`): a row where both models failed is not that
+  statistic (analyze C3).
 
 ## R7 — The question version
 

@@ -58,8 +58,10 @@ bank is ever changed because of the other** (FR-012).
 Countable after launch, each one query (SC-004, SC-006, SC-007):
 
 - readings per model and question version: `GROUP BY model, question_version`;
-- fallbacks of the chosen model: `WHERE fallback_from IS NOT NULL` — the
-  cross-business count constitution V admits since v1.6.0;
+- fallbacks of the chosen model: `WHERE fallback_from IS NOT NULL AND model
+  IS NOT NULL` — the chosen model failed and the default read; the
+  cross-business count constitution V admits since v1.6.0. A row where both
+  failed (`model` NULL) is a different fact and is not in this count;
 - same-bank readings per ISP and week: `WHERE same_bank = 1 GROUP BY
   business_id, week`;
 - receiving-bank disagreements: `WHERE receiving_bank_tie = 'mismatch'`.

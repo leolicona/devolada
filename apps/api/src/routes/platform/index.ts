@@ -12,6 +12,7 @@ import {
   postPlatformSetting,
 } from "./handler";
 import { landingOperatorRoute } from "../landing";
+import { readerOperatorRoute } from "../reader";
 
 /* Pure router (operator-panel spec). Every route: session + operator. */
 export const platformRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -35,3 +36,7 @@ platformRoute.post("/businesses/:id/adjustments", zValidator("json", adjustmentR
    operator's Landing tab. Mounted here so they sit behind this file's
    session + operator guard like every other platform read. */
 platformRoute.route("/landing", landingOperatorRoute);
+
+/* receipt-reader-tuning D18: the reader's model choice and test bench,
+   read and written by the operator's Lector tab — behind the same guard. */
+platformRoute.route("/reader", readerOperatorRoute);

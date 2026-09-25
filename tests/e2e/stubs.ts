@@ -274,6 +274,13 @@ export const settings = {
     effectiveServiceFeeCents: 1500,
     bankUnknown: false,
     configured: false,
+    /* receipt-triage D9, D29: the card and the phone, unset; the cuenta de
+       cobro reads the CLABE */
+    card: null,
+    cardBank: null,
+    phone: null,
+    phoneBank: null,
+    collectKind: "clabe",
   },
   reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
   reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
@@ -308,6 +315,8 @@ export const paymentLink = {
   speiBank: "STP",
   speiBeneficiaryName: "WifiPlus SA de CV",
   reference: "greyes@wifiplus",
+  /* receipt-triage D29: the one account the payer sees */
+  collectAccount: { kind: "clabe", value: "646180157000000004", bank: "STP" },
 };
 
 /* The longest real clave measured so far: 28 characters, from a live
@@ -328,8 +337,28 @@ export const proofReading = {
   senderBank: null,
   date: "2026-08-19",
   receiptStatus: "Aceptada",
-  gate: { trackingKey: "ok", senderBank: "unresolved", amount: "ok" },
+  gate: { trackingKey: "ok", senderBank: "unresolved", amount: "ok", referenceNumber: "missing" },
+  /* receipt-triage D12, D15, D8: no reference, nothing to ask, and the
+     destination's digits were read */
+  referenceNumber: null,
+  ask: null,
+  destinationSeen: true,
 };
+
+/* receipt-triage US2/US4: a clear capture with neither key — the one the
+   ask stops before any credit, and the guide answers "No se ve" for */
+export const keylessReading = {
+  ...proofReading,
+  trackingKey: null,
+  senderBank: "BANORTE",
+  legibility: "full",
+  gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "missing" },
+  ask: { reason: "no_key", fields: ["key"] },
+};
+
+export async function stubPagoKeylessReading(page: Page): Promise<void> {
+  await apiRoute(page, "**/direct-payments/links/*/read", keylessReading);
+}
 
 /* The one reading that still stops for the payer (claimed-amount D2):
    read whole, and above the debt. The surplus is consented to, never

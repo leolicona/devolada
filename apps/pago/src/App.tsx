@@ -35,9 +35,13 @@ export function App() {
   const token = tokenFromPath(path);
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="mx-auto min-h-dvh w-full max-w-md px-4 py-6">
+      {/* receipt-triage T027: the page's one landmark. Without it every
+          screen sat outside any landmark, and each step's <header> was a
+          stray "banner" — axe's `region` finding once the page tests
+          started running it. */}
+      <main className="mx-auto min-h-dvh w-full max-w-md px-4 py-6">
         {token ? <PaymentPage token={token} /> : <RootScreen onOpen={open} />}
-      </div>
+      </main>
     </QueryClientProvider>
   );
 }

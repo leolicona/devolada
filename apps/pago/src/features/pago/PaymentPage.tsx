@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -14,7 +14,7 @@ import {
   Skeleton,
   StatusBadge,
 } from "@devolada/ui";
-import { BANKS } from "@devolada/api/direct-payments-schema";
+import { BANKS, isGenericReference } from "@devolada/api/direct-payments-schema";
 import type {
   DirectPaymentStatusResponse,
   LinkStatusResponse,
@@ -27,8 +27,10 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
+  Camera,
   Copy,
   CloudUpload,
+  Info,
   ScanLine,
   ShieldCheck,
   Store,
@@ -44,6 +46,8 @@ import {
 import { api, ApiError } from "@/api";
 import { forgetLink, rememberLink } from "@/links";
 import { forgetStep, readStep, rememberStep, type Step } from "@/step";
+import { CaptureGuide, type GuideState } from "./CaptureGuide";
+import { bankHint, GENERAL_HINT } from "./bank-hints";
 
 /* The customer's payment page (direct-payment spec D9, D10): es-MX,
    "pago" never "cobro". Four flows — loading, instructions, verifying,
@@ -117,11 +121,35 @@ const payErrors: Record<string, string> = {
   TRANSFER_CONTRADICTED: "Tu banco reporta que esta transferencia no se completó. Revísala en tu app e intenta de nuevo.",
   TRANSFER_NOT_FOUND:
     "No encontramos tu transferencia en Banxico. Si ya la hiciste, contacta a tu proveedor de internet con tu comprobante para que la registre.",
+  /* receipt-triage D7, D17: both are answered with the clave */
+  REFERENCE_SHARED:
+    "Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya.",
+  REFERENCE_AMBIGUOUS:
+    "Tu número de referencia coincide con más de una transferencia. Escribe tu clave de rastreo para encontrar la tuya.",
 };
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
 
-type TransferDraft = { trackingKey?: string | null; senderBank?: string | null; date?: string | null };
+type TransferDraft = {
+  trackingKey?: string | null;
+  referenceNumber?: string | null;
+  senderBank?: string | null;
+  date?: string | null;
+};
+
+/* What the form sends: at least one key (receipt-triage FR-005) */
+type TypedTransfer = {
+  trackingKey?: string;
+  referenceNumber?: string;
+  senderBank: string;
+  date: string;
+  amountCents: number;
+};
+
+/* receipt-triage D2/D7: the one sentence for a reference that cannot find
+   the transfer alone — generic, or already used that day */
+const SHARED_REFERENCE_NOTE =
+  "Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya.";
 
 function TransferForm({
   onSubmit,
@@ -129,20 +157,19 @@ function TransferForm({
   draft,
   amountCents,
   submitLabel = "Verificar mi pago",
+  announce = true,
+  keys = "either",
+  requireClave = false,
+  missing,
+  onUploadInstead,
+}: {
+  onSubmit: (t: TypedTransfer) => void;
+  busy: boolean;
   /* design-foundations US1 (converge F1): whether this form owns the
      announcement of its own wait. False on the instance rendered inside the
      status Card, which is already aria-live="polite" — a second announcer
      there reads the state out twice. True everywhere else, because outside
      that Card nothing announces at all. */
-  announce = true,
-}: {
-  onSubmit: (t: {
-    trackingKey: string;
-    senderBank: string;
-    date: string;
-    amountCents: number;
-  }) => void;
-  busy: boolean;
   announce?: boolean;
   /* D18: what the reader proposed. Every field is editable and none is
      trusted — the payer is the one who confirms, and a field the gate
@@ -155,7 +182,20 @@ function TransferForm({
      what really left their account. */
   amountCents?: number | null;
   submitLabel?: string;
+  /* receipt-triage D17: after the provider said the reference matches
+     more than one transfer, only the clave can find it — the form asks
+     for it alone */
+  keys?: "either" | "clave";
+  /* receipt-triage D7: the reference is one another payment already holds
+     that day, so the clave is required beside it */
+  requireClave?: boolean;
+  /* receipt-triage D18 (FR-011): the fields the capture did not show,
+     each marked in text under its field */
+  missing?: ReadonlySet<"key" | "amount" | "date" | "senderBank">;
+  /* receipt-triage D18: the way back to the picker, at the form's end */
+  onUploadInstead?: () => void;
 }) {
+  const [referenceNumber, setReferenceNumber] = useState(draft?.referenceNumber ?? "");
   const [trackingKey, setTrackingKey] = useState(draft?.trackingKey ?? "");
   const [senderBank, setSenderBank] = useState(draft?.senderBank ?? "");
   /* validation-status-ux D6: a draft with no date arrives empty — the
@@ -173,64 +213,118 @@ function TransferForm({
   const amountOk = /^\d+(\.\d{1,2})?$/.test(amount.trim()) && Number.parseFloat(amount) > 0;
   /* D16/BUG-006: the same shape the API enforces, so the button is
      honest — a key that cannot validate never gets a paid call. */
-  const valid =
-    /^[A-Za-z0-9]{6,30}$/.test(trackingKey.trim()) &&
-    senderBank !== "" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
-    amountOk;
+  const claveOk = /^[A-Za-z0-9]{6,30}$/.test(trackingKey.trim());
+  /* receipt-triage D12: 1 to 7 digits as printed, leading zeros kept */
+  const referenceOk = keys === "either" && /^\d{1,7}$/.test(referenceNumber);
+  /* receipt-triage D2 (clarified 2026-09-24): the schema's own rule, so
+     the page and a client that skipped it refuse the same reference */
+  const generic = keys === "either" && isGenericReference(referenceNumber);
+  const claveRequired = keys === "clave" || generic || requireClave;
+  const keyOk = claveRequired ? claveOk : claveOk || referenceOk;
+  const valid = keyOk && senderBank !== "" && /^\d{4}-\d{2}-\d{2}$/.test(date) && amountOk;
+  const notInCapture = (field: "key" | "amount" | "date" | "senderBank") =>
+    missing?.has(field) ? <p className="mt-1 text-sm text-ink-soft">No aparece en tu captura</p> : null;
+  const claveField = (
+    <Field label="Clave de rastreo">
+      {/* BUG-009: a real clave runs to 28 characters, and in the body
+          font at 16px that is 327px of text in a 276px field on a
+          360px phone — the tail simply was not on screen. Mono at
+          text-sm fits it whole, and mono is what the value deserves
+          anyway: it is a code being proofread, where `0` and `O` have
+          to look different. */}
+      <Input
+        value={trackingKey}
+        onChange={(e) => setTrackingKey(e.target.value)}
+        placeholder="Está en tu comprobante"
+        className="font-mono text-sm"
+        autoComplete="off"
+      />
+    </Field>
+  );
   return (
     <div className="space-y-4">
-      <Field label="Clave de rastreo">
-        {/* BUG-009: a real clave runs to 28 characters, and in the body
-            font at 16px that is 327px of text in a 276px field on a
-            360px phone — the tail simply was not on screen. Mono at
-            text-sm fits it whole, and mono is what the value deserves
-            anyway: it is a code being proofread, where `0` and `O` have
-            to look different. */}
-        <Input
-          value={trackingKey}
-          onChange={(e) => setTrackingKey(e.target.value)}
-          placeholder="Está en tu comprobante"
-          className="font-mono text-sm"
-          autoComplete="off"
-        />
-      </Field>
-      <Field label="Monto transferido">
-        {/* claimed-amount D1/D3: what travels to Banxico is what the
-            payer says they sent — the debt only suggests the default.
-            The $ prefix is the same anchor the admin's money inputs
-            carry: an input cannot render through <Amount>, but it can
-            still look like pesos. */}
-        <Input
-          prefix="$"
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          autoComplete="off"
-        />
-      </Field>
-      <Field label="Banco desde el que pagaste">
-        {/* D16: typed free-hand, this field was the quietest way to lose a
-            real payment — apiCEP answers `invalid` for a name it does not
-            know, which reads exactly like a transfer that never happened.
-            Sorted for scanning; the constant keeps the provider's order. */}
-        <NativeSelect required value={senderBank} onChange={(e) => setSenderBank(e.target.value)}>
-          <option value="" disabled>
-            Elige tu banco
-          </option>
-          {[...BANKS]
-            .sort((a, b) => a.localeCompare(b, "es-MX"))
-            .map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-        </NativeSelect>
-      </Field>
-      <Field label="Fecha de la transferencia">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </Field>
+      {keys === "clave" ? (
+        <div>
+          {claveField}
+          {notInCapture("key")}
+        </div>
+      ) : (
+        /* receipt-triage FR-005 (clarified 2026-09-24): the reference
+           leads — it is short, digits only, and printed on receipts that
+           show no clave — and the clave is the alternative. Either one is
+           enough, unless the reference cannot find the transfer alone. */
+        <div className="space-y-3">
+          <div>
+            <Field label="Número de referencia">
+              <Input
+                inputMode="numeric"
+                value={referenceNumber}
+                /* digits only, as printed: a leading zero is part of it */
+                onChange={(e) => setReferenceNumber(e.target.value.replace(/\D/g, "").slice(0, 7))}
+                placeholder="Hasta 7 dígitos"
+                className="font-mono text-sm"
+                autoComplete="off"
+              />
+            </Field>
+            <p className="mt-1 text-sm text-ink-soft">
+              {generic || requireClave ? SHARED_REFERENCE_NOTE : "Hasta 7 dígitos, con los ceros del inicio."}
+            </p>
+            {notInCapture("key")}
+          </div>
+          <p className="text-sm font-medium text-ink-soft">
+            ¿No tienes número de referencia? Escribe tu clave de rastreo
+          </p>
+          {claveField}
+          <p className="text-sm text-ink-soft">
+            {claveRequired ? "Escribe tu clave de rastreo." : "Con uno basta."}
+          </p>
+        </div>
+      )}
+      <div>
+        <Field label="Monto transferido">
+          {/* claimed-amount D1/D3: what travels to Banxico is what the
+              payer says they sent — the debt only suggests the default.
+              The $ prefix is the same anchor the admin's money inputs
+              carry: an input cannot render through <Amount>, but it can
+              still look like pesos. */}
+          <Input
+            prefix="$"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            autoComplete="off"
+          />
+        </Field>
+        {notInCapture("amount")}
+      </div>
+      <div>
+        <Field label="Banco desde el que pagaste">
+          {/* D16: typed free-hand, this field was the quietest way to lose a
+              real payment — apiCEP answers `invalid` for a name it does not
+              know, which reads exactly like a transfer that never happened.
+              Sorted for scanning; the constant keeps the provider's order. */}
+          <NativeSelect required value={senderBank} onChange={(e) => setSenderBank(e.target.value)}>
+            <option value="" disabled>
+              Elige tu banco
+            </option>
+            {[...BANKS]
+              .sort((a, b) => a.localeCompare(b, "es-MX"))
+              .map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+          </NativeSelect>
+        </Field>
+        {notInCapture("senderBank")}
+      </div>
+      <div>
+        <Field label="Fecha de la transferencia">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        {notInCapture("date")}
+      </div>
       {/* design-foundations US1 (converge F2): the send is a wait like any
           other. Before this it was carried by a greyed-out button and a
           changed word — which is the one thing FR-008 refuses to rely on,
@@ -244,7 +338,10 @@ function TransferForm({
           disabled={!valid || busy}
           onClick={() =>
             onSubmit({
-              trackingKey: trackingKey.trim(),
+              /* receipt-triage D1: whatever key the payer typed travels to
+                 the server, which sends only the clave when both exist */
+              ...(claveOk ? { trackingKey: trackingKey.trim() } : {}),
+              ...(referenceOk ? { referenceNumber } : {}),
               senderBank: senderBank.trim(),
               date,
               amountCents: Math.round(Number.parseFloat(amount) * 100),
@@ -255,11 +352,28 @@ function TransferForm({
           {busy ? "Enviando…" : submitLabel}
         </Button>
       </Pending>
+      {onUploadInstead && (
+        <Button variant="ghost" className="h-12 w-full text-sm" onClick={onUploadInstead}>
+          Mejor subo otra captura
+        </Button>
+      )}
     </div>
   );
 }
 
-function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy: boolean }) {
+function ReceiptForm({
+  onSubmit,
+  busy,
+  reading = false,
+  inputRef,
+}: {
+  onSubmit: (file: File) => void;
+  busy: boolean;
+  /* receipt-triage D8/D20: `/read` is running on the file just sent */
+  reading?: boolean;
+  /* receipt-triage D18: "Subir otra captura" moves focus here */
+  inputRef?: RefObject<HTMLInputElement | null>;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [tooBig, setTooBig] = useState(false);
   const inputId = useId();
@@ -278,29 +392,45 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
           has no text to extract, is handed to the provider unread and
           silently (D15): the payer is told nothing, because there is
           nothing they could do about it. */}
-      <label
-        htmlFor={inputId}
-        className="flex cursor-pointer flex-col items-center gap-2 rounded-sm border border-dashed border-line-input bg-well px-4 py-8 text-center"
-      >
-        <CloudUpload className="size-6 text-ink-soft" aria-hidden />
-        <span className="break-all text-base font-medium text-ink">
-          {file ? file.name : "Toca para subir tu captura"}
-        </span>
-        <span className="text-sm text-ink-soft">
-          Captura o comprobante de tu transferencia · imagen o PDF, hasta 1 MB
-        </span>
-      </label>
       <input
+        ref={inputRef}
         id={inputId}
         type="file"
         accept="image/*,application/pdf"
-        className="sr-only"
+        className="peer sr-only"
         onChange={(e) => {
           const picked = e.target.files?.[0] ?? null;
           setTooBig(Boolean(picked && picked.size > 1_000_000));
           setFile(picked);
         }}
       />
+      <label
+        htmlFor={inputId}
+        /* receipt-triage T049: the input before the label is visually
+           hidden, so its own focus ring would draw on a 1px box — the
+           label, its peer, wears the same ring when the input has
+           keyboard focus */
+        className="flex cursor-pointer flex-col items-center gap-2 rounded-sm border border-dashed border-line-input bg-well px-4 py-8 text-center peer-focus-visible:[box-shadow:var(--shadow-focus)]"
+      >
+        <CloudUpload className="size-6 text-ink-soft" aria-hidden />
+        <span className="break-all text-base font-medium text-ink">
+          {file ? file.name : "Toca para subir tu captura"}
+        </span>
+        {reading ? (
+          /* receipt-triage D20: the file row breathes while the reader
+             reads it — the design system's waiting motion, opacity only */
+          <Pending active label="Leyendo tu captura." announce={false}>
+            <span data-motion="breath" className="animate-breath text-sm text-ink-soft">
+              Leyendo tu captura…
+            </span>
+          </Pending>
+        ) : (
+          <span className="text-sm text-ink-soft">
+            Captura o comprobante de tu transferencia · imagen o PDF, hasta 1 MB
+          </span>
+        )}
+      </label>
+
       {tooBig && (
         <Alert variant="warning" layout="icon">
           <TriangleAlert aria-hidden />
@@ -319,6 +449,43 @@ function ReceiptForm({ onSubmit, busy }: { onSubmit: (file: File) => void; busy:
       </Pending>
     </div>
   );
+}
+
+/* receipt-triage D29: the one account the payer sends money to. A page
+   answered by a server from before the feature carries only the CLABE. */
+type CollectAccount = NonNullable<LinkStatusResponse["collectAccount"]>;
+function collectAccountOf(data: LinkStatusResponse): CollectAccount | null {
+  if (data.collectAccount) return data.collectAccount;
+  return data.speiClabe ? { kind: "clabe", value: data.speiClabe, bank: data.speiBank ?? "" } : null;
+}
+const ACCOUNT_LABEL: Record<CollectAccount["kind"], string> = {
+  clabe: "CLABE",
+  card: "Tarjeta de débito",
+  phone: "Celular",
+};
+/* "…recibe pagos en {tipo} terminada en {últimos 4}" — the noun and its
+   agreement */
+const ACCOUNT_ENDING: Record<CollectAccount["kind"], string> = {
+  clabe: "CLABE terminada en",
+  card: "tarjeta terminada en",
+  phone: "celular terminado en",
+};
+
+/* receipt-triage D5 (FR-009): the other fields a capture lacked, named in
+   the form's order and joined the way a person says them */
+const FIELD_NAME = { amount: "el monto", date: "la fecha", senderBank: "el banco" } as const;
+function alsoMissing(fields: readonly string[]): string | null {
+  const names = fields.filter((f) => f !== "key").map((f) => FIELD_NAME[f as keyof typeof FIELD_NAME]);
+  if (!names.length) return null;
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} ni ${names[names.length - 1]}`;
+  return `Tampoco vemos ${list}.`;
+}
+
+/* receipt-triage D6/D19: where the payer's bank shows the data, when a
+   verified hint exists — the later asks' extra line */
+function whereLine(bank: string | null | undefined): string | null {
+  const found = bankHint(bank);
+  return found ? `En ${found.bank}: ${found.hint.where}.` : null;
 }
 
 export function PaymentPage({ token }: { token: string }) {
@@ -352,6 +519,29 @@ export function PaymentPage({ token }: { token: string }) {
   /* validation-status-ux D2: the correction door inside the calm phase.
      Opening it is deliberate; it never opens itself. */
   const [correcting, setCorrecting] = useState(false);
+  /* receipt-triage D5/D15/D18: what the reading asked the payer, with the
+     file and the reading it came from — the page renders it and never
+     pays a reading its ask stopped */
+  const [ask, setAsk] = useState<{
+    ask: NonNullable<ProofReading["ask"]>;
+    proofId: string;
+    reading: ProofReading;
+  } | null>(null);
+  /* receipt-triage FR-012 (D18): a second capture with no key in the same
+     visit puts the form first. Page state on purpose — a new visit starts
+     from the upload again, which is the path that costs the payer least. */
+  const [noKeyAsks, setNoKeyAsks] = useState(0);
+  const [askForm, setAskForm] = useState(false);
+  /* receipt-triage D8/D20: the capture guide's moment — before, while and
+     after the reading */
+  const [guide, setGuide] = useState<GuideState>("idle");
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const askRef = useRef<HTMLDivElement>(null);
+  /* receipt-triage FR-013: the message takes focus when it appears, so a
+     keyboard or screen-reader user starts from it */
+  useEffect(() => {
+    if (ask) askRef.current?.focus();
+  }, [ask]);
 
   const link = useQuery<LinkStatusResponse, ApiError>({
     queryKey: ["link", token],
@@ -430,6 +620,10 @@ export function PaymentPage({ token }: { token: string }) {
       setPayment(result);
       setResubmitOf(null);
       setCorrecting(false);
+      /* receipt-triage D18: the ask is consumed when the payment is born */
+      setAsk(null);
+      setAskForm(false);
+      setGuide("idle");
     },
   });
 
@@ -454,7 +648,10 @@ export function PaymentPage({ token }: { token: string }) {
      read at all (D2) — see the refusal above, before any upload is even
      paid for. */
   const upload = useMutation<
-    { proofId: string; reading: ProofReading | null } | { refusal: "not_receipt" | "illegible" } | PayResponse,
+    | { proofId: string; reading: ProofReading | null }
+    | { refusal: "not_receipt" | "illegible" }
+    | { ask: NonNullable<ProofReading["ask"]>; proofId: string; reading: ProofReading }
+    | PayResponse,
     ApiError,
     File
   >({
@@ -467,6 +664,7 @@ export function PaymentPage({ token }: { token: string }) {
       );
       setProofId(proofId);
       let reading: ProofReading | null = null;
+      setGuide("reading");
       try {
         reading = await api<ProofReading>(`/direct-payments/links/${token}/read`, {
           method: "POST",
@@ -489,8 +687,17 @@ export function PaymentPage({ token }: { token: string }) {
          "none"` is its sibling: a photograph with a receipt in it that
          no field can be read from. A `partial` legibility is *not* a
          refusal — it goes to the provider with its hole (FR-005). */
+      setGuide(reading ? { reading } : "idle");
       if (reading && (reading.isReceipt === false || reading.legibility === "none")) {
         return { refusal: reading.isReceipt === false ? "not_receipt" : "illegible" } as const;
+      }
+
+      /* receipt-triage D4/D15: a clear capture with neither key, or paid
+         to an account that is not this business's, is asked about here,
+         before anything is paid. The engine enforces the same ask on the
+         receipt door, so this is courtesy, not the guard. */
+      if (reading?.ask) {
+        return { ask: reading.ask, proofId, reading } as const;
       }
 
       /* partial-payment D1/D12: the amount printed on the receipt is what
@@ -529,7 +736,23 @@ export function PaymentPage({ token }: { token: string }) {
         }),
       });
     },
+    onMutate: () => {
+      setAsk(null);
+      setAskForm(false);
+    },
+    onError: () => setGuide("idle"),
     onSuccess: (result) => {
+      if ("ask" in result) {
+        setRefusal(null);
+        setAsk(result);
+        if (result.ask.reason === "no_key") {
+          const count = noKeyAsks + 1;
+          setNoKeyAsks(count);
+          /* FR-012: the second time, the form leads */
+          setAskForm(count >= 2);
+        }
+        return;
+      }
       if ("refusal" in result) {
         /* Nothing was paid and nothing was counted: the payer stays on
            the upload screen and takes another photo (D2). */
@@ -641,7 +864,12 @@ export function PaymentPage({ token }: { token: string }) {
           <>
             <StatusBadge status="validating" size="standard" />
             {(() => {
-              const notFound = status.error === "TRANSFER_NOT_FOUND";
+              /* receipt-triage D7/D17: a reference that cannot find the
+                 transfer alone asks for the clave, whatever the error
+                 that carried it */
+              const referenceAsk =
+                status.error === "REFERENCE_AMBIGUOUS" || status.error === "REFERENCE_SHARED";
+              const notFound = status.error === "TRANSFER_NOT_FOUND" || referenceAsk;
               /* D18: the receipt's own Estatus is the one discriminator
                  we have. "En proceso" means the bank has not released
                  the transfer — there is nothing for the payer to
@@ -736,7 +964,13 @@ export function PaymentPage({ token }: { token: string }) {
                 : null;
               const showForm =
                 !enProceso &&
-                (correcting || asked || (escalated && !agreed && !release && !farAway));
+                (correcting || asked || referenceAsk || (escalated && !agreed && !release && !farAway));
+              /* receipt-triage D13 (FR-004): the clave fell back to the
+                 reference and Banxico found nothing — either key is enough */
+              const eitherKey = disputedSet.has("trackingKey") && disputedSet.has("referenceNumber");
+              const keyAsked =
+                referenceAsk || disputedSet.has("trackingKey") || disputedSet.has("referenceNumber");
+              const where = keyAsked ? whereLine(status.senderBank) : null;
 
               return (
                 <div className="space-y-4">
@@ -744,6 +978,19 @@ export function PaymentPage({ token }: { token: string }) {
                     <p className="text-sm text-ink-soft">
                       Tu comprobante dice “{status.receiptStatus}”: tu banco todavía no libera la
                       transferencia. Seguiremos intentando y no necesitas hacer nada.
+                    </p>
+                  ) : referenceAsk ? (
+                    /* receipt-triage D17/D7: only the clave can find this
+                       transfer now, so it is the one thing asked */
+                    <p className="text-sm text-ink-soft">{payErrorCopy(status.error!)}</p>
+                  ) : eitherKey ? (
+                    <p className="text-sm text-ink-soft">
+                      No encontramos tu transferencia todavía. Confirma tu clave de rastreo o tu número
+                      de referencia mirando tu comprobante; con uno basta.
+                    </p>
+                  ) : disputed && disputedSet.has("referenceNumber") ? (
+                    <p className="text-sm text-ink-soft">
+                      Confirma tu número de referencia mirando tu comprobante.
                     </p>
                   ) : asked && !disputed && disputedSet.has("date") ? (
                     /* D20: the one field, named. Nothing is in doubt —
@@ -842,10 +1089,16 @@ export function PaymentPage({ token }: { token: string }) {
                     </p>
                   )}
 
+                  {where && showForm && <p className="text-sm text-ink-soft">{where}</p>}
+
                   {showForm ? (
                     /* The schedule keeps running underneath; whichever
                        resolves first wins (D3). */
                     <TransferForm
+                      /* receipt-triage D17: after the 422 the clave alone;
+                         D7: a shared reference needs the clave beside it */
+                      keys={status.error === "REFERENCE_AMBIGUOUS" ? "clave" : "either"}
+                      requireClave={status.error === "REFERENCE_SHARED"}
                       busy={busy}
                       /* The Card above is already aria-live="polite" */
                       announce={false}
@@ -856,6 +1109,9 @@ export function PaymentPage({ token }: { token: string }) {
                          undisputed fields stay pre-filled. */
                       draft={{
                         trackingKey: disputedSet.has("trackingKey") ? null : status.trackingKey,
+                        /* receipt-triage D13: a disputed reference arrives
+                           empty, like a disputed clave */
+                        referenceNumber: disputedSet.has("referenceNumber") ? null : (status.referenceNumber ?? null),
                         senderBank: status.senderBank,
                         /* two-eyes-receipt D20: an asked-for date arrives
                            empty, exactly as the clave and the amount do —
@@ -881,7 +1137,7 @@ export function PaymentPage({ token }: { token: string }) {
                       }
                     />
                   ) : (
-                    status.trackingKey && (
+                    (status.trackingKey || status.referenceNumber) && (
                       /* D2: verifying is free, editing is deliberate */
                       <Collapsible>
                         <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
@@ -894,12 +1150,20 @@ export function PaymentPage({ token }: { token: string }) {
                         <CollapsibleContent>
                           <div className="space-y-3 border-t border-line-soft pt-3">
                             <div className="divide-y divide-line-soft">
-                              <div className="py-2">
-                                <p className="text-sm text-ink-soft">Clave de rastreo</p>
-                                <p className="break-all font-mono text-sm text-ink">
-                                  {status.trackingKey}
-                                </p>
-                              </div>
+                              {status.trackingKey && (
+                                <div className="py-2">
+                                  <p className="text-sm text-ink-soft">Clave de rastreo</p>
+                                  <p className="break-all font-mono text-sm text-ink">
+                                    {status.trackingKey}
+                                  </p>
+                                </div>
+                              )}
+                              {status.referenceNumber && (
+                                <div className="py-2">
+                                  <p className="text-sm text-ink-soft">Número de referencia</p>
+                                  <p className="font-mono text-sm text-ink">{status.referenceNumber}</p>
+                                </div>
+                              )}
                               {status.senderBank && (
                                 <div className="py-2">
                                   <p className="text-sm text-ink-soft">Banco</p>
@@ -945,7 +1209,18 @@ export function PaymentPage({ token }: { token: string }) {
           </>
         )}
 
-        {status.status === "confirmed" && (
+        {/* receipt-triage D31 (FR-006, FR-020a): Banxico confirmed it and
+            the business decides — no success state, no reconnection copy */}
+        {status.inReview && (
+          <Reveal>
+            <Alert layout="icon">
+              <Info aria-hidden />
+              Tu pago está en revisión con {data.ispName}. Te avisaremos aquí cuando lo confirme.
+            </Alert>
+          </Reveal>
+        )}
+
+        {status.status === "confirmed" && !status.inReview && (
           <Reveal className="space-y-4">
             <StatusBadge status="paymentConfirmed" size="standard" />
             <p className="text-sm text-ink-soft">
@@ -969,7 +1244,7 @@ export function PaymentPage({ token }: { token: string }) {
             told what arrived, what is missing and what happens when the
             rest does — never a percentage, and never a green tick over a
             service that is still cut. */}
-        {status.status === "partial" && (
+        {status.status === "partial" && !status.inReview && (
           <Reveal className="space-y-4">
             <StatusBadge status="paymentPartial" size="standard" />
             <p className="text-sm text-ink-soft">
@@ -1005,9 +1280,12 @@ export function PaymentPage({ token }: { token: string }) {
             {/* UI contract: the SPEI instructions stay visible — the next
                 action is another transfer, and hiding the CLABE behind a
                 tap is a way to lose the payer. */}
-            {data.speiClabe && (
+            {collectAccountOf(data) && (
               <div className="border-y border-line-soft">
-                <CopyField label="CLABE" value={data.speiClabe} />
+                <CopyField
+                  label={ACCOUNT_LABEL[collectAccountOf(data)!.kind]}
+                  value={collectAccountOf(data)!.value}
+                />
               </div>
             )}
             {/* Back to step 1, where the fresh debt and the rest of the
@@ -1320,6 +1598,8 @@ export function PaymentPage({ token }: { token: string }) {
   }
 
   /* ——— 3. Instrucciones de pago — two steps (D19) ——— */
+  const account = collectAccountOf(data);
+
   /* ——— 3a. Paso 1 — haz tu transferencia ——— */
   if (step === "transfer") {
     return (
@@ -1371,8 +1651,23 @@ export function PaymentPage({ token }: { token: string }) {
           )}
         </div>
 
+        {/* receipt-triage D29 (FR-017): one account — the cuenta de
+            cobro — labelled by its kind; no list, no choice. A CLABE
+            renders exactly as it always did (SC-008). */}
         <div className="border-y border-line-soft">
-          <CopyField label="CLABE" value={data.speiClabe!} />
+          <CopyField label={ACCOUNT_LABEL[account!.kind]} value={account!.value} />
+        </div>
+
+        {/* receipt-triage D8/D20 (FR-022): the capture guide's first
+            moment — before the payer leaves for the bank */}
+        <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
+          <Camera className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+          <div className="text-sm">
+            <p className="font-medium text-ink">Al terminar, toma captura del detalle</p>
+            <p className="text-ink-soft">
+              Ahí aparecen la clave de rastreo o el número de referencia que necesitamos.
+            </p>
+          </div>
         </div>
 
         {/* Beneficiario, banco and concepto are checked once, if at all:
@@ -1392,7 +1687,7 @@ export function PaymentPage({ token }: { token: string }) {
               {data.speiBeneficiaryName && (
                 <CopyField label="Beneficiario" value={data.speiBeneficiaryName} />
               )}
-              {data.speiBank && <CopyField label="Banco" value={data.speiBank} />}
+              {account?.bank && <CopyField label="Banco" value={account.bank} />}
               {data.reference && <CopyField label="Concepto" value={data.reference} />}
             </div>
           </CollapsibleContent>
@@ -1438,7 +1733,102 @@ export function PaymentPage({ token }: { token: string }) {
         </Alert>
       )}
 
-      <ReceiptForm busy={busy} onSubmit={(file) => upload.mutate(file)} />
+      {/* receipt-triage D5, D18 — the ask, in the place the two refusals
+          use: the warning Alert at the top of the step (role="status", so
+          it is announced politely) that also takes focus when it arrives
+          (FR-013), and enters with the design system's own fade. */}
+      {ask && (
+        <div ref={askRef} tabIndex={-1} data-ask={ask.ask.reason} className="animate-enter rounded-md">
+        <Alert variant="warning" layout="icon">
+          <TriangleAlert aria-hidden />
+          <div className="space-y-2">
+            {ask.ask.reason === "wrong_destination" ? (
+              /* receipt-triage FR-020 (clarified 2026-09-24): honest and
+                 kind — the reading may be the one that is wrong */
+              <p>
+                Parece que esta transferencia se hizo a otra cuenta, no a la de {data.ispName}.{" "}
+                {account &&
+                  `${data.ispName} recibe pagos en ${ACCOUNT_ENDING[account.kind]} ${account.value.slice(-4)}. `}
+                Si leímos mal tu comprobante, sube otra captura o escribe tus datos.
+              </p>
+            ) : askForm && noKeyAsks >= 2 ? (
+              /* FR-012: the second capture with no key — the form leads */
+              <p>
+                Tu captura tampoco muestra la clave de rastreo ni el número de referencia. Escribe los
+                datos de tu transferencia.
+              </p>
+            ) : (
+              <>
+                <p>
+                  {ask.ask.shared
+                    ? `El número de referencia de tu captura${ask.reading.referenceNumber ? ` (${ask.reading.referenceNumber})` : ""} ya lo usó otra transferencia de ese día y no muestra la clave de rastreo.`
+                    : ask.reading.gate.referenceNumber === "generic"
+                      ? "El número de referencia de tu captura lo usan muchas transferencias y no muestra la clave de rastreo."
+                      : "Tu captura no muestra la clave de rastreo ni el número de referencia."}{" "}
+                  {alsoMissing(ask.ask.fields)}
+                </p>
+                <p>{whereLine(ask.reading.senderBank) ?? GENERAL_HINT}</p>
+              </>
+            )}
+          </div>
+        </Alert>
+        </div>
+      )}
+      {ask && !askForm && (
+        <div className="grid gap-2">
+          <Button
+            variant="secondary"
+            className="h-12 w-full"
+            onClick={() => {
+              pickerRef.current?.focus();
+            }}
+          >
+            Subir otra captura
+          </Button>
+          <Button variant="secondary" className="h-12 w-full" onClick={() => setAskForm(true)}>
+            Escribir los datos
+          </Button>
+        </div>
+      )}
+      {ask && askForm && (
+        /* receipt-triage D18 (FR-011): everything the capture showed is
+           already filled in; what it lacked says so in text */
+        <TransferForm
+          busy={busy}
+          draft={{
+            trackingKey: ask.reading.trackingKey,
+            referenceNumber: ask.reading.referenceNumber,
+            senderBank: ask.reading.senderBank,
+            date: ask.reading.date,
+          }}
+          amountCents={ask.reading.amountCents ?? data.totalCents ?? null}
+          missing={new Set(ask.ask.reason === "no_key" ? ask.ask.fields : [])}
+          requireClave={Boolean(ask.ask.reason === "no_key" && ask.ask.shared) || submitError?.code === "REFERENCE_SHARED"}
+          onSubmit={(transfer) =>
+            pay.mutate({
+              transfer,
+              proofId: ask.proofId,
+              ...(resubmitOf ? { supersedes: resubmitOf } : {}),
+            })
+          }
+          onUploadInstead={() => {
+            setAskForm(false);
+            setTimeout(() => pickerRef.current?.focus(), 0);
+          }}
+        />
+      )}
+
+      {/* receipt-triage D8/D20 (FR-022, FR-026): what a good capture
+          shows, above the upload control — never in front of it, and
+          never needing a tap to get past */}
+      <CaptureGuide state={guide} amountCents={data.totalCents} collectAccount={account ?? undefined} />
+
+      <ReceiptForm
+        busy={busy}
+        reading={guide === "reading"}
+        inputRef={pickerRef}
+        onSubmit={(file) => upload.mutate(file)}
+      />
 
       {/* D18 earned the upload its primacy: the machine reads it and,
           when the reading holds, nobody is asked anything. Typing a
@@ -1452,6 +1842,8 @@ export function PaymentPage({ token }: { token: string }) {
             /* claimed-amount D3: pre-filled with the expected total so
                the exact payer confirms without touching it */
             amountCents={data.totalCents ?? null}
+            /* receipt-triage D7: the server found the reference shared */
+            requireClave={submitError?.code === "REFERENCE_SHARED"}
             onSubmit={(transfer) =>
               pay.mutate({ transfer, ...(resubmitOf ? { supersedes: resubmitOf } : {}) })
             }

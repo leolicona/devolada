@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -47,3 +47,7 @@
   Never alter it. Handling a same-bank payment moved to Out of Scope as the
   next step. D3 now says what counts as a failure, and that a misread does
   not. D6 is still open.
+- Iteration 3 (2026-09-25): D6 settled as option B, a test bench in
+  `/operador`. Story 3, FR-015–FR-021, the bench entities, SC-008, the bench
+  edge cases and two assumptions (retention, marking without Banxico) were
+  written. No markers remain, and every item passes.

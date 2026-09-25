@@ -4,7 +4,8 @@
 
 **Created**: 2026-09-25
 
-**Status**: Draft
+**Status**: Specified — clarifications settled on 2026-09-25; ready for
+`/speckit-plan`
 
 **Input**: User description: "1. El modelo se puede elegir desde el
 administrador de la plataforma. Ruta /operador. 2. Optimizamos el prompt.
@@ -32,6 +33,11 @@ administrador de la plataforma. Ruta /operador. 2. Optimizamos el prompt.
   what was read. D5 was rewritten from "discard it" to "read both banks and
   flag the same-bank pair". What the product does with a same-bank payment,
   which Banxico's CEP cannot confirm, is a next step (Out of Scope).
+- Q: How are the models compared (D6)? → A: Option B, a test bench in
+  `/operador`. The operator uploads a receipt, and every allowed model reads
+  it side by side, with no payment and no credit. The operator marks each
+  field, and the bench adds up the marks per model and question version.
+  The real payment flow (A) and both (C) were not chosen.
 
 ## Where this comes from
 
@@ -85,8 +91,10 @@ Three things, in the creator's order:
    side, and the receiving bank from the destination's side. A same-bank
    pair is kept as read and flagged, never altered.
 3. **The creator compares the models on real receipts on dev** (Mistral Small
-   3.1 and Gemma 4). The result decides which model production uses and
-   closes the receipt-triage measurement debt.
+   3.1 and Gemma 4), on a **test bench in `/operador`**. The bench reads one
+   uploaded receipt with every allowed model side by side, creates no
+   payment and spends no credit. Its tally decides which model production
+   uses and closes the receipt-triage measurement debt.
 
 Every reading records the model that read it and the version of the
 questions it answered, so each result can be traced to its cause.
@@ -152,11 +160,31 @@ questions it answered, so each result can be traced to its cause.
   receipt's digits tie to one of the ISP's accounts (receipt-triage D24), the
   receiving bank read should be that account's bank, and a difference is
   recorded as a sign that one of the two readings is off.
-- **D6 — How the models are compared.** [NEEDS CLARIFICATION: through the
-  real payment flow, with each reading shown per model beside Banxico's
-  answer; through a test bench in `/operador` that reads one uploaded
-  receipt with every allowed model side by side, creating no payment and
-  spending no credit; or both?]
+- **D6 — A test bench in `/operador`** (the creator's choice, option B,
+  2026-09-25). The operator uploads a receipt, a picture or a PDF, and
+  **every model in the environment's list reads it at once**, with the
+  current questions. The results sit side by side, next to the receipt,
+  field by field, with the time each model took. The operator marks each
+  field right or wrong, and the bench adds up the marks per model and per
+  question version. That tally is the dated measurement that decides the
+  prod model and closes `receipt-triage-reader-unmeasured`.
+  - The bench creates **no payment**, spends **no validation credit** and
+    never calls the provider. Its readings are kept apart from payer
+    readings and count in no payer measurement.
+  - The bench **does not fall back** (D3 is for payers): a model that fails
+    shows as failed, because the bench exists to measure each model as it
+    is.
+  - A receipt stays on the bench for the same time as a payment proof. In
+    that time the operator can **read it again**, for example after a
+    change to the questions, and compare question versions on the same
+    files.
+  - The bench belongs to no ISP, so the destination is shown as read and is
+    not tied to anyone's accounts. The same-bank flag of D5 shows as it
+    would for a payer.
+  - Rejected: the real payment flow (option A), because each test would need
+    a real transfer, cost validation credits, and mean uploading every
+    receipt once per model. Both (option C) was also rejected: watching the
+    models against Banxico in production can be a later step.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -253,32 +281,52 @@ exists.
 
 ---
 
-### User Story 3 - The creator compares the models on real receipts (Priority: P2)
+### User Story 3 - The creator compares the models on real receipts, on a test bench (Priority: P2)
 
-On dev, the creator reads the same real receipts with Mistral Small 3.1 and
-with Gemma 4. For each receipt they see what each model read, field by field,
-and how long each took. With that, they decide which model production uses.
+On dev, the creator opens the test bench in `/operador` and uploads a real
+receipt from their phone. Mistral Small 3.1 and Gemma 4 read it at the same
+time. The receipt shows beside the two readings, field by field, with the
+time each took. The creator marks each field right or wrong. After ten or
+twenty receipts, the bench shows per model how many fields were right, and
+the creator decides which model production uses. No payment is created, no
+credit is spent, and no payer measurement moves (D6).
 
 **Why this priority**: Without the comparison, choosing a model is a guess,
 and the questions of Story 2 stay as unmeasured as the ones that failed. It
 comes after Stories 1 and 2 because it compares their result.
 
-**Independent Test**: Take ten real receipts from the creator's phone,
-including the known failures. Read them with both models and see a per-field
-result for each model. The method depends on D6.
+**Independent Test**: As the operator on dev, upload ten real receipts,
+including the known failures, to the bench. Mark every field. Check that the
+tally per model and question version matches the marks. Then check that no
+payment, no validation record and no payer reading appeared.
 
 **Acceptance Scenarios**:
 
-1. **Given** two models in the dev list, **When** the creator compares them
-   on one receipt, **Then** they see, side by side, each model's clave,
-   reference, sending bank, amount, date, destination and legibility, plus
-   the time each reading took.
-2. **Given** a set of compared receipts, **When** the creator reviews the
-   results, **Then** they can tell per model how many fields were right,
-   and which receipts each model got wrong.
-3. **Given** a comparison has been run, **When** the creator looks at the
-   payer measurements (refusal rate, reading outcomes), **Then** the
-   comparison's readings are not counted as payer readings.
+1. **Given** Mistral Small 3.1 and Gemma 4 in the dev list, **When** the
+   operator uploads a receipt to the bench, **Then** both models read it,
+   and the bench shows the receipt beside each model's clave, reference,
+   sending bank, receiving bank, amount, date, destination, legibility and
+   same-bank flag, plus the time each reading took.
+2. **Given** a bench reading, **When** the operator marks each field as
+   right, wrong or "not on the receipt", **Then** the marks are saved with
+   the model and the question version that produced the reading.
+3. **Given** marked readings of several receipts, **When** the operator
+   opens the tally, **Then** they see per model and per question version the
+   number of fields right out of those marked, the fields each model gets
+   wrong most, and the reading time within which 9 of 10 readings finished
+   (SC-005).
+4. **Given** one model fails on a bench receipt, **When** the results show,
+   **Then** that model's column says it failed, and no other model's
+   reading takes its place (D6).
+5. **Given** a bench receipt read with question version 1, **When** the
+   questions change to version 2 and the operator reads the receipt again,
+   **Then** both versions' readings show for that receipt, each with its own
+   marks.
+6. **Given** any number of bench readings, **When** anyone looks at payments,
+   validation records, credits or the payer reading measurements, **Then**
+   nothing from the bench appears in them.
+7. **Given** a user who is not the platform operator, **When** they try to
+   open the bench or upload to it, **Then** they are refused.
 
 ---
 
@@ -295,8 +343,8 @@ result for each model. The method depends on D6.
 - **The default model fails too.** Today's degradation holds (D3): the file
   goes to the provider unread, and the record says why.
 - **A slow model.** The payer waits for the reading at the upload. A model
-  that is right but slow is not eligible for prod (SC-005). The comparison
-  shows the time of every reading.
+  that is right but slow is not eligible for prod (SC-005). The bench shows
+  the time of every reading.
 - **A PDF.** The PDF's text is asked the same questions as a picture, apart
   from legibility, with any model (two-eyes-receipt D1). The rules of D4
   apply to the text as well.
@@ -319,6 +367,16 @@ result for each model. The method depends on D6.
   name). The reading says it is not shown, like any other field.
 - **A receipt read before this feature.** Its record keeps what it had, and
   shows no model version rather than a guessed one.
+- **The same file uploaded twice to the bench.** It is one bench receipt,
+  and the second upload offers to read it again rather than duplicating it.
+- **The bench in prod.** It works the same way, with prod's list (only
+  Mistral at launch). It measures prod's model on real receipts, and nothing
+  touches a payer.
+- **A bench receipt past its keeping time.** The file is gone. Its readings,
+  marks and tally stay, because they hold no image, only what was read.
+- **A receipt that is not a receipt,** or an illegible one, on the bench.
+  Each model's answer shows as it is ("no es comprobante", "ilegible"), and
+  it can be marked like any other field.
 
 ## Requirements *(mandatory)*
 
@@ -377,17 +435,31 @@ result for each model. The method depends on D6.
   the destination's digits and kind, legibility, and whether the file is a
   receipt at all.
 
-**The comparison (Story 3)**
+**The test bench (Story 3)**
 
-- **FR-015**: The creator MUST be able to compare how the environment's
-  allowed models read the same real receipt, field by field, with the time
-  of each reading. The method is decided in D6.
-- **FR-016**: Readings made for a comparison MUST NOT count as payer readings
-  in any measurement of refusals or reading outcomes.
-- **FR-017**: The comparison MUST produce a dated result per model and per
-  question version that can be written down as the reader's measurement.
-  That is the evidence that closes
-  `receipt-triage-reader-unmeasured`.
+- **FR-015**: The platform operator MUST be able to upload a receipt, a
+  picture or a PDF, to a test bench in `/operador`. Every model in the
+  environment's list reads it at once with the current questions (D6).
+- **FR-016**: For each bench receipt, the bench MUST show the receipt beside
+  each model's reading, field by field: clave, reference, sending bank,
+  receiving bank, amount, date, destination, legibility, the same-bank flag,
+  and the time the reading took.
+- **FR-017**: The operator MUST be able to mark each field of each bench
+  reading as right, wrong or "not on the receipt". The mark is kept with the
+  model and the question version that produced the reading.
+- **FR-018**: The bench MUST add up the marks per model and per question
+  version: fields right out of those marked, the most frequent wrong
+  fields, and the reading time within which 9 of 10 readings finished. The
+  tally at a given date is the reader's measurement (FR-020).
+- **FR-019**: The bench MUST create no payment, spend no validation credit,
+  make no provider call, and never fall back to another model. Its readings
+  MUST count in no payer measurement (D6).
+- **FR-020**: The bench MUST keep each uploaded receipt for as long as a
+  payment proof is kept. In that time the operator can read it again with the
+  current questions, and each reading stays tied to its question version.
+  The tally at a given date is what closes `receipt-triage-reader-unmeasured`.
+- **FR-021**: Only the platform operator MAY open, upload to or read the
+  bench.
 
 ### Key Entities
 
@@ -404,9 +476,14 @@ result for each model. The method depends on D6.
   reading took, whether it was a fallback, the receiving bank as read, the
   same-bank flag, and whether the receiving bank matched the tied account's
   bank.
-- **Comparison result**: For one receipt, what each compared model read per
-  field and how long it took, with the question version. Its exact form
-  follows D6.
+- **Bench receipt**: A receipt the operator uploaded to the test bench. It
+  belongs to no ISP and is kept as long as a payment proof.
+- **Bench reading**: What one model read from one bench receipt with one
+  question version, how long it took, or that it failed.
+- **Field mark**: The operator's verdict on one field of one bench reading:
+  right, wrong or not on the receipt.
+- **Bench tally**: The marks added up per model and per question version.
+  It is the measurement the prod model choice rests on.
 
 ## Success Criteria *(mandatory)*
 
@@ -434,8 +511,9 @@ result for each model. The method depends on D6.
 - **SC-007**: 100% of readings whose two banks are the same institution
   carry the same-bank flag. The number of same-bank payments, real or
   misread, can be counted from the records per week and per ISP.
-- **SC-008**: The creator can compare two models on ten real receipts in
-  under 15 minutes.
+- **SC-008**: The creator can compare two models on ten real receipts,
+  marks included, in under 15 minutes, with **zero** payments created,
+  **zero** validation credits spent and **zero** payer readings counted.
 - **SC-009**: The measurement debt `receipt-triage-reader-unmeasured` is
   closed with the dated result of the comparison.
 - **SC-010**: Every new test cites `receipt-reader-tuning US<n>`, and no
@@ -462,7 +540,14 @@ result for each model. The method depends on D6.
   the receipt (Azteca's app shows its own logo). That is measured, not
   assumed. When it cannot, "not read" is the correct answer (FR-011).
 - The panel follows the existing operator-rule pattern: a typed field, its
-  history, and the operator guard (operator-panel D1–D4).
+  history, and the operator guard (operator-panel D1–D4). The model choice
+  and the bench live together in `/operador`. Where exactly they sit is a
+  design decision for the plan.
+- The bench's readings hold no payer's name: the reader is never asked for
+  names. The only personal data on the bench is the uploaded image itself,
+  kept as long as a payment proof (15 days) and then deleted.
+- The creator marks the fields against the receipt on screen. No Banxico
+  answer is needed to mark them, so the bench never spends a credit.
 
 ## Out of Scope
 

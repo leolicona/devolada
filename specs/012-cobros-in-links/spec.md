@@ -126,7 +126,8 @@ Three things follow for this feature:
   amount, and over filtering only the rows already loaded. The cost was
   named and accepted: one more WispHub read for each result shown. What it
   buys: any debtor can be found, including a short-payer and one whose open
-  invoice is older than the list's 180-day window.
+  invoice is older than the list's 180-day window. *(Planning, research
+  D9: the cost is two reads per result, not one. See FR-017.)*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -405,12 +406,19 @@ refused key, confirm that the page sends the operator to Integraciones.
   carried balance, and MUST NOT read anything to find them. A search finds
   them (FR-010).
 - **FR-017**: What a search result owes MUST be read from WispHub when the
-  result is shown, with one read per result, and only for the results on
-  screen: a block of search results costs its customer read plus one read
-  per row, and nothing is read for a row that was never shown. The
-  customer's open invoices for that read MUST cover every open invoice
-  they have, with no date window, and the carried balance MUST come from
-  the customer record the search already returned (FR-015).
+  result is shown, and only for the results on screen: nothing is read for
+  a row that was never shown. For each result, the customer record and
+  their open invoices MUST be read together, in one operation, so that a
+  billing run between the two cannot count the carried balance twice
+  (FR-015). The open invoices MUST cover every one the customer has, with
+  no date window.
+
+  *Amended 2026-09-25, during planning* (research D9): this said the
+  carried balance would come from the record the search had already
+  returned, at one extra read per result. The measured billing cycle
+  moves the balance into a new invoice at one instant. A balance read at
+  search time and invoices read seconds later, across that instant, show
+  1,097.00 for 798.00 owed. The cost is now two reads per result shown.
 - **FR-018**: A search result MUST say one of three things, never a guess:
   the amount owed, when it is above zero; *Sin adeudo*, when WispHub answered
   and the customer owes nothing; or that it could not confirm what they owe,
@@ -493,12 +501,13 @@ refused key, confirm that the page sends the operator to Integraciones.
 - **Roles, CLABE gating, the WhatsApp message and the link rules are those of
   `links-on-demand-search`**, unchanged.
 - **The read budget per WispHub call stays what it is today.** A block is one
-  call; a search result's debt is one call of its own.
+  call; a search result's debt is two calls of its own (FR-017).
 - **A result's open invoices come from a per-customer read.** WispHub has a
   measured one-call answer that lists one customer's open invoices (798.00
   on the demo once the invoice existed), and the customer record carries
   the balance. Together they are the debt; either alone is not (FR-015).
-  Which call the plan uses is a plan decision, held to FR-017.
+  The plan uses both, read together (research D9, D10). The door is
+  measured on the pilot before it is built (quickstart M2).
 - **The browse and the search tell different truths, by design.** The list
   is open invoices, grouped by customer from the blocks that have loaded.
   A search result is one customer's whole debt. They are never on the

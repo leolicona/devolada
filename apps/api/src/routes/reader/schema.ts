@@ -19,8 +19,17 @@ export const readerStateResponse = z.object({
      list and reads; stale — it left the list, and the default reads (D8) */
   choice: z.enum(["default", "applies", "stale"]),
   staleChoice: z.string().nullable(),
-  /* Latest first, up to 5 */
-  history: z.array(z.object({ value: z.string(), authorUserId: z.string(), createdAt: z.number().int() })),
+  /* Latest first, up to 5. `authorEmail` is who chose it as a person
+     reads it (receipt-reader-tuning FR-002) — null only if the author's
+     account is gone. */
+  history: z.array(
+    z.object({
+      value: z.string(),
+      authorUserId: z.string(),
+      authorEmail: z.string().nullable(),
+      createdAt: z.number().int(),
+    }),
+  ),
   /* Payer readings where the chosen model failed and the default read —
      a count, never a row (constitution V, v1.6.0) */
   fallbacksLast7Days: z.number().int(),

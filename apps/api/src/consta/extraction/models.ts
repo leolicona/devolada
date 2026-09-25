@@ -99,7 +99,9 @@ export async function readerChoice(
     .select({ value: platformSettings.value })
     .from(platformSettings)
     .where(eq(platformSettings.key, READER_MODEL_KEY))
-    .orderBy(desc(platformSettings.createdAt))
+    /* The same order as the panel's history, so the model the panel shows
+       first is the one that reads */
+    .orderBy(desc(platformSettings.createdAt), desc(platformSettings.id))
     .limit(1);
   if (!row) return { active: defaultModel, choice: "default", stale: null };
   const chosen = list.find((m) => m.id === row.value);

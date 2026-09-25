@@ -174,7 +174,7 @@ describe("receipt-reader-tuning US1: the Lector tab — the operator chooses the
     arrange({
       state: state({
         fallbacksLast7Days: 2,
-        history: [{ value: DEFAULT, authorUserId: "user-1", createdAt: at }],
+        history: [{ value: DEFAULT, authorUserId: "user-1", authorEmail: "demo@devolada.app", createdAt: at }],
         choice: "applies",
       }),
     });
@@ -185,13 +185,27 @@ describe("receipt-reader-tuning US1: the Lector tab — the operator chooses the
     expect(within(card).getByText(/Respaldos en los últimos 7 días: 2/)).toBeInTheDocument();
     expect(within(card).getByText(/El modelo elegido falló y leyó el modelo por defecto/)).toBeInTheDocument();
     expect(within(card).getByText("Cambios recientes")).toBeInTheDocument();
+    /* FR-002: who chose it, by the address a person recognises — never a row id */
+    const change = within(card).getByText(/demo@devolada\.app/);
+    expect(change.textContent).toContain("Mistral Small 3.1");
+    expect(change.textContent).not.toContain("user-1");
     await expectNoViolations(screen.getByRole("tabpanel"));
   });
 
   it("a stale choice says which one and that the default reads", async () => {
-    arrange({ state: state({ choice: "stale", staleChoice: "@cf/old/model" }) });
+    arrange({
+      state: state({
+        choice: "stale",
+        staleChoice: "@cf/old/model",
+        /* The stale choice's author left: the row still shows, and says so */
+        history: [{ value: "@cf/old/model", authorUserId: "user-gone", authorEmail: null, createdAt: at }],
+      }),
+    });
     await openReader();
     expect(await screen.findByText(/La elección anterior \(@cf\/old\/model\) ya no está disponible/)).toBeInTheDocument();
+    const change = screen.getByText(/cuenta eliminada/);
+    expect(change.textContent).toContain("@cf/old/model");
+    expect(change.textContent).not.toContain("user-gone");
     await expectNoViolations(screen.getByRole("tabpanel"));
   });
 

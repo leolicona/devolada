@@ -23,7 +23,9 @@ readerStateResponse = z.object({
   //   stale   — the latest choice is no longer in the list; the default reads
   staleChoice: z.string().nullable(),          // the stale id, when choice = "stale"
   history: z.array(z.object({                  // latest first, up to 5
-    value: z.string(), authorUserId: z.string(), createdAt: z.number().int(),
+    value: z.string(), authorUserId: z.string(),
+    authorEmail: z.string().nullable(),        // who chose it, as a person reads it (FR-002); null if the account is gone
+    createdAt: z.number().int(),
   })),
   fallbacksLast7Days: z.number().int(),        // payer readings where the chosen model failed and the default read — constitution V (v1.6.0)
   questionVersion: z.string(),                 // QUESTIONS_VERSION
@@ -181,7 +183,9 @@ Compact size (40 px), tokens only, status as icon + text, keyboard-complete
 - A select of the list and the button "Usar este modelo" (disabled while
   unchanged). One model in the list → the select is shown disabled with the
   line "Este ambiente tiene un solo modelo."
-- "Cambios recientes": value, author, time — as the Reglas history.
+- "Cambios recientes": the model's label, the author's email ("cuenta
+  eliminada" if the account is gone) and the time. (Amended at convergence,
+  T040: the id alone named nobody — FR-002 asks who chose it.)
 - `readerAvailable: false` → `Alert`: "Este ambiente no tiene lector; los
   comprobantes van directo al proveedor." The choice can still be saved.
 

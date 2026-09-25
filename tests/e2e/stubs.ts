@@ -459,7 +459,7 @@ export const readerState = readerStateResponse.parse({
   activeModel: MISTRAL,
   choice: "applies",
   staleChoice: null,
-  history: [{ value: MISTRAL, authorUserId: "user-1", createdAt: at }],
+  history: [{ value: MISTRAL, authorUserId: "user-1", authorEmail: "demo@devolada.app", createdAt: at }],
   fallbacksLast7Days: 1,
   questionVersion: "2",
   readerAvailable: true,

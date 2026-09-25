@@ -141,6 +141,8 @@ describe("receipt-reader-tuning US1: the operator's choice (D8, FR-003, FR-005)"
     /* Choosing the default writes a row too: the history shows the switch back */
     expect(back.choice).toBe("applies");
     expect(back.history.map((h) => h.value)).toEqual([DEFAULT, OTHER]);
+    /* FR-002: who chose it, as a person reads it — not a row id */
+    expect(back.history.map((h) => h.authorEmail)).toEqual([OPERATOR, OPERATOR]);
 
     const rows = await db().select().from(platformSettings).where(eq(platformSettings.key, "reader_model"));
     expect(rows).toHaveLength(2);
@@ -309,6 +311,58 @@ describe("receipt-reader-tuning US1: a failing chosen model falls back to the de
       .insert(extractions)
       .values({ businessId: id, source: "reader", outcome: "passed", model: DEFAULT, fallbackFrom: OTHER, createdAt: new Date(Date.now() - 8 * 86_400_000) });
     expect((await state()).fallbacksLast7Days).toBe(1);
+  });
+});
+
+describe("receipt-reader-tuning US1: on the receipt door, both models failing is today's degradation (FR-006, FR-007)", () => {
+  it("the file still goes to the provider unread, and the paid call's row names the chosen model that failed first", async () => {
+    const { id } = await seedBusiness();
+    await choose(OTHER);
+    await PROOFS.put(PROOF_KEY, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const calls: unknown[] = [];
+    const AI = aiReturning({ [OTHER]: { throws: "down" }, [DEFAULT]: { throws: "down too" } }, calls);
+
+    let sent: Record<string, unknown> | undefined;
+    fetchMock
+      .get(APICEP_ORIGIN)
+      .intercept({
+        method: "POST",
+        path: "/validate-transfer",
+        body: (raw) => {
+          sent = JSON.parse(String(raw));
+          return true;
+        },
+      })
+      .reply(
+        200,
+        JSON.stringify({ validationId: "prov-nf", status: "invalid", validation: { banxicoConfirmed: false, cepPreviouslyValidated: null }, extracted: {} }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    const request = {
+      receipt: { proofKey: PROOF_KEY },
+      beneficiary: { bank: "STP", clabe: "646180157000000004" },
+    } as unknown as ConstaRequest;
+    /* A reader that is down is our problem, never the payer's (two-eyes-receipt D15): no throw */
+    await consta({ ...base(), AI }, db(), { businessId: id }).validate(request);
+
+    /* The chosen model once, then the default once — no third try */
+    expect(modelCalls(calls).map((c) => c.model)).toEqual([OTHER, DEFAULT]);
+    /* The provider got the file itself, through the image door, and no reading of ours */
+    expect(String(sent!.imageUrl)).toContain(`/direct-payments/proofs/${PROOF_KEY}?`);
+    expect(sent!.sender).toBeUndefined();
+
+    const rows = await db().select().from(extractions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].validationId).not.toBeNull();
+    expect(rows[0]).toMatchObject({
+      source: "provider-ocr",
+      outcome: "routed",
+      model: null,
+      questionVersion: null,
+      fallbackFrom: OTHER,
+    });
+    /* And it is not a fallback the panel counts: the default did not read (constitution V, v1.6.0) */
+    expect((await state()).fallbacksLast7Days).toBe(0);
   });
 });
 

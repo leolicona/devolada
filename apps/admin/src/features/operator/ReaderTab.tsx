@@ -111,7 +111,8 @@ function ModelCard() {
           <ul className="mt-1 space-y-1 text-xs text-ink-soft">
             {s.history.map((h) => (
               <li key={`${h.value}-${h.createdAt}`}>
-                {labelOf(h.value)} · {h.authorUserId} · {formatDateTime(h.createdAt, timeFormat, timezone)}
+                {/* receipt-reader-tuning FR-002: who chose it, by the address a person recognises */}
+                {labelOf(h.value)} · {h.authorEmail ?? "cuenta eliminada"} · {formatDateTime(h.createdAt, timeFormat, timezone)}
               </li>
             ))}
           </ul>

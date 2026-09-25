@@ -1,6 +1,6 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { and, count, desc, eq, gte, isNotNull } from "drizzle-orm";
-import { extractions, platformSettings } from "../db/schema";
+import { extractions, platformSettings, user } from "../db/schema";
 import { READER_MODEL_KEY, type ReaderModel } from "../consta/extraction/models";
 
 /* receipt-reader-tuning D8 — the operator's choice of reader model.
@@ -23,18 +23,26 @@ export async function chooseReaderModel(
   return { ok: true };
 }
 
+/* receipt-reader-tuning FR-002 (convergence T040): the panel says who
+   chose each model, so the history carries the author's email — the id
+   alone names nobody a person knows.
+   A left join, so a choice whose author's account is gone still shows.
+   Ordered like the Reglas reads (`latestRow`): newest first, the id
+   breaking a tie within one millisecond. */
 export async function readerHistory(db: DrizzleD1Database, limit = 5) {
   const rows = await db
     .select({
       value: platformSettings.value,
       authorUserId: platformSettings.authorUserId,
+      authorEmail: user.email,
       createdAt: platformSettings.createdAt,
     })
     .from(platformSettings)
+    .leftJoin(user, eq(user.id, platformSettings.authorUserId))
     .where(eq(platformSettings.key, READER_MODEL_KEY))
-    .orderBy(desc(platformSettings.createdAt))
+    .orderBy(desc(platformSettings.createdAt), desc(platformSettings.id))
     .limit(limit);
-  return rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() }));
+  return rows.map((r) => ({ ...r, authorEmail: r.authorEmail ?? null, createdAt: r.createdAt.getTime() }));
 }
 
 /* receipt-reader-tuning D11 — the one cross-business read constitution V

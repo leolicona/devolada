@@ -15,7 +15,9 @@ import { stubAdminApi } from "./stubs";
 async function openPicker(page: import("@playwright/test").Page) {
   await stubAdminApi(page);
   await page.goto(`${ADMIN}/settings/direct-payment`);
-  const field = page.getByRole("combobox", { name: "Banco" });
+  /* exact since receipt-triage US3: the card and the phone have bank
+     pickers of their own, "Banco de tarjeta de débito" among them */
+  const field = page.getByRole("combobox", { name: "Banco", exact: true });
   await expect(field).toBeVisible();
   await field.click();
   return field;

@@ -86,6 +86,9 @@ export const handlers = {
     http.get("/v1/payment-links/:id", ({ params }) => r(String(params.id))),
   executeAction: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/payments/:id/execute-action", ({ params }) => r(String(params.id))),
+  /* receipt-triage D31 */
+  reviewPayment: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/payments/:id/review", async ({ params, request }) => r(String(params.id), await request.json())),
   settings: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/settings", () => r()),
   patchSettings: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.patch("/settings", async ({ request }) => r(await request.json())),

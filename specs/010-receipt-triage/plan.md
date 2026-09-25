@@ -62,7 +62,8 @@ CLABE, a card or a phone, with a list of candidates when it reads a picture
 (documented, unmeasured — research, "What was measured")
 
 **Storage**: one D1 (`devolada-db`); one additive migration `0036` (columns listed in data-model.md, re-planned 2026-09-24): four
-columns on `businesses`, three on `payments`, five on `extractions`, no new
+columns on `businesses`, three on `payments`, five on `extractions` (as built
+2026-09-25: six, six and five, plus one index — `0036_receipt_triage.sql`), no new
 table. R2 `PROOFS` unchanged
 
 **Testing**: Vitest 3.2 in workerd with a real local D1; apiCEP intercepted

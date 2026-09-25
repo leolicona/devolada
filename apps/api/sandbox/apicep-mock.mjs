@@ -25,6 +25,17 @@
      contains "HANG"  → no answer, ever (Consta's own deadline must fire — D16)
      contains "ERR"   → HTTP 503 (PROVIDER_UNAVAILABLE)
      anything else    → valid, LIQUIDADO, echoing the claimed data
+   receipt-triage D1/D17: a direct-mode body may carry `sender.referenceNumber`
+   and no trackingKey. Then the reference picks the scenario:
+     "9999999"        → HTTP 422, "referencia duplicada en Banxico (requiere
+                        clave de rastreo)" (REQUEST_REJECTED + hint
+                        provide_tracking_key — the caller asks for the clave)
+     anything else    → valid, LIQUIDADO, with Banxico's clave in
+                        `cepDetails.trackingKey` (the caller adopts it — D14)
+                        and the beneficiary's account in
+                        `cepDetails.beneficiaryAccount` (D22)
+   receipt-triage D9: `beneficiary.cardNumber` and `beneficiary.phoneNumber`
+   are accepted exactly like a CLABE, on either door.
    The image door (imageUrl) is where every receipt lands first since
    two-eyes-receipt D3, so it carries scenarios of its own now, picked
    from the signed URL (the proof key is in it):
@@ -64,8 +75,13 @@ const headers200 = (processingMs) => ({
   "X-Processing-Time": `${processingMs}ms`,
 });
 
-const cepDetails = (claim) => ({
+const beneficiaryAccountOf = (b = {}) => b.clabe ?? b.cardNumber ?? b.phoneNumber ?? null;
+
+const cepDetails = (claim, beneficiary) => ({
   trackingKey: claim.trackingKey ?? "MOCK0000000000000000",
+  /* receipt-triage D22: Banxico names the account that received it */
+  beneficiaryAccount: beneficiaryAccountOf(beneficiary),
+  beneficiaryAccountType: beneficiary?.cardNumber ? "TARJETA" : beneficiary?.phoneNumber ? "CELULAR" : "CLABE",
   amount: claim.amount ?? 514.0,
   operationDate: claim.date ?? "2026-08-15",
   senderBank: claim.bank ?? "BBVA MEXICO",
@@ -122,6 +138,30 @@ function reply(body) {
 
   const claim = body.sender ?? {};
   const key = claim.trackingKey ?? "";
+
+  /* receipt-triage D1/D17: a search by reference alone */
+  if (!key && claim.referenceNumber) {
+    if (claim.referenceNumber === "9999999")
+      return {
+        code: 422,
+        json: { error: "Referencia duplicada en Banxico (requiere clave de rastreo) (mock)" },
+      };
+    return {
+      code: 200,
+      headers: headers200(6500),
+      json: {
+        validationId: crypto.randomUUID(),
+        status: "valid",
+        validation: {
+          banxicoConfirmed: true,
+          cepStatus: "LIQUIDADO",
+          cepPreviouslyValidated: false,
+          /* Banxico's own clave — what the caller adopts (D14) */
+          cepDetails: cepDetails({ ...claim, trackingKey: `MOCKREF${claim.referenceNumber}` }, body.beneficiary),
+        },
+      },
+    };
+  }
 
   if (key.includes("HANG")) return { hang: true };
   if (key.includes("E500")) return { code: 500, json: { error: "Internal server error (mock)" } };
@@ -206,7 +246,7 @@ function reply(body) {
         banxicoConfirmed: true,
         cepStatus: "LIQUIDADO",
         cepPreviouslyValidated: key.includes("DUP"),
-        cepDetails: cepDetails(claim),
+        cepDetails: cepDetails(claim, body.beneficiary),
       },
       downloads: {
         cepXml: `http://localhost:${PORT}/mock-cep.xml`,

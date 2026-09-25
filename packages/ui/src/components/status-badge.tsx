@@ -19,6 +19,7 @@ import {
   Hourglass,
   Mail,
   PauseCircle,
+  ShieldAlert,
   Store,
   TimerOff,
   Webhook,
@@ -79,6 +80,11 @@ export type Status =
   /* integrations-hub D7: `done` under register_only — the router was
      deliberately never asked, so "Reconectado" would be a lie. */
   | "registered"
+  /* receipt-triage D31: Banxico confirmed the transfer and the business
+     decides before anything settles — paid to an account it removed, or
+     found by reference with no clave the provider could vouch for.
+     Warning, not error: nothing is wrong yet, somebody must look. */
+  | "inReview"
   /* automated-collections-api FR-011: which channel a link collects
      through — the panel's own roster, or the business's software through
      the API. Icon + text, never colour alone, and both the same tone: a
@@ -145,6 +151,7 @@ const statuses: Record<
   classOver: { tone: "info", icon: CirclePlus, label: "Sobrante" },
   observation: { tone: "info", icon: Eye, label: "Observación" },
   registered: { tone: "success", icon: ClipboardCheck, label: "Registrado" },
+  inReview: { tone: "warning", icon: ShieldAlert, label: "En revisión" },
   channelPanel: { tone: "info", icon: MonitorSmartphone, label: "Panel" },
   channelApi: { tone: "info", icon: Code2, label: "API" },
   credentialActive: { tone: "success", icon: KeyRound, label: "Activa" },

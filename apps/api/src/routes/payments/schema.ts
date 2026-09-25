@@ -19,6 +19,11 @@ export const PAYMENT_STATUSES = [
 
 export const RECONCILIATION_CLASSES = ["exact", "short", "over"] as const;
 
+/* The action outcome's vocabulary (integrations-hub D7). receipt-triage
+   D31 adds `review`: Banxico confirmed, and the business decides before
+   anything settles. */
+export const ACTION_OUTCOMES = ["queued", "done", "withheld", "failed", "observation", "review"] as const;
+
 export const feedQuery = z.object({
   cursor: z.coerce.number().int().positive().optional(),
   /* Lifecycle filter (D4). Without it the feed answers money that
@@ -27,7 +32,7 @@ export const feedQuery = z.object({
   /* The action outcome keeps its own filter (payments-and-classes D5;
      vocabulary and name per integrations-hub D7): the failed strip and
      the queue chips ask about the action, not about the money. */
-  action: z.enum(["queued", "done", "withheld", "failed", "observation"]).optional(),
+  action: z.enum(ACTION_OUTCOMES).optional(),
   /* D1's vocabulary as a filter — the "Pago parcial" chip is `short` */
   class: z.enum(RECONCILIATION_CLASSES).optional(),
   /* Customer search: usuario or name, contains-match (D4) */
@@ -55,7 +60,16 @@ export const feedCharge = z.object({
      confirmed). Generic vocabulary since integrations-hub D7: `done` is
      the mapped action completed — the es-MX label stays action-specific
      ("Reconectado" under register_and_reconnect). */
-  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]).nullable(),
+  actionOutcome: z.enum(ACTION_OUTCOMES).nullable(),
+  /* receipt-triage D31: why a `review` row waits for the business, and —
+     for a removed account — which one received the money, as its kind
+     and last four digits (the panel shows accounts masked like this to
+     every role). Defaulted so fixtures born before it still parse. */
+  reviewReason: z.enum(["retired_account", "no_clave"]).nullable().default(null),
+  reviewAccount: z
+    .object({ kind: z.enum(["clabe", "card", "phone"]), last4: z.string() })
+    .nullable()
+    .default(null),
   /* D3: computed once at the verdict against the fresh ask; null until
      then and forever on invalid/expired (no money, no class). */
   reconciliationClass: z.enum(RECONCILIATION_CLASSES).nullable(),
@@ -137,8 +151,21 @@ export const proofResponse = z.object({
 /* payments-and-classes D5 (retry) and integrations-hub D5 (execute):
    both answer the row's new outcome */
 export const retryResponse = z.object({
-  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]),
+  actionOutcome: z.enum(ACTION_OUTCOMES),
   nextAttemptAt: z.number().int().nullable(),
+});
+
+/* receipt-triage D31: POST /payments/:id/review — the business's
+   decision on a held payment (contracts/review.md) */
+export const reviewDecisionRequest = z.object({
+  decision: z.enum(["accept", "reject"]),
+});
+
+export const reviewDecisionResponse = z.object({
+  status: z.enum(PAYMENT_STATUSES),
+  /* Null after a reject, and on an API payment whose verdict webhook has
+     no address to go to */
+  actionOutcome: z.enum(ACTION_OUTCOMES).nullable(),
 });
 
 /* presence-freshness D5: the tenant's latest `payment_registered_at`,
@@ -152,3 +179,5 @@ export type FeedCharge = z.infer<typeof feedCharge>;
 export type FeedResponse = z.infer<typeof feedResponse>;
 export type ProofResponse = z.infer<typeof proofResponse>;
 export type RetryResponse = z.infer<typeof retryResponse>;
+export type ReviewDecisionRequest = z.infer<typeof reviewDecisionRequest>;
+export type ReviewDecisionResponse = z.infer<typeof reviewDecisionResponse>;

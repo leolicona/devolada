@@ -4,8 +4,12 @@ import { extractions } from "../db/schema";
 import type { Bindings } from "../env";
 import { PROOF_URL_TTL_MINUTES } from "../direct-payments/proofs";
 import {
+  askBeforeCredit,
   checkShape,
   extractProof,
+  gateReference,
+  passesGate,
+  tieDestination,
   loadShapeRules,
   ProofFetchError,
   readProofFromBucket,
@@ -21,7 +25,8 @@ import {
 import type { Bank } from "../direct-payments/banks";
 import type { Classification, OurReading, ProviderReading } from "./extraction/compare";
 import { ConstaError, type ConstaErrorCode } from "./failure";
-import { ownerId, type ConstaReading, type Owner } from "./index";
+import { ownerId, type ConstaReading, type Owner, type RegisteredAccount } from "./index";
+import type { Ask } from "./extraction/ask";
 import { amountToCents } from "../wisphub/money";
 
 /* The reading door (proof-extraction D6): read without spending a
@@ -41,7 +46,13 @@ type Outcome =
   | "unreadable"
   | "refused"
   | "routed"
-  | "illegible";
+  | "illegible"
+  /* receipt-triage D15: the two stops before any credit — a clear reading
+     with no key, and one whose destination fits none of the ISP's
+     accounts. Recorded by `/read` (the draft) and by the receipt door
+     when a client skipped the page; either way with no validation id. */
+  | "key_missing"
+  | "wrong_destination";
 
 export type ShapeSignals = { shape: ShapeVerdict; suggestedBank: Bank | null };
 
@@ -86,6 +97,9 @@ export async function recordExtraction(
        binding): there is no `ExtractionResult` to read the door from,
        and the row must still say the file went to the provider. */
     source?: "reader" | "provider-ocr";
+    /* receipt-triage D21: the proof this row read, so an ask can be
+       followed to how it ended */
+    proofKey?: string | null;
   } = {},
 ): Promise<string> {
   const proof = result?.proof ?? null;
@@ -128,6 +142,15 @@ export async function recordExtraction(
       acceptedFrom: classification?.acceptedFrom ?? null,
       providerTrackingKey: extra.providerReading?.trackingKey ?? null,
       providerAmountCents: extra.providerReading?.amountCents ?? null,
+      /* receipt-triage D21: ours as read (gate or no gate — the count of
+         folios taken for references needs the rejects too), the
+         provider's on the paid call, and what the reading saw as the
+         destination. Never the ISP's own accounts. */
+      proofKey: extra.proofKey ?? null,
+      referenceNumber: reading?.referenceNumber ?? null,
+      providerReferenceNumber: extra.providerReading?.referenceNumber ?? null,
+      destinationKind: reading?.destination.kind ?? null,
+      destinationDigits: reading?.destination.digits ?? null,
       /* A row that read nothing says *why* instead of leaving the column
          empty — "handed over unread" is countable by cause (D19). */
       rawOutput:
@@ -176,9 +199,12 @@ export async function recentReading(
         eq(extractions.proofSha256, proof.sha256),
         eq(extractions.source, "reader"),
         /* Only rows that actually hold a reading. `gated` counts: since
-           D3 a hole no longer refuses, it goes to the provider, and the
-           fields it *did* read are still worth reusing. */
-        inArray(extractions.outcome, ["passed", "gated"]),
+           D3 a hole does not refuse, it goes to the provider, and the
+           fields it *did* read are still worth reusing.
+           receipt-triage D28: so do the two new stops — a pay that
+           carries the file `/read` just stopped must meet the same stop
+           without a second model call. */
+        inArray(extractions.outcome, ["passed", "gated", "key_missing", "wrong_destination"]),
         gt(extractions.createdAt, new Date(now.getTime() - REUSE_WINDOW_MS)),
       ),
     )
@@ -197,13 +223,18 @@ export async function recentReading(
        column holds `amountToCents` of what the model said, and the gate
        calls anything not strictly positive malformed (gate.ts). */
     amount: row.amountCents == null ? "missing" : row.amountCents > 0 ? "ok" : "malformed",
+    /* receipt-triage D28: the reference is stored as read, so its verdict
+       is re-derived by the gate's own function — rebuilding it any other
+       way would silently drop receipt 2's key on the paid attempt */
+    referenceNumber: gateReference(row.referenceNumber),
   };
   const gated: GatedReading = {
     gate,
     trackingKey: gate.trackingKey === "ok" ? row.trackingKey : null,
+    referenceNumber: gate.referenceNumber === "ok" ? row.referenceNumber!.trim() : null,
     senderBank: gate.senderBank === "ok" ? (row.senderBank as Bank | null) : null,
     amountCents: gate.amount === "ok" ? row.amountCents : null,
-    passes: gate.trackingKey === "ok" && gate.senderBank === "ok" && gate.amount === "ok",
+    passes: passesGate(gate),
   };
   const reading: Reading = {
     /* The outcome filter above admits only rows the reader called a
@@ -218,6 +249,12 @@ export async function recentReading(
     amount: row.amountCents == null ? null : row.amountCents / 100,
     date: row.transferDate,
     status: row.receiptStatus,
+    /* receipt-triage D28 */
+    referenceNumber: row.referenceNumber,
+    destination: {
+      kind: row.destinationKind ?? null,
+      digits: row.destinationDigits ?? null,
+    },
     /* The new row says where its reading came from rather than copying a
        raw model answer that was never produced for this call. */
     raw: `reused from extraction ${row.id}`,
@@ -262,8 +299,14 @@ export function readingPayload(
         trackingKey: "missing" as const,
         senderBank: "missing" as const,
         amount: "missing" as const,
+        referenceNumber: "missing" as const,
         shape: "unknown" as const,
       },
+      referenceNumber: null,
+      destination: { kind: null, digits: null },
+      /* receipt-triage FR-015: nothing read, nothing asked */
+      ask: null,
+      tiedAccount: null,
       /* Nothing here saw the file, so there is no legibility to report
          (two-eyes-receipt D15). The page reads this branch exactly as it
          reads a reader that is down, and never refuses on it. */
@@ -289,14 +332,26 @@ export function readingPayload(
     gate: { ...gated.gate, shape: signals.shape },
     /* D16: to confirm, never to send */
     ...(signals.suggestedBank ? { suggestedBank: signals.suggestedBank } : {}),
+    /* receipt-triage D12: only a reference the gate passed */
+    referenceNumber: gated.referenceNumber,
+    destination: reading.destination,
+    /* Filled by the caller that holds the accounts (`extract`) */
+    ask: null,
+    tiedAccount: null,
   };
+}
+
+/* receipt-triage D15: the outcome a stop is recorded under */
+export function askOutcome(ask: Ask): Outcome | null {
+  if (!ask) return null;
+  return ask.reason === "no_key" ? "key_missing" : "wrong_destination";
 }
 
 export async function extract(
   env: Bindings,
   db: DrizzleD1Database,
   owner: Owner,
-  { proofKey }: { proofKey: string },
+  { proofKey, receivingAccounts }: { proofKey: string; receivingAccounts?: RegisteredAccount[] },
 ): Promise<ConstaReading> {
   let result: ExtractionResult;
   try {
@@ -307,12 +362,21 @@ export async function extract(
     if (!failure) throw err;
     await recordExtraction(db, owner, failure.code === "READER_UNREADABLE" ? "unreadable" : "refused", null, {
       note: `${failure.code}: ${String((err as Error).message)}`,
+      proofKey,
     });
     throw new ConstaError(failure.code, failure.retryable, String((err as Error).message));
   }
 
   const signals = await shapeSignals(db, result);
   const payload = readingPayload(result, signals);
+  /* receipt-triage D15, D24: the ask and the tie, reported — this door
+     never throws on either (it "cannot reject anybody", two-eyes D2); the
+     receipt door is what enforces the ask */
+  const ask = askBeforeCredit(result, receivingAccounts);
+  const tie =
+    result.route === "reader" && receivingAccounts?.length
+      ? tieDestination(result.reading.destination, receivingAccounts)
+      : "unknown";
   /* two-eyes-receipt D2: `illegible` is recorded here too, so the
      refusal rate is countable from one table whichever door met it —
      but this door still throws nobody out (FR-004): it reports what the
@@ -324,12 +388,18 @@ export async function extract(
         ? "not_a_receipt"
         : result.reading.legibility === "none"
           ? "illegible"
-          : result.gated.passes
-            ? "passed"
-            : "gated";
+          : (askOutcome(ask) ??
+            (result.gated.passes
+              ? "passed"
+              : "gated"));
 
-  const extractionId = await recordExtraction(db, owner, outcome, result, { signals });
+  const extractionId = await recordExtraction(db, owner, outcome, result, { signals, proofKey });
   /* No apiCEP call happened on this path at all — that is the contract
      of this door, not an implementation detail (D6). */
-  return { extractionId, ...payload };
+  return {
+    extractionId,
+    ...payload,
+    ask,
+    tiedAccount: typeof tie === "object" ? tie.tied : null,
+  };
 }

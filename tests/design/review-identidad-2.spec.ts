@@ -211,7 +211,7 @@ const shots: Shot[] = [
     path: "/payments",
     widths: [1280, 768, 375],
     arrange: (page) => ok(page, "**/auth/me", { ...businessActor, speiConfigured: false, integrationConfigured: false }),
-    ready: text(/falta la clabe del negocio/i),
+    ready: text(/falta la cuenta donde te pagan/i),
   },
   {
     slug: "links-gated",

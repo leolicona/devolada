@@ -81,3 +81,19 @@ In Cuenta, the section "Pago directo" becomes "Cuentas para recibir pagos":
   borrar la cuenta donde te pagan: elige otra primero."
 - The section keeps its one save button, "Guardar pago directo". Controls at
   the compact 40px size of the admin; tokens only.
+
+## Amended 2026-09-25 (implementation)
+
+- **The heading.** The card keeps its title "Pago directo por SPEI" and its
+  `#spei` anchor — the CLABE banner and the setup wizard deep-link to it, and
+  it also holds the fee and the beneficiary name. "Cuentas para recibir pagos"
+  is the heading of the accounts inside it.
+- **Clearing the last account.** Clearing the cuenta de cobro is refused
+  (`VALIDATION_ERROR`, `reason: "COLLECT_ACCOUNT_CLEARED"`) only while another
+  registered account could take its place; clearing the only account left is
+  allowed, because that is what "SPEI not configured" has always been.
+  Choosing a kind that is not registered is `reason: "NOT_REGISTERED"`; a
+  number without its bank, or a bank without its number, is
+  `reason: "PAIR_INCOMPLETE"` with the field named.
+- The lock line shows to the roles that cannot change the accounts; the
+  owner does not need it.

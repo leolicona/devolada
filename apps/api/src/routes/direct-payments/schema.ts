@@ -6,6 +6,29 @@ import { BANKS } from "../../direct-payments/banks";
    offer a name the server refuses is the bug this closes (BUG-007). */
 export { BANKS, type Bank } from "../../direct-payments/banks";
 
+/* receipt-triage D2/D12 (clarified 2026-09-24): a reference many
+   transfers share is no key. A single digit repeated ("0", "0000",
+   "1111111") or a run of three or more consecutive digits, up or down
+   ("123", "1234567", "7654321") — the defaults banking apps fill in. Two
+   digits in a row ("45") are just a short reference: the spec's examples
+   of a run start at three. One pure
+   rule, here, because the gate, the pay contract and the page must agree
+   on it: the engine's gate imports it, the page imports this schema. A
+   string that is not 1–7 digits is not a reference at all, so it is not
+   generic either. */
+export function isGenericReference(value: string | null | undefined): boolean {
+  const v = value?.trim() ?? "";
+  if (!/^\d{1,7}$/.test(v)) return false;
+  if (/^(\d)\1*$/.test(v)) return true;
+  if (v.length < 3) return false;
+  const step = Number(v[1]) - Number(v[0]);
+  if (step !== 1 && step !== -1) return false;
+  for (let i = 1; i < v.length; i++) {
+    if (Number(v[i]) - Number(v[i - 1]) !== step) return false;
+  }
+  return true;
+}
+
 /* Shareable contract (ARCHITECTURE.md): apps/pago derives types from
    these schemas and its MSW handlers validate against them. */
 
@@ -29,8 +52,22 @@ export const linkStatusResponse = z.object({
   carriedBalanceCents: z.number().int().optional(),
   serviceFeeCents: z.number().int().optional(),
   totalCents: z.number().int().optional(),
+  /* Filled only when the cuenta de cobro is the CLABE, for a page built
+     before receipt-triage; `collectAccount` below is what a page reads */
   speiClabe: z.string().optional(),
   speiBank: z.string().optional(),
+  /* receipt-triage D29: exactly one account — the cuenta de cobro, whatever
+     its kind — never a list: the payer makes no choice about where to
+     send the money (spec D9, FR-017). Shown whole, because the payer
+     copies it. The business's other and retired accounts never leave the
+     server. Present whenever `status` is `debt`. */
+  collectAccount: z
+    .object({
+      kind: z.enum(["clabe", "card", "phone"]),
+      value: z.string(),
+      bank: z.string(),
+    })
+    .optional(),
   speiBeneficiaryName: z.string().optional(),
   /* Goes in the transfer's concepto so the ISP can recognise the payer */
   reference: z.string().optional(),
@@ -64,7 +101,12 @@ export const payRequest = z
            the point: a pasted trailing newline is harmless, a space inside
            is the two-line receipt wrap that costs a paid call and comes
            back `invalid`. */
-        trackingKey: z.string().trim().regex(/^[A-Za-z0-9]{6,30}$/),
+        trackingKey: z.string().trim().regex(/^[A-Za-z0-9]{6,30}$/).optional(),
+        /* receipt-triage D1/D12: the SPEI referencia numérica — 1 to 7
+           digits, as printed, leading zeros kept (text, never a number).
+           Either key is enough (FR-005); when both come, only the clave
+           travels to Banxico and the reference stays on the row. */
+        referenceNumber: z.string().trim().regex(/^\d{1,7}$/).optional(),
         /* D16: apiCEP answers `invalid` — never an error — for a bank name
            it does not know, which reads exactly like a transfer that never
            happened. Refusing here is the only way the payer ever learns. */
@@ -77,6 +119,19 @@ export const payRequest = z
            comes from the CEP and a fresh debt read, so lying here cannot
            buy a cheaper payment (same posture as receiptAmountCents). */
         amountCents: z.number().int().positive().optional(),
+      })
+      /* receipt-triage FR-005: a key is required — the clave or the
+         reference. The form never names an account: typed data is
+         checked against the cuenta de cobro (FR-018). */
+      .refine((t) => t.trackingKey || t.referenceNumber, {
+        message: "trackingKey or referenceNumber is required",
+      })
+      /* receipt-triage D2 (clarified 2026-09-24): a generic reference is
+         no key — the clave is required beside it. The page and this
+         schema share `isGenericReference`, so a client that skipped the
+         page meets the same rule as a VALIDATION_ERROR. */
+      .refine((t) => t.trackingKey || !isGenericReference(t.referenceNumber), {
+        message: "a generic referenceNumber needs a trackingKey",
       })
       .optional(),
     /* D18: the payment this submission corrects. Set only when the payer
@@ -135,6 +190,15 @@ export const publicPaymentError = z.enum([
   "STALE_TRANSFER",
   "TRANSFER_CONTRADICTED",
   "TRANSFER_NOT_FOUND",
+  /* receipt-triage D17: the provider said the reference matches more than
+     one transfer. The payment is still `validating`; the page asks for
+     the clave alone and no further call is made until it arrives. */
+  "REFERENCE_AMBIGUOUS",
+  /* receipt-triage D7 (clarified 2026-09-24): another payment of the
+     business already holds this reference with the same date, bank,
+     amount and account. From the pay route nothing was created or billed;
+     either way the page requires the clave. */
+  "REFERENCE_SHARED",
 ]);
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)
@@ -185,7 +249,34 @@ export const proofReadingResponse = z.object({
     trackingKey: z.enum(["ok", "malformed", "missing"]),
     senderBank: z.enum(["ok", "unknown", "missing"]),
     amount: z.enum(["ok", "malformed", "missing"]),
+    /* receipt-triage D12: `generic` is a reference many transfers share —
+       no key. Defaulted so fixtures born before it still parse. */
+    referenceNumber: z.enum(["ok", "malformed", "generic", "missing"]).default("missing"),
   }),
+  /* receipt-triage D12: only a reference that passed the gate — 1 to 7
+     digits, as printed. Defaulted for fixtures born before it. */
+  referenceNumber: z.string().nullable().default(null),
+  /* receipt-triage D15: the engine's ask, reported. The page renders it;
+     the engine also enforces it on the receipt door, so skipping the
+     page buys nothing. Null when the capture may go on to the paid call.
+     Never names an account: the form does not ask for one (FR-018). */
+  ask: z
+    .discriminatedUnion("reason", [
+      z.object({
+        reason: z.literal("no_key"),
+        fields: z.array(z.enum(["key", "amount", "date", "senderBank"])).min(1),
+        /* D7 (clarified 2026-09-24): the reading's reference is one another
+           payment of the business already holds that day */
+        shared: z.boolean().optional(),
+      }),
+      z.object({ reason: z.literal("wrong_destination") }),
+    ])
+    .nullable()
+    .default(null),
+  /* receipt-triage D8 (Story 4): at least three digits of the destination
+     were read — the guide's "Cuenta" item. The digits themselves, and the
+     account they tied to, never reach the page. */
+  destinationSeen: z.boolean().default(false),
 });
 
 export const payResponse = z.object({
@@ -223,7 +314,7 @@ export const directPaymentStatusResponse = z.object({
   debtCents: z.number().int().optional(),
   missingCents: z.number().int().optional(),
   /* integrations-hub D7: the generic outcome travels here too */
-  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation"]).optional(),
+  actionOutcome: z.enum(["queued", "done", "withheld", "failed", "observation", "review"]).optional(),
   folio: z.string().optional(),
   validationAttempts: z.number().int(),
   /* validation-status-ux D5: ms epoch of the next automatic attempt, so
@@ -252,7 +343,15 @@ export const directPaymentStatusResponse = z.object({
      date on either reading, so the payer is asked for that one field
      while the agreement stands — the transfer door is never called with
      a date nobody read. The page empties exactly these fields. */
-  disputedFields: z.array(z.enum(["trackingKey", "amount", "date"])).optional(),
+  /* receipt-triage D13: `"referenceNumber"` joins them; with
+     `"trackingKey"` beside it, either key is enough */
+  disputedFields: z.array(z.enum(["trackingKey", "referenceNumber", "amount", "date"])).optional(),
+  /* receipt-triage D1: the reference this payment searches with */
+  referenceNumber: z.string().nullable().optional(),
+  /* receipt-triage D31: true while the business decides on a payment
+     Banxico confirmed (FR-006, FR-020a) — the page shows "en revisión",
+     no success state and no reconnection copy */
+  inReview: z.boolean().optional(),
   /* The receipt's own `Estatus`: decides whether the payer is asked to
      confirm or simply told their bank has not released it yet */
   receiptStatus: z.string().nullable().optional(),

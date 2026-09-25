@@ -1,6 +1,7 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { PAGO } from "../../playwright.config";
-import { longTrackingKey, stubPagoApi, stubPagoSurplusReading } from "./stubs";
+import { longTrackingKey, stubPagoApi, stubPagoKeylessReading, stubPagoSurplusReading } from "./stubs";
 
 /* docs/legacy/direct-payment/direct-payment.spec.md (D16, D18, D19) — the
    customer's page in a real browser.
@@ -194,4 +195,77 @@ test.describe("design-foundations US1: the payer's page holds at all three width
       await expectNoHorizontalScroll(page);
     });
   }
+});
+
+/* receipt-triage US4 (D8, D20; FR-023, FR-026): the capture guide in a real
+   browser — the questions happy-dom cannot answer. Width at the floor and
+   above it, real contrast in both themes, the breath's computed duration
+   under reduced motion, no transform anywhere in the guide, and a keyboard
+   that reaches the upload control with a focus ring it can see. */
+test.describe("receipt-triage US4: the capture guide", () => {
+  async function openUpload(page: Page, width = 360, height = 740) {
+    await stubPagoApi(page);
+    await page.setViewportSize({ width, height });
+    await page.goto(`${PAGO}/p/tok123`);
+    await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+    await page.getByRole("heading", { name: "Tu captura debe mostrar" }).waitFor();
+  }
+
+  for (const width of [360, 768, 1280]) {
+    test(`the upload step with the guide does not scroll sideways at ${width}px`, async ({ page }) => {
+      await openUpload(page, width, 900);
+      await expectNoHorizontalScroll(page);
+    });
+  }
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`the guide and the ask have no contrast violations in ${theme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: theme });
+      await openUpload(page);
+      await stubPagoKeylessReading(page);
+      await page.locator('input[type="file"]').setInputFiles({ name: "cep.png", mimeType: "image/png", buffer: Buffer.alloc(120) });
+      await page.getByRole("button", { name: /enviar comprobante/i }).click();
+      await page.getByRole("heading", { name: "Lo que vimos en tu captura" }).waitFor();
+      /* measured at rest: mid-fade, every ink reads lighter than it is */
+      await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity));
+      const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
+      expect(
+        results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => `${n.html.slice(0, 90)} → ${n.failureSummary?.split("\n").slice(-1)[0]}`).join(" | ")}`),
+        theme,
+      ).toEqual([]);
+    });
+  }
+
+  test("under reduced motion the reading still breathes, and nothing in the guide moves", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openUpload(page);
+    /* the reading never answers, so the guide stays in its waiting state */
+    await page.route("**/direct-payments/links/*/read", () => new Promise(() => {}));
+    await page.locator('input[type="file"]').setInputFiles({ name: "cep.png", mimeType: "image/png", buffer: Buffer.alloc(120) });
+    await page.getByRole("button", { name: /enviar comprobante/i }).click();
+    const tile = page.locator("[data-item] [data-motion='breath']").first();
+    await expect(tile).toBeVisible();
+    const duration = await tile.evaluate((el) => getComputedStyle(el).animationDuration);
+    expect(duration).toBe("2.4s");
+    const transforms = await page
+      .locator("[data-item]")
+      .evaluateAll((els) =>
+        els.flatMap((el) => [el, ...el.querySelectorAll("*")]).map((el) => getComputedStyle(el).transform),
+      );
+    expect(transforms.filter((t) => t !== "none")).toEqual([]);
+  });
+
+  test("the upload control is reached by keyboard, with a focus ring the eye can see", async ({ page }) => {
+    await openUpload(page);
+    const dropzone = page.locator("label[for]", { hasText: /toca para subir/i });
+    const resting = await dropzone.evaluate((el) => getComputedStyle(el).boxShadow);
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press("Tab");
+      if (await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.type === "file")) break;
+    }
+    expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.type)).toBe("file");
+    const focused = await dropzone.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(focused).not.toBe("none");
+    expect(focused).not.toBe(resting);
+  });
 });

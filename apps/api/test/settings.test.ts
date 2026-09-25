@@ -157,3 +157,107 @@ describe("US-D05: the ISP configures its SPEI account and fee", () => {
   });
 });
 
+
+/* receipt-triage US3 (contracts/settings.md; D26, D29, D30, D32): the
+   three accounts and the cuenta de cobro. A Luhn-valid test card. */
+const CARD = "4111111111111111";
+const PHONE = "5512345678";
+
+describe("receipt-triage US3: the accounts an ISP is paid at", () => {
+  const patch = async (body: unknown, headers: Record<string, string> = asBusiness.headers) =>
+    (await app()).request(
+      "/settings",
+      { method: "PATCH", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) },
+      env,
+    );
+  const row = async () => (await drizzle(env.DB).select().from(businesses))[0];
+
+  it("the owner saves a card and a phone, each with its bank, and makes the card the cuenta de cobro", async () => {
+    await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP" });
+    const res = await patch({ speiCard: CARD, speiCardBank: "NUBANK", speiPhone: PHONE, speiPhoneBank: "BBVA MEXICO", speiCollectKind: "card" });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.spei).toMatchObject({
+      card: CARD,
+      cardBank: "NUBANK",
+      phone: PHONE,
+      phoneBank: "BBVA MEXICO",
+      collectKind: "card",
+      configured: true,
+    });
+  });
+
+  it.each([
+    ["a failing check digit", { speiCard: "4111111111111112", speiCardBank: "NUBANK" }],
+    ["15 digits", { speiCard: "411111111111111", speiCardBank: "NUBANK" }],
+    ["17 digits", { speiCard: "41111111111111111", speiCardBank: "NUBANK" }],
+    ["a 9-digit phone", { speiPhone: "551234567", speiPhoneBank: "NUBANK" }],
+    ["a card without its bank", { speiCard: CARD }],
+    ["a phone without its bank", { speiPhone: PHONE }],
+    ["a bank outside the vocabulary", { speiCard: CARD, speiCardBank: "Banco Inventado" }],
+    ["choosing an unregistered kind", { speiCollectKind: "phone" }],
+  ])("%s is a VALIDATION_ERROR", async (_name, body) => {
+    await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP" });
+    const res = await patch(body);
+    expect(res.status).toBe(400);
+    expect((await row()).speiCard).toBeNull();
+  });
+
+  it("clearing the cuenta de cobro while another account could take its place is refused", async () => {
+    await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP", speiCard: CARD, speiCardBank: "NUBANK" });
+    const res = await patch({ speiClabe: null, speiBank: null });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatchObject({ code: "VALIDATION_ERROR", reason: "COLLECT_ACCOUNT_CLEARED" });
+    /* with the card chosen first, the CLABE may go (D32: no kind is required) */
+    expect((await patch({ speiCollectKind: "card" })).status).toBe(200);
+    expect((await patch({ speiClabe: null, speiBank: null })).status).toBe(200);
+  });
+
+  it("an ISP with only a card as its cuenta de cobro is configured — no CLABE needed (D32)", async () => {
+    await seedBusiness();
+    const { data } = await (await patch({ speiCard: CARD, speiCardBank: "NUBANK", speiCollectKind: "card" })).json();
+    expect(data.spei.clabe).toBeNull();
+    expect(data.spei.configured).toBe(true);
+  });
+
+  it("a CLABE-only business born before this feature reads collectKind clabe and today's configured (D29)", async () => {
+    await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP" });
+    const { data } = await (await (await app()).request("/settings", asBusiness, env)).json();
+    expect(data.spei.collectKind).toBe("clabe");
+    expect(data.spei.configured).toBe(true);
+    expect((await row()).speiCollectKind).toBeNull();
+  });
+
+  it("changing or clearing a number retires the old one in the same write; setting it again takes it off (D30)", async () => {
+    await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP", speiCard: CARD, speiCardBank: "NUBANK" });
+    await patch({ speiCard: "5555555555554444", speiCardBank: "NUBANK" });
+    let retired = JSON.parse((await row()).speiRetiredAccounts!);
+    expect(retired).toEqual([{ kind: "card", value: CARD, bank: "NUBANK", removedAt: expect.any(Number) }]);
+
+    await patch({ speiCard: null, speiCardBank: null });
+    retired = JSON.parse((await row()).speiRetiredAccounts!);
+    expect(retired.map((r: { value: string }) => r.value)).toEqual([CARD, "5555555555554444"]);
+
+    await patch({ speiCard: CARD, speiCardBank: "NUBANK" });
+    retired = JSON.parse((await row()).speiRetiredAccounts!);
+    expect(retired.map((r: { value: string }) => r.value)).toEqual(["5555555555554444"]);
+  });
+
+  it("an admin cannot touch any account field (FORBIDDEN_FOR_ROLE); an operator reads them masked", async () => {
+    const business = await seedBusiness({ speiClabe: "646180157000000004", speiBank: "STP", speiCard: CARD, speiCardBank: "NUBANK", speiPhone: PHONE, speiPhoneBank: "NUBANK" });
+    const { seedMember } = await import("./helpers");
+    await seedMember(business, "admin@wifiplus.mx", "admin");
+    await seedMember(business, "operador@wifiplus.mx", "operator");
+    const asAdmin = { Cookie: await sessionCookieHeader("admin@wifiplus.mx") };
+    for (const body of [{ speiCard: null, speiCardBank: null }, { speiCollectKind: "card" }, { speiPhoneBank: "STP" }]) {
+      const res = await patch(body, asAdmin);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("FORBIDDEN_FOR_ROLE");
+    }
+    expect((await row()).speiCard).toBe(CARD);
+
+    const asOperator = { headers: { Cookie: await sessionCookieHeader("operador@wifiplus.mx") } };
+    const { data } = await (await (await app()).request("/settings", asOperator, env)).json();
+    expect(data.spei).toMatchObject({ clabe: "••••0004", card: "••••1111", phone: "••••5678" });
+  });
+});

@@ -43,6 +43,11 @@
   still holds for a partly legible receipt, a malformed clave, and a picture
   whose legibility the model omitted (receipt-triage D16, amended 2026-09-24
   when the reference joined the scope).
+- Amended 2026-09-25, with the implementation: `receipt-triage D15/D24` add a
+  second stop of the same kind — a clear receipt whose destination's last
+  visible digits fit none of the ISP's registered accounts is stopped before
+  the first paid call (`RECEIPT_WRONG_DESTINATION`). The numbers above did not
+  move.
 
 ## Decisions taken in session (2026-09-17)
 

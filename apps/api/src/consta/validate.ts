@@ -4,8 +4,17 @@ import { extractions, validations } from "../db/schema";
 import type { Bindings } from "../env";
 import { apiCepProvider } from "./provider/apicep";
 import { ProviderFailure, type ReceiptInput, type TransferInput } from "./provider/types";
-import { extractProof, readProofFromBucket, type ExtractionResult, type LoadedProof } from "./extraction";
 import {
+  askBeforeCredit,
+  asBeneficiary,
+  extractProof,
+  readProofFromBucket,
+  tieDestination,
+  type ExtractionResult,
+  type LoadedProof,
+} from "./extraction";
+import {
+  askOutcome,
   extractionFailure,
   readingPayload,
   recentReading,
@@ -26,7 +35,14 @@ import { suggestRetryAfter } from "./retry/suggest";
 import { validateRequestSchema } from "./request";
 import { signedProofUrl } from "../direct-payments/proofs";
 import { ConstaError } from "./failure";
-import { ownerId, type ConstaRequest, type ConstaVerdict, type Owner } from "./index";
+import {
+  ownerId,
+  type ConstaHooks,
+  type ConstaRequest,
+  type ConstaVerdict,
+  type Owner,
+  type RegisteredAccount,
+} from "./index";
 
 /* The validation door (validation spec D1): one call, two doors —
    transfer data, or a receipt. Was `POST /validate` while the engine was
@@ -45,6 +61,8 @@ function ourReadingPayload(ours: OurReading | null): ConstaVerdict["ourReading"]
     amountCents: ours.gate.amount === "ok" ? ours.amountCents : null,
     date: ours.date,
     legibility: ours.legibility ?? null,
+    /* receipt-triage D12 */
+    referenceNumber: ours.gate.referenceNumber === "ok" ? ours.referenceNumber : null,
   };
 }
 
@@ -67,6 +85,7 @@ export async function validate(
   db: DrizzleD1Database,
   owner: Owner,
   request: ConstaRequest,
+  hooks: ConstaHooks = {},
 ): Promise<ConstaVerdict> {
   /* consta-api-merge D8: the guard runs first, in-process, before any
      credit. D12/D13: refusing here is the point — a bank name or a
@@ -111,15 +130,24 @@ export async function validate(
      machines and the bank's learned clave shape all run out of ways to
      tell (D5–D8).
 
-     Exactly two things still refuse before a credit is spent (D2, FR-004):
-     the file is not a receipt at all, and the file cannot be read at all.
-     A *hole* no longer refuses (FR-005) — a missing clave used to throw
+     Two things refuse before a credit is spent (D2, FR-004): the file is
+     not a receipt at all, and the file cannot be read at all. A *hole*
+     does not refuse (FR-005) — a missing clave used to throw
      `RECEIPT_INCOMPLETE` and send the payer to a form before anything had
-     been asked of anybody; now it goes to the provider, whose reading may
-     fill it for free. That refusal is what the gate exists for is still
-     true of the two that remain: apiCEP cannot tell a caller which field
-     was wrong, because a malformed clave, an unknown bank and a transfer
-     that never happened are the same faceless `invalid` (D11).
+     been asked of anybody; it goes to the provider, whose reading may
+     fill it for free. receipt-triage D4 narrows that for exactly one hole
+     and adds one stop: a *clear* capture (a `completa` picture, or a
+     PDF's text — D16) that shows neither a clave nor a reference, a
+     generic reference counting as none, throws `RECEIPT_INCOMPLETE` again;
+     and one whose destination fits none of the ISP's accounts throws
+     `RECEIPT_WRONG_DESTINATION` (D15, D24). Neither is worth a credit: a
+     receipt that shows no key cannot be found by the provider's eyes
+     either, and one paid to somebody else is not this ISP's money. Every
+     other hole — a partly legible picture, an unjudged one, a malformed
+     clave — still goes through (FR-015). That refusing is what the gate
+     exists for is still true: apiCEP cannot tell a caller which field was
+     wrong, because a malformed clave, an unknown bank and a transfer that
+     never happened are the same faceless `invalid` (D11).
 
      If the reader is unavailable, or its answer will not parse, the file
      still goes to the provider with an empty reading on our side, and the
@@ -161,6 +189,10 @@ export async function validate(
         potentialBeneficiaries: body.potentialBeneficiaries,
       };
 
+  /* receipt-triage D22/D23: the product no longer sends a candidate list —
+     a payment is checked against the one account its receipt's digits
+     name, else its cuenta de cobro. The engine keeps accepting the list
+     for other callers, unchanged. */
   /* `potentialBeneficiaries` is an OCR-mode feature: apiCEP matches the
      image against a list of candidate accounts, and a direct-mode call
      takes exactly one beneficiary. So a caller using it keeps the OCR
@@ -175,6 +207,19 @@ export async function validate(
      takes (D3), so the flag now means "read nothing here" rather than
      "use the other door". */
   const readable = input.mode === "receipt" && Boolean(body.beneficiary) && !body.providerOcr;
+  /* receipt-triage D22/D30: the account the provider call names on the
+     receipt door — the caller's `beneficiary` (the cuenta de cobro)
+     unless the receipt's own digits name another registered account.
+     Reported on the verdict as `beneficiaryUsed`. */
+  let beneficiaryUsed: RegisteredAccount | null =
+    body.receipt && body.beneficiary ? (body.beneficiary as RegisteredAccount) : null;
+  /* What the ask and the tie judge the destination against: the
+     payment's registered accounts, or the one beneficiary (a top-up's
+     platform CLABE, spec Edge Cases). A legacy row skips both (D27). */
+  const accounts: RegisteredAccount[] | null = body.legacy
+    ? null
+    : ((body.receivingAccounts as RegisteredAccount[] | undefined) ??
+      (body.beneficiary ? [body.beneficiary as RegisteredAccount] : null));
   /* With no binding nothing here can read anything, so the bytes are not
      fetched at all — and, importantly, not sniffed either: a file whose
      magic bytes this engine does not recognise still reaches the
@@ -254,6 +299,80 @@ export async function validate(
           { reading: readingPayload(extracted, signals) },
         );
       }
+      /* receipt-triage D4/D15/D16 — the one narrowing of two-eyes D2/FR-005.
+         A clear capture (a `completa` picture, or a PDF's text) that
+         shows neither key — a generic reference counting as none — or
+         whose destination fits none of the ISP's accounts is stopped
+         here, before the provider is paid, exactly as `/read` reported
+         it to the page. A client that skipped the page buys nothing. A
+         partly legible or unjudged picture, and a malformed clave, still
+         go through with their hole (FR-015). A legacy row finishes under
+         the flow it started in (D27). */
+      if (accounts) {
+        const ask = askBeforeCredit(extracted, accounts);
+        if (ask) {
+          await recordExtraction(db, owner, askOutcome(ask)!, extracted, {
+            signals,
+            proofKey: body.receipt!.proofKey,
+            ...(reusedFrom ? { note: `reused from extraction ${reusedFrom}` } : {}),
+          });
+          throw ask.reason === "no_key"
+            ? new ConstaError("RECEIPT_INCOMPLETE", false, "the receipt shows neither a clave nor a reference", {
+                reading: readingPayload(extracted, signals),
+                missingFields: ask.fields,
+              })
+            : new ConstaError(
+                "RECEIPT_WRONG_DESTINATION",
+                false,
+                "the receipt's destination fits none of the business's accounts",
+                { reading: readingPayload(extracted, signals) },
+              );
+        }
+        /* receipt-triage D24/D30: the receipt's digits name the account
+           the provider is asked about — a registered one other than the
+           cuenta de cobro, or a retired one (FR-020a). Unknown — fewer
+           than three digits, or two fits — keeps the cuenta de cobro, and
+           no credit is spent trying accounts one after another (FR-019). */
+        const tie = tieDestination(reading.destination, accounts);
+        if (typeof tie === "object") {
+          beneficiaryUsed = tie.tied;
+          input = { ...input, beneficiary: asBeneficiary(tie.tied) } as ReceiptInput;
+        }
+        /* receipt-triage D7 (FR-007, converge T060): the page asks about a
+           shared reference at `/read`; this is the same stop for a client
+           that skipped it. A reading whose only key is a reference —
+           no clave the gate passed — that another payment of the business
+           already holds with the same date, bank, amount and account
+           cannot find this transfer alone, so the provider is not paid to
+           say so. Recorded as the ask it is (`key_missing`, D21), and the
+           payer is asked for the clave. */
+        const { gated: g } = extracted;
+        if (
+          hooks.referenceTaken &&
+          g.gate.trackingKey !== "ok" &&
+          g.referenceNumber &&
+          g.senderBank &&
+          g.amountCents != null &&
+          reading.date &&
+          (await hooks.referenceTaken({
+            referenceNumber: g.referenceNumber,
+            date: reading.date,
+            senderBank: g.senderBank,
+            amountCents: g.amountCents,
+            account: beneficiaryUsed ?? (body.beneficiary as RegisteredAccount),
+          }))
+        ) {
+          await recordExtraction(db, owner, "key_missing", extracted, {
+            signals,
+            proofKey: body.receipt!.proofKey,
+            note: `reference shared (D7)${reusedFrom ? `; reused from extraction ${reusedFrom}` : ""}`,
+          });
+          throw new ConstaError("RECEIPT_REFERENCE_SHARED", false, "the receipt's only key is a reference another payment holds", {
+            reading: readingPayload(extracted, signals),
+            missingFields: ["key"],
+          });
+        }
+      }
       /* two-eyes-receipt D3: the reading no longer *becomes* the request.
          It is kept beside it — the file itself is what the provider gets
          (`input` stays in receipt mode below), and the two readings meet
@@ -274,7 +393,7 @@ export async function validate(
      last — the request always carried it and the log dropped it. A
      receipt matched against a candidate list has no single receiver. */
   const beneficiaryBank =
-    input.mode === "transfer" ? input.beneficiary.bank : (body.beneficiary?.bank ?? null);
+    input.mode === "transfer" ? input.beneficiary.bank : (input.beneficiary?.bank ?? null);
 
   /* two-eyes-receipt D5/D19: the comparison, and the one reading record
      this call leaves behind. Written after the provider answers so the
@@ -308,6 +427,8 @@ export async function validate(
            again. A note rather than a column — the pair is an audit
            trail, not something any query groups by. */
         ...(reusedFrom ? { note: `reused from extraction ${reusedFrom}` } : {}),
+        /* receipt-triage D21 */
+        ...(body.receipt ? { proofKey: body.receipt.proofKey } : {}),
       },
     );
   };
@@ -375,6 +496,7 @@ export async function validate(
             reason: "not_found" as const,
             hint: "verify_inputs" as const,
             alreadyValidated: false,
+            ...(beneficiaryUsed ? { beneficiaryUsed } : {}),
             ourReading: ourReadingPayload(ours),
             ...classificationPayload(classification),
           };
@@ -529,6 +651,10 @@ export async function validate(
        about the payer's own transfer, so nothing foreign leaks. */
     ...(verdict.reason === "contradicted" && verdict.cepStatus ? { cepStatus: verdict.cepStatus } : {}),
     alreadyValidated: verdict.alreadyValidated,
+    /* receipt-triage FR-006: the flag as answered, null included */
+    previouslyValidated: verdict.previouslyValidated,
+    /* receipt-triage D22/D30: on the receipt door only */
+    ...(beneficiaryUsed ? { beneficiaryUsed } : {}),
     ...(verdict.cep ? { cep: verdict.cep } : {}),
     /* D11: the provider's reading — a reading, never a verdict. It
        survives failure (measured 2026-08-26), which is exactly when a

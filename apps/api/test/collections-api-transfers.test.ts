@@ -223,3 +223,24 @@ describe("scenario 4 / D16: unapplied money is visible; a deposit Devolada never
     expect((await transfers(other.key, aroundNow())).transfers).toEqual([]);
   });
 });
+
+/* receipt-triage US3 (plan D31, FR-020a): a payment Banxico confirmed that
+   waits for the business's decision is no verdict on this door — neither
+   in the history nor on the payment's own read — until the business
+   accepts it. An integration that polls must not act on it first. */
+describe("receipt-triage US3: a held payment has no verdict on /v1 until the business decides", () => {
+  it("reads as validating with no verdict facts, and stays out of /v1/transfers; once accepted it is both", async () => {
+    const { key, token } = await arrange();
+    const held = await confirmAt(token, "TRACK000HELD", new Date());
+    await db().update(payments).set({ actionOutcome: "review", reviewReason: "retired_account" }).where(eq(payments.id, held));
+
+    const read = await v1(key, "GET", `/payments/${held}`);
+    expect(read.body.data).toMatchObject({ status: "validating", receivedCents: null, folio: null, confirmedAt: null });
+    expect((await transfers(key, aroundNow())).transfers).toEqual([]);
+
+    /* the business accepts: the row leaves `review` */
+    await db().update(payments).set({ actionOutcome: null }).where(eq(payments.id, held));
+    expect((await v1(key, "GET", `/payments/${held}`)).body.data).toMatchObject({ status: "confirmed" });
+    expect((await transfers(key, aroundNow())).transfers.map((t) => t.id)).toEqual([held]);
+  });
+});

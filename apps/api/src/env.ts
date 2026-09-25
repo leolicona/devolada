@@ -85,7 +85,14 @@ export type Bindings = {
      PDF is handed over unread. What is lost is the second pair of eyes —
      a `not_found` classifies as `blind` on our side (FR-005), so the
      payer is asked rather than the machines agreeing for free. A door
-     that still works beats a door that 500s (constitution VIII). */
+     that still works beats a door that 500s (constitution VIII).
+
+     receipt-triage D15, D22: unset also means no reading of ours to ask
+     from and nothing to tie a destination with — no capture is stopped
+     for a missing key or a foreign account, no reference comes from our
+     side, and no other registered account is chosen: the file goes to the
+     provider named with the cuenta de cobro. The provider's own reading
+     still counts, its reference included, when the comparison runs. */
   AI?: Ai;
   /* proof-extraction D5: the reader's model is config, not a literal, so
      replacing it is a deploy and not a release. Unset → the reader's

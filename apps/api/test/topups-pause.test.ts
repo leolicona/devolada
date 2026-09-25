@@ -476,3 +476,58 @@ describe("two-eyes-receipt US1: a receipt top-up goes provider-first too", () =>
     expect(row.transferDate).toBeNull();
   });
 });
+
+/* receipt-triage US2/US3 (spec Edge Cases, analyze G3): the two stops apply
+   to the platform's own top-ups through the engine, with the platform's
+   CLABE as the only account — no provider credit, and the top-up rides
+   its schedule (the remedy is a new upload). */
+describe("receipt-triage US2/US3: a top-up with no key, or sent elsewhere, is stopped before any credit", () => {
+  async function seedReceiptTopUp(reading: Record<string, unknown>) {
+    const business = await seedBusiness();
+    await platformAccountSet();
+    const db = drizzle(env.DB);
+    const [owner] = await db.select().from(userTable).where(eq(userTable.email, OPERATOR));
+    const proofKey = `topups/${business.id}/proof-rt`;
+    const proofEnv = { ...testEnv(), PROOFS: fakeProofs(), AI: aiReturning(reading) } as Bindings;
+    await proofEnv.PROOFS.put(proofKey, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const [topUp] = await db
+      .insert(topUps)
+      .values({
+        businessId: business.id,
+        submittedByUserId: owner.id,
+        claimedCents: 25000,
+        proofMode: "receipt",
+        proofKey,
+        nextValidationAt: new Date(Date.now() - 1000),
+      })
+      .returning();
+    return { db, topUp, proofEnv };
+  }
+  const CLEAR = {
+    esComprobante: true,
+    legibilidad: "completa",
+    banco: "BBVA MEXICO",
+    monto: 250.0,
+    fecha: "2026-09-01",
+  };
+
+  it("neither key: the top-up rides its schedule with no provider request", async () => {
+    const { db, topUp, proofEnv } = await seedReceiptTopUp({ ...CLEAR, claveDeRastreo: null, referenciaNumerica: null });
+    /* no interceptor: a provider call would fail the test */
+    await sweepTopUps(proofEnv);
+    const [row] = await db.select().from(topUps).where(eq(topUps.id, topUp.id));
+    expect(row.status).toBe("validating");
+    expect(row.lastError).toBe("RECEIPT_INCOMPLETE");
+  });
+
+  it("a clear receipt to another account: stopped too, RECEIPT_WRONG_DESTINATION", async () => {
+    const { db, topUp, proofEnv } = await seedReceiptTopUp({
+      ...CLEAR,
+      claveDeRastreo: "TOPUP0009XYZABCDEFGH",
+      destino: { tipo: "clabe", digitos: "1234" },
+    });
+    await sweepTopUps(proofEnv);
+    const [row] = await db.select().from(topUps).where(eq(topUps.id, topUp.id));
+    expect(row.lastError).toBe("RECEIPT_WRONG_DESTINATION");
+  });
+});

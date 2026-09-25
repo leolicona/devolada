@@ -238,6 +238,9 @@ export function Shell() {
         <CreditBanner credit={actor.credit} canTopUp={roleCan(actor.role, "credit", "manage")} />
         {/* business-and-memberships D5 (2026-09-02): born without a CLABE;
             the banner is the wizard's missing step, the owner's to close.
+            receipt-triage D32 (converge T061): any account opens the
+            channel now — a CLABE, a debit card or a phone — so the banner
+            asks for an account, not for a CLABE.
             Both banners stack under sm: a sentence in a 130px column next
             to a wide button pushed Pagos below the fold on a phone (design
             review identidad-2). */}
@@ -245,7 +248,8 @@ export function Shell() {
           <Alert variant="warning" className="m-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:mx-8 lg:mt-6">
             <span className="flex items-center gap-2">
               <Landmark className="size-4 shrink-0" aria-hidden />
-              Falta la CLABE del negocio. Sin ella tus clientes no pueden pagarte por transferencia.
+              Falta la cuenta donde te pagan: una CLABE, una tarjeta de débito o un celular. Sin ella tus
+              clientes no pueden pagarte por transferencia.
             </span>
             {roleCan(actor.role, "clabe", "update") && (
               <Link to="/settings/direct-payment" hash="spei" className="block">

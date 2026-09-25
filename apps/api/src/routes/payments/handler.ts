@@ -1,11 +1,11 @@
 import type { Context } from "hono";
-import { and, count, desc, eq, gte, inArray, like, lt, lte, or, sum } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, or, sum } from "drizzle-orm";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { businesses, integrationEvents, paymentLinks, payments } from "../../db/schema";
 import { nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
-import { realOnly } from "../../direct-payments/links";
+import { realOnly, type ApiLink } from "../../direct-payments/links";
 import { integrationOf } from "../../integrations/store";
 import {
   outcomeOf,
@@ -24,7 +24,10 @@ import { isVerdictEvent } from "../../webhooks/events";
 import type { WebhookEventType } from "../v1/webhook/schema";
 import { deferOf } from "../defer";
 import { signedProofUrl } from "../../direct-payments/proofs";
-import type { ProofResponse, PulseResponse } from "./schema";
+import { enqueueAndDeliver } from "../../webhooks/queue";
+import { parseAccount } from "../../direct-payments/accounts";
+import type { Integration } from "../../integrations/store";
+import type { ProofResponse, PulseResponse, ReviewDecisionRequest, ReviewDecisionResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -55,7 +58,7 @@ export async function listPaymentFeed(
   q: {
     cursor?: number;
     status?: (typeof payments.$inferSelect)["status"];
-    action?: "queued" | "done" | "withheld" | "failed" | "observation";
+    action?: "queued" | "done" | "withheld" | "failed" | "observation" | "review";
     class?: "exact" | "short" | "over";
     q?: string;
     from?: string;
@@ -150,6 +153,9 @@ export async function listPaymentFeed(
         /* FR-035: nor in its real totals */
         realOnly(payments),
         inArray(payments.status, ["confirmed", "partial"]),
+        /* receipt-triage D31: a held payment is not paid until the
+           business accepts it */
+        or(isNull(payments.actionOutcome), ne(payments.actionOutcome, "review")),
         gte(payments.createdAt, new Date(todayStartMs)),
       ),
     );
@@ -193,6 +199,15 @@ export async function listPaymentFeed(
               ? receivedCents
               : Math.max(0, receivedCents - askedCents),
           observedAction: charge.observedAction,
+          /* receipt-triage D31: why it waits, and which removed account
+             received it — masked to the last four, as every role reads
+             an account in the panel */
+          reviewReason: charge.actionOutcome === "review" ? charge.reviewReason : null,
+          reviewAccount: (() => {
+            if (charge.actionOutcome !== "review") return null;
+            const account = parseAccount(charge.beneficiary);
+            return account ? { kind: account.kind, last4: account.value.slice(-4) } : null;
+          })(),
           dispatchedAction: lastAction.get(charge.id) ?? null,
           /* automated-collections-api D3: the link's usuario is null on an
              API link, whose payment carries the caller's reference
@@ -282,12 +297,38 @@ export async function executeAction(c: Ctx, id: string) {
     return c.json({ success: false, error: { code: "NOT_CONFIGURED" } }, 409);
   }
 
-  const now = new Date();
+  const updated = await dispatchObserved(c, db, actor.id, row, integration, new Date());
+  /* the registration just changed what WispHub owes this tenant's
+     screen — and `paymentRegisteredAt` above is the display cache's own
+     key (presence-freshness D6), so nothing else has to be told */
+  return c.json({
+    success: true,
+    data: {
+      actionOutcome: updated.actionOutcome ?? "queued",
+      nextAttemptAt: updated.nextAttemptAt?.getTime() ?? null,
+    },
+  });
+}
+
+/* integrations-hub D5: dispatch exactly what the gate recorded — the
+   hypothesis, the registered amount and the invoice are the verdict's
+   own. Shared by "Ejecutar ahora" and, since receipt-triage D31, by the
+   accept of a held payment, which the gate held in the same shape. */
+async function dispatchObserved(
+  c: Ctx,
+  db: DrizzleD1Database,
+  businessId: string,
+  row: typeof payments.$inferSelect,
+  integration: Integration,
+  now: Date,
+  extra: Partial<typeof payments.$inferInsert> = {},
+) {
+  const actorId = businessId;
   const { action, reconnect } = parseHypothesis(
     row.observedAction ?? "register_and_reconnect:reconnect",
   );
   await recordDispatch(db, {
-    businessId: actor.id,
+    businessId: actorId,
     integrationId: integration.id,
     paymentId: row.id,
     class: row.reconciliationClass ?? "exact",
@@ -295,7 +336,7 @@ export async function executeAction(c: Ctx, id: string) {
   });
   const attempt = await attemptReconnection(
     wisphubFor(integration, c.env),
-    actor.id,
+    actorId,
     { usuario: row.customerUsuario ?? "", wisphubId: row.wisphubCustomerId ?? "" },
     row.registeredCents ?? 0,
     now,
@@ -317,19 +358,102 @@ export async function executeAction(c: Ctx, id: string) {
       nextAttemptAt: schedule.nextAttemptAt,
       actionError: attempt.error,
       ...(outcome === "done" ? { actionDoneAt: now } : {}),
+      ...extra,
     })
     .where(eq(payments.id, row.id))
     .returning();
-  /* the registration just changed what WispHub owes this tenant's
-     screen — and `paymentRegisteredAt` above is the display cache's own
-     key (presence-freshness D6), so nothing else has to be told */
-  return c.json({
-    success: true,
-    data: {
-      actionOutcome: updated.actionOutcome ?? "queued",
-      nextAttemptAt: updated.nextAttemptAt?.getTime() ?? null,
-    },
-  });
+  return updated;
+}
+
+/* receipt-triage D31 (contracts/review.md) — the business decides on a
+   payment the lifecycle held: Banxico confirmed a transfer paid to an
+   account the business had removed (FR-020a), or one found by reference
+   whose CEP carried no clave while the provider could not say whether it
+   was validated before (FR-006). Only a `review` row qualifies.
+
+   `accept` settles it exactly as an accepted observation does: a panel
+   payment dispatches what the gate recorded, now ("Ejecutar ahora"'s own
+   path) — or, when the business keeps its actions in observation, joins
+   the observation rows it already reviews by hand; with no WispHub key it
+   waits in the queue as any queued action does. An API payment closes its
+   one-time link and announces its verdict now, which is the webhook the
+   hold kept back.
+
+   `reject` says the money is not this business's: `invalid`,
+   `REJECTED_BY_BUSINESS`, no action — and an API link hears `invalid`.
+   Both record who decided and when. */
+export async function reviewDecision(c: Ctx, id: string, body: ReviewDecisionRequest) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const { actor, db } = ctx;
+
+  const [row] = await db
+    .select()
+    .from(payments)
+    .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
+  if (!row) {
+    return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  }
+  if (row.actionOutcome !== "review") {
+    return c.json({ success: false, error: { code: "NOT_REVIEWABLE" } }, 409);
+  }
+  const [link] = await db.select().from(paymentLinks).where(eq(paymentLinks.id, row.paymentLinkId));
+  const now = new Date();
+  const decided = { reviewedBy: actor.userId, reviewedAt: now };
+  const announce = async (payment: typeof payments.$inferSelect) => {
+    if (link?.source === "api") {
+      await enqueueAndDeliver(c.env, db, { payment, link: link as ApiLink, now }, deferOf(c));
+    }
+  };
+
+  let updated: typeof payments.$inferSelect;
+  if (body.decision === "reject") {
+    [updated] = await db
+      .update(payments)
+      .set({ ...decided, status: "invalid", lastError: "REJECTED_BY_BUSINESS", actionOutcome: null, nextAttemptAt: null })
+      .where(eq(payments.id, row.id))
+      .returning();
+    await announce(updated);
+  } else if (link?.source === "api") {
+    /* automated-collections-api FR-027: a confirmed verdict closes a
+       one-time link — held until now, closed now */
+    if (row.status === "confirmed" && link.mode === "one_time") {
+      await db
+        .update(paymentLinks)
+        .set({ closedAt: now })
+        .where(and(eq(paymentLinks.id, link.id), isNull(paymentLinks.closedAt)));
+    }
+    [updated] = await db
+      .update(payments)
+      .set({ ...decided, actionOutcome: null })
+      .where(eq(payments.id, row.id))
+      .returning();
+    await announce(updated);
+    /* The delivery writes the outcome it reached (D8); re-read it */
+    [updated] = await db.select().from(payments).where(eq(payments.id, row.id));
+  } else {
+    const integration = await integrationOf(db, actor.id);
+    if (integration?.apiKey && integration.actionsEnabled) {
+      updated = await dispatchObserved(c, db, actor.id, row, integration, now, decided);
+    } else {
+      [updated] = await db
+        .update(payments)
+        .set({
+          ...decided,
+          ...(integration?.apiKey
+            ? /* integrations-hub D4: the business's own gate still
+                 holds — accepted money joins the rows it executes by hand */
+              { actionOutcome: "observation" as const }
+            : /* no key: queued, and the queue waits for Configuración */
+              { actionOutcome: "queued" as const, nextAttemptAt: now }),
+        })
+        .where(eq(payments.id, row.id))
+        .returning();
+    }
+  }
+
+  const data: ReviewDecisionResponse = { status: updated.status, actionOutcome: updated.actionOutcome };
+  return c.json({ success: true, data });
 }
 
 export async function retryAction(c: Ctx, id: string) {

@@ -272,3 +272,28 @@ Keyed by the `Bank` type re-exported from the schema, so an entry for a name
 outside the vocabulary does not compile. Launch entry: `BANORTE` — where:
 "toca «Ver más detalles» y captura esa pantalla"; source: "receipt 1,
 receipt-triage spec"; verified: "2026-09-23" (D19).
+
+## Amended 2026-09-25 (implementation)
+
+- **The generic sentence has no number.** `/read` returns a reference only
+  when the gate passed it, so a generic one never reaches the page; the first
+  sentence reads "El número de referencia de tu captura lo usan muchas
+  transferencias y no muestra la clave de rastreo." The shared sentence keeps
+  its number, which did pass the gate.
+- **The account's fix line has no digits.** The destination's digits never
+  reach the page (above), so the guide's "Cuenta destino" row, when not seen,
+  reads "Esperábamos la cuenta que termina en {últimos 4}" — the cuenta de
+  cobro's own digits, which the page already shows.
+- **"Se ve" uses the success ink**, not the accent: the accent is a fill
+  colour and measured 3.95:1 as small text on the dark card (2026-09-25).
+- **The page has a `<main>` landmark**, and the upload control's label wears
+  the focus ring its visually hidden input cannot draw. Both were gaps before
+  this feature, found when its tests started running axe and measuring focus.
+- **Where a run starts (`isGenericReference`).** A run needs three or more consecutive
+  digits ("123"); two ("45") is a short reference, not a default.
+- **The bank beside a card or phone (converge 2026-09-25, FR-017).** When the
+  cuenta de cobro is a card or a phone, its bank is a copyable row right under
+  the number; for a CLABE it stays under "Ver los demás datos", as today.
+- **The hint on every later ask (converge 2026-09-25, FR-014).** "En {banco}:
+  {dónde}" shows whenever the page asks the payer for a field — the date and
+  the amount too, not only a key.

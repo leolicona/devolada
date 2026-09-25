@@ -88,10 +88,22 @@ export const validateRequestSchema = z
        reading (its own, or Consta's /read), re-reading with the same
        model is not a second opinion — the provider's eyes are. */
     providerOcr: z.boolean().optional(),
+    /* receipt-triage D30: the accounts the receipt's destination is tied
+       against — engine-only, never forwarded to the provider. Each is a
+       beneficiary, optionally flagged as removed by the ISP. */
+    receivingAccounts: z
+      .array(z.intersection(beneficiarySchema, z.object({ retired: z.literal(true).optional() })))
+      .min(1)
+      .optional(),
+    /* receipt-triage D27: a payment born before this feature */
+    legacy: z.boolean().optional(),
   })
   .superRefine((body, ctx) => {
     if (!body.transfer === !body.receipt) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "exactly one of transfer or receipt" });
+    }
+    if ((body.receivingAccounts || body.legacy) && !body.receipt) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "receivingAccounts and legacy only apply to the receipt door" });
     }
     if (body.providerOcr && !body.receipt) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "providerOcr only applies to the receipt door" });

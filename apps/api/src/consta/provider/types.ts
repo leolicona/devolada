@@ -52,6 +52,9 @@ export type ProviderVerdict = {
   status: "valid" | "pending" | "invalid";
   reason: InvalidReason | null;
   alreadyValidated: boolean;
+  /* receipt-triage FR-006: `cepPreviouslyValidated` as answered — true,
+     false, or null when the provider could not say */
+  previouslyValidated: boolean | null;
   /* Raw provider CEP status ("EN PROCESO", "LIQUIDADO", …), for the log */
   cepStatus: string | null;
   telemetry: ProviderTelemetry;
@@ -64,6 +67,9 @@ export type ProviderVerdict = {
     receiverBank: string | null;
     beneficiaryName: string | null;
     digitalSignature: string | null;
+    /* receipt-triage D22: Banxico's own word on the receiving account */
+    beneficiaryAccount: string | null;
+    beneficiaryAccountType: string | null;
   } | null;
   /* Provider-hosted CEP documents; their URLs expire (apiCEP: 15 days) */
   downloads: { cepXml?: string; cepPdf?: string } | null;

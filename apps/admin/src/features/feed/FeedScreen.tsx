@@ -2,7 +2,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Search, TriangleAlert } from "lucide-react";
 import { Alert, Amount, AmountBreakdown, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge, type Status } from "@devolada/ui";
-import type { FeedCharge, FeedResponse, ProofResponse, RetryResponse } from "@devolada/api/payments-schema";
+import type {
+  FeedCharge,
+  FeedResponse,
+  ProofResponse,
+  RetryResponse,
+  ReviewDecisionResponse,
+} from "@devolada/api/payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -78,6 +84,20 @@ function hypothesisCopy(observed: string | null): string {
   if (observed === "register_and_reconnect:withhold")
     return "Se habría registrado sin reactivar (umbral).";
   return "Se habría reconectado.";
+}
+
+/* receipt-triage D31: why a held payment waits, in the owner's words.
+   The account is named as every role reads it in the panel — its kind
+   and last four digits — and with the gender its noun takes. */
+const reviewAccountNoun = { clabe: "CLABE", card: "tarjeta", phone: "celular" } as const;
+function reviewCopy(charge: FeedCharge): string {
+  if (charge.reviewReason === "no_clave") {
+    return "Banxico confirmó la transferencia sin clave de rastreo; revisa que no la hayas cobrado ya.";
+  }
+  const account = charge.reviewAccount;
+  if (!account) return "Pagó a una cuenta que ya no está registrada. Banxico confirmó la transferencia.";
+  const registered = account.kind === "phone" ? "registrado" : "registrada";
+  return `Pagó a tu ${reviewAccountNoun[account.kind]} ••••${account.last4}, que ya no está ${registered}. Banxico confirmó la transferencia.`;
 }
 
 const classBadge: Record<NonNullable<FeedCharge["reconciliationClass"]>, Status> = {
@@ -219,6 +239,16 @@ function ChargeRow({
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }),
   });
 
+  /* receipt-triage D31: the business decides on a held payment */
+  const decide = useMutation<ReviewDecisionResponse, ApiError, "accept" | "reject">({
+    mutationFn: (decision) =>
+      api<ReviewDecisionResponse>(`/payments/${charge.id}/review`, {
+        method: "POST",
+        body: JSON.stringify({ decision }),
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }),
+  });
+
   const shortCents = charge.askedCents - charge.receivedCents;
   /* integrations-hub D7: the row speaks the generic vocabulary; the
      badge keeps the action-specific es-MX word, from the ledger's last
@@ -229,7 +259,10 @@ function ChargeRow({
      — never "Reconectado" for a message the business's own system
      accepted. The same column, two vocabularies, the row says which. */
   const viaApi = charge.source === "api";
-  const badge: Status = viaApi
+  const inReview = charge.actionOutcome === "review";
+  const badge: Status = inReview
+    ? "inReview"
+    : viaApi
     ? charge.actionOutcome === "done"
       ? "deliveryDelivered"
       : charge.actionOutcome === "queued"
@@ -241,7 +274,9 @@ function ChargeRow({
       ? charge.dispatchedAction === "register_only"
         ? "registered"
         : "reconnected"
-      : (charge.actionOutcome ?? lifecycleBadge[charge.status] ?? "validating");
+      : ((charge.actionOutcome as Exclude<FeedCharge["actionOutcome"], "review" | "done">) ??
+        lifecycleBadge[charge.status] ??
+        "validating");
   const showsMoney = ["confirmed", "partial", "unapplied"].includes(charge.status);
   return (
     <li>
@@ -332,7 +367,10 @@ function ChargeRow({
             </div>
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
-              {charge.actionOutcome === "observation" ? (
+              {inReview ? (
+                /* receipt-triage D31: why it waits, and the decision */
+                <p className="mt-1 font-medium text-warning">{reviewCopy(charge)}</p>
+              ) : charge.actionOutcome === "observation" ? (
                 /* D5: the hypothesis is the ramp's instrument — the ISP
                    compares the oracle against their own hand */
                 <p className="mt-1 font-medium text-info">
@@ -354,6 +392,13 @@ function ChargeRow({
                     : execute.error.code === "NOT_CONFIGURED"
                       ? "Conecta WispHub para poder ejecutarla."
                       : "No pudimos ejecutar la acción. Intenta de nuevo."}
+                </p>
+              )}
+              {decide.error && (
+                <p className="mt-1 text-error">
+                  {decide.error.code === "NOT_REVIEWABLE"
+                    ? "Este pago ya se revisó."
+                    : "No pudimos guardar tu decisión. Intenta de nuevo."}
                 </p>
               )}
               {retry.error && (
@@ -380,6 +425,21 @@ function ChargeRow({
                 )}
                 {/* D5: only observation rows — `withheld` offers nothing;
                     the threshold is the owner's law */}
+                {canOperate && inReview && (
+                  <Pending active={decide.isPending} label="Guardando tu decisión.">
+                    <Button size="compact" disabled={decide.isPending} onClick={() => decide.mutate("accept")}>
+                      {decide.isPending && decide.variables === "accept" ? "Aceptando…" : "Aceptar pago"}
+                    </Button>
+                    <Button
+                      size="compact"
+                      variant="secondary"
+                      disabled={decide.isPending}
+                      onClick={() => decide.mutate("reject")}
+                    >
+                      {decide.isPending && decide.variables === "reject" ? "Rechazando…" : "Rechazar"}
+                    </Button>
+                  </Pending>
+                )}
                 {canOperate && charge.actionOutcome === "observation" && (
                   <Pending active={execute.isPending} label="Ejecutando la reconexión.">
                     <Button size="compact" disabled={execute.isPending} onClick={() => execute.mutate()}>

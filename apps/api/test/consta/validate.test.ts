@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
-import { gateReading, resetShapeRules } from "../../src/consta/extraction";
+import { gateReading, resetShapeRules, tieDestination } from "../../src/consta/extraction";
 import { compareReadings, type OurReading, type ProviderReading } from "../../src/consta/extraction/compare";
 import { deriveShapeRules } from "../../src/consta/extraction/shape";
 import type { Reading } from "../../src/consta/extraction/reader";
@@ -17,6 +17,8 @@ import {
   PDF,
   PNG,
   putProof,
+  RECEIPT_1_READING,
+  RECEIPT_2_READING,
   RECEIPT_TEXT,
   seedOwner,
   validations,
@@ -507,6 +509,8 @@ describe("The failure taxonomy (D9, D14–D16)", () => {
        is never asked to retype what we already read */
     expect(data.accepted).toEqual({
       trackingKey: "MBAN01002508150012345678",
+      /* receipt-triage US1 (D13): the reference rides along, none read */
+      referenceNumber: null,
       senderBank: "BBVA MEXICO",
       amountCents: 51400,
       date: "2026-08-15",
@@ -809,6 +813,8 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.disputedFields).toEqual([]);
     expect(data.accepted).toEqual({
       trackingKey: "MBAN01002508150012345678",
+      /* receipt-triage US1 (D13): the reference rides along, none read */
+      referenceNumber: null,
       senderBank: "BBVA MEXICO",
       amountCents: 51400,
       date: "2026-08-15",
@@ -819,6 +825,8 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
       amountCents: 51400,
       date: "2026-08-15",
       legibility: null,
+      /* receipt-triage US1 (D12): ours carries the reference, none read */
+      referenceNumber: null,
     });
 
     /* D19: one row carries both readings and what they settled, for a
@@ -1050,7 +1058,14 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
     expect(data.amountCents).toBe(51400);
     expect(data.receiptStatus).toBe("Aceptada");
     /* D15: `unknown` — BBVA has no graduated rule in this test's log */
-    expect(data.gate).toEqual({ trackingKey: "ok", senderBank: "ok", amount: "ok", shape: "unknown" });
+    /* receipt-triage US1 (D12): the gate also speaks of the reference */
+    expect(data.gate).toEqual({
+      trackingKey: "ok",
+      senderBank: "ok",
+      amount: "ok",
+      referenceNumber: "missing",
+      shape: "unknown",
+    });
 
     /* No provider interceptor was registered, and none was needed: the
        whole promise of this door is that a caller can show a customer
@@ -1413,6 +1428,8 @@ describe("two-eyes-receipt US1: the comparison", () => {
       amount: 514.0,
       date: "2026-08-30",
       status: "Aceptada",
+      referenceNumber: null,
+      destination: { kind: null, digits: null },
       raw: "",
       model: "test",
       ...over,
@@ -1436,6 +1453,8 @@ describe("two-eyes-receipt US1: the comparison", () => {
     expect(c.acceptedFrom).toBe("agreed");
     expect(c.accepted).toEqual({
       trackingKey: FITS,
+      /* receipt-triage US1 (D13): the reference rides along, none read */
+      referenceNumber: null,
       senderBank: "AZTECA",
       amountCents: 51400,
       date: "2026-08-30",
@@ -1560,7 +1579,9 @@ describe("two-eyes-receipt US1: the comparison", () => {
     expect(c.readingCheck).toBe("blind");
     expect(c.blindSide).toBe("both");
     expect(c.accepted).toBeNull();
-    expect(c.disputedFields).toEqual(["trackingKey", "amount"]);
+    /* receipt-triage US1 (FR-004/FR-005): either key is enough, so both
+       are asked for — no longer the fixed ["trackingKey", "amount"] */
+    expect(c.disputedFields).toEqual(["trackingKey", "referenceNumber", "amount"]);
   });
 
   it("a bank-name or date difference never disputes (reading-check D2, kept)", () => {
@@ -1984,5 +2005,468 @@ describe("two-eyes-receipt US5: the record answers the questions", () => {
        WHERE media_type = 'application/pdf' GROUP BY 1, 2`,
     );
     expect(pdfs.results).toEqual([{ source: "provider-ocr", outcome: "routed", n: 1 }]);
+  });
+});
+
+/* ======================================================================
+   receipt-triage — the reference as a second key, the ask before any
+   credit, and the account the receipt names (specs/010-receipt-triage).
+   ====================================================================== */
+
+/* The CLABE of the spec's examples: its account segment (positions 7–17)
+   is 00123453819, so receipt 3's "•3819 Cuenta" and receipt 1's "8195"
+   both name it. */
+const RT_CLABE = "012180001234538195";
+const RT_CARD = "4111111111111234";
+const RT_PHONE = "5512345678";
+const RT_RETIRED_CARD = "4000000000004321";
+const COBRO = { bank: "STP", clabe: RT_CLABE };
+const CARD = { bank: "NUBANK", cardNumber: RT_CARD };
+const PHONE = { bank: "BBVA MEXICO", phoneNumber: RT_PHONE };
+const RETIRED_CARD = { bank: "NUBANK", cardNumber: RT_RETIRED_CARD, retired: true as const };
+const ACCOUNTS = [COBRO, CARD, PHONE, RETIRED_CARD];
+
+/* Receipt 1 as if its detail screen had been captured: the same Banorte
+   transfer, with a clave — so it goes on to the paid call */
+const RECEIPT_1_READING_WITH_KEY = { ...RECEIPT_1_READING, claveDeRastreo: "BNET01002609090012345678" };
+
+const rtReceipt = (extra: Record<string, unknown> = {}) => ({
+  receipt: { proofKey: PROOF_KEY },
+  beneficiary: COBRO,
+  receivingAccounts: ACCOUNTS,
+  ...extra,
+});
+
+/* A not_found on the image door: the provider read nothing it could name */
+const notFoundResponse = (extracted: Record<string, unknown> = {}) => ({
+  validationId: "prov-nf",
+  status: "invalid",
+  validation: { banxicoConfirmed: false, cepPreviouslyValidated: null },
+  extracted,
+});
+
+describe("receipt-triage US1: the reference as a key (compareReadings, D13)", () => {
+  const reading = (over: Partial<Reading> = {}): OurReading => {
+    const r: Reading = {
+      isReceipt: true,
+      legibility: "full",
+      trackingKey: null,
+      senderBank: "AZTECA",
+      amount: 350,
+      date: "2026-09-09",
+      status: null,
+      referenceNumber: "038195",
+      destination: { kind: null, digits: null },
+      raw: "",
+      model: "test",
+      ...over,
+    };
+    return { ...gateReading(r), date: r.date, legibility: r.legibility };
+  };
+  const theirs = (over: Partial<ProviderReading> = {}): ProviderReading => ({
+    trackingKey: null,
+    referenceNumber: "038195",
+    amountCents: 35000,
+    date: "2026-09-09",
+    senderBank: "AZTECA",
+    ...over,
+  });
+
+  it("no clave on either side and the same reference: agreed, the reference accepted and no clave", () => {
+    const c = compareReadings(reading(), theirs(), []);
+    expect(c.readingCheck).toBe("agreed");
+    expect(c.disputedFields).toEqual([]);
+    expect(c.accepted).toEqual({
+      trackingKey: null,
+      referenceNumber: "038195",
+      senderBank: "AZTECA",
+      amountCents: 35000,
+      date: "2026-09-09",
+    });
+  });
+
+  it("different references: disputed on the reference, and no shape rule is consulted", () => {
+    const c = compareReadings(reading(), theirs({ referenceNumber: "038196" }), []);
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.disputedFields).toEqual(["referenceNumber"]);
+    expect(c.accepted).toBeNull();
+  });
+
+  it('"038195" and "38195" never agree — a reference is text, never a number', () => {
+    const c = compareReadings(reading(), theirs({ referenceNumber: "38195" }), []);
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.disputedFields).toEqual(["referenceNumber"]);
+  });
+
+  it("one side read no reference: blind on that side, the other's accepted", () => {
+    const ours = compareReadings(reading(), theirs({ referenceNumber: null }), []);
+    expect(ours.readingCheck).toBe("blind");
+    expect(ours.blindSide).toBe("provider");
+    expect(ours.accepted?.referenceNumber).toBe("038195");
+    const theirsOnly = compareReadings(reading({ referenceNumber: null }), theirs(), []);
+    expect(theirsOnly.blindSide).toBe("reader");
+    expect(theirsOnly.accepted?.referenceNumber).toBe("038195");
+    expect(theirsOnly.acceptedFrom).toBe("provider");
+  });
+
+  it("a clave on either side keeps today's rules, with the reference riding along", () => {
+    const c = compareReadings(reading({ trackingKey: "AZTK12345678" }), theirs({ trackingKey: "AZTK12345678" }), []);
+    expect(c.readingCheck).toBe("agreed");
+    expect(c.accepted?.trackingKey).toBe("AZTK12345678");
+    expect(c.accepted?.referenceNumber).toBe("038195");
+  });
+
+  it("the fallback: claves disagree with no tiebreak, the amount agreed, both read 038195 → the reference is the key, nobody asked", () => {
+    const c = compareReadings(reading({ trackingKey: "AZTK12345678" }), theirs({ trackingKey: "AZTK12345679" }), []);
+    expect(c.readingCheck).toBe("disputed");
+    expect(c.disputedFields).toEqual([]);
+    expect(c.accepted).toMatchObject({ trackingKey: null, referenceNumber: "038195" });
+  });
+
+  it("no fallback with one side's reference only, or with the amount also in doubt: today's dispute", () => {
+    const oneSide = compareReadings(
+      reading({ trackingKey: "AZTK12345678" }),
+      theirs({ trackingKey: "AZTK12345679", referenceNumber: null }),
+      [],
+    );
+    expect(oneSide.disputedFields).toEqual(["trackingKey"]);
+    expect(oneSide.accepted).toBeNull();
+    const amountToo = compareReadings(
+      reading({ trackingKey: "AZTK12345678" }),
+      theirs({ trackingKey: "AZTK12345679", amountCents: 30000 }),
+      [],
+    );
+    expect(amountToo.disputedFields).toEqual(["trackingKey", "amount"]);
+    expect(amountToo.accepted).toBeNull();
+  });
+
+  it("neither side read a key but both read the amount: either key is asked for, not the amount", () => {
+    const c = compareReadings(reading({ referenceNumber: null }), theirs({ referenceNumber: null }), []);
+    expect(c.blindSide).toBe("both");
+    expect(c.disputedFields).toEqual(["trackingKey", "referenceNumber"]);
+  });
+});
+
+describe("receipt-triage US1: the gate speaks of the reference (D2, D12)", () => {
+  const gate = (referenceNumber: string | null, trackingKey: string | null = null) =>
+    gateReading({
+      isReceipt: true,
+      legibility: "full",
+      trackingKey,
+      senderBank: "AZTECA",
+      amount: 350,
+      date: "2026-09-09",
+      status: null,
+      referenceNumber,
+      destination: { kind: null, digits: null },
+      raw: "",
+      model: "test",
+    });
+
+  it('"038195" is ok and kept exactly as printed', () => {
+    const g = gate("038195");
+    expect(g.gate.referenceNumber).toBe("ok");
+    expect(g.referenceNumber).toBe("038195");
+  });
+
+  it('a ten-digit folio is malformed and never a key', () => {
+    const g = gate("0082918812");
+    expect(g.gate.referenceNumber).toBe("malformed");
+    expect(g.referenceNumber).toBeNull();
+    expect(g.passes).toBe(false);
+  });
+
+  it.each(["0", "0000", "1111111", "1234567", "7654321", "123"])('"%s" is generic — no key', (ref) => {
+    const g = gate(ref);
+    expect(g.gate.referenceNumber).toBe("generic");
+    expect(g.referenceNumber).toBeNull();
+    expect(g.passes).toBe(false);
+  });
+
+  it("a non-generic reference with no clave passes the gate", () => {
+    expect(gate("038195").passes).toBe(true);
+    expect(gate(null).passes).toBe(false);
+    expect(gate(null, "AZTK12345678").passes).toBe(true);
+  });
+
+  it("isGenericReference, pure", async () => {
+    const { isGenericReference } = await import("../../src/routes/direct-payments/schema");
+    for (const g of ["0", "5", "0000", "9999999", "123", "1234567", "7654321", "3210", "789"]) {
+      expect(isGenericReference(g), g).toBe(true);
+    }
+    for (const n of ["038195", "1235", "12345678", "", "12a", "1357", "10", "89"]) {
+      expect(isGenericReference(n), n).toBe(false);
+    }
+    expect(isGenericReference(null)).toBe(false);
+  });
+});
+
+describe("receipt-triage US1: the engine reads, stores and reuses the reference (D21, D28)", () => {
+  it("/read of receipt 2, then the paid call with the same file: one reader call, the reused reading carries 038195, no ask", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const calls: unknown[] = [];
+    const AI = aiReturning(RECEIPT_2_READING, calls);
+
+    const read = await consta(testEnv({ AI }), db(), { businessId: key }).extract({
+      proofKey: PROOF_KEY,
+      receivingAccounts: ACCOUNTS,
+    });
+    expect(read.referenceNumber).toBe("038195");
+    expect(read.gate.referenceNumber).toBe("ok");
+    expect(read.ask).toBeNull();
+    expect(read.tiedAccount).toMatchObject({ clabe: RT_CLABE });
+
+    let provider = 0;
+    mockApiCep(notFoundResponse({ referenceNumber: "038195", amount: 350, senderBank: "AZTECA", date: "2026-09-09" }), (body) => {
+      provider = 1;
+      expect(body.beneficiary).toEqual(COBRO);
+    });
+    const res = await postValidate(key, rtReceipt(), { AI });
+    expect(res.ok).toBe(true);
+    expect(provider).toBe(1);
+    expect(calls.filter((c) => (c as { model?: string }).model)).toHaveLength(1);
+    expect(res.data.ourReading).toMatchObject({ referenceNumber: "038195" });
+    /* SC-002: both read the same reference — the next slot takes the
+       transfer door with it */
+    expect(res.data.readingCheck).toBe("agreed");
+    expect(res.data.accepted).toMatchObject({ trackingKey: null, referenceNumber: "038195" });
+
+    const rows = await db().select().from(extractions);
+    const paid = rows.find((r) => r.validationId)!;
+    expect(paid.referenceNumber).toBe("038195");
+    expect(paid.providerReferenceNumber).toBe("038195");
+    expect(paid.proofKey).toBe(PROOF_KEY);
+    expect(paid.destinationDigits).toBe("195");
+  });
+
+  it("the transfer door carries the reference only when there is no clave (D1)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(settledResponse, (body) => {
+      const sender = body.sender as Record<string, unknown>;
+      expect(sender.referenceNumber).toBe("038195");
+      expect("trackingKey" in sender).toBe(false);
+    });
+    const { trackingKey: _k, ...rest } = directRequest.transfer;
+    const res = await postValidate(key, { transfer: { ...rest, referenceNumber: "038195" } });
+    expect(res.ok).toBe(true);
+  });
+});
+
+describe("receipt-triage US2: a clear capture with no key is asked about before any credit (D4, D15, D16)", () => {
+  it("receipt 1: /read reports the ask, the receipt door refuses it and no request reaches the provider", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const AI = aiReturning(RECEIPT_1_READING);
+
+    const read = await consta(testEnv({ AI }), db(), { businessId: key }).extract({
+      proofKey: PROOF_KEY,
+      receivingAccounts: ACCOUNTS,
+    });
+    expect(read.ask).toEqual({ reason: "no_key", fields: ["key"] });
+
+    /* No interceptor is registered: a provider call would fail the test */
+    const res = await postValidate(key, rtReceipt(), { AI });
+    expect(res.ok).toBe(false);
+    expect(res.error!.code).toBe("RECEIPT_INCOMPLETE");
+    expect(res.error!.retryable).toBe(false);
+    expect(res.error!.missingFields).toEqual(["key"]);
+    expect(await db().select().from(validations)).toHaveLength(0);
+    const rows = await db().select().from(extractions);
+    expect(rows.map((r) => r.outcome)).toEqual(["key_missing", "key_missing"]);
+    expect(rows.every((r) => r.proofKey === PROOF_KEY && r.validationId === null)).toBe(true);
+  });
+
+  it("names every other field the capture lacks, in the form's order — never the account", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const noDate = await consta(testEnv({ AI: aiReturning({ ...RECEIPT_1_READING, fecha: null }) }), db(), {
+      businessId: key,
+    }).extract({ proofKey: PROOF_KEY, receivingAccounts: ACCOUNTS });
+    expect(noDate.ask).toEqual({ reason: "no_key", fields: ["key", "date"] });
+    const bare = await consta(
+      testEnv({ AI: aiReturning({ ...RECEIPT_1_READING, fecha: null, monto: null, banco: null }) }),
+      db(),
+      { businessId: key },
+    ).extract({ proofKey: PROOF_KEY, receivingAccounts: ACCOUNTS });
+    expect(bare.ask).toEqual({ reason: "no_key", fields: ["key", "amount", "date", "senderBank"] });
+  });
+
+  it("a clear capture whose only key is a generic reference is asked about (D2)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const read = await consta(testEnv({ AI: aiReturning({ ...RECEIPT_1_READING, referenciaNumerica: "1234567" }) }), db(), {
+      businessId: key,
+    }).extract({ proofKey: PROOF_KEY, receivingAccounts: ACCOUNTS });
+    expect(read.gate.referenceNumber).toBe("generic");
+    expect(read.ask).toEqual({ reason: "no_key", fields: ["key"] });
+  });
+
+  it.each([
+    ["partly legible", { legibilidad: "parcial" as const }],
+    ["legibility not judged", { legibilidad: undefined }],
+    ["a malformed clave", { claveDeRastreo: "AB 12" }],
+  ])("%s: no ask, and the capture reaches the provider as today (FR-015)", async (_name, over) => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    let provider = 0;
+    mockApiCep(settledResponse, () => (provider = 1));
+    const res = await postValidate(key, rtReceipt(), { AI: aiReturning({ ...RECEIPT_1_READING, ...over }) });
+    expect(res.ok).toBe(true);
+    expect(provider).toBe(1);
+  });
+
+  it("receipt 2, a reference and no clave: no ask", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const read = await consta(testEnv({ AI: aiReturning(RECEIPT_2_READING) }), db(), { businessId: key }).extract({
+      proofKey: PROOF_KEY,
+      receivingAccounts: ACCOUNTS,
+    });
+    expect(read.ask).toBeNull();
+  });
+
+  it("a PDF's text with neither key is asked about: text has nothing blurry (D16)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PDF(), "application/pdf");
+    const { legibilidad: _l, ...noLegibility } = RECEIPT_1_READING;
+    const res = await postValidate(key, rtReceipt(), {
+      AI: aiReturning(noLegibility, undefined, { pdfText: "Comprobante SPEI\nBanco: BANORTE\nMonto: $300.00" }),
+    });
+    expect(res.error?.code).toBe("RECEIPT_INCOMPLETE");
+  });
+
+  it("no AI binding: nothing is asked, and the file goes to the provider named with the cuenta de cobro (FR-015)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    let provider = 0;
+    mockApiCep(settledResponse, (body) => {
+      provider = 1;
+      expect(body.beneficiary).toEqual(COBRO);
+    });
+    const res = await postValidate(key, rtReceipt(), { AI: undefined });
+    expect(res.ok).toBe(true);
+    expect(provider).toBe(1);
+    expect(res.data.beneficiaryUsed).toEqual(COBRO);
+  });
+});
+
+describe("receipt-triage US3: the receipt's digits name the account (tieDestination, D24, D30)", () => {
+  const tie = (kind: Reading["destination"]["kind"], digits: string | null) => tieDestination({ kind, digits }, ACCOUNTS);
+
+  it("ties by the last four, or three, visible digits against every form of every account", () => {
+    expect(tie("clabe", "8195")).toEqual({ tied: COBRO });
+    expect(tie(null, "195")).toEqual({ tied: COBRO });
+    /* receipt 3: "•3819 Cuenta" — the account number inside the CLABE */
+    expect(tie("account", "3819")).toEqual({ tied: COBRO });
+    expect(tie("card", "1234")).toEqual({ tied: CARD });
+    expect(tie("phone", "••••5678")).toEqual({ tied: PHONE });
+    expect(tie(null, "12345678")).toEqual({ tied: PHONE });
+  });
+
+  it("the kind the label names only orders the search — a wrong kind never turns a fit into a mismatch", () => {
+    expect(tie("card", "3819")).toEqual({ tied: COBRO });
+  });
+
+  it("a retired account ties, flagged", () => {
+    expect(tie("card", "4321")).toEqual({ tied: RETIRED_CARD });
+  });
+
+  it("fewer than three digits, or digits that end two accounts, are unknown; nothing fitting is none", () => {
+    expect(tie(null, "95")).toBe("unknown");
+    expect(tie(null, null)).toBe("unknown");
+    expect(tieDestination({ kind: null, digits: "1234" }, [CARD, { bank: "STP", phoneNumber: "5500001234" }])).toBe("unknown");
+    expect(tie(null, "9999")).toBe("none");
+  });
+});
+
+describe("receipt-triage US3: the receipt door names one account (D22, D24, D27)", () => {
+  const settledFor = (beneficiary: unknown) => (body: Record<string, unknown>) => {
+    expect(body.beneficiary).toEqual(beneficiary);
+    expect(body.potentialBeneficiaries).toBeUndefined();
+  };
+
+  it("a destination ending the cuenta de cobro names it", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse, settledFor(COBRO));
+    const res = await postValidate(key, rtReceipt(), { AI: aiReturning(RECEIPT_1_READING_WITH_KEY) });
+    expect(res.data.beneficiaryUsed).toEqual(COBRO);
+  });
+
+  it("one ending the registered card names the card, never the cuenta de cobro", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse, settledFor(CARD));
+    const res = await postValidate(key, rtReceipt(), {
+      AI: aiReturning({ ...RECEIPT_1_READING_WITH_KEY, destino: { tipo: "tarjeta", digitos: "1234" } }),
+    });
+    expect(res.data.beneficiaryUsed).toEqual(CARD);
+  });
+
+  it("unknown — two digits — names the cuenta de cobro", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    mockApiCep(settledResponse, settledFor(COBRO));
+    const res = await postValidate(key, rtReceipt(), {
+      AI: aiReturning({ ...RECEIPT_1_READING_WITH_KEY, destino: { tipo: null, digitos: "34" } }),
+    });
+    expect(res.data.beneficiaryUsed).toEqual(COBRO);
+  });
+
+  it("a clear receipt to 9999 is stopped before any credit: RECEIPT_WRONG_DESTINATION", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const res = await postValidate(key, rtReceipt(), {
+      AI: aiReturning({ ...RECEIPT_1_READING_WITH_KEY, destino: { tipo: "clabe", digitos: "9999" } }),
+    });
+    expect(res.error?.code).toBe("RECEIPT_WRONG_DESTINATION");
+    expect(await db().select().from(validations)).toHaveLength(0);
+    const [row] = await db().select().from(extractions);
+    expect(row.outcome).toBe("wrong_destination");
+    expect(row.destinationDigits).toBe("9999");
+  });
+
+  it("a destination ending a retired card names it, flagged retired", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    const { retired: _r, ...plain } = RETIRED_CARD;
+    mockApiCep(settledResponse, settledFor(plain));
+    const res = await postValidate(key, rtReceipt(), {
+      AI: aiReturning({ ...RECEIPT_1_READING_WITH_KEY, destino: { tipo: "tarjeta", digitos: "4321" } }),
+    });
+    expect(res.data.beneficiaryUsed).toEqual(RETIRED_CARD);
+  });
+
+  it("a legacy request skips the ask and the tie: no key and a foreign destination still buy today's call (D27)", async () => {
+    const { key } = await seedOwner();
+    await mockProof(PNG(), "image/png");
+    let provider = 0;
+    mockApiCep(settledResponse, (body) => {
+      provider = 1;
+      expect(body.beneficiary).toEqual(COBRO);
+    });
+    const res = await postValidate(
+      key,
+      { receipt: { proofKey: PROOF_KEY }, beneficiary: COBRO, legacy: true },
+      { AI: aiReturning({ ...RECEIPT_1_READING, destino: { tipo: "clabe", digitos: "9999" } }) },
+    );
+    expect(res.ok).toBe(true);
+    expect(provider).toBe(1);
+  });
+
+  it("the verdict carries Banxico's account and the provider's tri-state replay flag", async () => {
+    const { key } = await seedOwner();
+    mockApiCep({
+      ...settledResponse,
+      validation: {
+        ...settledResponse.validation,
+        cepPreviouslyValidated: null,
+        cepDetails: { ...settledResponse.validation.cepDetails, beneficiaryAccount: RT_CLABE, beneficiaryAccountType: "CLABE" },
+      },
+    });
+    const res = await postValidate(key, directRequest);
+    expect(res.data.previouslyValidated).toBeNull();
+    expect((res.data.cep as Record<string, unknown>).beneficiaryAccount).toBe(RT_CLABE);
   });
 });

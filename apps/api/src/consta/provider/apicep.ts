@@ -54,6 +54,9 @@ type ApiCepResponse = {
       receiverBank?: string;
       beneficiaryName?: string;
       digitalSignature?: string;
+      /* receipt-triage D22: documented by the provider; kept now */
+      beneficiaryAccount?: string;
+      beneficiaryAccountType?: string;
     };
   };
   downloads?: { cepXml?: string; cepPdf?: string };
@@ -72,8 +75,14 @@ function requestBody(input: TransferInput | ReceiptInput): Record<string, unknow
            serialises to exactly the two decimals it means. */
         amount: input.amountCents / 100,
         bank: input.senderBank,
-        trackingKey: input.trackingKey ?? null,
-        referenceNumber: input.referenceNumber ?? null,
+        /* receipt-triage D1: exactly one key travels — the clave when
+           there is one, the reference only when there is none — and the
+           absent one is left out rather than sent as null */
+        ...(input.trackingKey
+          ? { trackingKey: input.trackingKey }
+          : input.referenceNumber
+            ? { referenceNumber: input.referenceNumber }
+            : {}),
       },
     };
   }
@@ -129,10 +138,12 @@ function classifyHttpFailure(
   if (res.status === 400 || res.status === 405 || res.status === 422) {
     return new ProviderFailure(`apiCEP ${res.status}: ${detail}`, "REQUEST_REJECTED", false, {
       ...shared,
-      /* 422 = the reference number is duplicated in Banxico; the one
-         remedy is resending with the tracking key. Published, unverified
-         — Devolada cannot hit it (it always sends the key), a future
-         integrator searching by reference alone can. */
+      /* 422 = "referencia duplicada en Banxico (requiere clave de
+         rastreo)": the reference matches more than one transfer, and the
+         one remedy is resending with the tracking key. Published,
+         unverified. Devolada can hit it since receipt-triage D1 — a
+         search by reference alone — and receipt-triage D17 is what the
+         caller does with it: ask the payer for the clave and stop calling. */
       hint: res.status === 422 ? "provide_tracking_key" : null,
     });
   }
@@ -263,6 +274,11 @@ export function apiCepProvider(env: {
         providerValidationId: body.validationId ?? null,
         ...mapVerdict(body, telemetry),
         alreadyValidated: body.validation?.cepPreviouslyValidated === true,
+        /* receipt-triage FR-006: the tri-state, for the no-clave guard */
+        previouslyValidated:
+          typeof body.validation?.cepPreviouslyValidated === "boolean"
+            ? body.validation.cepPreviouslyValidated
+            : null,
         cepStatus: body.validation?.cepStatus ?? null,
         telemetry,
         cep: details
@@ -278,6 +294,8 @@ export function apiCepProvider(env: {
               receiverBank: details.receiverBank ?? null,
               beneficiaryName: details.beneficiaryName ?? null,
               digitalSignature: details.digitalSignature ?? null,
+              beneficiaryAccount: details.beneficiaryAccount ?? null,
+              beneficiaryAccountType: details.beneficiaryAccountType ?? null,
             }
           : null,
         downloads: body.downloads ?? null,

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
+import { expectNoViolations } from "./a11y";
 
 /* docs/legacy/admin/charge-feed.spec.md scenarios 4–6. */
 
@@ -593,5 +594,68 @@ describe("pilot-UX: Verificando en Pagos", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Verificando" }));
     await screen.findByRole("button", { name: /janely/i });
     expect(seen).toContain("validating");
+  });
+});
+
+/* receipt-triage US3 (plan D31, contracts/review.md): a payment Banxico
+   confirmed that waits for the business — paid to an account it removed,
+   or found by reference with no clave. */
+describe("receipt-triage US3: the held row asks the business to decide", () => {
+  const held = (over: Record<string, unknown> = {}) =>
+    charge({
+      id: "ch-rev1",
+      actionOutcome: "review" as const,
+      reviewReason: "retired_account",
+      reviewAccount: { kind: "card", last4: "4321" },
+      observedAction: "register_and_reconnect:reconnect",
+      actionDoneAt: null,
+      actionAttempts: 0,
+      ...over,
+    });
+
+  it("a removed account: En revisión, which account, and both decisions post to the review route", async () => {
+    const decisions: unknown[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [held()]))),
+      handlers.reviewPayment((id, body) => {
+        decisions.push({ id, body });
+        return ok({ status: "confirmed", actionOutcome: "done" });
+      }),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    expect(within(row).getByText("En revisión")).toBeInTheDocument();
+    await userEvent.click(row);
+    expect(
+      await screen.findByText(
+        "Pagó a tu tarjeta ••••4321, que ya no está registrada. Banxico confirmó la transferencia.",
+      ),
+    ).toBeInTheDocument();
+    await expectNoViolations(document.body);
+
+    await userEvent.click(screen.getByRole("button", { name: "Aceptar pago" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Rechazar" }));
+    expect(decisions).toEqual([
+      { id: "ch-rev1", body: { decision: "accept" } },
+      { id: "ch-rev1", body: { decision: "reject" } },
+    ]);
+  });
+
+  it("no clave: the sentence says what to check", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [held({ reviewReason: "no_clave", reviewAccount: null })])),
+      ),
+    );
+    renderApp("/");
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    expect(
+      await screen.findByText(
+        "Banxico confirmó la transferencia sin clave de rastreo; revisa que no la hayas cobrado ya.",
+      ),
+    ).toBeInTheDocument();
   });
 });

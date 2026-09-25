@@ -490,7 +490,14 @@ function whereLine(bank: string | null | undefined): string | null {
 
 export function PaymentPage({ token }: { token: string }) {
   const queryClient = useQueryClient();
-  const [payment, setPayment] = useState<PayResponse | null>(null);
+  /* The payment this visit submitted. What the page watches is `payment`
+     below: this one, or the attempt the link says is still in review. */
+  const [ownPayment, setOwnPayment] = useState<PayResponse | null>(null);
+  /* bug: one-open-attempt — attempts the payer walked out of in this
+     visit ("Corregir el comprobante en revisión", a retry): the link keeps
+     naming one until the correction lands, and it must not pull the payer
+     back into it */
+  const [leftBehind, setLeftBehind] = useState<ReadonlySet<string>>(() => new Set());
   /* D18: the reading waiting for the payer to confirm it */
   const [draft, setDraft] = useState<{ proofId: string; reading: ProofReading } | null>(null);
   /* two-eyes-receipt D2: the two readings that stop before a credit is
@@ -548,6 +555,26 @@ export function PaymentPage({ token }: { token: string }) {
     queryFn: () => api<LinkStatusResponse>(`/direct-payments/links/${token}`),
     retry: false,
   });
+
+  /* bug: one-open-attempt — a payer who comes back (a reload, hours
+     later, another phone) resumes the attempt still in review instead of
+     meeting a fresh form beside it. The page used to know that attempt
+     only while it stayed open, so a returning payer started a second one
+     and the first kept polling the provider for up to twelve hours after
+     the customer had paid (found live on dev, 2026-09-25). */
+  const inReview = link.data?.status === "debt" ? link.data.inReview : undefined;
+  const resumed: PayResponse | null =
+    !ownPayment && inReview && !leftBehind.has(inReview.directPaymentId)
+      ? { directPaymentId: inReview.directPaymentId, status: inReview.status, error: null }
+      : null;
+  const payment = ownPayment ?? resumed;
+  const setPayment = (next: PayResponse | null) => {
+    if (!next && payment) {
+      const left = payment.directPaymentId;
+      setLeftBehind((ids) => new Set(ids).add(left));
+    }
+    setOwnPayment(next);
+  };
 
   /* US-D08 D2: this device keeps the link it was handed, so the customer
      can come back next month without asking the ISP again. Nothing is
@@ -1196,13 +1223,15 @@ export function PaymentPage({ token }: { token: string }) {
                   )}
 
                   {/* D7: the way out for the payer who already knows the
-                      receipt is wrong — on every not_found screen */}
+                      receipt is wrong — on every not_found screen. bug:
+                      one-open-attempt — named for what it does: the new
+                      capture replaces this one, it is not a second payment */}
                   <Button
                     variant="ghost"
                     className="h-12 w-full text-sm"
                     onClick={startOverWithReceipt}
                   >
-                    Subir otro comprobante
+                    Corregir el comprobante en revisión
                   </Button>
                 </div>
               );

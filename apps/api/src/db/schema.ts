@@ -325,7 +325,9 @@ export const payments = sqliteTable(
     /* `superseded` (D18): a silent attempt whose reading the payer then
        corrected. Deliberately not `invalid` — that word means "your
        transfer does not exist", and this is the opposite: we were the
-       ones who were wrong. */
+       ones who were wrong. bug: one-open-attempt widens it to any attempt
+       in review that a later submission on the same link replaced — the
+       payer corrected it, whether or not the page still named it. */
     /* `partial` (partial-payment D6): the transfer is real and the money
        moved, but it did not cover the debt. Not `confirmed` — the payer
        would see a green tick and no internet. Not `invalid` — that word

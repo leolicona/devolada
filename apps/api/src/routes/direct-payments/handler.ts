@@ -32,7 +32,7 @@ import {
   toBeneficiary,
   type StoredAccount,
 } from "../../direct-payments/accounts";
-import { tieDestination, visibleTail } from "../../consta/extraction";
+import { sha256Hex, tieDestination, visibleTail } from "../../consta/extraction";
 import {
   ensureLink,
   isApiLink,
@@ -107,6 +107,146 @@ async function attemptsInLastHour(
       ),
     );
   return Number(row?.n ?? 0);
+}
+
+/* bug: one-open-attempt — the statuses of an attempt still in review:
+   it has no verdict yet and will be polled (or released) again. */
+const OPEN_STATUSES = ["validating", "queued_for_credit"] as const;
+
+/* bug: one-open-attempt — the link's attempts still in review, newest
+   first. One link keeps one in review; more than one exists only on rows
+   born before this rule. */
+async function openAttempts(db: ReturnType<typeof drizzle>, linkId: string) {
+  return db
+    .select()
+    .from(payments)
+    .where(and(eq(payments.paymentLinkId, linkId), inArray(payments.status, [...OPEN_STATUSES])))
+    .orderBy(desc(payments.createdAt));
+}
+
+/* bug: one-open-attempt — the attempts an identical submission can be:
+   still in review (it answers), or already paid (it refuses, D9). An
+   `invalid` or `expired` one is left
+   out on purpose — its transfer may validate now (Banxico publishes
+   late), so sending it again must reach the provider. */
+const LIVE_STATUSES = ["validating", "queued_for_credit", "confirmed", "partial", "unapplied"] as const;
+
+/* bug: one-open-attempt — the attempt of this link a submission repeats,
+   if any. Two ways to be the same:
+
+   - **typed data**: D18's `unchanged` rule, applied to every live
+     attempt rather than the one the page named — the clave (or, with no
+     clave, the reference), the sending bank, the date and the amount.
+     claimed-amount D4: an omitted amount matches; a changed one is a
+     correction, because it changes what Banxico is asked. D9 amended:
+     the same clave with other fields changed is a correction too.
+   - **a receipt**: the same file — the sha256 its reading recorded
+     (consta `extractions.proof_sha256`), or the object hashed when it was
+     never read — and the same amount when the page confirmed one. */
+async function identicalAttempt(
+  env: Bindings,
+  db: ReturnType<typeof drizzle>,
+  business: { id: string },
+  link: PaymentLink,
+  body: PayRequest,
+): Promise<DirectPayment | null> {
+  const t = body.transfer;
+  if (t) {
+    const clave = t.trackingKey?.toUpperCase() ?? null;
+    const rows = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.paymentLinkId, link.id),
+          /* A reference is never unique — one bank printed 9784417 on three
+             different $5 transfers the same night (dev, 2026-09-25) — so it
+             can name the attempt still in review, but never refuse money
+             as already paid: only a clave or the file can say that */
+          inArray(payments.status, clave ? [...LIVE_STATUSES] : [...OPEN_STATUSES]),
+          clave ? eq(payments.trackingKey, clave) : eq(payments.referenceNumber, t.referenceNumber!),
+        ),
+      )
+      .orderBy(desc(payments.createdAt));
+    return (
+      rows.find(
+        (r) =>
+          (t.referenceNumber == null || !clave || r.referenceNumber === t.referenceNumber) &&
+          r.senderBank === t.senderBank &&
+          r.transferDate === t.date &&
+          (t.amountCents == null || t.amountCents === (r.claimedAmountCents ?? r.amountCents)),
+      ) ?? null
+    );
+  }
+  if (!body.proofId) return null;
+  const sha = await proofSha256(env, db, business.id, body.proofId);
+  if (!sha) return null;
+  const rows = await db
+    .select({ payment: payments })
+    .from(payments)
+    .innerJoin(
+      extractions,
+      and(eq(extractions.proofKey, payments.proofKey), eq(extractions.businessId, business.id)),
+    )
+    .where(
+      and(
+        eq(payments.paymentLinkId, link.id),
+        inArray(payments.status, [...LIVE_STATUSES]),
+        eq(extractions.proofSha256, sha),
+      ),
+    )
+    .orderBy(desc(payments.createdAt));
+  return (
+    rows
+      .map((r) => r.payment)
+      .find(
+        (r) =>
+          body.receiptAmountCents == null ||
+          body.receiptAmountCents === (r.claimedAmountCents ?? r.amountCents),
+      ) ?? null
+  );
+}
+
+/* bug: one-open-attempt — a proof's fingerprint: the one its reading
+   already recorded, or the object's own bytes hashed when the reader
+   never saw it (an unavailable reader sends the page straight to the
+   provider's door). Null when the object is gone. */
+async function proofSha256(
+  env: Bindings,
+  db: ReturnType<typeof drizzle>,
+  businessId: string,
+  proofKey: string,
+): Promise<string | null> {
+  const [read] = await db
+    .select({ sha: extractions.proofSha256 })
+    .from(extractions)
+    .where(
+      and(
+        eq(extractions.businessId, businessId),
+        eq(extractions.proofKey, proofKey),
+        sql`${extractions.proofSha256} IS NOT NULL`,
+      ),
+    )
+    .limit(1);
+  if (read?.sha) return read.sha;
+  const object = await env.PROOFS.get(proofKey);
+  if (!object) return null;
+  /* the engine's own hash, so both fingerprints are the same recipe; read
+     through a Response as the engine does, so the bucket's test double
+     and a real R2ObjectBody read the same way */
+  return sha256Hex(new Uint8Array(await new Response(object.body).arrayBuffer()));
+}
+
+/* bug: one-open-attempt — what the page needs to resume that attempt.
+   Panel links only, with the rule it serves (see `submitPayment`). */
+async function inReviewOf(
+  db: ReturnType<typeof drizzle>,
+  linkId: string,
+): Promise<Pick<LinkStatusResponse, "inReview">> {
+  const [open] = await openAttempts(db, linkId);
+  return open
+    ? { inReview: { directPaymentId: open.id, status: open.status as (typeof OPEN_STATUSES)[number] } }
+    : {};
 }
 
 /* One helper, two audiences (bug links-refused-key). The panel hears
@@ -302,6 +442,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
         .filter((f) => f.usuario === link.customerUsuario)
         .sort((a, b) => (a.invoiceDate ?? "").localeCompare(b.invoiceDate ?? "") || a.invoiceId - b.invoiceId)
         .map((f) => ({ externalId: f.invoiceId, amountCents: f.totalCents, invoiceDate: f.invoiceDate })),
+      ...(await inReviewOf(ctx.db, link.id)),
     };
     return c.json({ success: true, data });
   } catch (e) {
@@ -354,9 +495,58 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     }
   }
 
-  /* D18: the payer answered a `not_found` confirmation. Two outcomes,
-     and the first is the common one if CEP latency is what it looks
-     like: they confirmed a reading that was already right. */
+  /* bug: one-open-attempt — a submission identical to an attempt the
+     link already holds is answered from that attempt, and nothing is
+     created or spent. This is D18's "unchanged" (and D9's attach) widened
+     from the one row the page named to every live attempt of the link,
+     plus the file itself.
+
+     Still in review: it answers, as D18 always did. Already paid: D9's
+     refusal stands — the link is reusable, so last month's receipt shown
+     back as "confirmado" would read as this month paid — but it is now
+     given without a provider call. On 2026-09-25 a payer re-uploaded the
+     very file of a payment confirmed on the link, and a paid call was
+     spent to say `TRANSFER_ALREADY_USED`. */
+  const same = await identicalAttempt(c.env, db, business, link, body);
+  if (same && (OPEN_STATUSES as readonly string[]).includes(same.status)) {
+    return c.json(
+      {
+        success: true,
+        data: {
+          directPaymentId: same.id,
+          status: same.status as (typeof OPEN_STATUSES)[number],
+          error: publicError(same.lastError),
+        },
+      },
+      200,
+    );
+  }
+  if (same) {
+    /* provisional-release D6: the refusal keeps its memory, as the
+       index's own refusal below does — the owner is the payer's own
+       payment, which is confusion and never counts against them */
+    if (same.trackingKey) {
+      await db.insert(proofRejections).values({
+        businessId: link.businessId,
+        paymentLinkId: link.id,
+        ownerPaymentId: same.id,
+        trackingKey: same.trackingKey,
+      });
+    }
+    return c.json({ success: false, error: { code: "TRANSFER_ALREADY_USED" } }, 409);
+  }
+
+  /* D18: the payer answered a `not_found` confirmation — or, since bug
+     one-open-attempt, sent anything at all while the link has an attempt
+     in review. Nothing identical came back (above), so this is a
+     correction: the attempt in review is `superseded` and the new row
+     takes its place. The page used to name it in `supersedes` only while
+     it still held it in memory; a payer who reloaded, came back hours
+     later or opened the link on another phone started a second attempt
+     beside it, and the first kept polling the provider for up to twelve
+     hours after the customer's money was confirmed (found live on dev,
+     2026-09-25). One link keeps one attempt in review until paying in two
+     transfers becomes its own choice. */
   let superseded: DirectPayment | null = null;
   if (body.supersedes) {
     const [prior] = await db
@@ -371,41 +561,18 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     if (!prior || prior.status !== "validating") {
       return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
     }
-    /* A supersede without transfer data is the re-upload door
-       (validation-status-ux D7): a fresh proof is a new attempt by
-       definition, so only a typed correction can be "unchanged".
-       claimed-amount D4: the amount joins the comparison — changing only
-       the amount changes what Banxico is asked, so it is a real
-       correction. An omitted field matches whatever the row holds (older
-       clients and older rows never sent one). */
-    const unchanged =
-      body.transfer != null &&
-      prior.trackingKey === (body.transfer.trackingKey?.toUpperCase() ?? null) &&
-      /* receipt-triage D1: a reference is part of what was asked */
-      (body.transfer.referenceNumber == null || prior.referenceNumber === body.transfer.referenceNumber) &&
-      prior.senderBank === body.transfer.senderBank &&
-      prior.transferDate === body.transfer.date &&
-      (body.transfer.amountCents == null ||
-        body.transfer.amountCents === (prior.claimedAmountCents ?? prior.amountCents));
-    if (unchanged) {
-      /* Nothing to correct. Keep the row, its schedule and its attempt
-         count, and spend nothing — a second row would carry the same
-         clave straight into D8's unique index and answer
-         `TRANSFER_ALREADY_USED` to a payer racing only themselves. */
-      return c.json(
-        {
-          success: true,
-          data: {
-            directPaymentId: prior.id,
-            status: prior.status as "validating",
-            error: publicError(prior.lastError),
-          },
-        },
-        200,
-      );
-    }
     superseded = prior;
   }
+  /* Panel links only. An API link is the automated-collections contract,
+     where two transfers on one link are both kept and the later one reads
+     `unapplied`, never lost (automated-collections-api D16) — correcting
+     there stays the explicit `supersedes` it always was. */
+  const open = isPanelLink(link) ? await openAttempts(db, link.id) : [];
+  superseded ??= open[0] ?? null;
+  /* More than one open attempt exists only on rows born before this rule;
+     the correction closes them all, and `supersedesId` names the one the
+     payer was shown */
+  const alsoClosed = open.filter((r) => r.id !== superseded?.id);
 
   const serviceFeeCents = speiFeeCents(business);
 
@@ -558,11 +725,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   /* Release the old claim *before* the insert: the corrected row may well
      be claiming a clave that only differs by a character, and D8's index
      does not care that the two rows belong to the same payer. */
-  if (superseded) {
+  const closing = [...(superseded ? [superseded] : []), ...alsoClosed];
+  if (closing.length > 0) {
     await db
       .update(payments)
       .set({ status: "superseded", nextValidationAt: null })
-      .where(eq(payments.id, superseded.id));
+      .where(inArray(payments.id, closing.map((r) => r.id)));
   }
 
   const rowValues = {
@@ -582,7 +750,14 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     senderBank: body.transfer?.senderBank ?? null,
     transferDate: body.transfer?.date ?? null,
     proofKey: body.proofId ?? null,
-    receiptStatus: superseded?.receiptStatus ?? body.receiptStatus ?? null,
+    /* D18 carries the prior's receipt status forward when the correction
+       is of the same capture. bug: one-open-attempt — a new file is a new
+       capture, so it carries its own (a correction now also comes from a
+       payer who sent a different receipt). */
+    receiptStatus:
+      (superseded && (!body.proofId || body.proofId === superseded.proofKey) ? superseded.receiptStatus : null) ??
+      body.receiptStatus ??
+      null,
     supersedesId: superseded?.id ?? null,
     /* two-eyes-receipt D7 (data-model): a form the payer edited is the
        human's data, so the row records where its clave came from. That
@@ -622,11 +797,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      found live 2026-08-26 — a cross-link collision left the prior
      superseded with no successor, an orphan nothing would ever poll). */
   const restorePrior = async () => {
-    if (superseded) {
+    /* bug: one-open-attempt — every attempt this submission closed, each
+       to the status and slot it had (a queued one stays queued) */
+    for (const prior of closing) {
       await db
         .update(payments)
-        .set({ status: "validating", nextValidationAt: superseded.nextValidationAt })
-        .where(eq(payments.id, superseded.id));
+        .set({ status: prior.status, nextValidationAt: prior.nextValidationAt })
+        .where(eq(payments.id, prior.id));
     }
   };
 
@@ -738,8 +915,9 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      `waitUntil`; the payer's answer never waits on it (FR-017). */
   const defer = deferOf(c);
   if (isApiLink(link)) {
-    if (payment.supersedesId) {
-      const [closed] = await db.select().from(payments).where(eq(payments.id, payment.supersedesId));
+    for (const id of [payment.supersedesId, ...alsoClosed.map((r) => r.id)]) {
+      if (!id) continue;
+      const [closed] = await db.select().from(payments).where(eq(payments.id, id));
       if (closed?.status === "superseded") await enqueueAndDeliver(c.env, db, { payment: closed, link, now }, defer);
     }
     await enqueueAndDeliver(c.env, db, { payment, link, now }, defer);

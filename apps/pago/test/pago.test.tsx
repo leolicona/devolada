@@ -899,7 +899,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(copy.textContent).toMatch(/contactar a tu proveedor/i);
     /* no form in the foreground — the doors stay */
     expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /subir otro comprobante/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /corregir el comprobante en revisión/i })).toBeInTheDocument();
   });
 
   it("US-D12 scenario 7: an unread date never becomes today's — it is asked for, not invented", async () => {
@@ -931,7 +931,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(JSON.stringify(paid[0])).not.toContain(new Date().toISOString().slice(0, 10));
   });
 
-  it("US-D12 scenario 8: 'Subir otro comprobante' walks back to step 2 and the fresh proof supersedes", async () => {
+  it("US-D12 scenario 8: 'Corregir el comprobante en revisión' (bug: one-open-attempt, was 'Subir otro comprobante') walks back to step 2 and the fresh proof supersedes", async () => {
     const paid: unknown[] = [];
     server.use(...silentThen({}, paid));
     await uploadReceipt();
@@ -939,7 +939,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
     /* D7: the payer who knows the receipt is wrong does not wait out a
        validation they already know is lost */
-    await userEvent.click(screen.getByRole("button", { name: /subir otro comprobante/i }));
+    await userEvent.click(screen.getByRole("button", { name: /corregir el comprobante en revisión/i }));
 
     expect(
       await screen.findByRole("heading", { name: /envía tu comprobante/i }),
@@ -1933,5 +1933,88 @@ describe("receipt-triage US4: the capture guide", () => {
     expect(document.querySelector("[data-item='amount']")).toHaveTextContent("Se ve");
     expect(document.querySelector("[data-ask]")).toHaveClass("animate-enter");
     await expectNoViolations(document.body);
+  });
+});
+
+/* bug: one-open-attempt — the attempt in review is the server's to name,
+   so a payer who comes back (a reload, hours later, another phone) meets
+   it instead of a fresh form beside it, and corrects it. */
+describe("bug: one-open-attempt", () => {
+  it("a payer who comes back resumes the attempt in review and corrects it", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() =>
+        ok(
+          linkStatusResponse.parse({
+            ...debtLink,
+            inReview: { directPaymentId: "dp-1", status: "validating" },
+          }),
+        ),
+      ),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-2" }))),
+      handlers.read(() =>
+        ok(
+          proofReadingResponse.parse({
+            source: "reader",
+            isReceipt: true,
+            legibility: "full",
+            amountCents: 51400,
+            trackingKey: "260925071144393084I",
+            senderBank: "AZTECA",
+            date: "2026-09-25",
+            receiptStatus: "Aceptada",
+            gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+          }),
+        ),
+      ),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-2", status: "validating", error: null }), 201);
+      }),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 7,
+            error: "TRANSFER_NOT_FOUND",
+            senderBank: "AZTECA",
+            transferDate: "2026-09-24",
+          }),
+        ),
+      ),
+    );
+    /* A fresh visit: nothing on this device remembers the attempt */
+    renderPage();
+
+    const door = await screen.findByRole(
+      "button",
+      { name: /corregir el comprobante en revisión/i },
+      { timeout: 8000 },
+    );
+    /* the attempt, never the form beside it */
+    expect(screen.queryByRole("heading", { name: /haz tu transferencia/i })).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+
+    await userEvent.click(door);
+    /* the link still names dp-1 until the correction lands; the payer who
+       walked out of it is not pulled back in */
+    expect(
+      await screen.findByRole("heading", { name: /envía tu comprobante/i }),
+    ).toBeInTheDocument();
+    const picker = screen.getByLabelText(/captura o comprobante/i);
+    await userEvent.upload(picker, new File([new Uint8Array(100)], "cep2.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
+
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ supersedes: "dp-1", proofId: "link-1/proof-2" });
+  });
+
+  it("with nothing in review the page starts from the transfer, as before", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /corregir el comprobante en revisión/i }),
+    ).not.toBeInTheDocument();
   });
 });

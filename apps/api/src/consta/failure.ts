@@ -22,15 +22,19 @@ export type ConstaErrorCode =
   | "PROVIDER_AUTH_FAILED"
   | "REQUEST_REJECTED"
   | "RECEIPT_UNREADABLE"
-  /* proof-extraction D4: the reading did not survive the gate.
-     **No door throws this since two-eyes-receipt D3.** A hole in our
-     reading used to refuse before any credit and send the payer to a
-     form; now it rides along to the provider, whose own reading may
-     fill it for free (FR-005). The code stays declared because callers
-     still switch on it — removing it is a one-line follow-up once none
-     does, and deleting it here first would only make those switches
-     fail to compile for no gain. */
+  /* proof-extraction D4: the reading did not survive the gate. No door
+     threw it between two-eyes-receipt D3 and receipt-triage: a hole in
+     our reading rides to the provider, whose own reading may fill it
+     (FR-005). **Thrown again for one case** (receipt-triage D4, D15): a
+     clear capture — a `completa` picture or a PDF's text — that shows
+     neither a clave nor a reference, a generic reference counting as
+     none. Before the provider call, nothing billed; `missingFields`
+     carries the ask's fields. Every other hole still goes through. */
   | "RECEIPT_INCOMPLETE"
+  /* receipt-triage D15, D24: a clear capture whose destination fits none
+     of the ISP's registered accounts, current or retired. Stopped before
+     the provider call; nothing billed. */
+  | "RECEIPT_WRONG_DESTINATION"
   | "READER_UNAVAILABLE"
   | "READER_UNREADABLE"
   /* consta-api-merge D7: the bytes, from the product's own bucket */

@@ -1,8 +1,8 @@
 import type { Context } from "hono";
-import { and, asc, eq, gt, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, or, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
+import { extractions, payments, businesses, paymentLinks, proofRejections } from "../../db/schema";
 import { creditSummary } from "../../credit";
 import {
   CUSTOMER_SEARCH_FIELDS,
@@ -21,9 +21,18 @@ import {
   businessConfigured,
   isUniqueViolation,
   runValidation,
+  sharedReference,
   speiFeeCents,
   validationAvailable,
 } from "../../direct-payments/validation";
+import {
+  collectStored,
+  fromBeneficiary,
+  registeredAccounts,
+  toBeneficiary,
+  type StoredAccount,
+} from "../../direct-payments/accounts";
+import { tieDestination, visibleTail } from "../../consta/extraction";
 import {
   ensureLink,
   isApiLink,
@@ -140,6 +149,45 @@ function publicError(lastError: string | null) {
   return parsed.success ? parsed.data : null;
 }
 
+/* receipt-triage D29: the one account the payer sees — the cuenta de
+   cobro, whatever its kind. `speiClabe`/`speiBank` ride beside it only
+   when it is the CLABE, for a page built before this feature; a CLABE
+   renders exactly as it always did (SC-008). The channel gate above
+   guarantees the account exists. */
+function transferAccount(business: typeof businesses.$inferSelect): Partial<LinkStatusResponse> {
+  const account = collectStored(business)!;
+  return {
+    collectAccount: { kind: account.kind, value: account.value, bank: account.bank },
+    ...(account.kind === "clabe" ? { speiClabe: account.value, speiBank: account.bank } : {}),
+  };
+}
+
+/* receipt-triage D25: the account the draft reading of this proof tied
+   to, when `/read` ran on it — so the payment is born checked against the
+   account the receipt names. The engine ties again on the receipt door
+   and its `beneficiaryUsed` has the last word; this only saves the row
+   from being born with the wrong one. Owner-scoped like every read of
+   `extractions` (constitution V). */
+async function draftTiedAccount(
+  db: DrizzleD1Database,
+  business: typeof businesses.$inferSelect,
+  proofId: string,
+  accounts: StoredAccount[],
+): Promise<StoredAccount | null> {
+  const [draft] = await db
+    .select({ kind: extractions.destinationKind, digits: extractions.destinationDigits })
+    .from(extractions)
+    .where(and(eq(extractions.businessId, business.id), eq(extractions.proofKey, proofId)))
+    .orderBy(desc(extractions.createdAt))
+    .limit(1);
+  if (!draft?.digits) return null;
+  const tie = tieDestination(
+    { kind: draft.kind ?? null, digits: draft.digits },
+    accounts.map((a) => toBeneficiary(a)),
+  );
+  return typeof tie === "object" ? fromBeneficiary(tie.tied) : null;
+}
+
 /* GET /direct-payments/links/:token (US-D01, D1, D4, D15) */
 export async function getLinkStatus(c: Ctx, token: string) {
   const ctx = await resolveLink(c, token);
@@ -182,8 +230,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
       carriedBalanceCents: 0,
       serviceFeeCents,
       totalCents: link.askCents + serviceFeeCents,
-      speiClabe: business.speiClabe!,
-      speiBank: business.speiBank!,
+      ...transferAccount(business),
       ...(business.speiBeneficiaryName ? { speiBeneficiaryName: business.speiBeneficiaryName } : {}),
       /* The caller's own reference in the concepto, so the business
          recognises the payer in its statement exactly as an ISP does */
@@ -244,8 +291,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
       carriedBalanceCents: debt.carriedBalanceCents,
       serviceFeeCents,
       totalCents: debt.totalCents + serviceFeeCents,
-      speiClabe: business.speiClabe!,
-      speiBank: business.speiBank!,
+      ...transferAccount(business),
       /* claimed-amount D5: recommended, not required — omitted when the
          ISP has not configured it, and the page hides the row */
       ...(business.speiBeneficiaryName ? { speiBeneficiaryName: business.speiBeneficiaryName } : {}),
@@ -334,7 +380,9 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
        clients and older rows never sent one). */
     const unchanged =
       body.transfer != null &&
-      prior.trackingKey === body.transfer.trackingKey.toUpperCase() &&
+      prior.trackingKey === (body.transfer.trackingKey?.toUpperCase() ?? null) &&
+      /* receipt-triage D1: a reference is part of what was asked */
+      (body.transfer.referenceNumber == null || prior.referenceNumber === body.transfer.referenceNumber) &&
       prior.senderBank === body.transfer.senderBank &&
       prior.transferDate === body.transfer.date &&
       (body.transfer.amountCents == null ||
@@ -360,6 +408,19 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
   }
 
   const serviceFeeCents = speiFeeCents(business);
+
+  /* receipt-triage D25/D30: the account this payment is checked against,
+     and every account the business registered, current and retired —
+     snapshotted now, so a later edit in Cuenta never moves this payment
+     (FR-021). Typed data is checked against the cuenta de cobro (FR-018);
+     a receipt whose draft reading tied another registered account is
+     checked there (FR-020a). */
+  const snapshotAccounts = registeredAccounts(business);
+  let beneficiary: StoredAccount = collectStored(business)!;
+  if (body.proofId && !body.transfer) {
+    const tied = await draftTiedAccount(db, business, body.proofId, snapshotAccounts);
+    if (tied) beneficiary = tied;
+  }
 
   /* Where the ask comes from (automated-collections-api D5/D6). A panel
      link reads the debt live from WispHub; an API link carries it on the
@@ -470,6 +531,30 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      was never transferred finds no CEP, which is a `not_found` and rides
      D17's schedule while D18 asks the payer to check their data. */
 
+  /* claimed-amount D1/D3: the payer's own number wins — a human who
+     confirmed (or typed) the amount outranks the raw reading; the silent
+     path still carries the reader's. Kept so the lookup asks Banxico
+     about the transfer the payer actually made (partial-payment D5). */
+  const claimedCents = body.transfer?.amountCents ?? body.receiptAmountCents ?? null;
+
+  /* receipt-triage D7 (clarified 2026-09-24): typed data whose only key is
+     a reference another payment of the business already holds — same
+     date, bank, amount and account, from another link — cannot find this
+     transfer alone. Refused before anything is created or billed; the
+     page requires the clave (FR-005, FR-007). */
+  if (body.transfer && !body.transfer.trackingKey && body.transfer.referenceNumber) {
+    const shared = await sharedReference(db, business, link, {
+      reference: body.transfer.referenceNumber,
+      date: body.transfer.date,
+      senderBank: body.transfer.senderBank,
+      amountCents: claimedCents ?? amountCents,
+      account: beneficiary,
+    });
+    if (shared) {
+      return c.json({ success: false, error: { code: "REFERENCE_SHARED" } }, 409);
+    }
+  }
+
   /* Release the old claim *before* the insert: the corrected row may well
      be claiming a clave that only differs by a character, and D8's index
      does not care that the two rows belong to the same payer. */
@@ -480,11 +565,6 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
       .where(eq(payments.id, superseded.id));
   }
 
-  /* claimed-amount D1/D3: the payer's own number wins — a human who
-     confirmed (or typed) the amount outranks the raw reading; the silent
-     path still carries the reader's. Kept so the lookup asks Banxico
-     about the transfer the payer actually made (partial-payment D5). */
-  const claimedCents = body.transfer?.amountCents ?? body.receiptAmountCents ?? null;
   const rowValues = {
     paymentLinkId: link.id,
     businessId: business.id,
@@ -494,7 +574,11 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     claimedAmountCents: claimedCents,
     serviceFeeCents,
     proofMode: (body.transfer ? "transfer" : "receipt") as "transfer" | "receipt",
-    trackingKey: body.transfer?.trackingKey.toUpperCase() ?? null,
+    trackingKey: body.transfer?.trackingKey?.toUpperCase() ?? null,
+    /* receipt-triage D1/D12: as typed, leading zeros kept */
+    referenceNumber: body.transfer?.referenceNumber ?? null,
+    beneficiary: JSON.stringify(beneficiary),
+    registeredAccounts: JSON.stringify(snapshotAccounts),
     senderBank: body.transfer?.senderBank ?? null,
     transferDate: body.transfer?.date ?? null,
     proofKey: body.proofId ?? null,
@@ -558,7 +642,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
        payer whose "Verificando" context is gone collides with their own
        live row. Any owner that is not theirs — another link, or a
        terminal row that already consumed the transfer — still refuses. */
-    const collidingKey = body.transfer?.trackingKey.toUpperCase();
+    const collidingKey = body.transfer?.trackingKey?.toUpperCase();
     const [own] = collidingKey
       ? await db
           .select()
@@ -779,7 +863,16 @@ export async function uploadProof(c: Ctx, token: string) {
    machine is help, not an authority: **this endpoint cannot reject
    anybody**, and that stays true of the legibility it now reports —
    `legibility: "none"` is a fact on the wire here, and it is the *page*
-   that refuses on it, before a credit is spent (D2, FR-004). */
+   that refuses on it, before a credit is spent (D2, FR-004).
+
+   receipt-triage D15 keeps that sentence true while the reading learns to
+   ask: a clear capture with no key, or one whose destination fits none of
+   the business's accounts, comes back with an `ask` the page renders —
+   reported here, enforced by the engine's receipt door, so a client that
+   skips the page buys nothing either way. The business's registered
+   accounts, current and retired, go to the engine so it can judge the
+   destination (D24, D30); only whether one was seen comes back
+   (`destinationSeen`), never the digits or the account they tied. */
 export async function readProof(c: Ctx, token: string, proofId: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
@@ -808,7 +901,10 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
      (PaymentPage falls through to the provider's door on any failure). */
   let reading;
   try {
-    reading = await consta(c.env, db, { businessId: business.id }).extract({ proofKey: proofId });
+    reading = await consta(c.env, db, { businessId: business.id }).extract({
+      proofKey: proofId,
+      receivingAccounts: registeredAccounts(business).map((a) => toBeneficiary(a)),
+    });
   } catch (e) {
     const code = e instanceof ConstaError ? e.code : "READER_UNAVAILABLE";
     console.error("proof reading failed:", code);
@@ -833,8 +929,39 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
       date: reading.date,
       receiptStatus: reading.receiptStatus,
       gate: reading.gate,
+      /* receipt-triage D12 */
+      referenceNumber: reading.referenceNumber,
+      ask: await sharedAsk(db, business, link, reading),
+      destinationSeen: visibleTail(reading.destination.digits) !== null,
     },
   });
+}
+
+/* receipt-triage D7 (clarified 2026-09-24): a reading whose only key is a
+   reference another payment of the business already holds that day —
+   same bank, amount and account, from another link — is asked about as a
+   capture with no key: the reference cannot find this transfer alone. The
+   receipt door meets the same finding before its paid call (the
+   lifecycle's `sharedReference`), so the page and the engine agree. */
+async function sharedAsk(
+  db: DrizzleD1Database,
+  business: typeof businesses.$inferSelect,
+  link: PaymentLink,
+  reading: Awaited<ReturnType<ReturnType<typeof consta>["extract"]>>,
+) {
+  if (reading.ask || reading.trackingKey || !reading.referenceNumber) return reading.ask;
+  if (!reading.date || !reading.senderBank || reading.amountCents == null) return reading.ask;
+  const account = reading.tiedAccount ? fromBeneficiary(reading.tiedAccount) : collectStored(business);
+  const shared = await sharedReference(db, business, link, {
+    reference: reading.referenceNumber,
+    date: reading.date,
+    senderBank: reading.senderBank,
+    amountCents: reading.amountCents,
+    account,
+  });
+  if (!shared) return null;
+  const fields: ("key" | "amount" | "date" | "senderBank")[] = ["key"];
+  return { reason: "no_key" as const, fields, shared: true };
 }
 
 /* GET /direct-payments/proofs/:linkId/:file — how the engine's provider
@@ -945,6 +1072,11 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
          word "disputed" (contracts/payment-page.md). */
       ...(payment.disputedFields ? { disputedFields: JSON.parse(payment.disputedFields) } : {}),
       receiptStatus: payment.receiptStatus,
+      /* receipt-triage D1: the reference this payment searches with */
+      referenceNumber: payment.referenceNumber,
+      /* receipt-triage D31: the business decides before anything settles;
+         the page says so and shows no success state */
+      ...(payment.actionOutcome === "review" ? { inReview: true } : {}),
       /* provisional-release D9: the page never speaks in conditionals,
          so it must know whether the service was actually given back —
          and which evidence bought it, because evidence and consequence

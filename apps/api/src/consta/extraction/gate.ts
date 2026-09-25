@@ -1,6 +1,7 @@
 import { BANKS, type Bank } from "../../direct-payments/banks";
 import { amountToCents } from "../../wisphub/money";
 import type { Reading } from "./reader";
+import { isGenericReference } from "../../routes/direct-payments/schema";
 
 /* D4 — the gate is a range and a vocabulary, not a fixed length.
 
@@ -23,11 +24,17 @@ export type Gate = {
      what lets a caller catch the $1-receipt that this one would otherwise
      wave through (direct-payment D11). */
   amount: Extract<FieldGate, "ok" | "malformed" | "missing">;
+  /* receipt-triage D12: `ok` iff 1–7 digits as printed; `generic` is a
+     well-formed reference many transfers share (D2) — no key. The
+     engine's request guard stays at 20 digits for other callers. */
+  referenceNumber: Extract<FieldGate, "ok" | "malformed" | "missing"> | "generic";
 };
 
 export type GatedReading = {
   gate: Gate;
   trackingKey: string | null;
+  /* receipt-triage D12: only when the gate said `ok`, exactly as printed */
+  referenceNumber: string | null;
   senderBank: Bank | null;
   amountCents: number | null;
   /* True when everything a direct-mode call needs is present and sane */
@@ -39,6 +46,29 @@ export type GatedReading = {
    misread, for free. A range — apiCEP's own example carries ten
    characters and Nu's carries 28. */
 const TRACKING_KEY = /^[A-Za-z0-9]{6,30}$/;
+
+/* receipt-triage D12: apiCEP's own example carries seven digits, and a
+   longer number on a receipt is a folio or an authorisation number */
+const REFERENCE = /^\d{1,7}$/;
+
+/* receipt-triage D12: the reference's verdict on its own, re-derivable
+   from the stored text — `recentReading` rebuilds it this way (D28) */
+export function gateReference(value: string | null): Gate["referenceNumber"] {
+  const ref = value?.trim() ?? "";
+  if (!ref) return "missing";
+  if (!REFERENCE.test(ref)) return "malformed";
+  return isGenericReference(ref) ? "generic" : "ok";
+}
+
+/* receipt-triage D11: a direct-mode call needs one key — the clave or a
+   reference — plus the bank and the amount */
+export function passesGate(gate: Gate): boolean {
+  return (
+    (gate.trackingKey === "ok" || gate.referenceNumber === "ok") &&
+    gate.senderBank === "ok" &&
+    gate.amount === "ok"
+  );
+}
 
 const BY_NORMALISED = new Map<string, Bank>(BANKS.map((b) => [normalise(b), b]));
 
@@ -74,13 +104,15 @@ export function gateReading(reading: Reading): GatedReading {
     trackingKey: !key ? "missing" : trackingKey ? "ok" : "malformed",
     senderBank: !reading.senderBank ? "missing" : senderBank ? "ok" : "unknown",
     amount: reading.amount == null ? "missing" : amountCents ? "ok" : "malformed",
+    referenceNumber: gateReference(reading.referenceNumber),
   };
 
   return {
     gate,
     trackingKey,
+    referenceNumber: gate.referenceNumber === "ok" ? reading.referenceNumber!.trim() : null,
     senderBank,
     amountCents,
-    passes: gate.trackingKey === "ok" && gate.senderBank === "ok" && gate.amount === "ok",
+    passes: passesGate(gate),
   };
 }

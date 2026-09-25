@@ -58,11 +58,19 @@ export function ownerId(owner: Owner): string | null {
   return "businessId" in owner ? owner.businessId : null;
 }
 
-export type ConstaBeneficiary = {
-  bank: string;
-  clabe: string;
-  name?: string;
-};
+/* receipt-triage D9/D22: an ISP is paid at a CLABE, a debit card or a
+   phone — exactly the three shapes the request guard (`request.ts`)
+   already validates and the adapter already passes through. The
+   same-institution guard (validation spec D17) applies to all three. */
+export type ConstaBeneficiary =
+  | { bank: string; clabe: string; name?: string } // 18 digits
+  | { bank: string; cardNumber: string; name?: string } // 16 digits
+  | { bank: string; phoneNumber: string; name?: string }; // 10 digits
+
+/* receipt-triage D30: one of the ISP's registered accounts, flagged when
+   the ISP removed it after the payment was submitted — or before, when a
+   receipt shows it anyway */
+export type RegisteredAccount = ConstaBeneficiary & { retired?: true };
 
 export type ConstaRequest = (
   | {
@@ -70,7 +78,11 @@ export type ConstaRequest = (
         date: string;
         amountCents: number;
         senderBank: string;
-        trackingKey: string;
+        /* receipt-triage D1/D11: exactly one key travels — the clave
+           when there is one, the referencia numérica only when there is
+           none. The request guard refuses a transfer with neither. */
+        trackingKey?: string;
+        referenceNumber?: string;
         beneficiary: ConstaBeneficiary;
       };
     }
@@ -89,6 +101,15 @@ export type ConstaRequest = (
          request without it takes the provider-first flow, which reads
          here *and* asks the image door, so it needs no flag. */
       providerOcr?: true;
+      /* receipt-triage D30: the payment's registered accounts at
+         submission, current and retired — what the receipt's destination
+         is tied against (D24). Never sent to the provider. Omitted by a
+         top-up, whose one CLABE is `beneficiary`. */
+      receivingAccounts?: RegisteredAccount[];
+      /* receipt-triage D27 (FR-027): a payment born before this feature —
+         the engine reads as today but skips the ask and the destination
+         tie, so the row finishes under the flow it started in */
+      legacy?: true;
     }
 ) & {
   /* provisional-release D4 / trust-layer D1: history refs, sent on every
@@ -148,6 +169,17 @@ export type ConstaVerdict = {
      `valid` or `contradicted`. */
   trust?: ConstaTrust;
   alreadyValidated: boolean;
+  /* receipt-triage FR-006: the provider's replay flag as it answered —
+     `true`, `false`, or `null` when it could not say. `alreadyValidated`
+     above folds `null` into `false`, which is right for the replay rule
+     (D8) and wrong for the one guard that must tell "never validated"
+     from "unknown": a confirmation whose CEP carried no clave. */
+  previouslyValidated?: boolean | null;
+  /* receipt-triage D22/D30: the account the provider call named on the
+     receipt door, `retired` when it was one the ISP removed; absent on
+     the transfer door, whose caller chose. The lifecycle stores it on the
+     payment (D25) and holds a `retired` confirmation for the ISP (D31). */
+  beneficiaryUsed?: RegisteredAccount | null;
   cep?: {
     trackingKey: string | null;
     amountCents: number | null;
@@ -157,6 +189,12 @@ export type ConstaVerdict = {
     receiverBank: string | null;
     beneficiaryName: string | null;
     digitalSignature?: string | null;
+    /* receipt-triage D22: Banxico's own word on the receiving account —
+       documented by the provider, dropped by the adapter until now.
+       Whole or masked is unmeasured, so the lifecycle ties it with
+       `tieDestination` rather than comparing it whole. */
+    beneficiaryAccount?: string | null;
+    beneficiaryAccountType?: string | null;
   };
   /* proof-extraction D11: what the provider's OCR read off the image —
      a reading, never a verdict. Present on provider-OCR calls only, and
@@ -185,6 +223,8 @@ export type ConstaVerdict = {
     amountCents: number | null;
     date: string | null;
     legibility: "full" | "partial" | "none" | null;
+    /* receipt-triage D12: our reference, only when the gate said `ok` */
+    referenceNumber?: string | null;
   } | null;
   /* D5: the three words, taken at minute zero. `agreed` — both read the
      same clave and the same cents, which is evidence (D6) and stops the
@@ -193,7 +233,8 @@ export type ConstaVerdict = {
   /* D8: the fields to ask the payer for, and only those. Set when
      nothing could break a tie — and, whatever the check said, carrying
      `"date"` when the accepted data has no date on either side (D20). */
-  disputedFields?: ("trackingKey" | "amount" | "date")[];
+  /* receipt-triage D13: `"referenceNumber"` joins them */
+  disputedFields?: ("trackingKey" | "referenceNumber" | "amount" | "date")[];
   /* D5: which side read nothing, on `blind` only */
   blindSide?: "provider" | "reader" | "both";
   /* D6/D7: the data later attempts carry through the provider's
@@ -201,8 +242,12 @@ export type ConstaVerdict = {
      here is not a hole to paper over — `disputedFields` carries
      `"date"` and the transfer door waits for the payer's answer (D20):
      it is never called with a date nobody read. */
+  /* receipt-triage D13: the accepted data carries both keys, at least one
+     of them set — the clave when either reading found one, else a
+     reference both sides could stand behind */
   accepted?: {
-    trackingKey: string;
+    trackingKey: string | null;
+    referenceNumber: string | null;
     senderBank: Bank;
     amountCents: number;
     date: string | null;
@@ -223,6 +268,9 @@ export type ConstaGate = {
   trackingKey: "ok" | "malformed" | "missing";
   senderBank: "ok" | "unknown" | "missing";
   amount: "ok" | "malformed" | "missing";
+  /* receipt-triage D12: `generic` is a well-formed reference that many
+     transfers share — no key (D2) */
+  referenceNumber: "ok" | "malformed" | "generic" | "missing";
   /* proof-extraction D15: the shape verdict rides the gate as a field */
   shape: "ok" | "mismatch" | "unknown";
 };
@@ -251,11 +299,32 @@ export type ConstaReading = {
   legibility: "full" | "partial" | "none" | null;
   /* proof-extraction D16: to confirm, never to send */
   suggestedBank?: string;
+  /* receipt-triage D12: only when the gate said `ok` — 1 to 7 digits, as
+     printed */
+  referenceNumber: string | null;
+  /* receipt-triage D24: the receiving account as the reading saw it.
+     Never sent to the page — `destinationSeen` is (payment-page contract). */
+  destination: { kind: "clabe" | "card" | "phone" | "account" | null; digits: string | null };
+  /* receipt-triage D15: the one rule, reported. Null when the capture may
+     go on to the paid call. This door never throws on it. */
+  ask:
+    | null
+    | { reason: "no_key"; fields: ("key" | "amount" | "date" | "senderBank")[] }
+    | { reason: "wrong_destination" };
+  /* receipt-triage D24/D30: the account the destination tied to, when it
+     did — the pay handler snapshots it as the payment's `beneficiary`.
+     Never sent to the page. */
+  tiedAccount: RegisteredAccount | null;
 };
 
 export type ConstaEngine = {
   validate(request: ConstaRequest): Promise<ConstaVerdict>;
-  extract(input: { proofKey: string }): Promise<ConstaReading>;
+  extract(input: {
+    proofKey: string;
+    /* receipt-triage D15: the ISP's accounts, so the ask can judge the
+       destination. Omitted → the destination is never a mismatch. */
+    receivingAccounts?: RegisteredAccount[];
+  }): Promise<ConstaReading>;
 };
 
 /* Obtain an engine for one owner. It reads `APICEP_*`, `AI`,

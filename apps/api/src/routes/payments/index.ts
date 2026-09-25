@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
-import { feedQuery } from "./schema";
-import { executeAction, getPaymentProof, listPaymentFeed, paymentsPulse, retryAction } from "./handler";
+import { feedQuery, reviewDecisionRequest } from "./schema";
+import { executeAction, getPaymentProof, listPaymentFeed, paymentsPulse, retryAction, reviewDecision } from "./handler";
 
 /* Pure router: validation + wiring only (code organization law). The
    feed reads `payments` (business-and-memberships D6); the proof is
@@ -32,3 +32,14 @@ paymentsRoute.post("/:id/retry-action", requireSession, requireArea("payments", 
 paymentsRoute.post("/:id/execute-action", requireSession, requireArea("payments", "operate"), (c) => {
   return executeAction(c, c.req.param("id"));
 });
+
+/* receipt-triage D31: held rows only — accept or reject */
+paymentsRoute.post(
+  "/:id/review",
+  requireSession,
+  requireArea("payments", "operate"),
+  zValidator("json", reviewDecisionRequest),
+  (c) => {
+    return reviewDecision(c, c.req.param("id"), c.req.valid("json"));
+  },
+);

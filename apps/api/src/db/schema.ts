@@ -60,6 +60,22 @@ export const businesses = sqliteTable("businesses", {
   speiClabe: text("spei_clabe"),
   speiBank: text("spei_bank"),
   speiBeneficiaryName: text("spei_beneficiary_name"),
+  /* receipt-triage D9/D26: a debit card and a phone that receive SPEI,
+     beside the CLABE, each with its bank from the provider's vocabulary.
+     Same area as the CLABE (owner only), masked like it. */
+  speiCard: text("spei_card"),
+  speiCardBank: text("spei_card_bank"),
+  speiPhone: text("spei_phone"),
+  speiPhoneBank: text("spei_phone_bank"),
+  /* receipt-triage D29: the cuenta de cobro — the one registered account
+     the payers see. NULL reads `clabe`, so every business born before
+     this feature keeps its CLABE and today's `configured` (D32). */
+  speiCollectKind: text("spei_collect_kind", { enum: ["clabe", "card", "phone"] }),
+  /* receipt-triage D30: JSON array of `{ kind, value, bank, removedAt }` —
+     every number the ISP changed or cleared, appended by the settings
+     handler in the same write. Read only to recognise a receipt paid to
+     a removed account; never shown to a payer. */
+  speiRetiredAccounts: text("spei_retired_accounts"),
   /* null → falls back to serviceFeeCents (D3) */
   speiServiceFeeCents: integer("spei_service_fee_cents"),
   /* The WispHub key, the reconnection threshold+floor and the
@@ -252,7 +268,10 @@ export const payments = sqliteTable(
        reading check says — carrying "date" when the accepted data has no
        date on either side (two-eyes-receipt D20): the transfer door is
        never called with a date nobody read, so the payer is asked for that
-       one field while the agreement stands. */
+       one field while the agreement stands.
+       receipt-triage D13: `"referenceNumber"` joins them — a reference the
+       two readings disputed, or (beside `"trackingKey"`) a reference that
+       Banxico's search did not find, where either key is enough. */
     disputedFields: text("disputed_fields"),
     /* two-eyes-receipt D5/FR-018: the attempt number the classification
        was taken at — 1 on a provider-first call, higher when the inline
@@ -261,6 +280,33 @@ export const payments = sqliteTable(
        never this number: a new-flow row whose first attempt died classifies
        at 2 like a legacy cross does. */
     readingCheckAttempt: integer("reading_check_attempt"),
+    /* receipt-triage D1/D12: the referencia numérica this payment
+       searches with — typed by the payer, or accepted from the readings.
+       Up to seven digits as printed, leading zeros kept: text, never cast
+       to a number. It travels only when `tracking_key` is NULL (D1). */
+    referenceNumber: text("reference_number"),
+    /* receipt-triage D25/D30: JSON `{ kind, value, bank, retired? }` — the
+       account this payment is checked against, snapshotted at submission
+       (the cuenta de cobro, or the account the draft reading tied) and
+       replaced by the engine's `beneficiaryUsed` or by the account
+       Banxico's CEP names (D22). Attempts read the account from the
+       payment, never the business (FR-021). NULL with
+       `registered_accounts` NULL = a row born before this feature (D27). */
+    beneficiary: text("beneficiary"),
+    /* receipt-triage D30: JSON array — the ISP's accounts at submission,
+       current and retired (`retired: true`), what every attempt ties the
+       receipt's destination against. A later edit never moves a payment
+       in flight (FR-021). */
+    registeredAccounts: text("registered_accounts"),
+    /* receipt-triage D31: why a confirmed payment is held for the ISP —
+       `retired_account` (paid to an account the ISP removed, FR-020a) or
+       `no_clave` (confirmed by reference, Banxico's record carried no
+       clave and the provider could not say it was never validated,
+       FR-006). Set with `action_outcome = 'review'`. */
+    reviewReason: text("review_reason", { enum: ["retired_account", "no_clave"] }),
+    /* receipt-triage D31: who decided a held payment, and when */
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
     /* two-eyes-receipt D5: which side read nothing. Set only when
        `readingCheck = 'blind'`; 'both' is a hole on our side and no clave
        on theirs, which is the one blind case that still asks the payer. */
@@ -333,6 +379,12 @@ export const payments = sqliteTable(
     constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
     validationAttempts: integer("validation_attempts").notNull().default(0),
     nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
+    /* receipt-triage adds three words: `REFERENCE_AMBIGUOUS` (D17 — the
+       provider said the reference matches more than one transfer; no
+       further call until a clave arrives), `REFERENCE_SHARED` (D7 —
+       another payment of the business holds the same reference, date,
+       bank, amount and account) and `REJECTED_BY_BUSINESS` (D31 — the ISP
+       rejected a held payment). */
     lastError: text("last_error"),
     confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
     /* provisional-release D1/D11 (US-D15): the moment the vote of
@@ -400,9 +452,12 @@ export const payments = sqliteTable(
        action is its VERDICT's webhook — `queued` while it is retried,
        `done` when the endpoint accepted it, `failed` when the schedule
        is spent; null when no address is registered. Deliveries of
-       earlier states never write this column. */
+       earlier states never write this column.
+       receipt-triage D31: `review` = Banxico confirmed, and the ISP must
+       accept or reject before anything settles — no queue, no WispHub, no
+       webhook (`review_reason` says why). */
     actionOutcome: text("action_outcome", {
-      enum: ["queued", "done", "withheld", "failed", "observation"],
+      enum: ["queued", "done", "withheld", "failed", "observation", "review"],
     }),
     actionAttempts: integer("action_attempts").notNull().default(0),
     actionDoneAt: integer("action_done_at", { mode: "timestamp_ms" }),
@@ -436,6 +491,10 @@ export const payments = sqliteTable(
        read is one seek — measured against the `(business_id, created_at)`
        index it walked every payment of the tenant. */
     index("payments_business_registered_idx").on(t.businessId, t.paymentRegisteredAt),
+    /* receipt-triage D7: the shared-reference lookup — another payment of
+       the business with the same reference on the same day. Never unique:
+       references repeat by design. */
+    index("payments_business_reference_idx").on(t.businessId, t.referenceNumber, t.transferDate),
     /* D8: one transfer pays once — the database, not the provider,
        refuses the second submission, racing ones included */
     uniqueIndex("payments_business_tracking_idx")
@@ -862,6 +921,12 @@ export const extractions = sqliteTable(
         "refused",
         "routed",
         "illegible",
+        /* receipt-triage D15/D16: a clear SPEI reading with neither a
+           clave nor a (non-generic) reference — stopped before any credit */
+        "key_missing",
+        /* receipt-triage D15/D24: a clear reading whose destination fits
+           none of the ISP's registered accounts, current or retired */
+        "wrong_destination",
       ],
     }).notNull(),
     model: text("model"),
@@ -906,6 +971,19 @@ export const extractions = sqliteTable(
        (constitution II); converted by `amountToCents` in `apicep.ts`. */
     providerTrackingKey: text("provider_tracking_key"),
     providerAmountCents: integer("provider_amount_cents"),
+    /* receipt-triage D21: what makes every count of FR-028 one query.
+       `proof_key` — the proof this row read; its prefix is the link id, so
+       "how did an ask end" joins to the payment that followed.
+       `reference_number` — ours, as read, whether or not it passed the
+       gate; `provider_reference_number` — the provider's, on the paid
+       call's row. `destination_*` — what the reading saw as the receiving
+       account, masks removed. The ISP's own accounts are never written
+       here (constitution V). */
+    proofKey: text("proof_key"),
+    referenceNumber: text("reference_number"),
+    providerReferenceNumber: text("provider_reference_number"),
+    destinationKind: text("destination_kind", { enum: ["clabe", "card", "phone", "account"] }),
+    destinationDigits: text("destination_digits"),
     rawOutput: text("raw_output"),
     /* Set only when the reading went on to buy a provider call. NULL on
        every refusal, which is what makes "refused, and no credit spent" a

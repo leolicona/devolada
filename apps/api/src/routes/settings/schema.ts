@@ -24,6 +24,26 @@ export const timezone = z.enum([
 
 export const timeFormat = z.enum(["12h", "24h"]);
 
+/* receipt-triage D9/D26: a debit card is 16 digits whose last one is the
+   Luhn check digit — the one check a card number carries. Pure, and
+   exported so the admin's form speaks the same rule inline. */
+export function luhnValid(digits: string): boolean {
+  if (!/^\d+$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+/* receipt-triage D29: the three kinds of account an ISP can be paid at */
+export const COLLECT_KINDS = ["clabe", "card", "phone"] as const;
+
 export const settingsResponse = z.object({
   /* Read-only since D9: the birth default the SPEI fee inherits until the
      business saves one (direct-payment D3). Nothing edits it anymore —
@@ -45,7 +65,23 @@ export const settingsResponse = z.object({
     effectiveServiceFeeCents: z.number().int(),
     /* The bank is set but outside apiCEP's vocabulary (BUG-008) */
     bankUnknown: z.boolean(),
+    /* receipt-triage D32 — changed meaning: the cuenta de cobro is
+       registered with a bank the provider knows. A CLABE is no longer
+       needed; for a business with a CLABE and no choice made it is
+       exactly the test it always was. */
     configured: z.boolean(),
+    /* receipt-triage D9/D26: a debit card (16 digits) and a phone (10)
+       that receive SPEI, each with its bank. Masked to the last four for
+       a role that cannot update settings, like the CLABE. Defaulted so
+       fixtures born before them still parse. */
+    card: z.string().nullable().default(null),
+    cardBank: z.string().nullable().default(null),
+    phone: z.string().nullable().default(null),
+    phoneBank: z.string().nullable().default(null),
+    /* receipt-triage D29: which registered account the payers see — NULL
+       on the column reads `clabe`, so a business born before this feature
+       reads "clabe" here */
+    collectKind: z.enum(COLLECT_KINDS).nullable().default("clabe"),
   }),
   /* payments-and-classes D1/D2: the business's own reconciliation
      policy. `effectiveOverTreatment` is read-only — `credit` when the
@@ -71,6 +107,20 @@ export const settingsPatchRequest = z
     speiBank: z.string().trim().pipe(z.enum(BANKS)).nullable(),
     speiBeneficiaryName: z.string().trim().min(3).max(120).nullable(),
     speiServiceFeeCents: z.number().int().nonnegative().nullable(),
+    /* receipt-triage D9/D26: explicit null clears, like the CLABE. The
+       pairs (number, bank) and the cuenta de cobro are checked against the
+       merged row in the handler — a patch may send one half and rely on
+       the stored other. All in the `clabe` area: owner only. */
+    speiCard: z
+      .string()
+      .trim()
+      .regex(/^\d{16}$/)
+      .refine(luhnValid, { message: "the card number fails its check digit" })
+      .nullable(),
+    speiCardBank: z.string().trim().pipe(z.enum(BANKS)).nullable(),
+    speiPhone: z.string().trim().regex(/^\d{10}$/).nullable(),
+    speiPhoneBank: z.string().trim().pipe(z.enum(BANKS)).nullable(),
+    speiCollectKind: z.enum(COLLECT_KINDS),
     /* payments-and-classes D1 */
     toleranceCents: z.number().int().min(0).max(10000),
     overTreatment: z.enum(["flag", "credit"]),

@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, asc, desc, eq, gt, gte, inArray, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../../env";
 import { paymentLinks, payments } from "../../../db/schema";
@@ -22,7 +22,17 @@ import type { ApiPayment, ListTransfersQuery, TransferList } from "./schema";
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 type DirectPayment = typeof payments.$inferSelect;
 
-export function toPublic(payment: DirectPayment, link: ApiLink): ApiPayment {
+/* receipt-triage D31 (FR-020a): a payment held for the business's decision
+   has no verdict on this door yet. Its webhook is held too, and an
+   integration that polls instead of listening must not act on a
+   confirmation the business has not accepted — so the row reads as it did
+   before the verdict, `validating` with the verdict fields absent, until
+   the accept (which announces it) or the reject (`invalid`). */
+const heldAsValidating = (payment: DirectPayment): DirectPayment =>
+  payment.actionOutcome === "review" ? { ...payment, status: "validating" } : payment;
+
+export function toPublic(row: DirectPayment, link: ApiLink): ApiPayment {
+  const payment = heldAsValidating(row);
   /* the same facts the webhook carries, rendered by the same function
      so the two can never disagree (FR-014, FR-019) */
   const { paymentId: _paymentId, ...facts } = paymentFacts(payment, link);
@@ -134,6 +144,9 @@ export async function listTransfers(c: Ctx, q: ListTransfersQuery) {
       and(
         scope,
         inArray(payments.status, RECEIVED),
+        /* receipt-triage D31: held money is not received until the
+           business accepts it */
+        or(isNull(payments.actionOutcome), ne(payments.actionOutcome, "review")),
         gte(payments.confirmedAt, new Date(fromMs)),
         lt(payments.confirmedAt, new Date(toMs)),
         ...(after

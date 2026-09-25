@@ -1,5 +1,5 @@
 import type { Bank } from "../../direct-payments/banks";
-import { resolveBank, type GatedReading } from "./gate";
+import { gateReference, resolveBank, type GatedReading } from "./gate";
 import { checkShape, type ShapeRule } from "./shape";
 
 /* two-eyes-receipt D5–D8, D11, D20 — the comparison, at minute zero.
@@ -20,10 +20,24 @@ import { checkShape, type ShapeRule } from "./shape";
    flow for free (D18) — they call the same door and have no comparison
    code of their own.
 
-   Pure: no database, no clock, no I/O. The rules are passed in. */
+   Pure: no database, no clock, no I/O. The rules are passed in.
 
-/* D8: the only three fields a payer is ever asked to fix. */
-export type DisputedField = "trackingKey" | "amount" | "date";
+   receipt-triage D13: the key of a comparison is the clave when either
+   reading found one, and the referencia numérica otherwise. With a clave
+   the rules are exactly two-eyes' — the reference, when read, only rides
+   along in `accepted`, and never travels while the clave does (D1). With
+   no clave the reference is compared the same way — equal as text agrees,
+   different disputes, one side missing is blind — but the shape rules
+   are never consulted: they are learned from claves, and a reference has
+   no bank shape. "038195" and "38195" are different references. One
+   fallback joins the clave rules: claves that disagree with no tiebreak,
+   as the only field in doubt, fall back to a reference both readings hold
+   and the gate passed — the next attempt searches with it, and the payer
+   is asked only if Banxico then finds nothing (clarified 2026-09-24). */
+
+/* D8: the only fields a payer is ever asked to fix.
+   receipt-triage D13: the reference joins them. */
+export type DisputedField = "trackingKey" | "referenceNumber" | "amount" | "date";
 
 /* Our reading, gated, plus the date the gate has no opinion on (it is
    reported, never a search criterion we can validate — proof-extraction
@@ -39,6 +53,8 @@ export type OurReading = GatedReading & {
    exactly the answer this comparison runs on. */
 export type ProviderReading = {
   trackingKey: string | null;
+  /* receipt-triage D13: the adapter already parsed it; now it counts */
+  referenceNumber?: string | null;
   amountCents: number | null;
   date: string | null;
   senderBank: string | null;
@@ -50,8 +66,12 @@ export type Classification = {
   blindSide: "provider" | "reader" | "both" | null;
   /* D6/D7: what later attempts carry through the provider's transfer
      door. Null means nobody can tell, so the payer is asked. */
+  /* receipt-triage D13: at least one key set — the clave when there is
+     one, the reference otherwise; both when both were read (only the
+     clave travels, D1) */
   accepted: {
-    trackingKey: string;
+    trackingKey: string | null;
+    referenceNumber: string | null;
     senderBank: Bank;
     amountCents: number;
     date: string | null;
@@ -67,6 +87,8 @@ export type Classification = {
    supplies it. */
 const gatedFields = (ours: OurReading | null) => ({
   trackingKey: ours?.gate.trackingKey === "ok" ? ours.trackingKey : null,
+  /* receipt-triage D12: a generic or malformed reference is empty here */
+  referenceNumber: ours?.gate.referenceNumber === "ok" ? ours.referenceNumber : null,
   senderBank: ours?.gate.senderBank === "ok" ? ours.senderBank : null,
   amountCents: ours?.gate.amount === "ok" ? ours.amountCents : null,
 });
@@ -95,6 +117,13 @@ export function compareReadings(
   const theirBank = resolveBank(theirs?.senderBank ?? null);
   const theirKey = theirs?.trackingKey?.trim() ? theirs.trackingKey.trim() : null;
   const theirAmount = theirs?.amountCents ?? null;
+  /* receipt-triage D12: the provider's reference passes the same gate as
+     ours before it counts — a folio the provider took for a reference is
+     no key either */
+  const theirRef =
+    gateReference(theirs?.referenceNumber ?? null) === "ok" ? theirs!.referenceNumber!.trim() : null;
+  /* The reference that rides along beside a clave: ours first */
+  const anyRef = mine.referenceNumber ?? theirRef;
 
   /* Whichever side read it. Ours first — it is the one that passed a
      gate — and the bank may come from one side while the clave comes
@@ -104,9 +133,14 @@ export function compareReadings(
   const amount = mine.amountCents ?? theirAmount;
 
   /* Everything the provider's transfer door needs, from whoever has it */
-  const buildable = (clave: string | null) => Boolean(clave && bank && amount != null);
+  const buildable = (key: string | null) => Boolean(key && bank && amount != null);
   const build = (clave: string, from: Classification["acceptedFrom"]) => ({
-    accepted: { trackingKey: clave, senderBank: bank!, amountCents: amount!, date: null },
+    accepted: { trackingKey: clave, referenceNumber: anyRef, senderBank: bank!, amountCents: amount!, date: null },
+    acceptedFrom: from,
+  });
+  /* receipt-triage D13: a reference as the only key */
+  const buildByReference = (reference: string, from: Classification["acceptedFrom"]) => ({
+    accepted: { trackingKey: null, referenceNumber: reference, senderBank: bank!, amountCents: amount!, date: null },
     acceptedFrom: from,
   });
 
@@ -167,11 +201,35 @@ export function compareReadings(
              it — never ours, which the rule just declined. */
           accepted: {
             trackingKey: theirKey,
+            referenceNumber: anyRef,
             senderBank: theirBank!,
             amountCents: amount,
             date: null,
           },
           acceptedFrom: "provider",
+        };
+      }
+
+      /* receipt-triage D13, the fallback (clarified 2026-09-24): the
+         claves disagree, their banks' shapes settle nothing, the clave is
+         the only field in doubt, and both readings hold the same
+         reference that the gate passed. Nobody is asked yet: the next
+         attempt searches with the reference, no clave, and the payer is
+         asked for either key only if Banxico finds nothing with it. The
+         check still says `disputed` — the claves did differ. */
+      if (
+        !claveAgrees &&
+        !amountDisputed &&
+        mine.referenceNumber &&
+        theirRef &&
+        mine.referenceNumber === theirRef &&
+        buildable(mine.referenceNumber)
+      ) {
+        return {
+          readingCheck: "disputed",
+          disputedFields: [],
+          blindSide: null,
+          ...buildByReference(mine.referenceNumber, "agreed"),
         };
       }
 
@@ -229,16 +287,62 @@ export function compareReadings(
         disputedFields: usable ? [] : missingOf(theirKey, bank, amount, contradicted),
         blindSide: "reader",
         ...(usable
-          ? { accepted: { trackingKey: theirKey, senderBank: bank!, amountCents: amount!, date: null }, acceptedFrom: "provider" as const }
+          ? {
+              accepted: { trackingKey: theirKey, referenceNumber: anyRef, senderBank: bank!, amountCents: amount!, date: null },
+              acceptedFrom: "provider" as const,
+            }
           : { accepted: null, acceptedFrom: null }),
       };
     }
 
-    /* ---- Neither read a clave: nobody saw anything worth asking
-       Banxico about, so the payer is the only source left ---- */
+    /* ---- receipt-triage D13: neither read a clave — the reference is
+       the key. Compared as text, never as a number, and never judged by
+       a shape rule: a disputed reference is the payer's to settle. ---- */
+    const myRef = mine.referenceNumber;
+    if (myRef && theirRef) {
+      const refAgrees = myRef === theirRef;
+      const amountDisputed =
+        mine.amountCents != null && theirAmount != null && mine.amountCents !== theirAmount;
+      if (refAgrees && !amountDisputed) {
+        return {
+          readingCheck: "agreed",
+          disputedFields: [],
+          blindSide: null,
+          ...(buildable(myRef) ? buildByReference(myRef, "agreed") : { accepted: null, acceptedFrom: null }),
+        };
+      }
+      const disputed: DisputedField[] = [];
+      if (!refAgrees) disputed.push("referenceNumber");
+      if (amountDisputed) disputed.push("amount");
+      return { readingCheck: "disputed", disputedFields: disputed, blindSide: null, accepted: null, acceptedFrom: null };
+    }
+    if (myRef || theirRef) {
+      const ref = (myRef ?? theirRef)!;
+      const side = myRef ? ("provider" as const) : ("reader" as const);
+      if (buildable(ref)) {
+        return {
+          readingCheck: "blind",
+          disputedFields: [],
+          blindSide: side,
+          ...buildByReference(ref, myRef ? "reader" : "provider"),
+        };
+      }
+      return {
+        readingCheck: "blind",
+        disputedFields: missingOf(ref, bank, amount),
+        blindSide: "both",
+        accepted: null,
+        acceptedFrom: null,
+      };
+    }
+
+    /* ---- Neither read a key: nobody saw anything worth asking Banxico
+       about, so the payer is the only source left. receipt-triage
+       FR-004/FR-005: either key is enough, so both are asked for; the
+       amount only when no reading has one. ---- */
     return {
       readingCheck: "blind",
-      disputedFields: ["trackingKey", "amount"],
+      disputedFields: amount == null ? ["trackingKey", "referenceNumber", "amount"] : ["trackingKey", "referenceNumber"],
       blindSide: "both",
       accepted: null,
       acceptedFrom: null,
@@ -280,14 +384,18 @@ export function compareReadings(
    away with nobody able to say why. Reachable only when *neither*
    reading named a bank the vocabulary knows, which is a thoroughly
    degraded pair of readings. */
+/* receipt-triage D13: `key` is the clave or the reference this branch
+   holds; a missing one asks for either (FR-004), a contradicted or
+   bankless clave for the clave as before. */
 function missingOf(
-  clave: string | null,
+  key: string | null,
   bank: string | null,
   amount: number | null,
   contradicted = false,
 ): DisputedField[] {
   const fields: DisputedField[] = [];
-  if (!clave || contradicted || !bank) fields.push("trackingKey");
+  if (!key) fields.push("trackingKey", "referenceNumber");
+  else if (contradicted || !bank) fields.push("trackingKey");
   if (amount == null) fields.push("amount");
   return fields.length ? fields : ["trackingKey", "amount"];
 }

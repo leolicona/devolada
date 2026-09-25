@@ -3,10 +3,10 @@ import { readProof, ReaderError, type Reading } from "./reader";
 import { pdfToText } from "./pdf-text";
 import { gateReading, type GatedReading } from "./gate";
 
-export { ProofFetchError, MAX_PROOF_BYTES, loadProof, readProofFromBucket } from "./proof";
+export { ProofFetchError, MAX_PROOF_BYTES, loadProof, readProofFromBucket, sha256Hex } from "./proof";
 export type { LoadedProof } from "./proof";
 export { ReaderError } from "./reader";
-export { gateReading, resolveBank } from "./gate";
+export { gateReading, gateReference, passesGate, resolveBank } from "./gate";
 export { checkShape, loadShapeRules, resetShapeRules, suggestBank } from "./shape";
 export type { Reading } from "./reader";
 export type { Gate, GatedReading } from "./gate";
@@ -76,3 +76,17 @@ export async function extractProof(
 export function isNotAReceipt(result: ExtractionResult): boolean {
   return result.route === "reader" && !result.reading.isReceipt;
 }
+
+/* receipt-triage D15, D24: the two pure rules the reading now answers */
+export { askBeforeCredit, isClearReading, type Ask, type AskField } from "./ask";
+export {
+  accountKind,
+  accountValue,
+  asBeneficiary,
+  sameAccount,
+  tieCepAccount,
+  tieDestination,
+  visibleTail,
+  type AccountKind,
+  type TieResult,
+} from "./destination";

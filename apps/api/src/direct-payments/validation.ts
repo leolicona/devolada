@@ -1,10 +1,20 @@
-import { and, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { payments, businesses, paymentLinks } from "../db/schema";
+import { payments, businesses, paymentLinks, extractions, validations } from "../db/schema";
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
-import { consta, ConstaError, type ConstaRequest } from "../consta";
+import { consta, ConstaError, type ConstaRequest, type RegisteredAccount } from "../consta";
+import { asBeneficiary, sameAccount, tieCepAccount } from "../consta/extraction";
+import {
+  collectAccount,
+  collectBankIsKnown,
+  collectHalves,
+  fromBeneficiary,
+  parseAccount,
+  parseAccounts,
+  toBeneficiary,
+} from "./accounts";
 import { WispHubError, type PendingInvoices, type WispHub } from "../wisphub/client";
 /* provider-address-per-isp D4: the money is registered on the
    business's own installation, never on the platform's. */
@@ -16,6 +26,8 @@ import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
+import { nextSearchDate, searchDates } from "./search-date";
+import { businessWallClock } from "../time/business-day";
 import { classifyPayment, type ReconciliationClass } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
 import {
@@ -64,8 +76,10 @@ export function speiFeeCents(business: Isp): number {
    "nothing can validate" case D4 already refuses to show. */
 const KNOWN_BANKS: ReadonlySet<string> = new Set(BANKS);
 
-export function speiBankIsKnown(business: Pick<Isp, "speiBank">): boolean {
-  return Boolean(business.speiBank && KNOWN_BANKS.has(business.speiBank));
+/* receipt-triage D32: the bank that must be known is the cuenta de
+   cobro's — the CLABE's for every business born before this feature */
+export function speiBankIsKnown(business: Isp): boolean {
+  return collectBankIsKnown(business);
 }
 
 /* The channel gate, split in three (automated-collections-api D5). Until
@@ -90,7 +104,9 @@ export function speiBankIsKnown(business: Pick<Isp, "speiBank">): boolean {
    customers transfer into the void, whoever's gap it is. */
 
 /* What the business has not configured, or null when it has (FR-009):
-   the CLABE, or a bank outside apiCEP's vocabulary. `speiBank` being
+   the account (the cuenta de cobro since receipt-triage D32 — the CLABE
+   for every business born before it), or a bank outside apiCEP's
+   vocabulary. `speiBank` being
    non-empty is not enough, and BUG-008 is why: a value stored before D16
    can be truthy and still outside the list. Measured live on dev
    2026-08-19 — an ISP held `Klar` where the list says `KLAR`, so every
@@ -101,13 +117,16 @@ export function speiBankIsKnown(business: Pick<Isp, "speiBank">): boolean {
    name were all ours. */
 export type ChannelGap = "clabe" | "bank";
 
-export function channelGap(business: Pick<Isp, "speiClabe" | "speiBank">): ChannelGap | null {
-  if (!business.speiClabe) return "clabe";
+/* receipt-triage D32: "clabe" names the gap it always named — no account
+   to be paid at — now that the cuenta de cobro may be a card or a phone.
+   The word stays because /v1 and the panel already speak it. */
+export function channelGap(business: Isp): ChannelGap | null {
+  if (!collectHalves(business).value) return "clabe";
   if (!speiBankIsKnown(business)) return "bank";
   return null;
 }
 
-export function businessConfigured(business: Pick<Isp, "speiClabe" | "speiBank">): boolean {
+export function businessConfigured(business: Isp): boolean {
   return channelGap(business) === null;
 }
 
@@ -227,15 +246,29 @@ function announcingWriter(
 ): (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment> {
   let announced = payment.status;
   return async (values) => {
+    /* bug: one-open-attempt — a payer can replace an attempt while its
+       own validation is in flight. A verdict that paid it still lands:
+       Banxico says the money arrived, and by then WispHub may have heard
+       it too. Anything else — a retry slot, `invalid`, `expired` — would
+       bring a replaced attempt back to life, so it is dropped and the row
+       stays `superseded`. */
+    const paid = values.status === "confirmed" || values.status === "partial" || values.status === "unapplied";
     const [row] = await db
       .update(payments)
       .set(values)
-      .where(eq(payments.id, payment.id))
+      .where(paid ? eq(payments.id, payment.id) : and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
       .returning();
+    if (!row) {
+      const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
+      return current;
+    }
     /* prepaid-credit D2: the fee keys on the terminal verdict, once per
        payment — idempotent in the book, so every path may call it */
     await debitValidationFee(env, db, row);
-    if (isApiLink(link) && row.status !== announced) {
+    /* receipt-triage D31: a held payment is announced by the ISP's
+       decision, never before — `announced` stays where it was so the
+       accept (or the reject) is what the endpoint hears */
+    if (isApiLink(link) && row.status !== announced && row.actionOutcome !== "review") {
       announced = row.status;
       await enqueueAndDeliver(env, db, { payment: row, link, now }, defer);
     }
@@ -293,12 +326,26 @@ export async function runValidation(
   if (!env.APICEP_TOKEN) {
     return retryLater("PROVIDER_NOT_CONFIGURED");
   }
-  if (!business.speiClabe || !business.speiBank) {
+  /* receipt-triage D25, D27, D30 — the account comes from the payment,
+     never the business (FR-021). It used to be the business's CLABE read
+     fresh on every attempt, so an ISP that edited Cuenta moved every
+     payment in flight. Every row born since this feature carries the
+     account it was submitted under and the accounts registered then; a
+     row with neither was born before it, and keeps today's fallback —
+     the business's cuenta de cobro, which for such a business is its
+     CLABE — with `legacy`, so the engine finishes it under the flow it
+     started in (FR-027). */
+  const legacy = payment.beneficiary == null && payment.registeredAccounts == null;
+  const snapshot = legacy ? null : parseAccount(payment.beneficiary);
+  const beneficiary: RegisteredAccount | null = snapshot
+    ? toBeneficiary(snapshot, business.speiBeneficiaryName)
+    : collectAccount(business);
+  if (!beneficiary) {
     /* The ISP un-configured SPEI between submission and this attempt.
        The beneficiary name is not part of this check (claimed-amount D5). */
     return retryLater("SPEI_NOT_CONFIGURED");
   }
-  if (!speiBankIsKnown(business)) {
+  if (!KNOWN_BANKS.has(beneficiary.bank)) {
     /* BUG-008: retrying cannot fix the ISP's own configuration, and the
        engine's guard would refuse it with a REQUEST_REJECTED the schedule
        retries anyway. Stop here and name it, so the ISP sees a
@@ -306,14 +353,12 @@ export async function runValidation(
        for six hours. */
     return retryLater("SPEI_BANK_UNKNOWN");
   }
-
-  const beneficiary = {
-    bank: business.speiBank,
-    clabe: business.speiClabe,
-    /* claimed-amount D5: sent when configured, omitted when not — whether
-       apiCEP matches on it is unmeasured, so omitting beats guessing. */
-    ...(business.speiBeneficiaryName ? { name: business.speiBeneficiaryName } : {}),
-  };
+  /* D30: what the receipt's destination is tied against — the snapshot,
+     or the one account a legacy row knows */
+  const accounts: RegisteredAccount[] = legacy
+    ? [beneficiary]
+    : parseAccounts(payment.registeredAccounts).map((a) => toBeneficiary(a, business.speiBeneficiaryName));
+  if (!accounts.length) accounts.push(beneficiary);
   /* reading-check D1 — **legacy rows only since two-eyes-receipt D16.**
 
      The minute-two cross was how the two readings ever met: attempt 2
@@ -383,8 +428,12 @@ export async function runValidation(
      wrong day and gets a faceless `not_found` back for a real transfer.
      The manual door keeps the fallback below, because a row with no
      `proof_key` has nowhere else to go and its date came from a human. */
+  /* receipt-triage D11: a key is a clave **or** a reference — a row that
+     holds either, with the bank, the amount and the date, takes the
+     transfer door. There is no account condition: every row has its
+     account from submission (D25; the candidate list and D23 retired). */
   const accepted =
-    payment.trackingKey != null &&
+    (payment.trackingKey != null || payment.referenceNumber != null) &&
     payment.senderBank != null &&
     payment.claimedAmountCents != null &&
     payment.transferDate != null;
@@ -398,17 +447,63 @@ export async function runValidation(
      settled on something. */
   const receiptDoor = payment.proofKey != null && payment.proofMode === "receipt" && !accepted;
 
+  /* receipt-triage D1/D11: the transfer door carries exactly one key —
+     the clave when the row has one, the reference only when it has none.
+     When both exist the reference stays on the row and never travels,
+     first attempt and every retry. */
+  const byReference = !crossCheck && !receiptDoor && payment.trackingKey == null && payment.referenceNumber != null;
+
+  /* receipt-triage D17/D7: a reference the provider said matches more than
+     one transfer, or one another payment of the business already holds,
+     buys nothing on a second call with the same data. The row waits on
+     its schedule for the payer's clave — their correction supersedes it
+     (two-eyes D18) — and ends `expired` if none comes. No counter moves:
+     no call is made. */
+  if (
+    payment.trackingKey == null &&
+    (payment.lastError === "REFERENCE_AMBIGUOUS" || payment.lastError === "REFERENCE_SHARED")
+  ) {
+    return retryLater(payment.lastError);
+  }
+  /* receipt-triage D7 (FR-007): before any paid call that would search by
+     a reference, another payment of the business with the same five data
+     means the reference cannot find *this* transfer alone — the payer is
+     asked for the clave instead of the provider being paid to say so.
+     Finding none is not proof the reference is unique; the 422 above is
+     the provider's answer for that. */
+  if (byReference) {
+    const shared = await sharedReference(db, business, link, {
+      paymentId: payment.id,
+      reference: payment.referenceNumber!,
+      date: payment.transferDate ?? "",
+      senderBank: payment.senderBank ?? "",
+      amountCents: payment.claimedAmountCents ?? payment.amountCents,
+      account: snapshot,
+    });
+    if (shared) {
+      return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
+    }
+  }
+  /* bug: spei-date-rollover — a reference search asks Banxico the
+     operation day, not the calendar day the payer or the receipt gave:
+     the likelier one first, the other after a `not_found` (search-date.ts).
+     A clave search keeps the row's own date — for it the date is a hint. */
+  const search = byReference ? await referenceSearch(db, business, payment, now) : null;
   const request: ConstaRequest = crossCheck
     ? {
         receipt: { proofKey: payment.proofKey ?? "" },
-        beneficiary,
+        beneficiary: asBeneficiary(beneficiary),
         providerOcr: true,
         ...refs,
       }
     : receiptDoor
       ? {
           receipt: { proofKey: payment.proofKey ?? "" },
-          beneficiary,
+          beneficiary: asBeneficiary(beneficiary),
+          /* receipt-triage D30: the snapshot the destination is tied
+             against; D27: a row born before this feature carries `legacy`
+             instead, and the engine skips the ask and the tie for it */
+          ...(legacy ? { legacy: true as const } : { receivingAccounts: accounts }),
           ...refs,
         }
       : {
@@ -418,7 +513,9 @@ export async function runValidation(
                The fallback is the manual door's alone now (D20): every
                other row that reaches here has a date, because a row
                without one took the receipt door above. */
-            date: payment.transferDate ?? now.toISOString().slice(0, 10),
+            /* bug: spei-date-rollover — the fallback is the business's
+               day: the UTC date is tomorrow from 18:00 in Mexico City */
+            date: search?.date ?? payment.transferDate ?? businessWallClock(business.timezone, now).date,
             /* partial-payment D5: the amount is a **search criterion**,
                not an assertion. Asking with what we expected finds
                nothing when the payer fell short, so what travels is what
@@ -428,8 +525,10 @@ export async function runValidation(
                debt). The fallback covers rows born before that field. */
             amountCents: payment.claimedAmountCents ?? payment.amountCents,
             senderBank: payment.senderBank ?? "",
-            trackingKey: payment.trackingKey ?? "",
-            beneficiary,
+            ...(payment.trackingKey != null
+              ? { trackingKey: payment.trackingKey }
+              : { referenceNumber: payment.referenceNumber ?? "" }),
+            beneficiary: asBeneficiary(beneficiary),
           },
           ...refs,
         };
@@ -447,10 +546,18 @@ export async function runValidation(
      landed, which is knowable only in advance. */
   const isRetry = payment.validationAttempts > 0 || payment.constaStatus !== null;
   const attempts = payment.validationAttempts + 1;
-  await db
+  /* bug: one-open-attempt — the claim is also the last look before a
+     paid call: an attempt the payer replaced since it was read (the
+     sweep's batch, the inline attempt's insert) is not asked about */
+  const [claimed] = await db
     .update(payments)
     .set({ validationAttempts: attempts })
-    .where(eq(payments.id, payment.id));
+    .where(and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
+    .returning();
+  if (!claimed) {
+    const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    return current;
+  }
 
   let verdict;
   /* consta-api-merge D3: the business is the identity — the refs above
@@ -461,10 +568,34 @@ export async function runValidation(
      whether or not waiting can help; the row keeps the engine's own
      code so the ISP can see which it was. */
   try {
-    verdict = await consta(env, db, { businessId: business.id }).validate(request);
+    verdict = await consta(env, db, { businessId: business.id }, {
+      /* receipt-triage D7 (converge T060): the question only the lifecycle
+         can answer, asked by the engine on the receipt door */
+      referenceTaken: (r) =>
+        sharedReference(db, business, link, {
+          paymentId: payment.id,
+          reference: r.referenceNumber,
+          date: r.date,
+          senderBank: r.senderBank,
+          amountCents: r.amountCents,
+          account: fromBeneficiary(r.account),
+        }),
+    }).validate(request);
   } catch (e) {
     const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
     console.error("consta validation failed:", code);
+    /* receipt-triage D17 (FR-007): the provider's 422 — the reference
+       matches more than one transfer. The one remedy is the clave, so the
+       payer is asked for it alone, and the slots stop calling (above)
+       until it arrives. */
+    if (e instanceof ConstaError && e.hint === "provide_tracking_key" && byReference) {
+      return retryLater("REFERENCE_AMBIGUOUS", { disputedFields: JSON.stringify(["trackingKey"]) });
+    }
+    /* receipt-triage D7 (FR-007): the receipt door's own stop — the row
+       asks for the clave, and the slots after it make no call (above) */
+    if (e instanceof ConstaError && e.code === "RECEIPT_REFERENCE_SHARED") {
+      return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
+    }
     return retryLater(code);
   }
 
@@ -474,7 +605,23 @@ export async function runValidation(
     validationAttempts: attempts,
     constaValidationId: verdict.validationId,
     constaStatus: verdict.status,
+    /* receipt-triage D22/D30: the account the engine named on the receipt
+       door — the one the receipt's digits tied, retired ones included —
+       is the account this payment is checked against from now on */
+    ...(verdict.beneficiaryUsed && !legacy
+      ? { beneficiary: JSON.stringify(fromBeneficiary(verdict.beneficiaryUsed)) }
+      : {}),
   };
+
+  /* receipt-triage D31 (FR-020a, converge T058): money paid to an account
+     the business removed waits for the business's own decision, and a
+     provisional release would reconnect the customer before it — so none
+     fires for it, whatever the evidence. The account this attempt was
+     checked against is the verdict's when it named one, else the row's. */
+  const paidToRetired = Boolean(
+    verdict.beneficiaryUsed ? verdict.beneficiaryUsed.retired : snapshot?.retired,
+  );
+  const releasable = <E,>(evidence: E | null): E | null => (paidToRetired ? null : evidence);
 
   /* provisional-release D12 — the shadow only writes. The trust block as
      received rides the same row update the release evaluation was going
@@ -531,6 +678,9 @@ export async function runValidation(
             ...(verdict.accepted
               ? {
                   trackingKey: verdict.accepted.trackingKey,
+                  /* receipt-triage D13: the reference both keys rode
+                     with, or the one the fallback settled on */
+                  referenceNumber: verdict.accepted.referenceNumber,
                   senderBank: verdict.accepted.senderBank,
                   transferDate: verdict.accepted.date,
                   claimedAmountCents: verdict.accepted.amountCents,
@@ -539,7 +689,14 @@ export async function runValidation(
           }
         : crossCheck
           ? { ...classifyReading(payment, verdict.reading ?? null), readingCheckAttempt: attempts }
-          : {};
+          : /* receipt-triage D13 (clarified 2026-09-24): a disputed clave
+               fell back to a reference both readings held, and Banxico
+               found nothing with it. Now the payer is asked — for the
+               clave or the reference, either one enough — while the
+               slots keep searching with the reference meanwhile. */
+            byReference && payment.readingCheck === "disputed" && payment.acceptedFrom !== "human"
+            ? { readingCheck: payment.readingCheck, disputedFields: JSON.stringify(["trackingKey", "referenceNumber"]) }
+            : {};
 
       /* two-eyes-receipt D20 + FR-010: a settled classification is taken
          once, and a later call may only improve it.
@@ -590,10 +747,12 @@ export async function runValidation(
         integration,
         link,
         payment,
-        releaseEvidenceFor(payment, "not_found", classification) ??
-          /* D12 graduation, first privilege: a rich, clean record vouches
-             where the machines could not read. Inert until K exists. */
-          (historyVouches(verdict.trust) ? "history" : null),
+        releasable(
+          releaseEvidenceFor(payment, "not_found", classification) ??
+            /* D12 graduation, first privilege: a rich, clean record vouches
+               where the machines could not read. Inert until K exists. */
+            (historyVouches(verdict.trust) ? "history" : null),
+        ),
         now,
       );
       /* learned-retry D6: the verdict may carry the learned moment when
@@ -625,7 +784,7 @@ export async function runValidation(
       integration,
       link,
       payment,
-      releaseEvidenceFor(payment, "pending"),
+      releasable(releaseEvidenceFor(payment, "pending")),
       now,
     );
     const slot = nextValidationSlot(payment.createdAt, now, {
@@ -646,6 +805,12 @@ export async function runValidation(
 
   /* valid — necessary, not sufficient (D11): the CEP must match the debt */
 
+  /* bug: spei-date-rollover — counted, so how often the first guess
+     missed is a query over the logs and not a guess */
+  if (search && search.date !== search.primary) {
+    console.log(`spei-date-rollover: payment ${payment.id} found on ${search.date}, first guessed ${search.primary}`);
+  }
+
   if (
     verdict.alreadyValidated &&
     !isRetry &&
@@ -664,6 +829,36 @@ export async function runValidation(
   }
 
   const cep = verdict.cep;
+
+  /* receipt-triage D22 (amended 2026-09-24): Banxico's own word on the
+     receiving account outranks what the receipt's digits tied. Tied to
+     the snapshot → that is the account; a whole account number that fits
+     none of the ISP's accounts is a transfer to somebody else, however
+     the CEP otherwise matched. A masked or absent one changes nothing. */
+  let checkedAccount: RegisteredAccount = verdict.beneficiaryUsed ?? beneficiary;
+  if (!legacy && cep?.beneficiaryAccount) {
+    const tie = tieCepAccount(cep.beneficiaryAccount, accounts);
+    if (tie === "contradicts") {
+      return update({
+        ...base,
+        status: "invalid",
+        nextValidationAt: null,
+        lastError: "TRANSFER_CONTRADICTED",
+      });
+    }
+    if (typeof tie === "object") {
+      checkedAccount = tie.tied;
+      if (!sameAccount(tie.tied, verdict.beneficiaryUsed ?? beneficiary)) {
+        Object.assign(base, { beneficiary: JSON.stringify(fromBeneficiary(tie.tied)) });
+      }
+    }
+  }
+  /* receipt-triage D31 (FR-020a): paid to an account the ISP removed —
+     Banxico confirmed it, and the ISP decides whether that money is its
+     own. Held, never settled, until someone who operates payments
+     accepts or rejects it. */
+  let hold: "retired_account" | "no_clave" | null = checkedAccount.retired ? "retired_account" : null;
+
   /* partial-payment D1 replaces the `AMOUNT_MISMATCH` refusal that stood
      here. A CEP that disagrees with the expected total is not a lie — it
      is a transfer that really happened for a different amount, with the
@@ -737,10 +932,16 @@ export async function runValidation(
     payment.acceptedFrom === "agreed" ||
     payment.acceptedFrom === "reader" ||
     payment.acceptedFrom === "provider";
+  /* receipt-triage D14: a row found by reference — typed or read — earns
+     it too, whatever its `proof_mode`: without Banxico's clave on the row
+     the unique index could not stop the same transfer paying twice, once
+     by its reference and once by its clave (direct-payment D8). Written
+     before the confirmation, so a clave already used refuses the row
+     before it can confirm (FR-006). */
   const adoptKey =
     cep?.trackingKey &&
     (!payment.trackingKey
-      ? payment.proofMode === "receipt"
+      ? true
       : (crossCheck || machineKey) && cep.trackingKey !== payment.trackingKey);
   if (adoptKey && cep?.trackingKey) {
     try {
@@ -765,6 +966,50 @@ export async function runValidation(
     }
   }
 
+  /* receipt-triage FR-006 — the guard for a case never observed: Banxico
+     confirmed a transfer found by reference, and its CEP carries no
+     clave. Nothing is invented; the clave stays empty, so the unique
+     index cannot guard this row, and the two things that can stand in for
+     it are asked instead. The provider saying the CEP was validated
+     before, or another *confirmed* payment of the business holding the
+     same reference, date, bank, amount and account — the payer's own
+     earlier payment on this same link included (analyze 2026-09-24, I1) —
+     refuses it as already used. The provider unable to say either way
+     holds it for the ISP (D31). Only "never validated" and no twin
+     confirms it. */
+  if (!payment.trackingKey && !cep?.trackingKey) {
+    console.error(`unexpected: CEP without clave on payment ${payment.id}`);
+    const twin = payment.referenceNumber
+      ? await sharedReference(
+          db,
+          business,
+          link,
+          {
+            paymentId: payment.id,
+            reference: payment.referenceNumber,
+            date: cep?.date ?? payment.transferDate ?? "",
+            senderBank: payment.senderBank ?? "",
+            amountCents: payment.claimedAmountCents ?? payment.amountCents,
+            account: fromBeneficiary(checkedAccount),
+          },
+          { confirmedOnly: true, includeSameLink: true },
+        )
+      : false;
+    /* A `true` flag with no trace of our own attempt was refused above
+       (D8); reaching here with it means our own lost attempt set it — and
+       with no clave there is nothing to tell that apart from a stranger's
+       use, so the ISP decides. */
+    if (twin || (verdict.previouslyValidated === true && !isRetry)) {
+      return update({
+        ...base,
+        status: "invalid",
+        nextValidationAt: null,
+        lastError: "TRANSFER_ALREADY_USED",
+      });
+    }
+    if (verdict.previouslyValidated !== false) hold ??= "no_clave";
+  }
+
   /* automated-collections-api D7: the seam. Read top to bottom this
      function is two halves — everything above (claim the row, ask the
      engine, reconcile the CEP, adopt the key) IS the SPEI validation and
@@ -780,7 +1025,7 @@ export async function runValidation(
      the schedule is spent (FR-026); with no address registered nothing
      is sent and the outcome stays null. */
   if (isApiLink(link)) {
-    return settleApiPayment(db, update, payment, link, business, cep ?? null, base, now);
+    return settleApiPayment(db, update, payment, link, business, cep ?? null, base, now, hold);
   }
   if (!isPanelLink(link)) {
     throw new Error(`payment ${payment.id} sits on a link that is neither panel nor API (${link.id})`);
@@ -826,7 +1071,7 @@ export async function runValidation(
          sweep's list can answer, as it would for a provider outage. */
       return retryLater("WISPHUB_READ_INCOMPLETE", base);
     }
-    /* The money already moved to the ISP's CLABE: never register a
+    /* The money already moved to the ISP's account: never register a
        second WispHub payment, never drop the proof (D14). */
     return update({
       ...base,
@@ -919,6 +1164,32 @@ export async function runValidation(
      ahora" later dispatches. The invoice id rides along so that
      dispatch reuses it (TD-009's guard). No ledger row: the gate sits
      before dispatch, and the observation outcome IS the record (D6). */
+  /* receipt-triage D31: the hold, BEFORE any dispatch — the observation
+     gate's own place and shape (integrations-hub D4/D5). The verdict
+     lands whole — folio, customer, class, the settled amount, what the
+     mapping would execute — and nothing reaches WispHub, the queue or a
+     webhook until the ISP decides (`POST /payments/:id/review`). The
+     status is the settlement's (`confirmed`, or `partial` when short):
+     Banxico's verdict is not rewritten by holding it. */
+  if (hold) {
+    return update({
+      ...base,
+      receivedCents,
+      status: settlement.status,
+      reconciliationClass: klass,
+      confirmedAt: now,
+      cepSenderName: cep?.senderName ?? null,
+      nextValidationAt: null,
+      lastError: null,
+      actionOutcome: "review",
+      reviewReason: hold,
+      observedAction: hypothesisOf(action, settlement.reconnect),
+      wisphubInvoiceId: invoiceId,
+      actionAttempts: 0,
+      nextAttemptAt: null,
+    });
+  }
+
   if (!integration.actionsEnabled) {
     return update({
       ...base,
@@ -953,7 +1224,7 @@ export async function runValidation(
   });
   const attempt = await attemptReconnection(
     wisphub,
-    business.id,
+    business,
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
     settlement.ispRegisteredCents,
     now,
@@ -1027,6 +1298,8 @@ async function settleApiPayment(
   cep: { amountCents?: number | null; senderName?: string | null } | null,
   base: Partial<typeof payments.$inferInsert>,
   now: Date,
+  /* receipt-triage D31: why this verdict waits for the business */
+  hold: "retired_account" | "no_clave" | null = null,
 ): Promise<DirectPayment> {
   const receivedCents = cep?.amountCents ?? payment.amountCents;
   /* Rows born before `asked_cents` existed fall back to the link's ask */
@@ -1053,6 +1326,19 @@ async function settleApiPayment(
     toleranceCents: business.toleranceCents,
   });
   const status = klass === "short" ? "partial" : "confirmed";
+  /* receipt-triage D31: held — the link stays open and nothing is
+     announced (the writer skips a `review` row); the business's accept
+     closes and announces, its reject announces `invalid` */
+  if (hold) {
+    return update({
+      ...facts,
+      folio: makeFolio(),
+      status,
+      reconciliationClass: klass,
+      actionOutcome: "review",
+      reviewReason: hold,
+    });
+  }
   if (status === "confirmed" && link.mode === "one_time") {
     await db
       .update(paymentLinks)
@@ -1121,6 +1407,113 @@ export async function advanceTestPayment(
     default:
       return update({ ...undue, status: advance.status });
   }
+}
+
+/* bug: spei-date-rollover — the day this attempt's reference search asks,
+   and the one the rule guessed first (search-date.ts).
+
+   The time is the one the receipt printed, from the reader's record of
+   this row's own proof — and only when that record read the same date the
+   row holds, so the time belongs to the day being searched. A typed row
+   has no proof and the submission stands in (`created_at`).
+
+   The previous search is the row's last provider call, which the engine
+   recorded (`consta_validation_id`): a transfer-door call by reference,
+   with the day it asked and whether Banxico said `not_found`. */
+async function referenceSearch(
+  db: DB,
+  business: Pick<Isp, "id" | "timezone">,
+  payment: DirectPayment,
+  now: Date,
+): Promise<{ date: string; primary: string }> {
+  const date = payment.transferDate ?? businessWallClock(business.timezone, now).date;
+  let time: string | null = null;
+  if (payment.proofKey && payment.transferDate) {
+    const [printed] = await db
+      .select({ time: extractions.transferTime })
+      .from(extractions)
+      .where(
+        and(
+          eq(extractions.businessId, business.id),
+          eq(extractions.proofKey, payment.proofKey),
+          eq(extractions.source, "reader"),
+          eq(extractions.transferDate, payment.transferDate),
+          isNotNull(extractions.transferTime),
+        ),
+      )
+      .orderBy(desc(extractions.createdAt))
+      .limit(1);
+    time = printed?.time ?? null;
+  }
+  const dates = searchDates({ date, time, submittedAt: payment.createdAt });
+
+  let previous: { date: string; notFound: boolean } | null = null;
+  if (payment.constaValidationId) {
+    const [last] = await db
+      .select({
+        mode: validations.mode,
+        trackingKey: validations.trackingKey,
+        referenceNumber: validations.referenceNumber,
+        transferDate: validations.transferDate,
+        status: validations.status,
+        reason: validations.reason,
+      })
+      .from(validations)
+      .where(and(eq(validations.id, payment.constaValidationId), eq(validations.businessId, business.id)));
+    if (last?.mode === "transfer" && last.trackingKey == null && last.referenceNumber != null && last.transferDate) {
+      previous = { date: last.transferDate, notFound: last.status === "invalid" && last.reason === "not_found" };
+    }
+  }
+  return { date: nextSearchDate(dates, previous), primary: dates.primary };
+}
+
+/* receipt-triage D7 (clarified 2026-09-24) — another payment of the same
+   business that a reference search could not tell apart from this one:
+   the same reference, transfer date, sending bank, amount and receiving
+   account, not `superseded`. From another link by default — a payer
+   re-uploading or correcting their own payment is the same link, never a
+   match (spec Edge Cases). The account rules nothing out while either
+   side's is unknown (a row born before this feature has none). The
+   FR-006 guard asks with `confirmedOnly` and `includeSameLink`: "no
+   other confirmed payment of the business" includes the payer's own
+   earlier one (analyze 2026-09-24, I1). Never unique by design, so a
+   match is a reason to ask for the clave — and finding none proves
+   nothing. */
+export async function sharedReference(
+  db: DB,
+  business: Pick<Isp, "id">,
+  link: Pick<PaymentLink, "id">,
+  data: {
+    paymentId?: string | null;
+    reference: string;
+    date: string;
+    senderBank: string;
+    amountCents: number;
+    account: import("./accounts").StoredAccount | null;
+  },
+  opts: { confirmedOnly?: boolean; includeSameLink?: boolean } = {},
+): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(payments)
+    .where(
+      and(
+        eq(payments.businessId, business.id),
+        eq(payments.referenceNumber, data.reference),
+        eq(payments.transferDate, data.date),
+        opts.confirmedOnly
+          ? inArray(payments.status, ["confirmed", "partial", "unapplied"])
+          : ne(payments.status, "superseded"),
+        ...(opts.includeSameLink ? [] : [ne(payments.paymentLinkId, link.id)]),
+        ...(data.paymentId ? [ne(payments.id, data.paymentId)] : []),
+      ),
+    );
+  return rows.some((r) => {
+    if (r.senderBank !== data.senderBank) return false;
+    if ((r.claimedAmountCents ?? r.amountCents) !== data.amountCents) return false;
+    const theirs = parseAccount(r.beneficiary);
+    return !theirs || !data.account || (theirs.kind === data.account.kind && theirs.value === data.account.value);
+  });
 }
 
 export type DirectSweepReport = {

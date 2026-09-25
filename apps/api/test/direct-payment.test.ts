@@ -2,16 +2,17 @@ import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { asc, eq } from "drizzle-orm";
-import { extractions, payments, paymentLinks, proofRejections } from "../src/db/schema";
-import { sweepDirectPayments } from "../src/direct-payments/validation";
+import { businesses, extractions, payments, paymentLinks, proofRejections } from "../src/db/schema";
+import { runValidation, sweepDirectPayments } from "../src/direct-payments/validation";
+import { integrationOf } from "../src/integrations/store";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
 import { historyVouches } from "../src/direct-payments/provisional";
 import type { Bindings } from "../src/env";
 import { app, fakeProofs, seedBusiness } from "./helpers";
-import { resetShapeRules } from "../src/consta/extraction";
-import { aiReturning, PNG, seedValidations } from "./consta/helpers";
+import { resetShapeRules, sha256Hex } from "../src/consta/extraction";
+import { aiReturning, PNG, RECEIPT_1_READING, RECEIPT_2_READING, seedValidations } from "./consta/helpers";
 
 /* business-and-memberships D6: a payment that confirmed carries its folio
    on the same row — "the charge" of the old two-table world. */
@@ -136,6 +137,9 @@ type VerdictData = {
   /* proof-extraction D11: what the provider's OCR read, in the engine's
      cents; travels as apiCEP's `extracted` in pesos */
   reading?: Record<string, unknown>;
+  /* receipt-triage FR-006: the provider's replay flag as it answers it,
+     `null` included — `alreadyValidated` above only says true or false */
+  previouslyValidated?: boolean | null;
 };
 
 /* trust-layer US-V15: the block exactly as the engine ships it — the D8
@@ -182,6 +186,8 @@ function apiCepWire(data: VerdictData): Record<string, unknown> {
         senderName: cep.senderName,
         receiverBank: cep.receiverBank,
         beneficiaryName: cep.beneficiaryName,
+        /* receipt-triage D22 */
+        ...(cep.beneficiaryAccount !== undefined ? { beneficiaryAccount: cep.beneficiaryAccount } : {}),
       }
     : undefined;
   const cepStatus =
@@ -200,7 +206,8 @@ function apiCepWire(data: VerdictData): Record<string, unknown> {
     status,
     validation: {
       banxicoConfirmed: status === "valid",
-      cepPreviouslyValidated: data.alreadyValidated ?? false,
+      cepPreviouslyValidated:
+        "previouslyValidated" in data ? data.previouslyValidated : (data.alreadyValidated ?? false),
       ...(cepStatus ? { cepStatus } : {}),
       ...(cepDetails ? { cepDetails } : {}),
     },
@@ -1248,9 +1255,9 @@ describe("D8: one transfer pays once", () => {
 
     /* Same clave while the first row is still validating: a deterministic
        misread re-uploaded, the payer racing only themselves. No second
-       row, no Consta call — the answer is the row they already own. */
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices(undefined, 1);
+       row, no Consta call — the answer is the row they already own.
+       bug: one-open-attempt — and no WispHub read either: the identical
+       submission is recognised before anything is asked of anyone. */
     const second = await payTransfer();
     expect(second.status).toBe(200);
     const { data } = await second.json();
@@ -1377,9 +1384,9 @@ describe("D8: one transfer pays once", () => {
       });
 
     /* The transfer already bought something: attaching would show a live
-       "Verificando" over a consumed clave. The refusal is honest here. */
-    mockCustomerLookup([wisphubCustomer()], 1);
-    mockPendingInvoices(undefined, 1);
+       "Verificando" over a consumed clave. The refusal is honest here.
+       bug: one-open-attempt — and it comes before any read: the same
+       data as a paid attempt of this link asks WispHub nothing. */
     const res = await payTransfer();
     expect(res.status).toBe(409);
     const body = await res.json();
@@ -3420,5 +3427,1067 @@ describe("two-eyes-receipt US4: the answer never waits", () => {
     [row] = await db.select().from(payments);
     expect(row.status).toBe("confirmed");
     expect(row.validationAttempts).toBe(2);
+  });
+});
+
+/* ======================================================================
+   receipt-triage (specs/010-receipt-triage): the reference as a key, the
+   ask, the account a payment is checked against, and the review hold.
+   ====================================================================== */
+
+/* The spec's CLABE: receipt 1 shows 8195, receipt 2 shows 195 */
+const RT_CLABE = "012180001234538195";
+const RT_ACCOUNT = { kind: "clabe", value: RT_CLABE, bank: "STP" };
+const TODAY = () => new Date().toISOString().slice(0, 10);
+
+async function seedRtBusiness(overrides: Parameters<typeof seedBusiness>[0] = {}) {
+  return seedLinkedBusiness({ speiClabe: RT_CLABE, ...overrides });
+}
+
+/* A row born since this feature: it carries its account and the accounts
+   registered at submission (D25, D30) */
+async function seedRtRow(
+  link: { id: string },
+  business: { id: string },
+  over: Partial<typeof payments.$inferInsert> = {},
+) {
+  const [row] = await drizzle(env.DB)
+    .insert(payments)
+    .values({
+      paymentLinkId: link.id,
+      businessId: business.id,
+      amountCents: 51400,
+      invoiceCents: 49900,
+      serviceFeeCents: 1500,
+      proofMode: "transfer",
+      claimedAmountCents: 51400,
+      beneficiary: JSON.stringify(RT_ACCOUNT),
+      registeredAccounts: JSON.stringify([RT_ACCOUNT]),
+      nextValidationAt: new Date(Date.now() - 1000),
+      ...over,
+    })
+    .returning();
+  return row;
+}
+
+const rowById = async (id: string) =>
+  (await drizzle(env.DB).select().from(payments).where(eq(payments.id, id)))[0];
+
+const REF_TRANSFER = (over: Record<string, unknown> = {}) => ({
+  transfer: { referenceNumber: "038195", senderBank: "NUBANK", date: TODAY(), amountCents: 51400, ...over },
+});
+
+describe("receipt-triage US1: the referencia numérica finds the transfer", () => {
+  beforeEach(() => resetShapeRules());
+
+  it("(a) a typed submission with only a reference is accepted, and the provider searches with it and no clave", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+
+    const res = await payTransfer("tok2345abcdefgh2", REF_TRANSFER());
+    expect(res.status).toBe(201);
+    const sender = captured.body!.sender as Record<string, unknown>;
+    expect(sender.referenceNumber).toBe("038195");
+    expect("trackingKey" in sender).toBe(false);
+    const [row] = await drizzle(env.DB).select().from(payments);
+    expect(row.referenceNumber).toBe("038195");
+    expect(row.trackingKey).toBeNull();
+    /* D25: typed data is checked against the cuenta de cobro, snapshotted */
+    expect(JSON.parse(row.beneficiary!)).toEqual(RT_ACCOUNT);
+  });
+
+  it("(b) with both keys only the clave travels — first attempt and every retry after not_found (D1)", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const first = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await payTransfer("tok2345abcdefgh2", REF_TRANSFER({ trackingKey: "TRACK001XYZ" }));
+    expect((first.body!.sender as Record<string, unknown>).trackingKey).toBe("TRACK001XYZ");
+    expect("referenceNumber" in (first.body!.sender as Record<string, unknown>)).toBe(false);
+
+    const [row] = await drizzle(env.DB).select().from(payments);
+    expect(row.referenceNumber).toBe("038195");
+    const retry = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, new Date(row.nextValidationAt!.getTime() + 1000));
+    expect((retry.body!.sender as Record<string, unknown>).trackingKey).toBe("TRACK001XYZ");
+    expect("referenceNumber" in (retry.body!.sender as Record<string, unknown>)).toBe(false);
+  });
+
+  it("(c) a disputed clave that fell back to the reference searches with it, asks nothing, and adopts Banxico's clave on valid (D13, D14)", async () => {
+    const { business, link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/p-c`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, { proofMode: "receipt", proofKey: `${link.id}/p-c` });
+    const AI = aiReturning({
+      esComprobante: true,
+      claveDeRastreo: "AZTK12345678",
+      referenciaNumerica: "038195",
+      banco: "AZTECA",
+      monto: 514,
+      fecha: TODAY(),
+      destino: { tipo: "clabe", digitos: "8195" },
+    });
+    const readerEnv = { ...testEnv, AI } as typeof testEnv;
+    mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: { trackingKey: "AZTK12345679", referenceNumber: "038195", amountCents: 51400, senderBank: "AZTECA", date: TODAY() },
+    });
+    await sweepDirectPayments(readerEnv, new Date());
+    const fell = await rowById(row.id);
+    expect(fell.readingCheck).toBe("disputed");
+    expect(fell.disputedFields).toBeNull();
+    expect(fell.trackingKey).toBeNull();
+    expect(fell.referenceNumber).toBe("038195");
+
+    /* the next slot: the transfer door, the reference, no clave */
+    const captured = mockApiCep({ cep: { ...DEFAULT_CEP, trackingKey: "AZTECA0909BANXICO1" } });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    await sweepDirectPayments(readerEnv, new Date(fell.nextValidationAt!.getTime() + 1000));
+    const sender = captured.body!.sender as Record<string, unknown>;
+    expect(sender.referenceNumber).toBe("038195");
+    expect("trackingKey" in sender).toBe(false);
+    const done = await rowById(row.id);
+    expect(done.status).toBe("confirmed");
+    expect(done.trackingKey).toBe("AZTECA0909BANXICO1");
+  });
+
+  it("(c) …and when that search finds nothing, the payer is asked for either key while the slots keep searching with the reference", async () => {
+    const { business, link } = await seedRtBusiness();
+    const row = await seedRtRow(link, business, {
+      proofMode: "receipt",
+      proofKey: `${link.id}/p-c2`,
+      referenceNumber: "038195",
+      senderBank: "AZTECA",
+      transferDate: TODAY(),
+      readingCheck: "disputed",
+      acceptedFrom: "agreed",
+    });
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, new Date());
+    const asked = await rowById(row.id);
+    expect(JSON.parse(asked.disputedFields!)).toEqual(["trackingKey", "referenceNumber"]);
+    expect(asked.status).toBe("validating");
+
+    const again = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, new Date(asked.nextValidationAt!.getTime() + 1000));
+    expect((again.body!.sender as Record<string, unknown>).referenceNumber).toBe("038195");
+  });
+
+  it("(d) receipt 2: the provider agrees on 038195, and the next slot takes the transfer door with it (SC-002)", async () => {
+    const { business, link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/p-d`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, { proofMode: "receipt", proofKey: `${link.id}/p-d`, claimedAmountCents: null });
+    const readerEnv = { ...testEnv, AI: aiReturning(RECEIPT_2_READING) } as typeof testEnv;
+    const first = mockApiCep({
+      status: "invalid",
+      reason: "not_found",
+      cep: undefined,
+      reading: { trackingKey: null, referenceNumber: "038195", amountCents: 35000, senderBank: "AZTECA", date: "2026-09-09" },
+    });
+    await sweepDirectPayments(readerEnv, new Date());
+    expect(String(first.body!.imageUrl)).toContain("p-d");
+    const agreed = await rowById(row.id);
+    expect(agreed.readingCheck).toBe("agreed");
+    expect(agreed.referenceNumber).toBe("038195");
+
+    const second = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(readerEnv, new Date(agreed.nextValidationAt!.getTime() + 1000));
+    expect((second.body!.sender as Record<string, unknown>).referenceNumber).toBe("038195");
+    expect(second.body!.imageUrl).toBeUndefined();
+  });
+
+  it("(e) a transfer confirmed by reference carries Banxico's clave, and a second payment whose search returns it is already used (D14, FR-006)", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockReconnection("Activo");
+    mockApiCep({ cep: { ...DEFAULT_CEP, trackingKey: "BANXICOCLAVE001" } });
+    await payTransfer("tok2345abcdefgh2", REF_TRANSFER());
+    const [first] = await drizzle(env.DB).select().from(payments);
+    expect(first.status).toBe("confirmed");
+    expect(first.trackingKey).toBe("BANXICOCLAVE001");
+
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ cep: { ...DEFAULT_CEP, trackingKey: "BANXICOCLAVE001" } });
+    const res = await payTransfer("tok2345abcdefgh2", REF_TRANSFER({ referenceNumber: "038196" }));
+    const second = await rowById((await res.json()).data.directPaymentId);
+    expect(second.status).toBe("invalid");
+    expect(second.lastError).toBe("TRANSFER_ALREADY_USED");
+  });
+
+  it("(f) the provider's 422 asks for the clave, and no later slot pays for the same refusal (D17, SC-005)", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    apicep()
+      .intercept({ method: "POST", path: "/validate-transfer" })
+      .reply(422, JSON.stringify({ error: "Referencia duplicada en Banxico (requiere clave de rastreo)" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    const res = await payTransfer("tok2345abcdefgh2", REF_TRANSFER());
+    const { data } = await res.json();
+    expect(data.error).toBe("REFERENCE_AMBIGUOUS");
+    const row = await rowById(data.directPaymentId);
+    expect(JSON.parse(row.disputedFields!)).toEqual(["trackingKey"]);
+    expect(row.lastError).toBe("REFERENCE_AMBIGUOUS");
+
+    /* no interceptor: a provider call here would fail the test */
+    await sweepDirectPayments(testEnv, new Date(row.nextValidationAt!.getTime() + 1000));
+    const still = await rowById(row.id);
+    expect(still.status).toBe("validating");
+    expect(still.validationAttempts).toBe(row.validationAttempts);
+
+    /* the payer's clave supersedes it */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "pending", cep: undefined });
+    const fix = await payTransfer("tok2345abcdefgh2", {
+      ...REF_TRANSFER({ trackingKey: "TRACK001XYZ" }),
+      supersedes: row.id,
+    });
+    expect(fix.status).toBe(201);
+    expect((await rowById(row.id)).status).toBe("superseded");
+  });
+
+  it("(g) a generic reference with no clave is refused by the contract", async () => {
+    await seedRtBusiness();
+    const res = await payTransfer("tok2345abcdefgh2", REF_TRANSFER({ referenceNumber: "1234567" }));
+    expect(res.status).toBe(400);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(0);
+  });
+
+  it("(h) another link's payment with the same five data: the typed reference is refused REFERENCE_SHARED, nothing created (D7)", async () => {
+    const { business, link } = await seedRtBusiness();
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokother00000001", wisphubCustomerId: "7", customerUsuario: "otro@wifiplus" })
+      .returning();
+    await seedRtRow(other, business, {
+      referenceNumber: "038195",
+      senderBank: "NUBANK",
+      transferDate: TODAY(),
+      nextValidationAt: null,
+      status: "confirmed",
+    });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const res = await payTransfer("tok2345abcdefgh2", REF_TRANSFER());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("REFERENCE_SHARED");
+    const mine = (await drizzle(env.DB).select().from(payments)).filter((p) => p.paymentLinkId === link.id);
+    expect(mine).toHaveLength(0);
+  });
+
+  it("(h) the same link's own earlier row never matches", async () => {
+    const { business, link } = await seedRtBusiness();
+    await seedRtRow(link, business, {
+      referenceNumber: "038195",
+      senderBank: "NUBANK",
+      transferDate: TODAY(),
+      nextValidationAt: null,
+      status: "expired",
+    });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "pending", cep: undefined });
+    expect((await payTransfer("tok2345abcdefgh2", REF_TRANSFER())).status).toBe(201);
+  });
+
+  it("(h) a row whose accepted reference is shared makes no provider call, and asks for the clave", async () => {
+    const { business, link } = await seedRtBusiness();
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokother00000002", wisphubCustomerId: "7", customerUsuario: "otro@wifiplus" })
+      .returning();
+    const shared = { referenceNumber: "038195", senderBank: "AZTECA", transferDate: TODAY() };
+    await seedRtRow(other, business, { ...shared, nextValidationAt: null, status: "confirmed" });
+    const row = await seedRtRow(link, business, { ...shared, proofMode: "receipt", proofKey: `${link.id}/p-h`, acceptedFrom: "agreed" });
+    await sweepDirectPayments(testEnv, new Date());
+    const after = await rowById(row.id);
+    expect(after.lastError).toBe("REFERENCE_SHARED");
+    expect(JSON.parse(after.disputedFields!)).toEqual(["trackingKey"]);
+    expect(after.validationAttempts).toBe(0);
+  });
+});
+
+describe("receipt-triage US1: a confirmation whose CEP carries no clave (FR-006 guard)", () => {
+  const noClave = { ...DEFAULT_CEP, trackingKey: null };
+
+  it("never validated before and no confirmed twin: confirms with the clave empty", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockReconnection("Activo");
+    mockApiCep({ cep: noClave, previouslyValidated: false });
+    const { data } = await (await payTransfer("tok2345abcdefgh2", REF_TRANSFER())).json();
+    const row = await rowById(data.directPaymentId);
+    expect(row.status).toBe("confirmed");
+    expect(row.trackingKey).toBeNull();
+  });
+
+  it("the provider says it was validated before: already used", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ cep: noClave, previouslyValidated: true });
+    const { data } = await (await payTransfer("tok2345abcdefgh2", REF_TRANSFER())).json();
+    expect(await rowById(data.directPaymentId)).toMatchObject({ status: "invalid", lastError: "TRANSFER_ALREADY_USED" });
+  });
+
+  it("a confirmed twin with the same five data — on this same link — is already used", async () => {
+    const { business, link } = await seedRtBusiness();
+    await seedRtRow(link, business, {
+      referenceNumber: "038195",
+      senderBank: "NUBANK",
+      transferDate: DEFAULT_CEP.date,
+      nextValidationAt: null,
+      status: "confirmed",
+    });
+    const row = await seedRtRow(link, business, {
+      referenceNumber: "038195",
+      senderBank: "NUBANK",
+      transferDate: DEFAULT_CEP.date,
+    });
+    mockApiCep({ cep: noClave, previouslyValidated: false });
+    await sweepDirectPayments(testEnv, new Date());
+    expect(await rowById(row.id)).toMatchObject({ status: "invalid", lastError: "TRANSFER_ALREADY_USED" });
+  });
+
+  it("the provider cannot say: held for the business, never queued (D31)", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockPendingInvoices(undefined, 2);
+    mockApiCep({ cep: noClave, previouslyValidated: null });
+    const { data } = await (await payTransfer("tok2345abcdefgh2", REF_TRANSFER())).json();
+    const row = await rowById(data.directPaymentId);
+    expect(row).toMatchObject({ status: "confirmed", actionOutcome: "review", reviewReason: "no_clave" });
+    expect(row.nextAttemptAt).toBeNull();
+
+    /* receipt-triage US3 (T013): the queue never takes it, and the payer reads "en revisión" */
+    const report = await sweepReconnections(testEnv, new Date(Date.now() + 3600_000));
+    expect(report.claimed).toBe(0);
+    const status = await (await (await app()).request(`/direct-payments/${row.id}/status`, {}, testEnv)).json();
+    expect(status.data.inReview).toBe(true);
+  });
+});
+
+describe("receipt-triage US2: a payment that skipped the page meets the same ask", () => {
+  it("receipt 1 on the receipt door rides RECEIPT_INCOMPLETE with nothing billed", async () => {
+    const { business, link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/p-r1`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, { proofMode: "receipt", proofKey: `${link.id}/p-r1` });
+    await sweepDirectPayments({ ...testEnv, AI: aiReturning(RECEIPT_1_READING) } as typeof testEnv, new Date());
+    const after = await rowById(row.id);
+    expect(after.lastError).toBe("RECEIPT_INCOMPLETE");
+    expect(after.status).toBe("validating");
+    expect(after.constaValidationId).toBeNull();
+  });
+});
+
+describe("receipt-triage US3: the account a payment is checked against", () => {
+  const CARD = "4111111111111111";
+  const RETIRED = "4000000000004321";
+  const withKey = (destino: Record<string, unknown>) => ({
+    ...RECEIPT_1_READING,
+    claveDeRastreo: "BNET01002609090012345678",
+    destino,
+  });
+
+  it("a receipt to the registered card names the card, and the row remembers it (D22, D30)", async () => {
+    const { business, link } = await seedRtBusiness({ speiCard: CARD, speiCardBank: "NUBANK" });
+    await testEnv.PROOFS.put(`${link.id}/p-card`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const card = { kind: "card", value: CARD, bank: "NUBANK" };
+    const row = await seedRtRow(link, business, {
+      proofMode: "receipt",
+      proofKey: `${link.id}/p-card`,
+      registeredAccounts: JSON.stringify([RT_ACCOUNT, card]),
+    });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
+    await sweepDirectPayments({ ...testEnv, AI: aiReturning(withKey({ tipo: "tarjeta", digitos: "1111" })) } as typeof testEnv, new Date());
+    expect(captured.body!.beneficiary).toMatchObject({ bank: "NUBANK", cardNumber: CARD });
+    expect(JSON.parse((await rowById(row.id)).beneficiary!)).toEqual(card);
+  });
+
+  it("a receipt to a retired card is checked there, and Banxico's confirmation is held for the business (FR-020a)", async () => {
+    const { business, link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/p-ret`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, {
+      proofMode: "receipt",
+      proofKey: `${link.id}/p-ret`,
+      registeredAccounts: JSON.stringify([RT_ACCOUNT, { kind: "card", value: RETIRED, bank: "NUBANK", retired: true }]),
+    });
+    const captured = mockApiCep();
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    await sweepDirectPayments({ ...testEnv, AI: aiReturning(withKey({ tipo: "tarjeta", digitos: "4321" })) } as typeof testEnv, new Date());
+    expect(captured.body!.beneficiary).toMatchObject({ cardNumber: RETIRED });
+    expect((captured.body!.beneficiary as Record<string, unknown>).retired).toBeUndefined();
+    expect(await rowById(row.id)).toMatchObject({ status: "confirmed", actionOutcome: "review", reviewReason: "retired_account" });
+  });
+
+  it("Banxico's own account outranks the receipt's digits; a whole account that fits none is contradicted (D22)", async () => {
+    const { business, link } = await seedRtBusiness();
+    const row = await seedRtRow(link, business, { trackingKey: "TRACK001XYZ", senderBank: "NUBANK", transferDate: TODAY() });
+    mockApiCep({ cep: { ...DEFAULT_CEP, beneficiaryAccount: "999999999999999999" } });
+    await sweepDirectPayments(testEnv, new Date());
+    expect(await rowById(row.id)).toMatchObject({ status: "invalid", lastError: "TRANSFER_CONTRADICTED" });
+  });
+
+  it("the snapshot outlives an edit in Cuenta: a later attempt still names the account it was submitted under (FR-021)", async () => {
+    const { business, link } = await seedRtBusiness();
+    const row = await seedRtRow(link, business, { trackingKey: "TRACK001XYZ", senderBank: "NUBANK", transferDate: TODAY() });
+    await drizzle(env.DB)
+      .update((await import("../src/db/schema")).businesses)
+      .set({ speiClabe: "646180157000000004" })
+      .where(eq((await import("../src/db/schema")).businesses.id, business.id));
+    const captured = mockApiCep({ status: "pending", cep: undefined });
+    await sweepDirectPayments(testEnv, new Date());
+    expect((captured.body!.beneficiary as Record<string, unknown>).clabe).toBe(RT_CLABE);
+    expect((await rowById(row.id)).status).toBe("validating");
+  });
+
+  it("a payment born before this feature keeps today's flow: no ask, no tie, one provider call (FR-027, D27)", async () => {
+    const { business, link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/p-old`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, {
+      proofMode: "receipt",
+      proofKey: `${link.id}/p-old`,
+      beneficiary: null,
+      registeredAccounts: null,
+    });
+    const captured = mockApiCep({ status: "pending", cep: undefined });
+    await sweepDirectPayments(
+      { ...testEnv, AI: aiReturning({ ...RECEIPT_1_READING, destino: { tipo: "clabe", digitos: "9999" } }) } as typeof testEnv,
+      new Date(),
+    );
+    expect(String(captured.body!.imageUrl)).toContain("p-old");
+    expect((await rowById(row.id)).lastError).toBeNull();
+  });
+
+  it("an ISP whose cuenta de cobro is a card is paid there; the link shows only it", async () => {
+    await seedLinkedBusiness({ speiClabe: null, speiBank: null, speiCard: CARD, speiCardBank: "NUBANK", speiCollectKind: "card" });
+    mockCustomerLookup([wisphubCustomer()]);
+    mockPendingInvoices();
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("debt");
+    expect(data.collectAccount).toEqual({ kind: "card", value: CARD, bank: "NUBANK" });
+    expect(data.speiClabe).toBeUndefined();
+  });
+});
+
+describe("receipt-triage US2/US3: what /read reports to the page (D15, D7, D8)", () => {
+  const readAs = async (proofId: string, reading: Record<string, unknown>) =>
+    (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/read",
+      post({ proofId }),
+      { ...testEnv, AI: aiReturning(reading) },
+    );
+
+  it("receipt 1: the ask, the gate's reference verdict and that the destination was seen — never its digits", async () => {
+    const { link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/r1`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const { data } = await (await readAs(`${link.id}/r1`, RECEIPT_1_READING)).json();
+    expect(data.ask).toEqual({ reason: "no_key", fields: ["key"] });
+    expect(data.gate.referenceNumber).toBe("missing");
+    expect(data.destinationSeen).toBe(true);
+    expect(JSON.stringify(data)).not.toContain("8195");
+    expect(data).not.toHaveProperty("tiedAccount");
+  });
+
+  it("a receipt to another account is reported as wrong_destination", async () => {
+    const { link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/r9`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const { data } = await (
+      await readAs(`${link.id}/r9`, { ...RECEIPT_1_READING, claveDeRastreo: "BNET01002609090012345678", destino: { tipo: "clabe", digitos: "9999" } })
+    ).json();
+    expect(data.ask).toEqual({ reason: "wrong_destination" });
+  });
+
+  it("a reading whose only key another link's payment already holds that day is asked about as shared (D7)", async () => {
+    const { business, link } = await seedRtBusiness();
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokother00000003", wisphubCustomerId: "7", customerUsuario: "otro@wifiplus" })
+      .returning();
+    await seedRtRow(other, business, {
+      referenceNumber: "038195",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-09",
+      claimedAmountCents: 35000,
+      nextValidationAt: null,
+      status: "confirmed",
+    });
+    await testEnv.PROOFS.put(`${link.id}/r2`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const { data } = await (await readAs(`${link.id}/r2`, RECEIPT_2_READING)).json();
+    expect(data.referenceNumber).toBe("038195");
+    expect(data.ask).toEqual({ reason: "no_key", fields: ["key"], shared: true });
+    /* converge T060 (FR-028): counted as the ask it is */
+    const [reading] = await drizzle(env.DB).select().from(extractions);
+    expect(reading.outcome).toBe("key_missing");
+  });
+
+  it("Banxico's own account, tied to the snapshot, becomes the account the payment was checked against (D22)", async () => {
+    const CARD = "4111111111111111";
+    const { business, link } = await seedRtBusiness({ speiCard: CARD, speiCardBank: "NUBANK" });
+    const card = { kind: "card", value: CARD, bank: "NUBANK" };
+    const row = await seedRtRow(link, business, {
+      trackingKey: "TRACK001XYZ",
+      senderBank: "NUBANK",
+      transferDate: TODAY(),
+      registeredAccounts: JSON.stringify([RT_ACCOUNT, card]),
+    });
+    mockApiCep({ cep: { ...DEFAULT_CEP, beneficiaryAccount: CARD } });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    await sweepDirectPayments(testEnv, new Date());
+    const after = await rowById(row.id);
+    expect(after.status).toBe("confirmed");
+    expect(JSON.parse(after.beneficiary!)).toEqual(card);
+  });
+});
+
+/* receipt-triage US3 (FR-020a, US3/AC7, plan D31; converge T058): money
+   paid to an account the business removed waits for the business's own
+   decision, so a provisional release — a WispHub promise that reconnects
+   the customer — must not fire for it on any evidence. */
+describe("receipt-triage US3: no provisional release for a payment to a removed account", () => {
+  const RETIRED = { kind: "card", value: "4000000000004321", bank: "NUBANK", retired: true };
+  const typedRow = (link: { id: string }, business: { id: string }, account: Record<string, unknown>) =>
+    seedRtRow(link, business, {
+      trackingKey: "TRACK001XYZ",
+      /* not the card's own bank: a same-institution transfer is never
+         SPEI, and the engine's guard refuses it before any credit */
+      senderBank: "AZTECA",
+      transferDate: TODAY(),
+      beneficiary: JSON.stringify(account),
+      registeredAccounts: JSON.stringify([RT_ACCOUNT, RETIRED]),
+    });
+
+  it("control: the same pending verdict on a current account buys the promise", async () => {
+    const { business, link } = await seedRtBusiness({ provisionalReleaseEnabled: true });
+    const row = await typedRow(link, business, RT_ACCOUNT);
+    mockApiCep({ status: "pending", cep: undefined });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockPromise();
+    await sweepDirectPayments(testEnv, new Date());
+    expect((await rowById(row.id)).releaseEvidence).toBe("pending");
+  });
+
+  it("a pending verdict on a retired account asks WispHub nothing and releases nothing", async () => {
+    const { business, link } = await seedRtBusiness({ provisionalReleaseEnabled: true });
+    const row = await typedRow(link, business, RETIRED);
+    mockApiCep({ status: "pending", cep: undefined });
+    /* Watched at the edge: without the gate the release would try WispHub
+       and fail quietly inside its own try, so an unmocked call is not
+       proof enough */
+    const seen: string[] = [];
+    const original = globalThis.fetch.bind(globalThis);
+    const restore = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(String(input instanceof Request ? input.url : input));
+      return original(input, init);
+    }) as typeof fetch;
+    try {
+      await sweepDirectPayments(testEnv, new Date());
+    } finally {
+      globalThis.fetch = restore;
+    }
+    expect(seen.filter((u) => u.includes("wisphub"))).toEqual([]);
+    const after = await rowById(row.id);
+    expect(after.releaseEvidence).toBeNull();
+    expect(after.provisionalReleaseAt).toBeNull();
+  });
+});
+
+/* receipt-triage US1 (FR-007, D7; converge T060): the shared-reference stop
+   holds on the receipt door itself, for a client that never asked /read */
+describe("receipt-triage US1: a shared reference on the receipt door costs nothing", () => {
+  it("receipt 2, submitted as a file with no /read, whose reference another link's payment holds: no provider call, the clave is asked", async () => {
+    const { business, link } = await seedRtBusiness();
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokother00000004", wisphubCustomerId: "7", customerUsuario: "otro@wifiplus" })
+      .returning();
+    await seedRtRow(other, business, {
+      referenceNumber: "038195",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-09",
+      claimedAmountCents: 35000,
+      nextValidationAt: null,
+      status: "confirmed",
+    });
+    await testEnv.PROOFS.put(`${link.id}/p-shared`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, { proofMode: "receipt", proofKey: `${link.id}/p-shared`, claimedAmountCents: null });
+    const readerEnv = { ...testEnv, AI: aiReturning(RECEIPT_2_READING) } as typeof testEnv;
+
+    /* no apiCEP interceptor: a provider call would fail the test */
+    await sweepDirectPayments(readerEnv, new Date());
+    const asked = await rowById(row.id);
+    expect(asked.status).toBe("validating");
+    expect(asked.lastError).toBe("REFERENCE_SHARED");
+    expect(JSON.parse(asked.disputedFields!)).toEqual(["trackingKey"]);
+    expect(asked.constaValidationId).toBeNull();
+    const [reading] = await drizzle(env.DB).select().from(extractions);
+    expect(reading.outcome).toBe("key_missing");
+    expect(reading.validationId).toBeNull();
+
+    /* and the next slot makes no call either, until the payer's clave */
+    await sweepDirectPayments(readerEnv, new Date(asked.nextValidationAt!.getTime() + 1000));
+    expect((await rowById(row.id)).lastError).toBe("REFERENCE_SHARED");
+  });
+});
+
+/* bug: one-open-attempt — a payer who comes back to the link corrects
+   the attempt still in review instead of starting a second one beside it,
+   and a submission identical to an attempt the link already holds is
+   answered from it with nothing spent. Found live on dev, 2026-09-25: a
+   typed reference Banxico could not find kept polling the provider for
+   twelve hours after the same customer's receipt had paid. */
+describe("bug: one-open-attempt", () => {
+  const TOKEN = "tok2345abcdefgh2";
+  const getLink = async () =>
+    (await (await app()).request(`/direct-payments/links/${TOKEN}`, {}, testEnv)).json();
+
+  /* A typed reference Banxico cannot find: the row stays `validating`
+     with a slot, exactly like Abraham's first attempt */
+  async function notFoundByReference() {
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    const res = await payTransfer(TOKEN, {
+      transfer: { referenceNumber: "9784417", senderBank: "AZTECA", date: "2026-09-24" },
+    });
+    expect(res.status).toBe(201);
+    return (await res.json()).data.directPaymentId as string;
+  }
+
+  /* A proof of this link whose reading recorded its fingerprint, the way
+     the engine's own reading does */
+  async function readProof(businessId: string, linkId: string, name: string, bytes: Uint8Array) {
+    const key = `${linkId}/${name}`;
+    await testEnv.PROOFS.put(key, bytes, { httpMetadata: { contentType: "image/png" } });
+    await drizzle(env.DB).insert(extractions).values({
+      businessId,
+      source: "reader",
+      outcome: "passed",
+      proofKey: key,
+      proofSha256: await sha256Hex(bytes),
+    });
+    return key;
+  }
+
+  async function seedAttempt(
+    business: { id: string },
+    link: { id: string },
+    values: Partial<typeof payments.$inferInsert>,
+  ) {
+    const [row] = await drizzle(env.DB)
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "receipt",
+        status: "validating",
+        nextValidationAt: new Date(Date.now() + 60_000),
+        ...values,
+      })
+      .returning();
+    return row;
+  }
+
+  it("the link tells the page which attempt is in review, and only while one is", async () => {
+    await seedLinkedBusiness();
+    const first = await notFoundByReference();
+
+    mockCustomerLookup([wisphubCustomer()]);
+    mockPendingInvoices();
+    const { data } = await getLink();
+    expect(data.inReview).toEqual({ directPaymentId: first, status: "validating" });
+
+    await drizzle(env.DB).update(payments).set({ status: "expired", nextValidationAt: null });
+    /* the invoices come from the page's 30-second display cache */
+    mockCustomerLookup([wisphubCustomer()]);
+    expect((await getLink()).data.inReview).toBeUndefined();
+  });
+
+  it("a new submission without `supersedes` corrects the attempt in review, which stops polling", async () => {
+    await seedLinkedBusiness();
+    const db = drizzle(env.DB);
+    const first = await notFoundByReference();
+
+    /* The receipt with the clave, from a page that no longer remembered
+       the first attempt: no `supersedes` in the body */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "pending", cep: undefined });
+    const res = await payTransfer(TOKEN, {
+      transfer: { trackingKey: "260925071144393084I", senderBank: "AZTECA", date: "2026-09-25" },
+    });
+    expect(res.status).toBe(201);
+    const second = (await res.json()).data.directPaymentId as string;
+
+    const old = (await db.select().from(payments).where(eq(payments.id, first)))[0];
+    expect(old.status).toBe("superseded");
+    expect(old.nextValidationAt).toBeNull();
+    const fresh = (await db.select().from(payments).where(eq(payments.id, second)))[0];
+    expect(fresh.supersedesId).toBe(first);
+
+    /* Hours later, the sweep never asks the provider about it again (no
+       interceptor: a call would fail the test) */
+    await db.update(payments).set({ nextValidationAt: null }).where(eq(payments.id, second));
+    const report = await sweepDirectPayments(testEnv, new Date(Date.now() + 13 * 3600 * 1000));
+    expect(report.claimed).toBe(0);
+  });
+
+  it("the same file uploaded again while its attempt is in review answers with that attempt, spending nothing", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const bytes = PNG();
+    const k1 = await readProof(business.id, link.id, "proof-1", bytes);
+    const first = await seedAttempt(business, link, { proofKey: k1 });
+    /* The re-upload lands under a new key and was never read: its
+       fingerprint comes from the bytes themselves */
+    const k2 = `${link.id}/proof-2`;
+    await testEnv.PROOFS.put(k2, bytes, { httpMetadata: { contentType: "image/png" } });
+
+    /* No WispHub and no provider interceptor on purpose */
+    const res = await payTransfer(TOKEN, { proofId: k2 });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.directPaymentId).toBe(first.id);
+    expect(data.status).toBe("validating");
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(1);
+  });
+
+  it("the same file as a payment already confirmed on the link is refused as used, with no provider call", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const bytes = PNG();
+    const k1 = await readProof(business.id, link.id, "proof-1", bytes);
+    await seedAttempt(business, link, {
+      proofKey: k1,
+      trackingKey: "260925071144393084I",
+      status: "confirmed",
+      nextValidationAt: null,
+    });
+    const k2 = await readProof(business.id, link.id, "proof-2", bytes);
+
+    /* The link is reusable: showing last month's receipt back as
+       "confirmado" would read as this month paid (D9) */
+    const res = await payTransfer(TOKEN, { proofId: k2 });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("TRANSFER_ALREADY_USED");
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(1);
+    const [rejection] = await drizzle(env.DB).select().from(proofRejections);
+    expect(rejection.trackingKey).toBe("260925071144393084I");
+  });
+
+  it("the same reference, date, bank and amount typed again answers with the attempt in review", async () => {
+    await seedLinkedBusiness();
+    const first = await notFoundByReference();
+
+    const res = await payTransfer(TOKEN, {
+      transfer: { referenceNumber: "9784417", senderBank: "AZTECA", date: "2026-09-24" },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.directPaymentId).toBe(first);
+    expect(await drizzle(env.DB).select().from(payments)).toHaveLength(1);
+  });
+
+  it("the same reference as a payment already paid is not refused: a reference is never unique", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    await seedAttempt(business, link, {
+      proofMode: "transfer",
+      referenceNumber: "9784417",
+      trackingKey: "260925071144378233I",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-24",
+      claimedAmountCents: 51400,
+      status: "confirmed",
+      nextValidationAt: null,
+    });
+
+    /* a second real transfer with the same printed reference goes to
+       Banxico, which is the only one who can tell them apart */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "pending", cep: undefined });
+    const res = await payTransfer(TOKEN, {
+      transfer: { referenceNumber: "9784417", senderBank: "AZTECA", date: "2026-09-24" },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("the same reference with another date is a correction, not the same attempt", async () => {
+    await seedLinkedBusiness();
+    const first = await notFoundByReference();
+
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockApiCep({ status: "pending", cep: undefined });
+    const res = await payTransfer(TOKEN, {
+      transfer: { referenceNumber: "9784417", senderBank: "AZTECA", date: "2026-09-25" },
+    });
+    expect(res.status).toBe(201);
+    const [old] = await drizzle(env.DB).select().from(payments).where(eq(payments.id, first));
+    expect(old.status).toBe("superseded");
+  });
+
+  it("a refused correction gives the attempt in review back, with its slot", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const db = drizzle(env.DB);
+    const [other] = await db
+      .insert(paymentLinks)
+      .values({
+        businessId: business.id,
+        token: "tok9876zyxwvut99",
+        wisphubCustomerId: "7",
+        customerUsuario: "otro@wifiplus",
+      })
+      .returning();
+    /* Another customer's payment already owns this clave */
+    await seedAttempt(business, other, {
+      proofMode: "transfer",
+      trackingKey: "OTHER0001CLAVE",
+      senderBank: "NUBANK",
+      transferDate: "2026-09-25",
+      status: "confirmed",
+      nextValidationAt: null,
+    });
+    const first = await notFoundByReference();
+    const [before] = await db.select().from(payments).where(eq(payments.id, first));
+
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    const res = await payTransfer(TOKEN, {
+      transfer: { trackingKey: "OTHER0001CLAVE", senderBank: "NUBANK", date: "2026-09-25" },
+    });
+    expect(res.status).toBe(409);
+    const [after] = await db.select().from(payments).where(eq(payments.id, first));
+    expect(after.status).toBe("validating");
+    expect(after.nextValidationAt?.getTime()).toBe(before.nextValidationAt?.getTime());
+    expect(link.id).toBe(after.paymentLinkId);
+  });
+
+  it("an attempt replaced after it was read is not sent to the provider", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const db = drizzle(env.DB);
+    const stale = await seedAttempt(business, link, {
+      proofMode: "transfer",
+      trackingKey: "TRACK001XYZ",
+      senderBank: "NUBANK",
+      transferDate: "2026-08-17",
+    });
+    /* The payer corrected it after the sweep (or the inline attempt) had
+       read it as `validating` */
+    await db.update(payments).set({ status: "superseded", nextValidationAt: null }).where(eq(payments.id, stale.id));
+
+    const [isp] = await db.select().from(businesses).where(eq(businesses.id, business.id));
+    /* No provider interceptor: a call would fail the test */
+    const row = await runValidation(testEnv, db, stale, link, isp, await integrationOf(db, business.id), new Date());
+    expect(row.status).toBe("superseded");
+    expect(row.validationAttempts).toBe(0);
+    expect(row.nextValidationAt).toBeNull();
+  });
+
+  it("an API link keeps its transfers side by side: no attempt in review is named on its page", async () => {
+    const { business } = await seedLinkedBusiness();
+    const db = drizzle(env.DB);
+    const [apiLink] = await db
+      .insert(paymentLinks)
+      .values({
+        businessId: business.id,
+        token: "tokapi000000001",
+        source: "api",
+        customerRef: "ref-1",
+        askCents: 50000,
+      })
+      .returning();
+    await seedAttempt(business, apiLink, {});
+    const res = await (await app()).request(`/direct-payments/links/${apiLink.token}`, {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("debt");
+    expect(data.inReview).toBeUndefined();
+  });
+});
+
+/* bug: spei-date-rollover — a search by referencia numérica asks Banxico
+   the operation day, which changes at 18:00 Mexico City time, instead of
+   the calendar day the payer or the receipt gave; the other day follows a
+   `not_found`. Found live on dev, 2026-09-24: a reference typed at 23:50
+   with the 24th was `not_found` on all seven attempts, and Banxico had
+   filed it under the 25th. Instants are fixed, so the rule (and the
+   30-day staleness check) never depend on when the suite runs. */
+describe("bug: spei-date-rollover", () => {
+  /* 23:50 Mexico City on the 24th */
+  const EVENING = new Date("2026-09-25T05:50:00Z");
+  const minuteAfter = (d: Date) => new Date(d.getTime() + 60_000);
+  const senderOf = (c: { body?: Record<string, unknown> }) => c.body!.sender as Record<string, unknown>;
+
+  async function typedByReference(createdAt: Date, over: Partial<typeof payments.$inferInsert> = {}) {
+    const { business, link } = await seedRtBusiness();
+    const row = await seedRtRow(link, business, {
+      referenceNumber: "9784417",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-24",
+      acceptedFrom: "human",
+      createdAt,
+      nextValidationAt: createdAt,
+      ...over,
+    });
+    return { business, link, row };
+  }
+
+  /* The next swept attempt, answered `not_found` */
+  async function sweepNotFound(now: Date) {
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, now);
+    return captured;
+  }
+
+  it("typed by reference at 23:50: the next day first, then the day typed, then the next again", async () => {
+    const { row } = await typedByReference(EVENING);
+
+    const first = await sweepNotFound(minuteAfter(EVENING));
+    expect(senderOf(first).referenceNumber).toBe("9784417");
+    expect(senderOf(first).date).toBe("2026-09-25");
+
+    const afterFirst = await rowById(row.id);
+    const second = await sweepNotFound(new Date(afterFirst.nextValidationAt!.getTime() + 1000));
+    expect(senderOf(second).date).toBe("2026-09-24");
+
+    const afterSecond = await rowById(row.id);
+    const third = await sweepNotFound(new Date(afterSecond.nextValidationAt!.getTime() + 1000));
+    expect(senderOf(third).date).toBe("2026-09-25");
+
+    /* the row keeps what the payer typed; only the search moves */
+    expect((await rowById(row.id)).transferDate).toBe("2026-09-24");
+  });
+
+  it("typed by reference at 14:00: the day typed first", async () => {
+    const afternoon = new Date("2026-09-24T20:00:00Z");
+    await typedByReference(afternoon);
+    const first = await sweepNotFound(minuteAfter(afternoon));
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  it("found on the other day: the row adopts Banxico's clave and date and confirms", async () => {
+    const { row } = await typedByReference(EVENING);
+    await sweepNotFound(minuteAfter(EVENING));
+
+    /* transferred at 17:55, submitted at 23:50: Banxico filed it the 24th */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const found = mockApiCep({
+      cep: { ...DEFAULT_CEP, trackingKey: "260924071144000001I", senderBank: "AZTECA", date: "2026-09-24" },
+    });
+    const pending = await rowById(row.id);
+    await sweepDirectPayments(testEnv, new Date(pending.nextValidationAt!.getTime() + 1000));
+
+    expect(senderOf(found).date).toBe("2026-09-24");
+    const done = await rowById(row.id);
+    expect(done.status).toBe("confirmed");
+    expect(done.trackingKey).toBe("260924071144000001I");
+    expect(done.transferDate).toBe("2026-09-24");
+  });
+
+  it("pending on a day asks the same day again", async () => {
+    const { row } = await typedByReference(EVENING);
+    const pendingCall = mockApiCep({ status: "pending", cep: undefined });
+    await sweepDirectPayments(testEnv, minuteAfter(EVENING));
+    expect(senderOf(pendingCall).date).toBe("2026-09-25");
+
+    const afterPending = await rowById(row.id);
+    const again = await sweepNotFound(new Date(afterPending.nextValidationAt!.getTime() + 1000));
+    expect(senderOf(again).date).toBe("2026-09-25");
+  });
+
+  it("a clave search keeps the row's own date, even at 23:50", async () => {
+    await typedByReference(EVENING, { referenceNumber: null, trackingKey: "TRACK001XYZ" });
+    const first = await sweepNotFound(minuteAfter(EVENING));
+    expect(senderOf(first).trackingKey).toBe("TRACK001XYZ");
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  /* A receipt whose readings settled on the reference: the next slot takes
+     the transfer door with it (two-eyes D17), and the time the reader saw
+     printed decides the day */
+  async function settledReceipt(createdAt: Date, reading: { date: string; time: string | null }) {
+    const { business, link } = await seedRtBusiness();
+    const proofKey = `${link.id}/p-sdr`;
+    await drizzle(env.DB).insert(extractions).values({
+      businessId: business.id,
+      source: "reader",
+      outcome: "passed",
+      proofKey,
+      referenceNumber: "9784417",
+      transferDate: reading.date,
+      transferTime: reading.time,
+    });
+    return seedRtRow(link, business, {
+      proofMode: "receipt",
+      proofKey,
+      referenceNumber: "9784417",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-24",
+      readingCheck: "agreed",
+      acceptedFrom: "agreed",
+      createdAt,
+      nextValidationAt: createdAt,
+    });
+  }
+  /* 09:00 Mexico City the next morning */
+  const NEXT_MORNING = new Date("2026-09-25T15:00:00Z");
+
+  it("a receipt printed 23:40 is searched on the next day, whenever it was submitted", async () => {
+    await settledReceipt(NEXT_MORNING, { date: "2026-09-24", time: "23:40" });
+    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
+    expect(senderOf(first).referenceNumber).toBe("9784417");
+    expect(senderOf(first).date).toBe("2026-09-25");
+  });
+
+  it("a receipt printed 17:30 is searched on its own day, though submitted the next morning", async () => {
+    await settledReceipt(NEXT_MORNING, { date: "2026-09-24", time: "17:30" });
+    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  it("a time read with another date says nothing about this one: the submission stands in", async () => {
+    await settledReceipt(NEXT_MORNING, { date: "2026-09-23", time: "17:30" });
+    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
+    expect(senderOf(first).date).toBe("2026-09-25");
+  });
+
+  it("a row with no date asks the business's day, not the UTC one", async () => {
+    /* 20:00 Mexico City on the 24th is 02:00Z on the 25th */
+    const evening = new Date("2026-09-25T02:00:00Z");
+    await typedByReference(new Date(evening.getTime() - 60_000), {
+      referenceNumber: null,
+      trackingKey: "TRACK001XYZ",
+      transferDate: null,
+    });
+    const first = await sweepNotFound(evening);
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  it("the link tells the page the business's zone", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()]);
+    mockPendingInvoices();
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("debt");
+    expect(data.timezone).toBe("America/Mexico_City");
   });
 });

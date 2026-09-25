@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -11,6 +11,7 @@ import {
 import { BANKS } from "@devolada/api/direct-payments-schema";
 import { App } from "../src/App";
 import { fail, handlers, ok, server } from "./msw";
+import { expectNoViolations } from "./a11y";
 
 /* docs/legacy/direct-payment/direct-payment.spec.md scenario 15 (US-D01,
    US-D03, D9, D10): the page's four main flows, in es-MX "pago" copy. */
@@ -898,7 +899,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(copy.textContent).toMatch(/contactar a tu proveedor/i);
     /* no form in the foreground — the doors stay */
     expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /subir otro comprobante/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /corregir el comprobante en revisión/i })).toBeInTheDocument();
   });
 
   it("US-D12 scenario 7: an unread date never becomes today's — it is asked for, not invented", async () => {
@@ -930,7 +931,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     expect(JSON.stringify(paid[0])).not.toContain(new Date().toISOString().slice(0, 10));
   });
 
-  it("US-D12 scenario 8: 'Subir otro comprobante' walks back to step 2 and the fresh proof supersedes", async () => {
+  it("US-D12 scenario 8: 'Corregir el comprobante en revisión' (bug: one-open-attempt, was 'Subir otro comprobante') walks back to step 2 and the fresh proof supersedes", async () => {
     const paid: unknown[] = [];
     server.use(...silentThen({}, paid));
     await uploadReceipt();
@@ -938,7 +939,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
     /* D7: the payer who knows the receipt is wrong does not wait out a
        validation they already know is lost */
-    await userEvent.click(screen.getByRole("button", { name: /subir otro comprobante/i }));
+    await userEvent.click(screen.getByRole("button", { name: /corregir el comprobante en revisión/i }));
 
     expect(
       await screen.findByRole("heading", { name: /envía tu comprobante/i }),
@@ -1497,5 +1498,563 @@ describe("automated-collections-api US1: an API link on the payer's page", () =>
     expect(await screen.findByText(/folio dv-api001/i)).toBeInTheDocument();
     expect(screen.getByText("Tu pago fue registrado.")).toBeInTheDocument();
     expect(screen.queryByText(/tu servicio/i)).not.toBeInTheDocument();
+  });
+});
+
+/* ======================================================================
+   receipt-triage (specs/010-receipt-triage): the reference first, the ask
+   at the upload, the one account, and the capture guide.
+   ====================================================================== */
+
+const rtLink = (over: Record<string, unknown> = {}) =>
+  linkStatusResponse.parse({
+    ...debtLink,
+    collectAccount: { kind: "clabe", value: "012180001234538195", bank: "STP" },
+    speiClabe: "012180001234538195",
+    ...over,
+  });
+
+const rtRead = (over: Record<string, unknown> = {}) =>
+  proofReadingResponse.parse({
+    source: "reader",
+    isReceipt: true,
+    legibility: "full",
+    amountCents: 30000,
+    trackingKey: null,
+    referenceNumber: null,
+    senderBank: "BANORTE",
+    date: "2026-09-09",
+    receiptStatus: null,
+    gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "missing" },
+    ask: { reason: "no_key", fields: ["key"] },
+    destinationSeen: true,
+    ...over,
+  });
+
+const validatingWith = (over: Record<string, unknown>) =>
+  directPaymentStatusResponse.parse({ status: "validating", validationAttempts: 1, error: null, ...over });
+
+async function rtUpload() {
+  const picker = screen.getByLabelText(/captura o comprobante/i);
+  await userEvent.upload(picker, new File([new Uint8Array(100)], "cep.png", { type: "image/png" }));
+  await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
+}
+
+function uploadHandlers(reading: () => ReturnType<typeof ok> | Promise<ReturnType<typeof ok>>, paid: unknown[] = []) {
+  return [
+    handlers.link(() => ok(rtLink())),
+    handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-rt" }))),
+    handlers.read(reading as () => ReturnType<typeof ok>),
+    handlers.pay((body) => {
+      paid.push(body);
+      return ok(payResponse.parse({ directPaymentId: "dp-rt", status: "validating", error: null }), 201);
+    }),
+    handlers.status(() => ok(validatingWith({}))),
+  ];
+}
+
+describe("receipt-triage US1: the typing form leads with the reference", () => {
+  it("the reference comes first, alone is enough, and it travels exactly as typed", async () => {
+    const paid: unknown[] = [];
+    server.use(...uploadHandlers(() => ok(rtRead()), paid));
+    renderPage();
+    await openManualForm();
+
+    const reference = screen.getByLabelText("Número de referencia");
+    const clave = screen.getByLabelText("Clave de rastreo");
+    expect(reference.compareDocumentPosition(clave) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Hasta 7 dígitos, con los ceros del inicio.")).toBeInTheDocument();
+    expect(screen.getByText("Con uno basta.")).toBeInTheDocument();
+    await expectNoViolations(document.body);
+
+    const submit = screen.getByRole("button", { name: /verificar mi pago/i });
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    /* both keys empty: refused on the page */
+    expect(submit).toBeDisabled();
+    await userEvent.type(reference, "038195");
+    expect(submit).toBeEnabled();
+    await userEvent.click(submit);
+    await waitFor(() => expect(paid).toHaveLength(1));
+    const transfer = (paid[0] as { transfer: Record<string, unknown> }).transfer;
+    expect(transfer.referenceNumber).toBe("038195");
+    expect(transfer).not.toHaveProperty("trackingKey");
+  });
+
+  it("a generic reference alone is blocked with its line, and the clave becomes required", async () => {
+    server.use(handlers.link(() => ok(rtLink())));
+    renderPage();
+    await openManualForm();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.type(screen.getByLabelText("Número de referencia"), "1234567");
+    expect(
+      screen.getByText("Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Escribe tu clave de rastreo.")).toBeInTheDocument();
+    const submit = screen.getByRole("button", { name: /verificar mi pago/i });
+    expect(submit).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Clave de rastreo"), "TRACK001XYZ");
+    expect(submit).toBeEnabled();
+  });
+
+  it("REFERENCE_SHARED from the server shows the same line and requires the clave", async () => {
+    server.use(
+      handlers.link(() => ok(rtLink())),
+      handlers.pay(() => fail("REFERENCE_SHARED", 409)),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.type(screen.getByLabelText("Número de referencia"), "038195");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(await screen.findByText("Escribe tu clave de rastreo.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /verificar mi pago/i })).toBeDisabled();
+  });
+
+  it.each([
+    [
+      "a disputed reference",
+      { readingCheck: "disputed", disputedFields: ["referenceNumber"], error: "TRANSFER_NOT_FOUND", referenceNumber: "038195" },
+      "Confirma tu número de referencia mirando tu comprobante.",
+    ],
+    [
+      "the provider's 422",
+      { disputedFields: ["trackingKey"], error: "REFERENCE_AMBIGUOUS", referenceNumber: "038195" },
+      "Tu número de referencia coincide con más de una transferencia. Escribe tu clave de rastreo para encontrar la tuya.",
+    ],
+    [
+      "both keys, after the fallback found nothing",
+      { readingCheck: "disputed", disputedFields: ["trackingKey", "referenceNumber"], error: "TRANSFER_NOT_FOUND", referenceNumber: "038195" },
+      "No encontramos tu transferencia todavía. Confirma tu clave de rastreo o tu número de referencia mirando tu comprobante; con uno basta.",
+    ],
+  ])("the later ask for %s", async (_name, statusOver, sentence) => {
+    server.use(
+      handlers.link(() => ok(rtLink())),
+      handlers.pay(() => ok(payResponse.parse({ directPaymentId: "dp-rt", status: "validating", error: null }), 201)),
+      handlers.status(() => ok(validatingWith({ senderBank: "BANORTE", ...statusOver }))),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.type(screen.getByLabelText("Clave de rastreo"), "TRACK001XYZ");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument();
+    /* D6: the bank's own screen, when a verified hint exists */
+    expect(screen.getByText("En Banorte: toca «Ver más detalles» y captura esa pantalla.")).toBeInTheDocument();
+    if ((statusOver as { error: string }).error === "REFERENCE_AMBIGUOUS") {
+      expect(screen.queryByLabelText("Número de referencia")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Clave de rastreo")).toBeInTheDocument();
+    } else {
+      expect(screen.getByLabelText("Número de referencia")).toBeInTheDocument();
+    }
+    await expectNoViolations(document.body);
+  });
+
+  it.each([
+    ["the missing date", { readingCheck: "agreed", disputedFields: ["date"] }, "Solo nos falta la fecha de tu transferencia."],
+    ["a disputed amount", { readingCheck: "disputed", disputedFields: ["amount"] }, "Confirma el monto transferido mirando tu comprobante."],
+  ])("converge T059 (FR-014): the later ask for %s also says where the bank shows it", async (_name, statusOver, sentence) => {
+    server.use(
+      handlers.link(() => ok(rtLink())),
+      handlers.pay(() => ok(payResponse.parse({ directPaymentId: "dp-rt", status: "validating", error: null }), 201)),
+      handlers.status(() =>
+        ok(validatingWith({ senderBank: "BANORTE", error: "TRANSFER_NOT_FOUND", trackingKey: "TRACK001XYZ", ...statusOver })),
+      ),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.type(screen.getByLabelText("Clave de rastreo"), "TRACK001XYZ");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(await screen.findByText(new RegExp(sentence))).toBeInTheDocument();
+    expect(screen.getByText("En Banorte: toca «Ver más detalles» y captura esa pantalla.")).toBeInTheDocument();
+  });
+
+  it("in review: the business decides, and the page shows no success state", async () => {
+    server.use(
+      handlers.link(() => ok(rtLink())),
+      handlers.pay(() => ok(payResponse.parse({ directPaymentId: "dp-rt", status: "validating", error: null }), 201)),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "confirmed",
+            actionOutcome: "review",
+            inReview: true,
+            folio: "DV-REV001",
+            validationAttempts: 1,
+            error: null,
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.type(screen.getByLabelText("Número de referencia"), "038195");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(
+      await screen.findByText("Tu pago está en revisión con WifiPlus. Te avisaremos aquí cuando lo confirme."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Pago confirmado")).not.toBeInTheDocument();
+    expect(screen.queryByText(/tu servicio/i)).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+});
+
+describe("receipt-triage US2: the ask at the upload", () => {
+  it("names the key, then only the other fields missing, then where Banorte shows them — never an account", async () => {
+    const paid: unknown[] = [];
+    server.use(...uploadHandlers(() => ok(rtRead({ date: null, ask: { reason: "no_key", fields: ["key", "date"] } })), paid));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+
+    const message = await screen.findByText(/tu captura no muestra la clave de rastreo ni el número de referencia/i);
+    expect(message).toHaveTextContent("Tampoco vemos la fecha.");
+    expect(screen.getByText("En Banorte: toca «Ver más detalles» y captura esa pantalla.")).toBeInTheDocument();
+    expect(screen.queryByText(/cuenta/i, { selector: "[data-ask] *" })).not.toBeInTheDocument();
+    /* FR-013: focus lands on the message */
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("data-ask", "no_key"));
+    /* nothing was paid */
+    expect(paid).toHaveLength(0);
+    await expectNoViolations(document.body);
+  });
+
+  it("the general hint for a bank with no verified entry", async () => {
+    server.use(...uploadHandlers(() => ok(rtRead({ senderBank: "NUBANK" }))));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    expect(
+      await screen.findByText(
+        "Abre el detalle de la transferencia en tu app y captura la pantalla donde aparecen estos datos.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "a generic reference",
+      { gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "generic" } },
+      "El número de referencia de tu captura lo usan muchas transferencias y no muestra la clave de rastreo.",
+    ],
+    [
+      "a shared reference",
+      {
+        referenceNumber: "038195",
+        gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "ok" },
+        ask: { reason: "no_key", fields: ["key"], shared: true },
+      },
+      "El número de referencia de tu captura (038195) ya lo usó otra transferencia de ese día y no muestra la clave de rastreo.",
+    ],
+  ])("the first sentence for %s", async (_name, over, sentence) => {
+    server.use(...uploadHandlers(() => ok(rtRead(over))));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    expect(await screen.findByText(new RegExp(sentence.replace(/[()]/g, "\\$&")))).toBeInTheDocument();
+  });
+
+  it("“Escribir los datos” opens the form with what the capture showed, and marks what it lacked", async () => {
+    const paid: unknown[] = [];
+    server.use(...uploadHandlers(() => ok(rtRead({ date: null, ask: { reason: "no_key", fields: ["key", "date"] } })), paid));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    await userEvent.click(await screen.findByRole("button", { name: "Escribir los datos" }));
+
+    expect(screen.getByLabelText(/banco desde el que pagaste/i)).toHaveValue("BANORTE");
+    expect(screen.getByLabelText("Monto transferido")).toHaveValue("300.00");
+    expect(screen.getAllByText("No aparece en tu captura")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Mejor subo otra captura" })).toBeInTheDocument();
+    await expectNoViolations(document.body);
+
+    await userEvent.type(screen.getByLabelText("Número de referencia"), "038195");
+    await userEvent.type(screen.getByLabelText("Fecha de la transferencia"), "2026-09-09");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ proofId: "link-1/proof-rt", transfer: { referenceNumber: "038195", senderBank: "BANORTE" } });
+  });
+
+  it("a second capture with no key in the same visit puts the form first", async () => {
+    server.use(...uploadHandlers(() => ok(rtRead())));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    await screen.findByRole("button", { name: "Escribir los datos" });
+    await rtUpload();
+    expect(
+      await screen.findByText(
+        "Tu captura tampoco muestra la clave de rastreo ni el número de referencia. Escribe los datos de tu transferencia.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Número de referencia")).toBeInTheDocument();
+  });
+
+  it("a reference-only reading goes on to pay with no ask", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      ...uploadHandlers(
+        () =>
+          ok(
+            rtRead({
+              referenceNumber: "038195",
+              gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "ok" },
+              ask: null,
+            }),
+          ),
+        paid,
+      ),
+    );
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ proofId: "link-1/proof-rt" });
+    expect(screen.queryByText(/no muestra la clave de rastreo/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("receipt-triage US3: the one account the payer sees", () => {
+  it("a card as the cuenta de cobro: labelled by its kind, the only account on the step", async () => {
+    server.use(
+      handlers.link(() =>
+        ok(
+          rtLink({
+            speiClabe: undefined,
+            speiBank: undefined,
+            collectAccount: { kind: "card", value: "4111111111111111", bank: "NUBANK" },
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    /* the label, and the copy button's name for assistive tech */
+    expect((await screen.findAllByText("Tarjeta de débito")).length).toBeGreaterThan(0);
+    expect(screen.getByText("4111111111111111")).toBeInTheDocument();
+    expect(screen.queryAllByText("CLABE")).toHaveLength(0);
+    /* converge T057 (FR-017): the bank stands beside the card, in view —
+       not behind "Ver los demás datos" */
+    expect(screen.getByText("NUBANK")).toBeVisible();
+    expect(screen.getByRole("button", { name: /copiar banco/i })).toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("a phone is labelled Celular", async () => {
+    server.use(
+      handlers.link(() =>
+        ok(rtLink({ speiClabe: undefined, speiBank: undefined, collectAccount: { kind: "phone", value: "5512345678", bank: "NUBANK" } })),
+      ),
+    );
+    renderPage();
+    expect((await screen.findAllByText("Celular")).length).toBeGreaterThan(0);
+    expect(screen.getByText("5512345678")).toBeInTheDocument();
+    expect(screen.getByText("NUBANK")).toBeInTheDocument();
+  });
+
+  it("a CLABE renders exactly as it always did", async () => {
+    server.use(handlers.link(() => ok(rtLink())));
+    renderPage();
+    expect((await screen.findAllByText("CLABE")).length).toBeGreaterThan(0);
+    expect(screen.getByText("012180001234538195")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /copiar clabe/i })).toBeInTheDocument();
+    /* SC-008: a CLABE's bank stays under "Ver los demás datos", as today */
+    expect(screen.queryByRole("button", { name: /copiar banco/i })).not.toBeInTheDocument();
+  });
+
+  it("a receipt paid to another account is told honestly and kindly, with the account the business receives at", async () => {
+    server.use(...uploadHandlers(() => ok(rtRead({ ask: { reason: "wrong_destination" } }))));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    expect(
+      await screen.findByText(
+        "Parece que esta transferencia se hizo a otra cuenta, no a la de WifiPlus. WifiPlus recibe pagos en CLABE terminada en 8195. Si leímos mal tu comprobante, sube otra captura o escribe tus datos.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Subir otra captura" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Escribir los datos" })).toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+});
+
+describe("receipt-triage US4: the capture guide", () => {
+  it("the transfer step says to capture the detail, and why", async () => {
+    server.use(handlers.link(() => ok(rtLink())));
+    renderPage();
+    expect(await screen.findByText("Al terminar, toma captura del detalle")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ahí aparecen la clave de rastreo o el número de referencia que necesitamos."),
+    ).toBeInTheDocument();
+  });
+
+  it("the upload step lists the four items, the account's last four, and the tips one tap away", async () => {
+    server.use(handlers.link(() => ok(rtLink())));
+    renderPage();
+    await goToProof();
+    expect(screen.getByRole("heading", { name: "Tu captura debe mostrar" })).toBeInTheDocument();
+    expect(screen.getByText("4 datos")).toBeInTheDocument();
+    for (const name of ["Clave de rastreo o número de referencia", "Monto", "Fecha", "Cuenta destino"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+    expect(screen.getByText("Aparecen en el detalle, no en el resumen")).toBeInTheDocument();
+    expect(screen.getByText("CLABE que termina en 8195")).toBeInTheDocument();
+    expect(screen.getByText(/completa y sin reflejos/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "¿Dónde lo encuentro en mi banco?" }));
+    expect(await screen.findByText("Banorte:")).toBeInTheDocument();
+    /* FR-026: nothing needs a tap before the upload control */
+    expect(screen.getByLabelText(/captura o comprobante/i)).toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("while the capture is read the items breathe and say Revisando…; after it, each says whether it was seen", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    server.use(
+      ...uploadHandlers(async () => {
+        await gate;
+        return ok(rtRead());
+      }),
+    );
+    renderPage();
+    await goToProof();
+    await rtUpload();
+
+    expect(await screen.findByText("Revisando…")).toBeInTheDocument();
+    expect(screen.getByText("Leyendo tu captura…")).toBeInTheDocument();
+    const tiles = document.querySelectorAll("[data-item] [data-motion='breath']");
+    expect(tiles).toHaveLength(4);
+
+    release();
+    expect(await screen.findByRole("heading", { name: "Lo que vimos en tu captura" })).toBeInTheDocument();
+    const key = document.querySelector("[data-item='key']")!;
+    expect(key).toHaveTextContent("No se ve");
+    expect(key).toHaveTextContent("Busca «Ver más detalles» en tu app");
+    expect(document.querySelector("[data-item='amount']")).toHaveTextContent("Se ve");
+    expect(document.querySelector("[data-ask]")).toHaveClass("animate-enter");
+    await expectNoViolations(document.body);
+  });
+});
+
+/* bug: one-open-attempt — the attempt in review is the server's to name,
+   so a payer who comes back (a reload, hours later, another phone) meets
+   it instead of a fresh form beside it, and corrects it. */
+describe("bug: one-open-attempt", () => {
+  it("a payer who comes back resumes the attempt in review and corrects it", async () => {
+    const paid: unknown[] = [];
+    server.use(
+      handlers.link(() =>
+        ok(
+          linkStatusResponse.parse({
+            ...debtLink,
+            inReview: { directPaymentId: "dp-1", status: "validating" },
+          }),
+        ),
+      ),
+      handlers.proof(() => ok(proofUploadResponse.parse({ proofId: "link-1/proof-2" }))),
+      handlers.read(() =>
+        ok(
+          proofReadingResponse.parse({
+            source: "reader",
+            isReceipt: true,
+            legibility: "full",
+            amountCents: 51400,
+            trackingKey: "260925071144393084I",
+            senderBank: "AZTECA",
+            date: "2026-09-25",
+            receiptStatus: "Aceptada",
+            gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
+          }),
+        ),
+      ),
+      handlers.pay((body) => {
+        paid.push(body);
+        return ok(payResponse.parse({ directPaymentId: "dp-2", status: "validating", error: null }), 201);
+      }),
+      handlers.status(() =>
+        ok(
+          directPaymentStatusResponse.parse({
+            status: "validating",
+            validationAttempts: 7,
+            error: "TRANSFER_NOT_FOUND",
+            senderBank: "AZTECA",
+            transferDate: "2026-09-24",
+          }),
+        ),
+      ),
+    );
+    /* A fresh visit: nothing on this device remembers the attempt */
+    renderPage();
+
+    const door = await screen.findByRole(
+      "button",
+      { name: /corregir el comprobante en revisión/i },
+      { timeout: 8000 },
+    );
+    /* the attempt, never the form beside it */
+    expect(screen.queryByRole("heading", { name: /haz tu transferencia/i })).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+
+    await userEvent.click(door);
+    /* the link still names dp-1 until the correction lands; the payer who
+       walked out of it is not pulled back in */
+    expect(
+      await screen.findByRole("heading", { name: /envía tu comprobante/i }),
+    ).toBeInTheDocument();
+    const picker = screen.getByLabelText(/captura o comprobante/i);
+    await userEvent.upload(picker, new File([new Uint8Array(100)], "cep2.png", { type: "image/png" }));
+    await userEvent.click(screen.getByRole("button", { name: /enviar comprobante/i }));
+
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ supersedes: "dp-1", proofId: "link-1/proof-2" });
+  });
+
+  it("with nothing in review the page starts from the transfer, as before", async () => {
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /corregir el comprobante en revisión/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/* bug: spei-date-rollover — the manual form's "today" is the business's
+   day. It was the UTC date, which is already tomorrow from 18:00 in Mexico
+   City: an evening payer was offered a day their receipt does not show.
+   Only `Date` is faked, so MSW and the user events keep real timers. */
+describe("bug: spei-date-rollover", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("at 20:00 in Mexico City the manual form proposes that day, not the UTC one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    /* 20:00 on the 24th in Mexico City; the 25th in UTC */
+    vi.setSystemTime(new Date("2026-09-25T02:00:00Z"));
+    server.use(handlers.link(() => ok(linkStatusResponse.parse({ ...debtLink, timezone: "America/Mexico_City" }))));
+    renderPage();
+    await openManualForm();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
+    await expectNoViolations(document.body);
+  });
+
+  it("the business's own zone decides: past midnight in Mexico City, still the 24th in Hermosillo", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    /* 00:30 on the 25th in Mexico City, 23:30 on the 24th in Hermosillo */
+    vi.setSystemTime(new Date("2026-09-25T06:30:00Z"));
+    server.use(handlers.link(() => ok(linkStatusResponse.parse({ ...debtLink, timezone: "America/Hermosillo" }))));
+    renderPage();
+    await openManualForm();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
+  });
+
+  it("an answer without a zone assumes Mexico City", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T02:00:00Z"));
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    await openManualForm();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
   });
 });

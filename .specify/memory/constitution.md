@@ -1,4 +1,62 @@
 <!--
+Sync Impact Report (v1.6.0, 2026-09-25)
+- Version change: 1.5.0 → 1.6.0 — MINOR. One bullet of Principle V is
+  materially expanded (a third cross-business statistic is admitted), and the
+  stack table's Data row describes the reader model as it will be built. No
+  principle is added, removed or redefined, and nothing is renumbered.
+  Precedent: v1.3.0, also MINOR, which generalised a bullet of V.
+- Source: specs/011-receipt-reader-tuning. The /speckit-analyze run of
+  2026-09-25 found C1 (CRITICAL): the panel's count of reader fallbacks reads
+  `extractions` across businesses, which V limited to two statistics. The
+  creator chose to amend V rather than keep a separate platform counter or
+  drop the count (session 2026-09-25). The analysis also noted that the
+  stack table's "(model is a var)" would become incomplete (research R16).
+  As with v1.1.0, v1.3.0 and v1.5.0, the amendment leads the implementation
+  on purpose: the code catches up under specs/011-receipt-reader-tuning/tasks.md.
+- What this decides:
+  · The platform operator may see one number across businesses: how many
+    payer readings, in a recent window, fell back from the chosen reader
+    model to the default. It is a fact about a model. It returns a number,
+    never a row. It reads no column that names a business or a payer (only
+    the fallback marker and the time). A fourth such read still needs an
+    amendment.
+  · The reader's models stay configuration: every model id the reader can
+    use is a var. The platform operator picks one of them at runtime in
+    `/operador`. VIII's "model ids are `vars`, never literals" is unchanged
+    and still holds word for word.
+- What it does not change: the two bank statistics, and what they may read.
+  Tenant filtering on every business query. The operator named by deploy
+  (`PLATFORM_OPERATOR_EMAILS`). Principle IV: stubbed reader answers are
+  still measured ones. The feature resolves analyze finding C2 without an
+  amendment, by pinning the fixture to the answer the bench captures.
+- Modified sections:
+  · V. Tenant Isolation and Authorization by Area, last bullet — "Exactly
+    two derived statistics … A third such read is an amendment, not a
+    comment." becomes "Exactly three derived statistics …", adding the
+    reader-fallback count from `receipt-reader-tuning`, restating the shared
+    limits (no rows, no column naming a business or a payer) and ending "A
+    fourth such read is an amendment, not a comment."
+  · Technology Stack & Constraints, Data row — "Workers AI for receipt
+    reading (model is a var)" → "(the models are a var; the platform
+    operator picks one of them in `/operador`)".
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅ (Constitution Check is filled at plan time
+  from this file); spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(011-PLAN-V): specs/011-receipt-reader-tuning/plan.md's Constitution
+  Check row V says "No new cross-business read", and tasks.md T014 says to
+  note the read "in the comment". Both must cite v1.6.0 instead. This is a
+  spec artifact edit, outside this command.
+  TODO(TD-005): still open from v1.0.0 — spec-lint runs warning-only until
+  the debt it names is registered with /speckit-debt-log.
+  TODO(BREATH-AMPLITUDE): carried unchanged from v1.1.0.
+  Carried from v1.2.0, still open: who may be admitted as a business, and
+  whether identity is checked before one can collect — production-launch
+  D8 launches with open sign-up and names admission as the next feature.
+-->
+
+<!--
 Sync Impact Report (v1.5.0, 2026-09-20)
 - Version change: 1.4.0 → 1.5.0 — MINOR: the fixed stack table gains one
   row, its Tests row names a second test runner for one workspace, and one
@@ -365,12 +423,16 @@ worth less than no verdict. Each layer answers only the questions it can.
   Dev-only routes answer 404 outside `ENVIRONMENT=dev`. CORS is an allow-list
   of frontend origins.
 - The validation and reading records (`validations`, `extractions`) carry
-  `business_id`, NULL for the platform's own top-ups. Exactly two derived
-  statistics read across businesses, by decision `consta-api-merge D4`: the
-  bank clave shape (proof-extraction D14) and Banxico's latency per bank pair
-  (learned-retry D2). Both are facts about banks; both return a rule, never a
-  row; neither reads a column that names a business or a payer. A third such
-  read is an amendment, not a comment.
+  `business_id`, NULL for the platform's own top-ups. Exactly three derived
+  statistics read across businesses. Two come from decision
+  `consta-api-merge D4`: the bank clave shape (proof-extraction D14) and
+  Banxico's latency per bank pair (learned-retry D2). The third comes from
+  `receipt-reader-tuning`: the count of payer readings where the chosen
+  reader model failed and the default model read instead, shown only to the
+  platform operator. The first two are facts about banks and return a rule;
+  the third is a fact about a reader model and returns a number. None
+  returns a row, and none reads a column that names a business or a payer.
+  A fourth such read is an amendment, not a comment.
 
 Rationale: a multi-tenant payment system leaks money, not just data, when a
 filter is missing. One matrix, checked by area, is auditable with grep.
@@ -468,7 +530,7 @@ Complexity Tracking.
 | --- | --- |
 | Runtime | Cloudflare Workers, `compatibility_date` 2025-05-01, `nodejs_compat` where Better Auth needs it |
 | API | Hono 4 + `@hono/zod-validator`; `apps/api` — the product API, the SPEI validation engine (Consta, at `src/consta/`, attributed by `business_id` and reachable only in-process), and the every-minute cron sweeps |
-| Data | D1 via Drizzle ORM (`sqlite`), one database, migrations generated by `drizzle-kit`, additive — the per-PR preview applies them to the live dev database while the deployed Worker keeps serving; R2 for transfer proofs behind signed URLs; Workers AI for receipt reading (model is a var) |
+| Data | D1 via Drizzle ORM (`sqlite`), one database, migrations generated by `drizzle-kit`, additive — the per-PR preview applies them to the live dev database while the deployed Worker keeps serving; R2 for transfer proofs behind signed URLs; Workers AI for receipt reading (the models are a var; the platform operator picks one of them in `/operador`) |
 | Auth | Better Auth 1.6: email + password with OTP verification, passkeys (`@better-auth/passkey`), organization plugin as the tenant twin; sessions in our D1 |
 | Frontend | React 19, Vite 6, Tailwind CSS 4, shadcn/ui (new-york, lucide) over Radix, TanStack Router + Query; `apps/admin` (panel) and `apps/pago` (public payment page) served as assets-only Workers with SPA fallback |
 | Shared UI | `@devolada/ui`: tokens, base stylesheet and atoms consumed by every surface |
@@ -527,4 +589,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.5.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-20
+**Version**: 1.6.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-25

@@ -21,7 +21,26 @@ import type { LoadedProof } from "./proof";
 
    D1: the same model reads a PDF, through the text its conversion
    produces (`pdf-text.ts`). A text reading is asked the same questions
-   minus legibility: there is no photograph to judge (D15). */
+   minus legibility: there is no photograph to judge (D15).
+
+   receipt-triage D4/D16: legibility is also what decides whether a
+   capture with no key is asked about before a credit — only a `completa`
+   picture (or a PDF's text) is certain enough to stop. The rules below
+   are unchanged word for word; `parcial` and an omitted answer still go
+   to the provider with their hole.
+
+   receipt-triage D12/D24: two more questions ride the same prompt, so no
+   extra call — the referencia numérica (as printed, leading zeros kept,
+   and told what is *not* one: a folio, an authorisation number, the
+   clave, an account) and the destination account's visible digits with
+   the kind its label names. Both prompts share `FIELDS`, so a PDF's text
+   is asked the same. Nothing else is asked (spec Out of Scope).
+
+   Measured with the new prompt (T016, quickstart Step 0): **not run —
+   this implementation environment cannot reach the Workers AI binding**
+   (2026-09-25). Receipt 1 and receipt 2 must be read on dev before the
+   feature is called done; registered as debt
+   (.specify/debt/receipt-triage-reader-unmeasured/). */
 
 export type Reading = {
   isReceipt: boolean;
@@ -39,7 +58,20 @@ export type Reading = {
      is what tells a payer their capture was taken too early. */
   amount: number | null;
   date: string | null;
+  /* bug: spei-date-rollover — the time printed beside the date, "HH:MM"
+     on a 24-hour clock, or null. SPEI changes its operation day at 18:00
+     (Banxico, "Información operativa del SPEI"), and a receipt prints the
+     calendar day: the time is what says which day Banxico filed it under.
+     Reported like the date, never judged by the gate. */
+  time: string | null;
   status: string | null;
+  /* receipt-triage D12: as printed — text, never a number, so "038195"
+     keeps its zero. Judged by the gate, not here. */
+  referenceNumber: string | null;
+  /* receipt-triage D24: what the receipt shows as the receiving account.
+     `digits` has every mask removed ("•••• 8195" → "8195"); the kind
+     only orders the search when it is tied, never rules a fit out. */
+  destination: { kind: "clabe" | "card" | "phone" | "account" | null; digits: string | null };
   raw: string;
   model: string;
 };
@@ -66,7 +98,10 @@ const FIELDS = `{"esComprobante": <true if this really is a bank transfer receip
  "banco": "<the bank the money was sent FROM, or null>",
  "monto": <the amount in pesos as a number, or null>,
  "fecha": "<the operation date as YYYY-MM-DD, or null>",
- "estatus": "<the value of the 'Estatus' field, or null>"}`;
+ "hora": "<the time of the operation as HH:MM on a 24-hour clock, or null>",
+ "estatus": "<the value of the 'Estatus' field, or null>",
+ "referenciaNumerica": "<the value of the 'Referencia' or 'Referencia numérica' field, digits only, exactly as printed including leading zeros, or null>",
+ "destino": {"tipo": "<clabe | tarjeta | celular | cuenta, or null>", "digitos": "<the digits of the destination account you can see, without asterisks or dots, or null>"}}`;
 
 const RULES = `- "claveDeRastreo" is between 6 and 30 characters of uppercase letters and digits.
   Different banks use different lengths. It may be printed across two lines —
@@ -76,6 +111,17 @@ const RULES = `- "claveDeRastreo" is between 6 and 30 characters of uppercase le
   captured while the transfer is still "En proceso" often has none.
 - "banco" must be one of these exact names, or null if none of them fits:
 ${BANKS.join(", ")}
+- "referenciaNumerica" is the numeric reference the sender typed, at most 7
+  digits. Copy it exactly as printed, keeping any leading zeros. A "Folio", a
+  "Número de autorización", the "Clave de rastreo" or an account number is NOT
+  a reference — if the receipt shows no field named "Referencia" or
+  "Referencia numérica", return null.
+- "destino" is the account the money was sent TO (the beneficiary's), never
+  the sender's. "tipo" is what its label says it is; "digitos" are only the
+  digits you can actually see, often the last three or four.
+- "hora" is the time printed beside the date, converted to a 24-hour clock
+  ("11:47 p.m." is "23:47"). Return null if the receipt prints no time; never
+  guess one.
 - If this is not a bank transfer receipt, set "esComprobante" to false and
   every other field to null.`;
 
@@ -148,7 +194,33 @@ export function legibilityOf(v: unknown): Reading["legibility"] {
   const word = typeof v === "string" ? v.trim().toLowerCase() : null;
   return word && word in LEGIBILITY ? LEGIBILITY[word as keyof typeof LEGIBILITY] : null;
 }
+/* receipt-triage D24: the kind in the prompt's Spanish, the type's English.
+   Anything else is null — the kind only orders the tie, so a word we did
+   not ask for costs nothing. */
+const DESTINATION_KIND = { clabe: "clabe", tarjeta: "card", celular: "phone", cuenta: "account" } as const;
+export function destinationOf(v: unknown): Reading["destination"] {
+  const o = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  const word = typeof o.tipo === "string" ? o.tipo.trim().toLowerCase() : null;
+  const kind = word && word in DESTINATION_KIND ? DESTINATION_KIND[word as keyof typeof DESTINATION_KIND] : null;
+  const raw = str(typeof o.digitos === "number" ? String(o.digitos) : o.digitos);
+  const digits = raw ? raw.replace(/\D/g, "") || null : null;
+  return { kind, digits };
+}
+/* receipt-triage D12: a reference the model returned as a JSON number
+   has already lost its leading zeros — it is kept as the text of that
+   number, and the gate judges it like any other */
+const referenceOf = (v: unknown): string | null =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 ? String(v) : str(v);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/* bug: spei-date-rollover — a time is "HH:MM" on a 24-hour clock or it is
+   nothing: a word, a 12-hour clock or an impossible hour decides no day */
+export function timeOf(v: unknown): string | null {
+  const t = str(v);
+  const m = t ? /^(\d{1,2}):(\d{2})$/.exec(t) : null;
+  if (!m) return null;
+  const [h, min] = [Number(m[1]), Number(m[2])];
+  return h <= 23 && min <= 59 ? `${String(h).padStart(2, "0")}:${m[2]}` : null;
+}
 
 /* `text` reads a PDF's converted text instead of a picture (D1). Both
    go to the same model with the same JSON shape, so nothing downstream
@@ -195,7 +267,10 @@ export async function readProof(
     senderBank: str(parsed.banco),
     amount: num(parsed.monto),
     date: str(parsed.fecha),
+    time: timeOf(parsed.hora),
     status: str(parsed.estatus),
+    referenceNumber: referenceOf(parsed.referenciaNumerica),
+    destination: destinationOf(parsed.destino),
     raw,
     model,
   };

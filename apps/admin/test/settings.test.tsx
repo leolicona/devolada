@@ -5,6 +5,7 @@ import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { handlers, businessActor, ok, server } from "./msw";
 import { renderApp } from "./render";
+import { expectNoViolations } from "./a11y";
 
 /* docs/legacy/admin/settings.spec.md scenarios 5–7. */
 
@@ -261,5 +262,104 @@ describe("US-A04 scenario 6: Configuración splits in two", () => {
     const router = renderApp("/settings/business");
     expect(await screen.findByRole("heading", { name: /pago directo por spei/i })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/settings/direct-payment");
+  });
+});
+
+/* receipt-triage US3 (contracts/settings.md; D9, D26, D29, D32): the
+   accounts a business is paid at, and the one its payers see. */
+describe("receipt-triage US3: Cuentas para recibir pagos", () => {
+  const withAccounts = (spei: Record<string, unknown> = {}) =>
+    settings({
+      spei: {
+        clabe: "646180157000000004",
+        bank: "STP",
+        beneficiaryName: null,
+        serviceFeeCents: null,
+        effectiveServiceFeeCents: 1500,
+        bankUnknown: false,
+        configured: true,
+        card: null,
+        cardBank: null,
+        phone: null,
+        phoneBank: null,
+        collectKind: "clabe",
+        ...spei,
+      },
+    });
+  const pickBank = async (name: string, query: string) => {
+    const field = screen.getByRole("combobox", { name });
+    await userEvent.type(field, query);
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+  };
+
+  it("the owner registers a card with its bank and makes it the cuenta de cobro", async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() => ok(withAccounts())),
+      handlers.patchSettings((body) => {
+        patches.push(body as Record<string, unknown>);
+        return ok(withAccounts());
+      }),
+    );
+    const { container } = { container: document.body };
+    renderApp("/settings/direct-payment");
+
+    expect(await screen.findByRole("heading", { name: "Cuentas para recibir pagos" })).toBeInTheDocument();
+    expect(screen.getByText("Debe ser una tarjeta de débito que reciba transferencias.")).toBeInTheDocument();
+    expect(screen.getByText("El número que tu banco tiene registrado para recibir transferencias.")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "CLABE ••••0004" })).toBeChecked();
+
+    await userEvent.type(screen.getByLabelText("Tarjeta de débito"), "4111111111111111");
+    expect(screen.getByText("Elige el banco.")).toBeInTheDocument();
+    await pickBank("Banco de tarjeta de débito", "nubank");
+    await userEvent.click(screen.getByRole("radio", { name: "Tarjeta de débito ••••1111" }));
+    await expectNoViolations(container);
+    await userEvent.click(screen.getByRole("button", { name: /guardar pago directo/i }));
+    expect(patches[0]).toMatchObject({ speiCard: "4111111111111111", speiCardBank: "NUBANK", speiCollectKind: "card" });
+  });
+
+  it.each([
+    ["4111", "La tarjeta debe tener 16 dígitos."],
+    ["4111111111111112", "Revisa el número de la tarjeta: no es válido."],
+  ])("the card %s shows its inline error", async (value, error) => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(withAccounts())));
+    renderApp("/settings/direct-payment");
+    await userEvent.type(await screen.findByLabelText("Tarjeta de débito"), value);
+    expect(screen.getByText(error)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /guardar pago directo/i })).toBeDisabled();
+  });
+
+  it("a phone short of ten digits says so", async () => {
+    server.use(handlers.session(() => ok(businessActor)), handlers.settings(() => ok(withAccounts())));
+    renderApp("/settings/direct-payment");
+    await userEvent.type(await screen.findByLabelText("Celular para transferencias"), "55123");
+    expect(screen.getByText("El celular debe tener 10 dígitos.")).toBeInTheDocument();
+  });
+
+  it("clearing the account where the business is paid, while another exists, asks to choose first", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() => ok(withAccounts({ card: "4111111111111111", cardBank: "NUBANK" }))),
+    );
+    renderApp("/settings/direct-payment");
+    await userEvent.clear(await screen.findByLabelText("CLABE"));
+    expect(screen.getByText("No puedes borrar la cuenta donde te pagan: elige otra primero.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /guardar pago directo/i })).toBeDisabled();
+    await userEvent.click(screen.getByRole("radio", { name: "Tarjeta de débito ••••1111" }));
+    expect(screen.getByRole("button", { name: /guardar pago directo/i })).toBeEnabled();
+  });
+
+  it("an admin reads the accounts, with the lock line, and cannot edit them", async () => {
+    server.use(
+      handlers.session(() => ok({ ...businessActor, role: "admin" })),
+      handlers.settings(() => ok(withAccounts({ card: "4111111111111111", cardBank: "NUBANK" }))),
+    );
+    renderApp("/settings/direct-payment");
+    expect(await screen.findByText("Solo la persona dueña del negocio puede cambiarlas.")).toBeInTheDocument();
+    expect(screen.getByText("4111111111111111")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Tarjeta de débito" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "CLABE ••••0004" })).toBeDisabled();
+    await expectNoViolations(document.body);
   });
 });

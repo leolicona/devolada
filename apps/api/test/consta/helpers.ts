@@ -84,7 +84,42 @@ export type StubbedReading = {
   banco?: string | null;
   monto?: number | null;
   fecha?: string | null;
+  /* bug: spei-date-rollover — the time printed beside the date */
+  hora?: string | null;
   estatus?: string | null;
+  /* receipt-triage D12/D24: the two questions the prompt gained */
+  referenciaNumerica?: string | null;
+  destino?: { tipo?: string | null; digitos?: string | null } | null;
+};
+
+/* receipt-triage US1/US2: what the reader answers for the receipts the
+   product creator brought on 2026-09-23 (the images themselves were
+   uploaded in session and are never committed). Receipt 1 is Banorte's
+   summary screen — no clave, no reference, the CLABE's last four;
+   receipt 2 is Azteca's — no clave, the reference with its leading zero,
+   and only three digits of the destination. */
+export const RECEIPT_1_READING: StubbedReading = {
+  esComprobante: true,
+  legibilidad: "completa",
+  claveDeRastreo: null,
+  referenciaNumerica: null,
+  banco: "BANORTE",
+  monto: 300,
+  fecha: "2026-09-09",
+  estatus: null,
+  destino: { tipo: "clabe", digitos: "8195" },
+};
+
+export const RECEIPT_2_READING: StubbedReading = {
+  esComprobante: true,
+  legibilidad: "completa",
+  claveDeRastreo: null,
+  referenciaNumerica: "038195",
+  banco: "AZTECA",
+  monto: 350,
+  fecha: "2026-09-09",
+  estatus: null,
+  destino: { tipo: null, digitos: "195" },
 };
 
 /* two-eyes-receipt D1/D15: what the PDF-to-text conversion would return

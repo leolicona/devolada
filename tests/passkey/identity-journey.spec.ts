@@ -49,19 +49,22 @@ test("US-B01/US-B03: signup, verify, name the business, add the CLABE, invite, a
   await expect(ownerPage.getByRole("heading", { name: /tu negocio está listo/i })).toBeVisible();
   await ownerPage.getByRole("button", { name: /configurar mi clabe/i }).click();
 
-  /* The shell wears the CLABE banner until the SPEI card closes it */
-  await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toBeVisible();
+  /* The shell wears the account banner until the SPEI card closes it
+     (worded for any account since receipt-triage D32) */
+  await expect(ownerPage.getByText(/falta la cuenta donde te pagan/i)).toBeVisible();
   await ownerPage.getByLabel("CLABE").fill("646180157000000004");
   /* bug: bank-picker-unreachable — the picker is a combobox now, so the
      name the CLABE seeded is the field's value, not text beside it. */
-  await expect(ownerPage.getByRole("combobox", { name: "Banco" })).toHaveValue(/STP/);
+  /* exact since receipt-triage US3: the card and the phone have bank
+     pickers of their own */
+  await expect(ownerPage.getByRole("combobox", { name: "Banco", exact: true })).toHaveValue(/STP/);
   await ownerPage.getByRole("button", { name: /guardar pago directo/i }).click();
   await expect(ownerPage.getByText(/guardado|listo|actualizad/i).first()).toBeVisible({ timeout: 10_000 });
   await ownerPage.reload();
   /* settings D11: the page the wizard lands on is Pago directo y
      conciliación — "Configuración" was one page naming three subjects */
   await expect(ownerPage.getByRole("heading", { name: "Pago directo y conciliación" })).toBeVisible();
-  await expect(ownerPage.getByText(/falta la clabe del negocio/i)).toHaveCount(0);
+  await expect(ownerPage.getByText(/falta la cuenta donde te pagan/i)).toHaveCount(0);
 
   /* Invite (verified by construction — the session exists), and the
      pending list shows the clock. Usuarios is a sub-page of Cuenta since

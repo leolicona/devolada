@@ -317,6 +317,21 @@ export type ConstaReading = {
   tiedAccount: RegisteredAccount | null;
 };
 
+/* receipt-triage D7 (FR-007, converge T060): what only the caller can
+   know. The engine has no links and no payments; the lifecycle does, so it
+   hands the engine the one question the receipt door must ask before a
+   paid call — is this reference already another payment's? Omitted (a
+   top-up, the `/read` door) → never asked. */
+export type ConstaHooks = {
+  referenceTaken?: (reading: {
+    referenceNumber: string;
+    date: string;
+    senderBank: string;
+    amountCents: number;
+    account: RegisteredAccount;
+  }) => Promise<boolean>;
+};
+
 export type ConstaEngine = {
   validate(request: ConstaRequest): Promise<ConstaVerdict>;
   extract(input: {
@@ -338,10 +353,11 @@ export function consta(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: DrizzleD1Database<any>,
   owner: Owner,
+  hooks: ConstaHooks = {},
 ): ConstaEngine {
   const handle = db as DrizzleD1Database;
   return {
-    validate: (request) => validate(env, handle, owner, request),
+    validate: (request) => validate(env, handle, owner, request, hooks),
     extract: (input) => extract(env, handle, owner, input),
   };
 }

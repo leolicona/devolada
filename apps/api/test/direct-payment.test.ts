@@ -3927,6 +3927,9 @@ describe("receipt-triage US2/US3: what /read reports to the page (D15, D7, D8)",
     const { data } = await (await readAs(`${link.id}/r2`, RECEIPT_2_READING)).json();
     expect(data.referenceNumber).toBe("038195");
     expect(data.ask).toEqual({ reason: "no_key", fields: ["key"], shared: true });
+    /* converge T060 (FR-028): counted as the ask it is */
+    const [reading] = await drizzle(env.DB).select().from(extractions);
+    expect(reading.outcome).toBe("key_missing");
   });
 
   it("Banxico's own account, tied to the snapshot, becomes the account the payment was checked against (D22)", async () => {
@@ -3947,5 +3950,97 @@ describe("receipt-triage US2/US3: what /read reports to the page (D15, D7, D8)",
     const after = await rowById(row.id);
     expect(after.status).toBe("confirmed");
     expect(JSON.parse(after.beneficiary!)).toEqual(card);
+  });
+});
+
+/* receipt-triage US3 (FR-020a, US3/AC7, plan D31; converge T058): money
+   paid to an account the business removed waits for the business's own
+   decision, so a provisional release — a WispHub promise that reconnects
+   the customer — must not fire for it on any evidence. */
+describe("receipt-triage US3: no provisional release for a payment to a removed account", () => {
+  const RETIRED = { kind: "card", value: "4000000000004321", bank: "NUBANK", retired: true };
+  const typedRow = (link: { id: string }, business: { id: string }, account: Record<string, unknown>) =>
+    seedRtRow(link, business, {
+      trackingKey: "TRACK001XYZ",
+      /* not the card's own bank: a same-institution transfer is never
+         SPEI, and the engine's guard refuses it before any credit */
+      senderBank: "AZTECA",
+      transferDate: TODAY(),
+      beneficiary: JSON.stringify(account),
+      registeredAccounts: JSON.stringify([RT_ACCOUNT, RETIRED]),
+    });
+
+  it("control: the same pending verdict on a current account buys the promise", async () => {
+    const { business, link } = await seedRtBusiness({ provisionalReleaseEnabled: true });
+    const row = await typedRow(link, business, RT_ACCOUNT);
+    mockApiCep({ status: "pending", cep: undefined });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockPromise();
+    await sweepDirectPayments(testEnv, new Date());
+    expect((await rowById(row.id)).releaseEvidence).toBe("pending");
+  });
+
+  it("a pending verdict on a retired account asks WispHub nothing and releases nothing", async () => {
+    const { business, link } = await seedRtBusiness({ provisionalReleaseEnabled: true });
+    const row = await typedRow(link, business, RETIRED);
+    mockApiCep({ status: "pending", cep: undefined });
+    /* Watched at the edge: without the gate the release would try WispHub
+       and fail quietly inside its own try, so an unmocked call is not
+       proof enough */
+    const seen: string[] = [];
+    const original = globalThis.fetch.bind(globalThis);
+    const restore = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(String(input instanceof Request ? input.url : input));
+      return original(input, init);
+    }) as typeof fetch;
+    try {
+      await sweepDirectPayments(testEnv, new Date());
+    } finally {
+      globalThis.fetch = restore;
+    }
+    expect(seen.filter((u) => u.includes("wisphub"))).toEqual([]);
+    const after = await rowById(row.id);
+    expect(after.releaseEvidence).toBeNull();
+    expect(after.provisionalReleaseAt).toBeNull();
+  });
+});
+
+/* receipt-triage US1 (FR-007, D7; converge T060): the shared-reference stop
+   holds on the receipt door itself, for a client that never asked /read */
+describe("receipt-triage US1: a shared reference on the receipt door costs nothing", () => {
+  it("receipt 2, submitted as a file with no /read, whose reference another link's payment holds: no provider call, the clave is asked", async () => {
+    const { business, link } = await seedRtBusiness();
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokother00000004", wisphubCustomerId: "7", customerUsuario: "otro@wifiplus" })
+      .returning();
+    await seedRtRow(other, business, {
+      referenceNumber: "038195",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-09",
+      claimedAmountCents: 35000,
+      nextValidationAt: null,
+      status: "confirmed",
+    });
+    await testEnv.PROOFS.put(`${link.id}/p-shared`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const row = await seedRtRow(link, business, { proofMode: "receipt", proofKey: `${link.id}/p-shared`, claimedAmountCents: null });
+    const readerEnv = { ...testEnv, AI: aiReturning(RECEIPT_2_READING) } as typeof testEnv;
+
+    /* no apiCEP interceptor: a provider call would fail the test */
+    await sweepDirectPayments(readerEnv, new Date());
+    const asked = await rowById(row.id);
+    expect(asked.status).toBe("validating");
+    expect(asked.lastError).toBe("REFERENCE_SHARED");
+    expect(JSON.parse(asked.disputedFields!)).toEqual(["trackingKey"]);
+    expect(asked.constaValidationId).toBeNull();
+    const [reading] = await drizzle(env.DB).select().from(extractions);
+    expect(reading.outcome).toBe("key_missing");
+    expect(reading.validationId).toBeNull();
+
+    /* and the next slot makes no call either, until the payer's clave */
+    await sweepDirectPayments(readerEnv, new Date(asked.nextValidationAt!.getTime() + 1000));
+    expect((await rowById(row.id)).lastError).toBe("REFERENCE_SHARED");
   });
 });

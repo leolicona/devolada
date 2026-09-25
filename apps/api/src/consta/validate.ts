@@ -35,7 +35,14 @@ import { suggestRetryAfter } from "./retry/suggest";
 import { validateRequestSchema } from "./request";
 import { signedProofUrl } from "../direct-payments/proofs";
 import { ConstaError } from "./failure";
-import { ownerId, type ConstaRequest, type ConstaVerdict, type Owner, type RegisteredAccount } from "./index";
+import {
+  ownerId,
+  type ConstaHooks,
+  type ConstaRequest,
+  type ConstaVerdict,
+  type Owner,
+  type RegisteredAccount,
+} from "./index";
 
 /* The validation door (validation spec D1): one call, two doors —
    transfer data, or a receipt. Was `POST /validate` while the engine was
@@ -78,6 +85,7 @@ export async function validate(
   db: DrizzleD1Database,
   owner: Owner,
   request: ConstaRequest,
+  hooks: ConstaHooks = {},
 ): Promise<ConstaVerdict> {
   /* consta-api-merge D8: the guard runs first, in-process, before any
      credit. D12/D13: refusing here is the point — a bank name or a
@@ -329,6 +337,40 @@ export async function validate(
         if (typeof tie === "object") {
           beneficiaryUsed = tie.tied;
           input = { ...input, beneficiary: asBeneficiary(tie.tied) } as ReceiptInput;
+        }
+        /* receipt-triage D7 (FR-007, converge T060): the page asks about a
+           shared reference at `/read`; this is the same stop for a client
+           that skipped it. A reading whose only key is a reference —
+           no clave the gate passed — that another payment of the business
+           already holds with the same date, bank, amount and account
+           cannot find this transfer alone, so the provider is not paid to
+           say so. Recorded as the ask it is (`key_missing`, D21), and the
+           payer is asked for the clave. */
+        const { gated: g } = extracted;
+        if (
+          hooks.referenceTaken &&
+          g.gate.trackingKey !== "ok" &&
+          g.referenceNumber &&
+          g.senderBank &&
+          g.amountCents != null &&
+          reading.date &&
+          (await hooks.referenceTaken({
+            referenceNumber: g.referenceNumber,
+            date: reading.date,
+            senderBank: g.senderBank,
+            amountCents: g.amountCents,
+            account: beneficiaryUsed ?? (body.beneficiary as RegisteredAccount),
+          }))
+        ) {
+          await recordExtraction(db, owner, "key_missing", extracted, {
+            signals,
+            proofKey: body.receipt!.proofKey,
+            note: `reference shared (D7)${reusedFrom ? `; reused from extraction ${reusedFrom}` : ""}`,
+          });
+          throw new ConstaError("RECEIPT_REFERENCE_SHARED", false, "the receipt's only key is a reference another payment holds", {
+            reading: readingPayload(extracted, signals),
+            missingFields: ["key"],
+          });
         }
       }
       /* two-eyes-receipt D3: the reading no longer *becomes* the request.

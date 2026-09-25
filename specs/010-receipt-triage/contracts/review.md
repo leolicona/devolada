@@ -65,3 +65,16 @@ z.object({ decision: z.enum(["accept", "reject"]) })
   last4 }`) so the row can say which removed account received the money.
 - The panel's decision buttons read "Aceptar pago" and "Rechazar"; the badge
   is the shared `StatusBadge` status `inReview` ("En revisión").
+- **On `/v1` (converge 2026-09-25).** A held payment has no verdict on the
+  public API either: `GET /v1/payments/:id` reads it as `validating` with the
+  verdict facts absent, and `/v1/transfers` leaves it out, until the accept
+  (which announces it) or the reject. An integration that polls instead of
+  listening cannot act on money the business has not accepted.
+- **No provisional release (converge 2026-09-25).** A payment checked against
+  a retired account never buys a provisional release, whatever the evidence:
+  the release reconnects the customer, and that is the business's decision.
+- **The receipt door's shared reference (converge 2026-09-25).** The engine
+  asks the lifecycle, through `consta(…, { referenceTaken })`, whether a
+  reading's only key is a reference another payment holds; if so the attempt
+  stops before the provider call (`RECEIPT_REFERENCE_SHARED` in the engine,
+  `REFERENCE_SHARED` on the row), as `/read` already asks the page.

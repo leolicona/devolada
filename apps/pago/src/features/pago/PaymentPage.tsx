@@ -968,9 +968,10 @@ export function PaymentPage({ token }: { token: string }) {
               /* receipt-triage D13 (FR-004): the clave fell back to the
                  reference and Banxico found nothing — either key is enough */
               const eitherKey = disputedSet.has("trackingKey") && disputedSet.has("referenceNumber");
-              const keyAsked =
-                referenceAsk || disputedSet.has("trackingKey") || disputedSet.has("referenceNumber");
-              const where = keyAsked ? whereLine(status.senderBank) : null;
+              /* receipt-triage FR-014 (converge T059): whenever the check
+                 needs a field from the payer — a key, the date, the amount
+                 — the page says where their bank shows it, when it knows */
+              const where = asked || referenceAsk ? whereLine(status.senderBank) : null;
 
               return (
                 <div className="space-y-4">
@@ -1654,8 +1655,14 @@ export function PaymentPage({ token }: { token: string }) {
         {/* receipt-triage D29 (FR-017): one account — the cuenta de
             cobro — labelled by its kind; no list, no choice. A CLABE
             renders exactly as it always did (SC-008). */}
-        <div className="border-y border-line-soft">
+        <div className="divide-y divide-line-soft border-y border-line-soft">
           <CopyField label={ACCOUNT_LABEL[account!.kind]} value={account!.value} />
+          {/* receipt-triage FR-017 (converge T057): a card or a phone is
+              sent to through its bank — the payer's app asks for it — so
+              the bank stands beside the number, not behind "Ver los demás
+              datos". The CLABE carries its bank in its own digits and
+              keeps today's layout (SC-008). */}
+          {account!.kind !== "clabe" && account!.bank && <CopyField label="Banco" value={account!.bank} />}
         </div>
 
         {/* receipt-triage D8/D20 (FR-022): the capture guide's first
@@ -1687,7 +1694,7 @@ export function PaymentPage({ token }: { token: string }) {
               {data.speiBeneficiaryName && (
                 <CopyField label="Beneficiario" value={data.speiBeneficiaryName} />
               )}
-              {account?.bank && <CopyField label="Banco" value={account.bank} />}
+              {account?.kind === "clabe" && account.bank && <CopyField label="Banco" value={account.bank} />}
               {data.reference && <CopyField label="Concepto" value={data.reference} />}
             </div>
           </CollapsibleContent>

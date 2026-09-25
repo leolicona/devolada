@@ -540,7 +540,19 @@ export async function runValidation(
      whether or not waiting can help; the row keeps the engine's own
      code so the ISP can see which it was. */
   try {
-    verdict = await consta(env, db, { businessId: business.id }).validate(request);
+    verdict = await consta(env, db, { businessId: business.id }, {
+      /* receipt-triage D7 (converge T060): the question only the lifecycle
+         can answer, asked by the engine on the receipt door */
+      referenceTaken: (r) =>
+        sharedReference(db, business, link, {
+          paymentId: payment.id,
+          reference: r.referenceNumber,
+          date: r.date,
+          senderBank: r.senderBank,
+          amountCents: r.amountCents,
+          account: fromBeneficiary(r.account),
+        }),
+    }).validate(request);
   } catch (e) {
     const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
     console.error("consta validation failed:", code);
@@ -550,6 +562,11 @@ export async function runValidation(
        until it arrives. */
     if (e instanceof ConstaError && e.hint === "provide_tracking_key" && byReference) {
       return retryLater("REFERENCE_AMBIGUOUS", { disputedFields: JSON.stringify(["trackingKey"]) });
+    }
+    /* receipt-triage D7 (FR-007): the receipt door's own stop — the row
+       asks for the clave, and the slots after it make no call (above) */
+    if (e instanceof ConstaError && e.code === "RECEIPT_REFERENCE_SHARED") {
+      return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
     }
     return retryLater(code);
   }
@@ -567,6 +584,16 @@ export async function runValidation(
       ? { beneficiary: JSON.stringify(fromBeneficiary(verdict.beneficiaryUsed)) }
       : {}),
   };
+
+  /* receipt-triage D31 (FR-020a, converge T058): money paid to an account
+     the business removed waits for the business's own decision, and a
+     provisional release would reconnect the customer before it — so none
+     fires for it, whatever the evidence. The account this attempt was
+     checked against is the verdict's when it named one, else the row's. */
+  const paidToRetired = Boolean(
+    verdict.beneficiaryUsed ? verdict.beneficiaryUsed.retired : snapshot?.retired,
+  );
+  const releasable = <E,>(evidence: E | null): E | null => (paidToRetired ? null : evidence);
 
   /* provisional-release D12 — the shadow only writes. The trust block as
      received rides the same row update the release evaluation was going
@@ -692,10 +719,12 @@ export async function runValidation(
         integration,
         link,
         payment,
-        releaseEvidenceFor(payment, "not_found", classification) ??
-          /* D12 graduation, first privilege: a rich, clean record vouches
-             where the machines could not read. Inert until K exists. */
-          (historyVouches(verdict.trust) ? "history" : null),
+        releasable(
+          releaseEvidenceFor(payment, "not_found", classification) ??
+            /* D12 graduation, first privilege: a rich, clean record vouches
+               where the machines could not read. Inert until K exists. */
+            (historyVouches(verdict.trust) ? "history" : null),
+        ),
         now,
       );
       /* learned-retry D6: the verdict may carry the learned moment when
@@ -727,7 +756,7 @@ export async function runValidation(
       integration,
       link,
       payment,
-      releaseEvidenceFor(payment, "pending"),
+      releasable(releaseEvidenceFor(payment, "pending")),
       now,
     );
     const slot = nextValidationSlot(payment.createdAt, now, {

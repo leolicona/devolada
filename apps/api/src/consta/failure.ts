@@ -35,6 +35,11 @@ export type ConstaErrorCode =
      of the ISP's registered accounts, current or retired. Stopped before
      the provider call; nothing billed. */
   | "RECEIPT_WRONG_DESTINATION"
+  /* receipt-triage D7 (FR-007): a clear reading whose only key is a
+     reference another payment of the business already holds, with the same
+     date, bank, amount and account — the reference cannot find this
+     transfer alone. Stopped before the provider call; nothing billed. */
+  | "RECEIPT_REFERENCE_SHARED"
   | "READER_UNAVAILABLE"
   | "READER_UNREADABLE"
   /* consta-api-merge D7: the bytes, from the product's own bucket */

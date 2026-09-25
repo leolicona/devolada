@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
    when the file is reached this way. */
 import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
 import { linkStatusResponse, proofReadingResponse } from "../../apps/api/src/routes/direct-payments/schema";
+import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
 
 /* The API, stubbed at the network edge. Same discipline as MSW in the
    component layer: the shapes come from the real contracts, so a stub
@@ -261,8 +262,11 @@ export async function holdApiRoute(
 /* The business's settings, as /settings/direct-payment reads them
    (settings-schema). The SPEI card opens on a CLABE whose prefix is not in
    PREFIX_TO_BANK, which is the state the bank has to be picked by hand in
-   (bug: bank-picker-unreachable). */
-export const settings = {
+   (bug: bank-picker-unreachable).
+   receipt-triage T055 (Constitution III): parsed, so the stub serves what
+   the server serves — the `wisphub` and `reconnection` keys it carried
+   left for the hub (integrations-hub D9) and are stripped here too. */
+export const settings = settingsResponse.parse({
   serviceFeeCents: 1500,
   timezone: "America/Mexico_City",
   timeFormat: "12h",
@@ -285,7 +289,7 @@ export const settings = {
   },
   reconnection: { thresholdPercent: 100, floorCents: 0, provisionalReleaseEnabled: false },
   reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
-};
+});
 
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
@@ -326,9 +330,14 @@ export const paymentLink = linkStatusResponse.parse({
    NUBANK receipt (D16/BUG-006). The field has to hold it. */
 export const longTrackingKey = "NU3AGKMP3ASP8QQQ4U8J8F0K1E4K";
 
-export const proofReading = {
+/* receipt-triage T055 (Constitution III): parsed like every fixture. The
+   bank gate says `unknown` — the contract's word for a bank name outside
+   the vocabulary; it said "unresolved", which no server ever sent. */
+export const proofReading = proofReadingResponse.parse({
   source: "reader",
   isReceipt: true,
+  /* Not judged: reads as `full`, and never refuses (two-eyes D2) */
+  legibility: null,
   amountCents: paymentLink.totalCents,
   trackingKey: longTrackingKey,
   /* Unresolved on purpose — but no longer a door. Until two-eyes-receipt
@@ -340,13 +349,13 @@ export const proofReading = {
   senderBank: null,
   date: "2026-08-19",
   receiptStatus: "Aceptada",
-  gate: { trackingKey: "ok", senderBank: "unresolved", amount: "ok", referenceNumber: "missing" },
+  gate: { trackingKey: "ok", senderBank: "unknown", amount: "ok", referenceNumber: "missing" },
   /* receipt-triage D12, D15, D8: no reference, nothing to ask, and the
      destination's digits were read */
   referenceNumber: null,
   ask: null,
   destinationSeen: true,
-};
+});
 
 /* receipt-triage US2/US4: a clear capture with neither key — the one the
    ask stops before any credit, and the guide answers "No se ve" for */
@@ -374,12 +383,12 @@ export async function stubPagoKeylessReading(page: Page): Promise<void> {
    refused — so this is the only door left through which the machine's
    own clave is put in front of the payer to proofread, which is what
    BUG-009 measures. */
-export const surplusReading = {
+export const surplusReading = proofReadingResponse.parse({
   ...proofReading,
   senderBank: "STP",
-  amountCents: paymentLink.totalCents + 8600,
-  gate: { trackingKey: "ok", senderBank: "ok", amount: "ok" },
-};
+  amountCents: paymentLink.totalCents! + 8600,
+  gate: { trackingKey: "ok", senderBank: "ok", amount: "ok", referenceNumber: "missing" },
+});
 
 export async function stubPagoSurplusReading(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/links/*/read", surplusReading);

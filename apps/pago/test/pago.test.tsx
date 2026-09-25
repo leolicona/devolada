@@ -1650,6 +1650,26 @@ describe("receipt-triage US1: the typing form leads with the reference", () => {
     await expectNoViolations(document.body);
   });
 
+  it.each([
+    ["the missing date", { readingCheck: "agreed", disputedFields: ["date"] }, "Solo nos falta la fecha de tu transferencia."],
+    ["a disputed amount", { readingCheck: "disputed", disputedFields: ["amount"] }, "Confirma el monto transferido mirando tu comprobante."],
+  ])("converge T059 (FR-014): the later ask for %s also says where the bank shows it", async (_name, statusOver, sentence) => {
+    server.use(
+      handlers.link(() => ok(rtLink())),
+      handlers.pay(() => ok(payResponse.parse({ directPaymentId: "dp-rt", status: "validating", error: null }), 201)),
+      handlers.status(() =>
+        ok(validatingWith({ senderBank: "BANORTE", error: "TRANSFER_NOT_FOUND", trackingKey: "TRACK001XYZ", ...statusOver })),
+      ),
+    );
+    renderPage();
+    await openManualForm();
+    await userEvent.selectOptions(screen.getByLabelText(/banco desde el que pagaste/i), "NUBANK");
+    await userEvent.type(screen.getByLabelText("Clave de rastreo"), "TRACK001XYZ");
+    await userEvent.click(screen.getByRole("button", { name: /verificar mi pago/i }));
+    expect(await screen.findByText(new RegExp(sentence))).toBeInTheDocument();
+    expect(screen.getByText("En Banorte: toca «Ver más detalles» y captura esa pantalla.")).toBeInTheDocument();
+  });
+
   it("in review: the business decides, and the page shows no success state", async () => {
     server.use(
       handlers.link(() => ok(rtLink())),
@@ -1813,6 +1833,10 @@ describe("receipt-triage US3: the one account the payer sees", () => {
     expect((await screen.findAllByText("Tarjeta de débito")).length).toBeGreaterThan(0);
     expect(screen.getByText("4111111111111111")).toBeInTheDocument();
     expect(screen.queryAllByText("CLABE")).toHaveLength(0);
+    /* converge T057 (FR-017): the bank stands beside the card, in view —
+       not behind "Ver los demás datos" */
+    expect(screen.getByText("NUBANK")).toBeVisible();
+    expect(screen.getByRole("button", { name: /copiar banco/i })).toBeInTheDocument();
     await expectNoViolations(document.body);
   });
 
@@ -1825,6 +1849,7 @@ describe("receipt-triage US3: the one account the payer sees", () => {
     renderPage();
     expect((await screen.findAllByText("Celular")).length).toBeGreaterThan(0);
     expect(screen.getByText("5512345678")).toBeInTheDocument();
+    expect(screen.getByText("NUBANK")).toBeInTheDocument();
   });
 
   it("a CLABE renders exactly as it always did", async () => {
@@ -1833,6 +1858,8 @@ describe("receipt-triage US3: the one account the payer sees", () => {
     expect((await screen.findAllByText("CLABE")).length).toBeGreaterThan(0);
     expect(screen.getByText("012180001234538195")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /copiar clabe/i })).toBeInTheDocument();
+    /* SC-008: a CLABE's bank stays under "Ver los demás datos", as today */
+    expect(screen.queryByRole("button", { name: /copiar banco/i })).not.toBeInTheDocument();
   });
 
   it("a receipt paid to another account is told honestly and kindly, with the account the business receives at", async () => {

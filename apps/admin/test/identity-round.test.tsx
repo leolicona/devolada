@@ -103,7 +103,11 @@ describe("US-B01 / D5: a business born without a CLABE wears a banner and shares
   it("the owner's banner points at Configuración; a viewer sees the sentence without the button", async () => {
     server.use(handlers.session(() => ok({ ...businessActor, speiConfigured: false })), handlers.feed(emptyFeed));
     renderApp("/payments");
-    expect(await screen.findByText(/falta la clabe del negocio/i)).toBeInTheDocument();
+    /* receipt-triage US3 (D32, converge T061): any account opens the
+       channel, so the banner asks for one — a CLABE, a card or a phone */
+    expect(
+      await screen.findByText(/falta la cuenta donde te pagan: una clabe, una tarjeta de débito o un celular/i),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /configurar/i })).toHaveAttribute("href", "/settings/direct-payment#spei");
   });
 
@@ -142,7 +146,7 @@ describe("US-B01 / D5: a business born without a CLABE wears a banner and shares
     renderApp("/links");
     expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
     /* One voice per screen: the shell's banner says it, the page does not repeat it */
-    expect(screen.getByText(/falta la clabe del negocio/i)).toBeInTheDocument();
+    expect(screen.getByText(/falta la cuenta donde te pagan/i)).toBeInTheDocument();
     expect(screen.queryByText(/configura la clabe del negocio en configuración/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /whatsapp/i })).not.toBeInTheDocument();
   });

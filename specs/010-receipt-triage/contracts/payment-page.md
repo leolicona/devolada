@@ -291,3 +291,9 @@ receipt-triage spec"; verified: "2026-09-23" (D19).
   this feature, found when its tests started running axe and measuring focus.
 - **Where a run starts (`isGenericReference`).** A run needs three or more consecutive
   digits ("123"); two ("45") is a short reference, not a default.
+- **The bank beside a card or phone (converge 2026-09-25, FR-017).** When the
+  cuenta de cobro is a card or a phone, its bank is a copyable row right under
+  the number; for a CLABE it stays under "Ver los demás datos", as today.
+- **The hint on every later ask (converge 2026-09-25, FR-014).** "En {banco}:
+  {dónde}" shows whenever the page asks the payer for a field — the date and
+  the amount too, not only a key.

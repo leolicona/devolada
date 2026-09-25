@@ -911,6 +911,17 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
     return c.json({ success: false, error: { code: "READER_UNAVAILABLE" } }, 503);
   }
 
+  const ask = await sharedAsk(db, business, link, reading);
+  /* receipt-triage D21 (FR-028): a shared reference is asked about as a
+     capture with no key, so it is counted as one — the reading record
+     says `key_missing`, as the receipt door's own stop does */
+  if (ask?.reason === "no_key" && "shared" in ask && ask.shared && reading.extractionId) {
+    await db
+      .update(extractions)
+      .set({ outcome: "key_missing", rawOutput: sql`coalesce(${extractions.rawOutput}, '') || ' [reference shared (D7)]'` })
+      .where(and(eq(extractions.id, reading.extractionId), eq(extractions.businessId, business.id)));
+  }
+
   return c.json({
     success: true,
     data: {
@@ -931,7 +942,7 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
       gate: reading.gate,
       /* receipt-triage D12 */
       referenceNumber: reading.referenceNumber,
-      ask: await sharedAsk(db, business, link, reading),
+      ask,
       destinationSeen: visibleTail(reading.destination.digits) !== null,
     },
   });

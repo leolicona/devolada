@@ -38,6 +38,9 @@ export const SETTINGS = {
   support_whatsapp: { type: "phone", birth: null },
   support_email: { type: "text", birth: null, min: 5, max: 120 },
 } as const satisfies Record<string, Def>;
+/* Not here: `reader_model`, the operator's reader choice — its value is an
+   id from the deploy's list, so it lives in platform/reader-model.ts
+   (receipt-reader-tuning D8). */
 
 export type SettingKey = keyof typeof SETTINGS;
 export const SETTING_KEYS = Object.keys(SETTINGS) as SettingKey[];

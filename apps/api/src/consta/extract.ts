@@ -12,8 +12,11 @@ import {
   tieDestination,
   loadShapeRules,
   ProofFetchError,
+  readerPlan,
   readProofFromBucket,
   ReaderError,
+  receivingBankTie,
+  receivingOf,
   suggestBank,
   type ExtractionResult,
   type Gate,
@@ -100,6 +103,12 @@ export async function recordExtraction(
     /* receipt-triage D21: the proof this row read, so an ask can be
        followed to how it ended */
     proofKey?: string | null;
+    /* receipt-reader-tuning D14: the receiving bank against the tied
+       account's, from the tie the caller already computed */
+    receivingBankTie?: "match" | "mismatch" | null;
+    /* receipt-reader-tuning D11: on a row that read nothing because the
+       chosen model and then the default both failed */
+    fallbackFrom?: string | null;
   } = {},
 ): Promise<string> {
   const proof = result?.proof ?? null;
@@ -154,6 +163,24 @@ export async function recordExtraction(
       providerReferenceNumber: extra.providerReading?.referenceNumber ?? null,
       destinationKind: reading?.destination.kind ?? null,
       destinationDigits: reading?.destination.digits ?? null,
+      /* receipt-reader-tuning D11, D12: which questions, how long, and
+         whether the default read in place of a chosen model that failed.
+         `model` above is the model that produced the reading. */
+      questionVersion: reading?.questionVersion ?? null,
+      readerMs: reading?.ms ?? null,
+      fallbackFrom:
+        reading?.fallbackFrom ??
+        (result?.route === "provider-ocr" ? (result.fallbackFrom ?? null) : null) ??
+        extra.fallbackFrom ??
+        null,
+      /* receipt-reader-tuning D14: both banks, each as read — never one
+         changed because of the other (FR-012) */
+      receivingBank: gated?.receiving.bank ?? null,
+      gateReceivingBank: gated?.receiving.verdict ?? null,
+      /* 1 or 0 only when both resolved; NULL when either did not (D14) */
+      sameBank:
+        gated?.gate.senderBank === "ok" && gated.receiving.verdict === "ok" ? gated.receiving.sameBank : null,
+      receivingBankTie: extra.receivingBankTie ?? null,
       /* A row that read nothing says *why* instead of leaving the column
          empty — "handed over unread" is countable by cause (D19). */
       rawOutput:
@@ -238,6 +265,17 @@ export async function recentReading(
     senderBank: gate.senderBank === "ok" ? (row.senderBank as Bank | null) : null,
     amountCents: gate.amount === "ok" ? row.amountCents : null,
     passes: passesGate(gate),
+    /* receipt-reader-tuning D15: rebuilt from the stored receiving bank
+       through the gate's own function, so the flag is re-derived rather
+       than trusted. The stored verdict keeps `unknown` apart from
+       `missing`, which the resolved bank alone cannot. */
+    receiving: (() => {
+      const rebuilt = receivingOf(row.receivingBank, {
+        bank: gate.senderBank === "ok" ? (row.senderBank as Bank | null) : null,
+        verdict: gate.senderBank,
+      });
+      return row.gateReceivingBank ? { ...rebuilt, verdict: row.gateReceivingBank } : rebuilt;
+    })(),
   };
   const reading: Reading = {
     /* The outcome filter above admits only rows the reader called a
@@ -263,7 +301,15 @@ export async function recentReading(
     /* The new row says where its reading came from rather than copying a
        raw model answer that was never produced for this call. */
     raw: `reused from extraction ${row.id}`,
+    /* receipt-reader-tuning D15: the model and questions that read it —
+       a reused reading is never re-read with a newly chosen model (spec
+       US1 scenario 6) */
     model: row.model ?? "",
+    questionVersion: row.questionVersion ?? "",
+    ms: row.readerMs ?? 0,
+    fallbackFrom: row.fallbackFrom ?? null,
+    /* The stored bank is already resolved; the gate resolves it again */
+    receivingBank: row.receivingBank ?? null,
   };
   return { id: row.id, result: { route: "reader", proof, reading, gated } };
 }
@@ -360,14 +406,18 @@ export async function extract(
 ): Promise<ConstaReading> {
   let result: ExtractionResult;
   try {
-    /* consta-api-merge D7: the bytes come from the product's own bucket */
-    result = await extractProof(env, await readProofFromBucket(env.PROOFS, proofKey));
+    /* consta-api-merge D7: the bytes come from the product's own bucket.
+       receipt-reader-tuning D9: the model is the operator's choice,
+       resolved on every reading with no cache (SC-003). */
+    result = await extractProof(env, await readProofFromBucket(env.PROOFS, proofKey), await readerPlan(env, db));
   } catch (err) {
     const failure = extractionFailure(err);
     if (!failure) throw err;
     await recordExtraction(db, owner, failure.code === "READER_UNREADABLE" ? "unreadable" : "refused", null, {
       note: `${failure.code}: ${String((err as Error).message)}`,
       proofKey,
+      /* receipt-reader-tuning D11: both models failed */
+      fallbackFrom: err instanceof ReaderError ? (err.fallbackFrom ?? null) : null,
     });
     throw new ConstaError(failure.code, failure.retryable, String((err as Error).message));
   }
@@ -398,7 +448,12 @@ export async function extract(
               ? "passed"
               : "gated"));
 
-  const extractionId = await recordExtraction(db, owner, outcome, result, { signals, proofKey });
+  const extractionId = await recordExtraction(db, owner, outcome, result, {
+    signals,
+    proofKey,
+    /* receipt-reader-tuning D14 */
+    receivingBankTie: result.route === "reader" ? receivingBankTie(result.gated, tie === "unknown" ? null : tie) : null,
+  });
   /* No apiCEP call happened on this path at all — that is the contract
      of this door, not an implementation detail (D6). */
   return {

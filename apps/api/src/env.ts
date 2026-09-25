@@ -94,10 +94,25 @@ export type Bindings = {
      provider named with the cuenta de cobro. The provider's own reading
      still counts, its reference included, when the comparison runs. */
   AI?: Ai;
-  /* proof-extraction D5: the reader's model is config, not a literal, so
-     replacing it is a deploy and not a release. Unset → the reader's
-     DEFAULT_MODEL. */
+  /* proof-extraction D5, receipt-reader-tuning D1/D7: the **default**
+     reader model — always in the allowed list, what reads when no choice
+     was made, and the fallback when a chosen model fails (D11). Unset →
+     the reader's DEFAULT_MODEL. Which model reads is the operator's
+     choice in /operador → Lector, among `EXTRACTION_MODELS`. */
   EXTRACTION_MODEL?: string;
+  /* receipt-reader-tuning D7: the environment's allowed reader models, a
+     JSON var of `{ id, label, input? }[]` — `input` is merged into the
+     model call (D10). Wrangler hands a JSON var over already parsed,
+     hence `unknown`. The default is always prepended when missing. Unset
+     → the default alone, which is the reader before this feature; invalid
+     → the same, with one warning per isolate (constitution VIII). */
+  EXTRACTION_MODELS?: unknown;
+  /* receipt-reader-tuning D11: how long a *chosen* model that is not the
+     default may take before the default reads instead. Unset → 8000 ms:
+     the default answers in ~2.7 s (measured 2026-08-19), so a chosen model
+     past 8 s is failing, and the payer's worst case stays near 11 s
+     (research R6). A test knob — never set by a deploy. */
+  READER_TIMEOUT_MS?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
   /* automated-collections-api D10: the platform's webhook signing keys —

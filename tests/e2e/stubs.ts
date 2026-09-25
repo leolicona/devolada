@@ -5,6 +5,12 @@ import type { Page } from "@playwright/test";
 import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
 import { linkStatusResponse, proofReadingResponse } from "../../apps/api/src/routes/direct-payments/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
+import {
+  benchListResponse,
+  benchReceiptDetail,
+  benchTallyResponse,
+  readerStateResponse,
+} from "../../apps/api/src/routes/reader/schema";
 
 /* The API, stubbed at the network edge. Same discipline as MSW in the
    component layer: the shapes come from the real contracts, so a stub
@@ -434,4 +440,139 @@ export async function stubLandingRefusal(page: Page, code: "REQUEST_REFUSED" | "
     if (route.request().resourceType() === "document") return route.fallback();
     return route.fulfill({ status, contentType: "application/json", body: JSON.stringify({ success: false, error: { code } }) });
   });
+}
+
+/* receipt-reader-tuning US1/US3 (D19): /operador → Lector for the
+   operator — the model card, a bench receipt with two readings (one read
+   with the same-bank flag, one failed) and the tally. Parsed with the
+   contract, so the stub cannot carry a shape the server would never send
+   (constitution III). */
+const MISTRAL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
+const GEMMA = "@cf/google/gemma-4-26b-a4b-it";
+
+export const readerState = readerStateResponse.parse({
+  models: [
+    { id: MISTRAL, label: "Mistral Small 3.1" },
+    { id: GEMMA, label: "Gemma 4 26B" },
+  ],
+  defaultModel: MISTRAL,
+  activeModel: MISTRAL,
+  choice: "applies",
+  staleChoice: null,
+  history: [{ value: MISTRAL, authorUserId: "user-1", authorEmail: "demo@devolada.app", createdAt: at }],
+  fallbacksLast7Days: 1,
+  questionVersion: "2",
+  readerAvailable: true,
+});
+
+export const benchDetail = benchReceiptDetail.parse({
+  id: "b1",
+  mediaType: "image/png",
+  byteSize: 1200,
+  createdAt: at,
+  fileAvailable: true,
+  missing: [],
+  readings: [
+    {
+      id: "r1",
+      model: MISTRAL,
+      modelLabel: "Mistral Small 3.1",
+      questionVersion: "2",
+      status: "read",
+      failureCode: null,
+      readerMs: 3100,
+      reading: {
+        isReceipt: true,
+        legibility: "full",
+        trackingKey: "260925071144368901I",
+        referenceNumber: "038195",
+        senderBank: "AZTECA",
+        receivingBank: "AZTECA",
+        amountCents: 35000,
+        date: "2026-09-25",
+        destination: { kind: "clabe", digits: "8195" },
+        sameBank: true,
+      },
+      rawOutput: '```json\n{"esComprobante": true}\n```',
+      marks: { trackingKey: "right" },
+      judged: { trackingKey: "right" },
+      markedAt: at,
+    },
+    {
+      id: "r2",
+      model: GEMMA,
+      modelLabel: "Gemma 4 26B",
+      questionVersion: "2",
+      status: "failed",
+      failureCode: "READER_UNREADABLE",
+      readerMs: 4200,
+      reading: null,
+      rawOutput: '{"choices": []}',
+      marks: {},
+      judged: {},
+      markedAt: null,
+    },
+  ],
+});
+
+export const benchList = benchListResponse.parse({
+  items: [
+    {
+      id: "b1",
+      mediaType: "image/png",
+      byteSize: 1200,
+      createdAt: at,
+      fileAvailable: true,
+      readings: [
+        { id: "r1", model: MISTRAL, modelLabel: "Mistral Small 3.1", questionVersion: "2", status: "read", readerMs: 3100, marked: 1 },
+        { id: "r2", model: GEMMA, modelLabel: "Gemma 4 26B", questionVersion: "2", status: "failed", readerMs: 4200, marked: 0 },
+      ],
+    },
+  ],
+  nextCursor: null,
+});
+
+export const benchTally = benchTallyResponse.parse({
+  asOf: at,
+  rows: [
+    {
+      model: MISTRAL,
+      modelLabel: "Mistral Small 3.1",
+      questionVersion: "2",
+      readings: 7,
+      failures: 0,
+      judged: 50,
+      right: 45,
+      wrongByField: { trackingKey: 3, senderBank: 2 },
+      p90Ms: 3400,
+    },
+    {
+      model: GEMMA,
+      modelLabel: "Gemma 4 26B",
+      questionVersion: "2",
+      readings: 7,
+      failures: 7,
+      judged: 0,
+      right: 0,
+      wrongByField: {},
+      p90Ms: null,
+    },
+  ],
+});
+
+/* A real 1×1 PNG, so the bench picture renders rather than breaks */
+const ONE_PIXEL_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+export async function stubOperatorReaderApi(page: Page): Promise<void> {
+  await stubAdminApi(page);
+  await apiRoute(page, "**/auth/me", { ...businessActor, platformOperator: true });
+  await apiRoute(page, "**/platform/settings", { settings: [] });
+  await apiRoute(page, "**/platform/reader", readerState);
+  await apiRoute(page, "**/platform/reader/bench", benchList);
+  await apiRoute(page, "**/platform/reader/bench/tally", benchTally);
+  await apiRoute(page, "**/platform/reader/bench/b1", benchDetail);
+  await page.route("**/platform/reader/bench/b1/file", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(ONE_PIXEL_PNG, "base64") }),
+  );
 }

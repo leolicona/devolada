@@ -42,6 +42,19 @@ export default defineWorkersConfig(async () => {
                  seeded signup's OTP reached Resend for real (measured
                  2026-09-01: 429s in the test output). Empty = log only. */
               RESEND_API_KEY: "",
+              /* receipt-reader-tuning D7, D11 (constitution IV): the reader's
+                 models are pinned like the providers' origins, so a
+                 developer's .dev.vars — or the dev list in wrangler.jsonc —
+                 can never move a suite. The default is Mistral because
+                 validate.test.ts asserts its id on a row; `@cf/test/other`
+                 is a second model that exists only for the stub to answer
+                 as; 50 ms keeps the fallback's time limit fast to reach. */
+              EXTRACTION_MODEL: "@cf/mistralai/mistral-small-3.1-24b-instruct",
+              EXTRACTION_MODELS: JSON.stringify([
+                { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", label: "Default" },
+                { id: "@cf/test/other", label: "Other" },
+              ]),
+              READER_TIMEOUT_MS: "50",
               /* better-auth.spec.md D11: the suite signs in hundreds of
                  times from one address; the limiter's own test hands the
                  app an env without this pin. */

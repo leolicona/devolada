@@ -1,5 +1,6 @@
 import type { ConstaBeneficiary, RegisteredAccount } from "../index";
 import type { Reading } from "./reader";
+import { resolveBank, type GatedReading } from "./gate";
 
 /* receipt-triage D24, D30 — which of the ISP's accounts a receipt's
    destination names.
@@ -118,4 +119,17 @@ export function sameAccount(a: ConstaBeneficiary, b: ConstaBeneficiary): boolean
 export function asBeneficiary(account: RegisteredAccount): ConstaBeneficiary {
   const { retired: _retired, ...rest } = account as RegisteredAccount & { retired?: true };
   return rest as ConstaBeneficiary;
+}
+
+/* receipt-reader-tuning D14: the receiving bank as read, against the bank
+   of the account the destination tied to — `match`, `mismatch` when both
+   are known and differ, else null (nothing tied, or a bank that did not
+   resolve). Recorded, never acted on; the ISP's account is never written
+   (receipt-triage D21). */
+export function receivingBankTie(gated: GatedReading | null, tie: TieResult | null): "match" | "mismatch" | null {
+  if (!gated || !tie || typeof tie !== "object") return null;
+  const read = gated.receiving.bank;
+  const tied = resolveBank(tie.tied.bank);
+  if (!read || !tied) return null;
+  return read === tied ? "match" : "mismatch";
 }

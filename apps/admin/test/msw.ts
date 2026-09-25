@@ -156,6 +156,23 @@ export const handlers = {
     http.get("/platform/landing/requests", ({ request }) => r(new URL(request.url))),
   landingCounts: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/platform/landing/counts", ({ request }) => r(new URL(request.url))),
+  /* receipt-reader-tuning US1/US3 (D19): the operator's Lector tab */
+  readerState: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/platform/reader", () => r()),
+  readerChoose: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/reader/model", async ({ request }) => r(await request.json())),
+  benchList: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/platform/reader/bench", () => r()),
+  benchTally: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/platform/reader/bench/tally", () => r()),
+  benchDetail: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/reader/bench/:id", ({ params }) => r(String(params.id))),
+  benchUpload: (r: (form: FormData) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/reader/bench", async ({ request }) => r(await request.formData())),
+  benchRead: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/reader/bench/:id/read", ({ params }) => r(String(params.id))),
+  benchMarks: (r: (readingId: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.put("/platform/reader/bench/readings/:readingId/marks", async ({ params, request }) =>
+      r(String(params.readingId), await request.json()),
+    ),
+  benchFile: (r: (id: string) => Response) => http.get("/platform/reader/bench/:id/file", ({ params }) => r(String(params.id))),
 };
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };

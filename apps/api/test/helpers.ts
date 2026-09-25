@@ -42,6 +42,10 @@ export function fakeProofs(): R2Bucket {
     async head(key: string) {
       return store.has(key) ? ({} as R2Object) : null;
     },
+    /* receipt-reader-tuning US3: a bench file the 15-day rule removed */
+    async delete(key: string) {
+      store.delete(key);
+    },
     /* Enough of the real shape for the upload budget: prefix filter and
        an `uploaded` date per object (direct-payment D13) */
     async list(opts?: R2ListOptions) {

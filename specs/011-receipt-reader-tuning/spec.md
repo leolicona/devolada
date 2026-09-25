@@ -4,8 +4,8 @@
 
 **Created**: 2026-09-25
 
-**Status**: Specified — clarifications settled on 2026-09-25; ready for
-`/speckit-plan`
+**Status**: Planned — clarifications settled and plan written on 2026-09-25
+([plan.md](./plan.md)); ready for `/speckit-tasks`
 
 **Input**: User description: "1. El modelo se puede elegir desde el
 administrador de la plataforma. Ruta /operador. 2. Optimizamos el prompt.

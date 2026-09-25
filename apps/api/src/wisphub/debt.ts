@@ -14,7 +14,7 @@ import type { PendingInvoices, WispHubCustomer } from "./client";
 
    Never read the debt from `GET /clientes/{id}/saldo/`: the same day it
    answered 0 while `saldo` held 299.00 — it counts open invoices only
-   (customers-one-section FR-007). */
+   (cobros-in-links FR-015). */
 export type Debt = {
   /* What the pending invoices bill. Also where a credit is absorbed (D12). */
   invoiceCents: number;

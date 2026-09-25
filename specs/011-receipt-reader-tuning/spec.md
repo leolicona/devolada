@@ -21,7 +21,17 @@ administrador de la plataforma. Ruta /operador. 2. Optimizamos el prompt.
   nothing) is kept under Out of Scope as the next steps.
 - "Gemini 4" is read as **Gemma 4 26B A4B**, Google's open model in the
   Workers AI catalog, the one named in the model survey of the same session.
-  Gemini itself is not in Workers AI (Assumptions).
+  Gemini itself is not in Workers AI (Assumptions). Confirmed by the creator
+  the same day: "Me refería a Gemma 4."
+- Q: May the reader discard a sending bank that equals the destination's
+  bank, since SPEI cannot run inside one bank? → A: No. A payer may
+  legitimately transfer from the same bank the ISP receives at — an ISP with
+  an Azteca CLABE paid from an Azteca account — and that payment is real.
+  What matters is identifying the **sending bank and the receiving bank
+  correctly**, each from its own side of the receipt, and never altering
+  what was read. D5 was rewritten from "discard it" to "read both banks and
+  flag the same-bank pair". What the product does with a same-bank payment,
+  which Banxico's CEP cannot confirm, is a next step (Out of Scope).
 
 ## Where this comes from
 
@@ -71,8 +81,9 @@ Three things, in the creator's order:
    the models the environment allows. The change applies from the next
    reading, with no deploy.
 2. **The reader's questions are rewritten** so the three failures above stop.
-   A fixed rule backs them up: a sending bank equal to the destination's bank
-   is not a reading.
+   The reader identifies **both banks**: the sending bank from the sender's
+   side, and the receiving bank from the destination's side. A same-bank
+   pair is kept as read and flagged, never altered.
 3. **The creator compares the models on real receipts on dev** (Mistral Small
    3.1 and Gemma 4). The result decides which model production uses and
    closes the receipt-triage measurement debt.
@@ -97,10 +108,18 @@ questions it answered, so each result can be traced to its cause.
   label, and every reading records the label it answered.
 - **D3 — A failed answer never costs the payer the reading.** When the
   chosen model gives an error or an answer that cannot be used, the same
-  receipt is read once more by the environment's default model. The record
-  names the model that actually read it and marks the fallback. When the
-  default fails too, today's degradation holds: the file goes to the provider
-  unread (two-eyes-receipt D15).
+  receipt is read once more by the environment's default model. Examples of
+  a failure: the model is unavailable, retired by Cloudflare or too slow, or
+  it answers without the expected answer shape. The record names the model
+  that actually read the receipt and marks the fallback, so a comparison
+  never credits one model with another's reading. When the default fails
+  too, today's degradation holds: the file goes to the provider unread
+  (two-eyes-receipt D15). A **wrong** answer is not a failure: a confident
+  misread cannot be detected at that moment, and the fallback does not cover
+  it. Against misreads, the protections are the comparison (Story 3) and the
+  bar a model must pass before it becomes active in prod (SC-005). How long
+  the chosen model may take before it counts as too slow is decided in the
+  plan. It must keep the payer's total wait within SC-005.
 - **D4 — Three rules for the questions**, one per failure:
   - The clave de rastreo is taken only from the field the receipt labels as
     the clave. A folio, an authorisation or operation number, a reference or
@@ -112,15 +131,27 @@ questions it answered, so each result can be traced to its cause.
     name of the bank that issued the receipt. The bank printed beside the
     destination account is never the sending bank. When the receipt does
     not show the sending bank, the reading says so.
-- **D5 — A sending bank equal to the destination's bank is not a reading.**
-  SPEI cannot run inside one bank (validation spec D17), so that pair can
-  only be a misread. The reading treats the sending bank as **not read**,
-  and the payment follows the product's existing path for a receipt with no
-  readable bank. That path is to ask the payer at the first answer
-  (two-eyes-receipt D8), instead of riding the schedule to a silent expiry.
-  The destination's bank is the bank of the account the receipt's digits tie
-  to (receipt-triage D24), or else the account the payment is checked
-  against.
+- **D5 — Both banks, each from its own side, and a same-bank pair is
+  information, not an error** (rewritten on 2026-09-25 after the creator's
+  objection, Clarifications). The reader answers one more question: the
+  **receiving bank**, read only from the destination's side. The record
+  keeps both banks as read. The reader and the gate never alter one bank
+  because of the other. When the two are the same institution, the reading
+  is **flagged as a same-bank pair**. That is true of two different
+  situations, and the reading cannot tell them apart:
+  - A **misread**: the destination's bank taken for the sender's, the
+    measured Azteca case. The rules of D4 exist to stop it.
+  - A **real same-bank payment**: an ISP with an Azteca CLABE paid from an
+    Azteca account. The money is real, but no SPEI ran, so Banxico has no
+    CEP to confirm it. The engine refuses to search for that pair before
+    spending a credit (validation spec D17).
+
+  The flag makes both cases countable and visible from the first reading.
+  Handling them, today a silent ride to `expired`, is the next step (Out of
+  Scope). The receiving bank also cross-checks the destination: when the
+  receipt's digits tie to one of the ISP's accounts (receipt-triage D24), the
+  receiving bank read should be that account's bank, and a difference is
+  recorded as a sign that one of the two readings is off.
 - **D6 — How the models are compared.** [NEEDS CLARIFICATION: through the
   real payment flow, with each reading shown per model beside Banxico's
   answer; through a test bench in `/operador` that reads one uploaded
@@ -176,8 +207,9 @@ back, upload again, and confirm that the record names Mistral.
 
 A payer uploads a capture that shows a folio but no clave, one that shows
 only the destination's bank, or one whose clave ends in a letter. The reading
-names no clave for the first, no sending bank for the second, and the exact
-clave for the third. Nothing that reads right today reads wrong afterwards.
+names no clave for the first. For the second it names the receiving bank as
+the receiving bank, and never as the sending bank. For the third it gives
+the exact clave. Nothing that reads right today reads wrong afterwards.
 
 **Why this priority**: This is the product value. A misread key buys paid
 searches that can never succeed, and a misread bank ends in a silent
@@ -196,12 +228,17 @@ exists.
    clave, and the reference is `250926`.
 2. **Given** the Azteca capture with "Cuenta origen: Guardadito ***8301" and
    "Cuenta destino: … Bbva Mexico ***417", **When** it is read, **Then** the
-   sending bank is not BBVA MEXICO. It is either Banco Azteca, if the receipt
-   identifies its own bank, or not read.
-3. **Given** the same Azteca capture, **When** the model still answers BBVA
-   MEXICO as the sending bank and the destination ties to the ISP's BBVA
-   account, **Then** the reading treats the sending bank as not read (D5).
-   No search ever carries the pair BBVA→BBVA.
+   receiving bank is BBVA MEXICO. The sending bank is either Banco Azteca, if
+   the receipt identifies its own bank, or "not shown", and never BBVA
+   MEXICO.
+3. **Given** an ISP whose cuenta de cobro is an Azteca CLABE, and a payer who
+   transferred from an Azteca account with a receipt that shows it, **When**
+   it is read, **Then** the sending bank is Azteca and the receiving bank is
+   Azteca. Both are kept as read, and the reading is flagged as a same-bank
+   pair (D5). Nothing is discarded or changed.
+3a. **Given** a reading flagged as a same-bank pair, **When** the operator
+   looks at the reading records, **Then** they can count the flagged
+   readings and see both banks as they were read.
 4. **Given** an Azteca capture whose clave is `260925071144368901I`, **When**
    it is read, **Then** the clave is `260925071144368901I`, exactly, with its
    final letter.
@@ -267,11 +304,19 @@ result for each model. The method depends on D6.
   "ask before any credit" rule for a clear capture with no key is unchanged
   (receipt-triage D4). This feature adds no new stop.
 - **The destination is not tied** (fewer than three digits, or no destination
-  read). D5 then compares the sending bank with the account the payment is
-  checked against, the cuenta de cobro.
-- **A real same-bank transfer** (BBVA to BBVA). It could never be validated
-  by SPEI (validation spec D17), so treating its bank as not read loses
-  nothing.
+  read). The receiving bank is still read from the receipt and recorded.
+  There is simply no account to cross-check it with (D5).
+- **A real same-bank payment** (an ISP with an Azteca CLABE, paid from
+  Azteca). Both banks are read and kept, and the reading is flagged. The
+  payment is legitimate, but Banxico's CEP cannot confirm it, and today it
+  ends `expired` without anyone being told. Fixing that is the next step
+  (Out of Scope). This feature only makes the case visible and never
+  changes what was read.
+- **The receiving bank read differs from the bank of the account the digits
+  tie to.** One of the two readings is off. It is recorded for the
+  comparison and the measurement, and no flow changes because of it.
+- **The receipt does not show the receiving bank** (only digits, or only a
+  name). The reading says it is not shown, like any other field.
 - **A receipt read before this feature.** Its record keeps what it had, and
   shows no model version rather than a guessed one.
 
@@ -314,10 +359,17 @@ result for each model. The method depends on D6.
   receipt says about the sender. The bank printed beside the destination
   account MUST never be read as the sending bank. When the receipt does not
   show the sending bank, the reading MUST say it is not shown (D4).
-- **FR-012**: When the sending bank read is the same institution as the
-  destination's bank (D5), the reading MUST treat the sending bank as not
-  read. It is never sent to Banxico as the sending bank, and never shown to
-  the payer as read.
+- **FR-012**: The reader MUST read the receiving bank only from the
+  destination's side of the receipt, and the record MUST keep both banks as
+  read. Neither bank may be altered or discarded because of the other (D5).
+- **FR-012a**: When the sending bank and the receiving bank read are the same
+  institution, the reading MUST be flagged as a same-bank pair. The flag
+  MUST be recorded and countable, and it changes no other part of the flow
+  in this feature (D5).
+- **FR-012b**: When the receipt's digits tie to one of the ISP's accounts
+  (receipt-triage D24) and the receiving bank read is a different
+  institution from that account's bank, the record MUST note the difference
+  (D5).
 - **FR-013**: The questions MUST be the same for a picture and for a PDF's
   text, apart from legibility, and MUST carry a version label (D2).
 - **FR-014**: Every field that reads right today on the test set MUST still
@@ -349,7 +401,9 @@ result for each model. The method depends on D6.
   reader. It changes whenever the questions change.
 - **Reading record** (existing): What one reading of one receipt produced.
   It gains the model that actually read, the question version, the time the
-  reading took, and whether it was a fallback.
+  reading took, whether it was a fallback, the receiving bank as read, the
+  same-bank flag, and whether the receiving bank matched the tied account's
+  bank.
 - **Comparison result**: For one receipt, what each compared model read per
   field and how long it took, with the question version. Its exact form
   follows D6.
@@ -362,7 +416,8 @@ result for each model. The method depends on D6.
   plus receipts 1 and 2 of receipt-triage), the model chosen for prod, with
   the new questions, reads **zero** folios as a clave and **zero**
   destination banks as the sending bank, and copies **3 of 3** Azteca claves
-  exactly.
+  exactly. It names the receiving bank right on every receipt that shows it.
+  Its sending bank is either right or "not shown", and never wrong.
 - **SC-002**: On the same set, no field that read right with today's model
   and questions reads wrong with the chosen ones.
 - **SC-003**: Switching the reader model takes one action in `/operador`, and
@@ -376,8 +431,9 @@ result for each model. The method depends on D6.
 - **SC-006**: Zero payers are left without a reading because of the chosen
   model: every failed answer from it is followed by a reading from the
   default model.
-- **SC-007**: Zero payments end `expired` with the same-bank refusal as
-  their last error.
+- **SC-007**: 100% of readings whose two banks are the same institution
+  carry the same-bank flag. The number of same-bank payments, real or
+  misread, can be counted from the records per week and per ISP.
 - **SC-008**: The creator can compare two models on ten real receipts in
   under 15 minutes.
 - **SC-009**: The measurement debt `receipt-triage-reader-unmeasured` is
@@ -387,8 +443,8 @@ result for each model. The method depends on D6.
 
 ## Assumptions
 
-- "Gemini 4" in the request means Gemma 4 26B A4B on Workers AI (see
-  Clarifications). Gemini, GPT and Claude are reachable only through an
+- "Gemini 4" in the request means Gemma 4 26B A4B on Workers AI, as the
+  creator confirmed (Clarifications). Gemini, GPT and Claude are reachable only through an
   external provider, which would change the constitution's stack table
   (Out of Scope).
 - The reader stays on Workers AI. The constitution fixes it there and makes
@@ -411,6 +467,13 @@ result for each model. The method depends on D6.
 ## Out of Scope
 
 Found in the investigation of 2026-09-25 and kept here as the next steps:
+
+- **What happens to a same-bank payment.** Today a pair the engine refuses
+  (validation spec D17) rides its schedule to `expired` and nobody is told.
+  That covers both the misread and the real case (D5). The candidates, for
+  the creator to decide in their own spec: ask the payer to confirm the
+  sending bank before any credit, and when they confirm the same bank, hold
+  the payment for the ISP's review, since Banxico cannot confirm it.
 
 - Asking the payer for the sending bank **before** the first credit, when a
   clear capture does not show it.

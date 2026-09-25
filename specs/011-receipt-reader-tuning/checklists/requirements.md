@@ -39,3 +39,11 @@
   names (the creator's own choice and the constitution's fixed stack), the
   `/operador` route (the creator's input), and "deploy" as the product's
   unit of configuration change (constitution V, VIII).
+- Iteration 2 (2026-09-25): the creator confirmed Gemma 4, and objected to
+  D5 as first written (discarding a sending bank equal to the destination's).
+  A same-bank payment can be legitimate. D5, Story 2 scenarios 2–3a, the
+  edge cases, FR-012–FR-012b, the Reading record, SC-001 and SC-007 were
+  rewritten: read both banks, each from its own side, and flag the pair.
+  Never alter it. Handling a same-bank payment moved to Out of Scope as the
+  next step. D3 now says what counts as a failure, and that a misread does
+  not. D6 is still open.

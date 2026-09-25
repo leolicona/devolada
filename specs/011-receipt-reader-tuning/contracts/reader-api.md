@@ -25,8 +25,8 @@ readerStateResponse = z.object({
   history: z.array(z.object({                  // latest first, up to 5
     value: z.string(), authorUserId: z.string(), createdAt: z.number().int(),
   })),
-  fallbacksLast7Days: z.number().int(),        // payer readings with fallback_from set
-  questionsVersion: z.string(),                // QUESTIONS_VERSION
+  fallbacksLast7Days: z.number().int(),        // payer readings with fallback_from set — constitution V (v1.6.0)
+  questionVersion: z.string(),                 // QUESTIONS_VERSION
   readerAvailable: z.boolean(),                // false when the AI binding is absent (constitution VIII)
 });
 ```

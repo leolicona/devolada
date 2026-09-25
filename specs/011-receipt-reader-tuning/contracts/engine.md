@@ -31,7 +31,7 @@ author)`, refusing ids outside the list) and the history read; the
 ## Reading (`consta/extraction/reader.ts`) — D10, D12, D13
 
 ```ts
-export const QUESTIONS_VERSION = "2";
+export const QUESTIONS_VERSION = "2"; // "1" (the receipt-triage questions) until Story 2 lands
 
 readProof(ai: Ai, proof: LoadedProof, model: ReaderModel,
           opts: { text?: string; timeoutMs?: number }): Promise<Reading>;
@@ -45,6 +45,9 @@ readProof(ai: Ai, proof: LoadedProof, model: ReaderModel,
   today).
 - Answer text: `response` if a string; else `choices[0].message.content` if
   a string; else the serialized answer. Then `parseReaderOutput` (unchanged).
+  The `choices` branch is unmeasured: registered as debt
+  (`reader-answer-shape-unmeasured`) and never stubbed in tests until the
+  bench captures Gemma 4's real answer (constitution IV).
 - Parse: `bancoEmisor ?? banco` → `senderBank`; `bancoReceptor` →
   `receivingBank`; the rest unchanged. `model` = `model.id`;
   `questionVersion` = `QUESTIONS_VERSION`; `ms` = the call's duration.
@@ -54,7 +57,8 @@ readProof(ai: Ai, proof: LoadedProof, model: ReaderModel,
 ## Extraction with a plan (`consta/extraction/index.ts`) — D9, D11
 
 ```ts
-extractProof(env, proof, plan: ReaderPlan, opts?: { timeoutMs?: number }): Promise<ExtractionResult>;
+extractProof(env, proof, plan: ReaderPlan): Promise<ExtractionResult>;
+// the time limit comes from env.READER_TIMEOUT_MS ?? 8000
 ```
 
 1. PDF → `pdfToText` **once** (unchanged rules; no text → `provider-ocr`,
@@ -176,12 +180,14 @@ prompt keeps having none (two-eyes-receipt D15).
 aiReturning(
   reading: StubbedReading | string | Record<string /* model id */, StubbedReading | string | AiBehaviour>,
   calls?: unknown[],
-  opts?: { pdfText?: string; shape?: "response" | "choices" },
+  opts?: { pdfText?: string },
 ): Ai;
 type AiBehaviour = { throws: string } | { waitsMs: number; then: StubbedReading | string };
 ```
 
 `StubbedReading` gains `bancoEmisor?` and `bancoReceptor?`; `banco` still
 parses as the sending bank, so existing fixtures keep their meaning.
-`vitest.config.ts` pins `EXTRACTION_MODELS` (two test ids) and
-`READER_TIMEOUT_MS` (50) so a developer's `.dev.vars` cannot move a suite.
+Every answer uses the measured `response` shape; no unmeasured shape is
+stubbed (constitution IV). `vitest.config.ts` pins `EXTRACTION_MODEL` to
+Mistral's id, `EXTRACTION_MODELS` to that id plus `@cf/test/other`, and
+`READER_TIMEOUT_MS` (50), so a developer's `.dev.vars` cannot move a suite.

@@ -157,6 +157,11 @@ Read from the Workers AI docs on 2026-09-25 (not measured):
   upload on dev proves or disproves both shapes (quickstart Step 2). If
   Gemma needs a different image part, the fix is its list entry's `input`
   or one branch in `readProof`, and the bench shows it the same minute.
+- Amended 2026-09-25 (analyze C2): no test stubs the `choices` shape,
+  because constitution IV admits only measured answers. The branch is
+  registered as debt (`reader-answer-shape-unmeasured`) the day it lands.
+  The bench's first Gemma 4 raw answer becomes the fixture, and any branch
+  no measured answer uses is removed.
 
 Alternatives rejected: a per-model adapter table keyed by id in code
 (model ids as literals, and a code change per model); the OpenAI-compatible
@@ -192,16 +197,20 @@ default; a wrong answer is not a failure.
   (`routed`/`unreadable` with the reason) plus `fallback_from`.
 - The chosen model's failures are countable per week from `fallback_from`
   (the panel shows the count of the last 7 days next to the choice, FR-002,
-  edge case "a model stops existing").
+  edge case "a model stops existing"). That count reads across businesses,
+  and constitution V admits it as its third such statistic since v1.6.0
+  (analyze C1).
 
 ## R7 — The question version
 
 Spec D2: every reading records the version of the questions it answered.
 
 **Decision (D12)**: `QUESTIONS_VERSION` — an explicit label exported by
-`reader.ts`, `"2"` for this feature's questions (the receipt-triage
-questions are "1" in prose; no row carries "1", since rows before this
-feature read NULL — spec edge case). A test computes the SHA-256 of the two
+`reader.ts`. `"1"` names the receipt-triage questions and arrives first,
+pinned to today's prompts. `"2"` names this feature's questions and arrives
+with Story 2. Rows before this feature read NULL (spec edge case). A row
+carries `"1"` only if Story 1 is released before Story 2 (amended
+2026-09-25, analyze I1). A test computes the SHA-256 of the two
 prompt texts and asserts it equals the hash pinned beside the label, so a
 change of wording without a new label fails CI. Rejected: a version derived
 automatically from the hash (unreadable in the panel), and a date label
@@ -305,6 +314,9 @@ model per question version per receipt.
   question version or a model added to the list.
 - A file uploaded twice (same SHA-256) is the same bench receipt; the
   second upload answers with it and `duplicate: true` (spec edge case).
+- The 15-day rule is bucket configuration, applied once per environment
+  (direct-payment D12) and not visible from the repository. It is verified
+  on both buckets before the bench runs, and added if missing (analyze U1).
 - After 15 days the file is gone and the readings, marks and tally stay:
   they hold what was read, never the image or a name (the reader is never
   asked for names).
@@ -328,7 +340,10 @@ Spec FR-017, FR-018.
   (the folio read as a clave is exactly that).
 - Tally per (model, question version): readings, failures, fields judged,
   fields right, the share right, the wrong count per field, and the reading
-  time 9 of 10 readings finished within (SC-005). Computed on request from
+  time 9 of 10 readings finished within (SC-005). That time is the model's
+  own reading time (`reader_ms`): the call alone, not the upload or a PDF's
+  conversion. After launch, SC-005 is checked with the same measure on real
+  payer readings (analyze A1). Computed on request from
   the rows — the bench is small for the life of this feature (tens of
   receipts). `asOf` on the answer is the date that goes into `reader.ts`'s
   header and closes the debt (FR-020).
@@ -359,9 +374,10 @@ SC-005) is measured on the bench with real models (quickstart Step 2).
 
 **Decision (D20)**:
 
-- `aiReturning` learns four things: an answer **per model id**; an answer
-  in the OpenAI-style shape; a model that **throws**; a model that
-  **waits** (with `READER_TIMEOUT_MS` pinned low in the suite).
+- `aiReturning` learns three things: an answer **per model id**; a model
+  that **throws**; a model that **waits** (with `READER_TIMEOUT_MS` pinned
+  low in the suite). Every answer uses the measured `response` shape. An
+  unmeasured shape is never stubbed (constitution IV, analyze C2).
 - API tests (workerd, real D1): the choice and its guard; resolution and
   "applies"; the fallback on each failure kind, with and without a PDF;
   what the row records; the reused draft; both banks, the flag, the tie
@@ -390,8 +406,7 @@ it by writing code.
 The stack table says "Workers AI for receipt reading (model is a var)".
 After this feature, every model id the reader can use is still a var
 (`EXTRACTION_MODELS`, `EXTRACTION_MODEL`); the operator picks among them at
-runtime. No principle is blocked and no rule is broken — VIII's "model ids
-are vars" holds word for word. The table's parenthesis becomes slightly
-incomplete, not wrong. **Decision**: no amendment is required; if the
-creator wants the table exact, a PATCH ("models are a var; the operator
-picks among them") can ride the next amendment.
+runtime. VIII's "model ids are vars" holds word for word. **Amended**:
+constitution v1.6.0 (2026-09-25) rewrote the table's parenthesis to "the
+models are a var; the platform operator picks one of them in `/operador`",
+in the same amendment that admitted the fallback count into V (analyze C1).

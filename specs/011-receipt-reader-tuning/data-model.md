@@ -42,7 +42,7 @@ is not in the `SETTINGS` registry, so the Reglas tab never lists it (D8).
 
 | Column | Type | Null | Meaning |
 | --- | --- | --- | --- |
-| `question_version` | text | yes | `QUESTIONS_VERSION` of the questions this reading answered (`"2"` at launch). NULL on rows before this feature and on rows that read nothing |
+| `question_version` | text | yes | `QUESTIONS_VERSION` of the questions this reading answered (`"2"` with this feature's questions; `"1"` only if Story 1 ships before Story 2). NULL on rows before this feature and on rows that read nothing |
 | `reader_ms` | integer | yes | How long the reading that counted took, in ms — the fallback's own time on a fallback |
 | `fallback_from` | text | yes | The chosen model that failed, when the default read instead (D11). NULL when the chosen model read, or was the default |
 | `receiving_bank` | text | yes | The receiving bank as read, resolved to the vocabulary (`Bank`), else NULL |
@@ -58,7 +58,8 @@ bank is ever changed because of the other** (FR-012).
 Countable after launch, each one query (SC-004, SC-006, SC-007):
 
 - readings per model and question version: `GROUP BY model, question_version`;
-- fallbacks of the chosen model: `WHERE fallback_from IS NOT NULL`;
+- fallbacks of the chosen model: `WHERE fallback_from IS NOT NULL` — the
+  cross-business count constitution V admits since v1.6.0;
 - same-bank readings per ISP and week: `WHERE same_bank = 1 GROUP BY
   business_id, week`;
 - receiving-bank disagreements: `WHERE receiving_bank_tie = 'mismatch'`.
@@ -127,7 +128,7 @@ Per `(model, question_version)`, over bench readings:
 | `judged` | marked fields, over `read` readings |
 | `right` | judged fields that came out right |
 | `wrongByField` | per field, how many came out wrong |
-| `p90Ms` | the reading time within which 9 of 10 `read` readings finished (nearest-rank) |
+| `p90Ms` | the reading time within which 9 of 10 `read` readings finished (nearest-rank) — the model call alone (`reader_ms`), not the upload or a PDF's conversion (SC-005) |
 
 With `asOf` — the time of the answer, the date that closes the debt
 (FR-020).

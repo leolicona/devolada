@@ -58,8 +58,10 @@ so there is no schema for it. R2 `PROOFS` gains a `bench/` prefix under the
 existing 15-day lifecycle rule.
 
 **Testing**: Vitest 3.2 in workerd with a real local D1. The reader is
-stubbed at the binding (`aiReturning`), which gains per-model answers, the
-OpenAI-style shape, a throw and a wait. `EXTRACTION_MODELS` and
+stubbed at the binding (`aiReturning`), which gains per-model answers, a
+throw and a wait. Only answer shapes that were measured are stubbed
+(constitution IV); Gemma 4's is added from its real answer on the bench, and
+until then the tolerant branch is registered debt. `EXTRACTION_MODELS` and
 `READER_TIMEOUT_MS` are pinned in `vitest.config.ts`. `fetchMock` refuses
 any provider call during bench tests. The panel is tested with happy-dom +
 MSW with schema-parsed fixtures and axe on each state. The Lector tab joins
@@ -116,7 +118,7 @@ them as `receipt-reader-tuning D<n>` (constitution I).
 | D9 | The model is resolved by the two callers that hold `db` (`extract.ts`, `validate.ts`) into a reader plan `{ chosen, fallback }` handed to `extractProof`. `readProof` no longer reads `env` for the model | research R1 |
 | D10 | One request shape for every model (today's `messages` with text + image data URI), with the list entry's `input` merged in. The answer text comes from `response`, else `choices[0].message.content`, else the serialized answer. Gemma 4 runs with thinking off | research R5 |
 | D11 | Fallback on `ReaderError` only (unavailable, timeout, no JSON). An 8 s limit applies to a chosen model that is not the default. The default is never limited. The PDF is converted once. The row records the model that produced the reading, `fallback_from` and `reader_ms` | research R6 |
-| D12 | `QUESTIONS_VERSION = "2"`, pinned to the SHA-256 of both prompts by a test | research R7 |
+| D12 | `QUESTIONS_VERSION`: "1" names today's (receipt-triage) questions, "2" this feature's (Story 2); pinned to the SHA-256 of both prompts by a test. "1" reaches a row only if Story 1 ships before Story 2 (amended 2026-09-25, analyze I1) | research R7 |
 | D13 | Prompt v2: `bancoEmisor`/`bancoReceptor` keys (`banco` still parses); the clave only from its labelled field; a final letter kept, no letter/digit swaps; each bank only from its own side; everything else word for word | research R8 |
 | D14 | `GatedReading.receiving = { bank, verdict, sameBank }`, a sibling of `Gate`, so the payer contract does not move. Nothing acts on `sameBank`. `receiving_bank_tie` is `match`/`mismatch` against the tied account's bank | research R9 |
 | D15 | `recentReading` carries `model`, `question_version`, `reader_ms`, `fallback_from` and rebuilds `receiving`. A reused reading is never re-read | research R10 |
@@ -124,13 +126,13 @@ them as `receipt-reader-tuning D<n>` (constitution I).
 | D17 | What is marked is the product-facing value (after the gate and the vocabulary). Marks are `right`/`wrong`/`absent`, and `absent` is judged against the reading. The tally per (model, version) is computed on request, with `p90Ms` and `asOf` | research R12 |
 | D18 | A new area `routes/reader` mounted at `/platform/reader` behind the operator guard, exported as `./reader-schema` | research R4 |
 | D19 | A fourth tab **Lector** holds the Modelo card, the Banco de pruebas, the receipt detail side by side and Resultados. Images come through the API client as blobs. Columns stack below 768 px | research R13 |
-| D20 | Tests prove routing, recording and non-alteration with the reader stubbed per model; accuracy is measured on the bench, never asserted by a stub | research R14 |
+| D20 | Tests prove routing, recording and non-alteration with the reader stubbed per model, and stub only measured answer shapes; accuracy is measured on the bench, never asserted by a stub (amended 2026-09-25, analyze C2) | research R14 |
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Checked against v1.5.0. One gate per principle. The verdicts were re-read
+Checked against v1.6.0 (amended 2026-09-25 for this feature, analyze C1). One gate per principle. The verdicts were re-read
 after Phase 1 (see the note below the table).
 
 | # | Principle | Gate | Verdict |
@@ -138,8 +140,8 @@ after Phase 1 (see the note below the table).
 | I | Spec-Driven, Every Decision Cited | Twenty decisions, each with the place it was made. Every new rule in code cites `receipt-reader-tuning D<n>`. Comments that would contradict the code are rewritten: `reader.ts`'s header ("the model is read from config"), `env.ts` on `EXTRACTION_MODEL`, and the wrangler comment "replacing it is a deploy". The "not run" line in `reader.ts` is replaced only by the dated bench tally (quickstart Step 3) | PASS |
 | II | Money Law | The bench stores amounts as integer cents via `amountToCents`. No amount is added, compared or converted anywhere else | PASS |
 | III | One Contract, Pure Routers | New area `routes/reader/{index,handler,schema}.ts`. The router is pure, the logic lives in the handler, and zod schemas are exported as `@devolada/api/reader-schema` and used by the panel's MSW fixtures and the e2e stubs. One envelope; `UPPER_SNAKE` codes (`INVALID_MODEL`, `FILE_EXPIRED`, reused `PROOF_TOO_LARGE`, `PROOF_UNSUPPORTED_TYPE`, `READER_UNAVAILABLE`). The payer contract (`/read`, `Gate`) is unchanged by design (D14) | PASS |
-| IV | Tests Run on the Real Runtime | API tests run in workerd with a real D1 and migrations applied. The reader is still the one binding a test stands in for, now per model. `fetchMock` still intercepts the provider and refuses any call from the bench. Width and contrast of the new tab are measured in the browser layer. Accuracy is not asserted by a stub; it is measured on real models on the bench (D20) | PASS |
-| V | Tenant Isolation and Authorization by Area | The model choice and the bench are platform rows with no `business_id` (precedent: `platform_settings`, `access_requests`), read and written only behind `requirePlatformOperator`; no role-matrix change. The new `extractions` columns sit on a table that carries `business_id`. The ISP's accounts are never written; only the tie verdict is (receipt-triage D21). No new cross-business read. The bench reads no business data | PASS |
+| IV | Tests Run on the Real Runtime | API tests run in workerd with a real D1 and migrations applied. The reader is still the one binding a test stands in for, now per model. `fetchMock` still intercepts the provider and refuses any call from the bench. Width and contrast of the new tab are measured in the browser layer. Accuracy is not asserted by a stub; it is measured on real models on the bench (D20). Only measured answer shapes are stubbed: the branch for Gemma 4's shape stays untested and registered as debt until the bench captures its real answer, which becomes the fixture | PASS |
+| V | Tenant Isolation and Authorization by Area | The model choice and the bench are platform rows with no `business_id` (precedent: `platform_settings`, `access_requests`), read and written only behind `requirePlatformOperator`; no role-matrix change. The new `extractions` columns sit on a table that carries `business_id`. The ISP's accounts are never written; only the tie verdict is (receipt-triage D21). One new cross-business read, admitted by constitution v1.6.0: the count of payer readings that fell back from the chosen model. It returns a number, never a row, and reads only `fallback_from` and `created_at`. The bench reads no business data | PASS |
 | VI | Visual Foundations (NON-NEGOTIABLE) | The tab uses the existing atoms (`Card`, `Button`, `Alert`, `Pending`, `StatusBadge`, `Skeleton`) and the app's `Tabs`, `Select`, `Collapsible`, at compact 40 px, tokens only. Marks, failures and the same-bank flag are icon + text, never colour alone. The only motion is the `Pending` breath while reading. Checked at 360/768/1280 in both themes. es-MX copy | PASS |
 | VII | Every Test Cites Its Story | New tests cite `receipt-reader-tuning US1`–`US3`. Existing reader tests keep passing unchanged, because `banco` still parses and the pinned default is Mistral | PASS |
 | VIII | Absent Configuration Degrades, Never Breaks | `EXTRACTION_MODELS` unset leaves today's single model; invalid is the same plus a warning. No `AI` binding: payer readings degrade as today, the bench answers `READER_UNAVAILABLE`, and the panel says so. A chosen model that fails falls back to the default. Model ids stay vars; the only literal is today's `DEFAULT_MODEL`. `env.ts` documents both new bindings with what "unset" means | PASS |
@@ -149,7 +151,8 @@ re-read on purpose:
 
 - **(VIII)** The stack table's parenthesis "(model is a var)" stays true in
   substance: every usable model id is a var, and the operator only picks
-  among them. No amendment is required (research R16).
+  among them. Constitution v1.6.0 rewrote the parenthesis to say exactly
+  that (research R16).
 - **(V)** The bench's files share the payer proofs' bucket but not their
   namespace. Payer keys start with a link id, and `proofBelongsToLink` only
   accepts those, so no payment can reference a `bench/` key and the bench

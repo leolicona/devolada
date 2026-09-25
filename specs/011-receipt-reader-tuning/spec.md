@@ -504,7 +504,10 @@ payment, no validation record and no payer reading appeared.
   them and their question version.
 - **SC-005**: A model becomes active in prod only when, on the test set, it
   meets SC-001 and SC-002, and reads at least 9 of 10 receipts in under 5
-  seconds. Today's model was measured at about 2.7 s (proof-extraction D5).
+  seconds. The time is the model's own reading time, from the moment it is
+  asked to its answer, not the upload. After launch, the same measure on
+  real payers' readings stays under it. Today's model was measured at about
+  2.7 s (proof-extraction D5).
 - **SC-006**: Zero payers are left without a reading because of the chosen
   model: every failed answer from it is followed by a reading from the
   default model.
@@ -582,3 +585,8 @@ Found in the investigation of 2026-09-25 and kept here as the next steps:
   (receipt-triage D24).
 - Workers AI: Mistral Small 3.1 24B and Gemma 4 26B A4B, both available and
   not scheduled for deprecation on 2026-09-25.
+- The proofs bucket's 15-day expiry rule, set once per environment outside
+  the code (direct-payment D12). The bench's retention (D6, FR-020) rests
+  on it, so it is verified before the bench runs.
+- Constitution v1.6.0 (2026-09-25), whose principle V admits the panel's
+  count of reader fallbacks across businesses (analyze C1).

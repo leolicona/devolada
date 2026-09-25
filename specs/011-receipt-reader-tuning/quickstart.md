@@ -109,6 +109,16 @@ bucket keys are in `extractions.proof_key` on dev):
 - at least one receipt that shows a labelled "Clave de rastreo" read right
   today (no-regression), and one PDF.
 
+### Step 1b — the buckets forget on time (analyze U1)
+
+```sh
+pnpm --filter @devolada/api exec wrangler r2 bucket lifecycle list devolada-transfer-proofs-dev
+pnpm --filter @devolada/api exec wrangler r2 bucket lifecycle list devolada-transfer-proofs
+```
+
+Each must show a 15-day expiry with no prefix that leaves `bench/` out. If
+one is missing, add it before Step 2 (direct-payment D12).
+
 ### Step 2 — run the bench on dev
 
 After deploy to dev: `app.dev.devoladapago.com/operador` → **Lector** →
@@ -119,7 +129,9 @@ receipt does not show it.
 The first Gemma 4 upload also proves the call and answer shapes (research
 R5): a column that reads "Respuesta sin datos" with a raw answer that holds
 the JSON inside another structure means the answer-text rule needs one more
-branch — fix, deploy, "Leer de nuevo".
+branch — fix, deploy, "Leer de nuevo". Either way, copy one raw answer per
+model into the test fixtures and pay `reader-answer-shape-unmeasured`
+(constitution IV).
 
 Expected on the known failures, for the model that goes to prod (SC-001):
 
@@ -153,6 +165,8 @@ SC-002 on the whole set and reads 9 of 10 under 5 s (SC-005).
 SELECT count(*) FROM extractions WHERE created_at > :launch AND model IS NOT NULL AND question_version IS NULL;
 -- SC-006: fallbacks of the chosen model
 SELECT fallback_from, count(*) FROM extractions WHERE fallback_from IS NOT NULL GROUP BY 1;
+-- SC-005: the model's own reading time, 9 of 10 (read the 90th row of the sorted times)
+SELECT model, reader_ms FROM extractions WHERE created_at > :launch AND reader_ms IS NOT NULL ORDER BY model, reader_ms;
 -- SC-007: same-bank readings per ISP per week
 SELECT business_id, strftime('%Y-%W', created_at / 1000, 'unixepoch') AS week, count(*)
 FROM extractions WHERE same_bank = 1 GROUP BY 1, 2;

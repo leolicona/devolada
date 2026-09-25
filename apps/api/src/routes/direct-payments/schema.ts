@@ -82,6 +82,19 @@ export const linkStatusResponse = z.object({
       }),
     )
     .optional(),
+  /* bug: one-open-attempt — the link's attempt still in review, so a payer
+     who comes back (a reload, hours later, another phone) is shown it and
+     corrects it instead of starting a second one beside it. The id alone:
+     the page reads everything else from the status route, which is
+     already public by id. With `status: "debt"` on a panel link only —
+     an API link keeps several transfers side by side
+     (automated-collections-api D16). */
+  inReview: z
+    .object({
+      directPaymentId: z.string(),
+      status: z.enum(["validating", "queued_for_credit"]),
+    })
+    .optional(),
 });
 
 /* POST /direct-payments/links/:token/pay (US-D02). Exactly one proof
@@ -138,7 +151,10 @@ export const payRequest = z
        answered a `not_found` confirmation. If the three fields come back
        unchanged, the existing row is kept and nothing is spent; if they
        changed, the old row is `superseded` so it releases its claim on
-       `(business_id, tracking_key)` before the new one takes it. */
+       `(business_id, tracking_key)` before the new one takes it.
+       bug: one-open-attempt — optional in practice: while the link has
+       an attempt in review, a submission without it corrects that
+       attempt all the same (one attempt in review per link). */
     supersedes: z.string().min(1).optional(),
     /* D18: the `Estatus` the reader saw on the receipt, carried forward
        so the row can answer a reload. Client-supplied and harmless: it

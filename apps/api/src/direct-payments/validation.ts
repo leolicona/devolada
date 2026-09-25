@@ -244,11 +244,22 @@ function announcingWriter(
 ): (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment> {
   let announced = payment.status;
   return async (values) => {
+    /* bug: one-open-attempt — a payer can replace an attempt while its
+       own validation is in flight. A verdict that paid it still lands:
+       Banxico says the money arrived, and by then WispHub may have heard
+       it too. Anything else — a retry slot, `invalid`, `expired` — would
+       bring a replaced attempt back to life, so it is dropped and the row
+       stays `superseded`. */
+    const paid = values.status === "confirmed" || values.status === "partial" || values.status === "unapplied";
     const [row] = await db
       .update(payments)
       .set(values)
-      .where(eq(payments.id, payment.id))
+      .where(paid ? eq(payments.id, payment.id) : and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
       .returning();
+    if (!row) {
+      const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
+      return current;
+    }
     /* prepaid-credit D2: the fee keys on the terminal verdict, once per
        payment — idempotent in the book, so every path may call it */
     await debitValidationFee(env, db, row);
@@ -526,10 +537,18 @@ export async function runValidation(
      landed, which is knowable only in advance. */
   const isRetry = payment.validationAttempts > 0 || payment.constaStatus !== null;
   const attempts = payment.validationAttempts + 1;
-  await db
+  /* bug: one-open-attempt — the claim is also the last look before a
+     paid call: an attempt the payer replaced since it was read (the
+     sweep's batch, the inline attempt's insert) is not asked about */
+  const [claimed] = await db
     .update(payments)
     .set({ validationAttempts: attempts })
-    .where(eq(payments.id, payment.id));
+    .where(and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
+    .returning();
+  if (!claimed) {
+    const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    return current;
+  }
 
   let verdict;
   /* consta-api-merge D3: the business is the identity — the refs above

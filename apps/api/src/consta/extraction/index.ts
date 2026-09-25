@@ -3,7 +3,7 @@ import { readProof, ReaderError, type Reading } from "./reader";
 import { pdfToText } from "./pdf-text";
 import { gateReading, type GatedReading } from "./gate";
 
-export { ProofFetchError, MAX_PROOF_BYTES, loadProof, readProofFromBucket } from "./proof";
+export { ProofFetchError, MAX_PROOF_BYTES, loadProof, readProofFromBucket, sha256Hex } from "./proof";
 export type { LoadedProof } from "./proof";
 export { ReaderError } from "./reader";
 export { gateReading, gateReference, passesGate, resolveBank } from "./gate";

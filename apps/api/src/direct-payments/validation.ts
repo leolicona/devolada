@@ -1190,7 +1190,7 @@ export async function runValidation(
   });
   const attempt = await attemptReconnection(
     wisphub,
-    business.id,
+    business,
     { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
     settlement.ispRegisteredCents,
     now,

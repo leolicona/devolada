@@ -297,7 +297,7 @@ export async function executeAction(c: Ctx, id: string) {
     return c.json({ success: false, error: { code: "NOT_CONFIGURED" } }, 409);
   }
 
-  const updated = await dispatchObserved(c, db, actor.id, row, integration, new Date());
+  const updated = await dispatchObserved(c, db, actor, row, integration, new Date());
   /* the registration just changed what WispHub owes this tenant's
      screen — and `paymentRegisteredAt` above is the display cache's own
      key (presence-freshness D6), so nothing else has to be told */
@@ -317,13 +317,15 @@ export async function executeAction(c: Ctx, id: string) {
 async function dispatchObserved(
   c: Ctx,
   db: DrizzleD1Database,
-  businessId: string,
+  /* The actor's business — its timezone rides along for WispHub's
+     dates (bug: wisphub-payment-utc-time) */
+  business: { id: string; timezone: string },
   row: typeof payments.$inferSelect,
   integration: Integration,
   now: Date,
   extra: Partial<typeof payments.$inferInsert> = {},
 ) {
-  const actorId = businessId;
+  const actorId = business.id;
   const { action, reconnect } = parseHypothesis(
     row.observedAction ?? "register_and_reconnect:reconnect",
   );
@@ -336,7 +338,7 @@ async function dispatchObserved(
   });
   const attempt = await attemptReconnection(
     wisphubFor(integration, c.env),
-    actorId,
+    business,
     { usuario: row.customerUsuario ?? "", wisphubId: row.wisphubCustomerId ?? "" },
     row.registeredCents ?? 0,
     now,
@@ -434,7 +436,7 @@ export async function reviewDecision(c: Ctx, id: string, body: ReviewDecisionReq
   } else {
     const integration = await integrationOf(db, actor.id);
     if (integration?.apiKey && integration.actionsEnabled) {
-      updated = await dispatchObserved(c, db, actor.id, row, integration, now, decided);
+      updated = await dispatchObserved(c, db, actor, row, integration, now, decided);
     } else {
       [updated] = await db
         .update(payments)

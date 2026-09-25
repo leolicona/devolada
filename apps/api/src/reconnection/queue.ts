@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { payments } from "../db/schema";
+import { businesses, payments } from "../db/schema";
 import { integrationsFor } from "../integrations/store";
 import { settleDispatch } from "../integrations/dispatch";
 /* provider-address-per-isp D4: the sweep already loads each business's
@@ -91,6 +91,13 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
      in one batch reach two different installations. */
   const ispIds = [...new Set(due.map((c) => c.businessId))];
   const integrationByBusiness = await integrationsFor(db, ispIds);
+  /* bug: wisphub-payment-utc-time — each charge is registered on its own
+     ISP's clock, so two businesses in one batch write two local times */
+  const ispRows = await db
+    .select({ id: businesses.id, timezone: businesses.timezone })
+    .from(businesses)
+    .where(inArray(businesses.id, ispIds));
+  const ispById = new Map(ispRows.map((i) => [i.id, i]));
 
   for (const charge of due) {
     const integration = integrationByBusiness.get(charge.businessId);
@@ -106,10 +113,12 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
       report.stillQueued++;
       continue;
     }
+    const business = ispById.get(charge.businessId);
+    if (!business) continue; /* unreachable: the FK guarantees it */
 
     const result = await attemptReconnection(
       wisphubFor(integration, env),
-      charge.businessId,
+      business,
       /* D8: lookups need the usuario; the numeric id only serves the
          auto-activate PATCH. Charges from before 0006 have no stored
          usuario — the old identifier keeps their (broken) behavior. */

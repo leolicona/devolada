@@ -142,33 +142,43 @@ One account, the cuenta de cobro, in the existing `CopyField`, labelled by
 its kind — "CLABE", "Tarjeta de débito" or "Celular" — with its bank. No
 list, no heading, no choice. A CLABE renders exactly as today.
 
-### The capture guide (Story 4, D8, D20 — compact, re-planned 2026-09-24)
+### The capture guide (Story 4, D8, D20 — redesigned 2026-09-25)
 
-**On the transfer step**, one line under the account, in the muted body
-style with a small camera icon: "Al terminar, captura el detalle de tu
-transferencia." Nothing else.
+**Design**: the canvas's boards 1–4 and 9 (Version 6). Tokens and motion are
+`packages/ui`'s; nothing here adds a token.
 
-**On "Envía tu comprobante"**, above the upload control:
+**On the transfer step**, under the account, a note in the well surface with
+a camera icon: "Al terminar, toma captura del detalle" / "Ahí aparecen la
+clave de rastreo o el número de referencia que necesitamos."
 
-1. "Tu captura debe mostrar:" and four items on one or two lines at 360px,
-   each a small neutral icon + its word: **Clave o referencia** · **Monto** ·
-   **Fecha** · **Cuenta**. A text button "Ver ejemplo" at the end.
-2. "Ver ejemplo" opens in place (the existing `Collapsible`, closed by
-   default): the small drawing with the four items marked by number and
-   named in text, the three rules ("Captura el detalle de la transferencia,
-   no el resumen." · "Que se vea toda la pantalla, sin recortar." · "Si
-   tomas una foto, que no tenga reflejos.") and "¿Dónde los encuentro en mi
-   banco?" with the entries of `bank-hints.ts`.
-3. **After a reading**, the same four items take their state from the
-   reading — each icon becomes a check ("se ve") or an open circle ("no se
-   ve"), with that word beside it for assistive technology and in text,
-   never colour alone. The swap is the vocabulary's outcome cross-fade
-   (`--duration-*` tokens); reduced motion keeps only the opacity change.
-   The `Alert` of the ask (below) still carries the sentences; the
-   checklist is the at-a-glance version of the same facts.
+**On "Envía tu comprobante"**, above the upload control, a section in the
+well surface titled "Tu captura debe mostrar":
 
-Nothing that needs a tap is placed before the upload control (FR-026), and
-the closed guide takes no more than the checklist's lines.
+1. The small inline-SVG receipt (token classes, `aria-hidden`) beside an
+   ordered list of four items, each a numbered marker, its name and one
+   line: **Clave de rastreo o número de referencia** — "Aparecen en el
+   detalle, no en el resumen"; **Monto** — the amount due ("$300.00");
+   **Fecha** — "Del día que transferiste"; **Cuenta destino** — "{Tipo} que
+   termina en {últimos 4}" from `collectAccount`.
+2. One line with a camera icon: "Captura la pantalla de **detalle**,
+   completa y sin reflejos."
+3. The existing `Collapsible` "¿Dónde lo encuentro en mi banco?" (closed by
+   default) with the entries of `bank-hints.ts`.
+
+**Feedback states** (all opacity, the design system's own motion):
+
+- *Reading* — the file row says "Leyendo tu captura…" and each marker and a
+  "Revisando…" word carry `data-motion="breath"` (`--duration-breath`,
+  `--opacity-breath`), which keeps running under reduced motion.
+- *Read* — the section title becomes "Lo que vimos en tu captura"; each
+  marker becomes a check on `accent-soft` with "Se ve", or an open circle on
+  `warning-soft` with "No se ve" (and its line turns to the fix: "Busca «Ver
+  más detalles» en tu app"; for the account, "Tu captura muestra ••••9999;
+  esperábamos ••••1234"); each swap wrapped in `Reveal` (`animate-reveal`,
+  `--duration-slow`). The ask `Alert` arrives with `animate-enter`
+  (`--duration-normal`) and takes focus. No transform anywhere.
+
+Nothing that needs a tap is placed before the upload control (FR-026).
 
 ### The ask at the upload (Story 2, D5, D18)
 

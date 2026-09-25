@@ -44,3 +44,24 @@ z.object({ decision: z.enum(["accept", "reject"]) })
   Two buttons: "Aceptar pago" and "Rechazar".
 - The payer's status reads `inReview: true` (payment-page contract) and sees
   "Tu pago está en revisión con {ispName}."
+
+## Amended 2026-09-25 (implementation)
+
+- **The status is the settlement's.** A held row is written at the
+  observation gate's own place, after the debt is read and the settlement
+  computed, so its `status` is `confirmed` — or `partial` when the transfer
+  fell short. Writing `confirmed` over a short transfer would have told the
+  panel no money was missing. Banxico's verdict is still not rewritten.
+- **Accept, per link kind.** A panel payment dispatches what the gate
+  recorded, at once, through "Ejecutar ahora"'s own path — so `actionOutcome`
+  after accept is what that attempt reached (`done`, `queued` or `withheld`),
+  not always `queued`. When the business keeps its actions in observation, an
+  accepted row becomes `observation` (the owner's gate still holds); with no
+  WispHub key it is `queued` and waits like any queued action. An API payment
+  closes its one-time link and announces its verdict now; its outcome is the
+  delivery's, as for any API payment.
+- **Not paid while held.** The feed's "today" totals leave out `review`
+  rows, and the feed carries `reviewReason` and `reviewAccount` (`{ kind,
+  last4 }`) so the row can say which removed account received the money.
+- The panel's decision buttons read "Aceptar pago" and "Rechazar"; the badge
+  is the shared `StatusBadge` status `inReview` ("En revisión").

@@ -102,7 +102,9 @@ export function speiBankIsKnown(business: Isp): boolean {
    customers transfer into the void, whoever's gap it is. */
 
 /* What the business has not configured, or null when it has (FR-009):
-   the CLABE, or a bank outside apiCEP's vocabulary. `speiBank` being
+   the account (the cuenta de cobro since receipt-triage D32 — the CLABE
+   for every business born before it), or a bank outside apiCEP's
+   vocabulary. `speiBank` being
    non-empty is not enough, and BUG-008 is why: a value stored before D16
    can be truthy and still outside the list. Measured live on dev
    2026-08-19 — an ISP held `Klar` where the list says `KLAR`, so every
@@ -1006,7 +1008,7 @@ export async function runValidation(
          sweep's list can answer, as it would for a provider outage. */
       return retryLater("WISPHUB_READ_INCOMPLETE", base);
     }
-    /* The money already moved to the ISP's CLABE: never register a
+    /* The money already moved to the ISP's account: never register a
        second WispHub payment, never drop the proof (D14). */
     return update({
       ...base,

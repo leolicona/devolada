@@ -3880,3 +3880,72 @@ describe("receipt-triage US3: the account a payment is checked against", () => {
     expect(data.speiClabe).toBeUndefined();
   });
 });
+
+describe("receipt-triage US2/US3: what /read reports to the page (D15, D7, D8)", () => {
+  const readAs = async (proofId: string, reading: Record<string, unknown>) =>
+    (await app()).request(
+      "/direct-payments/links/tok2345abcdefgh2/read",
+      post({ proofId }),
+      { ...testEnv, AI: aiReturning(reading) },
+    );
+
+  it("receipt 1: the ask, the gate's reference verdict and that the destination was seen — never its digits", async () => {
+    const { link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/r1`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const { data } = await (await readAs(`${link.id}/r1`, RECEIPT_1_READING)).json();
+    expect(data.ask).toEqual({ reason: "no_key", fields: ["key"] });
+    expect(data.gate.referenceNumber).toBe("missing");
+    expect(data.destinationSeen).toBe(true);
+    expect(JSON.stringify(data)).not.toContain("8195");
+    expect(data).not.toHaveProperty("tiedAccount");
+  });
+
+  it("a receipt to another account is reported as wrong_destination", async () => {
+    const { link } = await seedRtBusiness();
+    await testEnv.PROOFS.put(`${link.id}/r9`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const { data } = await (
+      await readAs(`${link.id}/r9`, { ...RECEIPT_1_READING, claveDeRastreo: "BNET01002609090012345678", destino: { tipo: "clabe", digitos: "9999" } })
+    ).json();
+    expect(data.ask).toEqual({ reason: "wrong_destination" });
+  });
+
+  it("a reading whose only key another link's payment already holds that day is asked about as shared (D7)", async () => {
+    const { business, link } = await seedRtBusiness();
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({ businessId: business.id, token: "tokother00000003", wisphubCustomerId: "7", customerUsuario: "otro@wifiplus" })
+      .returning();
+    await seedRtRow(other, business, {
+      referenceNumber: "038195",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-09",
+      claimedAmountCents: 35000,
+      nextValidationAt: null,
+      status: "confirmed",
+    });
+    await testEnv.PROOFS.put(`${link.id}/r2`, PNG(), { httpMetadata: { contentType: "image/png" } });
+    const { data } = await (await readAs(`${link.id}/r2`, RECEIPT_2_READING)).json();
+    expect(data.referenceNumber).toBe("038195");
+    expect(data.ask).toEqual({ reason: "no_key", fields: ["key"], shared: true });
+  });
+
+  it("Banxico's own account, tied to the snapshot, becomes the account the payment was checked against (D22)", async () => {
+    const CARD = "4111111111111111";
+    const { business, link } = await seedRtBusiness({ speiCard: CARD, speiCardBank: "NUBANK" });
+    const card = { kind: "card", value: CARD, bank: "NUBANK" };
+    const row = await seedRtRow(link, business, {
+      trackingKey: "TRACK001XYZ",
+      senderBank: "NUBANK",
+      transferDate: TODAY(),
+      registeredAccounts: JSON.stringify([RT_ACCOUNT, card]),
+    });
+    mockApiCep({ cep: { ...DEFAULT_CEP, beneficiaryAccount: CARD } });
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    await sweepDirectPayments(testEnv, new Date());
+    const after = await rowById(row.id);
+    expect(after.status).toBe("confirmed");
+    expect(JSON.parse(after.beneficiary!)).toEqual(card);
+  });
+});

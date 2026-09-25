@@ -122,15 +122,24 @@ export async function validate(
      machines and the bank's learned clave shape all run out of ways to
      tell (D5–D8).
 
-     Exactly two things still refuse before a credit is spent (D2, FR-004):
-     the file is not a receipt at all, and the file cannot be read at all.
-     A *hole* no longer refuses (FR-005) — a missing clave used to throw
+     Two things refuse before a credit is spent (D2, FR-004): the file is
+     not a receipt at all, and the file cannot be read at all. A *hole*
+     does not refuse (FR-005) — a missing clave used to throw
      `RECEIPT_INCOMPLETE` and send the payer to a form before anything had
-     been asked of anybody; now it goes to the provider, whose reading may
-     fill it for free. That refusal is what the gate exists for is still
-     true of the two that remain: apiCEP cannot tell a caller which field
-     was wrong, because a malformed clave, an unknown bank and a transfer
-     that never happened are the same faceless `invalid` (D11).
+     been asked of anybody; it goes to the provider, whose reading may
+     fill it for free. receipt-triage D4 narrows that for exactly one hole
+     and adds one stop: a *clear* capture (a `completa` picture, or a
+     PDF's text — D16) that shows neither a clave nor a reference, a
+     generic reference counting as none, throws `RECEIPT_INCOMPLETE` again;
+     and one whose destination fits none of the ISP's accounts throws
+     `RECEIPT_WRONG_DESTINATION` (D15, D24). Neither is worth a credit: a
+     receipt that shows no key cannot be found by the provider's eyes
+     either, and one paid to somebody else is not this ISP's money. Every
+     other hole — a partly legible picture, an unjudged one, a malformed
+     clave — still goes through (FR-015). That refusing is what the gate
+     exists for is still true: apiCEP cannot tell a caller which field was
+     wrong, because a malformed clave, an unknown bank and a transfer that
+     never happened are the same faceless `invalid` (D11).
 
      If the reader is unavailable, or its answer will not parse, the file
      still goes to the provider with an empty reading on our side, and the
@@ -172,6 +181,10 @@ export async function validate(
         potentialBeneficiaries: body.potentialBeneficiaries,
       };
 
+  /* receipt-triage D22/D23: the product no longer sends a candidate list —
+     a payment is checked against the one account its receipt's digits
+     name, else its cuenta de cobro. The engine keeps accepting the list
+     for other callers, unchanged. */
   /* `potentialBeneficiaries` is an OCR-mode feature: apiCEP matches the
      image against a list of candidate accounts, and a direct-mode call
      takes exactly one beneficiary. So a caller using it keeps the OCR

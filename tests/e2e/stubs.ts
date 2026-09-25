@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
    API, and the contract's zod resolves from apps/api's own node_modules
    when the file is reached this way. */
 import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
+import { linkStatusResponse, proofReadingResponse } from "../../apps/api/src/routes/direct-payments/schema";
 
 /* The API, stubbed at the network edge. Same discipline as MSW in the
    component layer: the shapes come from the real contracts, so a stub
@@ -303,7 +304,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
 
 /* The customer's payment page (direct-payment D9): no session, so the
    only stubs are the link and the proof pipeline behind it. */
-export const paymentLink = {
+/* receipt-triage (analyze 2026-09-25, D1): parsed, so the stub cannot
+   carry a shape the server would never send (constitution III) */
+export const paymentLink = linkStatusResponse.parse({
   ispName: "WifiPlus",
   customerName: "Janely Reyes",
   status: "debt",
@@ -317,7 +320,7 @@ export const paymentLink = {
   reference: "greyes@wifiplus",
   /* receipt-triage D29: the one account the payer sees */
   collectAccount: { kind: "clabe", value: "646180157000000004", bank: "STP" },
-};
+});
 
 /* The longest real clave measured so far: 28 characters, from a live
    NUBANK receipt (D16/BUG-006). The field has to hold it. */
@@ -347,14 +350,20 @@ export const proofReading = {
 
 /* receipt-triage US2/US4: a clear capture with neither key — the one the
    ask stops before any credit, and the guide answers "No se ve" for */
-export const keylessReading = {
-  ...proofReading,
-  trackingKey: null,
-  senderBank: "BANORTE",
+export const keylessReading = proofReadingResponse.parse({
+  source: "reader",
+  isReceipt: true,
   legibility: "full",
+  amountCents: paymentLink.totalCents,
+  trackingKey: null,
+  referenceNumber: null,
+  senderBank: "BANORTE",
+  date: "2026-08-19",
+  receiptStatus: "Aceptada",
   gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "missing" },
   ask: { reason: "no_key", fields: ["key"] },
-};
+  destinationSeen: true,
+});
 
 export async function stubPagoKeylessReading(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/links/*/read", keylessReading);

@@ -199,7 +199,7 @@ export async function recentReading(
         eq(extractions.proofSha256, proof.sha256),
         eq(extractions.source, "reader"),
         /* Only rows that actually hold a reading. `gated` counts: since
-           D3 a hole no longer refuses, it goes to the provider, and the
+           D3 a hole does not refuse, it goes to the provider, and the
            fields it *did* read are still worth reusing.
            receipt-triage D28: so do the two new stops — a pay that
            carries the file `/read` just stopped must meet the same stop

@@ -58,6 +58,12 @@ export type Reading = {
      is what tells a payer their capture was taken too early. */
   amount: number | null;
   date: string | null;
+  /* bug: spei-date-rollover — the time printed beside the date, "HH:MM"
+     on a 24-hour clock, or null. SPEI changes its operation day at 18:00
+     (Banxico, "Información operativa del SPEI"), and a receipt prints the
+     calendar day: the time is what says which day Banxico filed it under.
+     Reported like the date, never judged by the gate. */
+  time: string | null;
   status: string | null;
   /* receipt-triage D12: as printed — text, never a number, so "038195"
      keeps its zero. Judged by the gate, not here. */
@@ -92,6 +98,7 @@ const FIELDS = `{"esComprobante": <true if this really is a bank transfer receip
  "banco": "<the bank the money was sent FROM, or null>",
  "monto": <the amount in pesos as a number, or null>,
  "fecha": "<the operation date as YYYY-MM-DD, or null>",
+ "hora": "<the time of the operation as HH:MM on a 24-hour clock, or null>",
  "estatus": "<the value of the 'Estatus' field, or null>",
  "referenciaNumerica": "<the value of the 'Referencia' or 'Referencia numérica' field, digits only, exactly as printed including leading zeros, or null>",
  "destino": {"tipo": "<clabe | tarjeta | celular | cuenta, or null>", "digitos": "<the digits of the destination account you can see, without asterisks or dots, or null>"}}`;
@@ -112,6 +119,9 @@ ${BANKS.join(", ")}
 - "destino" is the account the money was sent TO (the beneficiary's), never
   the sender's. "tipo" is what its label says it is; "digitos" are only the
   digits you can actually see, often the last three or four.
+- "hora" is the time printed beside the date, converted to a 24-hour clock
+  ("11:47 p.m." is "23:47"). Return null if the receipt prints no time; never
+  guess one.
 - If this is not a bank transfer receipt, set "esComprobante" to false and
   every other field to null.`;
 
@@ -202,6 +212,15 @@ export function destinationOf(v: unknown): Reading["destination"] {
 const referenceOf = (v: unknown): string | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 ? String(v) : str(v);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+/* bug: spei-date-rollover — a time is "HH:MM" on a 24-hour clock or it is
+   nothing: a word, a 12-hour clock or an impossible hour decides no day */
+export function timeOf(v: unknown): string | null {
+  const t = str(v);
+  const m = t ? /^(\d{1,2}):(\d{2})$/.exec(t) : null;
+  if (!m) return null;
+  const [h, min] = [Number(m[1]), Number(m[2])];
+  return h <= 23 && min <= 59 ? `${String(h).padStart(2, "0")}:${m[2]}` : null;
+}
 
 /* `text` reads a PDF's converted text instead of a picture (D1). Both
    go to the same model with the same JSON shape, so nothing downstream
@@ -248,6 +267,7 @@ export async function readProof(
     senderBank: str(parsed.banco),
     amount: num(parsed.monto),
     date: str(parsed.fecha),
+    time: timeOf(parsed.hora),
     status: str(parsed.estatus),
     referenceNumber: referenceOf(parsed.referenciaNumerica),
     destination: destinationOf(parsed.destino),

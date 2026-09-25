@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -2016,5 +2016,45 @@ describe("bug: one-open-attempt", () => {
     expect(
       screen.queryByRole("button", { name: /corregir el comprobante en revisión/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/* bug: spei-date-rollover — the manual form's "today" is the business's
+   day. It was the UTC date, which is already tomorrow from 18:00 in Mexico
+   City: an evening payer was offered a day their receipt does not show.
+   Only `Date` is faked, so MSW and the user events keep real timers. */
+describe("bug: spei-date-rollover", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("at 20:00 in Mexico City the manual form proposes that day, not the UTC one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    /* 20:00 on the 24th in Mexico City; the 25th in UTC */
+    vi.setSystemTime(new Date("2026-09-25T02:00:00Z"));
+    server.use(handlers.link(() => ok(linkStatusResponse.parse({ ...debtLink, timezone: "America/Mexico_City" }))));
+    renderPage();
+    await openManualForm();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
+    await expectNoViolations(document.body);
+  });
+
+  it("the business's own zone decides: past midnight in Mexico City, still the 24th in Hermosillo", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    /* 00:30 on the 25th in Mexico City, 23:30 on the 24th in Hermosillo */
+    vi.setSystemTime(new Date("2026-09-25T06:30:00Z"));
+    server.use(handlers.link(() => ok(linkStatusResponse.parse({ ...debtLink, timezone: "America/Hermosillo" }))));
+    renderPage();
+    await openManualForm();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
+  });
+
+  it("an answer without a zone assumes Mexico City", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T02:00:00Z"));
+    server.use(handlers.link(() => ok(debtLink)));
+    renderPage();
+    await openManualForm();
+    expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
   });
 });

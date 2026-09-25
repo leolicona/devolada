@@ -376,6 +376,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
          recognises the payer in its statement exactly as an ISP does */
       reference: link.customerRef,
       cobros: [],
+      timezone: business.timezone,
     };
     return c.json({ success: true, data });
   }
@@ -442,6 +443,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
         .filter((f) => f.usuario === link.customerUsuario)
         .sort((a, b) => (a.invoiceDate ?? "").localeCompare(b.invoiceDate ?? "") || a.invoiceId - b.invoiceId)
         .map((f) => ({ externalId: f.invoiceId, amountCents: f.totalCents, invoiceDate: f.invoiceDate })),
+      timezone: business.timezone,
       ...(await inReviewOf(ctx.db, link.id)),
     };
     return c.json({ success: true, data });

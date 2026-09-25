@@ -84,6 +84,8 @@ export type StubbedReading = {
   banco?: string | null;
   monto?: number | null;
   fecha?: string | null;
+  /* bug: spei-date-rollover — the time printed beside the date */
+  hora?: string | null;
   estatus?: string | null;
   /* receipt-triage D12/D24: the two questions the prompt gained */
   referenciaNumerica?: string | null;

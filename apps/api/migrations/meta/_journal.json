@@ -260,6 +260,13 @@
       "when": 1790299435321,
       "tag": "0036_receipt_triage",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1790356306185,
+      "tag": "0037_spei_date_rollover",
+      "breakpoints": true
     }
   ]
 }

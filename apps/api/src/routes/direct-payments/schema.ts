@@ -82,6 +82,11 @@ export const linkStatusResponse = z.object({
       }),
     )
     .optional(),
+  /* bug: spei-date-rollover — the business's IANA zone, so the manual
+     form's "today" is the business's day and not the UTC date (which is
+     tomorrow from 18:00 in Mexico City). With `status: "debt"`; a page
+     that meets an older API assumes Mexico City. */
+  timezone: z.string().optional(),
   /* bug: one-open-attempt — the link's attempt still in review, so a payer
      who comes back (a reload, hours later, another phone) is shown it and
      corrects it instead of starting a second one beside it. The id alone:

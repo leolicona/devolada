@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-25 · **Plan**: [plan.md](./plan.md) · **Research**: [research.md](./research.md)
 
-One additive migration, `0037_receipt_reader_tuning.sql`: seven `ADD
+One additive migration, `0038_receipt_reader_tuning.sql` (`0037` went to bug: spei-date-rollover): seven `ADD
 COLUMN`s on `extractions`, two new platform tables with their indexes.
 Nothing dropped, renamed or rebuilt. Every existing `extractions` row reads
 NULL on the new columns — "no model version rather than a guessed one"

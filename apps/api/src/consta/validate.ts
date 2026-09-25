@@ -8,7 +8,10 @@ import {
   askBeforeCredit,
   asBeneficiary,
   extractProof,
+  readerPlan,
   readProofFromBucket,
+  ReaderError,
+  receivingBankTie,
   tieDestination,
   type ExtractionResult,
   type LoadedProof,
@@ -172,6 +175,10 @@ export async function validate(
   let extracted: ExtractionResult | null = null;
   let signals: ShapeSignals = { shape: "unknown", suggestedBank: null };
   let reusedFrom: string | null = null;
+  /* receipt-reader-tuning D14: the receiving bank against the account
+     the destination tied to — recorded on every row this reading leaves,
+     never acted on */
+  let bankTie: "match" | "mismatch" | null = null;
 
   /* consta-api-merge D7: the provider gets a short-lived signed link
      (direct-payment D12) only when it must read the file itself — the
@@ -240,7 +247,10 @@ export async function validate(
         extracted = reused.result;
         reusedFrom = reused.id;
       } else {
-        extracted = await extractProof(env, proof);
+        /* receipt-reader-tuning D9: the operator's choice, resolved on
+           every reading with no cache (SC-003); a reused draft keeps the
+           model that read it (D15) */
+        extracted = await extractProof(env, proof, await readerPlan(env, db));
       }
     } catch (err) {
       const failure = extractionFailure(err);
@@ -256,6 +266,8 @@ export async function validate(
           route: "provider-ocr",
           proof,
           reason: failure.code === "READER_UNAVAILABLE" ? "no-binding" : "unreadable",
+          /* receipt-reader-tuning D11: both models failed */
+          fallbackFrom: err instanceof ReaderError ? (err.fallbackFrom ?? null) : null,
         };
       } else {
         /* The *file* is unusable — too large, unrecognised bytes, not in
@@ -274,6 +286,7 @@ export async function validate(
          none of them — a mismatch rides into the paid call below */
       signals = await shapeSignals(db, extracted);
       shape = signals.shape;
+      bankTie = accounts ? receivingBankTie(gated, tieDestination(reading.destination, accounts)) : null;
       /* The lead case: measured live, an image with no receipt in it
          makes apiCEP answer `error`, which is retryable, so the payment
          rides Devolada's whole six-hour schedule at up to seven paid
@@ -290,7 +303,7 @@ export async function validate(
           owner,
           reading.isReceipt ? "illegible" : "not_a_receipt",
           extracted,
-          { signals },
+          { signals, receivingBankTie: bankTie },
         );
         throw new ConstaError(
           "RECEIPT_UNREADABLE",
@@ -313,6 +326,7 @@ export async function validate(
         if (ask) {
           await recordExtraction(db, owner, askOutcome(ask)!, extracted, {
             signals,
+            receivingBankTie: bankTie,
             proofKey: body.receipt!.proofKey,
             ...(reusedFrom ? { note: `reused from extraction ${reusedFrom}` } : {}),
           });
@@ -364,6 +378,7 @@ export async function validate(
         ) {
           await recordExtraction(db, owner, "key_missing", extracted, {
             signals,
+            receivingBankTie: bankTie,
             proofKey: body.receipt!.proofKey,
             note: `reference shared (D7)${reusedFrom ? `; reused from extraction ${reusedFrom}` : ""}`,
           });
@@ -416,6 +431,7 @@ export async function validate(
       extracted,
       {
         signals,
+        receivingBankTie: bankTie,
         validationId,
         classification,
         providerReading: theirs,

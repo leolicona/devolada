@@ -51,7 +51,7 @@ in the panel. Workers AI goes through the `AI` binding: Mistral Small 3.1
 off via `chat_template_kwargs`, unmeasured, R5). Model ids live only in
 `wrangler.jsonc` vars and in `DEFAULT_MODEL`.
 
-**Storage**: one D1. One additive migration, `0037`: seven columns on
+**Storage**: one D1. One additive migration, `0038` (`0037` went to bug: spei-date-rollover): seven columns on
 `extractions`, and two platform tables, `bench_receipts` and
 `bench_readings` (data-model.md). The choice is a `platform_settings` row,
 so there is no schema for it. R2 `PROOFS` gains a `bench/` prefix under the
@@ -182,7 +182,7 @@ specs/011-receipt-reader-tuning/
 
 ```text
 apps/api/
-├── migrations/0037_receipt_reader_tuning.sql   # + extractions columns; bench_receipts, bench_readings
+├── migrations/0038_receipt_reader_tuning.sql   # + extractions columns; bench_receipts, bench_readings
 ├── wrangler.jsonc                              # + EXTRACTION_MODELS (top-level, dev, prod); ~ comments
 ├── vitest.config.ts                            # + pins EXTRACTION_MODELS, READER_TIMEOUT_MS
 ├── package.json                                # + "./reader-schema" export

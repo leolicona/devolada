@@ -267,6 +267,13 @@
       "when": 1790356306185,
       "tag": "0037_spei_date_rollover",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1790359161224,
+      "tag": "0038_receipt_reader_tuning",
+      "breakpoints": true
     }
   ]
 }

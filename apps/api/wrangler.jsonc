@@ -22,14 +22,23 @@
   "r2_buckets": [
     { "binding": "PROOFS", "bucket_name": "devolada-transfer-proofs" }
   ],
-  /* proof-extraction D5: the receipt reader runs on Workers AI. The model
-     is a var, not a literal in code, so replacing it is a deploy and not
-     a release. Like `d1_databases`, an env block replaces this rather
-     than inheriting it, so both are repeated below (consta-api-merge D9). */
+  /* proof-extraction D5: the receipt reader runs on Workers AI. The
+     models are vars, never literals in code (constitution VIII):
+     `EXTRACTION_MODEL` is the default, and `EXTRACTION_MODELS` is the
+     list the operator picks from in /operador → Lector — the pick is a
+     row, the list is a deploy (receipt-reader-tuning D1, D7). Like
+     `d1_databases`, an env block replaces this rather than inheriting it,
+     so both are repeated below (consta-api-merge D9). */
   "ai": { "binding": "AI" },
   "vars": {
     "ENVIRONMENT": "dev",
     "EXTRACTION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "EXTRACTION_MODELS": [
+      { "id": "@cf/mistralai/mistral-small-3.1-24b-instruct", "label": "Mistral Small 3.1" },
+      /* receipt-reader-tuning D10: thinking off — the reader wants the
+         JSON, not the reasoning (research R5) */
+      { "id": "@cf/google/gemma-4-26b-a4b-it", "label": "Gemma 4 26B", "input": { "chat_template_kwargs": { "enable_thinking": false } } }
+    ],
     "API_BASE_URL": "http://localhost:8787",
     "ADMIN_BASE_URL": "http://localhost:5174",
     "PAGO_BASE_URL": "http://localhost:5175",
@@ -67,6 +76,12 @@
       "vars": {
         "ENVIRONMENT": "dev",
         "EXTRACTION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "EXTRACTION_MODELS": [
+          { "id": "@cf/mistralai/mistral-small-3.1-24b-instruct", "label": "Mistral Small 3.1" },
+          /* receipt-reader-tuning D10: thinking off — the reader wants the
+             JSON, not the reasoning (research R5) */
+          { "id": "@cf/google/gemma-4-26b-a4b-it", "label": "Gemma 4 26B", "input": { "chat_template_kwargs": { "enable_thinking": false } } }
+        ],
         "API_BASE_URL": "https://api.dev.devoladapago.com",
         "ADMIN_BASE_URL": "https://app.dev.devoladapago.com",
         "PAGO_BASE_URL": "https://link.dev.devoladapago.com",
@@ -99,6 +114,11 @@
       "vars": {
         "ENVIRONMENT": "prod",
         "EXTRACTION_MODEL": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "EXTRACTION_MODELS": [
+          /* receipt-reader-tuning SC-005: prod stays on Mistral alone until the
+             bench decides; a second model here is a deploy */
+          { "id": "@cf/mistralai/mistral-small-3.1-24b-instruct", "label": "Mistral Small 3.1" }
+        ],
         "API_BASE_URL": "https://api.devoladapago.com",
         "ADMIN_BASE_URL": "https://app.devoladapago.com",
         "PAGO_BASE_URL": "https://link.devoladapago.com",

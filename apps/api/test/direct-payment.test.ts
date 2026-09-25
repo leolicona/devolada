@@ -4320,3 +4320,174 @@ describe("bug: one-open-attempt", () => {
     expect(data.inReview).toBeUndefined();
   });
 });
+
+/* bug: spei-date-rollover — a search by referencia numérica asks Banxico
+   the operation day, which changes at 18:00 Mexico City time, instead of
+   the calendar day the payer or the receipt gave; the other day follows a
+   `not_found`. Found live on dev, 2026-09-24: a reference typed at 23:50
+   with the 24th was `not_found` on all seven attempts, and Banxico had
+   filed it under the 25th. Instants are fixed, so the rule (and the
+   30-day staleness check) never depend on when the suite runs. */
+describe("bug: spei-date-rollover", () => {
+  /* 23:50 Mexico City on the 24th */
+  const EVENING = new Date("2026-09-25T05:50:00Z");
+  const minuteAfter = (d: Date) => new Date(d.getTime() + 60_000);
+  const senderOf = (c: { body?: Record<string, unknown> }) => c.body!.sender as Record<string, unknown>;
+
+  async function typedByReference(createdAt: Date, over: Partial<typeof payments.$inferInsert> = {}) {
+    const { business, link } = await seedRtBusiness();
+    const row = await seedRtRow(link, business, {
+      referenceNumber: "9784417",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-24",
+      acceptedFrom: "human",
+      createdAt,
+      nextValidationAt: createdAt,
+      ...over,
+    });
+    return { business, link, row };
+  }
+
+  /* The next swept attempt, answered `not_found` */
+  async function sweepNotFound(now: Date) {
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, now);
+    return captured;
+  }
+
+  it("typed by reference at 23:50: the next day first, then the day typed, then the next again", async () => {
+    const { row } = await typedByReference(EVENING);
+
+    const first = await sweepNotFound(minuteAfter(EVENING));
+    expect(senderOf(first).referenceNumber).toBe("9784417");
+    expect(senderOf(first).date).toBe("2026-09-25");
+
+    const afterFirst = await rowById(row.id);
+    const second = await sweepNotFound(new Date(afterFirst.nextValidationAt!.getTime() + 1000));
+    expect(senderOf(second).date).toBe("2026-09-24");
+
+    const afterSecond = await rowById(row.id);
+    const third = await sweepNotFound(new Date(afterSecond.nextValidationAt!.getTime() + 1000));
+    expect(senderOf(third).date).toBe("2026-09-25");
+
+    /* the row keeps what the payer typed; only the search moves */
+    expect((await rowById(row.id)).transferDate).toBe("2026-09-24");
+  });
+
+  it("typed by reference at 14:00: the day typed first", async () => {
+    const afternoon = new Date("2026-09-24T20:00:00Z");
+    await typedByReference(afternoon);
+    const first = await sweepNotFound(minuteAfter(afternoon));
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  it("found on the other day: the row adopts Banxico's clave and date and confirms", async () => {
+    const { row } = await typedByReference(EVENING);
+    await sweepNotFound(minuteAfter(EVENING));
+
+    /* transferred at 17:55, submitted at 23:50: Banxico filed it the 24th */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const found = mockApiCep({
+      cep: { ...DEFAULT_CEP, trackingKey: "260924071144000001I", senderBank: "AZTECA", date: "2026-09-24" },
+    });
+    const pending = await rowById(row.id);
+    await sweepDirectPayments(testEnv, new Date(pending.nextValidationAt!.getTime() + 1000));
+
+    expect(senderOf(found).date).toBe("2026-09-24");
+    const done = await rowById(row.id);
+    expect(done.status).toBe("confirmed");
+    expect(done.trackingKey).toBe("260924071144000001I");
+    expect(done.transferDate).toBe("2026-09-24");
+  });
+
+  it("pending on a day asks the same day again", async () => {
+    const { row } = await typedByReference(EVENING);
+    const pendingCall = mockApiCep({ status: "pending", cep: undefined });
+    await sweepDirectPayments(testEnv, minuteAfter(EVENING));
+    expect(senderOf(pendingCall).date).toBe("2026-09-25");
+
+    const afterPending = await rowById(row.id);
+    const again = await sweepNotFound(new Date(afterPending.nextValidationAt!.getTime() + 1000));
+    expect(senderOf(again).date).toBe("2026-09-25");
+  });
+
+  it("a clave search keeps the row's own date, even at 23:50", async () => {
+    await typedByReference(EVENING, { referenceNumber: null, trackingKey: "TRACK001XYZ" });
+    const first = await sweepNotFound(minuteAfter(EVENING));
+    expect(senderOf(first).trackingKey).toBe("TRACK001XYZ");
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  /* A receipt whose readings settled on the reference: the next slot takes
+     the transfer door with it (two-eyes D17), and the time the reader saw
+     printed decides the day */
+  async function settledReceipt(createdAt: Date, reading: { date: string; time: string | null }) {
+    const { business, link } = await seedRtBusiness();
+    const proofKey = `${link.id}/p-sdr`;
+    await drizzle(env.DB).insert(extractions).values({
+      businessId: business.id,
+      source: "reader",
+      outcome: "passed",
+      proofKey,
+      referenceNumber: "9784417",
+      transferDate: reading.date,
+      transferTime: reading.time,
+    });
+    return seedRtRow(link, business, {
+      proofMode: "receipt",
+      proofKey,
+      referenceNumber: "9784417",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-24",
+      readingCheck: "agreed",
+      acceptedFrom: "agreed",
+      createdAt,
+      nextValidationAt: createdAt,
+    });
+  }
+  /* 09:00 Mexico City the next morning */
+  const NEXT_MORNING = new Date("2026-09-25T15:00:00Z");
+
+  it("a receipt printed 23:40 is searched on the next day, whenever it was submitted", async () => {
+    await settledReceipt(NEXT_MORNING, { date: "2026-09-24", time: "23:40" });
+    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
+    expect(senderOf(first).referenceNumber).toBe("9784417");
+    expect(senderOf(first).date).toBe("2026-09-25");
+  });
+
+  it("a receipt printed 17:30 is searched on its own day, though submitted the next morning", async () => {
+    await settledReceipt(NEXT_MORNING, { date: "2026-09-24", time: "17:30" });
+    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  it("a time read with another date says nothing about this one: the submission stands in", async () => {
+    await settledReceipt(NEXT_MORNING, { date: "2026-09-23", time: "17:30" });
+    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
+    expect(senderOf(first).date).toBe("2026-09-25");
+  });
+
+  it("a row with no date asks the business's day, not the UTC one", async () => {
+    /* 20:00 Mexico City on the 24th is 02:00Z on the 25th */
+    const evening = new Date("2026-09-25T02:00:00Z");
+    await typedByReference(new Date(evening.getTime() - 60_000), {
+      referenceNumber: null,
+      trackingKey: "TRACK001XYZ",
+      transferDate: null,
+    });
+    const first = await sweepNotFound(evening);
+    expect(senderOf(first).date).toBe("2026-09-24");
+  });
+
+  it("the link tells the page the business's zone", async () => {
+    await seedRtBusiness();
+    mockCustomerLookup([wisphubCustomer()]);
+    mockPendingInvoices();
+    const res = await (await app()).request("/direct-payments/links/tok2345abcdefgh2", {}, testEnv);
+    const { data } = await res.json();
+    expect(data.status).toBe("debt");
+    expect(data.timezone).toBe("America/Mexico_City");
+  });
+});

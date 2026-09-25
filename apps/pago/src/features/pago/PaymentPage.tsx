@@ -151,11 +151,29 @@ type TypedTransfer = {
 const SHARED_REFERENCE_NOTE =
   "Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya.";
 
+/* bug: spei-date-rollover — "today" is the business's day. The UTC date
+   (`toISOString`) is already tomorrow from 18:00 in Mexico City, so an
+   evening payer was offered a day their receipt does not show. en-CA
+   writes YYYY-MM-DD, the date input's own shape; a zone this browser does
+   not know falls back to Mexico City's. */
+function todayIn(timezone: string | undefined): string {
+  const format = (timeZone: string) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
+      new Date(),
+    );
+  try {
+    return format(timezone ?? "America/Mexico_City");
+  } catch {
+    return format("America/Mexico_City");
+  }
+}
+
 function TransferForm({
   onSubmit,
   busy,
   draft,
   amountCents,
+  timezone,
   submitLabel = "Verificar mi pago",
   announce = true,
   keys = "either",
@@ -181,6 +199,9 @@ function TransferForm({
      confirms without touching it; editable because only the payer knows
      what really left their account. */
   amountCents?: number | null;
+  /* bug: spei-date-rollover — the business's zone, for the manual door's
+     "today" */
+  timezone?: string;
   submitLabel?: string;
   /* receipt-triage D17: after the provider said the reference matches
      more than one transfer, only the clave can find it — the form asks
@@ -203,7 +224,7 @@ function TransferForm({
      that merely looks confirmed. Only the manual door, where the payer
      types everything, keeps today as the honest same-day prior. */
   const [date, setDate] = useState(
-    draft ? (draft.date ?? "") : new Date().toISOString().slice(0, 10),
+    draft ? (draft.date ?? "") : todayIn(timezone),
   );
   const [amount, setAmount] = useState(
     amountCents != null ? (amountCents / 100).toFixed(2) : "",
@@ -1878,6 +1899,7 @@ export function PaymentPage({ token }: { token: string }) {
             /* claimed-amount D3: pre-filled with the expected total so
                the exact payer confirms without touching it */
             amountCents={data.totalCents ?? null}
+            timezone={data.timezone}
             /* receipt-triage D7: the server found the reference shared */
             requireClave={submitError?.code === "REFERENCE_SHARED"}
             onSubmit={(transfer) =>

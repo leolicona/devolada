@@ -5,7 +5,8 @@
 **Created**: 2026-09-23 · **Rescoped**: 2026-09-24
 
 **Status**: Planned — spec, plan and tasks aligned on 2026-09-24
-(`/speckit-analyze` findings folded in); ready for `/speckit-implement`
+(`/speckit-analyze` findings folded in); design approved on 2026-09-25
+(canvas v8); ready for `/speckit-implement`
 
 **Input**: User description: "1. Previous guide on how to upload a payment
 receipt. 2. Validate transfer receipts by payment reference number. Mandatory
@@ -148,6 +149,13 @@ receipt."
   subtler, and without the receipt drawing — a light bordered card, one row
   per item with a small icon (#, $, calendar, bank) that becomes the item's
   state, a "4 datos" count, and the rules and bank tips at its foot.
+- Q: Is the design settled? → A (2026-09-25): **approved.** The design canvas
+  at version 8 ("Guía más sutil, sin dibujo del recibo",
+  https://claude.ai/artifact/HjmxGRx5YA9vZDsXoqR9HU) is the reference for
+  Stories 2–4 and the panel screens: the guide above the upload control, its
+  reading and outcome states, the asks, the cuenta de cobro settings and the
+  review in the feed. Implementation follows it; a departure is a new
+  decision recorded here, not a silent drift.
 - Q: Should the reader report more (which screen it is, the label of a
   "details" button) and the feedback adapt to it, or the model write the
   feedback? → A: No — out of scope. The reader reports the fields it already

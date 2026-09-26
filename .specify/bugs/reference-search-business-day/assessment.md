@@ -153,6 +153,12 @@ calls (`scripts/apicep-probe.sh`). What they settle for this bug:
   only**; the Monday is the one alternate worth a call, for weekend
   transfers. The business-day rule keeps its place for what is recorded
   and compared, not for what is asked. See `measurement.md`, "Lot 3".
+  **Banxico by batch (same day, folio A0E0097211) put it beyond the
+  provider**: 16 claves asked with their credit day, 16 CEPs; 14 asked
+  with their operation day, 14 "no se pudo localizar". Banxico's query
+  indexes the credit day only. The remediation's "primary = next business
+  day" is therefore **wrong for the search** and must not be built; the
+  business-day calendar is still right for what Devolada records.
 
 ## Open Questions
 

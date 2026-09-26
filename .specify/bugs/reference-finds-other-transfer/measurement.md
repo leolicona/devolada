@@ -208,3 +208,45 @@ asked by clave and by reference with its printed day, settles whether the
 clave rule holds against Banxico itself. E2 points the same way: three
 $3 transfers had credit day 25 and the reference search returned one,
 the one validated before.
+
+## Banxico by batch (2026-09-26, folio A0E0097211): the credit day is the only day, and the answers are Banxico's
+
+The creator uploaded `banxico-lote1.txt` to Banxico's free batch service
+(`cep-scl`): 30 lines, the 16 claves known from lots 1–3 and the opened
+ZIPs, every night or weekend transfer twice — with its **credit day** (the
+day printed on the receipt) and with its **operation day** (the day Banxico
+files it under, which the clave encodes). No provider in between. Banxico
+answered within the hour with 16 PDFs and `resumen.txt`.
+
+| Lines | Asked with | Banxico |
+| --- | --- | --- |
+| 16 | the credit day | **CEP generated, all 16** |
+| 14 | the operation day | **"No se pudo localizar el pago", all 14** |
+
+Three things are now settled at the source, not at the provider:
+
+1. **Banxico's CEP query indexes the credit day only.** The operation day
+   — a Monday for a Saturday transfer, a Friday for a Thursday-night one —
+   finds nothing at Banxico, ever. So the *only* date Devolada may ask with
+   is the day the money moved: the day the receipt prints, the day the
+   payer gives, the day the statement shows. The business-day rule is for
+   what Devolada records (`operationDate`), never for what it asks. This
+   closes `reference-search-business-day` the other way round from its
+   remediation.
+2. **apiCEP's Monday finds were apiCEP's doing.** In lots 1–2 a Saturday
+   transfer answered to the 28th (E1, E5, F3, F5–F8). Banxico says no to
+   the 28th for every one of them, so the provider reaches back over a
+   weekend on its own. That is convenient and undocumented; Devolada must
+   not depend on it.
+3. **Banxico has the Friday-night transfers, by clave with the 25th**
+   (`…52850963I`, `…55271843I`). The provider's reference search never
+   returned them on any date (E1, E2, E3, G5). The gap is the provider's,
+   not Banxico's — whether its reference search or its store, only the
+   provider can say. And the open question above is closed: T8
+   (`…58244710I`, never validated by anyone) came back like the rest, so
+   these are Banxico's answers, not a cache of earlier validations.
+
+For spec 012: the batch file Devolada prepares (US4, FR-020) carries the
+credit day per clave — the statement's date, or the receipt's — and one
+line per transfer is enough. Banxico's index names each miss with the
+day and clave asked, so a wrong day costs one line, not the batch.

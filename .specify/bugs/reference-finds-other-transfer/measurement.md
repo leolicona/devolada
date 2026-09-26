@@ -191,3 +191,20 @@ A retry on the business day buys nothing measured; a retry on the Monday
 for a weekend transfer is the one alternate worth a call. The business-day
 rule stays for what Devolada records and compares (`operationDate`,
 `cdaChain`), never for what it asks.
+
+**Exception, measured (review of 2026-09-26):** a transfer made on a
+**Friday after 18:00** — operation day across a weekend — was found by
+**no date when asked by reference**: the 25th (E2) returned only the
+07:19 transfer as a single `valid`, and 26 (E3), 27 (G5) and 28 (E1)
+returned the three Saturday CEPs. Only its clave with the printed day
+(G1) or the receipt door found it. A reference-only payment of that kind
+must ask the payer for the clave (or go to the receipt door), not retry.
+Whether the eve of a holiday behaves the same is not measured.
+
+**Open (2 calls close it):** the night-by-clave evidence (G1, G6) comes
+only from transfers validated earlier, which the provider may answer from
+its own store. A *fresh* weekday-after-18:00 transfer, uploaded nowhere,
+asked by clave and by reference with its printed day, settles whether the
+clave rule holds against Banxico itself. E2 points the same way: three
+$3 transfers had credit day 25 and the reference search returned one,
+the one validated before.

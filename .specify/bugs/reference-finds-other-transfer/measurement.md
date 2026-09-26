@@ -133,11 +133,11 @@ and 06:51 UTC) — are absent from every direct-mode answer:
 Saturday transfers (credit 26, operation 28) were found with both days;
 Thursday-night ones (credit 24, operation 25) only with the credit day;
 Friday-night ones (credit 25, operation 28 across a weekend) with neither.
-The one door that found them is the receipt door. [NEEDS CLARIFICATION:
-which three CEPs E3's ZIP holds (asked the 26th) — opening it on the
-creator's machine costs nothing and says whether the 26th finds them.
-Next paid probe: one Friday-night transfer asked with 25, 26, 27 and 28,
-by reference and by clave.]
+The one door that found them is the receipt door. ~~Which three CEPs
+E3's ZIP holds, and the next paid probe~~ — answered by lot 3 below: the
+Friday-night transfer is found by **clave with its printed day (25)** and
+by no other date; by reference, the 27th returned the same three Saturday
+CEPs (by size) and not the Friday-night ones.
 
 This also corrects `valid-lost-on-later-failure` step 5: direct mode does
 not hide an already-validated CEP (E5, F4, F6 answer `valid` with the flag).
@@ -146,3 +146,48 @@ What `0e2aa815-…` met is this Friday-night gap, not reuse.
 The dev token's last call (18:49:58 UTC, after the run) carries no status:
 the quota of 50/month is spent until 2026-10-26, and every dev validation
 fails until it is topped up (bug `provider-refusal-silent`).
+
+## Lot 3 (2026-09-26, 21:00 UTC): which date finds a night transfer
+
+`scripts/apicep-probe.cases.lote3.json`, 9 paid calls on a new token
+(**quota 800/month**, 791 left, reset 2026-10-26). Raw answers in the
+git-ignored `apicep-probe-lote3/`.
+
+| Case | Asked | Transfer | apiCEP said |
+| --- | --- | --- | --- |
+| G1 | clave `…52850963I`, **25** (printed) | Friday 18:58, op. day 28 | **valid**, validated before, credit 25 18:59:26 |
+| G2 | same clave, 26 (Saturday) | | not found (Banxico not confirmed) |
+| G3 | same clave, 27 (Sunday) | | not found |
+| G4 | same clave, **28** (its operation day) | | **not found** |
+| G5 | ref 9784417 $3, 27 (Sunday) | | ambiguous ZIP, 83 KB = 3 CEPs (the Saturday ones by size) |
+| G6 | clave `…44368901I`, **24** (printed) | Thursday 23:40, op. day 25 | **valid**, validated before, credit 24 23:40:49 |
+| G7 | same clave, **25** (its operation day) | | **not found** |
+| G8 | ref 250926 $3 Nu, 25 | Nu Friday 07:23 | **valid**, first time, `NU3AMPQSD4A98PNQ0F5C6TF9HFF7` |
+| G9 | that clave, 25 | | valid, validated before (by G8) |
+
+What lots 1–3 settle together, 24 calls:
+
+- **The printed day is the only date that finds a transfer made after
+  18:00.** By clave, the Friday-night transfer answered to 25 and to none
+  of 26, 27, 28; the Thursday-night one to 24 and not to 25. The business
+  day Banxico files them under (their `operationDate`, what the claves
+  encode) found **nothing** in direct mode, by clave or by reference.
+- Weekend transfers are the exception that made this look inconsistent:
+  a Saturday transfer answers to the Saturday *and* to the Monday (E1, E3,
+  F3–F8). A query for a Monday reaches back over the weekend; a query for a
+  Friday or a Monday does not reach a Friday-night credit.
+- **A Nu reference works like any other** (G8): the earlier misses on dev
+  were the folio taken for a clave (`receipt-reader-tuning`), not Nu.
+- Every "validated before" answer (G1, G6, G9, E2, E5, F4, F6) came with
+  the printed day or, on a weekend, either day. Whether the provider
+  answers those from its own store rather than from Banxico cannot be told
+  from outside; a never-validated night transfer asked by clave with its
+  printed day would settle it. It does not change the rule for Devolada.
+
+**Rule for the product** (replaces the "primary = business day" of
+`reference-search-business-day`'s remediation): a direct-mode search asks
+**the day printed on the receipt / given by the payer**, first and only.
+A retry on the business day buys nothing measured; a retry on the Monday
+for a weekend transfer is the one alternate worth a call. The business-day
+rule stays for what Devolada records and compares (`operationDate`,
+`cdaChain`), never for what it asks.

@@ -146,10 +146,13 @@ calls (`scripts/apicep-probe.sh`). What they settle for this bug:
   `spei-date-rollover` holds for filing. But the search found them only
   when asked with the **24th** (their credit day), not with the 25th (E7).
   Across the run the credit day never missed and the operation day missed
-  once. So the primary ask should be the printed day, the alternate the
-  business day — the reverse of this remediation's order — until the
-  provider's date handling is measured again (a Friday-night transfer asked
-  with Friday, Saturday and Monday).
+  once. **Lot 3 (same day, 9 more calls) closed it**: a Friday-night
+  transfer answers by clave to its printed day (25) and to none of 26, 27,
+  28; a Thursday-night one to 24 and not to 25. The operation day found
+  nothing in direct mode. So the search asks **the printed day, first and
+  only**; the Monday is the one alternate worth a call, for weekend
+  transfers. The business-day rule keeps its place for what is recorded
+  and compared, not for what is asked. See `measurement.md`, "Lot 3".
 
 ## Open Questions
 

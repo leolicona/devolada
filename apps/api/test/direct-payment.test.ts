@@ -2,15 +2,15 @@ import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { asc, eq } from "drizzle-orm";
-import { businesses, extractions, payments, paymentLinks, proofRejections } from "../src/db/schema";
-import { runValidation, sweepDirectPayments } from "../src/direct-payments/validation";
+import { businesses, extractions, payments, paymentLinks, proofRejections, validations } from "../src/db/schema";
+import { KEPT_RETRY_MINUTES, runValidation, sweepDirectPayments } from "../src/direct-payments/validation";
 import { integrationOf } from "../src/integrations/store";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
 import { historyVouches } from "../src/direct-payments/provisional";
 import type { Bindings } from "../src/env";
-import { app, fakeProofs, seedBusiness } from "./helpers";
+import { app, fakeProofs, seedBusiness, sessionCookieHeader } from "./helpers";
 import { resetShapeRules, sha256Hex } from "../src/consta/extraction";
 import { aiReturning, PNG, RECEIPT_1_READING, RECEIPT_2_READING, seedValidations } from "./consta/helpers";
 
@@ -4489,5 +4489,219 @@ describe("bug: spei-date-rollover", () => {
     const { data } = await res.json();
     expect(data.status).toBe("debt");
     expect(data.timezone).toBe("America/Mexico_City");
+  });
+});
+
+/* bug: valid-lost-on-later-failure — found live on dev, 2026-09-26: Banxico
+   said `valid`, the WispHub read after it failed (a demo key had
+   expired), and the next slot asked the provider again from scratch. The
+   provider's direct mode answered `not_found` for the CEP it had already
+   validated, and a paid, confirmed transfer never reached the customer. */
+describe("bug: valid-lost-on-later-failure — Banxico's valid is kept", () => {
+  /* A transfer row due in the sweep, one attempt behind it */
+  async function dueRow(
+    business: { id: string },
+    link: { id: string },
+    now: Date,
+    values: Partial<typeof payments.$inferInsert> = {},
+  ) {
+    const [row] = await drizzle(env.DB)
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: "2026-08-17",
+        constaStatus: "pending",
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt: new Date(now.getTime() - 2 * 60 * 1000),
+        ...values,
+      })
+      .returning();
+    return row;
+  }
+
+  /* WispHub refusing the key on the debt re-check: both reads of D14 */
+  function refuseWispHub() {
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/") && p.includes("usuario=") })
+      .reply(401, "{}");
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
+      .reply(401, "{}");
+  }
+
+  it("valid, then WispHub refuses the key → the verdict is kept, and the next slot confirms with no provider call", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const payment = await dueRow(business, link, now);
+
+    mockApiCep();
+    refuseWispHub();
+    await sweepDirectPayments(testEnv, now);
+    let [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.constaStatus).toBe("valid");
+    expect(row.banxicoValidAt?.getTime()).toBe(now.getTime());
+    expect(row.receivedCents).toBe(51400);
+    expect(row.cepSenderName).toBe("JANELY REYES");
+    expect(row.lastError).toBe("WISPHUB_AUTH_FAILED");
+    expect(row.validationAttempts).toBe(2);
+    expect(row.nextValidationAt).not.toBeNull();
+
+    /* the ISP reads it as confirmed by Banxico, waiting on WispHub */
+    const later = new Date(row.nextValidationAt!.getTime() + 1000);
+    /* no apiCEP interceptor: a provider call here fails the attempt */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const report = await sweepDirectPayments(testEnv, later);
+    expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
+    [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+    expect(row.folio).not.toBeNull();
+    expect(row.receivedCents).toBe(51400);
+    expect(row.actionOutcome).toBe("done");
+    /* no second paid call was made */
+    expect(row.validationAttempts).toBe(2);
+    expect(await db.select().from(validations)).toHaveLength(1);
+  });
+
+  it("a kept verdict past the six-hour schedule is retried on the hour, never expired", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const payment = await dueRow(business, link, now, {
+      constaStatus: "valid",
+      banxicoValidAt: new Date(now.getTime() - 7 * 60 * 60 * 1000),
+      receivedCents: 51400,
+      validationAttempts: 6,
+      lastError: "WISPHUB_AUTH_FAILED",
+      createdAt: new Date(now.getTime() - 7 * 60 * 60 * 1000),
+    });
+
+    refuseWispHub();
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.expired).toBe(0);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.lastError).toBe("WISPHUB_AUTH_FAILED");
+    expect(row.nextValidationAt?.getTime()).toBe(now.getTime() + KEPT_RETRY_MINUTES * 60 * 1000);
+    expect(row.validationAttempts).toBe(6);
+  });
+
+  it("the ISP's feed says Banxico confirmed it and what WispHub needs", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    await dueRow(business, link, now, {
+      constaStatus: "valid",
+      banxicoValidAt: now,
+      receivedCents: 51400,
+      lastError: "WISPHUB_AUTH_FAILED",
+    });
+    const res = await (await app()).request(
+      "/payments/feed?status=validating",
+      { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
+      testEnv,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.payments[0]).toMatchObject({
+      status: "validating",
+      banxicoConfirmedAt: now.getTime(),
+      waitingOn: "WISPHUB_AUTH_FAILED",
+      receivedCents: 51400,
+    });
+  });
+
+  it("a new submission on the link does not replace an attempt Banxico confirmed", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const kept = await dueRow(business, link, now, {
+      constaStatus: "valid",
+      banxicoValidAt: now,
+      receivedCents: 51400,
+      lastError: "WISPHUB_AUTH_FAILED",
+      nextValidationAt: new Date(now.getTime() + 60 * 60 * 1000),
+    });
+
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { trackingKey: "OTHERKEY123", senderBank: "NUBANK", date: "2026-08-17" },
+    });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data).toMatchObject({ directPaymentId: kept.id, status: "validating" });
+    const rows = await db.select().from(payments);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("validating");
+  });
+
+  /* The replay flag, when the first validation of the CEP was ours on
+     another link of the same business (dev, 2026-09-26: refused on
+     Janely's link after Juan Fernando's validated it and never applied) */
+  async function secondLink(business: { id: string }) {
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({
+        businessId: business.id,
+        token: "tok9876zyxwvut98",
+        wisphubCustomerId: "9",
+        customerUsuario: "otro@wifiplus",
+      })
+      .returning();
+    return other;
+  }
+  async function earlierValidation(businessId: string, paymentRef: string, alreadyValidated = false) {
+    await drizzle(env.DB).insert(validations).values({
+      businessId,
+      mode: "receipt",
+      status: "valid",
+      alreadyValidated,
+      trackingKey: "TRACK001XYZ",
+      paymentRef,
+    });
+  }
+
+  it("our own first validation on another link of the business is ours, not a stranger's", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const other = await secondLink(business);
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const first = await dueRow(business, other, now, { status: "superseded", nextValidationAt: null });
+    await earlierValidation(business.id, first.id);
+    const payment = await dueRow(business, link, now, { constaStatus: null, validationAttempts: 0 });
+
+    mockApiCep({ alreadyValidated: true });
+    refuseWispHub();
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.lastError).not.toBe("TRANSFER_ALREADY_USED");
+    expect(row.status).toBe("validating");
+    expect(row.banxicoValidAt).not.toBeNull();
+  });
+
+  it("a first validation that was itself a replay, or another business's, still refuses", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const other = await secondLink(business);
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const first = await dueRow(business, other, now, { status: "superseded", nextValidationAt: null });
+    await earlierValidation(business.id, first.id, true);
+    const payment = await dueRow(business, link, now, { constaStatus: null, validationAttempts: 0 });
+
+    mockApiCep({ alreadyValidated: true });
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("invalid");
+    expect(row.lastError).toBe("TRANSFER_ALREADY_USED");
+    expect(row.banxicoValidAt).toBeNull();
   });
 });

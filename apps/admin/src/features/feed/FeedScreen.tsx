@@ -67,6 +67,19 @@ const reasons: Record<string, string> = {
 };
 const reasonFor = (code: string) => reasons[code] ?? "WispHub no respondió. Lo seguimos intentando.";
 
+/* bug: valid-lost-on-later-failure — Banxico confirmed the transfer and
+   the payment waits on WispHub alone: said as such, never as a plain
+   "Verificando", so the ISP knows the money arrived and what to fix */
+const waitingReasons: Record<string, string> = {
+  WISPHUB_AUTH_FAILED: "tu llave no funciona. Revísala en Integraciones.",
+  WISPHUB_NOT_CONFIGURED: "falta la llave en Integraciones.",
+  WISPHUB_READ_INCOMPLETE: "no pudimos leer completa la deuda del cliente. Lo seguimos intentando.",
+};
+const waitingCopy = (code: string | null) =>
+  `Confirmado por Banxico; falta leer WispHub: ${
+    (code && waitingReasons[code]) || "WispHub no respondió. Lo seguimos intentando."
+  }`;
+
 /* A row with no action outcome wears its lifecycle instead — an
    `unapplied` payment never met the router (D3). */
 const lifecycleBadge: Partial<Record<FeedCharge["status"], Status>> = {
@@ -380,6 +393,9 @@ function ChargeRow({
                 <p className="mt-1">
                   {viaApi ? "Intentos de aviso al sistema" : "Intentos de reconexión"}: {charge.actionAttempts}
                 </p>
+              )}
+              {charge.banxicoConfirmedAt != null && (
+                <p className="mt-1 font-medium text-warning">{waitingCopy(charge.waitingOn)}</p>
               )}
               {charge.actionError && <p className="mt-1 text-error">{reasonFor(charge.actionError)}</p>}
               {charge.actionDoneAt && (

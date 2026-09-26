@@ -218,6 +218,10 @@ export async function listPaymentFeed(
           actionDoneAt: charge.actionDoneAt?.getTime() ?? null,
           actionAttempts: charge.actionAttempts,
           actionError: charge.actionError,
+          /* bug: valid-lost-on-later-failure */
+          ...(charge.status === "validating" && charge.banxicoValidAt
+            ? { banxicoConfirmedAt: charge.banxicoValidAt.getTime(), waitingOn: charge.lastError }
+            : { banxicoConfirmedAt: null, waitingOn: null }),
         };
       }),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,

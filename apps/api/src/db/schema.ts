@@ -379,6 +379,16 @@ export const payments = sqliteTable(
     supersedesId: text("supersedes_id"),
     constaValidationId: text("consta_validation_id"),
     constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
+    /* bug: valid-lost-on-later-failure — when Banxico said `valid` and
+       every check of the CEP passed, before the WispHub half ran. A kept
+       fact: a row that holds it never asks the provider again (its retry
+       re-reads WispHub only and spends no call), and it never ends
+       `expired`. The CEP it confirmed rides the row beside it
+       (`received_cents`, `cep_sender_name`, the adopted clave; a hold in
+       `review_reason`). Measured 2026-09-26: re-asking lost a confirmed
+       transfer, because apiCEP's direct mode answered `not_found` for a
+       CEP the account had already validated. */
+    banxicoValidAt: integer("banxico_valid_at", { mode: "timestamp_ms" }),
     validationAttempts: integer("validation_attempts").notNull().default(0),
     nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
     /* receipt-triage adds three words: `REFERENCE_AMBIGUOUS` (D17 — the

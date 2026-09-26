@@ -575,6 +575,25 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      the correction closes them all, and `supersedesId` names the one the
      payer was shown */
   const alsoClosed = open.filter((r) => r.id !== superseded?.id);
+  /* bug: valid-lost-on-later-failure — an attempt Banxico already
+     confirmed is not corrected: it waits on WispHub, not on the payer, and
+     replacing it would ask the provider again for a transfer it may now
+     call `not_found`. The submission is answered from that attempt, as an
+     identical one is, and nothing is created or spent. */
+  const kept = [superseded, ...alsoClosed].find((r) => r?.banxicoValidAt != null);
+  if (kept) {
+    return c.json(
+      {
+        success: true,
+        data: {
+          directPaymentId: kept.id,
+          status: kept.status as (typeof OPEN_STATUSES)[number],
+          error: publicError(kept.lastError),
+        },
+      },
+      200,
+    );
+  }
 
   const serviceFeeCents = speiFeeCents(business);
 

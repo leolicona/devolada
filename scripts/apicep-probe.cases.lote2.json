@@ -1,0 +1,17 @@
+{
+  "beneficiary": { "bank": "BBVA MEXICO", "clabe": "012290015579784417" },
+  "cases": [
+    { "id": "F1", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "5830261",
+      "note": "T1 11:41:29 (…58256772I) y T2 11:43:02 (…58273815I), nadie las validó: ¿422, una, o no encontrada?" },
+    { "id": "F2", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "5830261",
+      "note": "otra vez: ¿la otra, o la misma ya validada?" },
+    { "id": "F3", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "4917358",
+      "note": "T3 11:43:56 (…58283781I), única: control" },
+    { "id": "F4", "date": "2026-09-26", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "4917358",
+      "note": "la fecha impresa (sábado): se espera no encontrada" },
+    { "id": "F5", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "6274089",
+      "note": "T4 11:45:13 (…58297980I): base para comparar con T5 ($3.01)" },
+    { "id": "F6", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "trackingKey": "260928071158283781I",
+      "note": "clave de T3, ya validada en F3 por referencia: ¿válida y ya usada, o no encontrada?" }
+  ]
+}

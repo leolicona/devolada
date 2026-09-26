@@ -53,6 +53,19 @@ Observed on dev (read-only, 2026-09-26):
    `TRANSFER_ALREADY_USED`. The only validation of that CEP was our own, at
    06:51, on a different link.
 
+5. Follow-up, 2026-09-26 14:30 UTC: payment `0e2aa815-…` is still
+   `validating` after five transfer-door calls with the clave, all
+   `not_found` (dates 2026-09-26 and, on `0c2a53a0-…`, 2026-09-28). The same
+   hour the transfer door found Abraham's never-validated clave
+   `260928071156210101I` **`valid`** with the same bank, amount, account
+   and a wrong date (see `reference-search-business-day`). And the receipt
+   door found this very CEP at 12:59 with `already_validated = 1`.
+   **Inference (one clave, six calls)**: apiCEP's direct mode answers
+   `not_found` for a CEP already validated through the account, where the
+   OCR mode answers `valid` + the flag. If it holds, a row that lost its
+   `valid` can **never** get it back through the transfer door, and every
+   retry is a paid call that cannot succeed.
+
 ## Suspected Code Paths
 
 - `apps/api/src/direct-payments/validation.ts` — the `valid` branch claims
@@ -137,6 +150,10 @@ Decision between two options for step 1, asked of the creator on
   step 3 lands it can be re-submitted.
 
 ## Open Questions
+
+- [NEEDS CLARIFICATION: does apiCEP's direct mode hide an already-validated
+  CEP (step 5)? One direct call with a clave validated earlier and still
+  unapplied would confirm it; apiCEP's support can answer it for free.]
 
 - [NEEDS CLARIFICATION: product decision — option A or option B above.]
 - [NEEDS CLARIFICATION: how long may a Banxico-confirmed payment wait for

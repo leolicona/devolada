@@ -122,14 +122,19 @@ next year is missing (the `gen-banks --check` pattern).
   whatever date comes with it (measured 2026-08-17)". Today's dev data
   disagrees at least once: clave `260928071155271843I` with 2026-09-26 was
   `not_found` five times, and with 2026-09-28 once (10:51 UTC), although the
-  receipt door found it `valid` at 06:51 UTC. [NEEDS CLARIFICATION: whether a
-  clave search needs the operation day too — measure on the bench or with
-  the sandbox before changing the clave path.]
+  receipt door found it `valid` at 06:51 UTC. **Resolved 2026-09-26, 14:19
+  UTC**: the clave path needs no change. Abraham's transfer (Saturday 07:10,
+  filed under Monday 28) was found `valid` by clave `260928071156210101I`
+  asked with **2026-09-26** (validation `transfer`, 8.3 s; payment
+  `9d78ee65-…` confirmed). The earlier clave `not_found`s were wrong input,
+  not a wrong date: `2609280711562101011` was the same clave typed with a
+  final `1` for the `I`. The one unexplained miss left is
+  `260928071155271843I` with 2026-09-28 at 10:51 UTC.
 - The holiday list is a new piece of data to keep up to date each year.
 
 ## Open Questions
 
 - [NEEDS CLARIFICATION: the source for SPEI non-business days — Banxico
   publishes them yearly; confirm the list for 2026 and 2027.]
-- [NEEDS CLARIFICATION: does the transfer door need the operation day for a
-  clave search too? See the clave path above.]
+- ~~Does the transfer door need the operation day for a clave search too?~~
+  No — measured 2026-09-26, see the clave path above.

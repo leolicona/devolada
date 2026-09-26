@@ -70,8 +70,9 @@ rastreo") in any of these calls.
   `not_found` (`providerFirst && status === "invalid" && reason ===
   "not_found"`); a `valid` answer is never compared with our reading.
 - `apps/api/src/consta/provider/apicep.ts` — `cepDetails` is parsed for
-  `operationDate` only. [NEEDS CLARIFICATION: whether apiCEP returns the
-  operation's time; Banxico's CEP carries it.]
+  `operationDate` only. apiCEP does return the time
+  (`cepDetails.processingTime`, `HH:MM:SS`; measured 2026-09-26, see
+  `measurement.md`).
 - `apps/api/src/direct-payments/validation.ts::sharedReference`
   (receipt-triage D7) — compares reference, date, bank, amount and account
   among **our** payments only; it cannot see a transfer nobody submitted
@@ -147,10 +148,28 @@ the receipt's transfer:
   transfer; it is the creator's own test money. [NEEDS CLARIFICATION: leave
   it as is?]
 
+## Measured 2026-09-26
+
+`measurement.md` beside this file holds the 15 direct apiCEP calls made
+with `scripts/apicep-probe.sh`. What they settle for this bug:
+
+- The provider **never** answers `422` for a duplicate reference. Several
+  matches come back as `invalid` + `banxicoConfirmed: true` + a ZIP with
+  one Banxico CEP per match (credit time included). One match comes back
+  `valid`; none as `invalid` + `banxicoConfirmed: false`.
+- The amount and the sending bank filter before the search; the time does
+  not — the ambiguity left is same reference, amount, bank and day.
+- The CEP carries the credit time, so remediation step 2 is possible.
+- A CEP validated before is returned again, flagged
+  `cepPreviouslyValidated: true`.
+
 ## Open Questions
 
-- [NEEDS CLARIFICATION: does apiCEP's `cepDetails` include the operation
-  time? One raw provider answer on dev would tell.]
+- ~~Does apiCEP's `cepDetails` include the operation time?~~ Yes — measured
+  2026-09-26.
 - [NEEDS CLARIFICATION: product decision — when the day does not match,
   ask the payer for the clave at once (recommended), or first retry by
   reference on the right day?]
+- [NEEDS CLARIFICATION: product decision — on an ambiguous answer, open the
+  provider's ZIP and pick by credit time / unused clave, or ask the payer
+  for the clave?]

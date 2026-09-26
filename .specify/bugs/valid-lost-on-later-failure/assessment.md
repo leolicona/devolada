@@ -60,6 +60,11 @@ Observed on dev (read-only, 2026-09-26):
    `260928071156210101I` **`valid`** with the same bank, amount, account
    and a wrong date (see `reference-search-business-day`). And the receipt
    door found this very CEP at 12:59 with `already_validated = 1`.
+   **Corrected 2026-09-26 by measurement** (`../reference-finds-other-transfer/measurement.md`,
+   E5/F4/F6 and the addendum): direct mode does **not** hide a validated
+   CEP — it answers `valid` with `cepPreviouslyValidated: true`. This clave
+   is a Friday-night transfer, a class direct mode missed on every date
+   asked. The original inference follows, kept for the record.
    **Inference (one clave, six calls)**: apiCEP's direct mode answers
    `not_found` for a CEP already validated through the account, where the
    OCR mode answers `valid` + the flag. If it holds, a row that lost its

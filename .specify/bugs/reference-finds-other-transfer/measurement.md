@@ -113,3 +113,36 @@ memory can only be Devolada's. E3's and F2's ZIPs were not opened; at
   the business-day rule matters for what Devolada *records* and compares.
 - A validated CEP is visible again with `cepPreviouslyValidated: true`, so
   reuse detection can rely on the provider's flag as well as on our rows.
+
+## Addendum (2026-09-26, read against the dev D1): Friday-night transfers were found by no date
+
+The two Friday transfers made after 18:00 — `260928071152850963I` (18:58)
+and `260928071155271843I` (22:46), $3.00, ref 9784417, Azteca → BBVA ***417,
+operation day **28** by their CEPs (receipt door, dev `validations`, 04:44
+and 06:51 UTC) — are absent from every direct-mode answer:
+
+- **E2** (asked the 25th, their credit day) returned only `…45184062I`,
+  the Friday-morning one. So "the credit day never missed" does not hold:
+  it missed these two.
+- **E1** (asked the 28th, their operation day) returned the three
+  Saturday CEPs and not these two. The operation day missed them too.
+- **By clave**, `…55271843I` was `not_found` asked with the 28th (10:51
+  UTC) and five times with the 26th — while the receipt door found it
+  `valid` at 06:51 and 12:59 UTC. So the clave door misses them as well.
+
+Saturday transfers (credit 26, operation 28) were found with both days;
+Thursday-night ones (credit 24, operation 25) only with the credit day;
+Friday-night ones (credit 25, operation 28 across a weekend) with neither.
+The one door that found them is the receipt door. [NEEDS CLARIFICATION:
+which three CEPs E3's ZIP holds (asked the 26th) — opening it on the
+creator's machine costs nothing and says whether the 26th finds them.
+Next paid probe: one Friday-night transfer asked with 25, 26, 27 and 28,
+by reference and by clave.]
+
+This also corrects `valid-lost-on-later-failure` step 5: direct mode does
+not hide an already-validated CEP (E5, F4, F6 answer `valid` with the flag).
+What `0e2aa815-…` met is this Friday-night gap, not reuse.
+
+The dev token's last call (18:49:58 UTC, after the run) carries no status:
+the quota of 50/month is spent until 2026-10-26, and every dev validation
+fails until it is topped up (bug `provider-refusal-silent`).

@@ -1,0 +1,15 @@
+{
+  "beneficiary": { "bank": "BBVA MEXICO", "clabe": "012290015579784417" },
+  "cases": [
+    { "id": "E1", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "9784417",
+      "note": "cuatro transferencias con esta referencia el 28: ¿422, una, o no encontrada? ¿trae la hora?" },
+    { "id": "E2", "date": "2026-09-25", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "9784417",
+      "note": "el 25 solo la de antes de las 18:00 (…45184062I)" },
+    { "id": "E3", "date": "2026-09-26", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "9784417",
+      "note": "sábado: se espera no encontrada" },
+    { "id": "E4", "date": "2026-09-28", "amountCents": 301, "bank": "AZTECA", "referenceNumber": "9784417",
+      "note": "otro monto: ¿el monto filtra?" },
+    { "id": "E5", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "trackingKey": "260928071156210101I",
+      "note": "clave ya validada (Abraham): ¿válida y ya usada, o no encontrada?" }
+  ]
+}

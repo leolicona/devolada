@@ -43,7 +43,7 @@ import {
   notifyProvisionalExpiry,
   releaseEvidenceFor,
 } from "./provisional";
-import { isApiLink, isPanelLink, realOnly, type ApiLink } from "./links";
+import { isApiLink, isPanelLink, realOnly, type ApiLink, type PanelLink } from "./links";
 import { enqueueAndDeliver, type Defer } from "../webhooks/queue";
 
 /* One validation attempt of a direct payment (direct-payment spec).
@@ -60,6 +60,10 @@ type Isp = typeof businesses.$inferSelect;
    2026-08-17: apiCEP treats the claimed date as a hint, not a filter,
    so the returned date is compared here. */
 export const STALE_TRANSFER_DAYS = 30;
+
+/* bug: valid-lost-on-later-failure — the cadence of a Banxico-confirmed
+   row past its schedule: one WispHub read an hour, no provider call */
+export const KEPT_RETRY_MINUTES = 60;
 
 const LEASE_MINUTES = 2;
 const BATCH = 20;
@@ -223,7 +227,32 @@ async function tracesToOwnAttempt(
         ne(payments.id, payment.id),
       ),
     );
-  return siblings.some(attempted);
+  if (siblings.some(attempted)) return true;
+
+  /* bug: valid-lost-on-later-failure — the first validation of this CEP
+     was ours, whatever the link: a `valid` the provider called
+     never-validated, asked for another payment of this same business.
+     Found live on 2026-09-26: a transfer validated on one link and never
+     applied was refused on another as "validated outside Devolada". Safe
+     to forgive because it is not what stops a double payment — the
+     unique clave index is (D8): a payment that holds the clave alive
+     still refuses this one when the clave is claimed below. */
+  const [ours] = await db
+    .select({ id: validations.id })
+    .from(validations)
+    .innerJoin(payments, eq(payments.id, validations.paymentRef))
+    .where(
+      and(
+        eq(validations.businessId, payment.businessId),
+        eq(payments.businessId, payment.businessId),
+        eq(validations.trackingKey, key),
+        eq(validations.status, "valid"),
+        eq(validations.alreadyValidated, false),
+        ne(payments.id, payment.id),
+      ),
+    )
+    .limit(1);
+  return ours != null;
 }
 
 /* automated-collections-api D7/D17 (FR-013): every status an API
@@ -305,7 +334,14 @@ export async function runValidation(
     base: Partial<typeof payments.$inferInsert> = {},
     opts: { lateSlot?: boolean; suggestedAt?: Date | null } = {},
   ) => {
-    const slot = nextValidationSlot(payment.createdAt, now, opts);
+    /* bug: valid-lost-on-later-failure — a row Banxico already confirmed
+       is never `expired`: what it waits on is ours or the ISP's (WispHub),
+       and its retries cost no provider call, so past the schedule it
+       keeps being retried on the hour */
+    const kept = payment.banxicoValidAt != null || base.banxicoValidAt != null;
+    const slot =
+      nextValidationSlot(payment.createdAt, now, opts) ??
+      (kept ? new Date(now.getTime() + minutes(KEPT_RETRY_MINUTES)) : null);
     const row = await update(
       slot
         ? { ...base, lastError: error, nextValidationAt: slot }
@@ -319,6 +355,19 @@ export async function runValidation(
     }
     return row;
   };
+
+  /* bug: valid-lost-on-later-failure — Banxico already confirmed this
+     transfer on an earlier attempt, and what failed after it was WispHub.
+     Resume there: no provider call, no credential needed, the CEP's facts
+     from the row. Only a panel link can hold one (the API half never
+     waits on WispHub). */
+  if (payment.banxicoValidAt != null && isPanelLink(link)) {
+    const hold = payment.reviewReason ?? null;
+    return settlePanelPayment(env, db, payment, link, business, integration, now, update, retryLater, {}, {
+      amountCents: payment.receivedCents,
+      senderName: payment.cepSenderName,
+    }, hold);
+  }
 
   /* consta-api-merge D6: the engine's own code on the row. A payment
      already in flight when the credential is absent rides the schedule,
@@ -1031,6 +1080,39 @@ export async function runValidation(
     throw new Error(`payment ${payment.id} sits on a link that is neither panel nor API (${link.id})`);
   }
 
+  /* bug: valid-lost-on-later-failure — the verdict is kept before the
+     WispHub half runs: a read that fails there retries the read alone,
+     and Banxico is never asked the same question twice (the retry cannot
+     be told `not_found` for a transfer it confirmed). What the CEP said
+     rides the row with it, so the resumed attempt settles on the same
+     facts. */
+  return settlePanelPayment(env, db, payment, link, business, integration, now, update, retryLater, {
+    ...base,
+    banxicoValidAt: payment.banxicoValidAt ?? now,
+    receivedCents: cep?.amountCents ?? payment.amountCents,
+    cepSenderName: cep?.senderName ?? null,
+    reviewReason: hold,
+  }, cep ?? null, hold);
+}
+
+/* bug: valid-lost-on-later-failure — the panel half of a `valid`
+   verdict, from the WispHub debt re-check (D14) to the dispatch. Reached
+   two ways: straight after the verdict, and on a later slot of a row that
+   kept one (`banxico_valid_at`), which calls no provider. */
+async function settlePanelPayment(
+  env: Bindings,
+  db: DB,
+  payment: DirectPayment,
+  link: PanelLink,
+  business: Isp,
+  integration: Integration | null,
+  now: Date,
+  update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
+  retryLater: (error: string, base?: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
+  base: Partial<typeof payments.$inferInsert>,
+  cep: { amountCents?: number | null; senderName?: string | null } | null,
+  hold: "retired_account" | "no_clave" | null,
+): Promise<DirectPayment> {
   /* D14: between submission and confirmation the debt can be settled
      elsewhere. Re-check before touching WispHub's money.
      automated-collections-api D5/D7 (research, "the null guard the seam

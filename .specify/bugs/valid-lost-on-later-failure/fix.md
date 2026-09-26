@@ -76,7 +76,7 @@ counts as its own, not as "validated outside Devolada".
   left pending, not on their own assertion.
 - `pnpm -r typecheck`, `spec-lint`, `pending-lint`, `contrast-lint`,
   `gen-banks --check`: all green.
-- Full API, admin and pago suites: see the commit that carries this report.
+- Full suites: API 772/772, admin 258/258, pago 84/84.
 
 ## Deviations from Assessment
 

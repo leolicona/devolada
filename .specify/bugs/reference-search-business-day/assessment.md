@@ -132,6 +132,25 @@ next year is missing (the `gen-banks --check` pattern).
   `260928071155271843I` with 2026-09-28 at 10:51 UTC.
 - The holiday list is a new piece of data to keep up to date each year.
 
+## Measured 2026-09-26
+
+`../reference-finds-other-transfer/measurement.md` holds 15 direct apiCEP
+calls (`scripts/apicep-probe.sh`). What they settle for this bug:
+
+- **Weekend**: Saturday transfers are filed under Monday 28, and a search
+  with the printed Saturday date finds them as well as one with the 28th
+  (cases E3, F4). The primary/alternate pair of the remediation is right,
+  and the printed day is a safe alternate.
+- **18:00**: the three Thursday 23:40–23:48 transfers carry operation day
+  Friday 25 in their CEPs (E6's ZIP, opened), so the rollover from
+  `spei-date-rollover` holds for filing. But the search found them only
+  when asked with the **24th** (their credit day), not with the 25th (E7).
+  Across the run the credit day never missed and the operation day missed
+  once. So the primary ask should be the printed day, the alternate the
+  business day — the reverse of this remediation's order — until the
+  provider's date handling is measured again (a Friday-night transfer asked
+  with Friday, Saturday and Monday).
+
 ## Open Questions
 
 - [NEEDS CLARIFICATION: the source for SPEI non-business days — Banxico

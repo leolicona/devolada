@@ -25,3 +25,6 @@ playwright.*.local.config.ts
 # Astro's generated types for apps/landing (landing-page D1): rebuilt by
 # `astro sync` / every build and check; never reviewed in git.
 .astro/
+
+# scripts/apicep-probe.sh output: raw provider answers carry names and accounts
+apicep-probe-*/

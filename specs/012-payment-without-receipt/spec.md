@@ -39,12 +39,14 @@ this spec up:
   **ZIP with one signed Banxico CEP per match**, each with its credit time
   to the second.
 - A CEP validated before comes back again, marked as validated before.
-- The **printed day** of a transfer (the day the money moved) is the one
-  date that finds a transfer made after 18:00, by clave; the business day
-  Banxico files it under found none of them. One measured gap: a transfer
-  made on a **Friday after 18:00** was found by **no date when asked by
-  reference**, only by its clave or through the receipt. Such a payment
-  asks for the clave instead of retrying.
+- **Banxico indexes a transfer by the day the money moved**, the day the
+  receipt prints — never by the business day it files it under. Asked by
+  batch with the printed day, Banxico returned 16 of 16 CEPs; asked with
+  the operation day, 0 of 14. The provider's weekend finds on a Monday are
+  its own doing. One measured gap at the provider: a transfer made on a
+  **Friday after 18:00** was found by **no date when asked by reference**,
+  though Banxico holds it; only its clave or the receipt found it. Such a
+  payment asks for the clave instead of retrying.
 - Banxico's own CEP query is **free**. One at a time it takes a reference
   but has an image captcha per query and runs 09:30–23:00. **By batch**
   (`cep-scl`) it takes a text file of up to 500 lines, one captcha per file,
@@ -442,8 +444,10 @@ see both confirmed with credit time and a seal check recorded.
 - The invoice amount comes from WispHub as today; the profile never stores
   an amount.
 - The day the payer gives is the day the money moved (the date their app
-  prints); Devolada asks that day first and only, with the Monday as the one
-  alternate for a weekend transfer (measured 2026-09-26, lots 1–3). A
+  prints); Devolada asks that day, and only that day, of Banxico and of
+  the provider (measured 2026-09-26: Banxico by batch 16/16 by that day,
+  0/14 by the business day). The batch file of US4 carries that day per
+  clave. A
   Friday-after-18:00 transfer confirmed by reference is the measured
   exception: it is not found by any date, so it asks the payer for the
   clave rather than retrying (US2 scenario 2 covers "nothing found";

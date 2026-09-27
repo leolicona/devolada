@@ -38,7 +38,9 @@ export type ConstaErrorCode =
   /* receipt-triage D7 (FR-007): a clear reading whose only key is a
      reference another payment of the business already holds, with the same
      date, bank, amount and account — the reference cannot find this
-     transfer alone. Stopped before the provider call; nothing billed. */
+     transfer alone. Stopped before the provider call; nothing billed.
+     cep-bundle-match D12: only a reading that shows neither a time nor the
+     sender's digits; with either, the search runs and the bundle decides. */
   | "RECEIPT_REFERENCE_SHARED"
   | "READER_UNAVAILABLE"
   | "READER_UNREADABLE"

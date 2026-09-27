@@ -10,6 +10,8 @@ import { queuedCount, sweepReconnections } from "../reconnection/queue";
 import { sweepDirectPayments, validatingCount } from "../direct-payments/validation";
 import { releaseQueuedForCredit, sweepTopUps } from "../credit/topups";
 import { sweepWebhookDeliveries } from "../webhooks/queue";
+import { readBundleBytes } from "../consta/bundle/store";
+import { tailOf } from "../consta/bundle/match";
 
 /* Dev-only routes: index.ts mounts them solely when ENVIRONMENT === "dev".
    Seeds a demo ISP to verify login with curl. */
@@ -28,6 +30,36 @@ const DEMO = {
 dev.post("/reconnect-sweep", async (c) => {
   const report = await sweepReconnections(c.env);
   return c.json({ success: true, data: { ...report, queued: await queuedCount(c.env) } });
+});
+
+/* cep-bundle-match T046 (quickstart Step 0): read a bundle of CEPs — the
+   ZIP apiCEP serves as `cepPdf`, or one CEP's PDF — exactly as the engine
+   would (`readBundleBytes`, D3, D4), and say what it found: the records
+   and the entries it could not read. Keeps nothing: no record, no file,
+   no business. Accounts by their last four digits only (FR-010), so a
+   reading copied into a task's notes carries no whole account. */
+dev.post("/cep-read", async (c) => {
+  const reading = await readBundleBytes(new Uint8Array(await c.req.arrayBuffer()));
+  if (!reading) return c.json({ success: false, error: { code: "NOT_A_BUNDLE" } }, 400);
+  return c.json({
+    success: true,
+    data: {
+      kind: reading.kind,
+      records: reading.found.map(({ clave, facts }) => ({
+        clave,
+        operationDate: facts.operationDate,
+        creditDate: facts.creditDate,
+        creditTime: facts.creditTime,
+        amountCents: facts.amountCents,
+        senderBank: facts.senderBank,
+        senderAccountType: facts.senderAccountType,
+        senderTail: tailOf(facts.senderAccount),
+        receiverAccountType: facts.receiverAccountType,
+        receiverTail: tailOf(facts.receiverAccount),
+      })),
+      unreadable: reading.unreadable,
+    },
+  });
 });
 
 /* Same escape hatch for the direct-payment re-validations (D7) */

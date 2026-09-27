@@ -58,7 +58,11 @@ const DESTINATION_KIND = { clabe: "CLABE", card: "Tarjeta", phone: "Celular", ac
 
 export const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
-const NOT_SHOWN = <span className="text-ink-faint">No se ve</span>;
+/* cep-bundle-match T049 (measured 2026-09-27 in both themes): "No se ve"
+   is an answer, not a placeholder — the faint ink measured 2.52:1 on the
+   card once the bench's two new fields rendered it, so it takes the
+   secondary ink every other read-only answer uses */
+const NOT_SHOWN = <span className="text-ink-soft">No se ve</span>;
 
 function FieldValue({ reading, field }: { reading: NonNullable<BenchReading["reading"]>; field: BenchField }) {
   switch (field) {

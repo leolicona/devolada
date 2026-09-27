@@ -1,9 +1,9 @@
 import type { Context } from "hono";
-import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, or, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, notExists, notInArray, or, sql, sum } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, integrationEvents, paymentLinks, payments } from "../../db/schema";
-import { nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
+import { businesses, cepRecords, integrationEvents, paymentLinks, payments } from "../../db/schema";
+import { businessWallClock, nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { realOnly, type ApiLink } from "../../direct-payments/links";
 import { integrationOf } from "../../integrations/store";
@@ -27,10 +27,19 @@ import { signedProofUrl } from "../../direct-payments/proofs";
 import { enqueueAndDeliver } from "../../webhooks/queue";
 import { parseAccount } from "../../direct-payments/accounts";
 import type { Integration } from "../../integrations/store";
-import type { ProofMatch, ProofResponse, PulseResponse, ReviewDecisionRequest, ReviewDecisionResponse } from "./schema";
+import {
+  UNMATCHED_MAX,
+  type ProofMatch,
+  type ProofResponse,
+  type PulseResponse,
+  type ReviewDecisionRequest,
+  type ReviewDecisionResponse,
+  type UnmatchedTransfersQuery,
+  type UnmatchedTransfersResponse,
+} from "./schema";
 import { recordsFor } from "../../consta/bundle/store";
-import { shownTail } from "../../consta/bundle/match";
-import { undecidedReasonOf } from "../../direct-payments/cep-match";
+import { shownTail, tailOf } from "../../consta/bundle/match";
+import { RELEASED, undecidedReasonOf } from "../../direct-payments/cep-match";
 import type { MatchTrail } from "../../consta/bundle/types";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -274,6 +283,52 @@ export async function getPaymentProof(c: Ctx, id: string) {
       : null,
     imageUrl: row.proofKey ? await signedProofUrl(c.env, row.proofKey, new Date()) : null,
     match: await proofMatchOf(db, actor.id, row),
+  };
+  return c.json({ success: true, data });
+}
+
+/* cep-bundle-match D14, FR-009: the business's transfers no live payment
+   holds — records its own searches kept, typically other customers'
+   transfers from a bundle, waiting for their payers. "Holds" is the
+   unique clave index's own predicate: a payment in any status but
+   invalid, expired or superseded (direct-payment D8). Newest credit
+   first, the last 30 days unless `from`, at most 200. Both sides are the
+   actor's business (constitution V); readable by every role, like the
+   feed. */
+export async function listUnmatchedTransfers(c: Ctx, q: UnmatchedTransfersQuery) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const { actor, db } = ctx;
+
+  const today = businessWallClock(actor.timezone, new Date()).date;
+  const [y, m, d] = today.split("-").map(Number);
+  const from = q.from ?? new Date(Date.UTC(y, m - 1, d - 30)).toISOString().slice(0, 10);
+  const held = db
+    .select({ one: sql`1` })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.businessId, actor.id),
+        eq(payments.trackingKey, cepRecords.clave),
+        notInArray(payments.status, [...RELEASED]),
+      ),
+    );
+  const rows = await db
+    .select()
+    .from(cepRecords)
+    .where(and(eq(cepRecords.businessId, actor.id), gte(cepRecords.creditDate, from), notExists(held)))
+    .orderBy(desc(cepRecords.creditedAt))
+    .limit(UNMATCHED_MAX);
+
+  const data: UnmatchedTransfersResponse = {
+    transfers: rows.map((r) => ({
+      clave: r.clave,
+      creditDate: r.creditDate,
+      creditTime: r.creditTime,
+      amountCents: r.amountCents,
+      senderBank: r.senderBank,
+      senderTail: tailOf(r.senderAccount),
+    })),
   };
   return c.json({ success: true, data });
 }

@@ -1790,7 +1790,9 @@ export async function advanceTestPayment(
    other confirmed payment of the business" includes the payer's own
    earlier one (analyze 2026-09-24, I1). Never unique by design, so a
    match is a reason to ask for the clave — and finding none proves
-   nothing. */
+   nothing. cep-bundle-match D12: the three stops before a paid search ask
+   only when the receipt shows neither a time nor the sender's digits;
+   with either, the search runs and the bundle's matcher decides. */
 export async function sharedReference(
   db: DB,
   business: Pick<Isp, "id">,

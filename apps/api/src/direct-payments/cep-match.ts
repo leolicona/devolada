@@ -24,7 +24,7 @@ type Payment = typeof payments.$inferSelect;
 
 /* The statuses that release a clave — the unique index's own predicate
    (direct-payment D8): a payment in any other status holds its clave */
-const RELEASED = ["invalid", "expired", "superseded"] as const;
+export const RELEASED = ["invalid", "expired", "superseded"] as const;
 
 /* D8, R6: "used" is a query, never a stored fate — the claves among these
    that another live payment of the business holds. Chunked under D1's

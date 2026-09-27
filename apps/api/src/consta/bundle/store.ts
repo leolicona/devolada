@@ -7,7 +7,7 @@ import { sha256Hex } from "../extraction";
 import type { Owner } from "../index";
 import { parseCadena } from "./cadena";
 import { readCepPdf } from "./cep-pdf";
-import type { BundleStatus, CepRecord } from "./types";
+import type { BundleStatus, CadenaFacts, CepRecord } from "./types";
 import { claveOfEntry, listEntries, readEntries, sniff } from "./zip";
 
 /* cep-bundle-match D5, D16 — keeping what a search without a clave found.
@@ -153,23 +153,36 @@ async function download(env: Pick<Bindings, "APICEP_STORAGE_ORIGIN">, url: strin
 
 type Parsed = { claves: string[]; unreadable: { entry: string; reason: string }[]; kind: "zip" | "pdf" };
 
-/* D3: every entry's clave from its name; only entries whose clave the
-   business holds no record of are inflated and read, and each new CEP
-   becomes a record (first sighting wins the `bundle_id`). */
-async function readBundle(db: Db, businessId: string, bundleId: string, bytes: Uint8Array): Promise<Parsed | null> {
+/* D3: a bundle's CEPs, read — pure but for `held`, which names the claves
+   that need no reading (the business already holds their records): every
+   entry's clave comes from its name, and only the others are inflated and
+   read. Null when the bytes are neither a ZIP nor a PDF, or the ZIP will
+   not open. The engine keeps what this reads (`readBundle`); `/dev/cep-read`
+   shows it and keeps nothing — one reading, so the two never disagree. */
+export type BundleReading = {
+  kind: "zip" | "pdf";
+  claves: string[];
+  found: { clave: string; seal: string; facts: CadenaFacts }[];
+  unreadable: { entry: string; reason: string }[];
+};
+
+export async function readBundleBytes(
+  bytes: Uint8Array,
+  held: (claves: string[]) => Promise<Set<string>> = async () => new Set(),
+): Promise<BundleReading | null> {
   const kind = sniff(bytes);
   if (!kind) return null;
   const unreadable: { entry: string; reason: string }[] = [];
-  const found: { clave: string; cadena: string; seal: string }[] = [];
+  const read: { clave: string; cadena: string; seal: string }[] = [];
   const claves: string[] = [];
 
   if (kind === "pdf") {
     /* A bundle of one, served bare: the clave is the one printed */
-    const read = readCepPdf(bytes);
-    if ("unreadable" in read) unreadable.push({ entry: "cep.pdf", reason: read.unreadable });
+    const cep = readCepPdf(bytes);
+    if ("unreadable" in cep) unreadable.push({ entry: "cep.pdf", reason: cep.unreadable });
     else {
-      claves.push(read.clave);
-      found.push(read);
+      claves.push(cep.clave);
+      read.push(cep);
     }
   } else {
     let names: string[];
@@ -183,8 +196,8 @@ async function readBundle(db: Db, businessId: string, bundleId: string, bytes: U
       if (n.clave) claves.push(n.clave);
       else unreadable.push({ entry: n.name, reason: "name" });
     }
-    const held = new Set((await recordsFor(db, businessId, claves)).map((r) => r.clave));
-    const wanted = new Map(named.filter((n) => n.clave && !held.has(n.clave)).map((n) => [n.name, n.clave!]));
+    const skip = await held(claves);
+    const wanted = new Map(named.filter((n) => n.clave && !skip.has(n.clave)).map((n) => [n.name, n.clave!]));
     let entries: { name: string; bytes: Uint8Array }[] = [];
     try {
       entries = readEntries(bytes, (name) => wanted.has(name));
@@ -193,24 +206,33 @@ async function readBundle(db: Db, businessId: string, bundleId: string, bytes: U
     }
     for (const e of entries) {
       const clave = wanted.get(e.name)!;
-      const read = readCepPdf(e.bytes, { expectedClave: clave });
-      if ("unreadable" in read) unreadable.push({ entry: e.name, reason: read.unreadable });
-      else found.push(read);
+      const cep = readCepPdf(e.bytes, { expectedClave: clave });
+      if ("unreadable" in cep) unreadable.push({ entry: e.name, reason: cep.unreadable });
+      else read.push(cep);
     }
   }
 
-  for (const cep of found) {
+  const found: BundleReading["found"] = [];
+  for (const cep of read) {
     const facts = parseCadena(cep.cadena);
-    if (!facts) {
-      unreadable.push({ entry: cep.clave, reason: "cadena" });
-      continue;
-    }
+    if (!facts) unreadable.push({ entry: cep.clave, reason: "cadena" });
+    else found.push({ clave: cep.clave, seal: cep.seal, facts });
+  }
+  return { kind, claves: [...new Set(claves)], found, unreadable };
+}
+
+/* D3, D5: the engine's reading, kept — each new CEP becomes a record of the
+   business (first sighting wins the `bundle_id`) */
+async function readBundle(db: Db, businessId: string, bundleId: string, bytes: Uint8Array): Promise<Parsed | null> {
+  const reading = await readBundleBytes(bytes, async (claves) => new Set((await recordsFor(db, businessId, claves)).map((r) => r.clave)));
+  if (!reading) return null;
+  for (const cep of reading.found) {
     await db
       .insert(cepRecords)
-      .values({ businessId, clave: cep.clave, bundleId, ...facts, creditedAt: new Date(facts.creditedAt), seal: cep.seal })
+      .values({ businessId, clave: cep.clave, bundleId, ...cep.facts, creditedAt: new Date(cep.facts.creditedAt), seal: cep.seal })
       .onConflictDoNothing();
   }
-  return { claves: [...new Set(claves)], unreadable, kind };
+  return { claves: reading.claves, unreadable: reading.unreadable, kind: reading.kind };
 }
 
 /* Steps 2–5 of contracts/engine.md, for a file in hand */

@@ -172,6 +172,29 @@ export const proofMatch = z.object({
   ),
 });
 
+/* cep-bundle-match US4, FR-009 (contracts/panel.md): the transfers the
+   business received that no payment holds, as its own searches found
+   them — typically another customer's, from a bundle. */
+export const unmatchedTransfersQuery = z.object({
+  /* A credit day, YYYY-MM-DD; the last 30 days when absent */
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+export const UNMATCHED_MAX = 200;
+export const unmatchedTransfersResponse = z.object({
+  transfers: z.array(
+    z.object({
+      clave: z.string(),
+      /* YYYY-MM-DD and HH:MM:SS, Mexico City — the CEP's own clock */
+      creditDate: z.string(),
+      creditTime: z.string(),
+      amountCents: z.number().int(),
+      senderBank: z.string(),
+      /* The last four digits of the sender's account, never more (FR-010) */
+      senderTail: z.string(),
+    }),
+  ),
+});
+
 /* payments-and-classes D4: the proof is the whole truth — what Banxico
    said and what the payer sent — readable by every role. */
 export const proofResponse = z.object({
@@ -229,6 +252,8 @@ export type FeedCharge = z.infer<typeof feedCharge>;
 export type FeedResponse = z.infer<typeof feedResponse>;
 export type ProofResponse = z.infer<typeof proofResponse>;
 export type ProofMatch = z.infer<typeof proofMatch>;
+export type UnmatchedTransfersQuery = z.infer<typeof unmatchedTransfersQuery>;
+export type UnmatchedTransfersResponse = z.infer<typeof unmatchedTransfersResponse>;
 export type RetryResponse = z.infer<typeof retryResponse>;
 export type ReviewDecisionRequest = z.infer<typeof reviewDecisionRequest>;
 export type ReviewDecisionResponse = z.infer<typeof reviewDecisionResponse>;

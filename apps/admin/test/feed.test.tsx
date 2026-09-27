@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { feedResponse, proofResponse } from "@devolada/api/payments-schema";
+import { feedResponse, proofResponse, unmatchedTransfersResponse } from "@devolada/api/payments-schema";
 import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
@@ -949,5 +949,57 @@ describe("cep-bundle-match US3: an undecided row says why it waits, and shows wh
       await userEvent.click(await screen.findByRole("button", { name: new RegExp(`Cliente ${i + 1}`) }));
       expect(await screen.findByText(words)).toBeInTheDocument();
     }
+  });
+});
+
+describe("cep-bundle-match US4: the 'Sin pago' chip lists the transfers no payment holds", () => {
+  it("shows them in place of the charges — es-MX amounts, tabular numerals, four digits — axe clean", async () => {
+    const feedAsked: string[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => {
+        feedAsked.push(url.search);
+        return ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()]));
+      }),
+      handlers.unmatchedTransfers(() =>
+        ok(
+          unmatchedTransfersResponse.parse({
+            transfers: [
+              { clave: THEIRS_CLAVE, creditDate: "2026-09-26", creditTime: "11:40:47", amountCents: 123456, senderBank: "AZTECA", senderTail: "4171" },
+              { clave: "260926190099000023I", creditDate: "2026-09-25", creditTime: "19:00:05", amountCents: 300, senderBank: "BBVA MEXICO", senderTail: "2344" },
+            ],
+          }),
+        ),
+      ),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Sin pago" }));
+    expect(await screen.findByText("Transferencias recibidas que ningún pago ha usado.")).toBeInTheDocument();
+    const list = await screen.findByRole("list", { name: "Transferencias sin pago" });
+    const [first, second] = within(list).getAllByRole("listitem");
+    expect(within(first).getByText("$1,234.56")).toHaveClass("tabular-nums");
+    expect(within(first).getByText(/AZTECA · cuenta …4171/)).toBeInTheDocument();
+    expect(within(first).getByText(THEIRS_CLAVE)).toBeInTheDocument();
+    expect(within(first).getByText(/11:40:47/)).toBeInTheDocument();
+    expect(within(second).getByText("$3.00")).toBeInTheDocument();
+    /* the charges are not shown, and the feed was never asked for "Sin pago" */
+    expect(screen.queryByRole("button", { name: /janely/i })).not.toBeInTheDocument();
+    expect(feedAsked.some((q) => q.includes("unmatched"))).toBe(false);
+    /* the search and the dates narrow charges; they leave with them */
+    expect(screen.queryByRole("searchbox", { name: "Buscar por nombre o usuario" })).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("an empty list says so", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed(() => ok(feedOf([]))),
+      handlers.unmatchedTransfers(() => ok({ transfers: [] })),
+    );
+    renderApp("/");
+    await userEvent.click(await screen.findByRole("tab", { name: "Sin pago" }));
+    expect(await screen.findByText("Ninguna transferencia sin pago en los últimos 30 días.")).toBeInTheDocument();
   });
 });

@@ -840,3 +840,79 @@ describe("cep-bundle-match US3: an undecided payment asks, waits without expirin
     expect(await calls()).toBe(2);
   });
 });
+
+describe("cep-bundle-match US4: other customers' CEPs in the bundle confirm their own pending payments (D14)", () => {
+  /* Customer B paid too — their transfer is THEIRS — and typed its clave,
+     which Banxico had not published when their first attempt ran */
+  async function pendingB(business: { id: string }) {
+    const link = await seedLink(business, "tokazteca0000011", "otro@wifiplus");
+    return seedRow(link, business, {
+      proofMode: "transfer",
+      trackingKey: THEIRS.clave,
+      senderBank: "AZTECA",
+      transferDate: "2026-09-26",
+      acceptedFrom: "human",
+      validationAttempts: 1,
+      lastError: "TRANSFER_NOT_FOUND",
+      nextValidationAt: new Date(Date.now() + 30 * 60_000),
+    });
+  }
+
+  it("A's bundle makes B due now, and the next sweep confirms B from the record with no provider call", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const b = await pendingB(business);
+    const a = await seedSettledRow(link, business, { transferTime: "07:10:58", senderTail: "8301" });
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([MINE, THEIRS]));
+    mockConfirmation();
+
+    const now = NOW();
+    await sweepDirectPayments(testEnv, now);
+    expect(await rowById(a.id)).toMatchObject({ status: "confirmed", trackingKey: MINE.clave });
+    /* nudged: due at A's attempt, not at its own slot half an hour away */
+    expect((await rowById(b.id)).nextValidationAt!.getTime()).toBe(now.getTime());
+
+    mockConfirmation("otro@wifiplus", { again: true });
+    await sweepDirectPayments(testEnv, NOW());
+    const after = await rowById(b.id);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: THEIRS.clave, receivedCents: 300, actionOutcome: "done" });
+    expect(after.banxicoValidAt).not.toBeNull();
+    expect(trailOf(after)).toMatchObject({ decided: "chosen", by: "clave", source: "several" });
+    /* A's several answer is the only paid call of the two payments */
+    expect(await calls()).toBe(1);
+  });
+
+  it("a clave in no record calls the provider as today", async () => {
+    const { business } = await seedAztecaBusiness();
+    const link = await seedLink(business, "tokazteca0000012", "otro@wifiplus");
+    const row = await seedRow(link, business, {
+      proofMode: "transfer",
+      trackingKey: "ZZZ4417ZZZ9999",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-26",
+      acceptedFrom: "human",
+    });
+    mockApiCep(noneAnswer(), (body) => expect((body.sender as Record<string, unknown>).trackingKey).toBe("ZZZ4417ZZZ9999"));
+    await sweepDirectPayments(testEnv, NOW());
+    expect(await rowById(row.id)).toMatchObject({ status: "validating", lastError: "TRANSFER_NOT_FOUND", matchTrail: null });
+    expect(await calls()).toBe(1);
+  });
+
+  it("a record another business holds is never pulled (constitution V)", async () => {
+    /* business one reads the bundle and keeps THEIRS … */
+    const { business: one, link: oneLink } = await seedAztecaBusiness();
+    await seedSettledRow(oneLink, one, { transferTime: "07:10:58", senderTail: "8301" });
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([MINE, THEIRS]));
+    mockConfirmation();
+    await sweepDirectPayments(testEnv, NOW());
+    /* … business two's payment with the same clave still asks Banxico */
+    const { business: two } = await seedAztecaBusiness("tokazteca0000013");
+    const row = await pendingB(two);
+    await db().update(payments).set({ nextValidationAt: new Date(Date.now() - 1000) }).where(eq(payments.id, row.id));
+    mockApiCep(noneAnswer());
+    await sweepDirectPayments(testEnv, NOW());
+    expect(await rowById(row.id)).toMatchObject({ status: "validating", lastError: "TRANSFER_NOT_FOUND" });
+    expect(await calls()).toBe(2);
+  });
+});

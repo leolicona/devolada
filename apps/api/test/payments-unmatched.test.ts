@@ -7,6 +7,7 @@ import { parseCadena } from "../src/consta/bundle/cadena";
 import { matchCandidates } from "../src/consta/bundle/match";
 import { recordsFor } from "../src/consta/bundle/store";
 import { trailOf } from "../src/direct-payments/cep-match";
+import { unmatchedTransfersResponse } from "../src/routes/payments/schema";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 import { SENDER_4417, SENDER_8301, SYNTHETIC, transferCadena, type SyntheticTransfer } from "./consta/bundle-fixtures";
 
@@ -160,5 +161,77 @@ describe("cep-bundle-match US1: the proof says how a search without a clave was 
     ]);
     const [row] = await db().select().from(payments).where(eq(payments.id, payment.id));
     expect(row.matchDistanceS).toBe(22);
+  });
+});
+
+describe("cep-bundle-match US4: the transfers received that no payment holds (FR-009)", () => {
+  const asOwner = async (email = "demo@devolada.app") => ({ headers: { Cookie: await sessionCookieHeader(email) } });
+  const unmatched = async (query = "?from=2026-09-01", init?: RequestInit) => {
+    const res = await (await app()).request(`/payments/unmatched-transfers${query}`, init ?? (await asOwner()), env);
+    return { status: res.status, body: await res.json() };
+  };
+  const EVENING = transfer("260926190099000023I", "19:00:05", "127180555555512344");
+
+  it("lists the records no live payment holds — amount, credit time, bank and four digits — newest credit first", async () => {
+    const business = await seedBusiness({ speiClabe: BUSINESS_CLABE, speiBank: "BBVA MEXICO" });
+    await seedBundle(business.id, [MINE, THEIRS, EVENING]);
+    /* MINE paid a payment: held */
+    await seedConfirmedPayment(business, { trackingKey: MINE.clave });
+
+    const { status, body } = await unmatched();
+    expect(status).toBe(200);
+    expect(unmatchedTransfersResponse.parse(body.data)).toEqual({
+      transfers: [
+        { clave: EVENING.clave, creditDate: "2026-09-26", creditTime: "19:00:05", amountCents: 300, senderBank: "AZTECA", senderTail: "2344" },
+        { clave: THEIRS.clave, creditDate: "2026-09-26", creditTime: "11:40:47", amountCents: 300, senderBank: "AZTECA", senderTail: "4171" },
+      ],
+    });
+    /* FR-010: four digits, never the account, never a name */
+    const text = JSON.stringify(body);
+    for (const secret of [SENDER_4417, "127180555555512344", SYNTHETIC.senderName, SYNTHETIC.senderRfc]) expect(text).not.toContain(secret);
+  });
+
+  it("a clave released by its payment — invalid, expired or superseded — is unmatched again", async () => {
+    const business = await seedBusiness({ speiClabe: BUSINESS_CLABE, speiBank: "BBVA MEXICO" });
+    await seedBundle(business.id, [MINE, THEIRS]);
+    await seedConfirmedPayment(business, { trackingKey: MINE.clave, status: "expired" });
+    await seedConfirmedPayment(business, { trackingKey: THEIRS.clave, status: "validating" });
+    const { body } = await unmatched();
+    expect(body.data.transfers.map((t: { clave: string }) => t.clave)).toEqual([MINE.clave]);
+  });
+
+  it("never shows another business's records, and a viewer may read its own", async () => {
+    const business = await seedBusiness({ speiClabe: BUSINESS_CLABE, speiBank: "BBVA MEXICO" });
+    await seedBundle(business.id, [THEIRS]);
+    const other = await seedBusiness({ email: "otro@business.mx" });
+    await seedBundle(other.id, [MINE, EVENING]);
+    await seedMember(business, "lector@wifiplus.mx", "viewer");
+
+    const { status, body } = await unmatched("?from=2026-09-01", await asOwner("lector@wifiplus.mx"));
+    expect(status).toBe(200);
+    expect(body.data.transfers.map((t: { clave: string }) => t.clave)).toEqual([THEIRS.clave]);
+  });
+
+  it("`from` filters by credit day; absent, it is the last 30 days; malformed, a 400", async () => {
+    const business = await seedBusiness({ speiClabe: BUSINESS_CLABE, speiBank: "BBVA MEXICO" });
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+    const recent = { ...transfer("260926190099000024I", "10:00:00", SENDER_4417), operationDay: daysAgo(2), creditDay: daysAgo(2) };
+    const old = { ...transfer("260926190099000025I", "10:00:00", SENDER_4417), operationDay: daysAgo(40), creditDay: daysAgo(40) };
+    await seedBundle(business.id, [recent, old]);
+
+    expect((await unmatched("")).body.data.transfers.map((t: { clave: string }) => t.clave)).toEqual([recent.clave]);
+    expect((await unmatched(`?from=${daysAgo(45)}`)).body.data.transfers.map((t: { clave: string }) => t.clave)).toEqual([
+      recent.clave,
+      old.clave,
+    ]);
+    expect((await unmatched("?from=septiembre")).status).toBe(400);
+  });
+
+  it("the payer's status never carries another sender's transfer", async () => {
+    const business = await seedBusiness({ speiClabe: BUSINESS_CLABE, speiBank: "BBVA MEXICO" });
+    const payment = await seedDecided(business, { time: "07:10:58", tail: "8301" });
+    const res = await (await app()).request(`/direct-payments/${payment.id}/status`, {}, env);
+    const text = JSON.stringify(await res.json());
+    for (const other of [THEIRS.clave, SENDER_4417, "4171", "11:40:47"]) expect(text).not.toContain(other);
   });
 });

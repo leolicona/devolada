@@ -9,6 +9,7 @@ import type {
   ProofResponse,
   RetryResponse,
   ReviewDecisionResponse,
+  UnmatchedTransfersResponse,
 } from "@devolada/api/payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -41,7 +42,11 @@ const statusFilters = [
   { value: "withheld", label: "Sin reactivar" },
   { value: "done", label: "Reconectados" },
   { value: "short", label: "Pago parcial" },
+  /* cep-bundle-match US4 (FR-009): not a filter of the charges — the
+     transfers received that no payment holds, in their place */
+  { value: "unmatched", label: "Sin pago" },
 ] as const;
+const UNMATCHED = "unmatched";
 
 type Filters = { chip: string; q: string; from: string; to: string };
 
@@ -329,6 +334,61 @@ function ProofDialog({ charge, label = "Ver comprobante" }: { charge: FeedCharge
         </Pending>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* cep-bundle-match US4 (contracts/panel.md): the transfers the business
+   received that no payment holds — usually another customer's, kept from
+   a bundle one of its searches returned, waiting for that payer. Senders
+   by bank and four digits, never by name (FR-010); 40px compact rows
+   (constitution VI); amounts es-MX with tabular numerals (II). */
+const fmtShortDate = (iso: string) =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+
+function UnmatchedTransfers() {
+  const list = useQuery<UnmatchedTransfersResponse, ApiError>({
+    queryKey: ["unmatched-transfers"],
+    queryFn: () => api<UnmatchedTransfersResponse>("/payments/unmatched-transfers"),
+    refetchInterval: POLL_MS,
+    refetchIntervalInBackground: false,
+  });
+  const transfers = list.data?.transfers ?? [];
+  return (
+    <>
+      <p className="mt-4 text-sm text-ink-soft">Transferencias recibidas que ningún pago ha usado.</p>
+      {list.isError && !list.data && (
+        <ListError what="las transferencias" onRetry={() => list.refetch()} className="mt-4" />
+      )}
+      <Pending
+        active={list.isPending && !list.isError}
+        label="Cargando las transferencias"
+        shape={<Skeleton className="mt-4 h-24 w-full" />}
+      >
+        {list.data && transfers.length === 0 && (
+          <p className="mt-6 max-w-lg rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+            Ninguna transferencia sin pago en los últimos 30 días.
+          </p>
+        )}
+        {transfers.length > 0 && (
+          <Card className="mt-4">
+            <ul className="divide-y divide-line-soft" aria-label="Transferencias sin pago">
+              {transfers.map((t) => (
+                <li key={t.clave} className="flex min-h-10 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-sm">
+                  <span className="tabular-nums text-muted-foreground">
+                    {fmtShortDate(t.creditDate)} · {t.creditTime}
+                  </span>
+                  <span>
+                    {t.senderBank} · cuenta …{t.senderTail}
+                  </span>
+                  <span className="min-w-0 break-all font-mono text-muted-foreground">{t.clave}</span>
+                  <Amount cents={t.amountCents} className="ml-auto font-semibold" />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </Pending>
+    </>
   );
 }
 
@@ -635,8 +695,11 @@ export function FeedScreen() {
     setFrom("");
     setTo("");
   };
+  const unmatched = status === UNMATCHED;
   const feed = useInfiniteQuery<FeedResponse, ApiError>({
     queryKey: ["feed", status, q, from, to],
+    /* "Sin pago" lists transfers, not charges: the feed rests meanwhile */
+    enabled: !unmatched,
     queryFn: ({ pageParam }) =>
       api<FeedResponse>(feedPath({ ...filters, cursor: pageParam as number | undefined })),
     initialPageParam: undefined as number | undefined,
@@ -721,6 +784,7 @@ export function FeedScreen() {
               `mm/dd/yyyy` whatever `lang` said. The row wraps: two rows
               in the common case, the trigger drops to its own line only
               when a wide range makes it wide. */}
+          {!unmatched && (
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="min-w-48 flex-1 sm:max-w-sm">
               <Input size="compact"
@@ -745,8 +809,13 @@ export function FeedScreen() {
               todayMs={today?.startedAtMs}
             />
           </div>
+          )}
         </section>
         <TabsContent value={status}>
+      {unmatched ? (
+        <UnmatchedTransfers />
+      ) : (
+        <>
 
       {failedFirstLoad && (
         <ListError
@@ -817,6 +886,8 @@ export function FeedScreen() {
             </Button>
           </Pending>
         </div>
+      )}
+        </>
       )}
         </TabsContent>
       </Tabs>

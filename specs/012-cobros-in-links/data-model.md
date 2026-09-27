@@ -22,6 +22,10 @@ them. The core handlers never see a WispHub row, path or cursor.
 | `receivables` | `page(cursor: string \| null, limit) → ReceivablesPage \| "bad_cursor"` | one `/facturas/` call; the `inv:` cursor |
 | `customerDebt` | `of(usuario) → CustomerDebtAnswer` | `getCustomer`, then `/clientes/{id}/saldo/` (GET only), composed with `debtFor` |
 
+The types and `IntegrationError` live in `capabilities.ts`, which imports
+no adapter. The entry point, `capabilitiesOf`, lives in
+`integrations/registry.ts`, the only core file that imports one.
+
 Failures reach the core as `IntegrationError`: `INTEGRATION_UNAVAILABLE`
 or `INTEGRATION_AUTH_FAILED`. The session carries
 `integrationCapabilities: ("receivables" | "customerDebt")[]` (D13).
@@ -58,7 +62,8 @@ This is the new body of `GET /payment-requests` (D1). See
 | `integration` | `"ok"` \| `"unavailable"` | D7: `unavailable` with no rows is *could not read*, never *nobody owes* |
 
 `CobroRow` keeps its six fields and gains `periodCents`, `carriedCents` and
-`period`, all nullable.
+`period`, all nullable. Its `externalId` is the core `OpenInvoice`'s
+`invoiceId`, under the name the contract already uses.
 
 ### Receivables cursor (inside `nextCursor`, owned by the WispHub adapter)
 

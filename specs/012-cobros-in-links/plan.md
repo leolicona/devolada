@@ -70,7 +70,8 @@ commit.
 - the pilot has 193 open invoices and 6,522 customers: 4–10 blocks of Por cobrar, depending on screen height;
 - one new API door, one changed door, one new optional parameter, one adapter method, two `StatusBadge` statuses;
 - one admin screen reshaped, one removed;
-- one core module for integration capabilities, and one adapter module that fills it (D18).
+- two core files for integration capabilities (types, and the one entry point), and one adapter module that fills them (D18);
+- one new session field, `integrationCapabilities` (D13).
 
 **Measured 2026-09-27** (research, "Measurements recorded"): M1 pages by
 `offset` and `count` is present; M3's money fields are JSON numbers.
@@ -81,7 +82,7 @@ them. M2 is the only measurement that can reopen a decision (D10).
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-checked after Phase 1 design: still passes, with no violation. Re-checked 2026-09-27 against constitution v1.7.0 (IX added): the first design broke IX in two core handlers; D18 moves that logic into the adapter, and it passes.*
+*GATE: Must pass before Phase 0 research. Re-checked after Phase 1 design: still passes, with no violation. Re-checked 2026-09-27 against constitution v1.7.1 (IX added, then reworded after /speckit-analyze K1): the first design broke IX in two core handlers; D18 moves that logic into the adapter, and it passes.*
 
 | Principle | Gate | Status |
 | --- | --- | --- |
@@ -120,8 +121,10 @@ specs/012-cobros-in-links/
 ```text
 apps/api/
 ├── src/money.ts                             # moved from src/wisphub/money.ts: the money parsers are core (IX, T003)
-├── src/integrations/capabilities.ts         # new, core: IntegrationCapabilities, OpenInvoice, IntegrationError,
-│                                            #   capabilitiesOf / capabilityNames — the one entry point (D18)
+├── src/integrations/capabilities.ts         # new, core: IntegrationCapabilities, OpenInvoice, IntegrationError;
+│                                            #   imports no adapter (D18)
+├── src/integrations/registry.ts             # new, core: capabilitiesOf / capabilityNames, the one entry point
+│                                            #   and the only core file that imports an adapter (D18)
 ├── src/auth/middleware.ts                   # the session gains integrationCapabilities (D13)
 ├── src/wisphub/                             # the adapter
 │   ├── client.ts                            # PendingInvoice +3 optional fields; pendingInvoicesPage reads count

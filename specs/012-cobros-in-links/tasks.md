@@ -82,12 +82,14 @@ so the analysis and research that cite them stay true.
 **⚠️ CRITICAL**: no user story work begins until this phase is done.
 
 - [ ] T003 Move `apps/api/src/wisphub/money.ts` to `apps/api/src/money.ts` (`git mv`) and update every importer: Consta's three (`consta/provider/apicep.ts`, `consta/extraction/gate.ts`, `consta/extract.ts`), the adapter and the tests. The money parsers are core, not the adapter's (constitution IX, `cobros-in-links D18`). Then add a money helper there that accepts a provider amount as either a string or a JSON number and always converts through `decimalToCents` (numbers via `amountToCents`). Unreadable input returns `null` rather than throwing. Cite `cobros-in-links D5` and the M3 result from T001.
-- [ ] T044 Create the core module `apps/api/src/integrations/capabilities.ts` (`cobros-in-links D18`, data-model "Core and adapter"). It must import no adapter internals except in its one entry point:
+- [ ] T044 Create two core files (`cobros-in-links D18`, data-model "Core and adapter"). Dependencies point one way: the adapter imports `capabilities.ts`, and only `registry.ts` imports an adapter.
+  **`apps/api/src/integrations/capabilities.ts`** imports nothing from any adapter:
   - the core shapes `OpenInvoice`, `ReceivablesPage`, `CustomerDebtAnswer`;
   - `IntegrationCapabilities`, with optional `receivables.page(cursor, limit)` (answers a page or `"bad_cursor"`) and `customerDebt.of(usuario)`;
   - `IntegrationError`, with codes `INTEGRATION_UNAVAILABLE` and `INTEGRATION_AUTH_FAILED`;
-  - `capabilitiesOf(integration, env)`: the one entry point. It picks the adapter by `integration.provider`, and returns `{}` for no integration or no key;
-  - `capabilityNames(integration)`: the same answer with no network call.
+  **`apps/api/src/integrations/registry.ts`** is the one entry point, and the only core file that imports an adapter:
+  - `capabilitiesOf(integration, env)` picks the adapter by `integration.provider`, and returns `{}` for no integration or no key;
+  - `capabilityNames(integration)` gives the same answer with no network call.
   The WispHub side is filled by T046 and T029.
 - [ ] T045 The session says what the integration can do (`cobros-in-links D13`):
   - `apps/api/src/auth/middleware.ts` and the actor type in `apps/api/src/env.ts` gain `integrationCapabilities: ("receivables" | "customerDebt")[]` from `capabilityNames`, beside `integrationConfigured` (`integrations-hub` D10);
@@ -101,7 +103,7 @@ so the analysis and research that cite them stay true.
   - a row with no period line, which gives `period: null`;
   - `debtOf` over the same list unchanged, byte for byte.
 
-**Checkpoint**: the adapter reads everything the Por cobrar row shows, and nothing on the money path moved.
+**Checkpoint**: the adapter reads everything the Por cobrar row shows, the session says what the integration can do, and no money behaviour changed (T003 moves the parsers' file, not what they do).
 
 ---
 
@@ -149,7 +151,7 @@ so the analysis and research that cite them stay true.
   - Never carry or accept a path.
   - Mirror `routes/direct-payments/cursor.ts` in form.
 - [ ] T009 [US1] Rewrite `apps/api/src/routes/payment-requests/schema.ts` to the block contract: `receivablesQuery` (`limit`, `cursor`) and `paymentRequestsResponse` = `{ results: CobroRow[], nextCursor, total, integration: "ok" | "unavailable" }`, where `CobroRow` gains `periodCents`, `carriedCents` and `period`. Remove `complete` and `readAt`, with a comment citing `cobros-in-links D1` and D16. The field names no provider (D18).
-- [ ] T046 [US1] In `apps/api/src/wisphub/receivables.ts`, implement the `receivables` capability and register it in `capabilitiesOf` (`cobros-in-links D18`):
+- [ ] T046 [US1] In `apps/api/src/wisphub/receivables.ts`, implement the `receivables` capability and register it in `integrations/registry.ts` (`cobros-in-links D18`):
   - one `pendingInvoicesPage` call per page, on a fresh `wisphubFor` instance;
   - the path is `/facturas/?estado=1&tipo_fecha=fecha_emision`, plus T008's cursor numbers, or today's window on the first page: 180 days back, one day ahead (FR-004);
   - it reads no `readPendingInvoices`, no snapshot and no display cache (`cobros-in-links D3`);
@@ -247,7 +249,7 @@ so the analysis and research that cite them stay true.
   - add `customerDebtQuery` (`usuario`, trimmed, at least one character) and `customerDebtResponse`, a discriminated union on `state`: `owes` | `none` | `unconfirmed` (data-model "Customer debt").
 - [ ] T028 [US3] In `apps/api/src/routes/direct-payments/handler.ts`, `listCustomers` honours `channel=panel`: it skips `apiLinksOf` rows on the search, browse and offline paths, so `matched` counts panel rows only (`cobros-in-links D8`).
 - [ ] T029 [US3] Split along the boundary (`cobros-in-links D9`, D18):
-  - **Adapter.** In `apps/api/src/wisphub/receivables.ts`, implement the `customerDebt` capability and register it in `capabilitiesOf`:
+  - **Adapter.** In `apps/api/src/wisphub/receivables.ts`, implement the `customerDebt` capability and register it in `integrations/registry.ts`:
     - one `wisphubFor` instance for one operation budget;
     - `getCustomer(usuario)` first, then `openInvoicesOf(fresh.wisphubId)`;
     - compose with `debtFor(record, { invoices, complete: true, source: "live" })` and `nothingOwedIsProven`, with no new debt arithmetic;
@@ -294,7 +296,7 @@ so the analysis and research that cite them stay true.
 ### Implementation for User Story 4
 
 - [ ] T036 [US4] In `apps/api/src/routes/payment-requests/handler.ts`, map the failures as `cobros-in-links D7` says. `IntegrationError("INTEGRATION_UNAVAILABLE")` → the `unavailable` 200 answer, logged the way the current handler logs (`console.error("integration failure:", code, message)`, never the key). `INTEGRATION_AUTH_FAILED` → `503`. The adapter (T046) is where a `WispHubError` becomes one of the two.
-- [ ] T037 [US4] In `apps/admin/src/features/links/ReceivablesList.tsx` and `useReceivables.ts`, render three different states: *nobody* (`ok`, no rows, no cursor), *could not read* (`unavailable`, no rows, Reintentar), and *rows kept under the quiet note* (`unavailable` after rows). Reuse the refused-key rendering Links already has (`bug: links-refused-key`), and reuse Links' "Sin conexión a WispHub" note rather than writing that literal again: it is registered debt (`core-reads-provider-directly`), and the view adds no new provider literal (D18).
+- [ ] T037 [US4] In `apps/admin/src/features/links/ReceivablesList.tsx` and `useReceivables.ts`, render three different states: *nobody* (`ok`, no rows, no cursor), *could not read* (`unavailable`, no rows, Reintentar), and *rows kept under the quiet note* (`unavailable` after rows). Reuse the refused-key rendering Links already has (`bug: links-refused-key`), shown for `INTEGRATION_AUTH_FAILED` from this door, and reuse Links' "Sin conexión a WispHub" note rather than writing that literal again: it is registered debt (`core-reads-provider-directly`), and the view adds no new provider literal (D18).
 - [ ] T038 [US4] In `apps/admin/src/features/links/LinksScreen.tsx`, on a `409` from `/payment-requests`, drop `view` from the address (`cobros-in-links D13`, FR-013). The chip's own rule landed in T015.
 
 **Checkpoint**: every failure reads as what it is. There is no empty list that means "we don't know".
@@ -317,7 +319,7 @@ so the analysis and research that cite them stay true.
   5. `pnpm -r --if-present typecheck`
   6. `pnpm -r --if-present test`
   7. `pnpm -r --if-present build`
-  8. Constitution IX: `grep -rn "wisphub/" apps/api/src/routes/payment-requests` finds nothing, and the new `customerDebt` handler calls nothing from `wisphub/`.
+  8. Constitution IX: `grep -rn "wisphub/" apps/api/src/routes/payment-requests apps/api/src/integrations/capabilities.ts` finds nothing, and the new `customerDebt` handler calls nothing from `wisphub/`.
 - [ ] T043 Walk quickstart §2, steps 1–7, against the local API with the demo key, and record anything that differs from the spec in `specs/012-cobros-in-links/quickstart.md`.
 
 ---

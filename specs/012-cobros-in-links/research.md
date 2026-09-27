@@ -386,8 +386,12 @@ hub's `store.ts` and `dispatch.ts`) defines, in its own words:
 | `CustomerDebtAnswer` | `owes` / `none` with the amounts and invoices, or `{ state: "unconfirmed" }` |
 | `IntegrationCapabilities` | `receivables?: { page(cursor, limit) }` and `customerDebt?: { of(usuario) }` |
 | `IntegrationError` | `INTEGRATION_UNAVAILABLE` or `INTEGRATION_AUTH_FAILED` |
-| `capabilitiesOf(integration, env)` | the one entry point: picks the adapter by `integration.provider` and returns what it can do |
-| `capabilityNames(integration)` | the same answer with no network call, for `/auth/me` |
+| `capabilitiesOf(integration, env)` | in `integrations/registry.ts`: the one entry point, and the only core file that imports an adapter. It picks the adapter by `integration.provider` and returns what it can do |
+| `capabilityNames(integration)` | in the same file: the same answer with no network call, for `/auth/me` |
+
+The split keeps dependencies pointing one way: the adapter imports
+`capabilities.ts` (types and `IntegrationError`), and `registry.ts`
+imports the adapter. Neither imports the other back.
 
 **The WispHub adapter** (`apps/api/src/wisphub/receivables.ts`) implements
 both capabilities and keeps everything that is WispHub's:

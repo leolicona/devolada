@@ -265,7 +265,7 @@ cobrar list does not contain them.
 4. **Given** a matching customer who owes nothing, **When** results show,
    **Then** they appear marked *Sin adeudo* — never hidden, because a hidden
    customer reads as a customer who does not exist.
-5. **Given** a matching customer whose debt WispHub did not answer for,
+5. **Given** a matching customer whose debt the integration did not answer for,
    **When** results show, **Then** the row says it could not confirm what
    they owe and shows no amount — never a zero.
 6. **Given** a result, **When** the operator presses Copiar or WhatsApp,
@@ -306,9 +306,10 @@ refused key, confirm that the page sends the operator to Integraciones.
 3. **Given** WispHub refuses the business's key, **When** the Por cobrar view reads,
    **Then** the page says it is a setup problem and links to Integraciones,
    as the customer view does.
-4. **Given** a business with no WispHub connected, **When** it opens Links,
-   **Then** the Por cobrar chip does not appear. There are no invoices to read,
-   and the customer view is as it is today.
+4. **Given** a business whose integration cannot read open invoices (none
+   connected, or an adapter without that capability), **When** it opens
+   Links, **Then** the Por cobrar chip does not appear. There are no
+   invoices to read, and the customer view is as it is today (FR-013).
 
 ---
 
@@ -383,8 +384,8 @@ refused key, confirm that the page sends the operator to Integraciones.
   period, its total and, when the invoice carries one, the part that came
   from before (*saldo anterior*), all read from the invoice itself.
 - **FR-007**: The view MUST say how many open invoices the business has, using the
-  number WispHub reports. It MUST say invoices, not customers, and MUST say
-  nothing when WispHub does not report one.
+  number the integration reports. It MUST say invoices, not customers, and
+  MUST say nothing when the integration does not report one.
 - **FR-008**: Copiar and WhatsApp on a Por cobrar row MUST be the same act as on
   a customer row: the link is created on first use and never on being shown
   (`links-on-demand-search` FR-008, FR-025), and WhatsApp opens the
@@ -402,8 +403,8 @@ refused key, confirm that the page sends the operator to Integraciones.
   (`debt-truth` D7). The search replaces the list while it is active, as it
   does in the customer view; a list row and a search result are never
   mixed on one screen. Links created through the collections API have no
-  WispHub customer and no WispHub debt, so they MUST NOT appear in this
-  view's results. When WispHub is away, the search answers from what the
+  customer and no debt in the business's system, so they MUST NOT appear
+  in this view's results. When the integration is away, the search answers from what the
   customer view can still reach (`links-on-demand-search` FR-014, FR-021),
   and every such result says it could not confirm what they owe (FR-018).
 - **FR-011**: The Por cobrar view MUST re-read its first block when the operator
@@ -422,14 +423,16 @@ refused key, confirm that the page sends the operator to Integraciones.
   connected".
 - **FR-014**: The Cobros section MUST leave the menu. Its old address MUST
   open Links with the Por cobrar view chosen.
-- **FR-015**: No amount this feature shows MAY come from WispHub's one-call
-  balance answer alone. It counts open invoices only and leaves out a
-  carried balance (measured 2026-09-23).
+- **FR-015**: The WispHub adapter MUST NOT answer any amount this feature
+  shows from WispHub's one-call balance answer alone. It counts open
+  invoices only and leaves out a carried balance (measured 2026-09-23).
+  This is an adapter rule (constitution IX): the core never sees that
+  answer.
 - **FR-016**: The Por cobrar list (no search active) MUST show only what the
   invoice list answered. It MUST NOT add customers whose only debt is a
   carried balance, and MUST NOT read anything to find them. A search finds
   them (FR-010).
-- **FR-017**: What a search result owes MUST be read from WispHub when the
+- **FR-017**: What a search result owes MUST be read from the integration when the
   result is shown, and only for the results in the blocks that have
   loaded. Blocks are sized to the screen, so these are the rows on screen
   or one scroll away. Nothing is read for a block that never loaded. For
@@ -446,7 +449,7 @@ refused key, confirm that the page sends the operator to Integraciones.
   search time and invoices read seconds later, across that instant, show
   1,097.00 for 798.00 owed. The cost is now two reads per result shown.
 - **FR-018**: A search result MUST say one of three things, never a guess:
-  the amount owed, when it is above zero; *Sin adeudo*, when WispHub answered
+  the amount owed, when it is above zero; *Sin adeudo*, when the integration answered
   and the customer owes nothing; or that it could not confirm what they owe,
   with no amount, when the read for that customer failed. A customer who
   owes nothing MUST NOT be hidden from the results.
@@ -460,7 +463,7 @@ refused key, confirm that the page sends the operator to Integraciones.
 
 ### Key Entities
 
-- **Open invoice**: an unpaid invoice as WispHub lists it. It carries the
+- **Open invoice**: an unpaid invoice as the business's system lists it (today, WispHub). It carries the
   customer's usuario and name, its issue and due dates, what this period
   bills, the part carried from before, its total, and line text naming the
   period. Devolada reads it and does not keep it.
@@ -486,11 +489,11 @@ refused key, confirm that the page sends the operator to Integraciones.
 - **SC-002**: The Por cobrar view's first block appears within three seconds of
   pressing the chip on 95% of presses, for a business of any size.
 - **SC-003**: Opening the Por cobrar view and not scrolling reads exactly one
-  block from WispHub, and the view never reads a block the operator did not
+  block from the integration, and the view never reads a block the operator did not
   scroll toward.
-- **SC-004**: With WispHub unreachable, the Por cobrar view never shows "nobody
-  has an open invoice": 100% of such reads say that WispHub could not be
-  read.
+- **SC-004**: With the integration unreachable, the Por cobrar view never
+  shows "nobody has an open invoice": 100% of such reads say the open
+  invoices could not be read.
 - **SC-005**: Every return to the page — from another page, by the back
   button, by reload — comes back to the view and search text the operator
   left, 100% of the time.
@@ -499,7 +502,7 @@ refused key, confirm that the page sends the operator to Integraciones.
 - **SC-007**: The panel has one section for sending links and seeing who has
   open invoices, not two.
 - **SC-008**: A search in the Por cobrar view finds a customer who paid short,
-  with the remainder as what they owe, 100% of the time WispHub answers.
+  with the remainder as what they owe, 100% of the time the integration answers.
 - **SC-009**: A search that shows N results makes at most N debt reads, and
   a search whose results are never scrolled past the first block reads no
   debt beyond that block.

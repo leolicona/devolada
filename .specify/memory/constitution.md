@@ -1,4 +1,20 @@
 <!--
+Sync Impact Report (v1.7.1, 2026-09-27)
+- Version change: 1.7.0 → 1.7.1 — PATCH. One sentence of Principle IX is
+  reworded; no rule is added or removed.
+- Source: /speckit-analyze on specs/012-cobros-in-links, finding K1. IX said
+  a business whose adapter lacks a capability "gets the core without that
+  feature, and the screen says so". Read literally, every screen would have
+  to announce every feature an adapter does not offer. The creator chose
+  (2026-09-27, option A of two) that a feature the integration does not
+  offer is simply not offered, and the screen speaks only when something
+  the business relies on is missing or failing.
+- What it does not change: Principle VIII. A connection down or a key
+  refused is still said on screen, never shown as a void.
+- Templates: none touched.
+-->
+
+<!--
 Sync Impact Report (v1.7.0, 2026-09-27)
 - Version change: 1.6.0 → 1.7.0 — MINOR. Principle IX is added, and the
   Purpose paragraph is reworded to name adapters. No principle is removed or
@@ -584,7 +600,9 @@ loudly, in the UI and in the deploy log.
   customer's debt, register a payment, reconnect, absorb an overpayment), and
   the core offers a feature because the business's integration has that
   capability. A business with no integration, or whose adapter lacks the
-  capability, gets the core without that feature, and the screen says so
+  capability, gets the core without that feature: it is simply not offered.
+  The screen speaks only when something the business relies on is missing
+  or failing — a connection down, a key refused — and never leaves a void
   (Principle VIII).
 - Contracts, tables and copy use the core's words: business, customer, open
   invoices, debt, integration. A provider's name appears in a contract only
@@ -675,4 +693,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.7.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-27
+**Version**: 1.7.1 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-27

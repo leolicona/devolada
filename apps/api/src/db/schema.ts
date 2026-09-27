@@ -953,8 +953,10 @@ export const extractions = sqliteTable(
     transferDate: text("transfer_date"),
     /* bug: spei-date-rollover — the time printed beside the date, "HH:MM"
        on a 24-hour clock. SPEI changes its operation day at 18:00 Mexico
-       City time, and a receipt prints the calendar day: a reference search
-       reads this to ask Banxico the day it filed the transfer under */
+       City time, and a receipt prints the calendar day. Since bug:
+       reference-search-printed-day no search reads it (Banxico answers the
+       printed day only, measured 2026-09-26); it stays as the receipt's
+       own clock, to pair it with one CEP when several share a reference */
     transferTime: text("transfer_time"),
     receiptStatus: text("receipt_status"),
     gateTrackingKey: text("gate_tracking_key"),

@@ -1,4 +1,64 @@
 <!--
+Sync Impact Report (v1.7.1, 2026-09-27)
+- Version change: 1.7.0 → 1.7.1 — PATCH. One sentence of Principle IX is
+  reworded; no rule is added or removed.
+- Source: /speckit-analyze on specs/014-cobros-in-links, finding K1. IX said
+  a business whose adapter lacks a capability "gets the core without that
+  feature, and the screen says so". Read literally, every screen would have
+  to announce every feature an adapter does not offer. The creator chose
+  (2026-09-27, option A of two) that a feature the integration does not
+  offer is simply not offered, and the screen speaks only when something
+  the business relies on is missing or failing.
+- What it does not change: Principle VIII. A connection down or a key
+  refused is still said on screen, never shown as a void.
+- Templates: none touched.
+-->
+
+<!--
+Sync Impact Report (v1.7.0, 2026-09-27)
+- Version change: 1.6.0 → 1.7.0 — MINOR. Principle IX is added, and the
+  Purpose paragraph is reworded to name adapters. No principle is removed or
+  redefined, and nothing is renumbered.
+- Source: the creator, session 2026-09-27, while reviewing
+  specs/014-cobros-in-links: "Devoladapago is a product for validating SPEI
+  transfers for many kinds of businesses, not ISPs. It supports adapters
+  for specific providers, in this case for ISPs that use WispHub. That is
+  how we tell the base behaviour of Devoladapago from each adapter's."
+  (translated from Spanish). The review found the read side (customers,
+  open invoices, debt) had no boundary: 12 core files import the WispHub
+  folder, Consta included, and 014's plan would have added two core routes
+  that build WispHub paths.
+- Added: IX. The Core Speaks Generic; Adapters Translate.
+- Modified: Purpose — "with dedicated downstream automation for ISPs" →
+  "What a business's own system does with a payment goes through an adapter
+  for that system: today there is one, WispHub, for ISPs." v1.2.0 already
+  widened who the product is for; this names the mechanism.
+- What this decides:
+  · Provider paths, pagination, cursors, field names, error vocabulary and
+    measured provider facts live in the adapter.
+  · The core offers a feature by capability, never by provider name.
+  · Core contracts and copy use the core's words. The provider's name
+    appears only as the value that identifies an integration, and in the
+    copy of that integration's own screens.
+  · The money law's parsers belong to the core.
+- What it does not change: the action side already follows this rule — the
+  queue writes the core's words (`done`/`queued`/`withheld`) while the
+  adapter speaks its own (`integrations-hub` D7). Principles I–VIII are
+  untouched.
+- Existing gaps, registered as debt, not tolerated silently (Governance):
+  `apps/api/src/wisphub/money.ts` imported by Consta and the core;
+  `WISPHUB_CAPABILITIES` imported by name in `direct-payments/classes.ts`;
+  core routes calling `wisphubFor` directly (payments, direct-payments,
+  payment-requests); the customers contract's `wisphub` field and the
+  `WISPHUB_*` error codes in browser-facing contracts.
+- Templates: plan-template's Constitution Check is filled per principle at
+  plan time, so IX gets its gate with no template change. No template file
+  is edited.
+- Follow-up outside this file: CLAUDE.md's opening still says "a Mexican
+  ISP". specs/014-cobros-in-links is revised to follow IX before it is built.
+-->
+
+<!--
 Sync Impact Report (v1.6.0, 2026-09-25)
 - Version change: 1.5.0 → 1.6.0 — MINOR. One bullet of Principle V is
   materially expanded (a third cross-business statistic is admitted), and the
@@ -309,9 +369,11 @@ Sync Impact Report (v1.1.0)
 
 # Devolada Constitution
 
-Devolada lets Mexican businesses collect payments by SPEI, with dedicated
-downstream automation for ISPs. It is built by one developer working with AI
-agents; that developer decides. Ask for decisions, not approvals.
+Devolada lets Mexican businesses of any kind collect payments by SPEI and
+validates every transfer. What a business's own system does with a payment
+goes through an adapter for that system: today there is one, WispHub, for
+ISPs (Principle IX). It is built by one developer working with AI agents;
+that developer decides. Ask for decisions, not approvals.
 
 ## Core Principles
 
@@ -521,6 +583,48 @@ Rationale: the failures that hurt were silent — a green step that planted a
 dead token, a missing HMAC key that lost a month of payer history. Degrade
 loudly, in the UI and in the deploy log.
 
+### IX. The Core Speaks Generic; Adapters Translate
+
+- Devolada is the **core**: payment links, SPEI validation, payments, the
+  panel, the payer's page, the collections API. An **adapter** connects the
+  core to one provider's system (today `apps/api/src/wisphub/`, for ISPs).
+  The core never assumes the business is an ISP.
+- What belongs to one provider lives inside its adapter: its endpoints and
+  query strings, its pagination and cursors, its field names and words, its
+  error vocabulary, and every fact measured about it (for example, WispHub's
+  billing run folding the carried balance into a new invoice). A core route,
+  handler, contract, table or screen MUST NOT build a provider's path, parse
+  its payload, or carry a rule that holds only for that provider.
+- The core asks by **capability**, never by provider name. An adapter
+  declares what it can do (list customers, read open invoices, read one
+  customer's debt, register a payment, reconnect, absorb an overpayment), and
+  the core offers a feature because the business's integration has that
+  capability. A business with no integration, or whose adapter lacks the
+  capability, gets the core without that feature: it is simply not offered.
+  The screen speaks only when something the business relies on is missing
+  or failing — a connection down, a key refused — and never leaves a void
+  (Principle VIII).
+- Contracts, tables and copy use the core's words: business, customer, open
+  invoices, debt, integration. A provider's name appears in a contract only
+  as the value that says which provider an integration is, and in copy only
+  where the screen is about that integration (its setup, its failures).
+- The core reaches an adapter through one entry point that picks the adapter
+  for an integration and returns the capabilities it has. Adapters import the
+  core; the core imports no adapter internals. Generic rules never live in an
+  adapter's folder: the money law's parsers (Principle II) serve the whole
+  product and belong to the core.
+- Code that already breaks this principle is registered with
+  `/speckit-debt-log`, which is how the gap stays visible rather than
+  tolerated, and is paid through the normal flow. New code MUST NOT add a
+  leak: `/speckit-plan` gates it in the Constitution Check, and
+  `/speckit-analyze` treats a new leak as CRITICAL.
+
+Rationale: the product serves many kinds of businesses. Every rule written in
+one provider's words inside the core is a rule the next adapter must route
+around, and an ISP's facts silently become every business's facts. An
+adapter that owns its provider's quirks can be measured, replaced or joined
+by a second one without touching what the payer and the operator rely on.
+
 ## Technology Stack & Constraints
 
 The stack is fixed; a plan that departs from it justifies the departure in
@@ -589,4 +693,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.6.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-25
+**Version**: 1.7.1 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-27

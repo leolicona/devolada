@@ -62,7 +62,9 @@ export type WispHubCustomer = {
   /* WispHub's running balance for the customer (`saldo`, debt-truth
      D7): positive is carried debt, negative is a credit. It is where a
      short payment's remainder lives, and the pending-invoice list can
-     be empty while this is not. */
+     be empty while this is not — until the zone's next billing run,
+     which folds it into the new invoice and resets it to 0 (measured
+     2026-09-23, demo tenant). It never includes open invoices. */
   carriedBalanceCents: number;
 };
 

@@ -131,6 +131,42 @@ export const feedResponse = z.object({
   }),
 });
 
+/* cep-bundle-match D10: why a search without a clave did not decide */
+export const MATCH_REASONS = ["all_used", "no_signal", "too_close", "none_fit", "unreadable", "too_large"] as const;
+/* cep-bundle-match FR-013: why a candidate was not the one. `farther`: it
+   was inside the time window, and another was nearer (D6). */
+export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amount", "account", "unreadable"] as const;
+
+/* cep-bundle-match D8, FR-013 (contracts/panel.md): how a search without a
+   clave was decided, and what happened to every transfer it found. Other
+   senders appear by the last four digits of their account and a clave —
+   the business's own incoming money, as its bank statement shows it —
+   never by name or whole account, and nothing of it reaches the payer. A
+   CEP that could not be read has no record: its clave and fate only. */
+export const proofMatch = z.object({
+  source: z.enum(["several", "single"]),
+  decided: z.enum(["chosen", "undecided"]),
+  by: z.enum(["tail", "time", "both", "none", "clave"]).nullable(),
+  reason: z.enum(MATCH_REASONS).nullable(),
+  /* D6: credit − receipt time of the chosen one, whole seconds */
+  distanceS: z.number().int().nullable(),
+  receipt: z.object({ time: z.string().nullable(), tail: z.string().nullable() }),
+  candidates: z.array(
+    z.object({
+      clave: z.string(),
+      /* YYYY-MM-DD and HH:MM:SS, Mexico City — the CEP's own clock */
+      creditDate: z.string().nullable(),
+      creditTime: z.string().nullable(),
+      amountCents: z.number().int().nullable(),
+      senderBank: z.string().nullable(),
+      /* The last four digits of the sender's account, never more */
+      senderTail: z.string().nullable(),
+      fate: z.enum(["chosen", "dropped", "kept"]),
+      why: z.enum(MATCH_WHY).nullable(),
+    }),
+  ),
+});
+
 /* payments-and-classes D4: the proof is the whole truth — what Banxico
    said and what the payer sent — readable by every role. */
 export const proofResponse = z.object({
@@ -152,6 +188,9 @@ export const proofResponse = z.object({
   /* Short-lived signed URL (direct-payment D12's own mechanism), null
      when the payer never uploaded a capture */
   imageUrl: z.string().nullable(),
+  /* cep-bundle-match: null for a row that never matched. Defaulted so
+     fixtures born before it still parse. */
+  match: proofMatch.nullable().default(null),
 });
 
 /* payments-and-classes D5 (retry) and integrations-hub D5 (execute):
@@ -184,6 +223,7 @@ export type PulseResponse = z.infer<typeof pulseResponse>;
 export type FeedCharge = z.infer<typeof feedCharge>;
 export type FeedResponse = z.infer<typeof feedResponse>;
 export type ProofResponse = z.infer<typeof proofResponse>;
+export type ProofMatch = z.infer<typeof proofMatch>;
 export type RetryResponse = z.infer<typeof retryResponse>;
 export type ReviewDecisionRequest = z.infer<typeof reviewDecisionRequest>;
 export type ReviewDecisionResponse = z.infer<typeof reviewDecisionResponse>;

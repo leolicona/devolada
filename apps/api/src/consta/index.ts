@@ -43,6 +43,7 @@
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bank } from "../direct-payments/banks";
 import type { Bindings } from "../env";
+import type { BundleStatus, CepRecord } from "./bundle/types";
 import { validate } from "./validate";
 import { extract } from "./extract";
 
@@ -154,8 +155,11 @@ export type ConstaVerdict = {
   status: "valid" | "pending" | "invalid";
   /* Consta D11: which kind of `invalid`. Optional, and a missing value
      is read as the ambiguous one — an unverifiable payment must never
-     turn back into a refusal. */
-  reason?: "contradicted" | "not_found";
+     turn back into a refusal. cep-bundle-match D1: `several` — Banxico
+     confirmed more than one transfer and `bundle` below says what was
+     read of them. The platform's own top-ups never see it: for them a
+     several answer stays `not_found` (D5). */
+  reason?: "contradicted" | "not_found" | "several";
   hint?: "verify_inputs";
   /* learned-retry (consta US-V16): when Banxico's answer is "not yet",
      the moment when asking again stops being spending in vain — learned
@@ -195,7 +199,33 @@ export type ConstaVerdict = {
        `tieDestination` rather than comparing it whole. */
     beneficiaryAccount?: string | null;
     beneficiaryAccountType?: string | null;
+    /* cep-bundle-match D1/D4: the credit time ("HH:MM:SS"), the cadena
+       original and the sender's account as the provider's `valid` carries
+       them — the facts a record of a clave-less search is made of */
+    creditTime?: string | null;
+    chain?: string | null;
+    senderAccountType?: string | null;
+    senderAccount?: string | null;
+    certificateNumber?: string | null;
   };
+  /* cep-bundle-match D1, D5, D16: set exactly when the provider answered
+     `several` for a business. `candidates` holds every readable record of
+     the bundle, new or already held; `pending` means the file could not be
+     downloaded yet (no candidates), `unreadable` and `too_large` that it
+     never will be. Never set for the platform's own top-ups. */
+  bundle?: {
+    id: string;
+    status: BundleStatus;
+    candidates: CepRecord[];
+    unreadable: { entry: string; reason: string }[];
+  };
+  /* cep-bundle-match D5, D9: the record of a single `valid`'s CEP, when
+     the search had no clave — the transfer door asked by reference, or no
+     reading on the receipt door carried a clave the gate passed. What the
+     lifecycle runs the matcher on (FR-014). `null` when the search had no
+     clave but the CEP's cadena could not be read: nothing can be compared
+     with the receipt. Absent on a clave search and for the platform. */
+  record?: CepRecord | null;
   /* proof-extraction D11: what the provider's OCR read off the image —
      a reading, never a verdict. Present on provider-OCR calls only, and
      it survives failure (measured 2026-08-26), which is exactly when the
@@ -225,6 +255,11 @@ export type ConstaVerdict = {
     legibility: "full" | "partial" | "none" | null;
     /* receipt-triage D12: our reference, only when the gate said `ok` */
     referenceNumber?: string | null;
+    /* cep-bundle-match D15: the receipt's side of a match — the printed
+       time ("HH:MM" or "HH:MM:SS") and the sender account's visible
+       digits. Reported as read: the gate never judges them. */
+    time?: string | null;
+    senderTail?: string | null;
   } | null;
   /* D5: the three words, taken at minute zero. `agreed` — both read the
      same clave and the same cents, which is evidence (D6) and stops the
@@ -315,13 +350,20 @@ export type ConstaReading = {
      did — the pay handler snapshots it as the payment's `beneficiary`.
      Never sent to the page. */
   tiedAccount: RegisteredAccount | null;
+  /* cep-bundle-match D15: the printed time ("HH:MM" or "HH:MM:SS") and
+     the sender account's visible digits (three or more). `/read` narrows
+     the shared-reference ask with them (D12); the page never shows them. */
+  time: string | null;
+  senderTail: string | null;
 };
 
 /* receipt-triage D7 (FR-007, converge T060): what only the caller can
    know. The engine has no links and no payments; the lifecycle does, so it
    hands the engine the one question the receipt door must ask before a
    paid call — is this reference already another payment's? Omitted (a
-   top-up, the `/read` door) → never asked. */
+   top-up, the `/read` door) → never asked. cep-bundle-match D12: asked
+   only of a reading with neither a time nor the sender's digits — with
+   either, the bundle decides. */
 export type ConstaHooks = {
   referenceTaken?: (reading: {
     referenceNumber: string;

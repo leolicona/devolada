@@ -729,7 +729,10 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      a reference another payment of the business already holds — same
      date, bank, amount and account, from another link — cannot find this
      transfer alone. Refused before anything is created or billed; the
-     page requires the clave (FR-005, FR-007). */
+     page requires the clave (FR-005, FR-007).
+     cep-bundle-match D12 narrows the three other stops to a receipt with
+     neither a time nor the sender's digits. This one is unchanged in
+     effect: the form asks for neither, so typed data never carries them. */
   if (body.transfer && !body.transfer.trackingKey && body.transfer.referenceNumber) {
     const shared = await sharedReference(db, business, link, {
       reference: body.transfer.referenceNumber,
@@ -1160,6 +1163,10 @@ async function sharedAsk(
   reading: Awaited<ReturnType<ReturnType<typeof consta>["extract"]>>,
 ) {
   if (reading.ask || reading.trackingKey || !reading.referenceNumber) return reading.ask;
+  /* cep-bundle-match D12 (FR-015): a receipt that shows its time or the
+     sender's digits is not asked — the payer continues, and if several
+     transfers share the reference the bundle decides which is theirs */
+  if (reading.time || reading.senderTail) return null;
   if (!reading.date || !reading.senderBank || reading.amountCents == null) return reading.ask;
   const account = reading.tiedAccount ? fromBeneficiary(reading.tiedAccount) : collectStored(business);
   const shared = await sharedReference(db, business, link, {

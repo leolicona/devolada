@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { feedResponse } from "@devolada/api/payments-schema";
+import { feedResponse, proofResponse } from "@devolada/api/payments-schema";
 import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
@@ -710,5 +710,100 @@ describe("bug: valid-lost-on-later-failure — confirmed by Banxico, waiting on 
     await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
     await screen.findByText(/Registrado a las/);
     expect(screen.queryByText(/Confirmado por Banxico/)).not.toBeInTheDocument();
+  });
+});
+
+/* cep-bundle-match (contracts/panel.md): the proof dialog of a payment a
+   search without a clave decided. Synthetic claves; other senders by four
+   digits only (FR-010). */
+const MINE_CLAVE = "260926071199000021I";
+const THEIRS_CLAVE = "260926114099000022I";
+const decidedProof = (match: Record<string, unknown>) =>
+  proofResponse.parse({
+    folio: "DV-FEED01",
+    proofMode: "receipt",
+    cep: {
+      trackingKey: MINE_CLAVE,
+      amountCents: 300,
+      date: "2026-09-26",
+      senderBank: "AZTECA",
+      senderName: null,
+      beneficiaryName: "WifiPlus SA de CV",
+    },
+    imageUrl: null,
+    match,
+  });
+const candidate = (over: Record<string, unknown>) => ({
+  clave: MINE_CLAVE,
+  creditDate: "2026-09-26",
+  creditTime: "07:11:20",
+  amountCents: 300,
+  senderBank: "AZTECA",
+  senderTail: "8301",
+  fate: "chosen",
+  why: null,
+  ...over,
+});
+
+async function openProof(proof: ReturnType<typeof decidedProof>) {
+  server.use(
+    handlers.session(() => ok(businessActor)),
+    handlers.feed((url) => ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()]))),
+    handlers.paymentProof((id) => (id === "ch-1" ? ok(proof) : fail("NOT_FOUND", 404))),
+  );
+  renderApp("/");
+  await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+  await userEvent.click(await screen.findByRole("button", { name: "Ver comprobante" }));
+  return screen.findByRole("region", { name: "Coincidencias" });
+}
+
+describe("cep-bundle-match US1: the proof says how a search without a clave was decided", () => {
+  it("the decision line, the credit time and each candidate's fate by four digits", async () => {
+    const section = await openProof(
+      decidedProof({
+        source: "several",
+        decided: "chosen",
+        by: "tail",
+        reason: null,
+        distanceS: 22,
+        receipt: { time: "07:10:58", tail: "8301" },
+        candidates: [
+          candidate({}),
+          candidate({ clave: THEIRS_CLAVE, creditTime: "11:40:47", senderTail: "4171", fate: "dropped", why: "tail" }),
+        ],
+      }),
+    );
+
+    expect(within(section).getByText("Varias coincidencias · resuelta por cuenta")).toBeInTheDocument();
+    expect(within(section).getByText(/Comprobante: 07:10:58 · cuenta …8301/)).toBeInTheDocument();
+    const [mine, theirs] = within(section).getAllByRole("listitem");
+    expect(within(mine).getByText(/cuenta …8301/)).toBeInTheDocument();
+    expect(within(mine).getByText(MINE_CLAVE)).toBeInTheDocument();
+    expect(within(mine).getByText("Elegida")).toBeInTheDocument();
+    expect(within(theirs).getByText(/11:40:47/)).toBeInTheDocument();
+    expect(within(theirs).getByText(/cuenta …4171/)).toBeInTheDocument();
+    expect(within(theirs).getByText("Otra cuenta")).toBeInTheDocument();
+    /* the CEP block beside it carries the same clave */
+    expect(screen.getAllByText(MINE_CLAVE)).toHaveLength(2);
+    /* the dialog is the screen: behind it, Radix's focus guards inside an
+       aria-hidden page trip axe in happy-dom whatever the dialog holds */
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("a payment the payer's own typed clave closed says so", async () => {
+    const section = await openProof(
+      decidedProof({
+        source: "several",
+        decided: "chosen",
+        by: "clave",
+        reason: null,
+        distanceS: null,
+        receipt: { time: null, tail: null },
+        candidates: [candidate({}), candidate({ clave: THEIRS_CLAVE, creditTime: "07:11:31", senderTail: "4171", fate: "kept", why: "too_close" })],
+      }),
+    );
+    expect(within(section).getByText("Varias coincidencias · resuelta por la clave de rastreo")).toBeInTheDocument();
+    expect(within(section).getByText("Comprobante: sin hora ni cuenta")).toBeInTheDocument();
+    expect(within(section).getByText("Muy cerca de otra")).toBeInTheDocument();
   });
 });

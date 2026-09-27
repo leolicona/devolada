@@ -102,6 +102,7 @@ suffixed copies). The API's optional secrets, each degrading when unset
 | --- | --- |
 | `APICEP_TOKEN` | the SPEI channel is unavailable; `/v1` still creates links with a `VALIDATION_UNAVAILABLE` notice |
 | `APICEP_BASE_URL` | the real provider; `http://localhost:8789` points it at `pnpm --filter @devolada/api sandbox` |
+| `APICEP_STORAGE_ORIGIN` | set in `wrangler.jsonc` to the provider's storage; with the sandbox, `http://localhost:8789` so its bundle downloads. Unset, no bundle of CEPs is downloaded and a several-matches payment asks the payer for the clave |
 | `WEBHOOK_SIGNING_KEYS` | webhook deliveries are recorded but never attempted (`SIGNING_KEY_MISSING` on the row, empty JWKS); mint one with the one-liner in `specs/003-automated-collections-api/quickstart.md` |
 | `RESEND_API_KEY` | the OTP is logged instead of emailed |
 | `WISPHUB_API_KEY` | the dev seed connects no provider |

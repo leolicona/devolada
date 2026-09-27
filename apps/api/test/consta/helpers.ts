@@ -89,8 +89,12 @@ export type StubbedReading = {
   bancoReceptor?: string | null;
   monto?: number | null;
   fecha?: string | null;
-  /* bug: spei-date-rollover — the time printed beside the date */
+  /* bug: spei-date-rollover — the time printed beside the date;
+     cep-bundle-match D15 — with its seconds when the receipt prints them */
   hora?: string | null;
+  /* cep-bundle-match D15: the sender account's visible digits, as the
+     version-3 questions ask them */
+  cuentaOrigen?: string | null;
   estatus?: string | null;
   /* receipt-triage D12/D24: the two questions the prompt gained */
   referenciaNumerica?: string | null;
@@ -125,6 +129,56 @@ export const RECEIPT_2_READING: StubbedReading = {
   fecha: "2026-09-09",
   estatus: null,
   destino: { tipo: null, digitos: "195" },
+};
+
+/* cep-bundle-match T016 — the readings this feature's tests stand the
+   reader in with. **PROVISIONAL, NOT MEASURED** (2026-09-27): constitution
+   IV wants a stubbed answer to be one the reader gave, and the version-3
+   questions (`hora` with its seconds, `cuentaOrigen`) have not been read
+   on the bench yet — this implementation environment cannot reach the
+   Workers AI binding, and the captures are the creator's (tasks T015). So
+   these are written from the receipts as the spec and the bug's
+   measurement describe them, and registered as debt
+   (.specify/debt/cep-bundle-match-reader-unmeasured/): when the bench has
+   read the captures, each is replaced by its raw answer, dated, and every
+   test here keeps deriving from them.
+
+   The creator's Azteca receipts of 2026-09-26 (bug
+   reference-finds-other-transfer): $3.00 to the business's BBVA account
+   ending 417, the default reference 9784417, no clave de rastreo, the
+   time printed with its seconds and the sender as "Guardadito ***8301". */
+export const AZTECA_SECONDS_TAIL_READING: StubbedReading = {
+  esComprobante: true,
+  legibilidad: "completa",
+  claveDeRastreo: null,
+  referenciaNumerica: "9784417",
+  bancoEmisor: "AZTECA",
+  bancoReceptor: "BBVA MEXICO",
+  monto: 3,
+  fecha: "2026-09-26",
+  hora: "07:10:58",
+  cuentaOrigen: "8301",
+  estatus: null,
+  destino: { tipo: "clabe", digitos: "417" },
+};
+
+/* The Janely receipt as the dev D1 recorded its reading on 2026-09-26:
+   printed Friday 25 at 18:58, reference 9784417, no clave —
+   `extractions.transfer_time = 18:58` (measured; version 2 asked HH:MM and
+   no sender account, so none is here) */
+export const AZTECA_1858_READING: StubbedReading = {
+  ...AZTECA_SECONDS_TAIL_READING,
+  fecha: "2026-09-25",
+  hora: "18:58",
+  cuentaOrigen: null,
+};
+
+/* A receipt that prints the minute alone and no sender account — most
+   banks' (research R7) */
+export const MINUTE_ONLY_READING: StubbedReading = {
+  ...AZTECA_SECONDS_TAIL_READING,
+  hora: "11:42",
+  cuentaOrigen: null,
 };
 
 /* two-eyes-receipt D1/D15: what the PDF-to-text conversion would return

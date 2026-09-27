@@ -7,6 +7,22 @@ import { deriveShapeRules } from "../../src/consta/extraction/shape";
 import type { Reading } from "../../src/consta/extraction/reader";
 import { consta, ConstaError, type ConstaRequest } from "../../src/consta";
 import type { Bindings } from "../../src/env";
+import { cepBundles, cepRecords } from "../../src/db/schema";
+import { MAX_BUNDLE_BYTES, readPendingBundle } from "../../src/consta/bundle/store";
+import {
+  buildBundleZip,
+  bundleOf,
+  entryName,
+  noneAnswer,
+  SENDER_4417,
+  SENDER_8301,
+  severalAnswer,
+  SYNTHETIC,
+  transferCadena,
+  transferPdf,
+  validAnswer,
+  type SyntheticTransfer,
+} from "./bundle-fixtures";
 import {
   aiReturning,
   db,
@@ -827,6 +843,10 @@ describe("The receipt is read at our edge (proof-extraction)", () => {
       legibility: null,
       /* receipt-triage US1 (D12): ours carries the reference, none read */
       referenceNumber: null,
+      /* cep-bundle-match D15: and the receipt's side of a match — this
+         reading printed neither */
+      time: null,
+      senderTail: null,
     });
 
     /* D19: one row carries both readings and what they settled, for a
@@ -2468,5 +2488,263 @@ describe("receipt-triage US3: the receipt door names one account (D22, D24, D27)
     const res = await postValidate(key, directRequest);
     expect(res.data.previouslyValidated).toBeNull();
     expect((res.data.cep as Record<string, unknown>).beneficiaryAccount).toBe(RT_CLABE);
+  });
+});
+
+/* cep-bundle-match US1 — the engine hears "several", reads the bundle and
+   keeps what the search found (D1, D3–D5, D9, D13, D16). apiCEP and its
+   storage are intercepted at their pinned origins; the bundles are
+   synthetic CEPs in the measured layout (research R18). */
+describe("cep-bundle-match US1: several matches, read and kept by the engine", () => {
+  const STORAGE_ORIGIN = "https://storage.apicep.cloud";
+  const BUNDLE_PATH = "/9784417-1790446947555.pdf";
+  const BUNDLE_URL = `${STORAGE_ORIGIN}${BUNDLE_PATH}`;
+  const BUSINESS_CLABE = "012180001234567897";
+  const transfer = (n: number, creditTime: string, senderAccount = SENDER_8301): SyntheticTransfer => ({
+    clave: `26092807119900000${n}I`,
+    operationDay: "2026-09-28",
+    creditDay: "2026-09-26",
+    creditTime,
+    senderAccount,
+    beneficiaryAccount: BUSINESS_CLABE,
+    amount: "3.00",
+  });
+  const T1 = transfer(1, "07:08:21");
+  const T2 = transfer(2, "07:11:20");
+  const T3 = transfer(3, "11:40:47", SENDER_4417);
+  const byReference = {
+    transfer: {
+      date: "2026-09-26",
+      amountCents: 300,
+      senderBank: "AZTECA",
+      referenceNumber: "9784417",
+      beneficiary: { bank: "BBVA MEXICO", clabe: BUSINESS_CLABE },
+    },
+    paymentRef: "payment-1",
+  };
+  const byClave = (clave: string) => ({
+    transfer: { ...byReference.transfer, referenceNumber: undefined, trackingKey: clave },
+    paymentRef: "payment-1",
+  });
+
+  function mockStorage(body: Uint8Array | string, opts: { status?: number; headers?: Record<string, string> } = {}) {
+    fetchMock
+      .get(STORAGE_ORIGIN)
+      .intercept({ method: "GET", path: BUNDLE_PATH })
+      .reply(opts.status ?? 200, body, { headers: { "Content-Type": "application/pdf", ...(opts.headers ?? {}) } });
+  }
+  const bundles = () => db().select().from(cepBundles);
+  const records = () => db().select().from(cepRecords);
+
+  it("the adapter reads `banxicoConfirmed`: several with a link, not_found without one or unconfirmed (D1)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([T1, T2, T3]));
+    const several = await postValidate(key, byReference);
+    expect(several.data).toMatchObject({ status: "invalid", reason: "several" });
+    /* never "check your inputs", never a retry suggestion: the transfers exist */
+    expect(several.data.hint).toBeUndefined();
+    expect(several.data.retryAfter).toBeUndefined();
+
+    mockApiCep({ ...severalAnswer(BUNDLE_URL), downloads: {} });
+    expect((await postValidate(key, byReference)).data).toMatchObject({ reason: "not_found", hint: "verify_inputs" });
+    mockApiCep(noneAnswer());
+    expect((await postValidate(key, byReference)).data).toMatchObject({ reason: "not_found", hint: "verify_inputs" });
+    expect((await db().select().from(validations)).map((v) => v.reason)).toEqual(["several", "not_found", "not_found"]);
+  });
+
+  it("a valid exposes the credit time, the cadena, the sender's account and type, and the certificate (D1, D4)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(validAnswer(T2));
+    const res = await postValidate(key, byClave(T2.clave));
+    expect(res.data.cep).toMatchObject({
+      creditTime: "07:11:20",
+      chain: transferCadena(T2),
+      senderAccountType: "40",
+      senderAccount: SENDER_8301,
+      certificateNumber: SYNTHETIC.certificateNumber,
+    });
+  });
+
+  it("several: one billing row, the bundle read, every record written under the business, the file in the bucket, the link gone", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([T1, T2, T3]));
+    const res = await postValidate(key, byReference);
+
+    const logged = await db().select().from(validations);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({ status: "invalid", reason: "several", paymentRef: "payment-1", businessId: key });
+
+    const bundle = res.data.bundle as { id: string; status: string; candidates: { clave: string }[]; unreadable: unknown[] };
+    expect(bundle.status).toBe("read");
+    expect(bundle.unreadable).toEqual([]);
+    expect(bundle.candidates.map((c) => c.clave)).toEqual([T1.clave, T2.clave, T3.clave]);
+
+    const [row] = await bundles();
+    expect(row).toMatchObject({
+      id: bundle.id,
+      businessId: key,
+      paymentRef: "payment-1",
+      validationId: logged[0].id,
+      source: "apicep",
+      status: "read",
+      url: null,
+      referenceNumber: "9784417",
+      transferDate: "2026-09-26",
+      senderBank: "AZTECA",
+      amountCents: 300,
+      beneficiary: BUSINESS_CLABE,
+      r2Key: `bundles/${key}/${bundle.id}.zip`,
+    });
+    expect(JSON.parse(row.claves!)).toEqual([T1.clave, T2.clave, T3.clave]);
+    expect(row.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(await PROOFS.head(row.r2Key!)).not.toBeNull();
+
+    const kept = await records();
+    expect(kept).toHaveLength(3);
+    expect(kept.every((r) => r.businessId === key && r.bundleId === bundle.id && r.sealStatus === "not_verified")).toBe(true);
+    expect(kept.find((r) => r.clave === T2.clave)).toMatchObject({
+      creditDate: "2026-09-26",
+      creditTime: "07:11:20",
+      senderAccountType: "40",
+      senderAccount: SENDER_8301,
+      receiverAccount: BUSINESS_CLABE,
+      amountCents: 300,
+    });
+    /* FR-006, FR-010: no name and no RFC, anywhere it keeps */
+    const everything = JSON.stringify({ kept, row, res: res.data });
+    for (const personal of [SYNTHETIC.senderName, SYNTHETIC.senderRfc, SYNTHETIC.beneficiaryName, SYNTHETIC.beneficiaryRfc]) {
+      expect(everything).not.toContain(personal);
+    }
+  });
+
+  it("a link on any other origin is never fetched, and with no storage origin nothing is: the bundle is unreadable (D16)", async () => {
+    const { key } = await seedOwner();
+    /* no storage interceptor: a fetch would fail and read as `pending` */
+    mockApiCep(severalAnswer("https://files.example.com/9784417.pdf"));
+    const foreign = await postValidate(key, byReference);
+    expect(foreign.data.bundle).toMatchObject({ status: "unreadable", candidates: [] });
+
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    const unset = await postValidate(key, byReference, { APICEP_STORAGE_ORIGIN: undefined });
+    expect(unset.data.bundle).toMatchObject({ status: "unreadable", candidates: [] });
+    expect((await bundles()).map((b) => [b.status, b.url])).toEqual([
+      ["unreadable", null],
+      ["unreadable", null],
+    ]);
+    expect(await records()).toHaveLength(0);
+  });
+
+  it("a failed download keeps the bundle pending with its link; the retry reads it with no provider call; the third failure gives up (D16)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage("unavailable", { status: 503 });
+    const res = await postValidate(key, byReference);
+    const bundle = res.data.bundle as { id: string };
+    expect(res.data.bundle).toMatchObject({ status: "pending", candidates: [] });
+    expect((await bundles())[0]).toMatchObject({ status: "pending", url: BUNDLE_URL, downloadAttempts: 1 });
+
+    mockStorage(bundleOf([T1, T2]));
+    const read = await readPendingBundle(testEnv(), db(), { businessId: key }, bundle.id);
+    expect(read).toMatchObject({ status: "read" });
+    expect(read!.candidates.map((c) => c.clave)).toEqual([T1.clave, T2.clave]);
+    expect((await bundles())[0]).toMatchObject({ status: "read", url: null, downloadAttempts: 2 });
+    expect(await db().select().from(validations)).toHaveLength(1);
+
+    /* a second payment's bundle that never downloads */
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage("unavailable", { status: 503 });
+    const other = (await postValidate(key, byReference)).data.bundle as { id: string };
+    mockStorage("unavailable", { status: 500 });
+    expect(await readPendingBundle(testEnv(), db(), { businessId: key }, other.id)).toMatchObject({ status: "pending" });
+    mockStorage("unavailable", { status: 500 });
+    expect(await readPendingBundle(testEnv(), db(), { businessId: key }, other.id)).toMatchObject({ status: "unreadable" });
+    const [, givenUp] = await bundles();
+    expect(givenUp).toMatchObject({ status: "unreadable", url: null, downloadAttempts: 3 });
+    /* and another business never reads it */
+    const { key: stranger } = await seedOwner();
+    expect(await readPendingBundle(testEnv(), db(), { businessId: stranger }, other.id)).toBeNull();
+  });
+
+  it("a file over 4 MB is too_large, and nothing goes to the bucket (D16)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(new Uint8Array(MAX_BUNDLE_BYTES + 1));
+    const res = await postValidate(key, byReference);
+    expect(res.data.bundle).toMatchObject({ status: "too_large", candidates: [] });
+    expect((await bundles())[0]).toMatchObject({ status: "too_large", url: null, r2Key: null });
+  });
+
+  it("a second bundle repeating a clave reads only the new entry — a transfer is parsed once per business (D3)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([T1, T2]));
+    const first = (await postValidate(key, byReference)).data.bundle as { id: string };
+
+    /* T2 again, but its bytes would never read: opening it would show */
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(
+      buildBundleZip([
+        { name: entryName(T2.operationDay, T2.clave), bytes: new TextEncoder().encode("%PDF-1.5 broken") },
+        { name: entryName(T3.operationDay, T3.clave), bytes: transferPdf(T3) },
+      ]),
+    );
+    const second = (await postValidate(key, byReference)).data.bundle as { candidates: { clave: string; bundleId: string }[]; unreadable: unknown[] };
+    expect(second.unreadable).toEqual([]);
+    expect(second.candidates.map((c) => c.clave)).toEqual([T2.clave, T3.clave]);
+    expect(second.candidates[0].bundleId).toBe(first.id);
+    expect(await records()).toHaveLength(3);
+  });
+
+  it("one unreadable CEP is flagged, and the rest of the bundle is still read (FR-002)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(
+      buildBundleZip([
+        { name: entryName(T1.operationDay, T1.clave), bytes: transferPdf(T1, { omitLabel: "cadena" }) },
+        { name: entryName(T2.operationDay, T2.clave), bytes: transferPdf(T2) },
+      ]),
+    );
+    const bundle = (await postValidate(key, byReference)).data.bundle as { candidates: { clave: string }[]; unreadable: unknown[] };
+    expect(bundle.candidates.map((c) => c.clave)).toEqual([T2.clave]);
+    expect(bundle.unreadable).toEqual([{ entry: entryName(T1.operationDay, T1.clave), reason: "no_cadena_label" }]);
+  });
+
+  it("a single valid of a search without a clave keeps its record, and the billing row logs its clave (D5, D9, D13)", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(validAnswer(T2));
+    const res = await postValidate(key, byReference);
+    expect(res.data.record).toMatchObject({ clave: T2.clave, bundleId: null, creditTime: "07:11:20", senderAccount: SENDER_8301 });
+    expect(await records()).toHaveLength(1);
+    const [logged] = await db().select().from(validations);
+    expect(logged).toMatchObject({ trackingKey: T2.clave, referenceNumber: "9784417", status: "valid" });
+
+    /* a search by clave is the payer's own: no record */
+    mockApiCep(validAnswer(T1));
+    const byItsClave = await postValidate(key, byClave(T1.clave));
+    expect(byItsClave.data.record).toBeUndefined();
+    expect(await records()).toHaveLength(1);
+  });
+
+  it("the platform's own top-up writes no record, and a several answer on it stays not_found (D5)", async () => {
+    await mockProof(PNG(), "image/png");
+    const topUp = { receipt: { proofKey: PROOF_KEY }, beneficiary: { bank: "BBVA MEXICO", clabe: BUSINESS_CLABE } } as ConstaRequest;
+    mockApiCep(validAnswer(T2));
+    const valid = await consta(testEnv(), db(), { platform: true }).validate(topUp);
+    expect(valid.status).toBe("valid");
+    expect(valid.record).toBeUndefined();
+
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    const several = await consta(testEnv(), db(), { platform: true }).validate(topUp);
+    expect(several).toMatchObject({ status: "invalid", reason: "not_found", hint: "verify_inputs" });
+    expect(several.bundle).toBeUndefined();
+    expect(await bundles()).toHaveLength(0);
+    expect(await records()).toHaveLength(0);
+    /* the log still says what the provider answered */
+    expect((await db().select().from(validations)).map((v) => [v.businessId, v.reason])).toEqual([
+      [null, null],
+      [null, "several"],
+    ]);
   });
 });

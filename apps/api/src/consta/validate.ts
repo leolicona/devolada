@@ -5,9 +5,11 @@ import type { Bindings } from "../env";
 import { apiCepProvider } from "./provider/apicep";
 import { ProviderFailure, type ReceiptInput, type TransferInput } from "./provider/types";
 import {
+  accountValue,
   askBeforeCredit,
   asBeneficiary,
   extractProof,
+  gateTrackingKey,
   readerPlan,
   readProofFromBucket,
   ReaderError,
@@ -16,6 +18,8 @@ import {
   type ExtractionResult,
   type LoadedProof,
 } from "./extraction";
+import { storeBundle, storeSingleRecord, type StoredBundle } from "./bundle/store";
+import type { CepRecord } from "./bundle/types";
 import {
   askOutcome,
   extractionFailure,
@@ -66,6 +70,12 @@ function ourReadingPayload(ours: OurReading | null): ConstaVerdict["ourReading"]
     legibility: ours.legibility ?? null,
     /* receipt-triage D12 */
     referenceNumber: ours.gate.referenceNumber === "ok" ? ours.referenceNumber : null,
+    /* cep-bundle-match D15: as read — the gate has no opinion on either.
+       On every outcome of a provider-first call, so the lifecycle has the
+       receipt's side of a match even on the first attempt, before the row
+       holds it (analyze I1). */
+    time: ours.time ?? null,
+    senderTail: ours.senderTail ?? null,
   };
 }
 
@@ -359,10 +369,16 @@ export async function validate(
            already holds with the same date, bank, amount and account
            cannot find this transfer alone, so the provider is not paid to
            say so. Recorded as the ask it is (`key_missing`, D21), and the
-           payer is asked for the clave. */
+           payer is asked for the clave.
+           cep-bundle-match D12 (FR-015): only when the reading shows
+           neither a time nor the sender's digits. With either, the search
+           runs: several matches come back as a bundle, and the lifecycle's
+           matcher tells them apart. */
         const { gated: g } = extracted;
         if (
           hooks.referenceTaken &&
+          !reading.time &&
+          !reading.senderTail &&
           g.gate.trackingKey !== "ok" &&
           g.referenceNumber &&
           g.senderBank &&
@@ -393,7 +409,14 @@ export async function validate(
          (`input` stays in receipt mode below), and the two readings meet
          after the answer. A hole rides along rather than refusing: the
          provider may read what we could not (FR-005). */
-      ours = { ...gated, date: reading.date, legibility: reading.legibility };
+      ours = {
+        ...gated,
+        date: reading.date,
+        legibility: reading.legibility,
+        /* cep-bundle-match D15 */
+        time: reading.time,
+        senderTail: reading.senderTail,
+      };
     }
   }
 
@@ -544,9 +567,16 @@ export async function validate(
       businessId,
       mode: input.mode,
       status: verdict.status,
+      /* cep-bundle-match D1: `several` is written as the provider said it,
+         for the platform too — the log says what was answered */
       reason: verdict.reason,
       alreadyValidated: verdict.alreadyValidated,
-      trackingKey: (input.mode === "transfer" ? input.trackingKey : verdict.cep?.trackingKey) ?? null,
+      /* cep-bundle-match D13: a search by reference names no clave, so the
+         CEP's clave is recorded in its place — what lets a later "validated
+         before" trace back to this, our own search */
+      trackingKey:
+        (input.mode === "transfer" ? (input.trackingKey ?? verdict.cep?.trackingKey) : verdict.cep?.trackingKey) ??
+        null,
       /* proof-extraction D13: the pair (bank, clave) is what per-bank
          clave shape is derived from, and only `valid` rows count */
       senderBank: (input.mode === "transfer" ? input.senderBank : verdict.cep?.senderBank) ?? null,
@@ -568,6 +598,59 @@ export async function validate(
     })
     .returning({ id: validations.id });
 
+  /* cep-bundle-match D5: the platform's own top-ups keep today's path — a
+     record belongs to the business that received the money, and a top-up
+     pays Devolada. For them a several answer is what it was before this
+     feature: `not_found`, with everything that rides one. */
+  const reason = verdict.reason === "several" && businessId === null ? ("not_found" as const) : verdict.reason;
+
+  /* cep-bundle-match D1, D5, D16: several matches, for a business — the
+     bundle is downloaded from the provider's storage, read and kept in this
+     same call, after the billing row it came with. Nothing here decides
+     which transfer is the payer's: the lifecycle does (D8). */
+  let bundle: StoredBundle | null = null;
+  if (verdict.status === "invalid" && reason === "several" && verdict.downloads?.cepPdf) {
+    const keys =
+      input.mode === "transfer"
+        ? {
+            referenceNumber: input.referenceNumber ?? null,
+            transferDate: input.date,
+            senderBank: input.senderBank,
+            amountCents: input.amountCents,
+          }
+        : /* the image door searched with what the provider read */
+          {
+            referenceNumber: verdict.reading?.referenceNumber ?? null,
+            transferDate: verdict.reading?.date ?? null,
+            senderBank: verdict.reading?.senderBank ?? null,
+            amountCents: verdict.reading?.amountCents ?? null,
+          };
+    bundle = await storeBundle(env, db, owner, {
+      paymentRef: body.paymentRef ?? null,
+      validationId: row.id,
+      searchKeys: {
+        ...keys,
+        beneficiary: input.beneficiary ? accountValue(input.beneficiary as RegisteredAccount) : null,
+      },
+      url: verdict.downloads.cepPdf,
+    });
+  }
+
+  /* cep-bundle-match D5, D9: a single `valid` of a search without a clave
+     is a candidate like any bundle's, so its CEP is kept as a record the
+     lifecycle runs the matcher on (FR-014). Clave-less means the transfer
+     door asked by reference, or neither reading on the receipt door
+     carried a clave the gate passed — a receipt whose clave was read is a
+     clave search, and the CEP it returns is the payer's (analyze A1). */
+  const claveless =
+    input.mode === "transfer"
+      ? !input.trackingKey && Boolean(input.referenceNumber)
+      : providerFirst &&
+        gateTrackingKey(ours?.trackingKey) !== "ok" &&
+        gateTrackingKey(verdict.reading?.trackingKey) !== "ok";
+  const recorded = verdict.status === "valid" && claveless && businessId !== null;
+  const record: CepRecord | null = recorded && verdict.cep ? await storeSingleRecord(db, owner, verdict.cep) : null;
+
   /* two-eyes-receipt D5: the comparison, at minute zero.
 
      It runs on exactly one answer — `not_found`, the faceless `invalid`
@@ -575,9 +658,10 @@ export async function validate(
      answer the payer used to wait six hours behind, and the one where a
      second reading is worth something: `valid` needs no second opinion
      (the CEP decided), `pending` and `contradicted` are Banxico's own
-     word, and the transfer door read no image at all. */
+     word, and the transfer door read no image at all. Nor does `several`
+     (cep-bundle-match R17): the bundle, not a reading, answers it. */
   const classification =
-    providerFirst && verdict.status === "invalid" && verdict.reason === "not_found"
+    providerFirst && verdict.status === "invalid" && reason === "not_found"
       ? compareReadings(ours, verdict.reading ?? null, await loadShapeRules(db))
       : null;
 
@@ -607,7 +691,7 @@ export async function validate(
     body.customerRef &&
     businessId !== null &&
     (verdict.status === "pending" ||
-      (verdict.status === "invalid" && verdict.reason === "not_found"));
+      (verdict.status === "invalid" && reason === "not_found"));
   const trust = wantsTrust
     ? await trustBlock(
         db,
@@ -629,7 +713,7 @@ export async function validate(
      verdicts as the trust block, and for the same reason. */
   const retryAfter =
     verdict.status === "pending" ||
-    (verdict.status === "invalid" && verdict.reason === "not_found")
+    (verdict.status === "invalid" && reason === "not_found")
       ? await suggestRetryAfter(db, {
           trackingKey:
             (input.mode === "transfer" ? input.trackingKey : verdict.cep?.trackingKey) ?? null,
@@ -656,8 +740,8 @@ export async function validate(
        `not_found` is ambiguous by construction, so it travels with
        the only advice that is always true for it — and never with a
        licence to tell a customer their transfer does not exist. */
-    ...(verdict.reason ? { reason: verdict.reason } : {}),
-    ...(verdict.reason === "not_found" ? { hint: "verify_inputs" as const } : {}),
+    ...(reason ? { reason } : {}),
+    ...(reason === "not_found" ? { hint: "verify_inputs" as const } : {}),
     /* learned-retry D1: a suggestion, never a promise — the caller's
        own schedule remains the floor and the tail */
     ...(retryAfter ? { retryAfter } : {}),
@@ -665,7 +749,7 @@ export async function validate(
        "DEVUELTO" lets a caller tell its customer "your bank returned
        the transfer" instead of a generic mismatch. Banxico's word
        about the payer's own transfer, so nothing foreign leaks. */
-    ...(verdict.reason === "contradicted" && verdict.cepStatus ? { cepStatus: verdict.cepStatus } : {}),
+    ...(reason === "contradicted" && verdict.cepStatus ? { cepStatus: verdict.cepStatus } : {}),
     alreadyValidated: verdict.alreadyValidated,
     /* receipt-triage FR-006: the flag as answered, null included */
     previouslyValidated: verdict.previouslyValidated,
@@ -684,5 +768,9 @@ export async function validate(
     ...(classification ? classificationPayload(classification) : {}),
     ...(verdict.downloads ? { downloads: verdict.downloads } : {}),
     ...(trust ? { trust } : {}),
+    /* cep-bundle-match D1, D5: what was read of a several answer, and the
+       record of a clave-less single `valid` — the lifecycle's to decide */
+    ...(bundle ? { bundle } : {}),
+    ...(recorded ? { record } : {}),
   };
 }

@@ -220,6 +220,12 @@ export const publicPaymentError = z.enum([
      amount and account. From the pay route nothing was created or billed;
      either way the page requires the clave. */
   "REFERENCE_SHARED",
+  /* cep-bundle-match D10: the bundle, or a single match found without a
+     clave, did not say which transfer is the payer's. Still `validating`;
+     no call is made until the clave arrives, and the payment does not
+     expire meanwhile. (`CEP_BUNDLE_PENDING` is not public: the bundle is
+     still downloading, and the page shows its ordinary wait.) */
+  "CEP_UNDECIDED",
 ]);
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)

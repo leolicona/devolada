@@ -2058,3 +2058,79 @@ describe("bug: spei-date-rollover", () => {
     expect(screen.getByLabelText(/fecha de la transferencia/i)).toHaveValue("2026-09-24");
   });
 });
+
+/* ======================================================================
+   cep-bundle-match (specs/013-cep-bundle-match): a reference several
+   transfers share, or a single match found without a clave, that did not
+   say which transfer is the payer's — the page asks for the clave alone.
+   ====================================================================== */
+
+describe("cep-bundle-match US1: the ask when Banxico's answer did not say which transfer is theirs (D10)", () => {
+  const undecided = (over: Record<string, unknown> = {}) =>
+    validatingWith({
+      error: "CEP_UNDECIDED",
+      disputedFields: ["trackingKey"],
+      nextValidationAt: null,
+      senderBank: "AZTECA",
+      transferDate: "2026-09-26",
+      claimedAmountCents: 300,
+      referenceNumber: "9784417",
+      ...over,
+    });
+  const referenceOnly = () =>
+    ok(
+      rtRead({
+        amountCents: 300,
+        senderBank: "AZTECA",
+        referenceNumber: "9784417",
+        gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "ok" },
+        ask: null,
+      }),
+    );
+
+  it("CEP_UNDECIDED opens the clave form alone, with its words, focus on the clave and the other fields filled; the correction supersedes", async () => {
+    const paid: unknown[] = [];
+    server.use(...uploadHandlers(referenceOnly, paid));
+    server.use(handlers.status(() => ok(undecided())));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+
+    expect(
+      await screen.findByText(
+        "Encontramos más de una transferencia que podría ser la tuya. Escribe tu clave de rastreo para saber cuál es.",
+        {},
+        { timeout: 8000 },
+      ),
+    ).toBeInTheDocument();
+    const clave = screen.getByLabelText("Clave de rastreo");
+    await waitFor(() => expect(clave).toHaveFocus());
+    expect(screen.queryByLabelText("Número de referencia")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Banco desde el que pagaste")).toHaveValue("AZTECA");
+    expect(screen.getByLabelText("Fecha de la transferencia")).toHaveValue("2026-09-26");
+    expect(screen.getByLabelText("Monto transferido")).toHaveValue("3.00");
+    /* never a bundle or a candidate on the payer's page (FR-010) — the
+       status it reads carries neither, so nothing here could show one */
+    expect(document.body.textContent).not.toMatch(/\bZIP\b|candidat|coincidencias/i);
+    await expectNoViolations(document.body);
+
+    await userEvent.type(clave, "260928071199000011I");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar estos datos/i }));
+    await waitFor(() => expect(paid).toHaveLength(2));
+    expect(paid[1]).toMatchObject({
+      supersedes: "dp-rt",
+      transfer: { trackingKey: "260928071199000011I", senderBank: "AZTECA", date: "2026-09-26", amountCents: 300 },
+    });
+  });
+
+  it("the bundle still downloading is not public: the page shows its ordinary wait", async () => {
+    server.use(...uploadHandlers(referenceOnly));
+    /* CEP_BUNDLE_PENDING never reaches the wire — the status says nothing */
+    server.use(handlers.status(() => ok(validatingWith({ error: null, nextValidationAt: Date.now() + 120_000 }))));
+    renderPage();
+    await goToProof();
+    await rtUpload();
+    expect(await screen.findByText(/estamos verificando tu transferencia/i, {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Clave de rastreo")).not.toBeInTheDocument();
+  });
+});

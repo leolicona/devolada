@@ -5,6 +5,7 @@ import { Alert, Amount, AmountBreakdown, Button, Card, formatMoney, Input, ListE
 import type {
   FeedCharge,
   FeedResponse,
+  ProofMatch,
   ProofResponse,
   RetryResponse,
   ReviewDecisionResponse,
@@ -129,9 +130,116 @@ const fmtCepDate = (iso: string) =>
     year: "numeric",
   });
 
+/* cep-bundle-match D10 (contracts/panel.md): why a search without a clave
+   did not decide, in the operator's words */
+const undecidedCopy: Record<NonNullable<ProofMatch["reason"]>, string> = {
+  all_used: "Varias coincidencias, todas ya usadas en otros pagos",
+  no_signal: "Varias coincidencias; el comprobante no muestra hora ni cuenta",
+  too_close: "Varias coincidencias con menos de 30 s de diferencia",
+  none_fit: "Ninguna transferencia encontrada coincide con el comprobante",
+  unreadable: "No se pudo leer el archivo de coincidencias",
+  too_large: "Demasiadas coincidencias para revisarlas",
+};
+
+/* cep-bundle-match D8, FR-013: how the transfer was chosen. `none`: nothing
+   the receipt said was needed — the others were another amount, another
+   destination or already used, or there was only the one. */
+function decisionCopy(match: ProofMatch): string {
+  if (match.decided === "undecided") return match.reason ? undecidedCopy[match.reason] : "Sin decidir";
+  const found = match.source === "several" ? "Varias coincidencias" : "Una coincidencia";
+  const how = {
+    tail: "resuelta por cuenta",
+    time: "resuelta por hora",
+    both: "resuelta por cuenta y hora",
+    clave: "resuelta por la clave de rastreo",
+    none: match.source === "several" ? "la única disponible" : "coincide con el comprobante",
+  }[match.by ?? "none"];
+  return `${found} · ${how}`;
+}
+
+/* D6: the chosen credit against the receipt's time — "abonada a las
+   07:11:20, 22 s después de la hora del comprobante". A receipt printed
+   "HH:MM" is its whole minute, so 0 there means inside it. */
+function distanceCopy(match: ProofMatch): string | null {
+  const d = match.distanceS;
+  if (d == null) return null;
+  if (d === 0) {
+    return match.receipt.time && match.receipt.time.length <= 5
+      ? "dentro del minuto del comprobante"
+      : "a la hora del comprobante";
+  }
+  return `${Math.abs(d)} s ${d > 0 ? "después" : "antes"} de la hora del comprobante`;
+}
+
+/* FR-013: what happened to each transfer the search found */
+function fateCopy(c: ProofMatch["candidates"][number]): string {
+  if (c.fate === "chosen") return "Elegida";
+  switch (c.why) {
+    case "used":
+      return "Ya usada";
+    case "tail":
+      return "Otra cuenta";
+    case "window":
+      return "Fuera de la ventana de hora";
+    case "farther":
+      return "Más lejos de la hora";
+    case "too_close":
+      return "Muy cerca de otra";
+    case "amount":
+      return "Otro monto";
+    case "account":
+      return "Otro destino";
+    case "unreadable":
+      return "No se pudo leer";
+    default:
+      return "Posible";
+  }
+}
+
+/* cep-bundle-match FR-010, FR-013: the decision beside the CEP. Other
+   senders are named the way the business's own statement names them — the
+   last four digits and the clave — never by name. */
+function MatchSection({ match }: { match: ProofMatch }) {
+  const chosen = match.candidates.find((c) => c.fate === "chosen");
+  const distance = distanceCopy(match);
+  const receipt = [
+    match.receipt.time,
+    match.receipt.tail ? `cuenta …${match.receipt.tail}` : null,
+  ].filter(Boolean);
+  return (
+    <section aria-label="Coincidencias" className="space-y-2 text-sm">
+      <p className="font-medium">{decisionCopy(match)}</p>
+      <p className="text-ink-soft">
+        Comprobante: {receipt.length ? receipt.join(" · ") : "sin hora ni cuenta"}
+      </p>
+      {chosen?.creditTime && (
+        <p>
+          Abonada a las <span className="tabular-nums">{chosen.creditTime}</span>
+          {distance && <>, {distance}</>}
+        </p>
+      )}
+      <ul className="divide-y divide-line-soft border-y border-line-soft">
+        {match.candidates.map((c) => (
+          <li key={c.clave} className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 py-2">
+            <span className="tabular-nums">
+              {c.creditTime ?? "—"} ·{" "}
+              {c.amountCents != null ? <Amount cents={c.amountCents} /> : "—"}
+              {c.senderBank && <> · {c.senderBank}</>}
+              {c.senderTail && <> · cuenta …{c.senderTail}</>}
+            </span>
+            <span className={c.fate === "chosen" ? "font-medium" : "text-ink-soft"}>{fateCopy(c)}</span>
+            <span className="col-span-2 break-all font-mono text-ink-soft">{c.clave}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /* D4: the proof is the whole truth — the CEP as Banxico answered it and
-   the payer's capture — read for every role. */
-function ProofDialog({ charge }: { charge: FeedCharge }) {
+   the payer's capture — read for every role. cep-bundle-match D10: the
+   same dialog opens as "Ver coincidencias" for an undecided row. */
+function ProofDialog({ charge, label = "Ver comprobante" }: { charge: FeedCharge; label?: string }) {
   const [open, setOpen] = useState(false);
   const proof = useQuery<ProofResponse, ApiError>({
     queryKey: ["payment-proof", charge.id],
@@ -147,7 +255,7 @@ function ProofDialog({ charge }: { charge: FeedCharge }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="compact" variant="secondary">Ver comprobante</Button>
+        <Button size="compact" variant="secondary">{label}</Button>
       </DialogTrigger>
       <DialogContent aria-describedby={undefined}>
         <DialogTitle>Comprobante · {charge.customerName}</DialogTitle>
@@ -187,11 +295,12 @@ function ProofDialog({ charge }: { charge: FeedCharge }) {
                   {line("Ordenante", proof.data.cep.senderName)}
                   {line("Beneficiario", proof.data.cep.beneficiaryName)}
                 </dl>
-              ) : (
+              ) : proof.data.match ? null : (
                 <p className="text-sm text-muted-foreground">
                   Banxico aún no confirma esta transferencia; el CEP aparecerá aquí cuando responda.
                 </p>
               )}
+              {proof.data.match && <MatchSection match={proof.data.match} />}
               {proof.data.imageUrl ? (
                 <figure className="space-y-2">
                   <img

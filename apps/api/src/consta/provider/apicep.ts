@@ -45,6 +45,10 @@ type ApiCepResponse = {
   validation?: {
     cepStatus?: string;
     cepPreviouslyValidated?: boolean | null;
+    /* cep-bundle-match D1: whether Banxico confirmed anything at all —
+       `true` with no CEP is the several-matches answer (measured
+       2026-09-26), `false` the not-found one. Never read before. */
+    banxicoConfirmed?: boolean | null;
     cepDetails?: {
       trackingKey?: string;
       amount?: number;
@@ -57,10 +61,23 @@ type ApiCepResponse = {
       /* receipt-triage D22: documented by the provider; kept now */
       beneficiaryAccount?: string;
       beneficiaryAccountType?: string;
+      /* cep-bundle-match D1/D4 (measured 2026-09-26): the credit time,
+         the cadena original in one line, the sender's account whole and
+         its type, and the certificate's number */
+      processingTime?: string;
+      cdaChain?: string;
+      senderAccountType?: string | number;
+      senderAccount?: string | number;
+      certificateNumber?: string | number;
     };
   };
   downloads?: { cepXml?: string; cepPdf?: string };
 };
+
+/* A field the provider may send as a string or a JSON number (an account
+   type, an account); anything else is absent */
+const text = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" && Number.isFinite(v) ? String(v) : null;
 
 function requestBody(input: TransferInput | ReceiptInput): Record<string, unknown> {
   if (input.mode === "transfer") {
@@ -139,11 +156,13 @@ function classifyHttpFailure(
     return new ProviderFailure(`apiCEP ${res.status}: ${detail}`, "REQUEST_REJECTED", false, {
       ...shared,
       /* 422 = "referencia duplicada en Banxico (requiere clave de
-         rastreo)": the reference matches more than one transfer, and the
-         one remedy is resending with the tracking key. Published,
-         unverified. Devolada can hit it since receipt-triage D1 — a
-         search by reference alone — and receipt-triage D17 is what the
-         caller does with it: ask the payer for the clave and stop calling. */
+         rastreo)", as published. cep-bundle-match D1: measured
+         2026-09-26, a reference matching several transfers never comes
+         back as a 422 (24 calls, none): it comes back `invalid` +
+         `banxicoConfirmed` with a bundle of their CEPs, which `mapVerdict`
+         reads as `several`. The hint stays for the answer the provider
+         documents; receipt-triage D17 is still what a caller does with
+         it — ask the payer for the clave and stop calling. */
       hint: res.status === 422 ? "provide_tracking_key" : null,
     });
   }
@@ -155,7 +174,7 @@ function classifyHttpFailure(
    Both their explicit "pending" and an "invalid" whose cepStatus is still
    EN PROCESO mean "ask again later", never "the transfer is fake".
 
-   D11: past that, an `invalid` still says two different things. When a
+   D11: past that, an `invalid` still says three different things. When a
    CEP came back, the provider is contradicting the claim with evidence.
    When nothing came back — no cepDetails and no cepStatus — there is
    nothing to contradict it with, and that answer covers a transfer that
@@ -164,6 +183,13 @@ function classifyHttpFailure(
    settled transfer sent with the wrong `sender.bank` returned exactly the
    shape a nonexistent one returns). The caller cannot tell them apart
    either, but it can at least be told that it cannot.
+   cep-bundle-match D1 found the third inside that second one: nothing
+   came back *because too much did*. `banxicoConfirmed: true` with no CEP
+   and a `downloads.cepPdf` is Banxico confirming several transfers for
+   the search, and the link is a ZIP of their CEPs (measured 2026-09-26,
+   E1/E3/E6/F1/F2/G5). It is `several`, never `not_found`: asking again
+   returns the same ZIP (F2). Confirmed without the link is still
+   `not_found` — there is nothing to open.
 
    D10: a status we do not recognise is not a verdict. The old fallback
    was `invalid` — the harshest reading available — so a value apiCEP
@@ -191,6 +217,14 @@ function mapVerdict(
        of dying as a false "your bank says it failed". `contradicted`
        stays reserved for evidence that resolves: DEVUELTO, CANCELADA. */
     if (cepStatus === "LIQUIDADO") return { status: "pending", reason: null };
+    if (
+      body.validation?.banxicoConfirmed === true &&
+      !body.validation?.cepDetails &&
+      cepStatus === null &&
+      body.downloads?.cepPdf
+    ) {
+      return { status: "invalid", reason: "several" };
+    }
     const evidence = Boolean(body.validation?.cepDetails) || cepStatus !== null;
     return { status: "invalid", reason: evidence ? "contradicted" : "not_found" };
   }
@@ -296,6 +330,12 @@ export function apiCepProvider(env: {
               digitalSignature: details.digitalSignature ?? null,
               beneficiaryAccount: details.beneficiaryAccount ?? null,
               beneficiaryAccountType: details.beneficiaryAccountType ?? null,
+              /* cep-bundle-match D1/D4 */
+              creditTime: text(details.processingTime),
+              chain: text(details.cdaChain),
+              senderAccountType: text(details.senderAccountType),
+              senderAccount: text(details.senderAccount),
+              certificateNumber: text(details.certificateNumber),
             }
           : null,
         downloads: body.downloads ?? null,

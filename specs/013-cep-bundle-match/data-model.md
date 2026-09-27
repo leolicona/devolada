@@ -103,8 +103,10 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
 
 - `reason` only when `decided = "undecided"`; `by` only when `chosen` —
   `clave` when a typed clave fitted a kept candidate (D11).
-- `tail` in a candidate is the last four digits of its sender account —
-  what the panel may show (FR-010).
+- `tail` in a candidate is four digits of its sender account — what the
+  panel may show (FR-010): the four the receipt's tail matched when it
+  fitted the account number inside a CLABE (research R8), otherwise the
+  account's last four (amended 2026-09-27, `consta/bundle/match.ts::shownTail`).
 - Written by the lifecycle in the same update that confirms the row or
   marks it undecided (FR-013).
 

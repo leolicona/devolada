@@ -30,6 +30,16 @@
      "9999999"        → HTTP 422, "referencia duplicada en Banxico (requiere
                         clave de rastreo)" (REQUEST_REJECTED + hint
                         provide_tracking_key — the caller asks for the clave)
+     "4417000"        → cep-bundle-match D1: the shared reference. The
+                        several-matches answer as measured 2026-09-26 —
+                        `invalid`, `banxicoConfirmed: true`, no cepDetails,
+                        no cepStatus — with `downloads.cepPdf` linking
+                        `/mock-bundle.zip?day=<the day asked>`: a ZIP served
+                        as `application/pdf`, two synthetic CEPs of $3.00 to
+                        the dev seed's CLABE, tails 8301 (credited 07:11:20)
+                        and 4417 (11:40:47), built by `cep-bundle.mjs`. Point
+                        APICEP_STORAGE_ORIGIN at this server too, or the API
+                        never downloads it (D16)
      anything else    → valid, LIQUIDADO, with Banxico's clave in
                         `cepDetails.trackingKey` (the caller adopts it — D14)
                         and the beneficiary's account in
@@ -61,6 +71,7 @@
    (~1.3 s). */
 
 import { createServer } from "node:http";
+import { sandboxBundle } from "./cep-bundle.mjs";
 
 const PORT = Number(process.env.PORT ?? 8789);
 
@@ -145,6 +156,18 @@ function reply(body) {
       return {
         code: 422,
         json: { error: "Referencia duplicada en Banxico (requiere clave de rastreo) (mock)" },
+      };
+    /* cep-bundle-match D1: several transfers share this reference */
+    if (claim.referenceNumber === "4417000")
+      return {
+        code: 200,
+        headers: headers200(4400),
+        json: {
+          validationId: crypto.randomUUID(),
+          status: "invalid",
+          validation: { banxicoConfirmed: true, cepPreviouslyValidated: null },
+          downloads: { cepPdf: `http://localhost:${PORT}/mock-bundle.zip?day=${claim.date ?? ""}` },
+        },
       };
     return {
       code: 200,
@@ -256,7 +279,24 @@ function reply(body) {
   };
 }
 
+/* cep-bundle-match D16: the bundle behind a several answer, one per day
+   asked, built on first request. Served as a PDF, as the provider serves
+   it: the API must recognise it by its bytes (D3). */
+const bundles = new Map();
+const mexicoCityToday = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
+
 createServer((req, res) => {
+  const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+  if (req.method === "GET" && url.pathname === "/mock-bundle.zip") {
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("day") ?? "") ? url.searchParams.get("day") : mexicoCityToday();
+    if (!bundles.has(day)) bundles.set(day, sandboxBundle(day));
+    const zip = bundles.get(day);
+    console.log(`  ${new Date().toISOString()} → bundle of CEPs for ${day} (${zip.length} bytes)`);
+    res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": String(zip.length) });
+    res.end(Buffer.from(zip));
+    return;
+  }
   if (req.method !== "POST" || req.url !== "/validate-transfer") {
     res.writeHead(404).end();
     return;
@@ -279,4 +319,9 @@ createServer((req, res) => {
     res.writeHead(code, headers ?? { "Content-Type": "application/json" });
     res.end(JSON.stringify(json));
   });
-}).listen(PORT, () => console.log(`apiCEP mock listening on http://localhost:${PORT}`));
+}).listen(PORT, () => {
+  /* cep-bundle-match T019: today's bundle is built at startup, so a broken
+     build shows here and not on the first several answer */
+  bundles.set(mexicoCityToday(), sandboxBundle(mexicoCityToday()));
+  console.log(`apiCEP mock listening on http://localhost:${PORT}`);
+});

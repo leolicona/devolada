@@ -126,6 +126,10 @@ const payErrors: Record<string, string> = {
     "Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya.",
   REFERENCE_AMBIGUOUS:
     "Tu número de referencia coincide con más de una transferencia. Escribe tu clave de rastreo para encontrar la tuya.",
+  /* cep-bundle-match D10: Banxico's answer did not say which transfer is
+     the payer's — asked with the clave, like the two above */
+  CEP_UNDECIDED:
+    "Encontramos más de una transferencia que podría ser la tuya. Escribe tu clave de rastreo para saber cuál es.",
 };
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
@@ -178,6 +182,7 @@ function TransferForm({
   announce = true,
   keys = "either",
   requireClave = false,
+  focusClave = false,
   missing,
   onUploadInstead,
 }: {
@@ -210,6 +215,9 @@ function TransferForm({
   /* receipt-triage D7: the reference is one another payment already holds
      that day, so the clave is required beside it */
   requireClave?: boolean;
+  /* cep-bundle-match D10 (contracts/payment-page.md): the ask for the
+     clave alone takes focus on its one field when it appears */
+  focusClave?: boolean;
   /* receipt-triage D18 (FR-011): the fields the capture did not show,
      each marked in text under its field */
   missing?: ReadonlySet<"key" | "amount" | "date" | "senderBank">;
@@ -259,6 +267,7 @@ function TransferForm({
         placeholder="Está en tu comprobante"
         className="font-mono text-sm"
         autoComplete="off"
+        autoFocus={focusClave}
       />
     </Field>
   );
@@ -915,8 +924,10 @@ export function PaymentPage({ token }: { token: string }) {
               /* receipt-triage D7/D17: a reference that cannot find the
                  transfer alone asks for the clave, whatever the error
                  that carried it */
-              const referenceAsk =
-                status.error === "REFERENCE_AMBIGUOUS" || status.error === "REFERENCE_SHARED";
+              /* cep-bundle-match D10: and a bundle, or a single match, that
+                 did not say which transfer is the payer's */
+              const clavesOnly = status.error === "REFERENCE_AMBIGUOUS" || status.error === "CEP_UNDECIDED";
+              const referenceAsk = clavesOnly || status.error === "REFERENCE_SHARED";
               const notFound = status.error === "TRANSFER_NOT_FOUND" || referenceAsk;
               /* D18: the receipt's own Estatus is the one discriminator
                  we have. "En proceso" means the bank has not released
@@ -1146,8 +1157,9 @@ export function PaymentPage({ token }: { token: string }) {
                     <TransferForm
                       /* receipt-triage D17: after the 422 the clave alone;
                          D7: a shared reference needs the clave beside it */
-                      keys={status.error === "REFERENCE_AMBIGUOUS" ? "clave" : "either"}
+                      keys={clavesOnly ? "clave" : "either"}
                       requireClave={status.error === "REFERENCE_SHARED"}
+                      focusClave={status.error === "CEP_UNDECIDED"}
                       busy={busy}
                       /* The Card above is already aria-live="polite" */
                       announce={false}

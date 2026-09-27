@@ -64,12 +64,12 @@ commit.
 - one new API door, one changed door, one new optional parameter, one adapter method, two `StatusBadge` statuses;
 - one admin screen reshaped, one removed.
 
-**Waiting on measurement** (quickstart §0, before adapter code):
-- **M1**: the shape of the invoice list's `next`, and whether it carries `count`;
-- **M2**: WispHub's per-customer balance door on the pilot, with one and with two open invoices;
-- **M3**: the JSON types of an invoice row's `saldo` and `sub_total`.
+**Measured 2026-09-27** (research, "Measurements recorded"): M1 pages by
+`offset` and `count` is present; M3's money fields are JSON numbers.
 
-D2, D5 and D10 are designed to take either answer. M2 is the only one that can reopen a decision (D10).
+**Still open**: M2 cases (b) two invoices and (c) a short-payer, and
+whether the door lists an invoice older than 180 days. Only US3 waits on
+them. M2 is the only measurement that can reopen a decision (D10).
 
 ## Constitution Check
 

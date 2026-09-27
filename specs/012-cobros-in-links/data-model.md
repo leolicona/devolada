@@ -46,8 +46,8 @@ This is the new body of `GET /payment-requests` (D1). See
 
 ### Receivables cursor (inside `nextCursor`)
 
-`inv:<desde>:<hasta>:<a>:<b>`, base64url, where `<a>:<b>` is `offset:limit`
-or `page:<n>` according to what the provider's `next` carries (D2, M1).
+`inv:<desde>:<hasta>:<offset>:<limit>`, base64url, the numbers the
+provider's `next` carries (D2; M1 measured `offset` 2026-09-27).
 The server rebuilds the provider path from the fixed filter
 (`estado=1&tipo_fecha=fecha_emision`) and these values only.
 
@@ -59,7 +59,8 @@ The cursor is refused when:
 ## Cobros row (admin, derived)
 
 The screen groups the loaded `CobroRow`s by `usuario` (D6). This is
-`groupCobros` without its sort.
+`groupCobros` without its sort. Named `CobroRow` in code; the spec calls it
+the Por cobrar row.
 
 | Field | Derived as |
 | --- | --- |

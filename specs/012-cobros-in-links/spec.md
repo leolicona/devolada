@@ -406,8 +406,10 @@ refused key, confirm that the page sends the operator to Integraciones.
   carried balance, and MUST NOT read anything to find them. A search finds
   them (FR-010).
 - **FR-017**: What a search result owes MUST be read from WispHub when the
-  result is shown, and only for the results on screen: nothing is read for
-  a row that was never shown. For each result, the customer record and
+  result is shown, and only for the results in the blocks that have
+  loaded. Blocks are sized to the screen, so these are the rows on screen
+  or one scroll away. Nothing is read for a block that never loaded. For
+  each result, the customer record and
   their open invoices MUST be read together, in one operation, so that a
   billing run between the two cannot count the carried balance twice
   (FR-015). The open invoices MUST cover every one the customer has, with
@@ -488,9 +490,12 @@ refused key, confirm that the page sends the operator to Integraciones.
 - **No sort by oldest debt.** Today's section sorts the whole list by due
   date. Blocks arrive in the provider's order, and sorting them would need
   the whole list. Rows are grouped by customer as they arrive (FR-005).
-- **The next block is WispHub's own link to its next page.** That link is
-  measured on the invoice list. A computed page offset is not.
-  (`cobros-on-demand-search` D2 reached the same conclusion.)
+- **The next block is WispHub's own link to its next page.** Measured on
+  the invoice list 2026-09-27 (demo): `next` pages by `offset`, and an
+  explicit `offset` returns the same rows. The server still rebuilds each
+  request from those numbers and never forwards the provider's link
+  (research D2). (`cobros-on-demand-search` D2 reached the same
+  conclusion.)
 - **The row's total is its open invoices on screen, not the customer's
   whole debt.** The payer's page shows the whole debt (open invoices plus
   carried balance, `debt-truth` D7) when the customer opens the link. The

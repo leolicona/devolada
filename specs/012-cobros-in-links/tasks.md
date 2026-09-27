@@ -117,12 +117,17 @@ tells an outage from an empty list with it.
   - a row opens to its invoices, with period and *saldo anterior*;
   - Copiar and WhatsApp go through `POST /direct-payments/links` (FR-008);
   - a viewer sees no buttons;
-  - an ISP with no open invoice gets "Nadie tiene facturas abiertas hoy", with no warning.
+  - an ISP with no open invoice gets "Nadie tiene facturas abiertas hoy", with no warning;
+  - returning to the tab re-reads the first block, at most once every 30 s, and shows no read age (FR-011);
+  - the count line reads "N facturas abiertas", and nothing when `total` is `null` (FR-007);
+  - a business with no CLABE sees the rows with the buttons withheld (US1 scenario 7);
+  - an invoice with no due date shows its issue date and never reads *Venció*;
+  - switching views quickly never draws one view's late answer over the other.
 
 ### Implementation for User Story 1
 
 - [ ] T008 [P] [US1] Create `apps/api/src/routes/payment-requests/cursor.ts` for the opaque `inv:` cursor (`cobros-in-links D2`, data-model "Receivables cursor").
-  - Encode `desde`, `hasta` and the numbers parsed from the provider's `next`: `offset`/`limit`, or `page`, per T001.
+  - Encode `desde`, `hasta`, `limit` and `offset` parsed from the provider's `next` (measured 2026-09-27: `next` pages by `offset`).
   - Decode to either a value or `null`.
   - Never carry or accept a path.
   - Mirror `routes/direct-payments/cursor.ts` in form.
@@ -133,9 +138,9 @@ tells an outage from an empty list with it.
   - `apps/api/test/payment-requests.test.ts`: rewrite for the block contract.
   - `apps/api/test/pending-invoice-cap.test.ts` (around lines 279–284 and 366–367): the snapshot still feeds the money paths, so re-point those assertions at a money-path reader, or at T006's SC-006 case.
   - `apps/api/test/presence-freshness.test.ts` (lines 90–105): the display cache no longer serves this door.
-- [ ] T013 [P] [US1] Create `apps/admin/src/features/links/useReceivables.ts`: an infinite query over `GET /payment-requests` with the Links block size (reuse `blockSize` and the constants from `useCustomers.ts`, `cobros-in-links D4`) and the same sentinel scroll trigger. It groups loaded pages with `groupReceivables`, which is `groupCobros` without its sort, in first-appearance order (D6). It re-reads the first block on return to the tab with the 30-second floor (FR-011, reusing `FOCUS_FLOOR_MS`), and shows no read age.
-- [ ] T014 [P] [US1] Create `apps/admin/src/features/links/ReceivablesList.tsx`, moving the row, expansion, `fmtDay` and `todayIn` from `apps/admin/src/features/cobros/CobrosScreen.tsx`. It keeps *Venció* / *Vence* as icon plus text, and adds each invoice's period and *saldo anterior* in the expansion (FR-006). Buttons use `useLinkAction`, one pair per customer, withheld per `roleCan` and the CLABE, as today. The count line reads "N facturas abiertas", or nothing when `total` is null (FR-007).
-- [ ] T015 [US1] In `apps/admin/src/features/links/LinksScreen.tsx`, add the chip, the shadcn `Tabs` from `@/components/ui/tabs`, compact 40px, labelled *Todos* / *Por cobrar* (`cobros-in-links D14`), beside the search box, wrapping under it at 360px. *Todos* renders today's list unchanged. *Por cobrar* with no search text renders `ReceivablesList`. The chosen view is local state for now (T018 moves it to the address).
+- [ ] T013 [P] [US1] Create `apps/admin/src/features/links/useReceivables.ts`: an infinite query over `GET /payment-requests` with the Links block size (export `blockSize` from `useCustomers.ts` and reuse it with the constants from `useCustomers.ts`, `cobros-in-links D4`) and the same sentinel scroll trigger. It groups loaded pages with `groupReceivables`, which is `groupCobros` without its sort, in first-appearance order (D6). It re-reads the first block on return to the tab with the 30-second floor (FR-011, reusing `FOCUS_FLOOR_MS`), and shows no read age.
+- [ ] T014 [P] [US1] Create `apps/admin/src/features/links/ReceivablesList.tsx`, moving the row, expansion, `fmtDay` and `todayIn` from `apps/admin/src/features/cobros/CobrosScreen.tsx`. It keeps *Venció* / *Vence* as icon plus text, and adds each invoice's period and *saldo anterior* in the expansion (FR-006). Buttons use `useLinkAction`, one pair per customer, withheld per `roleCan` and the CLABE, as today. The count line reads "N facturas abiertas", or nothing when `total` is null (FR-007). The empty state reads "Nadie tiene facturas abiertas hoy." (replacing Cobros' "Nadie te debe hoy.": FR-007 names invoices, not debt).
+- [ ] T015 [US1] In `apps/admin/src/features/links/LinksScreen.tsx`, add the chip, the shadcn `Tabs` from `@/components/ui/tabs`, compact 40px, labelled *Todos* / *Por cobrar* (`cobros-in-links D14`), beside the search box, wrapping under it at 360px. *Todos* renders today's list unchanged. *Por cobrar* with no search text renders `ReceivablesList`. The chosen view is local state for now (T018 moves it to the address). The chip renders only when the customers answer is not `not_configured` (`cobros-in-links D13`, FR-013), so US1 never shows a chip that leads to a `409`. T038 keeps the other half: a `409` on `/payment-requests` drops `view` from the address.
 - [ ] T016 [P] [US1] In `apps/admin/test/msw.ts`, give `/payment-requests` a handler that answers the block contract with fixtures validated by `paymentRequestsResponse`: two blocks, one customer split across them, and a row with period and *saldo anterior*.
 
 **Checkpoint**: US1 is complete on its own. Por cobrar lists, walks, groups and sends; the customer view is untouched.
@@ -207,11 +212,13 @@ tells an outage from an empty list with it.
   - the search replaces the list while active, and clearing it brings the list back;
   - fewer than three characters searches nothing;
   - only the latest text's answer shows;
-  - the text survives leaving and returning.
+  - the text survives leaving and returning;
+  - debt is asked only for the results of loaded blocks. With one block of N results loaded, exactly N debt requests go out, and none for the next block until it loads (FR-017, SC-009);
+  - with the customers door answering from its offline fallback, every result reads *Sin confirmar* (FR-010).
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] Add `openInvoicesOf(idServicio: number): Promise<PendingInvoice[]>` in `apps/api/src/wisphub/client.ts`. It reads `/clientes/{id}/saldo/` and maps `facturas[]` (id, dates, `total` through T003's helper, `usuario` from the caller). It deliberately ignores the door's own `saldo` and `url_pago`. Its comment cites `cobros-in-links D10` with the demo measurement of 2026-09-23 and T001's pilot M2 result. An unreadable body throws `WispHubError("WISPHUB_UNAVAILABLE")`.
+- [ ] T026 [US3] Add `openInvoicesOf(idServicio: number): Promise<PendingInvoice[]>` in `apps/api/src/wisphub/client.ts`. It reads `/clientes/{id}/saldo/` and maps `facturas[]` (id, dates, `total` through T003's helper, `usuario` from the caller). It deliberately ignores the door's own `saldo` and `url_pago`. Its comment cites `cobros-in-links D10` with the demo measurement of 2026-09-23 and T001's pilot M2 result. An unreadable body throws `WispHubError("WISPHUB_UNAVAILABLE")`. The door also allows `PUT`, `PATCH` and `DELETE` (measured 2026-09-27). The adapter only ever sends `GET`, and the comment says so.
 - [ ] T027 [US3] In `apps/api/src/routes/direct-payments/schema.ts`:
   - `customersQuery` gains `channel: z.enum(["panel"]).optional()`;
   - add `customerDebtQuery` (`usuario`, trimmed, at least one character) and `customerDebtResponse`, a discriminated union on `state`: `owes` | `none` | `unconfirmed` (data-model "Customer debt").
@@ -262,7 +269,7 @@ tells an outage from an empty list with it.
 
 - [ ] T036 [US4] In `apps/api/src/routes/payment-requests/handler.ts`, map the failures as `cobros-in-links D7` says. A `WispHubError` other than `WISPHUB_AUTH_FAILED` → the `unavailable` 200 answer, logged the way the current handler logs (`console.error("wisphub failure:", code, message)`, never the key). A refused key → `503`.
 - [ ] T037 [US4] In `apps/admin/src/features/links/ReceivablesList.tsx` and `useReceivables.ts`, render three different states: *nobody* (`ok`, no rows, no cursor), *could not read* (`unavailable`, no rows, Reintentar), and *rows kept under the quiet note* (`unavailable` after rows). Reuse the refused-key rendering Links already has (`bug: links-refused-key`).
-- [ ] T038 [US4] In `apps/admin/src/features/links/LinksScreen.tsx`, render the chip only when the customers answer is not `not_configured`. On a `409` from `/payment-requests`, drop `view` from the address (`cobros-in-links D13`, FR-013).
+- [ ] T038 [US4] In `apps/admin/src/features/links/LinksScreen.tsx`, on a `409` from `/payment-requests`, drop `view` from the address (`cobros-in-links D13`, FR-013). The chip's own rule landed in T015.
 
 **Checkpoint**: every failure reads as what it is. There is no empty list that means "we don't know".
 
@@ -271,7 +278,10 @@ tells an outage from an empty list with it.
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T039 [P] Update `tests/e2e/stubs.ts` so the `cobros` fixture takes the block shape and is validated by `paymentRequestsResponse`, with a stub for `/direct-payments/customers/debt`. Point `tests/e2e/contrast.spec.ts`, `tests/design/review-foundations.spec.ts` and `tests/design/review-feedback.spec.ts` at `/links?view=receivables` where they opened `/payment-requests`.
-- [ ] T040 [P] In `tests/e2e/links.spec.ts` (cite `cobros-in-links US1`), check the chip and the Por cobrar view at 360, 768 and 1280: no horizontal scroll, 40px compact targets on desktop, a measured focus ring on the chip, and axe clean. The two new badges are also checked in both themes through `tests/e2e/contrast.spec.ts`.
+- [ ] T040 [P] In `tests/e2e/links.spec.ts` (cite `cobros-in-links US1`), check the chip and the Por cobrar view at 360, 768 and 1280: no horizontal scroll, 40px compact targets on desktop, a measured focus ring on the chip, and axe clean. The two new badges are also checked in both themes through `tests/e2e/contrast.spec.ts`. Also:
+  - FR-003 / SC-003: pressing *Por cobrar* and not scrolling reads exactly one block. The stub counts `/payment-requests` calls, as `FR-020: the walk follows the operator` does for customers. This needs layout, so it lives here, not in the component suite (constitution IV);
+  - SC-002: the first Por cobrar block is on screen within the 3 s ceiling (logged, with a generous ceiling, as `links.spec.ts` logs its SCs);
+  - SC-001: from opening Links to pressing WhatsApp on a Por cobrar row, within the 10 s target (logged, 20 s ceiling).
 - [ ] T041 [P] Update the comment in `apps/api/src/routes/payment-requests/handler.ts` and the header comments of the Links screen to cite `cobros-in-links` D1–D17 where rules changed. Also update `CLAUDE.md`'s architecture notes where they name the Cobros section.
 - [ ] T042 Run the CI order locally and fix what fails, never skipping a check:
   1. `node scripts/spec-lint.mjs`

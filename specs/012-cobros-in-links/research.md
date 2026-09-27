@@ -71,6 +71,9 @@ invoices between two blocks.
 - Assume `offset`. Rejected until M1 measures it. The parser takes
   whichever of `offset` or `page` the provider's `next` carries.
 
+**Settled 2026-09-27 (M1):** `next` pages by `offset`. The cursor carries
+`offset` and `limit`; `page` is not parsed.
+
 ## D3 — Live only: no sweep copy, no display cache
 
 Each block is one `pendingInvoicesPage` call on a fresh `WispHub`

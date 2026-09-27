@@ -128,37 +128,31 @@ next year is missing (the `gen-banks --check` pattern).
   asked with **2026-09-26** (validation `transfer`, 8.3 s; payment
   `9d78ee65-…` confirmed). The earlier clave `not_found`s were wrong input,
   not a wrong date: `2609280711562101011` was the same clave typed with a
-  final `1` for the `I`. The one unexplained miss left is
-  `260928071155271843I` with 2026-09-28 at 10:51 UTC.
+  final `1` for the `I`. The miss of
+  `260928071155271843I` with 2026-09-28 at 10:51 UTC was its operation
+  day; Banxico found it with its printed day, 25 (measured below).
 - The holiday list is a new piece of data to keep up to date each year.
 
 ## Measured 2026-09-26
 
-`../reference-finds-other-transfer/measurement.md` holds 15 direct apiCEP
-calls (`scripts/apicep-probe.sh`). What they settle for this bug:
+`../reference-finds-other-transfer/measurement.md` holds 24 direct apiCEP
+calls (`scripts/apicep-probe.sh`) and Banxico's batch answer. What they
+settle for this bug:
 
-- **Weekend**: Saturday transfers are filed under Monday 28, and a search
-  with the printed Saturday date finds them as well as one with the 28th
-  (cases E3, F4). The primary/alternate pair of the remediation is right,
-  and the printed day is a safe alternate.
-- **18:00**: the three Thursday 23:40–23:48 transfers carry operation day
-  Friday 25 in their CEPs (E6's ZIP, opened), so the rollover from
-  `spei-date-rollover` holds for filing. But the search found them only
-  when asked with the **24th** (their credit day), not with the 25th (E7).
-  Across the run the credit day never missed and the operation day missed
-  once. **Lot 3 (same day, 9 more calls) closed it**: a Friday-night
-  transfer answers by clave to its printed day (25) and to none of 26, 27,
-  28; a Thursday-night one to 24 and not to 25. The operation day found
-  nothing in direct mode. So the search asks **the printed day, first and
-  only**; the Monday is the one alternate worth a call, for weekend
-  transfers. The business-day rule keeps its place for what is recorded
-  and compared, not for what is asked. See `measurement.md`, "Lot 3".
-  **Banxico by batch (same day, folio A0E0097211) put it beyond the
-  provider**: 16 claves asked with their credit day, 16 CEPs; 14 asked
-  with their operation day, 14 "no se pudo localizar". Banxico's query
-  indexes the credit day only. The remediation's "primary = next business
-  day" is therefore **wrong for the search** and must not be built; the
-  business-day calendar is still right for what Devolada records.
+- **Filing**: a transfer made after 18:00, or on a weekend, is filed under
+  the next business day. Thursday 23:40–23:48 → Friday 25 (E6's ZIP,
+  opened); Friday 18:58 and 22:46 → Monday 28; Saturday → Monday 28. The
+  rollover of `spei-date-rollover` holds for **what is recorded**.
+- **Searching**: Banxico's batch (folio A0E0097211) found 16 of 16 claves
+  asked with their printed day and 0 of 14 asked with their operation day.
+  apiCEP by clave found the Friday-night and Thursday-night transfers only
+  with their printed day (G1–G4, G6–G7), and a fresh Saturday 19:21 one
+  with its printed day too. So the remediation's "primary = next business
+  day" is **wrong for the search** and must not be built: the search asks
+  the printed day.
+- apiCEP also found Saturday transfers when asked for the Monday (E1, E5,
+  F3, F5–F8). Banxico does not, so that is the provider's own, undocumented
+  behaviour; nothing should depend on it.
 
 ## Open Questions
 

@@ -63,8 +63,10 @@ Observed on dev (read-only, 2026-09-26):
    **Corrected 2026-09-26 by measurement** (`../reference-finds-other-transfer/measurement.md`,
    E5/F4/F6 and the addendum): direct mode does **not** hide a validated
    CEP — it answers `valid` with `cepPreviouslyValidated: true`. This clave
-   is a Friday-night transfer, a class direct mode missed on every date
-   asked. The original inference follows, kept for the record.
+   is a Friday 22:46 transfer (printed day 25, operation day 28), and it
+   was asked only with 26 and 28, never with its printed day; Banxico's
+   batch found it with 25. The original inference follows, kept for the
+   record.
    **Inference (one clave, six calls)**: apiCEP's direct mode answers
    `not_found` for a CEP already validated through the account, where the
    OCR mode answers `valid` + the flag. If it holds, a row that lost its

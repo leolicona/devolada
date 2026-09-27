@@ -133,8 +133,8 @@ export async function recordExtraction(
          consta-api-merge D18) */
       amountCents: reading?.amount != null ? amountToCents(reading.amount) : null,
       transferDate: reading?.date ?? null,
-      /* bug: spei-date-rollover — the time a reference search needs to
-         tell which day Banxico filed the transfer under */
+      /* bug: spei-date-rollover — the printed time; since bug:
+         reference-search-printed-day it no longer picks the search day */
       transferTime: reading?.time ?? null,
       receiptStatus: reading?.status ?? null,
       gateTrackingKey: gated?.gate.trackingKey ?? null,

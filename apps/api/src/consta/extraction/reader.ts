@@ -81,8 +81,11 @@ export type Reading = {
   /* bug: spei-date-rollover — the time printed beside the date, "HH:MM"
      on a 24-hour clock, or null. SPEI changes its operation day at 18:00
      (Banxico, "Información operativa del SPEI"), and a receipt prints the
-     calendar day: the time is what says which day Banxico filed it under.
-     Reported like the date, never judged by the gate. */
+     calendar day. Since bug: reference-search-printed-day it no longer
+     decides the day a search asks — Banxico answers the printed day only
+     (measured 2026-09-26) — but it is kept: it is what pairs a receipt
+     with one CEP when several share a reference. Reported like the date,
+     never judged by the gate. */
   time: string | null;
   status: string | null;
   /* receipt-triage D12: as printed — text, never a number, so "038195"
@@ -279,7 +282,7 @@ const referenceOf = (v: unknown): string | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 ? String(v) : str(v);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 /* bug: spei-date-rollover — a time is "HH:MM" on a 24-hour clock or it is
-   nothing: a word, a 12-hour clock or an impossible hour decides no day */
+   nothing: a word, a 12-hour clock or an impossible hour is not stored */
 export function timeOf(v: unknown): string | null {
   const t = str(v);
   const m = t ? /^(\d{1,2}):(\d{2})$/.exec(t) : null;

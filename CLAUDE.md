@@ -2,11 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Devolada lets a Mexican ISP (the *business* / Negocio) collect customer payments
-by SPEI: permanent payment link → the customer transfers to the ISP's CLABE →
-Banxico validation through Consta → the action fires back in the ISP's system
-(WispHub reconnection). Identifiers, comments and commits are **English**;
-product copy is **es-MX**.
+Devolada lets Mexican businesses of any kind (the *business* / Negocio)
+collect payments by SPEI: permanent payment link → the payer transfers to the
+business's CLABE → Banxico validation through Consta → the action fires back
+in the business's own system through an **adapter**. Today there is one
+adapter, WispHub, for ISPs (reconnection, customers, open invoices). The core
+never assumes the business is an ISP (constitution IX). Identifiers, comments
+and commits are **English**; product copy is **es-MX**.
 
 ## How we talk during a session
 
@@ -29,7 +31,7 @@ The constitution says it in one line: *ask for decisions, not approvals*.
 
 [`.specify/memory/constitution.md`](.specify/memory/constitution.md) is the law
 of this repo and supersedes every other practice document, this file included.
-It carries the eight principles CI enforces and the fixed stack table. Read it
+It carries the nine principles and the fixed stack table. Read it
 before planning anything; where it and code disagree, one of them gets amended —
 the gap is not tolerated silently.
 
@@ -154,6 +156,13 @@ in `apps/api/package.json` too.
 
 Invariants worth knowing before you touch anything:
 
+- **The core speaks generic; adapters translate** (constitution IX). A
+  provider's paths, pagination, cursors, field names and measured quirks live
+  in its adapter (`apps/api/src/wisphub/`). Core routes, contracts and screens
+  use the core's words (customer, open invoices, debt, integration) and offer
+  a feature because the integration has the capability, never because it is
+  WispHub. Older code that breaks this is registered debt under
+  `.specify/debt/`; new code adds no leak.
 - **Money is integer cents end to end** (`*_cents`, `receivedCents`); provider
   decimals convert by string parsing (`decimalToCents`), never `× 100`.
   Timestamps are ms; "today" belongs to the business timezone, not the browser.

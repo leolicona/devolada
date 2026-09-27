@@ -100,7 +100,7 @@ matcher tables), ~20 lifecycle, ~4 panel routes, ~4 page, ~4 feed — cited
 
 The spec's clarifications (sessions 2026-09-26 and 2026-09-27) are the
 product decisions. The plan adds the ones below; code comments cite them as
-`cep-bundle-match D<n>` (constitution I).
+`cep-bundle-match D<n>` (constitution I). D17 came from the analysis of 2026-09-27.
 
 | # | Decision | Made in |
 | --- | --- | --- |
@@ -111,14 +111,15 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D5 | The engine writes `cep_bundles` (search keys, status, claves, hash, R2 key; the URL only until read) and `cep_records` (unique `(business_id, clave)`) for every transfer a clave-less search returns; the file goes to `PROOFS` under `bundles/<business_id>/`. "Used" and "unmatched" are queries, never a stored fate. Never for the platform's own top-ups (owner `platform`): they keep today's path | research R6 |
 | D6 | The window: `d = credit − receipt`, inside when `−60 s ≤ d ≤ +180 s` (an `HH:MM` receipt is the whole minute); the nearest by `\|d\|` wins unless the two nearest were credited within 30 s; `d` is recorded as `match_distance_s` | research R7, clarified 2026-09-27 |
 | D7 | The tail follows the CEP's account type: `40` — the CLABE's end or its first 17 digits' end; `3`, `10`, others — the number's end; fewer than three digits is no tail | research R8, clarified 2026-09-27 |
-| D8 | The engine reads, the lifecycle decides: `matchCandidates` (pure, `consta/bundle/match.ts`) runs integrity → used → tail → window; a decided match is promoted to the ordinary `valid` verdict (`alreadyValidated: false`, `previouslyValidated: null`) and the existing valid branch runs unchanged; `match_trail` records every candidate's fate | research R9 |
-| D9 | Every CEP a clave-less search returns passes the matcher, the single `valid` included; with neither time nor tail on the row a single candidate confirms as today | research R9, clarified 2026-09-27 |
+| D8 | The engine reads, the lifecycle decides: `matchCandidates` (pure, `consta/bundle/match.ts`) runs integrity → used → tail → window on a receipt side taken from the attempt's own reading when it has one (`verdict.ourReading`), else from the row — a first receipt-door attempt has an empty row (analyze I1); a decided match is promoted to the ordinary `valid` verdict (`alreadyValidated: false`, `previouslyValidated: null`) and the existing valid branch runs unchanged; `match_trail` records every candidate's fate | research R9 |
+| D9 | Every CEP a clave-less search returns passes the matcher, the single `valid` included. A search is clave-less when the transfer door asked by reference, or when neither reading on the receipt door carried a clave the gate passed (analyze A1). With neither time nor tail, a single candidate confirms as today | research R9, clarified 2026-09-27 |
 | D10 | Undecided = `validating` + `last_error = 'CEP_UNDECIDED'` + `disputed_fields ["trackingKey"]` + `next_validation_at = NULL`: no call, no expiry; the reason in `match_trail.reason`. Public codes `CEP_UNDECIDED` and `CEP_ALL_USED`; no new `status` | research R10, clarified 2026-09-27 |
 | D11 | A clave on a row that supersedes an undecided one is first fitted against the superseded row's candidates — O as 0, I as 1, or one character missing — and exactly one fit confirms without a call | research R11, clarified 2026-09-27 |
 | D12 | The shared-reference stop (receipt-triage D7) fires, in all four places, only when there is neither a time nor a tail | research R12, clarified 2026-09-27 |
 | D13 | A "validated before" flag traces to Devolada when the clave is in the business's `cep_records`; the transfer door's billing row records the CEP's clave when the request had none | research R13 |
 | D14 | Other customers' CEPs by pull: a payment holding a clave looks up `cep_records` before any call; a stored bundle nudges the business's `validating` payments whose clave it holds (`next_validation_at = now`) | research R14 |
-| D15 | The reader asks `hora` with seconds when printed and `cuentaOrigen`; `QUESTIONS_VERSION` 3; `ConstaReading` and `extractions` carry the tail; the payment takes `transfer_time` and `sender_tail` from `verdict.ourReading` with the accepted fields | research R15 |
+| D15 | The reader asks `hora` with seconds when printed and `cuentaOrigen`; `QUESTIONS_VERSION` 3; `ConstaReading` and `extractions` carry the tail; the payment takes `transfer_time` and `sender_tail` from `verdict.ourReading` on every attempt that carries one, not only on `not_found` (analyze I1). The two answers are measured on spec 011's bench — which learns to mark them — before any test stub stands on them (constitution IV, analyze C1) | research R15 |
+| D17 | A business on the `/v1` API sees what an undecided payment awaits: `apiPayment` gains `awaiting` (`"payer_tracking_key"` or null) and `awaitingReason` (`all_used`, `ambiguous`, `no_match`, `unreadable`, or null), derived from `last_error = 'CEP_UNDECIDED'` and `match_trail.reason`; additive, no status word, no new event, the webhook body unchanged | research R19, clarified 2026-09-27 |
 | D16 | The download: only from `APICEP_STORAGE_ORIGIN` — a `wrangler.jsonc` var, no URL in code; unset, nothing is downloaded and the payment asks for the clave — 10 s, 4 MB, no credit; a failure is `CEP_BUNDLE_PENDING` and its next slot downloads, never calls; three failures `unreadable`, over the cap `too_large` — both undecided | research R16 |
 
 ## Constitution Check
@@ -132,8 +133,8 @@ Phase 1 (below the table).
 | --- | --- | --- | --- |
 | I | Spec-Driven, Every Decision Cited | Sixteen decisions with the place each was made; every new rule cites `cep-bundle-match D<n>`. Comments that stop being true are rewritten, not left beside the code: the D11 comment on `not_found` in `provider/{apicep,types}.ts` (a third `invalid` exists), the 422 comment (the provider answers several with a bundle, measured, never a 422), the `last_error` word list in `db/schema.ts`, the reader's `time` comment (now the pairing it promised), receipt-triage D7's four stops. The bug `reference-finds-other-transfer` gets a dated note pointing at FR-014 and is closed with `/speckit-bug-test` after implementation | PASS |
 | II | Money Law | The CEP's amount is parsed from the cadena's text with `amountToCents`; the matcher compares cents to cents; `credited_at` is epoch ms. The one zone read is the CEP's own (Mexico City, printed on it) — a fact of the document, not "today" | PASS |
-| III | One Contract, Pure Routers | `publicPaymentError` +2, `feedCharge.undecided`, `proofResponse.match`, and the new `unmatchedTransfers` schemas change additively and are exported from `@devolada/api` (contracts/). The new route's router is pure; the logic sits in the handler. The engine's changes are internal (contracts/engine.md) | PASS |
-| IV | Tests Run on the Real Runtime | apiCEP and its storage are intercepted at pinned origins (`APICEP_BASE_URL`, `APICEP_STORAGE_ORIGIN`); the reader stays the one stubbed binding; migrations per test; no database mocks. The fixtures are synthetic PDFs and ZIPs reproducing the measured layout, because real CEPs carry names and RFCs | PASS |
+| III | One Contract, Pure Routers | `publicPaymentError` +2, `feedCharge.undecided`, `proofResponse.match`, the new `unmatchedTransfers` schemas and the public `apiPayment` (two nullable fields, contracts/public-api.md) change additively and are exported from `@devolada/api` (contracts/). The new route's router is pure; the logic sits in the handler. The engine's changes are internal (contracts/engine.md) | PASS |
+| IV | Tests Run on the Real Runtime | apiCEP and its storage are intercepted at pinned origins (`APICEP_BASE_URL`, `APICEP_STORAGE_ORIGIN`); the reader stays the one stubbed binding, and its two new answers are measured on the bench before a stub copies them (T015–T016); migrations per test; no database mocks. The fixtures are synthetic PDFs and ZIPs reproducing the measured layout, because real CEPs carry names and RFCs | PASS |
 | V | Tenant Isolation and Authorization by Area | Both tables carry `business_id`; every read filters on it; records are unique per business, so one business's transfers never touch another's. The list and the dialog use `payments/read`. No read across businesses: recalibrating the window from `match_distance_s` is the creator's manual query today, and becomes an amendment if it ever becomes a panel number | PASS |
 | VI | Visual Foundations (NON-NEGOTIABLE) | The ask reuses `TransferForm` and the `Alert` recipe (icon + text); the feed keeps `StatusBadge` and adds text; tokens only; 48px on the page, 40px compact in the panel; no motion; es-MX copy | PASS |
 | VII | Every Test Cites Its Story | New tests cite `cep-bundle-match US1`…`US4`; the single-`valid` refusal also cites `bug: reference-finds-other-transfer`; tasks carry `[US<n>]` | PASS |
@@ -155,14 +156,15 @@ payer's schemas. (V) the pull of D14 and the fit of D11 read
 ```text
 specs/013-cep-bundle-match/
 ├── plan.md              # This file
-├── spec.md              # four stories, FR-001…FR-016, clarified 2026-09-27
+├── spec.md              # four stories, FR-001…FR-017, clarified 2026-09-27
 ├── research.md          # Phase 0: what was measured, R1–R18
 ├── data-model.md        # Phase 1: two tables, five columns, the trail, the state
 ├── quickstart.md        # Phase 1: validation per story, gates in CI order
 ├── contracts/
 │   ├── engine.md        # adapter, verdict, bundle reading, records, the matcher, the reader
 │   ├── payment-page.md  # the two codes and the ask
-│   └── panel.md         # undecided reason, the trail in the proof, unmatched transfers
+│   ├── panel.md         # undecided reason, the trail in the proof, unmatched transfers
+│   └── public-api.md    # what an undecided payment awaits, on the /v1 read
 ├── checklists/requirements.md
 └── tasks.md             # Phase 2 (/speckit-tasks)
 ```
@@ -191,17 +193,23 @@ apps/api/
 │   │       ├── cadena.ts                      # + parseCadena (D4)
 │   │       ├── store.ts                       # + download, R2, bundles, records, readPendingBundle (D5, D16)
 │   │       └── match.ts                       # + matchCandidates, fitClave — pure (D6–D8, D11)
+│   ├── platform/bench.ts                      # ~ productReading, notShown: time and senderTail
 │   ├── direct-payments/validation.ts          # ~ matcher → promoted valid | undecided; bundle retry; fit; pull + nudge; narrowed stop; tracing; receipt side
 │   └── routes/
 │       ├── dev.ts                                  # + POST /dev/cep-read — reads a bundle, stores nothing (quickstart Step 0)
 │       ├── direct-payments/handler.ts, schema.ts   # ~ two public codes, status mapping, sharedAsk narrowed
-│       └── payments/index.ts, handler.ts, schema.ts  # ~ feedCharge.undecided, proofResponse.match; + GET /unmatched-transfers
+│       ├── payments/index.ts, handler.ts, schema.ts  # ~ feedCharge.undecided, proofResponse.match; + GET /unmatched-transfers
+│       ├── reader/schema.ts                        # ~ BENCH_FIELDS + time, senderTail
+│       └── v1/payments/schema.ts, handler.ts       # ~ apiPayment.awaiting, .awaitingReason (D17)
 └── test/
     ├── consta/bundle-fixtures.ts              # + synthetic CEP PDF and ZIP builders (R18)
     ├── consta/bundle.test.ts                  # + zip, CEP reader, cadena
     ├── consta/match.test.ts                   # + matcher and fitClave tables
     ├── consta/validate.test.ts                # ~ several recognised; bundle read and stored; single record; billing clave
     ├── consta/reader-questions.test.ts        # ~ version 3, pinned hash
+    ├── consta/helpers.ts                      # ~ stubs copied from the bench's measured answers (T016)
+    ├── reader-bench.test.ts                   # ~ the tally counts time and senderTail
+    ├── collections-api-verify.test.ts         # + awaiting on the /v1 read
     ├── cep-bundle-match.test.ts               # + lifecycle: US1–US4, FR-014–FR-016, SC-003 call counts, download retry
     └── payments-unmatched.test.ts             # + feed reason, proof match, unmatched list
 
@@ -211,10 +219,12 @@ apps/pago/
 
 apps/admin/
 ├── src/features/feed/FeedScreen.tsx           # ~ undecided reason, candidates in the proof dialog, "Sin pago" list
-└── test/feed.test.tsx                         # + scenarios
+├── src/features/operator/BenchReceipt.tsx     # ~ "Hora" and "Cuenta de origen" can be marked
+├── test/feed.test.tsx                         # + scenarios
+└── test/operator-reader.test.tsx              # + the two bench fields
 
 .specify/bugs/reference-finds-other-transfer/assessment.md   # ~ dated note: fixed by spec 013 FR-014
-CLAUDE.md                                      # ~ the .dev.vars table gains APICEP_STORAGE_ORIGIN
+CLAUDE.md                                      # ~ opens with the business, as the constitution does (done with this plan); the .dev.vars table gains APICEP_STORAGE_ORIGIN
 ```
 
 **Structure Decision**: the engine gains one folder, `consta/bundle/`, whose

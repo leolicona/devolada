@@ -78,7 +78,7 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
 
 | Column | Type | Null | Meaning |
 | --- | --- | --- | --- |
-| `transfer_time` | text | yes | The receipt's time as read, `HH:MM` or `HH:MM:SS` — the receipt side of D6. From the reading the row was submitted with; NULL on typed rows |
+| `transfer_time` | text | yes | The receipt's time as read, `HH:MM` or `HH:MM:SS` — the receipt side of D6. From the reading of every attempt that carries one — the first receipt-door attempt at the latest, whatever the outcome — never overwritten; NULL on typed rows |
 | `sender_tail` | text | yes | The sender account's visible digits as read (3+ digits) — the receipt side of D7. NULL when the receipt shows none |
 | `match_trail` | text (JSON) | yes | How a clave-less search was decided — see below. NULL for every row that never matched |
 | `match_distance_s` | integer | yes | `d` of the chosen candidate in whole seconds (D6), whenever the receipt shows a time — even when the tail alone decided; NULL otherwise. What recalibrates the window |
@@ -125,6 +125,12 @@ CEP_UNDECIDED ──payer sends a clave──▶ new row supersedes it (two-eyes
                                   ──▶ D11 fit ──▶ promoted valid, no call
                                   ──▶ no fit  ──▶ ordinary clave search
 ```
+
+**Derived for the public read** (D17): while `last_error = 'CEP_UNDECIDED'`,
+the `/v1` payment carries `awaiting = "payer_tracking_key"` and
+`awaitingReason` from `match_trail.reason` (`all_used`; `ambiguous` ←
+`no_signal`, `too_close`; `no_match` ← `none_fit`; `unreadable` ←
+`unreadable`, `too_large`). No column.
 
 `last_error` gains two words: `CEP_UNDECIDED` (the bundle, or a single match,
 did not decide — the payer is asked for the clave) and `CEP_BUNDLE_PENDING`

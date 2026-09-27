@@ -160,6 +160,11 @@ link already identifies the customer.
   CLABE? → A: By the account type the CEP names: for a CLABE, the end of
   the CLABE or the end of the account number inside it; for a debit card
   or a phone, the end of that number.
+- Q: How does a business on the `/v1` API learn that a payment waits on the
+  payer, now that an undecided payment never expires and no event
+  announces it? → A: The payment it reads says what it awaits — the
+  payer's clave — and why (all used, ambiguous, no match, unreadable), in
+  two new fields that change nothing else. No status word, no new event.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -289,6 +294,10 @@ with no provider call.
 4. **Given** an undecided payment that holds a bundle, **When** its
    schedule would end, **Then** it does not become `expired`: it stays
    undecided and visible to the operator with its candidates.
+5. **Given** an undecided payment of a business that uses the `/v1` API,
+   **When** the business reads the payment, **Then** it sees that the
+   payment awaits the payer's clave, and why; nothing else it reads
+   changes.
 
 ---
 
@@ -428,6 +437,10 @@ provider call in total.
 - **FR-016**: A provider's "validated before" flag on a transfer that one
   of Devolada's own searches for the same business returned MUST NOT be read as
   a use outside Devolada.
+- **FR-017**: A business reading its payments through the `/v1` API MUST
+  see, on a payment that waits on the payer's clave, what it awaits and
+  why; the fields are empty on every other payment, and no existing field,
+  status or event changes.
 
 ### Key Entities
 

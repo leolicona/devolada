@@ -53,7 +53,7 @@ bundle?: {
   candidates: CepRecord[];   // every readable record of the bundle, new or already held
   unreadable: { entry: string; reason: string }[];
 };
-/* D5/D9: the record of a single valid's CEP, when the request had no clave */
+/* D5/D9: the record of a single valid's CEP, when the search was clave-less */
 record?: CepRecord;
 ```
 
@@ -99,8 +99,9 @@ failure sets `unreadable` and clears the URL.
 
 ## `validate()` on a single `valid` without a clave (D5, D9, D13)
 
-When the request carried no clave (a reference search, or a receipt whose
-reading had none) and the answer is `valid`: parse `cep.chain`, insert the
+When the search was clave-less (D9: the transfer door asked by reference, or
+neither reading on the receipt door carried a clave the gate passed) and
+the answer is `valid`: parse `cep.chain`, insert the
 record (ignore on conflict), and return it as `record`. On the transfer
 door the billing row's `tracking_key` is the CEP's clave when the request
 had none (D13).
@@ -154,6 +155,9 @@ candidate only when exactly one fits.
 - `Reading.time` is `HH:MM` or `HH:MM:SS`; `Reading.senderTail: string |
   null` (≥ 3 digits, else null).
 - `QUESTIONS_VERSION` moves to `"3"`; the pinned prompt hash moves with it.
+- `ourReading` rides every outcome of a provider-first call (`valid`,
+  `several`, `not_found`, `pending`): the lifecycle builds the receipt side
+  from it on the first receipt-door attempt (D8, analyze I1).
 - `ConstaReading` (the verdict's `ourReading`, and `/read`'s answer) gains
   `time: string | null` and `senderTail: string | null`.
 

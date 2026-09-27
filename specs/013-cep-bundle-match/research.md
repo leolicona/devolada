@@ -289,10 +289,13 @@ that fits none of the payment's accounts: dropped and flagged), used (a
 clave a live payment holds), tail (D7), window (D6).
 
 **Decision (D9).** Every CEP found without a clave passes the matcher —
-a several answer's records, and the single `valid` of a search by reference
-or of a receipt whose reading had no clave (FR-014). With neither a time
-nor a tail on the row, nothing contradicts a single candidate and it
-confirms as today; several with no signal are undecided.
+a several answer's records, and the single `valid` of a clave-less search
+(FR-014). A search is clave-less when the transfer door asked by reference,
+or when neither reading on the receipt door — ours or the provider's —
+carried a clave the gate passed; a receipt whose clave was read is a clave
+search, and the CEP it returns is the payer's (analyze A1, 2026-09-27).
+With neither a time nor a tail, nothing contradicts a single candidate and
+it confirms as today; several with no signal are undecided.
 
 ## R10 — The undecided state
 
@@ -385,12 +388,28 @@ visible digits of the account the money **left** — "Cuenta origen",
 answer — gains `time` and `senderTail`. Today the time stops at
 `extractions.transfer_time` and never reaches a payment: a receipt-door row
 is born with its accepted fields empty and fills them from the first
-verdict (`verdict.accepted`, two-eyes D17). The payment takes
-`transfer_time` and `sender_tail` from `verdict.ourReading` in that same
-update, so the first attempt that meets a bundle already has its receipt
-side. A misread tail fails safe (no candidate fits: the clave is
-asked). The reader bench of spec 011 re-runs on the new questions before
-release.
+verdict (`verdict.accepted`, two-eyes D17). That copy runs only on `not_found`; a `valid` takes the CEP's data instead.
+So the matcher reads the receipt side from the attempt's own reading when
+the verdict carries one — `verdict.ourReading` rides every outcome of a
+provider-first call — and falls back to the row; and the payment takes
+`transfer_time` and `sender_tail` from `verdict.ourReading` on every attempt
+that carries one, never overwriting (analyze I1, 2026-09-27: reading the
+row alone, the receipt door's first attempt — the Janely case — would meet
+an empty row and confirm as today). A misread tail fails safe (no
+candidate fits: the clave is asked).
+
+**Measured before it is stubbed** (constitution IV, analyze C1). Tests
+stand in for the reader with answers it gave; these two answers do not
+exist yet. The bench of spec 011 (`/operador` → Lector: real receipts read
+by a model and a question version, each field marked right, wrong or
+absent, tallied per version) marks nine fields today and neither of these;
+it learns `time` and `senderTail`, the creator reads real captures — an
+Azteca receipt with seconds and "***8301", one with `HH:MM` only, one with
+no sender account — with version 3 beside the bench's own set, and the
+tally must show no field worse than version 2. The stubs are then copied
+from those raw answers, and the table goes, dated, into the header of
+`extraction/reader.ts` (the way receipt-triage's Step 0 recorded its
+own).
 
 ## R16 — Downloading, and a bundle too large
 
@@ -424,6 +443,31 @@ answer on the receipt door takes the same path: bundle, matcher, decision.
 The receipt side comes from the row, written from the reading at
 submission (D15). A several answer is not `not_found`, so no reading
 comparison runs for it.
+
+## R19 — A business on the `/v1` API and an undecided payment
+
+**Found** (2026-09-27). An undecided payment stays `validating` and, by the
+clarification of the same day, never expires. The public read
+(`apiPayment`, `routes/v1/payments/schema.ts`) carries the status and the
+verdict facts, nothing about what a payment waits on; webhooks fire once
+per status, so an undecided payment announces nothing. A business on the
+API would see a payment that never ends and not know why. Its payers use
+Devolada's page today, which asks for the clave; the business needs to see
+it.
+
+**Decision (D17).** `apiPayment` gains two nullable fields, set only while
+`last_error = 'CEP_UNDECIDED'`: `awaiting: "payer_tracking_key"` and
+`awaitingReason` — `all_used`; `ambiguous` for `no_signal` and
+`too_close`; `no_match` for `none_fit`; `unreadable` for `unreadable` and
+`too_large`. Four public words over six internal ones, so the internal
+vocabulary can move without a breaking change. Additive (clarified
+2026-09-27, option a).
+
+**Alternatives.** Keeping the six-hour expiry for API links: a real
+transfer would end `expired` while Devolada holds the proof it arrived.
+A new webhook event (`payment.awaiting`): a new word in the public event
+vocabulary, which is built from the statuses; left for when a business
+asks for push.
 
 ## R18 — Tests and fixtures
 

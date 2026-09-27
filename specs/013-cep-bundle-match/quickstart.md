@@ -55,13 +55,18 @@ time (07:08:21, 07:11:20, 11:40:47; 23:40:49, 23:43:47, 23:48:18;
 amount `300` or `500` cents. The route returns what `parseCadena` returns:
 no name, no RFC, and it stores nothing.
 
-## Step 1 — the reader's two new answers (D15)
+## Step 1 — the reader's two new answers, measured before any stub (D15, tasks T015)
 
-Upload an Azteca capture that prints seconds and "***8301" to a dev link
-and call `/read`. Expected: `time` `HH:MM:SS`, `senderTail` `8301`; the
-extraction row has both. Then re-run the reader bench of spec 011 on its
-set with question version 3 and compare field accuracy with version 2: no
-field may get worse.
+With the API on the real `AI` binding (`pnpm --filter @devolada/api dev`)
+and the bench marking `time` and `senderTail` (T014), open `/operador` →
+Lector. Add real captures — an Azteca receipt that prints seconds and
+"Guardadito ***8301", one that prints `HH:MM` only, one with no sender
+account — beside the bench's own receipts; read them all with question
+version 3; mark every field. Expected: `time` `HH:MM:SS` on the Azteca
+capture, `senderTail` `8301`, `null` where no sender account shows, and a
+tally with no field worse than version 2. The raw answers become the test
+stubs (T016) and a dated table in `extraction/reader.ts`. A field worse in
+version 3 stops the work there.
 
 ## User Story 1 — a shared reference resolves (P1)
 
@@ -96,6 +101,11 @@ field may get worse.
   call.
 - **Page**: `pnpm --filter @devolada/pago test -- -t "cep-bundle-match"`:
   both asks render the clave form with their copy, axe clean.
+- **Public API**: `pnpm --filter @devolada/api test -- test/collections-api-verify.test.ts`:
+  an undecided payment of an API link reads `awaiting:
+  "payer_tracking_key"` and its `awaitingReason` on `/v1/payments` and
+  `/v1/transfers`; every other payment reads both as `null`
+  (contracts/public-api.md).
 
 ## User Story 4 — other customers' CEPs (P3)
 

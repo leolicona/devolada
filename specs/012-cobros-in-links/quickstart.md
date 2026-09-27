@@ -71,7 +71,7 @@ no provider, and step 6 is what you should see.
 5. **The address (US2).** Go to Pagos and back, press back, reload: still
    on Por cobrar with the same text. Open `/payment-requests`: it lands on
    `/links?view=receivables`. The menu has no Cobros.
-6. **No WispHub (US4).** Log in as a business with no integration. There
+6. **No integration (US4).** Log in as a business with no integration. There
    is no Por cobrar chip. An address with `view=receivables` falls back to
    the customer view.
 7. **WispHub away (US4).** Cut the API's network to WispHub (for example,

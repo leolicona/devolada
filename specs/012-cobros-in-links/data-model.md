@@ -11,11 +11,27 @@ FR-009).
 
 What follows are the shapes that exist in memory and on the wire.
 
-## Open invoice (adapter → API)
+## Core and adapter (D18, constitution IX)
 
-`PendingInvoice` in `apps/api/src/wisphub/client.ts` gains three
-**optional** fields (D5). The money paths read `totalCents` only and are
-unaffected.
+The core defines the shapes below in its own words, in
+`apps/api/src/integrations/capabilities.ts`. The WispHub adapter fills
+them. The core handlers never see a WispHub row, path or cursor.
+
+| Capability | Core call | WispHub fills it with |
+| --- | --- | --- |
+| `receivables` | `page(cursor: string \| null, limit) → ReceivablesPage \| "bad_cursor"` | one `/facturas/` call; the `inv:` cursor |
+| `customerDebt` | `of(usuario) → CustomerDebtAnswer` | `getCustomer`, then `/clientes/{id}/saldo/` (GET only), composed with `debtFor` |
+
+Failures reach the core as `IntegrationError`: `INTEGRATION_UNAVAILABLE`
+or `INTEGRATION_AUTH_FAILED`. The session carries
+`integrationCapabilities: ("receivables" | "customerDebt")[]` (D13).
+
+## Open invoice (adapter → core)
+
+The core's `OpenInvoice` carries the fields below. Inside the adapter,
+`PendingInvoice` in `apps/api/src/wisphub/client.ts` gains the three
+**optional** fields it needs to fill them (D5). The money paths read
+`totalCents` only and are unaffected.
 
 | Field | Type | From WispHub | Rule |
 | --- | --- | --- | --- |
@@ -39,19 +55,20 @@ This is the new body of `GET /payment-requests` (D1). See
 | `results` | `CobroRow[]` | the block's invoices, in the provider's order |
 | `nextCursor` | string \| null | opaque (D2); null when the walk ends or the provider is away |
 | `total` | int \| null | the provider's own count of open invoices in the window; null when absent (FR-007) |
-| `wisphub` | `"ok"` \| `"unavailable"` | D7: `unavailable` with no rows is *could not read*, never *nobody owes* |
+| `integration` | `"ok"` \| `"unavailable"` | D7: `unavailable` with no rows is *could not read*, never *nobody owes* |
 
 `CobroRow` keeps its six fields and gains `periodCents`, `carriedCents` and
 `period`, all nullable.
 
-### Receivables cursor (inside `nextCursor`)
+### Receivables cursor (inside `nextCursor`, owned by the WispHub adapter)
 
 `inv:<desde>:<hasta>:<offset>:<limit>`, base64url, the numbers the
 provider's `next` carries (D2; M1 measured `offset` 2026-09-27).
-The server rebuilds the provider path from the fixed filter
+The adapter rebuilds the provider path from the fixed filter
 (`estado=1&tipo_fecha=fecha_emision`) and these values only.
 
-The cursor is refused when:
+The core passes it through untouched. The adapter refuses it, and the
+core answers `400 VALIDATION_ERROR`, when:
 - its prefix is not one this version writes;
 - a date is not `YYYY-MM-DD`, or `desde > hasta`;
 - a number is not a non-negative safe integer.
@@ -111,5 +128,5 @@ Local memory (`seen.ts`) and query keys include the view (D12).
 
 | Retired | Replaced by |
 | --- | --- |
-| `paymentRequestsResponse.cobros`, `.complete`, `.readAt` | `results`, `nextCursor`, `total`, `wisphub` |
+| `paymentRequestsResponse.cobros`, `.complete`, `.readAt` | `results`, `nextCursor`, `total`, `integration` |
 | The admin route `/payment-requests` and `CobrosScreen` | the redirect, and the Por cobrar view in Links |

@@ -5,7 +5,8 @@
 **Created**: 2026-09-25
 
 **Status**: Draft — clarified 2026-09-25 (the chip's label and what search
-does in its view)
+does in its view); revised 2026-09-27 for constitution IX (core and
+adapter)
 
 **Input**: User description: "1. Cobros se lee desde Links, ya no se renombra… porque la página describe lo que contiene. 2. Inicia con Links tal cual está al día de hoy en dev. 3. Se accede a Cobros mediante una tab o chip, como si se aplicara un filtro, pero en realidad se hace el llamado a facturas. 4. Cobros se comporta exactamente como Links: sin sweep, llama directamente a WispHub, etc. 5. ¿Dejamos el nombre del chip como Cobros o pensamos en otro nombre más ad hoc?"
 
@@ -23,7 +24,7 @@ belong to. Cobros becomes a way of looking at that page — a chip beside the
 search box, labelled **Por cobrar** — and not a section of its own.
 
 **The page starts from Links as it is on `main` today** (after
-`links-on-demand-search`, shipped in #236): a search box, the ISP's customers
+`links-on-demand-search`, shipped in #236): a search box, the business's customers
 read live from WispHub one block at a time as the operator scrolls, a search
 that asks WispHub directly, the text in the address, and the Copiar and
 WhatsApp buttons that create the link on first use. Nothing about that view
@@ -34,14 +35,34 @@ customer list cannot be filtered by who owes money: every billing filter
 tried on the pilot came back with the whole base of 6,522 customers
 (measured 2026-09-23). Only the invoice list can say who has an unpaid
 invoice. So pressing the chip does not narrow the customer list. It reads
-the ISP's open invoices from WispHub, one block at a time, the same way the
+the business's open invoices from WispHub, one block at a time, the same way the
 customer view reads customers.
 
 **It reads WispHub directly, like Links, and never a stored copy.** Today's
 Cobros section reads the whole list of open invoices in one response. For a
-large ISP that response comes from a copy that a background task (the
+large business that response comes from a copy that a background task (the
 "sweep") rebuilds every few minutes. The Por cobrar view in this feature does
 neither: it asks WispHub for the block it shows, when it shows it.
+
+### Core and adapter (constitution IX)
+
+Devolada serves many kinds of businesses and reaches each one's own system
+through an adapter. Today there is one, WispHub, for ISPs. This feature
+keeps the two apart (creator, 2026-09-27):
+
+- **The core** owns the view: the chip, the list grouped by customer,
+  *Venció* / *Vence*, the search, what a result owes as *Sin adeudo* or
+  *Sin confirmar*, and the Copiar and WhatsApp act. It asks the business's
+  integration for two things, by capability: a block of open invoices,
+  and what one customer owes. It shows the chip because the integration
+  can answer, not because it is WispHub.
+- **The WispHub adapter** owns how those answers are read: which endpoint,
+  how it pages, how an invoice's period is written, and the measured
+  billing-run rule below. Everything this spec measured about WispHub is
+  the adapter's.
+
+A business on another system gets Por cobrar the day its adapter answers
+the same two questions, with no change to the view.
 
 ### What the provider answers (measured)
 
@@ -96,7 +117,7 @@ Three things follow for this feature:
   the provider's own link, blocks are grouped by customer as they arrive,
   the provider being away is never read as "nobody owes", and a debtor
   search asks the customer list and then works out each match's debt. It
-  drops the one that relied on the sweep: 010 served a large ISP's blocks,
+  drops the one that relied on the sweep: 010 served a large business's blocks,
   and each match's open invoices, from the sweep's copy. This feature never
   does.
 
@@ -144,7 +165,7 @@ arrives.
 collecting — knowing who owes and sending them the link — on one page, with
 the buttons the operator already knows.
 
-**Independent Test**: on a connected ISP with open invoices, open Links,
+**Independent Test**: on a connected business with open invoices, open Links,
 press the chip, and confirm that the first block of customers with open
 invoices appears, that scrolling brings more, that each row's WhatsApp opens
 that customer's chat with a working link, and that the chip's count matches
@@ -176,7 +197,7 @@ the number of open invoices WispHub reports.
 7. **Given** a viewer, or a business with no CLABE configured, **When** they
    open the Por cobrar view, **Then** they see the rows with the buttons
    withheld, exactly as in the customer view.
-8. **Given** an ISP with no open invoice, **When** the operator presses the
+8. **Given** a business with no open invoice, **When** the operator presses the
    chip, **Then** the page says nobody has an open invoice today, with no
    warning and no error.
 
@@ -226,7 +247,7 @@ customer list, as the customer view does, and then asks what each match owes.
 scroll through blocks to reach them. Today's Cobros section searches only the
 rows already loaded, and never finds a short-payer at all.
 
-**Independent Test**: on a connected ISP, search the Por cobrar view for a
+**Independent Test**: on a connected business, search the Por cobrar view for a
 customer who paid short — invoice closed, remainder in their balance — and
 confirm they appear with the remainder as what they owe, although the Por
 cobrar list does not contain them.
@@ -282,7 +303,7 @@ refused key, confirm that the page sends the operator to Integraciones.
 2. **Given** rows already on screen and WispHub stops answering, **When** the
    next block fails, **Then** the rows stay, with the quiet note "Sin
    conexión a WispHub" the customer view already uses.
-3. **Given** WispHub refuses the ISP's key, **When** the Por cobrar view reads,
+3. **Given** WispHub refuses the business's key, **When** the Por cobrar view reads,
    **Then** the page says it is a setup problem and links to Integraciones,
    as the customer view does.
 4. **Given** a business with no WispHub connected, **When** it opens Links,
@@ -344,7 +365,7 @@ refused key, confirm that the page sends the operator to Integraciones.
 - **FR-002**: The page MUST offer a chip (or tab) beside the search box,
   labelled **Por cobrar**, that switches to the Por cobrar view, and one
   that returns to the customer view.
-- **FR-003**: The Por cobrar view MUST read the ISP's open invoices from WispHub
+- **FR-003**: The Por cobrar view MUST read the business's open invoices from its integration
   at the moment it shows them, one block at a time. The first block MUST be
   no larger than what fills the screen, and the next MUST be read only when
   the operator scrolls toward it. The view MUST NOT read the whole invoice
@@ -361,7 +382,7 @@ refused key, confirm that the page sends the operator to Integraciones.
 - **FR-006**: Opening a row MUST show each of its open invoices with its
   period, its total and, when the invoice carries one, the part that came
   from before (*saldo anterior*), all read from the invoice itself.
-- **FR-007**: The view MUST say how many open invoices the ISP has, using the
+- **FR-007**: The view MUST say how many open invoices the business has, using the
   number WispHub reports. It MUST say invoices, not customers, and MUST say
   nothing when WispHub does not report one.
 - **FR-008**: Copiar and WhatsApp on a Por cobrar row MUST be the same act as on
@@ -389,13 +410,16 @@ refused key, confirm that the page sends the operator to Integraciones.
   returns to the tab, no more than once every 30 seconds, and MUST NOT show
   how old its rows are, exactly like the customer view
   (`links-on-demand-search` FR-027).
-- **FR-012**: When WispHub cannot be reached, the Por cobrar view MUST NOT show
+- **FR-012**: When the integration cannot be reached, the Por cobrar view MUST NOT show
   the "nobody has an open invoice" state. With no rows yet, it MUST say
   open invoices cannot be read right now and offer to try again. With rows
   on screen, it MUST keep them under the quiet "Sin conexión a WispHub"
   note. A refused key MUST send the operator to Integraciones.
-- **FR-013**: A business with no WispHub connected MUST NOT see the Por cobrar
-  chip.
+- **FR-013**: A business whose integration cannot read open invoices (no
+  integration connected, or an adapter without that capability) MUST NOT
+  see the Por cobrar chip. The same rule holds for a search result's debt.
+  *Amended 2026-09-27* (constitution IX): this said "with no WispHub
+  connected".
 - **FR-014**: The Cobros section MUST leave the menu. Its old address MUST
   open Links with the Por cobrar view chosen.
 - **FR-015**: No amount this feature shows MAY come from WispHub's one-call
@@ -427,6 +451,13 @@ refused key, confirm that the page sends the operator to Integraciones.
   with no amount, when the read for that customer failed. A customer who
   owes nothing MUST NOT be hidden from the results.
 
+- **FR-019**: The view and the search's debt MUST reach the provider only
+  through the integration's adapter (constitution IX). What the core
+  shows and says — the contract, the states, the copy — MUST use the
+  core's words: business, customer, open invoices, debt, integration. The
+  provider's name appears only where the screen is about the integration
+  itself (its setup and its failures, as today).
+
 ### Key Entities
 
 - **Open invoice**: an unpaid invoice as WispHub lists it. It carries the
@@ -453,7 +484,7 @@ refused key, confirm that the page sends the operator to Integraciones.
   a customer with an open invoice in under 10 seconds, without leaving the
   page.
 - **SC-002**: The Por cobrar view's first block appears within three seconds of
-  pressing the chip on 95% of presses, for an ISP of any size.
+  pressing the chip on 95% of presses, for a business of any size.
 - **SC-003**: Opening the Por cobrar view and not scrolling reads exactly one
   block from WispHub, and the view never reads a block the operator did not
   scroll toward.

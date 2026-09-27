@@ -1,6 +1,6 @@
 # Contract: what a search result owes, and the search's panel-only filter
 
-`cobros-in-links` D8–D11. The schemas live in
+`cobros-in-links` D8–D11 and D18. The schemas live in
 `apps/api/src/routes/direct-payments/schema.ts`, exported as
 `@devolada/api/direct-payments-schema`.
 
@@ -15,9 +15,14 @@ the customers door. A viewer reads it too.
 | --- | --- |
 | `usuario` | required, trimmed, at least one character. A query parameter, not a path segment: usuarios carry `@` |
 
-### What it asks the provider
+### Who asks the provider
 
-Two calls, in order, inside one operation budget (D9):
+The core handler asks the integration's `customerDebt` capability and maps
+its answer (D18). It imports nothing from `wisphub/`. No integration, or
+no capability, is `409 NOT_CONFIGURED`.
+
+The WispHub adapter makes two calls, in order, inside one operation
+budget (D9):
 
 1. `/clientes/?usuario=<usuario>&limit=10`, the exact filter (`getCustomer`).
    It gives the fresh `saldo`, `estado_facturas` and `id_servicio`.
@@ -51,7 +56,7 @@ The same customer the day before the billing run reads `state: "owes"`,
 | --- | --- |
 | `owes` | every amount field; `totalCents` > 0 |
 | `none` | every amount field; `totalCents` = 0 and proven (`nothingOwedIsProven`) |
-| `unconfirmed` | `usuario` and `state` only. Covers four cases: WispHub timed out or failed, the customer no longer exists, the balance door's body is unreadable, or zero is not proven |
+| `unconfirmed` | `usuario` and `state` only. Covers four cases: the provider timed out or failed, the customer no longer exists, the balance door's body is unreadable, or zero is not proven |
 
 ### Errors
 
@@ -59,8 +64,8 @@ The same customer the day before the billing run reads `state: "owes"`,
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | `usuario` missing or blank |
 | 401 / 403 | `AUTHENTICATION_ERROR` / `FORBIDDEN_FOR_ROLE` | no session or not a business, or no `payments:read` |
-| 409 | `NOT_CONFIGURED` | no WispHub integration |
-| 503 | `WISPHUB_AUTH_FAILED` | WispHub refused the key: the page shows the setup message |
+| 409 | `NOT_CONFIGURED` | no integration, or one without the `customerDebt` capability |
+| 503 | `INTEGRATION_AUTH_FAILED` | the provider refused the key: the page shows the setup message |
 
 An outage is **never** a 5xx on this door. It is `unconfirmed`, so one row
 says so and the others keep working.

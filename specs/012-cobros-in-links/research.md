@@ -158,9 +158,14 @@ D9).
 
 | Situation | Answer |
 | --- | --- |
-| WispHub times out or fails | `200 { results: [], nextCursor: null, total: null, wisphub: "unavailable" }` |
-| WispHub refuses the key | `503 WISPHUB_AUTH_FAILED`, as today |
-| No integration | `409 NOT_CONFIGURED`, as today |
+| The provider times out or fails | `200 { results: [], nextCursor: null, total: null, integration: "unavailable" }` |
+| The provider refuses the key | `503 INTEGRATION_AUTH_FAILED` |
+| No integration, or one without the `receivables` capability | `409 NOT_CONFIGURED`, as today |
+
+*Amended 2026-09-27 (constitution IX, D18):* the field was `wisphub` and
+the code `WISPHUB_AUTH_FAILED`. A new contract speaks the core's words;
+the admin shows `INTEGRATION_AUTH_FAILED` exactly as it shows the old
+code today (the setup message, linked to Integraciones).
 
 The client tells *nobody owes* (`ok` with no rows) apart from *could not
 read* (`unavailable`):
@@ -188,6 +193,12 @@ confirm" from D9.
 Rejected: the count would include rows that are never shown.
 
 ## D9 — What a search result owes: one door, two provider reads, one operation
+
+*Amended 2026-09-27 (constitution IX, D18):* the door and the rule stand.
+What moved is **where** the two reads and their composition run: inside
+the WispHub adapter's `customerDebt` capability, not in the core handler.
+The billing-run race below is a fact about WispHub, so it lives with
+WispHub. The core handler asks the capability and maps its answer.
 
 `GET /direct-payments/customers/debt?usuario=` reads:
 
@@ -225,7 +236,7 @@ The two calls run in sequence, because the balance door needs the fresh
 | Debt above zero | `{ state: "owes", totalCents, invoiceCents, carriedBalanceCents, invoices[] }` |
 | Zero, proven | `{ state: "none", … }` |
 | Either read failed, or the customer is gone | `{ state: "unconfirmed" }`, a 200 |
-| Refused key | `503 WISPHUB_AUTH_FAILED` |
+| Refused key | `503 INTEGRATION_AUTH_FAILED` |
 
 FR-018 is exactly those three states.
 
@@ -295,10 +306,16 @@ creator before anything ships. Until then an unreadable answer is
   search) and the query keys include the view. The same text in the two
   views asks two different questions.
 
-## D13 — The chip appears only for a business with WispHub
+## D13 — The chip appears only when the integration can read open invoices
 
-- The customers door already answers `wisphub: "not_configured"`. When it
-  does, the page does not render the chip (FR-013).
+*Amended 2026-09-27 (constitution IX, D18):* this said "only for a
+business with WispHub" and read the customers door's `wisphub` field.
+
+- The session (`/auth/me`) gains `integrationCapabilities`, beside the
+  `integrationConfigured` it already carries for any provider
+  (`integrations-hub` D10: "the shell names none"). The chip renders
+  only when it includes `receivables` (FR-013). The search's debt renders
+  only when it includes `customerDebt`.
 - An address that arrives with `view=receivables` for such a business gets
   a `409 NOT_CONFIGURED` from the receivables door. The page then falls
   back to the customer view instead of showing an error.
@@ -345,12 +362,69 @@ and text, which is a date and not a status.
 | Layer | What it proves |
 | --- | --- |
 | API (workerd + D1, `fetchMock` at the WispHub origin) | the block walk and its cursor, including a crafted cursor refused; the window carried across blocks; the three answers of D7; the debt door's three states with the measured cycle (299 carried then 798 open, never 1,097); `channel=panel`; SC-006, with a seeded snapshot whose rows differ from the live answer, and the door returns the live ones |
-| Component (MSW) | the chip and its address; grouping across two blocks; the empty-vs-unavailable distinction; a row's debt states and "Consultando adeudo"; the redirect; the chip absent without WispHub |
+| Component (MSW) | the chip and its address; grouping across two blocks; the empty-vs-unavailable distinction; a row's debt states and "Consultando adeudo"; the redirect; the chip absent without the `receivables` capability |
 | Browser (Playwright + axe) | the chip at 360/768/1280 with no horizontal scroll, touch targets, and contrast of the two new badges in both themes |
 
 Each file cites `cobros-in-links US<n>`.
 
 ---
+
+## D18 — Two capabilities, owned by the adapter (constitution IX)
+
+*Added 2026-09-27.* The creator ruled that Devolada serves many kinds of
+businesses and reaches each provider through an adapter (constitution
+v1.7.0, Principle IX). The first plan put WispHub's paths, cursor and
+billing-run rule in two core route handlers. This decision moves them.
+
+**The core** (`apps/api/src/integrations/capabilities.ts`, beside the
+hub's `store.ts` and `dispatch.ts`) defines, in its own words:
+
+| Name | What it is |
+| --- | --- |
+| `OpenInvoice` | `invoiceId`, `usuario`, `customerName`, `totalCents`, `invoiceDate`, `dueDate`, `periodCents`, `carriedCents`, `period` |
+| `ReceivablesPage` | `{ invoices: OpenInvoice[], cursor: string \| null, total: number \| null }` |
+| `CustomerDebtAnswer` | `owes` / `none` with the amounts and invoices, or `{ state: "unconfirmed" }` |
+| `IntegrationCapabilities` | `receivables?: { page(cursor, limit) }` and `customerDebt?: { of(usuario) }` |
+| `IntegrationError` | `INTEGRATION_UNAVAILABLE` or `INTEGRATION_AUTH_FAILED` |
+| `capabilitiesOf(integration, env)` | the one entry point: picks the adapter by `integration.provider` and returns what it can do |
+| `capabilityNames(integration)` | the same answer with no network call, for `/auth/me` |
+
+**The WispHub adapter** (`apps/api/src/wisphub/receivables.ts`) implements
+both capabilities and keeps everything that is WispHub's:
+- the `/facturas/?estado=1&tipo_fecha=fecha_emision` path and the window
+  (180 days back, one day ahead, `debt-truth` D3);
+- the `inv:` cursor (D2): encoded and decoded here, opaque to the core. A
+  cursor it cannot read comes back as `"bad_cursor"`, and the core answers
+  `400 VALIDATION_ERROR`;
+- the mapping of an invoice row, period text included (D5);
+- the two reads of D9 and their composition with `debtFor` and
+  `nothingOwedIsProven`, and `openInvoicesOf`, GET only (D10);
+- the translation of `WispHubError` into `IntegrationError`.
+
+**The core handlers** (`routes/payment-requests/handler.ts`, and
+`customerDebt` in `routes/direct-payments/handler.ts`) import nothing from
+`wisphub/`. No integration, or no capability, is `409 NOT_CONFIGURED`.
+
+**What stays as it is, and is registered as debt instead**
+(`.specify/debt/core-reads-provider-directly/`):
+- `usuario` in these contracts. It is already the payment link's identity
+  in the core table (`customer_usuario`, `admin-links-view` D5), so 012
+  keeps it rather than split the vocabulary. Renaming it is one change
+  across every contract.
+- The customers door's `wisphub` field, the `WISPHUB_*` codes on older
+  doors, and the literal "Sin conexión a WispHub". The Por cobrar view
+  reuses the Links note that holds that literal; it adds no new one.
+
+**The money parsers move to the core** (T003): `apps/api/src/wisphub/money.ts`
+becomes `apps/api/src/money.ts`, and T003's new helper is born there.
+Consta and the core stop importing from the adapter's folder.
+
+**Alternatives considered**:
+- Keep the logic in the core handlers, as Links (009) does. Rejected: IX
+  forbids a new leak, and this feature would have added two.
+- A full adapter boundary for every existing read before 012. Rejected by
+  the creator (path 1 of 3, 2026-09-27): it delays Por cobrar for weeks.
+  The existing reads are the debt entry above.
 
 ## Measurements recorded (T001)
 

@@ -71,12 +71,29 @@ to change.
 
 ## Phase 2: Foundational
 
-**Purpose**: the adapter's reading of an invoice row. US1 draws it and US4
-tells an outage from an empty list with it.
+**Purpose**: the boundary the rest stands on (constitution IX, D18): the
+money parsers in the core, the core's capability module, the session that
+says what the integration can do, and the adapter's reading of an invoice
+row. US1 draws the row and US4 tells an outage from an empty list with it.
+
+*Added 2026-09-27:* T044 and T045 are new. Earlier IDs keep their numbers,
+so the analysis and research that cite them stay true.
 
 **⚠️ CRITICAL**: no user story work begins until this phase is done.
 
-- [ ] T003 Add a money helper to `apps/api/src/wisphub/money.ts` that accepts a provider amount as either a string or a JSON number and always converts through `decimalToCents` (numbers via `amountToCents`). Unreadable input returns `null` rather than throwing. Cite `cobros-in-links D5` and the M3 result from T001.
+- [ ] T003 Move `apps/api/src/wisphub/money.ts` to `apps/api/src/money.ts` (`git mv`) and update every importer: Consta's three (`consta/provider/apicep.ts`, `consta/extraction/gate.ts`, `consta/extract.ts`), the adapter and the tests. The money parsers are core, not the adapter's (constitution IX, `cobros-in-links D18`). Then add a money helper there that accepts a provider amount as either a string or a JSON number and always converts through `decimalToCents` (numbers via `amountToCents`). Unreadable input returns `null` rather than throwing. Cite `cobros-in-links D5` and the M3 result from T001.
+- [ ] T044 Create the core module `apps/api/src/integrations/capabilities.ts` (`cobros-in-links D18`, data-model "Core and adapter"). It must import no adapter internals except in its one entry point:
+  - the core shapes `OpenInvoice`, `ReceivablesPage`, `CustomerDebtAnswer`;
+  - `IntegrationCapabilities`, with optional `receivables.page(cursor, limit)` (answers a page or `"bad_cursor"`) and `customerDebt.of(usuario)`;
+  - `IntegrationError`, with codes `INTEGRATION_UNAVAILABLE` and `INTEGRATION_AUTH_FAILED`;
+  - `capabilitiesOf(integration, env)`: the one entry point. It picks the adapter by `integration.provider`, and returns `{}` for no integration or no key;
+  - `capabilityNames(integration)`: the same answer with no network call.
+  The WispHub side is filled by T046 and T029.
+- [ ] T045 The session says what the integration can do (`cobros-in-links D13`):
+  - `apps/api/src/auth/middleware.ts` and the actor type in `apps/api/src/env.ts` gain `integrationCapabilities: ("receivables" | "customerDebt")[]` from `capabilityNames`, beside `integrationConfigured` (`integrations-hub` D10);
+  - `apps/admin/src/features/auth/session.ts`'s `BusinessActor` gains the same field;
+  - the session fixture in `apps/admin/test/msw.ts` carries it.
+  Add an API test to `apps/api/test/cobros-in-links.test.ts` (cite `cobros-in-links US1`): a business with a WispHub key reads both names, and one with no integration reads `[]`.
 - [ ] T004 In `apps/api/src/wisphub/client.ts`, give `PendingInvoice` three optional fields: `periodCents` (from `sub_total`), `carriedCents` (from the invoice's `saldo`) and `period` (the first `articulos[].descripcion` match of `Periodo del … al …`). Map them in `pendingInvoicesPage` with T003's helper. `pendingInvoicesPage` also returns the envelope's `count` as `total: number | null`, read defensively. A row whose new fields cannot be read keeps its `totalCents`. `debtOf`, the sweep and the money paths read nothing new (`cobros-in-links D5`).
 - [ ] T005 [P] Add API tests to `apps/api/test/cobros-in-links.test.ts`, citing `cobros-in-links US1`, for T003 and T004. They use the measured demo row: `sub_total` 499, `saldo` 299, `total` 798, and the line "Periodo del 15/Sept./2026 al 15/Oct./2026". Cover:
   - both money shapes, string and number;
@@ -126,13 +143,18 @@ tells an outage from an empty list with it.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] Create `apps/api/src/routes/payment-requests/cursor.ts` for the opaque `inv:` cursor (`cobros-in-links D2`, data-model "Receivables cursor").
+- [ ] T008 [P] [US1] In the adapter, `apps/api/src/wisphub/receivables.ts`, write the opaque `inv:` cursor (`cobros-in-links D2`, D18, data-model "Receivables cursor"). The core never reads it.
   - Encode `desde`, `hasta`, `limit` and `offset` parsed from the provider's `next` (measured 2026-09-27: `next` pages by `offset`).
-  - Decode to either a value or `null`.
+  - Decode to either a value or `null`; `null` reaches the core as `"bad_cursor"`.
   - Never carry or accept a path.
   - Mirror `routes/direct-payments/cursor.ts` in form.
-- [ ] T009 [US1] Rewrite `apps/api/src/routes/payment-requests/schema.ts` to the block contract: `receivablesQuery` (`limit`, `cursor`) and `paymentRequestsResponse` = `{ results: CobroRow[], nextCursor, total, wisphub: "ok" | "unavailable" }`, where `CobroRow` gains `periodCents`, `carriedCents` and `period`. Remove `complete` and `readAt`, with a comment citing `cobros-in-links D1` and D16.
-- [ ] T010 [US1] Rewrite `apps/api/src/routes/payment-requests/handler.ts` to make one `pendingInvoicesPage` call per request, on a fresh `wisphubFor` instance. The path is built from the fixed filter plus the cursor's numbers, or today's window on the first block. It reads no `readPendingInvoices`, no snapshot and no display cache (`cobros-in-links D3`). It maps rows and `total`, and encodes `nextCursor` from the provider's `next`. Keep `403` for a non-business actor and `409 NOT_CONFIGURED` without a key.
+- [ ] T009 [US1] Rewrite `apps/api/src/routes/payment-requests/schema.ts` to the block contract: `receivablesQuery` (`limit`, `cursor`) and `paymentRequestsResponse` = `{ results: CobroRow[], nextCursor, total, integration: "ok" | "unavailable" }`, where `CobroRow` gains `periodCents`, `carriedCents` and `period`. Remove `complete` and `readAt`, with a comment citing `cobros-in-links D1` and D16. The field names no provider (D18).
+- [ ] T046 [US1] In `apps/api/src/wisphub/receivables.ts`, implement the `receivables` capability and register it in `capabilitiesOf` (`cobros-in-links D18`):
+  - one `pendingInvoicesPage` call per page, on a fresh `wisphubFor` instance;
+  - the path is `/facturas/?estado=1&tipo_fecha=fecha_emision`, plus T008's cursor numbers, or today's window on the first page: 180 days back, one day ahead (FR-004);
+  - it reads no `readPendingInvoices`, no snapshot and no display cache (`cobros-in-links D3`);
+  - it maps `PendingInvoice` to the core's `OpenInvoice`, returns `total` and the next cursor, and translates `WispHubError` into `IntegrationError`.
+- [ ] T010 [US1] Rewrite `apps/api/src/routes/payment-requests/handler.ts` to ask `capabilitiesOf(...).receivables.page(cursor, limit)` once per request. It maps the page to the contract. `"bad_cursor"` becomes `400 VALIDATION_ERROR`. It imports nothing from `wisphub/` (constitution IX). Keep `403` for a non-business actor, and `409 NOT_CONFIGURED` with no integration or no capability.
 - [ ] T011 [US1] Wire `zValidator("query", receivablesQuery)` in `apps/api/src/routes/payment-requests/index.ts`, keeping `requireSession` and no `requireArea` (`cobros-live` D4). The router stays pure.
 - [ ] T012 [US1] Retire `/payment-requests`' old behaviour in the API suites, and say why in each test's comment (`cobros-in-links D3`, D16). Do not delete the snapshot's own coverage.
   - `apps/api/test/payment-requests.test.ts`: rewrite for the block contract.
@@ -140,7 +162,7 @@ tells an outage from an empty list with it.
   - `apps/api/test/presence-freshness.test.ts` (lines 90–105): the display cache no longer serves this door.
 - [ ] T013 [P] [US1] Create `apps/admin/src/features/links/useReceivables.ts`: an infinite query over `GET /payment-requests` with the Links block size (export `blockSize` from `useCustomers.ts` and reuse it with the constants from `useCustomers.ts`, `cobros-in-links D4`) and the same sentinel scroll trigger. It groups loaded pages with `groupReceivables`, which is `groupCobros` without its sort, in first-appearance order (D6). It re-reads the first block on return to the tab with the 30-second floor (FR-011, reusing `FOCUS_FLOOR_MS`), and shows no read age.
 - [ ] T014 [P] [US1] Create `apps/admin/src/features/links/ReceivablesList.tsx`, moving the row, expansion, `fmtDay` and `todayIn` from `apps/admin/src/features/cobros/CobrosScreen.tsx`. It keeps *Venció* / *Vence* as icon plus text, and adds each invoice's period and *saldo anterior* in the expansion (FR-006). Buttons use `useLinkAction`, one pair per customer, withheld per `roleCan` and the CLABE, as today. The count line reads "N facturas abiertas", or nothing when `total` is null (FR-007). The empty state reads "Nadie tiene facturas abiertas hoy." (replacing Cobros' "Nadie te debe hoy.": FR-007 names invoices, not debt).
-- [ ] T015 [US1] In `apps/admin/src/features/links/LinksScreen.tsx`, add the chip, the shadcn `Tabs` from `@/components/ui/tabs`, compact 40px, labelled *Todos* / *Por cobrar* (`cobros-in-links D14`), beside the search box, wrapping under it at 360px. *Todos* renders today's list unchanged. *Por cobrar* with no search text renders `ReceivablesList`. The chosen view is local state for now (T018 moves it to the address). The chip renders only when the customers answer is not `not_configured` (`cobros-in-links D13`, FR-013), so US1 never shows a chip that leads to a `409`. T038 keeps the other half: a `409` on `/payment-requests` drops `view` from the address.
+- [ ] T015 [US1] In `apps/admin/src/features/links/LinksScreen.tsx`, add the chip, the shadcn `Tabs` from `@/components/ui/tabs`, compact 40px, labelled *Todos* / *Por cobrar* (`cobros-in-links D14`), beside the search box, wrapping under it at 360px. *Todos* renders today's list unchanged. *Por cobrar* with no search text renders `ReceivablesList`. The chosen view is local state for now (T018 moves it to the address). The chip renders only when the session's `integrationCapabilities` includes `receivables` (T045, `cobros-in-links D13`, FR-013), so US1 never shows a chip that leads to a `409`. T038 keeps the other half: a `409` on `/payment-requests` drops `view` from the address.
 - [ ] T016 [P] [US1] In `apps/admin/test/msw.ts`, give `/payment-requests` a handler that answers the block contract with fixtures validated by `paymentRequestsResponse`: two blocks, one customer split across them, and a row with period and *saldo anterior*.
 
 **Checkpoint**: US1 is complete on its own. Por cobrar lists, walks, groups and sends; the customer view is untouched.
@@ -198,7 +220,8 @@ tells an outage from an empty list with it.
   - a credit is netted (`debt-truth` D12);
   - `none` only when `nothingOwedIsProven`;
   - `unconfirmed` for four cases: a stalled `/clientes/`, a stalled balance door, an unreadable body, and a vanished customer;
-  - `503 WISPHUB_AUTH_FAILED` for a refused key;
+  - `503 INTEGRATION_AUTH_FAILED` for a refused key;
+  - `409 NOT_CONFIGURED` with no integration;
   - `400` for a blank `usuario`;
   - a viewer may read it;
   - exactly two provider calls, in order: `usuario=` first, then `/clientes/{id_servicio}/saldo/`, using the fresh `id_servicio`.
@@ -223,18 +246,21 @@ tells an outage from an empty list with it.
   - `customersQuery` gains `channel: z.enum(["panel"]).optional()`;
   - add `customerDebtQuery` (`usuario`, trimmed, at least one character) and `customerDebtResponse`, a discriminated union on `state`: `owes` | `none` | `unconfirmed` (data-model "Customer debt").
 - [ ] T028 [US3] In `apps/api/src/routes/direct-payments/handler.ts`, `listCustomers` honours `channel=panel`: it skips `apiLinksOf` rows on the search, browse and offline paths, so `matched` counts panel rows only (`cobros-in-links D8`).
-- [ ] T029 [US3] Add `customerDebt` in `apps/api/src/routes/direct-payments/handler.ts`, following `cobros-in-links D9`:
-  - one `wisphubFor` instance for one operation budget;
-  - `getCustomer(usuario)` first, then `openInvoicesOf(fresh.wisphubId)`;
-  - compose with `debtFor(record, { invoices, complete: true, source: "live" })` and `nothingOwedIsProven`, with no new debt arithmetic;
-  - any `WispHubError` other than `WISPHUB_AUTH_FAILED` → `{ state: "unconfirmed" }`, and a refused key → `wisphubFailure(c, e, "panel")`;
-  - a null record → `unconfirmed`.
+- [ ] T029 [US3] Split along the boundary (`cobros-in-links D9`, D18):
+  - **Adapter.** In `apps/api/src/wisphub/receivables.ts`, implement the `customerDebt` capability and register it in `capabilitiesOf`:
+    - one `wisphubFor` instance for one operation budget;
+    - `getCustomer(usuario)` first, then `openInvoicesOf(fresh.wisphubId)`;
+    - compose with `debtFor(record, { invoices, complete: true, source: "live" })` and `nothingOwedIsProven`, with no new debt arithmetic;
+    - a null record, or any `WispHubError` other than `WISPHUB_AUTH_FAILED`, → `{ state: "unconfirmed" }`;
+    - a refused key → `IntegrationError("INTEGRATION_AUTH_FAILED")`.
+  - **Core.** Add `customerDebt` in `apps/api/src/routes/direct-payments/handler.ts`. It asks `capabilitiesOf(...).customerDebt.of(usuario)` and maps the answer. `INTEGRATION_AUTH_FAILED` → `503`, and no capability → `409 NOT_CONFIGURED`. The function calls nothing from `wisphub/`.
 - [ ] T030 [US3] Wire `GET /customers/debt` in `apps/api/src/routes/direct-payments/index.ts` with `requireSession`, `requireArea("payments", "read")` and `zValidator("query", customerDebtQuery)`. Register it **before** any `/customers/:…` pattern could shadow it. The router stays pure.
 - [ ] T031 [P] [US3] Create `apps/admin/src/features/links/useCustomerDebt.ts`: one TanStack query per row, keyed `["customer-debt", usuario]`, with a two-minute `staleTime` and a concurrency gate of four in flight (`cobros-in-links D11`). It exposes `state`, `totalCents` and `refused`.
 - [ ] T032 [US3] In `apps/admin/src/features/links/LinksScreen.tsx` and `useCustomers.ts`, when Por cobrar is chosen and the text has at least three characters:
   - run the customers search with `channel=panel`;
   - render each result's debt with `useCustomerDebt`: `Amount` for `owes`, `StatusBadge` `debtNone` / `debtUnconfirmed`, and "Consultando adeudo" inside `<Pending>` while waiting;
-  - a `refused` answer switches the page to the existing refused-key message;
+  - a `refused` answer (`INTEGRATION_AUTH_FAILED`) switches the page to the existing refused-key message, the same one `WISPHUB_AUTH_FAILED` shows today;
+  - the debt renders only when the session's `integrationCapabilities` includes `customerDebt`;
   - the list (T014) hides while the search is active (FR-010).
 - [ ] T033 [P] [US3] In `apps/admin/test/msw.ts`, add handlers for `/direct-payments/customers/debt`, validated by `customerDebtResponse`: the short-payer `owes` 299.00, a `none`, an `unconfirmed`, and a delayed answer for the "one slow row" case.
 
@@ -254,21 +280,21 @@ tells an outage from an empty list with it.
 ### Tests for User Story 4
 
 - [ ] T034 [P] [US4] API tests in `apps/api/test/cobros-in-links.test.ts` (cite `cobros-in-links US4`), all from contract `receivables-api.md`:
-  - a stalled or failing first block answers `200 { results: [], nextCursor: null, total: null, wisphub: "unavailable" }`;
+  - a stalled or failing first block answers `200 { results: [], nextCursor: null, total: null, integration: "unavailable" }`;
   - a later block failing answers the same, while the earlier blocks stay the client's;
-  - a refused key answers `503 WISPHUB_AUTH_FAILED`;
+  - a refused key answers `503 INTEGRATION_AUTH_FAILED`;
   - no integration answers `409 NOT_CONFIGURED`.
 - [ ] T035 [P] [US4] Component tests in `apps/admin/test/cobros-in-links.test.tsx` (cite `cobros-in-links US4`):
   - `unavailable` with no rows shows the could-not-read state with Reintentar, never "Nadie tiene facturas abiertas";
   - `unavailable` on a later block keeps the rows under "Sin conexión a WispHub";
   - a refused key shows the Integraciones message and no Reintentar;
-  - a customers answer of `not_configured` hides the chip;
+  - a session without `receivables` in `integrationCapabilities` hides the chip;
   - `view=receivables` with a `409` falls back to the customer view.
 
 ### Implementation for User Story 4
 
-- [ ] T036 [US4] In `apps/api/src/routes/payment-requests/handler.ts`, map the failures as `cobros-in-links D7` says. A `WispHubError` other than `WISPHUB_AUTH_FAILED` → the `unavailable` 200 answer, logged the way the current handler logs (`console.error("wisphub failure:", code, message)`, never the key). A refused key → `503`.
-- [ ] T037 [US4] In `apps/admin/src/features/links/ReceivablesList.tsx` and `useReceivables.ts`, render three different states: *nobody* (`ok`, no rows, no cursor), *could not read* (`unavailable`, no rows, Reintentar), and *rows kept under the quiet note* (`unavailable` after rows). Reuse the refused-key rendering Links already has (`bug: links-refused-key`).
+- [ ] T036 [US4] In `apps/api/src/routes/payment-requests/handler.ts`, map the failures as `cobros-in-links D7` says. `IntegrationError("INTEGRATION_UNAVAILABLE")` → the `unavailable` 200 answer, logged the way the current handler logs (`console.error("integration failure:", code, message)`, never the key). `INTEGRATION_AUTH_FAILED` → `503`. The adapter (T046) is where a `WispHubError` becomes one of the two.
+- [ ] T037 [US4] In `apps/admin/src/features/links/ReceivablesList.tsx` and `useReceivables.ts`, render three different states: *nobody* (`ok`, no rows, no cursor), *could not read* (`unavailable`, no rows, Reintentar), and *rows kept under the quiet note* (`unavailable` after rows). Reuse the refused-key rendering Links already has (`bug: links-refused-key`), and reuse Links' "Sin conexión a WispHub" note rather than writing that literal again: it is registered debt (`core-reads-provider-directly`), and the view adds no new provider literal (D18).
 - [ ] T038 [US4] In `apps/admin/src/features/links/LinksScreen.tsx`, on a `409` from `/payment-requests`, drop `view` from the address (`cobros-in-links D13`, FR-013). The chip's own rule landed in T015.
 
 **Checkpoint**: every failure reads as what it is. There is no empty list that means "we don't know".
@@ -282,7 +308,7 @@ tells an outage from an empty list with it.
   - FR-003 / SC-003: pressing *Por cobrar* and not scrolling reads exactly one block. The stub counts `/payment-requests` calls, as `FR-020: the walk follows the operator` does for customers. This needs layout, so it lives here, not in the component suite (constitution IV);
   - SC-002: the first Por cobrar block is on screen within the 3 s ceiling (logged, with a generous ceiling, as `links.spec.ts` logs its SCs);
   - SC-001: from opening Links to pressing WhatsApp on a Por cobrar row, within the 10 s target (logged, 20 s ceiling).
-- [ ] T041 [P] Update the comment in `apps/api/src/routes/payment-requests/handler.ts` and the header comments of the Links screen to cite `cobros-in-links` D1–D17 where rules changed. Also update `CLAUDE.md`'s architecture notes where they name the Cobros section.
+- [ ] T041 [P] Update the comment in `apps/api/src/routes/payment-requests/handler.ts` and the header comments of the Links screen to cite `cobros-in-links` D1–D18 where rules changed. Also update `CLAUDE.md`'s architecture notes where they name the Cobros section.
 - [ ] T042 Run the CI order locally and fix what fails, never skipping a check:
   1. `node scripts/spec-lint.mjs`
   2. `node scripts/gen-banks.mjs --check`
@@ -291,6 +317,7 @@ tells an outage from an empty list with it.
   5. `pnpm -r --if-present typecheck`
   6. `pnpm -r --if-present test`
   7. `pnpm -r --if-present build`
+  8. Constitution IX: `grep -rn "wisphub/" apps/api/src/routes/payment-requests` finds nothing, and the new `customerDebt` handler calls nothing from `wisphub/`.
 - [ ] T043 Walk quickstart §2, steps 1–7, against the local API with the demo key, and record anything that differs from the spec in `specs/012-cobros-in-links/quickstart.md`.
 
 ---
@@ -300,8 +327,8 @@ tells an outage from an empty list with it.
 ### Phase Dependencies
 
 - **Setup (T001–T002)**: no dependencies. T001 needs the creator to run Postman.
-- **Foundational (T003–T005)**: after T001's M3 answer; blocks every story.
-- **US1 (T006–T016)**: after Foundational. This is the MVP.
+- **Foundational (T003–T005, T044, T045)**: after T001's M3 answer; blocks every story. T044 comes before T045.
+- **US1 (T006–T016, T046)**: after Foundational. This is the MVP. T008 comes before T046, and T046 before T010.
 - **US2 (T017–T021)**: after US1's chip (T015) exists.
 - **US3 (T022–T033)**: after Foundational and T001's M2 verdict. It needs US1's chip (T015) to have a view to search in. T022, T024, T027 and T028 do not depend on M2.
 - **US4 (T034–T038)**: after US1's handler (T010) and list (T014).
@@ -324,7 +351,7 @@ tells an outage from an empty list with it.
 
 - T002 runs while the creator runs T001.
 - T005 runs beside T004 once T003 lands.
-- **US1:** T006 and T007 (tests), T008 (cursor), and T013, T014 and T016 (admin) touch different files.
+- **US1:** T006 and T007 (tests), T008 then T046 (adapter), and T013, T014 and T016 (admin) touch different files.
 - **US3:** T022–T025 (tests and badge), then T031 and T033, while T026–T030 land in the API.
 - **Across stories:** after US1, the US2, US3 and US4 phases touch mostly different files. Watch `LinksScreen.tsx`, which T015, T018, T032 and T038 all edit. Sequence those four.
 
@@ -347,8 +374,8 @@ T016  MSW fixtures                                 apps/admin/test/msw.ts
 
 ### MVP First (User Story 1 Only)
 
-1. T001 (measure) and T002, then T003–T005.
-2. US1: T006–T016.
+1. T001 (measure) and T002, then T003–T005, T044 and T045.
+2. US1: T006–T016 and T046.
 3. **Stop and validate**: quickstart §2 steps 1–3. Por cobrar lists, walks, groups and sends. The old Cobros section still exists beside it, which is harmless.
 
 ### Incremental Delivery

@@ -8,8 +8,15 @@
 
 Links keeps its name and gains a two-option chip beside its search box:
 *Todos* (the customer view, unchanged from `main`) and **Por cobrar**. The
-chip looks like a filter. Underneath, it reads the ISP's open invoices
-from WispHub, one block per scroll, live, never from the sweep's copy.
+chip looks like a filter. Underneath, it reads the business's open
+invoices from its integration, one block per scroll, live, never from the
+sweep's copy.
+
+**Core and adapter (constitution IX, D18).** The core asks the business's
+integration for two capabilities, `receivables` and `customerDebt`, and
+imports nothing from `wisphub/`. The WispHub adapter owns the invoice
+path, the cursor, the period text and the billing-run rule. The chip
+shows because the integration has the capability, as the session says.
 
 Four pieces make that work:
 
@@ -62,7 +69,8 @@ commit.
 **Scale/Scope**:
 - the pilot has 193 open invoices and 6,522 customers: 4–10 blocks of Por cobrar, depending on screen height;
 - one new API door, one changed door, one new optional parameter, one adapter method, two `StatusBadge` statuses;
-- one admin screen reshaped, one removed.
+- one admin screen reshaped, one removed;
+- one core module for integration capabilities, and one adapter module that fills it (D18).
 
 **Measured 2026-09-27** (research, "Measurements recorded"): M1 pages by
 `offset` and `count` is present; M3's money fields are JSON numbers.
@@ -73,7 +81,7 @@ them. M2 is the only measurement that can reopen a decision (D10).
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-checked after Phase 1 design: still passes, with no violation.*
+*GATE: Must pass before Phase 0 research. Re-checked after Phase 1 design: still passes, with no violation. Re-checked 2026-09-27 against constitution v1.7.0 (IX added): the first design broke IX in two core handlers; D18 moves that logic into the adapter, and it passes.*
 
 | Principle | Gate | Status |
 | --- | --- | --- |
@@ -84,7 +92,8 @@ them. M2 is the only measurement that can reopen a decision (D10).
 | V. Tenant isolation, authorization by area | Every read uses the actor's own integration. The debt door is `requireArea("payments","read")`, like the customers door. `/payment-requests` keeps `requireSession` (every role reads, `cobros-live` D4). No cross-business read | ✅ |
 | VI. Visual foundations | The chip is the existing `Tabs` primitive at compact 40px (D14). Status goes through `StatusBadge`, with two new entries in `packages/ui` (D15). Amounts use `Amount`. The waiting label is inside `<Pending>`. 360px with no horizontal scroll, checked by the browser layer. es-MX copy | ✅ |
 | VII. Every test cites its story | Every new or changed test file cites `cobros-in-links US<n>`. Tasks carry `[US<n>]` | ✅ |
-| VIII. Absent configuration degrades | No new binding. Without WispHub, no chip: the customer view says where links come from, as today (D13). A provider outage is an answer on both doors (D7, D9) | ✅ |
+| VIII. Absent configuration degrades | No new binding. Without an integration that can read open invoices, no chip: the customer view says where links come from, as today (D13). A provider outage is an answer on both doors (D7, D9) | ✅ |
+| IX. The core speaks generic; adapters translate | Added 2026-09-27. The core defines `IntegrationCapabilities` and one entry point, `capabilitiesOf` (D18). Both core handlers import nothing from `wisphub/`. The invoice path, the `inv:` cursor, the period text and the two-read debt rule live in `wisphub/receivables.ts`. New contracts say `integration` and `INTEGRATION_AUTH_FAILED`. The chip reads `integrationCapabilities` from the session. The money parsers move to the core (T003). Older leaks are registered debt (`core-reads-provider-directly`) | ✅ |
 | Stack table | No departure | ✅ |
 | One Worker trigger | No new periodic work. The sweep is untouched | ✅ |
 
@@ -96,7 +105,7 @@ them. M2 is the only measurement that can reopen a decision (D10).
 specs/012-cobros-in-links/
 ├── spec.md
 ├── plan.md              # this file
-├── research.md          # D1–D17
+├── research.md          # D1–D18
 ├── data-model.md
 ├── quickstart.md        # M1–M3, then the checks
 ├── contracts/
@@ -110,22 +119,30 @@ specs/012-cobros-in-links/
 
 ```text
 apps/api/
-├── src/wisphub/client.ts                    # PendingInvoice +3 optional fields; pendingInvoicesPage reads count
-│                                            #   and the new fields; openInvoicesOf(idServicio) (D5, D10)
+├── src/money.ts                             # moved from src/wisphub/money.ts: the money parsers are core (IX, T003)
+├── src/integrations/capabilities.ts         # new, core: IntegrationCapabilities, OpenInvoice, IntegrationError,
+│                                            #   capabilitiesOf / capabilityNames — the one entry point (D18)
+├── src/auth/middleware.ts                   # the session gains integrationCapabilities (D13)
+├── src/wisphub/                             # the adapter
+│   ├── client.ts                            # PendingInvoice +3 optional fields; pendingInvoicesPage reads count
+│   │                                        #   and the new fields; openInvoicesOf(idServicio), GET only (D5, D10)
+│   └── receivables.ts                       # new: both capabilities; the inv: cursor, the window, the /facturas/
+│                                            #   path, the two-read debt; WispHubError → IntegrationError (D2, D9, D18)
 ├── src/routes/payment-requests/
 │   ├── schema.ts                            # block contract; receivables query (D1)
-│   ├── cursor.ts                            # new: inv: cursor, parsed from the provider's next (D2)
-│   ├── handler.ts                           # one live page per request; D7 answers (D3, D7)
+│   ├── handler.ts                           # asks the receivables capability; D7 answers; no wisphub/ import
 │   └── index.ts                             # zValidator for the query
 ├── src/routes/direct-payments/
 │   ├── schema.ts                            # customersQuery.channel; customerDebtQuery/Response (D8, D9)
-│   ├── handler.ts                           # listCustomers honours channel=panel; customerDebt (D8, D9)
+│   ├── handler.ts                           # listCustomers honours channel=panel; customerDebt asks the
+│   │                                        #   customerDebt capability, no wisphub/ import (D8, D9, D18)
 │   └── index.ts                             # GET /customers/debt
 └── test/
     ├── cobros-in-links.test.ts              # new (US1, US3, US4)
     └── payment-requests.test.ts             # rewritten for the block contract
 
 apps/admin/
+├── src/features/auth/session.ts             # BusinessActor.integrationCapabilities (D13)
 ├── src/router.tsx                           # linksSearch += view; /payment-requests → redirect (D12)
 ├── src/features/shell/Shell.tsx             # Cobros leaves baseSections
 ├── src/features/links/

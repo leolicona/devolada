@@ -659,3 +659,56 @@ describe("receipt-triage US3: the held row asks the business to decide", () => {
     ).toBeInTheDocument();
   });
 });
+
+/* bug: valid-lost-on-later-failure — a payment Banxico confirmed that
+   waits on WispHub says so, and names what the ISP must fix */
+describe("bug: valid-lost-on-later-failure — confirmed by Banxico, waiting on WispHub", () => {
+  it("the detail reads 'Confirmado por Banxico' with the WispHub reason, not a plain wait", async () => {
+    const kept = charge({
+      id: "ch-k1",
+      folio: "",
+      status: "validating" as const,
+      actionOutcome: null,
+      reconciliationClass: null,
+      actionDoneAt: null,
+      actionAttempts: 0,
+      banxicoConfirmedAt: Date.now(),
+      waitingOn: "WISPHUB_AUTH_FAILED",
+    });
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [kept]))),
+    );
+    renderApp("/");
+
+    const row = await screen.findByRole("button", { name: /janely/i });
+    await userEvent.click(row);
+    expect(
+      await screen.findByText(
+        "Confirmado por Banxico; falta leer WispHub: tu llave no funciona. Revísala en Integraciones.",
+      ),
+    ).toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("an ordinary wait carries no such line", async () => {
+    const waiting = charge({
+      id: "ch-w1",
+      folio: "",
+      status: "validating" as const,
+      actionOutcome: null,
+      reconciliationClass: null,
+      actionDoneAt: null,
+      actionAttempts: 0,
+    });
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [waiting]))),
+    );
+    renderApp("/");
+
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    await screen.findByText(/Registrado a las/);
+    expect(screen.queryByText(/Confirmado por Banxico/)).not.toBeInTheDocument();
+  });
+});

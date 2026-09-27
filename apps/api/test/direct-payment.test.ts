@@ -2,15 +2,15 @@ import { beforeAll, beforeEach, afterEach, describe, expect, it } from "vitest";
 import { createExecutionContext, env, fetchMock, waitOnExecutionContext } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { asc, eq } from "drizzle-orm";
-import { businesses, extractions, payments, paymentLinks, proofRejections } from "../src/db/schema";
-import { runValidation, sweepDirectPayments } from "../src/direct-payments/validation";
+import { businesses, extractions, payments, paymentLinks, proofRejections, validations } from "../src/db/schema";
+import { KEPT_RETRY_MINUTES, runValidation, sweepDirectPayments } from "../src/direct-payments/validation";
 import { integrationOf } from "../src/integrations/store";
 import { nextValidationSlot, suggestedSlot } from "../src/direct-payments/schedule";
 import { sweepReconnections } from "../src/reconnection/queue";
 import { signedProofUrl, UPLOAD_HOURLY_BUDGET } from "../src/direct-payments/proofs";
 import { historyVouches } from "../src/direct-payments/provisional";
 import type { Bindings } from "../src/env";
-import { app, fakeProofs, seedBusiness } from "./helpers";
+import { app, fakeProofs, seedBusiness, sessionCookieHeader } from "./helpers";
 import { resetShapeRules, sha256Hex } from "../src/consta/extraction";
 import { aiReturning, PNG, RECEIPT_1_READING, RECEIPT_2_READING, seedValidations } from "./consta/helpers";
 
@@ -4321,14 +4321,17 @@ describe("bug: one-open-attempt", () => {
   });
 });
 
-/* bug: spei-date-rollover — a search by referencia numérica asks Banxico
-   the operation day, which changes at 18:00 Mexico City time, instead of
-   the calendar day the payer or the receipt gave; the other day follows a
-   `not_found`. Found live on dev, 2026-09-24: a reference typed at 23:50
-   with the 24th was `not_found` on all seven attempts, and Banxico had
-   filed it under the 25th. Instants are fixed, so the rule (and the
-   30-day staleness check) never depend on when the suite runs. */
-describe("bug: spei-date-rollover", () => {
+/* bug: reference-search-printed-day — a search asks the day the receipt
+   printed or the payer typed, on every attempt, whatever the hour. Banxico's
+   CEP query answers that day and never the operation day it files a
+   transfer under (measured 2026-09-26, cep-scl batch A0E0097211: 16 of 16
+   by the printed day, 0 of 14 by the operation day). Found live on dev the
+   same evening: a Nu receipt printed Saturday 19:21 was searched by
+   reference with Sunday, and found at 19:40 by clave with Saturday. This
+   replaces spei-date-rollover's alternation, whose tests asserted the
+   defect. Instants are fixed, so the rule (and the 30-day staleness check)
+   never depend on when the suite runs. */
+describe("bug: reference-search-printed-day", () => {
   /* 23:50 Mexico City on the 24th */
   const EVENING = new Date("2026-09-25T05:50:00Z");
   const minuteAfter = (d: Date) => new Date(d.getTime() + 60_000);
@@ -4354,63 +4357,59 @@ describe("bug: spei-date-rollover", () => {
     await sweepDirectPayments(testEnv, now);
     return captured;
   }
+  const nextSlot = async (id: string) => new Date((await rowById(id)).nextValidationAt!.getTime() + 1000);
 
-  it("typed by reference at 23:50: the next day first, then the day typed, then the next again", async () => {
+  it("typed by reference at 23:50: every attempt asks the day typed, never the next", async () => {
     const { row } = await typedByReference(EVENING);
 
     const first = await sweepNotFound(minuteAfter(EVENING));
     expect(senderOf(first).referenceNumber).toBe("9784417");
-    expect(senderOf(first).date).toBe("2026-09-25");
+    expect(senderOf(first).date).toBe("2026-09-24");
 
-    const afterFirst = await rowById(row.id);
-    const second = await sweepNotFound(new Date(afterFirst.nextValidationAt!.getTime() + 1000));
+    const second = await sweepNotFound(await nextSlot(row.id));
     expect(senderOf(second).date).toBe("2026-09-24");
 
-    const afterSecond = await rowById(row.id);
-    const third = await sweepNotFound(new Date(afterSecond.nextValidationAt!.getTime() + 1000));
-    expect(senderOf(third).date).toBe("2026-09-25");
+    const third = await sweepNotFound(await nextSlot(row.id));
+    expect(senderOf(third).date).toBe("2026-09-24");
 
-    /* the row keeps what the payer typed; only the search moves */
     expect((await rowById(row.id)).transferDate).toBe("2026-09-24");
   });
 
-  it("typed by reference at 14:00: the day typed first", async () => {
+  it("typed by reference at 14:00: the day typed", async () => {
     const afternoon = new Date("2026-09-24T20:00:00Z");
     await typedByReference(afternoon);
     const first = await sweepNotFound(minuteAfter(afternoon));
     expect(senderOf(first).date).toBe("2026-09-24");
   });
 
-  it("found on the other day: the row adopts Banxico's clave and date and confirms", async () => {
+  it("found on the printed day: the row adopts Banxico's clave and records its operation day", async () => {
     const { row } = await typedByReference(EVENING);
-    await sweepNotFound(minuteAfter(EVENING));
 
-    /* transferred at 17:55, submitted at 23:50: Banxico filed it the 24th */
     mockCustomerLookup([wisphubCustomer()], 1);
     mockPendingInvoices(undefined, 1);
     mockReconnection("Activo");
+    /* transferred at 23:45 on the 24th: Banxico files it under the 25th */
     const found = mockApiCep({
-      cep: { ...DEFAULT_CEP, trackingKey: "260924071144000001I", senderBank: "AZTECA", date: "2026-09-24" },
+      cep: { ...DEFAULT_CEP, trackingKey: "260925071144000001I", senderBank: "AZTECA", date: "2026-09-25" },
     });
-    const pending = await rowById(row.id);
-    await sweepDirectPayments(testEnv, new Date(pending.nextValidationAt!.getTime() + 1000));
+    await sweepDirectPayments(testEnv, minuteAfter(EVENING));
 
     expect(senderOf(found).date).toBe("2026-09-24");
     const done = await rowById(row.id);
     expect(done.status).toBe("confirmed");
-    expect(done.trackingKey).toBe("260924071144000001I");
-    expect(done.transferDate).toBe("2026-09-24");
+    expect(done.trackingKey).toBe("260925071144000001I");
+    /* the operation day is recorded, never asked */
+    expect(done.transferDate).toBe("2026-09-25");
   });
 
   it("pending on a day asks the same day again", async () => {
     const { row } = await typedByReference(EVENING);
     const pendingCall = mockApiCep({ status: "pending", cep: undefined });
     await sweepDirectPayments(testEnv, minuteAfter(EVENING));
-    expect(senderOf(pendingCall).date).toBe("2026-09-25");
+    expect(senderOf(pendingCall).date).toBe("2026-09-24");
 
-    const afterPending = await rowById(row.id);
-    const again = await sweepNotFound(new Date(afterPending.nextValidationAt!.getTime() + 1000));
-    expect(senderOf(again).date).toBe("2026-09-25");
+    const again = await sweepNotFound(await nextSlot(row.id));
+    expect(senderOf(again).date).toBe("2026-09-24");
   });
 
   it("a clave search keeps the row's own date, even at 23:50", async () => {
@@ -4421,8 +4420,8 @@ describe("bug: spei-date-rollover", () => {
   });
 
   /* A receipt whose readings settled on the reference: the next slot takes
-     the transfer door with it (two-eyes D17), and the time the reader saw
-     printed decides the day */
+     the transfer door with it (two-eyes D17). The time the reader saw
+     printed is stored and decides nothing. */
   async function settledReceipt(createdAt: Date, reading: { date: string; time: string | null }) {
     const { business, link } = await seedRtBusiness();
     const proofKey = `${link.id}/p-sdr`;
@@ -4440,7 +4439,7 @@ describe("bug: spei-date-rollover", () => {
       proofKey,
       referenceNumber: "9784417",
       senderBank: "AZTECA",
-      transferDate: "2026-09-24",
+      transferDate: reading.date,
       readingCheck: "agreed",
       acceptedFrom: "agreed",
       createdAt,
@@ -4450,35 +4449,44 @@ describe("bug: spei-date-rollover", () => {
   /* 09:00 Mexico City the next morning */
   const NEXT_MORNING = new Date("2026-09-25T15:00:00Z");
 
-  it("a receipt printed 23:40 is searched on the next day, whenever it was submitted", async () => {
+  it("a receipt printed 23:40 is searched on its printed day, whenever it was submitted", async () => {
     await settledReceipt(NEXT_MORNING, { date: "2026-09-24", time: "23:40" });
     const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
     expect(senderOf(first).referenceNumber).toBe("9784417");
-    expect(senderOf(first).date).toBe("2026-09-25");
-  });
-
-  it("a receipt printed 17:30 is searched on its own day, though submitted the next morning", async () => {
-    await settledReceipt(NEXT_MORNING, { date: "2026-09-24", time: "17:30" });
-    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
     expect(senderOf(first).date).toBe("2026-09-24");
   });
 
-  it("a time read with another date says nothing about this one: the submission stands in", async () => {
-    await settledReceipt(NEXT_MORNING, { date: "2026-09-23", time: "17:30" });
-    const first = await sweepNotFound(minuteAfter(NEXT_MORNING));
-    expect(senderOf(first).date).toBe("2026-09-25");
+  it("a Saturday receipt printed 19:21 asks the Saturday on every attempt, never the Sunday or the Monday", async () => {
+    /* 19:24 Mexico City on Saturday the 26th */
+    const saturdayNight = new Date("2026-09-27T01:24:00Z");
+    const row = await settledReceipt(saturdayNight, { date: "2026-09-26", time: "19:21" });
+    const first = await sweepNotFound(minuteAfter(saturdayNight));
+    expect(senderOf(first).date).toBe("2026-09-26");
+    const second = await sweepNotFound(await nextSlot(row.id));
+    expect(senderOf(second).date).toBe("2026-09-26");
   });
+});
+
+/* bug: spei-date-rollover — what still holds of it: "today" is the
+   business's day, not the UTC date, for a row that carries none. */
+describe("bug: spei-date-rollover", () => {
+  const senderOf = (c: { body?: Record<string, unknown> }) => c.body!.sender as Record<string, unknown>;
 
   it("a row with no date asks the business's day, not the UTC one", async () => {
     /* 20:00 Mexico City on the 24th is 02:00Z on the 25th */
     const evening = new Date("2026-09-25T02:00:00Z");
-    await typedByReference(new Date(evening.getTime() - 60_000), {
-      referenceNumber: null,
+    const { business, link } = await seedRtBusiness();
+    await seedRtRow(link, business, {
       trackingKey: "TRACK001XYZ",
+      senderBank: "AZTECA",
       transferDate: null,
+      acceptedFrom: "human",
+      createdAt: new Date(evening.getTime() - 60_000),
+      nextValidationAt: new Date(evening.getTime() - 60_000),
     });
-    const first = await sweepNotFound(evening);
-    expect(senderOf(first).date).toBe("2026-09-24");
+    const captured = mockApiCep({ status: "invalid", reason: "not_found", cep: undefined });
+    await sweepDirectPayments(testEnv, evening);
+    expect(senderOf(captured).date).toBe("2026-09-24");
   });
 
   it("the link tells the page the business's zone", async () => {
@@ -4489,5 +4497,219 @@ describe("bug: spei-date-rollover", () => {
     const { data } = await res.json();
     expect(data.status).toBe("debt");
     expect(data.timezone).toBe("America/Mexico_City");
+  });
+});
+
+/* bug: valid-lost-on-later-failure — found live on dev, 2026-09-26: Banxico
+   said `valid`, the WispHub read after it failed (a demo key had
+   expired), and the next slot asked the provider again from scratch. The
+   provider's direct mode answered `not_found` for the CEP it had already
+   validated, and a paid, confirmed transfer never reached the customer. */
+describe("bug: valid-lost-on-later-failure — Banxico's valid is kept", () => {
+  /* A transfer row due in the sweep, one attempt behind it */
+  async function dueRow(
+    business: { id: string },
+    link: { id: string },
+    now: Date,
+    values: Partial<typeof payments.$inferInsert> = {},
+  ) {
+    const [row] = await drizzle(env.DB)
+      .insert(payments)
+      .values({
+        paymentLinkId: link.id,
+        businessId: business.id,
+        amountCents: 51400,
+        invoiceCents: 49900,
+        serviceFeeCents: 1500,
+        proofMode: "transfer",
+        trackingKey: "TRACK001XYZ",
+        senderBank: "NUBANK",
+        transferDate: "2026-08-17",
+        constaStatus: "pending",
+        validationAttempts: 1,
+        nextValidationAt: new Date(now.getTime() - 1000),
+        createdAt: new Date(now.getTime() - 2 * 60 * 1000),
+        ...values,
+      })
+      .returning();
+    return row;
+  }
+
+  /* WispHub refusing the key on the debt re-check: both reads of D14 */
+  function refuseWispHub() {
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/") && p.includes("usuario=") })
+      .reply(401, "{}");
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
+      .reply(401, "{}");
+  }
+
+  it("valid, then WispHub refuses the key → the verdict is kept, and the next slot confirms with no provider call", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const payment = await dueRow(business, link, now);
+
+    mockApiCep();
+    refuseWispHub();
+    await sweepDirectPayments(testEnv, now);
+    let [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.constaStatus).toBe("valid");
+    expect(row.banxicoValidAt?.getTime()).toBe(now.getTime());
+    expect(row.receivedCents).toBe(51400);
+    expect(row.cepSenderName).toBe("JANELY REYES");
+    expect(row.lastError).toBe("WISPHUB_AUTH_FAILED");
+    expect(row.validationAttempts).toBe(2);
+    expect(row.nextValidationAt).not.toBeNull();
+
+    /* the ISP reads it as confirmed by Banxico, waiting on WispHub */
+    const later = new Date(row.nextValidationAt!.getTime() + 1000);
+    /* no apiCEP interceptor: a provider call here fails the attempt */
+    mockCustomerLookup([wisphubCustomer()], 1);
+    mockPendingInvoices(undefined, 1);
+    mockReconnection("Activo");
+    const report = await sweepDirectPayments(testEnv, later);
+    expect(report).toMatchObject({ claimed: 1, confirmed: 1 });
+    [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("confirmed");
+    expect(row.folio).not.toBeNull();
+    expect(row.receivedCents).toBe(51400);
+    expect(row.actionOutcome).toBe("done");
+    /* no second paid call was made */
+    expect(row.validationAttempts).toBe(2);
+    expect(await db.select().from(validations)).toHaveLength(1);
+  });
+
+  it("a kept verdict past the six-hour schedule is retried on the hour, never expired", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const payment = await dueRow(business, link, now, {
+      constaStatus: "valid",
+      banxicoValidAt: new Date(now.getTime() - 7 * 60 * 60 * 1000),
+      receivedCents: 51400,
+      validationAttempts: 6,
+      lastError: "WISPHUB_AUTH_FAILED",
+      createdAt: new Date(now.getTime() - 7 * 60 * 60 * 1000),
+    });
+
+    refuseWispHub();
+    const report = await sweepDirectPayments(testEnv, now);
+    expect(report.expired).toBe(0);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("validating");
+    expect(row.lastError).toBe("WISPHUB_AUTH_FAILED");
+    expect(row.nextValidationAt?.getTime()).toBe(now.getTime() + KEPT_RETRY_MINUTES * 60 * 1000);
+    expect(row.validationAttempts).toBe(6);
+  });
+
+  it("the ISP's feed says Banxico confirmed it and what WispHub needs", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    await dueRow(business, link, now, {
+      constaStatus: "valid",
+      banxicoValidAt: now,
+      receivedCents: 51400,
+      lastError: "WISPHUB_AUTH_FAILED",
+    });
+    const res = await (await app()).request(
+      "/payments/feed?status=validating",
+      { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
+      testEnv,
+    );
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.payments[0]).toMatchObject({
+      status: "validating",
+      banxicoConfirmedAt: now.getTime(),
+      waitingOn: "WISPHUB_AUTH_FAILED",
+      receivedCents: 51400,
+    });
+  });
+
+  it("a new submission on the link does not replace an attempt Banxico confirmed", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const kept = await dueRow(business, link, now, {
+      constaStatus: "valid",
+      banxicoValidAt: now,
+      receivedCents: 51400,
+      lastError: "WISPHUB_AUTH_FAILED",
+      nextValidationAt: new Date(now.getTime() + 60 * 60 * 1000),
+    });
+
+    const res = await payTransfer("tok2345abcdefgh2", {
+      transfer: { trackingKey: "OTHERKEY123", senderBank: "NUBANK", date: "2026-08-17" },
+    });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data).toMatchObject({ directPaymentId: kept.id, status: "validating" });
+    const rows = await db.select().from(payments);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("validating");
+  });
+
+  /* The replay flag, when the first validation of the CEP was ours on
+     another link of the same business (dev, 2026-09-26: refused on
+     Janely's link after Juan Fernando's validated it and never applied) */
+  async function secondLink(business: { id: string }) {
+    const [other] = await drizzle(env.DB)
+      .insert(paymentLinks)
+      .values({
+        businessId: business.id,
+        token: "tok9876zyxwvut98",
+        wisphubCustomerId: "9",
+        customerUsuario: "otro@wifiplus",
+      })
+      .returning();
+    return other;
+  }
+  async function earlierValidation(businessId: string, paymentRef: string, alreadyValidated = false) {
+    await drizzle(env.DB).insert(validations).values({
+      businessId,
+      mode: "receipt",
+      status: "valid",
+      alreadyValidated,
+      trackingKey: "TRACK001XYZ",
+      paymentRef,
+    });
+  }
+
+  it("our own first validation on another link of the business is ours, not a stranger's", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const other = await secondLink(business);
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const first = await dueRow(business, other, now, { status: "superseded", nextValidationAt: null });
+    await earlierValidation(business.id, first.id);
+    const payment = await dueRow(business, link, now, { constaStatus: null, validationAttempts: 0 });
+
+    mockApiCep({ alreadyValidated: true });
+    refuseWispHub();
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.lastError).not.toBe("TRANSFER_ALREADY_USED");
+    expect(row.status).toBe("validating");
+    expect(row.banxicoValidAt).not.toBeNull();
+  });
+
+  it("a first validation that was itself a replay, or another business's, still refuses", async () => {
+    const { business, link } = await seedLinkedBusiness();
+    const other = await secondLink(business);
+    const now = new Date();
+    const db = drizzle(env.DB);
+    const first = await dueRow(business, other, now, { status: "superseded", nextValidationAt: null });
+    await earlierValidation(business.id, first.id, true);
+    const payment = await dueRow(business, link, now, { constaStatus: null, validationAttempts: 0 });
+
+    mockApiCep({ alreadyValidated: true });
+    await sweepDirectPayments(testEnv, now);
+    const [row] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(row.status).toBe("invalid");
+    expect(row.lastError).toBe("TRANSFER_ALREADY_USED");
+    expect(row.banxicoValidAt).toBeNull();
   });
 });

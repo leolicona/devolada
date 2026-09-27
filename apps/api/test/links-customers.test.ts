@@ -165,8 +165,13 @@ describe("US1: the browse is one block, not a customer base", () => {
 
   it("walks Devolada's own links first and crosses into WispHub in the same block (D2)", async () => {
     const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
-    await apiLink(business.id, { customerRef: "CLI-1" });
-    await apiLink(business.id, { customerRef: "CLI-2" });
+    /* The walk orders by `created_at`, then the random id: two inserts in
+       the same millisecond tie, and the id decided which came first (red
+       on CI, 2026-09-26). The order under test is by age, so each link
+       gets its own. */
+    const t = Date.now();
+    await apiLink(business.id, { customerRef: "CLI-1", createdAt: new Date(t - 1000) });
+    await apiLink(business.id, { customerRef: "CLI-2", createdAt: new Date(t) });
     mockBlock([customer()], 1);
 
     const { data } = await (await read("?limit=10")).json();
@@ -178,8 +183,13 @@ describe("US1: the browse is one block, not a customer base", () => {
 
   it("the cursor carries its phase: a block that ends inside the API links says so (D2)", async () => {
     const business = await seedBusiness({ ...SPEI, wisphubApiKey: "wh-key-1" });
-    await apiLink(business.id, { customerRef: "CLI-1" });
-    await apiLink(business.id, { customerRef: "CLI-2" });
+    /* The walk orders by `created_at`, then the random id: two inserts in
+       the same millisecond tie, and the id decided which came first (red
+       on CI, 2026-09-26). The order under test is by age, so each link
+       gets its own. */
+    const t = Date.now();
+    await apiLink(business.id, { customerRef: "CLI-1", createdAt: new Date(t - 1000) });
+    await apiLink(business.id, { customerRef: "CLI-2", createdAt: new Date(t) });
     await apiLink(business.id, { customerRef: "CLI-3" });
 
     /* limit is clamped up to ten, and three API links do not fill it —

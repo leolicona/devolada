@@ -8,7 +8,7 @@ contributor runs. The shapes are in [contracts/](./contracts/) and
 
 ```sh
 pnpm install
-pnpm --filter @devolada/api db:migrate:local      # applies 0037
+pnpm --filter @devolada/api db:migrate:local      # applies 0038
 pnpm --filter @devolada/api dev                   # API on :8787, AI binding remote
 pnpm --filter @devolada/admin dev                 # panel on :5174
 pnpm --filter @devolada/pago dev                  # payment page on :5175

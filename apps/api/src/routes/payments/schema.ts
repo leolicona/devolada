@@ -103,6 +103,12 @@ export const feedCharge = z.object({
   /* Why the last attempt did not work, for the ISP's detail view
      (reconnection-queue spec UI contract) */
   actionError: z.string().nullable(),
+  /* bug: valid-lost-on-later-failure — a payment still `validating` that
+     Banxico already confirmed: when, and the WispHub code it waits on
+     (`WISPHUB_AUTH_FAILED`, …). Null on every other row. Defaulted so
+     fixtures born before it still parse. */
+  banxicoConfirmedAt: z.number().int().nullable().default(null),
+  waitingOn: z.string().nullable().default(null),
 });
 
 export const feedResponse = z.object({

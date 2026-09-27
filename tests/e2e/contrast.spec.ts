@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
-import { stubAdminApi, stubPagoClosed } from "./stubs";
+import { stubAdminApi, stubOperatorReaderApi, stubPagoClosed } from "./stubs";
 
 /* docs/legacy/polish/dark-and-contrast.spec.md, the half a token file cannot
    prove. contrast-lint measures the palette; this measures the pixels —
@@ -79,3 +79,26 @@ test.describe("automated-collections-api US1: the closed link at 360/768/1280", 
     }
   }
 });
+
+/* receipt-reader-tuning US3 (D19): the Lector tab — the model card, the
+   bench detail with its marks, the same-bank flag and a failed column,
+   and the results — measured in both themes. The marks and the failure
+   are icon + text; only a browser can say whether their inks met the
+   surfaces they land on. */
+for (const theme of ["light", "dark"] as const) {
+  test(`receipt-reader-tuning US3: Lector has no contrast violations in ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await stubOperatorReaderApi(page);
+    await page.goto(`${ADMIN}/operador`);
+    await page.getByRole("tab", { name: "Lector" }).click();
+    await expect(page.getByText("Modelo que lee los comprobantes")).toBeVisible();
+    await page.getByRole("button", { name: /Mistral Small 3\.1: leído/ }).click();
+    await expect(page.getByText("Respuesta sin datos")).toBeVisible();
+
+    const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
+    const readable = results.violations.map(
+      (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
+    );
+    expect(readable, `Lector in ${theme}`).toEqual([]);
+  });
+}

@@ -379,6 +379,16 @@ export const payments = sqliteTable(
     supersedesId: text("supersedes_id"),
     constaValidationId: text("consta_validation_id"),
     constaStatus: text("consta_status", { enum: ["valid", "pending", "invalid"] }),
+    /* bug: valid-lost-on-later-failure — when Banxico said `valid` and
+       every check of the CEP passed, before the WispHub half ran. A kept
+       fact: a row that holds it never asks the provider again (its retry
+       re-reads WispHub only and spends no call), and it never ends
+       `expired`. The CEP it confirmed rides the row beside it
+       (`received_cents`, `cep_sender_name`, the adopted clave; a hold in
+       `review_reason`). Measured 2026-09-26: re-asking lost a confirmed
+       transfer, because apiCEP's direct mode answered `not_found` for a
+       CEP the account had already validated. */
+    banxicoValidAt: integer("banxico_valid_at", { mode: "timestamp_ms" }),
     validationAttempts: integer("validation_attempts").notNull().default(0),
     nextValidationAt: integer("next_validation_at", { mode: "timestamp_ms" }),
     /* receipt-triage adds three words: `REFERENCE_AMBIGUOUS` (D17 — the
@@ -943,8 +953,10 @@ export const extractions = sqliteTable(
     transferDate: text("transfer_date"),
     /* bug: spei-date-rollover — the time printed beside the date, "HH:MM"
        on a 24-hour clock. SPEI changes its operation day at 18:00 Mexico
-       City time, and a receipt prints the calendar day: a reference search
-       reads this to ask Banxico the day it filed the transfer under */
+       City time, and a receipt prints the calendar day. Since bug:
+       reference-search-printed-day no search reads it (Banxico answers the
+       printed day only, measured 2026-09-26); it stays as the receipt's
+       own clock, to pair it with one CEP when several share a reference */
     transferTime: text("transfer_time"),
     receiptStatus: text("receipt_status"),
     gateTrackingKey: text("gate_tracking_key"),
@@ -991,6 +1003,32 @@ export const extractions = sqliteTable(
     providerReferenceNumber: text("provider_reference_number"),
     destinationKind: text("destination_kind", { enum: ["clabe", "card", "phone", "account"] }),
     destinationDigits: text("destination_digits"),
+    /* receipt-reader-tuning D12: the version of the questions this
+       reading answered (`QUESTIONS_VERSION`). NULL on rows before the
+       feature and on rows that read nothing — no guessed version. */
+    questionVersion: text("question_version"),
+    /* receipt-reader-tuning D11: how long the reading that counted took,
+       in ms — the fallback's own time on a fallback */
+    readerMs: integer("reader_ms"),
+    /* receipt-reader-tuning D11: the chosen model that failed, when the
+       default read instead (or was tried and failed too). `model` stays
+       the model that produced the reading. */
+    fallbackFrom: text("fallback_from"),
+    /* receipt-reader-tuning D14: the receiving bank as read, resolved to
+       the vocabulary, and its verdict — as `sender_bank` and
+       `gate_sender_bank` are the sender's. Neither bank is ever changed
+       because of the other (spec FR-012). */
+    receivingBank: text("receiving_bank"),
+    gateReceivingBank: text("gate_receiving_bank", { enum: ["ok", "unknown", "missing"] }),
+    /* receipt-reader-tuning D14: both banks resolved to the same
+       institution. A flag for counting; nothing reads it to change the
+       flow. NULL when either bank did not resolve. */
+    sameBank: integer("same_bank", { mode: "boolean" }),
+    /* receipt-reader-tuning D14: the receiving bank against the bank of
+       the account the destination tied to. NULL when nothing tied or the
+       bank did not resolve. The ISP's account is never written here
+       (receipt-triage D21). */
+    receivingBankTie: text("receiving_bank_tie", { enum: ["match", "mismatch"] }),
     rawOutput: text("raw_output"),
     /* Set only when the reading went on to buy a provider call. NULL on
        every refusal, which is what makes "refused, and no credit spent" a
@@ -1237,4 +1275,63 @@ export const landingCounts = sqliteTable(
     count: integer("count").notNull().default(0),
   },
   (t) => [uniqueIndex("landing_counts_day_channel_step_idx").on(t.day, t.channel, t.step)],
+);
+
+/* ---- The reader's test bench (receipt-reader-tuning D16, D17) ----
+   Platform rows with no `business_id`, like `platform_settings` and
+   `access_requests` (constitution V): a bench receipt belongs to no
+   business, and only the platform operator reads or writes it. Nothing
+   here is a payment, a validation or a credit (spec FR-019). */
+
+/* receipt-reader-tuning D16: one uploaded receipt. The file sits at
+   `bench/<uuid>` in `PROOFS` under the bucket's 15-day rule; the row
+   stays after the file is gone, and "file gone" is learned by a `head`
+   miss. The same bytes twice are one bench receipt. */
+export const benchReceipts = sqliteTable("bench_receipts", {
+  id: id(),
+  proofKey: text("proof_key").notNull(),
+  sha256: text("sha256").notNull().unique(),
+  /* As sniffed by magic bytes (`loadProof`), never as claimed */
+  mediaType: text("media_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  uploadedBy: text("uploaded_by")
+    .notNull()
+    .references(() => user.id),
+  createdAt: createdAt(),
+});
+
+/* receipt-reader-tuning D16, D17: one model's reading of one bench
+   receipt, per question version. `reading` is the product-facing value —
+   after the gate and the vocabulary, amounts in cents — because that is
+   what a payer's reading would act on. `model_label` is the label at the
+   time: the list can change later. */
+export const benchReadings = sqliteTable(
+  "bench_readings",
+  {
+    id: id(),
+    benchReceiptId: text("bench_receipt_id")
+      .notNull()
+      .references(() => benchReceipts.id),
+    model: text("model").notNull(),
+    modelLabel: text("model_label").notNull(),
+    questionVersion: text("question_version").notNull(),
+    status: text("status", { enum: ["read", "failed"] }).notNull(),
+    failureCode: text("failure_code", { enum: ["READER_UNAVAILABLE", "READER_UNREADABLE", "TIMEOUT"] }),
+    /* The call's time, success or failure */
+    readerMs: integer("reader_ms").notNull(),
+    /* JSON — the contract's `benchReading.reading`; NULL when failed */
+    reading: text("reading"),
+    /* The model's answer, verbatim, success or failure */
+    rawOutput: text("raw_output"),
+    /* JSON — `{ [field]: "right" | "wrong" | "absent" }`, any subset */
+    marks: text("marks"),
+    markedBy: text("marked_by").references(() => user.id),
+    markedAt: integer("marked_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    /* One reading per combination; "Leer de nuevo" fills only what is missing */
+    uniqueIndex("bench_readings_receipt_model_version_idx").on(t.benchReceiptId, t.model, t.questionVersion),
+    index("bench_readings_created_idx").on(t.createdAt),
+  ],
 );

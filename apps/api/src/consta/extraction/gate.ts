@@ -39,7 +39,37 @@ export type GatedReading = {
   amountCents: number | null;
   /* True when everything a direct-mode call needs is present and sane */
   passes: boolean;
+  /* receipt-reader-tuning D14: the bank the money went to, through the
+     same vocabulary as the sender's. A sibling of `gate`, not a field of
+     it: `Gate` is what the payer page receives, and it does not move.
+     Nothing reads `sameBank` to change the flow, and the gate never
+     changes `senderBank` because of the receiver (spec D5, FR-012) —
+     the same-institution guard is validation spec D17's, in request.ts. */
+  receiving: ReceivingBank;
 };
+
+export type ReceivingBank = {
+  bank: Bank | null;
+  verdict: "ok" | "unknown" | "missing";
+  sameBank: boolean;
+};
+
+/* receipt-reader-tuning D14: the verdict like the sender's — `missing`
+   when not read, `unknown` when outside the vocabulary — and the flag
+   only when both banks resolved to the same institution. `recentReading`
+   rebuilds it through here from the stored columns (D15). */
+export function receivingOf(
+  receivingBank: string | null,
+  sender: { bank: Bank | null; verdict: Gate["senderBank"] },
+): ReceivingBank {
+  const bank = resolveBank(receivingBank);
+  const verdict = !receivingBank ? "missing" : bank ? "ok" : "unknown";
+  return {
+    bank,
+    verdict,
+    sameBank: sender.verdict === "ok" && verdict === "ok" && sender.bank === bank,
+  };
+}
 
 /* validation.spec.md D13, verbatim: the check that catches the receipt
    printing its clave across two lines, and llama's measured 27-character
@@ -114,5 +144,6 @@ export function gateReading(reading: Reading): GatedReading {
     senderBank,
     amountCents,
     passes: passesGate(gate),
+    receiving: receivingOf(reading.receivingBank, { bank: senderBank, verdict: gate.senderBank }),
   };
 }

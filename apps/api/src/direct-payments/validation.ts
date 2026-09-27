@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { payments, businesses, paymentLinks, extractions, validations } from "../db/schema";
+import { payments, businesses, paymentLinks, validations } from "../db/schema";
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
 import { consta, ConstaError, type ConstaRequest, type RegisteredAccount } from "../consta";
@@ -26,7 +26,6 @@ import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
 import { nextValidationSlot, suggestedSlot } from "./schedule";
-import { nextSearchDate, searchDates } from "./search-date";
 import { businessWallClock } from "../time/business-day";
 import { classifyPayment, type ReconciliationClass } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
@@ -43,7 +42,7 @@ import {
   notifyProvisionalExpiry,
   releaseEvidenceFor,
 } from "./provisional";
-import { isApiLink, isPanelLink, realOnly, type ApiLink } from "./links";
+import { isApiLink, isPanelLink, realOnly, type ApiLink, type PanelLink } from "./links";
 import { enqueueAndDeliver, type Defer } from "../webhooks/queue";
 
 /* One validation attempt of a direct payment (direct-payment spec).
@@ -60,6 +59,10 @@ type Isp = typeof businesses.$inferSelect;
    2026-08-17: apiCEP treats the claimed date as a hint, not a filter,
    so the returned date is compared here. */
 export const STALE_TRANSFER_DAYS = 30;
+
+/* bug: valid-lost-on-later-failure — the cadence of a Banxico-confirmed
+   row past its schedule: one WispHub read an hour, no provider call */
+export const KEPT_RETRY_MINUTES = 60;
 
 const LEASE_MINUTES = 2;
 const BATCH = 20;
@@ -223,7 +226,32 @@ async function tracesToOwnAttempt(
         ne(payments.id, payment.id),
       ),
     );
-  return siblings.some(attempted);
+  if (siblings.some(attempted)) return true;
+
+  /* bug: valid-lost-on-later-failure — the first validation of this CEP
+     was ours, whatever the link: a `valid` the provider called
+     never-validated, asked for another payment of this same business.
+     Found live on 2026-09-26: a transfer validated on one link and never
+     applied was refused on another as "validated outside Devolada". Safe
+     to forgive because it is not what stops a double payment — the
+     unique clave index is (D8): a payment that holds the clave alive
+     still refuses this one when the clave is claimed below. */
+  const [ours] = await db
+    .select({ id: validations.id })
+    .from(validations)
+    .innerJoin(payments, eq(payments.id, validations.paymentRef))
+    .where(
+      and(
+        eq(validations.businessId, payment.businessId),
+        eq(payments.businessId, payment.businessId),
+        eq(validations.trackingKey, key),
+        eq(validations.status, "valid"),
+        eq(validations.alreadyValidated, false),
+        ne(payments.id, payment.id),
+      ),
+    )
+    .limit(1);
+  return ours != null;
 }
 
 /* automated-collections-api D7/D17 (FR-013): every status an API
@@ -305,7 +333,14 @@ export async function runValidation(
     base: Partial<typeof payments.$inferInsert> = {},
     opts: { lateSlot?: boolean; suggestedAt?: Date | null } = {},
   ) => {
-    const slot = nextValidationSlot(payment.createdAt, now, opts);
+    /* bug: valid-lost-on-later-failure — a row Banxico already confirmed
+       is never `expired`: what it waits on is ours or the ISP's (WispHub),
+       and its retries cost no provider call, so past the schedule it
+       keeps being retried on the hour */
+    const kept = payment.banxicoValidAt != null || base.banxicoValidAt != null;
+    const slot =
+      nextValidationSlot(payment.createdAt, now, opts) ??
+      (kept ? new Date(now.getTime() + minutes(KEPT_RETRY_MINUTES)) : null);
     const row = await update(
       slot
         ? { ...base, lastError: error, nextValidationAt: slot }
@@ -319,6 +354,19 @@ export async function runValidation(
     }
     return row;
   };
+
+  /* bug: valid-lost-on-later-failure — Banxico already confirmed this
+     transfer on an earlier attempt, and what failed after it was WispHub.
+     Resume there: no provider call, no credential needed, the CEP's facts
+     from the row. Only a panel link can hold one (the API half never
+     waits on WispHub). */
+  if (payment.banxicoValidAt != null && isPanelLink(link)) {
+    const hold = payment.reviewReason ?? null;
+    return settlePanelPayment(env, db, payment, link, business, integration, now, update, retryLater, {}, {
+      amountCents: payment.receivedCents,
+      senderName: payment.cepSenderName,
+    }, hold);
+  }
 
   /* consta-api-merge D6: the engine's own code on the row. A payment
      already in flight when the credential is absent rides the schedule,
@@ -484,11 +532,6 @@ export async function runValidation(
       return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
     }
   }
-  /* bug: spei-date-rollover — a reference search asks Banxico the
-     operation day, not the calendar day the payer or the receipt gave:
-     the likelier one first, the other after a `not_found` (search-date.ts).
-     A clave search keeps the row's own date — for it the date is a hint. */
-  const search = byReference ? await referenceSearch(db, business, payment, now) : null;
   const request: ConstaRequest = crossCheck
     ? {
         receipt: { proofKey: payment.proofKey ?? "" },
@@ -513,9 +556,16 @@ export async function runValidation(
                The fallback is the manual door's alone now (D20): every
                other row that reaches here has a date, because a row
                without one took the receipt door above. */
-            /* bug: spei-date-rollover — the fallback is the business's
-               day: the UTC date is tomorrow from 18:00 in Mexico City */
-            date: search?.date ?? payment.transferDate ?? businessWallClock(business.timezone, now).date,
+            /* bug: reference-search-printed-day — a clave and a reference
+               alike ask the day the receipt printed or the payer typed, on
+               every attempt. Banxico's CEP query answers that day (the
+               CEP's *fecha de abono*) and never the operation day it
+               files a transfer under (measured 2026-09-26, cep-scl batch
+               A0E0097211: 16 of 16 by the printed day, 0 of 14 by the
+               operation day), so the alternation spei-date-rollover
+               added only spent calls. The fallback is the business's
+               day: the UTC date is tomorrow from 18:00 in Mexico City. */
+            date: payment.transferDate ?? businessWallClock(business.timezone, now).date,
             /* partial-payment D5: the amount is a **search criterion**,
                not an assertion. Asking with what we expected finds
                nothing when the payer fell short, so what travels is what
@@ -805,12 +855,6 @@ export async function runValidation(
 
   /* valid — necessary, not sufficient (D11): the CEP must match the debt */
 
-  /* bug: spei-date-rollover — counted, so how often the first guess
-     missed is a query over the logs and not a guess */
-  if (search && search.date !== search.primary) {
-    console.log(`spei-date-rollover: payment ${payment.id} found on ${search.date}, first guessed ${search.primary}`);
-  }
-
   if (
     verdict.alreadyValidated &&
     !isRetry &&
@@ -1031,6 +1075,39 @@ export async function runValidation(
     throw new Error(`payment ${payment.id} sits on a link that is neither panel nor API (${link.id})`);
   }
 
+  /* bug: valid-lost-on-later-failure — the verdict is kept before the
+     WispHub half runs: a read that fails there retries the read alone,
+     and Banxico is never asked the same question twice (the retry cannot
+     be told `not_found` for a transfer it confirmed). What the CEP said
+     rides the row with it, so the resumed attempt settles on the same
+     facts. */
+  return settlePanelPayment(env, db, payment, link, business, integration, now, update, retryLater, {
+    ...base,
+    banxicoValidAt: payment.banxicoValidAt ?? now,
+    receivedCents: cep?.amountCents ?? payment.amountCents,
+    cepSenderName: cep?.senderName ?? null,
+    reviewReason: hold,
+  }, cep ?? null, hold);
+}
+
+/* bug: valid-lost-on-later-failure — the panel half of a `valid`
+   verdict, from the WispHub debt re-check (D14) to the dispatch. Reached
+   two ways: straight after the verdict, and on a later slot of a row that
+   kept one (`banxico_valid_at`), which calls no provider. */
+async function settlePanelPayment(
+  env: Bindings,
+  db: DB,
+  payment: DirectPayment,
+  link: PanelLink,
+  business: Isp,
+  integration: Integration | null,
+  now: Date,
+  update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
+  retryLater: (error: string, base?: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>,
+  base: Partial<typeof payments.$inferInsert>,
+  cep: { amountCents?: number | null; senderName?: string | null } | null,
+  hold: "retired_account" | "no_clave" | null,
+): Promise<DirectPayment> {
   /* D14: between submission and confirmation the debt can be settled
      elsewhere. Re-check before touching WispHub's money.
      automated-collections-api D5/D7 (research, "the null guard the seam
@@ -1407,64 +1484,6 @@ export async function advanceTestPayment(
     default:
       return update({ ...undue, status: advance.status });
   }
-}
-
-/* bug: spei-date-rollover — the day this attempt's reference search asks,
-   and the one the rule guessed first (search-date.ts).
-
-   The time is the one the receipt printed, from the reader's record of
-   this row's own proof — and only when that record read the same date the
-   row holds, so the time belongs to the day being searched. A typed row
-   has no proof and the submission stands in (`created_at`).
-
-   The previous search is the row's last provider call, which the engine
-   recorded (`consta_validation_id`): a transfer-door call by reference,
-   with the day it asked and whether Banxico said `not_found`. */
-async function referenceSearch(
-  db: DB,
-  business: Pick<Isp, "id" | "timezone">,
-  payment: DirectPayment,
-  now: Date,
-): Promise<{ date: string; primary: string }> {
-  const date = payment.transferDate ?? businessWallClock(business.timezone, now).date;
-  let time: string | null = null;
-  if (payment.proofKey && payment.transferDate) {
-    const [printed] = await db
-      .select({ time: extractions.transferTime })
-      .from(extractions)
-      .where(
-        and(
-          eq(extractions.businessId, business.id),
-          eq(extractions.proofKey, payment.proofKey),
-          eq(extractions.source, "reader"),
-          eq(extractions.transferDate, payment.transferDate),
-          isNotNull(extractions.transferTime),
-        ),
-      )
-      .orderBy(desc(extractions.createdAt))
-      .limit(1);
-    time = printed?.time ?? null;
-  }
-  const dates = searchDates({ date, time, submittedAt: payment.createdAt });
-
-  let previous: { date: string; notFound: boolean } | null = null;
-  if (payment.constaValidationId) {
-    const [last] = await db
-      .select({
-        mode: validations.mode,
-        trackingKey: validations.trackingKey,
-        referenceNumber: validations.referenceNumber,
-        transferDate: validations.transferDate,
-        status: validations.status,
-        reason: validations.reason,
-      })
-      .from(validations)
-      .where(and(eq(validations.id, payment.constaValidationId), eq(validations.businessId, business.id)));
-    if (last?.mode === "transfer" && last.trackingKey == null && last.referenceNumber != null && last.transferDate) {
-      previous = { date: last.transferDate, notFound: last.status === "invalid" && last.reason === "not_found" };
-    }
-  }
-  return { date: nextSearchDate(dates, previous), primary: dates.primary };
 }
 
 /* receipt-triage D7 (clarified 2026-09-24) — another payment of the same

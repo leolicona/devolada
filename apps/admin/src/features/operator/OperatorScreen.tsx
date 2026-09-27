@@ -17,12 +17,14 @@ import { useDisplaySettings, useSession } from "../auth/session";
 import { ENTRY_LABELS } from "../credit/CreditCard";
 import { STEP_COPY } from "../credit/CreditChip";
 import { LandingTab } from "./LandingTab";
+import { ReaderTab } from "./ReaderTab";
 
 /* /operador (operator-panel spec, US-L02): the platform's hands. Boring
-   on purpose (IA). Three tabs — Reglas (D1's keys as typed fields with
+   on purpose (IA). Four tabs — Reglas (D1's keys as typed fields with
    their history), Negocios (D7's map, with the adjustment and override
-   forms) and Landing (landing-page D17: the page's counts and requests).
-   The route is hidden unless the actor is the operator; the API guard is
+   forms), Landing (landing-page D17: the page's counts and requests) and
+   Lector (receipt-reader-tuning D19: the model that reads receipts, its
+   test bench and the results that pick it). The route is hidden unless the actor is the operator; the API guard is
    the real defense (D3). */
 
 const KEY_LABELS: Record<string, string> = {
@@ -335,6 +337,7 @@ export function OperatorScreen() {
           <TabsTrigger value="rules">Reglas</TabsTrigger>
           <TabsTrigger value="businesses">Negocios</TabsTrigger>
           <TabsTrigger value="landing">Landing</TabsTrigger>
+          <TabsTrigger value="reader">Lector</TabsTrigger>
         </TabsList>
         <TabsContent value="rules" className="mt-4">
           <RulesTab />
@@ -344,6 +347,9 @@ export function OperatorScreen() {
         </TabsContent>
         <TabsContent value="landing" className="mt-4">
           <LandingTab />
+        </TabsContent>
+        <TabsContent value="reader" className="mt-4">
+          <ReaderTab />
         </TabsContent>
       </Tabs>
     </main>

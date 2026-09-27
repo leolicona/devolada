@@ -82,6 +82,11 @@ export type StubbedReading = {
   legibilidad?: "completa" | "parcial" | "nula";
   claveDeRastreo?: string | null;
   banco?: string | null;
+  /* receipt-reader-tuning D13: the two banks the version-2 questions
+     ask for. `banco` still parses as the sending bank, so older fixtures
+     keep their meaning. */
+  bancoEmisor?: string | null;
+  bancoReceptor?: string | null;
   monto?: number | null;
   fecha?: string | null;
   /* bug: spei-date-rollover — the time printed beside the date */
@@ -137,6 +142,31 @@ Fecha de operación: 2026-08-19
 Estatus: Liquidado
 Beneficiario: DEVOLADA SA DE CV`;
 
+/* receipt-reader-tuning D20: what one model does when called — answer
+   with a reading or a raw string, throw (the binding refusing), or wait
+   and then answer (a model past the time limit). Every answer uses the
+   `response` shape, the one measured on Mistral since 2026-08-19. No
+   unmeasured answer shape is stubbed (constitution IV): Gemma 4's is
+   added from its real answer on the bench (tasks T038). */
+export type AiBehaviour = { throws: string } | { waitsMs: number; then: StubbedReading | string };
+type AiAnswer = StubbedReading | string | AiBehaviour;
+
+/* A per-model map is told apart from a reading by its keys: model ids
+   carry a slash (`@cf/…`), a reading's keys are the prompt's words. */
+const isPerModel = (r: unknown): r is Record<string, AiAnswer> =>
+  !!r && typeof r === "object" && Object.keys(r).length > 0 && Object.keys(r).every((k) => k.includes("/"));
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function answer(a: AiAnswer): Promise<{ response: string }> {
+  if (typeof a === "object" && "throws" in a) throw new Error(a.throws);
+  if (typeof a === "object" && "waitsMs" in a) {
+    await sleep(a.waitsMs);
+    return answer(a.then);
+  }
+  return { response: typeof a === "string" ? a : fenced(a) };
+}
+
 /* `pdfText` seeds what `toMarkdown` returns: receipt text for a text
    PDF, and the empty string for a scanned one (D15) — the case where
    the conversion succeeds and there is simply nothing in it to read.
@@ -144,14 +174,19 @@ Beneficiario: DEVOLADA SA DE CV`;
    binding answers; a conversion that *fails* is a separate test that
    makes the stub throw. */
 export function aiReturning(
-  reading: StubbedReading | string,
+  reading: StubbedReading | string | Record<string /* model id */, AiAnswer>,
   calls?: unknown[],
   opts: { pdfText?: string } = {},
 ): Ai {
   return {
     run: async (model: string, input: unknown) => {
       calls?.push({ model, input });
-      return { response: typeof reading === "string" ? reading : fenced(reading) };
+      if (isPerModel(reading)) {
+        const a = reading[model];
+        if (a === undefined) throw new Error(`no stubbed answer for ${model}`);
+        return answer(a);
+      }
+      return answer(reading as StubbedReading | string);
     },
     toMarkdown: async (files: unknown) => {
       calls?.push({ toMarkdown: files });

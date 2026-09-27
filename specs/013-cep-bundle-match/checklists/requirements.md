@@ -13,8 +13,8 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — two open: FR-005 (the time
-      window) and US3 scenario 2 (clave ask first, or human queue at once)
+- [x] No [NEEDS CLARIFICATION] markers remain — FR-005 (the window) and
+      US3 (clave first) settled in session 2026-09-27
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -34,5 +34,9 @@
 
 - The provider's answer shape and the CEP's fields appear as the measured
   facts the feature rests on, not as implementation choices.
-- Settle the two clarifications with `/speckit-clarify` or in session
-  before `/speckit-plan`.
+- Session 2026-09-27 settled the two open clarifications and added four:
+  the seal cannot be verified (so FR-002 keeps it, marked not verified),
+  the single match passes the same filter (FR-014), the shared-reference
+  stop narrows (FR-015), and the tail follows the account type (FR-004).
+  FR-016 follows from FR-014: a match the filter refused must not later
+  read as a use outside Devolada.

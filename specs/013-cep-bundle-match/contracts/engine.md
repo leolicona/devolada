@@ -10,7 +10,9 @@ this contract is between the engine and its callers in the same Worker — the
 payment lifecycle (`direct-payments/validation.ts`), the `/read` route, and
 the top-up lifecycle (`credit/topups.ts`, which a several answer reaches as
 it reaches any caller: it keeps today's clave rule and treats `several` as
-it treats `not_found`). Additions only; no field changes meaning.
+it treats `not_found`). On a platform-owned call (`{ platform: true }`) the
+engine downloads no bundle and writes no record: both tables belong to a
+business. Additions only; no field changes meaning.
 
 ## Provider adapter (D1, D4)
 
@@ -63,9 +65,9 @@ name and no RFC.
 In the same call, after the billing row is written with `reason:
 "several"`:
 
-1. Download `downloads.cepPdf` — only when its origin is
-   `APICEP_STORAGE_ORIGIN` (else `unreadable`, no fetch); no auth header,
-   10 s deadline, 4 MB cap.
+1. Download `downloads.cepPdf` — only when `APICEP_STORAGE_ORIGIN` is set
+   and the link's origin equals it (else `unreadable`, no fetch); no auth
+   header, 10 s deadline, 4 MB cap.
 2. Sniff: `PK\x03\x04` → ZIP; `%PDF-` → one CEP; anything else →
    `unreadable`.
 3. List the entries; for each name matching

@@ -20,6 +20,12 @@ la clave al pagador o va a la cola de tu gente."
 
 ## Where this comes from
 
+The business can be an ISP or any other business that collects by SPEI
+through Devolada — from its panel or through the `/v1` API. What happens
+after a confirmation is the business's own action: an ISP's WispHub
+reconnection, an API business's webhook. Nothing in this feature depends
+on which.
+
 A payer uploads a capture of their receipt. Many receipts print only a
 **reference**, no clave de rastreo. Devolada searches Banxico through the
 provider with what the receipt shows: reference, amount, sending bank and
@@ -40,7 +46,7 @@ calls, none).
 
 This is the common case, not the corner: Banco Azteca's default reference
 is the last seven digits of the receiving CLABE, so **every Azteca payer of
-one ISP shares the same reference**, and any two of them who pay the same
+one business shares the same reference**, and any two of them who pay the same
 amount on the same day are "several matches".
 
 The single match is not safe either. A receipt printed 18:58 with no clave
@@ -74,7 +80,7 @@ Three measured facts shape the matching:
 
 - The receipt's time and the CEP's time are **never equal**. The receipt
   prints the payer's bank clock at sending; the CEP prints the moment the
-  ISP's bank credited the money. Measured gaps: 8 s, 22 s, about a minute —
+  business's bank credited the money. Measured gaps: 8 s, 22 s, about a minute —
   the credit after the send every time.
 - The four digits a receipt shows are the end of the **account number**,
   not always the end of the CLABE. Azteca's "***8301" is positions 14–17
@@ -105,7 +111,7 @@ link already identifies the customer.
 
 - Q: Does the CEP carry the time the receipt prints? → A: No. The search
   takes a day, never a time, and the CEP carries one time: the credit at
-  the ISP's bank. Matching is receipt-time against CEP-time within a
+  the business's bank. Matching is receipt-time against CEP-time within a
   window, never equality.
 - Q: May the sender's name in the CEP confirm the customer? → A: No,
   neither as a filter nor as a confirmation. A relative may pay from their
@@ -146,7 +152,7 @@ link already identifies the customer.
   contradicts does not confirm; the clave is asked. This closes bug
   `reference-finds-other-transfer`.
 - Q: What happens to the shared-reference stop (receipt-triage D7), which
-  today asks the clave without calling when another payment of the ISP
+  today asks the clave without calling when another payment of the business
   holds the same reference, day, bank and amount? → A: It stops the call
   only when the receipt shows neither a time nor an account tail. With
   either, the search runs and the bundle decides.
@@ -159,13 +165,13 @@ link already identifies the customer.
 
 ### User Story 1 - A shared reference resolves to the payer's own transfer (Priority: P1)
 
-An Azteca customer pays the ISP and uploads a capture that shows the
+An Azteca customer pays a business and uploads a capture that shows the
 reference, the amount, the time and "Guardadito ***8301". Another Azteca
 customer paid the same amount the same day with the same default
 reference. The provider answers with a ZIP of two CEPs. Devolada opens
 both, drops the one whose sender account does not end in 8301, is left
 with one, confirms the payment with that clave and credit time, and
-reconnects the customer. The other customer's CEP is kept for when they
+fires the business's action (for an ISP, the reconnection). The other customer's CEP is kept for when they
 upload theirs.
 
 The same filter guards the single match: when the provider answers one
@@ -181,7 +187,7 @@ bank.
 amount, time 07:10:58 and account tail 8301; answer the provider call with
 a ZIP of two CEPs (tails 8301 and 4417, credit times 07:11:20 and
 11:40:47); see the payment confirmed with the 8301 clave, one provider
-call, and the reconnection queued. Then seed a receipt printed 18:58 with
+call, and the business's action queued. Then seed a receipt printed 18:58 with
 no clave and answer a single `valid` credited 07:19:52; see the payment
 not confirmed and the clave asked.
 
@@ -290,9 +296,9 @@ with no provider call.
 
 The bundle for one customer's payment also holds the CEPs of other
 customers who share the reference. When one of those CEPs matches, by
-clave, a pending payment of another customer of the same ISP, that
+clave, a pending payment of another customer of the same business, that
 payment is confirmed too, without a provider call of its own. The rest are
-kept under the ISP, listed for the operator as transfers received without
+kept under the business, listed for the operator as transfers received without
 a payment to attach to.
 
 **Why this priority**: the bundle is paid for once and holds proof for
@@ -307,10 +313,10 @@ provider call in total.
 **Acceptance Scenarios**:
 
 1. **Given** a bundle CEP whose clave matches a pending payment of another
-   customer of the same ISP, **When** the bundle is resolved, **Then**
-   that payment confirms with its CEP and its own reconnection fires.
+   customer of the same business, **When** the bundle is resolved, **Then**
+   that payment confirms with its CEP and its own action fires.
 2. **Given** a bundle CEP that matches no pending payment, **When** the
-   bundle is resolved, **Then** it is kept under the ISP and listed for
+   bundle is resolved, **Then** it is kept under the business and listed for
    the operator with amount, credit time and account tail — never shown to
    any payer.
 
@@ -341,7 +347,7 @@ provider call in total.
   bounded number of times, and goes undecided with the reason "no se pudo
   leer el archivo".
 - **A bundle too large to read in one attempt** (a due date at a large
-  ISP). The payment goes undecided with its reason, and the clave is
+  business). The payment goes undecided with its reason, and the clave is
   asked.
 - **The receipt prints a time zone other than Mexico City's.** The CEP's
   credit time is Mexico City time. A receipt printed an hour off falls
@@ -366,7 +372,7 @@ provider call in total.
   answer (`invalid`, `banxicoConfirmed: true`, a bundle link) as a
   distinct outcome, not as "not found", on either door, and MUST NOT make
   another provider call for that payment on that basis.
-- **FR-002**: Devolada MUST download the bundle, keep it under the ISP
+- **FR-002**: Devolada MUST download the bundle, keep it under the business
   with the payment, recognise it by its content, open every CEP in it, and
   read the CEP's clave and, from its cadena original, the operation day,
   credit day, credit time, sending bank, sender account type and account,
@@ -397,11 +403,11 @@ provider call in total.
   read as 1, or one character missing — MUST confirm from it without a new
   call. A payment that holds a bundle MUST NOT end `expired`.
 - **FR-009**: A bundle CEP whose clave matches another pending payment of
-  the same ISP MUST confirm that payment; every other unmatched CEP MUST
-  be kept under the ISP and listed for the operator with amount, credit
+  the same business MUST confirm that payment; every other unmatched CEP MUST
+  be kept under the business and listed for the operator with amount, credit
   time and account tail.
 - **FR-010**: Data of other senders read from a bundle (name, account,
-  RFC) MUST be stored only under the ISP that received the money and MUST
+  RFC) MUST be stored only under the business that received the money and MUST
   never be shown to a payer. The bundle's link MUST never leave the API.
 - **FR-011**: The reader MUST keep the receipt's time with seconds when
   the receipt prints them, and MUST read the sender's account tail when
@@ -417,10 +423,10 @@ provider call in total.
   receipt contradicts MUST NOT confirm: it is kept as a candidate and the
   payment goes the undecided way of FR-008.
 - **FR-015**: Before a paid search by reference, another payment of the
-  ISP with the same reference, day, bank and amount MUST stop the search
+  business with the same reference, day, bank and amount MUST stop the search
   only when the receipt shows neither a time nor an account tail.
 - **FR-016**: A provider's "validated before" flag on a transfer that one
-  of Devolada's own searches for the same ISP returned MUST NOT be read as
+  of Devolada's own searches for the same business returned MUST NOT be read as
   a use outside Devolada.
 
 ### Key Entities
@@ -430,7 +436,7 @@ provider call in total.
   whether it could be read.
 - **Bundle CEP**: one CEP read from a bundle or from a single match —
   clave, operation day, credit day and time, sending bank, sender account
-  type and account (tail shown, full value kept under the ISP), amount,
+  type and account (tail shown, full value kept under the business), amount,
   destination account, the seal (kept, not verified), and its fate:
   chosen, dropped (reason), matched another payment, or kept unmatched.
 - **Payment** (existing): gains the undecided state with its reason, the
@@ -482,6 +488,9 @@ provider call in total.
   young, and the records stay after it.
 - The existing clave ask, action queue, partial and overpayment rules are
   unchanged; this feature adds a decision in front of them.
+- The platform's own top-ups — a business buying prepaid credit pays
+  Devolada, not a business — keep today's path: no bundle is read and no
+  transfer is kept for them.
 - Out of scope: any name matching; any change to the reader's model; the
   human queue's screens (spec 012); the Banxico batch file itself; seal
   verification, until Banxico says how bank certificates are obtained.

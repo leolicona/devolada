@@ -17,7 +17,7 @@ happened; a clave that fits a kept candidate confirms without a new wait.
    clave arrives, and the payment does not expire meanwhile. */
 "CEP_UNDECIDED",
 /* cep-bundle-match D10: every transfer found with these data already
-   confirmed another payment of the ISP — possibly the payer's own */
+   confirmed another payment of the business — possibly the payer's own */
 "CEP_ALL_USED",
 ```
 

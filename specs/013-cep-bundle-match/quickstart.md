@@ -69,7 +69,7 @@ field may get worse.
   Expected: a receipt at 07:10:58 with tail 8301 against a ZIP of two CEPs
   confirms with the 8301 clave, `match_trail.by = "tail"`, one
   `validations` row (`reason = 'several'`), one R2 object under
-  `bundles/<business_id>/`, the reconnection queued; the single `valid`
+  `bundles/<business_id>/`, the business's action queued; the single `valid`
   credited 07:19:52 against a receipt printed 18:58 does not confirm
   (`CEP_UNDECIDED`, reason `none_fit`); with neither time nor tail a single
   `valid` confirms as today.
@@ -102,7 +102,7 @@ field may get worse.
 - **Tests**: `-t "US4"`. Expected: a second customer's pending payment
   whose clave is in the first customer's bundle is confirmed by the next
   sweep without a provider call (one `validations` row in total), and its
-  own reconnection fires; the other CEP appears in `GET
+  own action fires; the other CEP appears in `GET
   /payments/unmatched-transfers` with amount, credit time and tail; the
   payer's endpoints never carry it.
 - **Panel**: `pnpm --filter @devolada/admin test -- -t "cep-bundle-match"`:

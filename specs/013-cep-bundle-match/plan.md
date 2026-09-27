@@ -16,7 +16,7 @@ The **engine** recognises the several answer (`invalid` +
 `banxicoConfirmed` + a bundle link), downloads the file from the
 provider's storage only, reads each CEP with a reader built for Banxico's
 layout, and keeps every transfer a clave-less search returns — bundle or
-single `valid` — as a record under the ISP. The **lifecycle** decides with
+single `valid` — as a record under the business. The **lifecycle** decides with
 one pure matcher: integrity, used claves, the account tail by account type,
 then the time window (−60 s / +180 s, nearest, 30 s margin). A decided
 match is **promoted to the ordinary `valid` verdict**, so every check that
@@ -77,12 +77,13 @@ feed). `packages/ui` untouched
 answer (SC-003); decided in the attempt that receives it — ~5 s provider,
 ≤ 10 s download, milliseconds to read three 28 KB CEPs — so a receipt with
 a time or a tail confirms within 2 minutes (SC-001) and an undecided one
-asks within the minute (SC-004); a transfer is parsed once per ISP however
+asks within the minute (SC-004); a transfer is parsed once per business however
 many bundles repeat it (D3, D16)
 
 **Constraints**: migration additive; no new `status` word, no new trigger,
-no new secret; one new var mirroring `APICEP_BASE_URL`
-(`APICEP_STORAGE_ORIGIN`); names and RFCs never stored; the bundle's link
+no new secret; one new var, `APICEP_STORAGE_ORIGIN`, set in
+`wrangler.jsonc` with no URL written in code (constitution VIII); names and
+RFCs never stored; the bundle's link
 never leaves the API; what a verdict means, the fee, partial settlement
 and the WispHub half are unchanged (spec Assumptions)
 
@@ -105,9 +106,9 @@ product decisions. The plan adds the ones below; code comments cite them as
 | --- | --- | --- |
 | D1 | "Several" is a provider reason: `invalid` + `banxicoConfirmed: true` + no `cepDetails`/`cepStatus` + `downloads.cepPdf`. Logged as `validations.reason = 'several'`; never rides the `not_found` schedule. The adapter also reads `processingTime`, `cdaChain`, `senderAccountType`, `senderAccount`, `certificateNumber` on a `valid` | research R1 |
 | D2 | No seal verification: the bundle is trusted as the provider's answer, like every `valid`; one call, no second call by clave. The seal is stored per record, `seal_status = 'not_verified'` | research R2, clarified 2026-09-27 |
-| D3 | The bundle is recognised by its first bytes (`PK\x03\x04` ZIP, `%PDF-` one CEP), unzipped with `fflate`; the clave comes from the entry name and must equal the printed one; days never come from a name; a clave the ISP already holds as a record is not opened again. Each CEP is read by a purpose-built reader of Banxico's layout: streams sliced by `/Length`, cp1252 runs, the cadena's three lines joined without spaces; anything unexpected is `unreadable` | research R3, R4 |
+| D3 | The bundle is recognised by its first bytes (`PK\x03\x04` ZIP, `%PDF-` one CEP), unzipped with `fflate`; the clave comes from the entry name and must equal the printed one; days never come from a name; a clave the business already holds as a record is not opened again. Each CEP is read by a purpose-built reader of Banxico's layout: streams sliced by `/Length`, cp1252 runs, the cadena's three lines joined without spaces; anything unexpected is `unreadable` | research R3, R4 |
 | D4 | One `parseCadena` for a bundle's CEPs and a `valid`'s `cdaChain`: version `01`, positions 1–18 and the certificate; names and RFC/CURP never leave the parser; amount by string parsing; credit instant = credit day + time in `America/Mexico_City` | research R5 |
-| D5 | The engine writes `cep_bundles` (search keys, status, claves, hash, R2 key; the URL only until read) and `cep_records` (unique `(business_id, clave)`) for every transfer a clave-less search returns; the file goes to `PROOFS` under `bundles/<business_id>/`. "Used" and "unmatched" are queries, never a stored fate | research R6 |
+| D5 | The engine writes `cep_bundles` (search keys, status, claves, hash, R2 key; the URL only until read) and `cep_records` (unique `(business_id, clave)`) for every transfer a clave-less search returns; the file goes to `PROOFS` under `bundles/<business_id>/`. "Used" and "unmatched" are queries, never a stored fate. Never for the platform's own top-ups (owner `platform`): they keep today's path | research R6 |
 | D6 | The window: `d = credit − receipt`, inside when `−60 s ≤ d ≤ +180 s` (an `HH:MM` receipt is the whole minute); the nearest by `\|d\|` wins unless the two nearest were credited within 30 s; `d` is recorded as `match_distance_s` | research R7, clarified 2026-09-27 |
 | D7 | The tail follows the CEP's account type: `40` — the CLABE's end or its first 17 digits' end; `3`, `10`, others — the number's end; fewer than three digits is no tail | research R8, clarified 2026-09-27 |
 | D8 | The engine reads, the lifecycle decides: `matchCandidates` (pure, `consta/bundle/match.ts`) runs integrity → used → tail → window; a decided match is promoted to the ordinary `valid` verdict (`alreadyValidated: false`, `previouslyValidated: null`) and the existing valid branch runs unchanged; `match_trail` records every candidate's fate | research R9 |
@@ -115,10 +116,10 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D10 | Undecided = `validating` + `last_error = 'CEP_UNDECIDED'` + `disputed_fields ["trackingKey"]` + `next_validation_at = NULL`: no call, no expiry; the reason in `match_trail.reason`. Public codes `CEP_UNDECIDED` and `CEP_ALL_USED`; no new `status` | research R10, clarified 2026-09-27 |
 | D11 | A clave on a row that supersedes an undecided one is first fitted against the superseded row's candidates — O as 0, I as 1, or one character missing — and exactly one fit confirms without a call | research R11, clarified 2026-09-27 |
 | D12 | The shared-reference stop (receipt-triage D7) fires, in all four places, only when there is neither a time nor a tail | research R12, clarified 2026-09-27 |
-| D13 | A "validated before" flag traces to Devolada when the clave is in the ISP's `cep_records`; the transfer door's billing row records the CEP's clave when the request had none | research R13 |
-| D14 | Other customers' CEPs by pull: a payment holding a clave looks up `cep_records` before any call; a stored bundle nudges the ISP's `validating` payments whose clave it holds (`next_validation_at = now`) | research R14 |
+| D13 | A "validated before" flag traces to Devolada when the clave is in the business's `cep_records`; the transfer door's billing row records the CEP's clave when the request had none | research R13 |
+| D14 | Other customers' CEPs by pull: a payment holding a clave looks up `cep_records` before any call; a stored bundle nudges the business's `validating` payments whose clave it holds (`next_validation_at = now`) | research R14 |
 | D15 | The reader asks `hora` with seconds when printed and `cuentaOrigen`; `QUESTIONS_VERSION` 3; `ConstaReading` and `extractions` carry the tail; the payment takes `transfer_time` and `sender_tail` from `verdict.ourReading` with the accepted fields | research R15 |
-| D16 | The download: only from `APICEP_STORAGE_ORIGIN`, 10 s, 4 MB, no credit; a failure is `CEP_BUNDLE_PENDING` and its next slot downloads, never calls; three failures `unreadable`, over the cap `too_large` — both undecided | research R16 |
+| D16 | The download: only from `APICEP_STORAGE_ORIGIN` — a `wrangler.jsonc` var, no URL in code; unset, nothing is downloaded and the payment asks for the clave — 10 s, 4 MB, no credit; a failure is `CEP_BUNDLE_PENDING` and its next slot downloads, never calls; three failures `unreadable`, over the cap `too_large` — both undecided | research R16 |
 
 ## Constitution Check
 
@@ -133,14 +134,14 @@ Phase 1 (below the table).
 | II | Money Law | The CEP's amount is parsed from the cadena's text with `amountToCents`; the matcher compares cents to cents; `credited_at` is epoch ms. The one zone read is the CEP's own (Mexico City, printed on it) — a fact of the document, not "today" | PASS |
 | III | One Contract, Pure Routers | `publicPaymentError` +2, `feedCharge.undecided`, `proofResponse.match`, and the new `unmatchedTransfers` schemas change additively and are exported from `@devolada/api` (contracts/). The new route's router is pure; the logic sits in the handler. The engine's changes are internal (contracts/engine.md) | PASS |
 | IV | Tests Run on the Real Runtime | apiCEP and its storage are intercepted at pinned origins (`APICEP_BASE_URL`, `APICEP_STORAGE_ORIGIN`); the reader stays the one stubbed binding; migrations per test; no database mocks. The fixtures are synthetic PDFs and ZIPs reproducing the measured layout, because real CEPs carry names and RFCs | PASS |
-| V | Tenant Isolation and Authorization by Area | Both tables carry `business_id`; every read filters on it; records are unique per business, so one ISP's transfers never touch another's. The list and the dialog use `payments/read`. No read across businesses: recalibrating the window from `match_distance_s` is the creator's manual query today, and becomes an amendment if it ever becomes a panel number | PASS |
+| V | Tenant Isolation and Authorization by Area | Both tables carry `business_id`; every read filters on it; records are unique per business, so one business's transfers never touch another's. The list and the dialog use `payments/read`. No read across businesses: recalibrating the window from `match_distance_s` is the creator's manual query today, and becomes an amendment if it ever becomes a panel number | PASS |
 | VI | Visual Foundations (NON-NEGOTIABLE) | The ask reuses `TransferForm` and the `Alert` recipe (icon + text); the feed keeps `StatusBadge` and adds text; tokens only; 48px on the page, 40px compact in the panel; no motion; es-MX copy | PASS |
 | VII | Every Test Cites Its Story | New tests cite `cep-bundle-match US1`…`US4`; the single-`valid` refusal also cites `bug: reference-finds-other-transfer`; tasks carry `[US<n>]` | PASS |
-| VIII | Absent Configuration Degrades, Never Breaks | `APICEP_STORAGE_ORIGIN` is declared in `env.ts` with its "unset means" (the real provider's storage, like `APICEP_BASE_URL`); a link to any other origin is never fetched and the payment asks for the clave. No provider credential → no call → no bundle, as today. No `AI` binding → no time and no tail → a single match confirms as today and a bundle asks for the clave | PASS |
+| VIII | Absent Configuration Degrades, Never Breaks | `APICEP_STORAGE_ORIGIN` is a var in `wrangler.jsonc` (local, dev, prod), with no URL written in code, and `env.ts` says what unset means: no bundle is downloaded and the payment asks for the clave; a link to any other origin is never fetched. `APICEP_BASE_URL` still carries its URL in code — the same gap, registered as debt (`.specify/debt/provider-url-defaults/`), not repeated here. (WispHub's default is a compiled catalogue entry of a per-business choice, spec 007 — not the same case.) No provider credential → no call → no bundle, as today. No `AI` binding → no time and no tail → a single match confirms as today and a bundle asks for the clave | PASS |
 
 **Post-design re-check (after Phase 1).** Still PASS on all eight. Re-read
 on purpose: (III) `proofResponse.match` shows other senders by the last
-four digits and a clave — the ISP's own incoming money, the same its bank
+four digits and a clave — the business's own incoming money, the same its bank
 statement shows; no name, no whole account, and nothing of it reaches the
 payer's schemas. (V) the pull of D14 and the fit of D11 read
 `cep_records` by `(business_id, clave)` only. (VIII) the promoted `valid`
@@ -172,6 +173,7 @@ specs/013-cep-bundle-match/
 apps/api/
 ├── migrations/0040_cep_bundle_match.sql      # + cep_bundles, cep_records; payments ×4; extractions ×1
 ├── package.json                               # + fflate
+├── wrangler.jsonc                             # + APICEP_STORAGE_ORIGIN in vars (local, dev, prod)
 ├── vitest.config.ts                           # + APICEP_STORAGE_ORIGIN pinned
 ├── sandbox/apicep-mock.mjs                    # + a several scenario serving a ZIP of synthetic CEPs
 ├── src/

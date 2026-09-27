@@ -47,7 +47,7 @@ decision, and what else was weighed. Decisions are numbered in the plan
   `storage.apicep.cloud` — no token — named by the reference and what reads
   as the call's epoch milliseconds (`9784417-1790446947555.pdf`, called
   2026-09-26 ~18:23 UTC). Guessable from the reference, which for Azteca
-  is the ISP's CLABE's last seven digits.
+  is the business's CLABE's last seven digits.
 - A one-match `valid` carries in `cepDetails` more than the adapter reads
   today: `processingTime` (the credit time, `HH:MM:SS`), `speiKey`,
   `cdaChain` (the cadena original in one line), `certificateNumber`,
@@ -201,7 +201,7 @@ space; the names it glues are the ones dropped.
 **Found.** Payments, proofs and the billing log all live under
 `business_id` (constitution V); proofs sit privately in R2 `PROOFS` behind
 signed URLs (D12 of direct-payment). The creator decided the bundle is kept
-under the ISP (session 2026-09-27); the spec keeps it as long as its
+under the business (session 2026-09-27); the spec keeps it as long as its
 payment.
 
 **Decision (D5).** Two tables, written by the engine:
@@ -223,6 +223,11 @@ follows the bucket's 15-day lifecycle rule like every receipt (set by hand,
 `wrangler.jsonc`); the records stay. Which transfer a payment took is the
 payment's own `tracking_key` (adopted, D8 of direct-payment); "used" and
 "unmatched" are queries, never a stored fate.
+
+Neither is written for the platform's own top-ups: those calls are owned
+by the platform (`consta(env, db, { platform: true })`, `business_id` NULL
+in `validations`), and a record belongs to the business that received the
+money. For them a several answer stays what it is today, `not_found`.
 
 **Alternatives.** A fate column per record: two writers (engine and
 lifecycle) on one row and a state that can drift from the payments that
@@ -391,19 +396,23 @@ release.
 
 **Decision (D16).** The download is not a provider call: no credit, no
 `validations` row. It is made only to the provider's storage origin —
-`APICEP_STORAGE_ORIGIN`, declared in `env.ts` exactly like
-`APICEP_BASE_URL`: unset means the real provider's
-(`https://storage.apicep.cloud`); `http://localhost:8789` points it at the
-sandbox; `vitest.config.ts` pins it (constitution IV, VIII). A link to any
-other origin is never fetched: the bundle is `unreadable`, the payment
-undecided, the clave asked. It runs in the attempt that received the answer, with a
+`APICEP_STORAGE_ORIGIN`, a var in `wrangler.jsonc` for local, dev and
+prod (`https://storage.apicep.cloud`), with no URL written in code
+(constitution VIII: base URLs are vars, never literals). Unset, no bundle is
+downloaded: the payment is undecided and the clave is asked. `.dev.vars`
+points it at the sandbox (`http://localhost:8789`); `vitest.config.ts` pins
+it (constitution IV). A link to any other origin is never fetched: the
+bundle is `unreadable`, the payment undecided, the clave asked. The
+provider's own base URL does carry a code default today
+(`DEFAULT_BASE_URL` in `provider/apicep.ts`); that gap is registered as
+debt (`provider-url-defaults`), not copied. It runs in the attempt that received the answer, with a
 10 s deadline and a 4 MB cap (about 140 CEPs at 28 KB). A failed download
 leaves the bundle `pending` and the row `validating` with `last_error =
 'CEP_BUNDLE_PENDING'`: its next slot downloads again and never calls the
 provider. Three failed attempts make the bundle `unreadable`, and a file
 over the cap `too_large` — both undecided (D10). Only entries whose clave the business
 does not hold as a record are inflated (D3), so a due date's growing
-bundles cost each transfer one parse per ISP.
+bundles cost each transfer one parse per business.
 
 ## R17 — The receipt door's several
 

@@ -11,7 +11,8 @@ free number is used and this line is amended.)
 ## `cep_bundles` — a several answer (D1, D5, D16)
 
 One row per provider answer that held a bundle. Written by the engine, in
-the attempt that received it.
+the attempt that received it — only for a business; the platform's own
+top-ups write neither table (D5).
 
 | Column | Type | Null | Rule |
 | --- | --- | --- | --- |
@@ -51,7 +52,7 @@ row is a fact read from Banxico's document and never changes after.
 | `credited_at` | integer (ms) | no | `credit_date` + `credit_time` in `America/Mexico_City` (D4) |
 | `sender_bank` | text | no | As printed (position 6) |
 | `sender_account_type` | text | no | `40`, `3`, `10`… (position 8) |
-| `sender_account` | text | no | Whole (position 9). Under the ISP only; the panel shows its tail; never a payer (FR-010) |
+| `sender_account` | text | no | Whole (position 9). Under the business only; the panel shows its tail; never a payer (FR-010) |
 | `receiver_spei_code` | text | no | Position 5 |
 | `receiver_account_type`, `receiver_account` | text | no | Positions 13, 14 |
 | `amount_cents` | integer | no | Position 18 by string parsing (constitution II) |

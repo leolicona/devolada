@@ -1,0 +1,23 @@
+{
+  "beneficiary": { "bank": "BBVA MEXICO", "clabe": "012290015579784417" },
+  "cases": [
+    { "id": "G1", "date": "2026-09-25", "amountCents": 300, "bank": "AZTECA", "trackingKey": "260928071152850963I",
+      "note": "viernes 18:58 (Banxico: día 28), clave con el día impreso" },
+    { "id": "G2", "date": "2026-09-26", "amountCents": 300, "bank": "AZTECA", "trackingKey": "260928071152850963I",
+      "note": "viernes 18:58, clave con el sábado" },
+    { "id": "G3", "date": "2026-09-27", "amountCents": 300, "bank": "AZTECA", "trackingKey": "260928071152850963I",
+      "note": "viernes 18:58, clave con el domingo" },
+    { "id": "G4", "date": "2026-09-28", "amountCents": 300, "bank": "AZTECA", "trackingKey": "260928071152850963I",
+      "note": "viernes 18:58, clave con su día de operación (lunes)" },
+    { "id": "G5", "date": "2026-09-27", "amountCents": 300, "bank": "AZTECA", "referenceNumber": "9784417",
+      "note": "referencia con el domingo: ¿aparecen las del viernes en la noche?" },
+    { "id": "G6", "date": "2026-09-24", "amountCents": 500, "bank": "AZTECA", "trackingKey": "260925071144368901I",
+      "note": "jueves 23:40 (Banxico: día 25), clave con el día impreso" },
+    { "id": "G7", "date": "2026-09-25", "amountCents": 500, "bank": "AZTECA", "trackingKey": "260925071144368901I",
+      "note": "jueves 23:40, clave con su día de operación" },
+    { "id": "G8", "date": "2026-09-25", "amountCents": 300, "bank": "NUBANK", "referenceNumber": "250926",
+      "note": "Nu viernes 07:23 (NU3AMPQSD4A98PNQ0F5C6TF9HFF7): control de día hábil, otro banco" },
+    { "id": "G9", "date": "2026-09-25", "amountCents": 300, "bank": "NUBANK", "trackingKey": "NU3AMPQSD4A98PNQ0F5C6TF9HFF7",
+      "note": "la misma por su clave real (en dev se buscó con el folio QVSBGOD7L)" }
+  ]
+}

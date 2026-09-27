@@ -1,115 +1,226 @@
-# Measurement: what apiCEP answers when asked by reference (2026-09-26)
+# Measurement: what apiCEP and Banxico answer, by reference and by clave (2026-09-26)
 
-- **Instrument**: `scripts/apicep-probe.sh` with
-  `scripts/apicep-probe.cases.example.json` (lot 1, E1–E7) and
-  `scripts/apicep-probe.cases.lote2.json` (lot 2, F1–F8), run by the
-  product creator's request on 2026-09-26 between 18:22 and 18:24 UTC
-  against `https://api.apicep.cloud/validate-transfer`.
-- **Cost**: 15 paid calls. The token's quota is **50 calls per month**
-  (`x-ratelimit-limit`); it went from 15 to 0 and resets 2026-10-26.
+- **Instruments**:
+  - `scripts/apicep-probe.sh`, asking apiCEP directly with no Devolada in
+    between:
+    - lot 1 (E1–E7): `scripts/apicep-probe.cases.example.json`
+    - lot 2 (F1–F8): `scripts/apicep-probe.cases.lote2.json`
+    - lot 3 (G1–G9): `scripts/apicep-probe.cases.lote3.json`
+  - Banxico's free batch service `cep-scl` (folio A0E0097211), with no
+    provider in between.
+  - The dev D1's `payments` and `validations` rows.
+- **Cost**: 24 paid apiCEP calls.
+  - Lots 1–2 spent the old token's 50/month; it resets 2026-10-26.
+  - Lot 3 ran on a new token of 800/month.
 - **Raw answers**: kept only on the creator's machine, in the git-ignored
-  `apicep-probe-lote1/` and `apicep-probe-lote2/`. They carry the sender's
-  name, RFC and account, which is why this file keeps claves and times and
-  nothing else.
-- **Serves**: this bug, `reference-search-business-day`, and the spec that
-  will make a reference the primary key of a payment.
+  `apicep-probe-lote*/`, and in the session scratchpad for Banxico's ZIP.
+  They carry the sender's name, RFC and account. This file keeps claves,
+  days and times, nothing else.
+- **Serves**: this bug, `reference-search-business-day`,
+  `valid-lost-on-later-failure` and spec 012.
 
-All transfers are the creator's own: Azteca (and one Nu) → the demo BBVA
-account ending 417, $3.00 unless stated, referencia 9784417 unless stated.
+All transfers are the creator's own. They go from Azteca (and some from Nu)
+to the demo BBVA account ending 417. The amount is $3.00 and the referencia
+9784417 unless stated.
 
-## Answers
+**Words used below:**
+- The *printed day* is the day the receipt shows. The CEP calls it the
+  *fecha de abono*, and it is the calendar day the money moved.
+- The *operation day* is the business day Banxico files the transfer under:
+  the CEP's `operationDate`, also the first digits of an Azteca clave.
 
-| # | Question the assessments left open | Answer |
+This file records only what was asked and what came back. The last section
+lists what the answers do not tell.
+
+## Lots 1–2 (apiCEP, 18:22–18:24 UTC)
+
+| Case | Asked | apiCEP said |
 | --- | --- | --- |
-| 1 | What does a reference that matches several transfers return? | `status: invalid`, `banxicoConfirmed: true`, no `cepDetails`, and a `downloads.cepPdf` that is a **ZIP holding one Banxico CEP per match**. Never a `422`. |
-| 2 | Do the amount and the sending bank tell same-reference transfers apart? | **Yes, both.** $3.00 and $3.01 with one reference gave two different valid CEPs; Azteca and Nu with one reference and amount gave two different valid CEPs. |
-| 3 | Does the CEP include the operation's time? | **Yes.** `cepDetails.processingTime` is `HH:MM:SS`, and `cdaChain` fields 4–6 are operation date, calendar date, time (`28092026|26092026|114430`). |
-| 4 | Does the 18:00 / weekend rule hold? | **Both hold for filing**: Saturday transfers carry operation day Monday 28, and Thursday 23:40–23:48 transfers carry operation day Friday 25 (their CEPs, opened below). **The search is another matter**: the credit (calendar) day found every transfer; the operation day found the Saturday ones (28) but not the Thursday-night ones (25). Unexplained; see below. |
-| 5 | Does direct mode hide a CEP already validated? | **No.** It answers `valid` with `cepPreviouslyValidated: true`, on the clave door and on the reference door alike. |
+| E1 | ref 9784417, 28, $3, Azteca | invalid, Banxico confirmed, ZIP. Opened: 3 Saturday CEPs, below |
+| E2 | ref 9784417, 25, $3, Azteca | valid, validated before, `…45184062I`, 07:19:52 (a Friday-morning transfer) |
+| E3 | ref 9784417, 26 (Saturday), $3, Azteca | invalid, Banxico confirmed, ZIP, not opened (3 CEPs by size) |
+| E4 | ref 9784417, 28, **$3.01**, Azteca | invalid, Banxico **not** confirmed, no file |
+| E5 | clave `260928071156210101I`, 28 | valid, validated before, 07:11:20 |
+| E6 | ref 9784417, 24 (Thursday), **$5**, Azteca | invalid, Banxico confirmed, ZIP. Opened: 3 Thursday-night CEPs, below |
+| E7 | ref 9784417, 25, $5, Azteca | invalid, Banxico not confirmed, no file |
+| F1 | ref 5830261, 28, $3, Azteca | invalid, Banxico confirmed, ZIP. Opened: 2 CEPs, below |
+| F2 | same as F1 | same as F1 |
+| F3 | ref 4917358, 28, $3, Azteca | valid, first time, `…58283781I`, 11:44:30 |
+| F4 | ref 4917358, 26 (printed Saturday), $3, Azteca | valid, validated before, same clave as F3 |
+| F5 | ref 6274089, 28, $3, Azteca | valid, first time, `…58297980I`, 11:45:59 |
+| F6 | clave `260928071158283781I`, 28 | valid, validated before (by F3) |
+| F7 | ref 6274089, 28, **$3.01**, Azteca | valid, first time, `…58309423I`, 11:46:37 |
+| F8 | ref 4917358, 28, $3, **Nu** | valid, first time, `NU3AN02K6CS59GIBCF1CQ696SE8Q`, 11:47:58 |
 
-## Every case
+Timing:
 
-| Case | Asked | apiCEP said | Read as |
-| --- | --- | --- | --- |
-| E1 | ref 9784417, 2026-09-28, $3, Azteca | invalid, Banxico confirmed, ZIP | several matches (three, see below) |
-| E2 | ref 9784417, 2026-09-25, $3, Azteca | valid, already validated, `…45184062I`, 07:19:52 | the one Friday-morning transfer |
-| E3 | ref 9784417, 2026-09-26 (Saturday), $3, Azteca | invalid, Banxico confirmed, ZIP (3 CEPs by size) | the calendar day finds the Monday matches too |
-| E4 | ref 9784417, 2026-09-28, **$3.01**, Azteca | invalid, Banxico **not** confirmed, no file | no transfer of that amount: the amount filters |
-| E5 | clave `260928071156210101I`, 2026-09-28 | valid, already validated, 07:11:20 | a validated CEP is not hidden |
-| E6 | ref 9784417, 2026-09-24 (Thursday), **$5**, Azteca | invalid, Banxico confirmed, ZIP (3 CEPs, opened below) | the three Thursday-night $5 transfers, found by their credit day |
-| E7 | ref 9784417, 2026-09-25, $5, Azteca | invalid, Banxico not confirmed, no file | **not found by their operation day**, although the three CEPs say 25 |
-| F1 | ref 5830261, 2026-09-28, $3, Azteca | invalid, Banxico confirmed, ZIP (2 CEPs, opened below) | a fresh exact duplicate is ambiguous from the first call |
-| F2 | same as F1 | same as F1 | asking again does not pick one |
-| F3 | ref 4917358, 2026-09-28, $3, Azteca | valid, first time, `…58283781I`, 11:44:30 | the bank filters (Nu's twin is F8) |
-| F4 | ref 4917358, 2026-09-26 (printed Saturday), $3, Azteca | valid, already validated, same clave as F3 | the calendar day finds it too |
-| F5 | ref 6274089, 2026-09-28, $3, Azteca | valid, first time, `…58297980I`, 11:45:59 | base for F7 |
-| F6 | clave `260928071158283781I`, 2026-09-28 | valid, already validated (by F3) | a reference validation marks the clave as used |
-| F7 | ref 6274089, 2026-09-28, **$3.01**, Azteca | valid, first time, `…58309423I`, 11:46:37 | the amount filters |
-| F8 | ref 4917358, 2026-09-28, $3, **Nu** | valid, first time, `NU3AN02K6CS59GIBCF1CQ696SE8Q`, 11:47:58 | the bank filters |
+| Answer | Time |
+| --- | --- |
+| A CEP found | 3.8–8.2 s |
+| Several matches | 4.4–5.7 s |
+| Not found | 0.6–1.7 s |
 
-Timing: a found CEP took 3.8–8.2 s; an ambiguous answer 4.4–5.7 s; a
-clean "not found" 0.6–1.7 s.
+On dev the same evening, "not found" answers took 1.8–4.5 s, so time alone
+does not tell the answers apart.
 
-## The ambiguous answer, opened (E1)
+### The ZIPs, opened
 
 The file behind `downloads.cepPdf` is served as `application/pdf` but is a
-ZIP. E1's holds three one-page CEPs, `CEP-20260928-<clave>.pdf`, each
-signed by the receiving bank, with operation day 28, credit day 26,
-credit time, referencia, clave, chain and seal:
+ZIP. It holds one one-page CEP per match, `CEP-<operation day>-<clave>.pdf`.
+Each is signed by the receiving bank and carries:
+- the operation day, and the credit day and time;
+- the amount and the referencia;
+- the clave, the chain and the seal.
 
-| Clave | Credit time | Amount | Validated before this run |
+| Case | Clave | Operation day | Credit day and time | Amount |
+| --- | --- | --- | --- | --- |
+| E1 | `260928071156202040I` | 28 | 26, 07:08:21 | $3.00 |
+| E1 | `260928071156210101I` | 28 | 26, 07:11:20 | $3.00 |
+| E1 | `260928071158244710I` | 28 | 26, 11:40:47 | $3.00 |
+| F1 | `260928071158256772I` | 28 | 26, 11:42:13 | $3.00 |
+| F1 | `260928071158273815I` | 28 | 26, 11:43:36 | $3.00 |
+| E6 | `260925071144368901I` | **25** | 24, 23:40:49 | $5.00 |
+| E6 | `260925071144378233I` | **25** | 24, 23:43:47 | $5.00 |
+| E6 | `260925071144393084I` | **25** | 24, 23:48:18 | $5.00 |
+
+- **E1:** the first two CEPs had been validated before this run; the third
+  (T8) had not. Nothing in the ZIP says which is which.
+- **F1:** two transfers 83 s apart with the same reference, amount, bank
+  and day, neither validated before. Only the credit time separates them.
+
+### Two Friday transfers after 18:00
+
+The receipt door found them `valid` on dev: `260928071152850963I` at 18:58
+and `260928071155271843I` at 22:46. Both are $3.00, ref 9784417, Azteca,
+printed day 25, operation day 28.
+
+| Asked | What came back |
+| --- | --- |
+| By reference with 25 (E2) | a single `valid`: the 07:19 transfer, not these two |
+| By reference with 28 (E1, opened) | the three Saturday CEPs, not these two |
+| By reference with 26 (E3) | a ZIP of 3 CEPs by size, not opened |
+| `…55271843I` by clave with 28 (dev `validations`) | `not_found`, once |
+| `…55271843I` by clave with 26 (dev `validations`) | `not_found`, five times |
+
+## Lot 3 (apiCEP, 21:00 UTC)
+
+| Case | Asked | Transfer | apiCEP said |
 | --- | --- | --- | --- |
-| `260928071156202040I` | 07:08:21 | $3.00 | yes |
-| `260928071156210101I` | 07:11:20 | $3.00 | yes (E5's) |
-| `260928071158244710I` | 11:40:47 | $3.00 | no (T8) |
+| G1 | clave `…52850963I`, **25** (printed) | Friday 18:58, op. day 28 | **valid**, validated before, credit 25 18:59:26 |
+| G2 | same clave, 26 | | not found (Banxico not confirmed) |
+| G3 | same clave, 27 | | not found |
+| G4 | same clave, **28** (operation day) | | not found |
+| G5 | ref 9784417, $3, 27 (Sunday) | | ZIP of 83 KB (3 CEPs by size), not opened |
+| G6 | clave `…44368901I`, **24** (printed) | Thursday 23:40, op. day 25 | **valid**, validated before, credit 24 23:40:49 |
+| G7 | same clave, **25** (operation day) | | not found |
+| G8 | ref 250926, $3, Nu, 25 | Nu Friday 07:23 | **valid**, first time, `NU3AMPQSD4A98PNQ0F5C6TF9HFF7` |
+| G9 | that clave, 25 | | valid, validated before (by G8) |
 
-Two things follow. Banxico returns **every** match, and the amount already
-filtered before the list (the creator's $5 transfers of the same reference
-are absent). And the list does not say which CEP was used before: that
-memory can only be Devolada's. E3's and F2's ZIPs were not opened; at
-~28 KB per CEP their sizes say 3 and 2.
+## Banxico by batch (`cep-scl`, folio A0E0097211)
 
-## F1 and E6, opened and compared
+The creator sent a 30-line file:
+- 16 claves from lots 1–3 and the opened ZIPs, each asked with its
+  **printed day**;
+- 14 of those (every night or weekend transfer) asked a second time, with
+  their **operation day**.
 
-| Case | Asked | CEP clave | Operation day | Credit day and time | Amount |
-| --- | --- | --- | --- | --- | --- |
-| F1 | 2026-09-28 | `260928071158256772I` | 28 | 26, 11:42:13 | $3.00 |
-| F1 | 2026-09-28 | `260928071158273815I` | 28 | 26, 11:43:36 | $3.00 |
-| E6 | 2026-09-24 | `260925071144368901I` | **25** | 24, 23:40:49 | $5.00 |
-| E6 | 2026-09-24 | `260925071144378233I` | **25** | 24, 23:43:47 | $5.00 |
-| E6 | 2026-09-24 | `260925071144393084I` | **25** | 24, 23:48:18 | $5.00 |
+Banxico answered the same day with 16 PDFs and `resumen.txt`.
 
-- **F1** is the clean duplicate: two transfers 83 s apart, same reference,
-  amount, bank and day, neither validated by anyone. The ZIP is the only
-  thing that separates them, by credit time. Every CEP in a ZIP is
-  complete and signed; the ZIP is not a shortened list.
-- **E6** settles the 18:00 rule for filing: Banxico stamped the three
-  Thursday 23:40–23:48 transfers with operation day Friday 25, exactly as
-  `spei-date-rollover` modelled. The claves say so too (`260925…`).
-- **E6 versus E7** is the surprise. Asked with the **credit day** (24) they
-  were found; asked with their **operation day** (25) they were not. Yet
-  the Saturday transfers (credit 26, operation 28) were found with both
-  days (E1, E3, F3–F8, F4). Across all 15 calls the credit day never
-  missed; the operation day missed once, on a plain weekday. What the
-  provider does with the date it receives (its own or Banxico's rule, a
-  weekend shift, a window) is not documented and this run cannot tell.
-  One more probe, when the quota returns, should ask a Friday-night
-  transfer with Friday, Saturday and Monday, and a weekday-night one with
-  its day and the next.
+| Lines | Asked with | Banxico answered |
+| --- | --- | --- |
+| 16 | the printed day | a CEP, all 16 |
+| 14 | the operation day | "No se pudo localizar el pago", all 14 |
 
-## What this rules out, and what it opens
+The 16 include T8 (`…58244710I`), which no one had validated before.
 
-- A `422` "duplicate reference" from the provider is not a signal Devolada
-  will ever get; ambiguity is `invalid` + `banxicoConfirmed: true` + a file.
-- "Ask again on another day" cannot resolve a duplicate; the ZIP can, by
-  the credit time next to the receipt's printed time, or by the clave nobody
-  has used.
-- Azteca's default referencia is the last seven digits of the receiving
-  CLABE (`9784417` here), so every Azteca payer of one ISP shares it: the
-  ambiguous case is the common case for that bank, not the corner.
-- The search never missed when asked with the **credit day** — the date a
-  receipt prints. The operation day missed once (E7). Until the provider's
-  date handling is understood, the printed day is the safer first ask, and
-  the business-day rule matters for what Devolada *records* and compares.
-- A validated CEP is visible again with `cepPreviouslyValidated: true`, so
-  reuse detection can rely on the provider's flag as well as on our rows.
+## Dev, the evening of Saturday 2026-09-26 (read 2026-09-27)
+
+The creator uploaded five receipts from the payer's page.
+
+| Receipt | How it was searched | Date asked | apiCEP said |
+| --- | --- | --- | --- |
+| Azteca $3.01 (the F7 transfer) | receipt door | none | valid, validated before (by F7) |
+| Nu 19:05, $3.00, ref 260926 | receipt door | none | valid, first time |
+| Nu 19:15, $3.00, ref 1701712 | receipt door | none | valid, first time |
+| Nu 19:25, $2.00, ref 260926 | receipt door | none | valid, first time |
+| Nu 19:21, $3.00, ref 260926 | see below | | |
+
+The receipt door does not send a date. The day stored on each confirmed
+payment (28) is the CEP's operation day, written after the answer.
+
+The 19:21 transfer (Juan Fernando's link), in order:
+
+1. Receipt door: `not_found`. No clave was recorded as read.
+2. By reference 260926, $3, Nu, **27**: Devolada recorded `not_found`.
+   - Devolada keeps only its verdict. A "several matches" answer (ZIP) is
+     read as `not_found` too, so which of the two came back is not known.
+   - apiCEP's id for this call is `dabe7ef1-b637-4e56-ab95-c74cf9f8ce0a`.
+3. By clave, typed by hand, with 26: `not_found` four times. The claves
+   were mistyped: one character missing once, and O and 0 swapped three
+   times.
+4. By clave `NU3AN1NOH58F83MPKJHM01OH2K0Q` with **26** (printed): **valid,
+   first time**.
+
+## What is settled
+
+1. **Several matches are never a refusal.** They come back as `invalid`,
+   `banxicoConfirmed: true` and a ZIP with one signed CEP per match, never a
+   `422` (E1, E3, E6, F1, G5). Asking again returns the same ZIP (F2).
+2. **The amount and the sending bank filter a reference search.**
+   - Amount: E4, F7.
+   - Bank: F3 against F8.
+   - The request has no field for the time, so time cannot filter.
+3. **Each CEP carries the credit day and time to the second** (the ZIPs,
+   `cepDetails.processingTime`).
+4. **A CEP validated before comes back `valid` with
+   `cepPreviouslyValidated: true`**, by clave and by reference alike (E2,
+   E5, F4, F6, G1, G6, G9). A validation by reference marks the clave as
+   used (F6).
+5. **Banxico finds a transfer by its printed day and never by its operation
+   day** (the batch: 16 of 16 against 0 of 14). This holds for claves,
+   because the batch takes claves only.
+6. **apiCEP by clave found night transfers only by the printed day.** Each
+   one was asked more than once:
+   - Friday 18:58: found with 25 (G1); not with 26, 27 or 28 (G2–G4).
+   - Thursday 23:40: found with 24 (G6); not with 25 (G7).
+   - A fresh Saturday 19:21 transfer, never validated before: found with
+     26 (dev, step 4).
+7. **apiCEP also found Saturday transfers when asked for the Monday** (28):
+   E1, E5, F3, F5–F8. By reference, a Sunday query (27) returned a ZIP
+   whose size matches the three Saturday CEPs (G5). Banxico's batch does
+   not answer the Monday, so this comes from the provider, and it is not
+   documented.
+8. **The operation day of a transfer after 18:00 is the next business
+   day.**
+   - Thursday 23:40 → Friday 25 (E6).
+   - Friday 18:58 and 22:46 → Monday 28.
+   - Saturday → Monday 28.
+9. **The creator's Azteca receipts carry referencia 9784417 by default.**
+   These are the last seven digits of the receiving CLABE.
+10. **A Nu reference is searched like any other** (F8, G8).
+
+## What these answers do not tell
+
+- **Why E2 returned one transfer and not three.** On the 25th three
+  transfers matched on reference, amount, bank and printed day. apiCEP
+  answered a single `valid` with the 07:19 one, which had been validated
+  before, and left out the 18:58 and 22:46 ones. No date asked by
+  reference returned those two (E1 opened; E3 and G5 by size only).
+  - Banxico's batch found them, but by clave; how Banxico answers them by
+    reference is not measured.
+  - This is **one call**. Whether another Friday transfer after 18:00, or
+    a weekday one, behaves the same by reference is not measured.
+- **What call 2 of the 19:21 transfer received**: a ZIP or a true "not
+  found". apiCEP's panel can show it by the id above.
+  - The date asked was a Sunday. G5 shows that a Sunday query by reference
+    returned the Saturday transfers of another reference.
+  - Two $3.00 Nu transfers with referencia 260926 exist that evening
+    (19:05 and 19:21), so a ZIP was possible.
+- **Whether apiCEP answers a clave validated before from Banxico or from its
+  own store.** G1 and G6 are both transfers validated before. The fresh
+  transfer found by clave (dev, step 4) is a Saturday one. A fresh weekday
+  transfer after 18:00, asked by clave with its printed day, is not
+  measured.
+- **Why apiCEP answers the Monday or Sunday for a Saturday transfer**, and
+  whether it always will.
+- **The eve of a holiday**: not measured.

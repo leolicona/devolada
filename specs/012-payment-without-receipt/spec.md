@@ -22,25 +22,35 @@ bugs of 2026-09-26 showed the weak spot: a receipt that prints only a
 reference can be confirmed with **somebody else's** transfer
 (`reference-finds-other-transfer`), and a weekend transfer is searched on
 days that cannot hold it (`reference-search-business-day`). Banco Azteca
-makes the first one the common case: its default reference is the last
-seven digits of the receiving CLABE, so every Azteca payer of one ISP shares
-it.
+makes the first one the common case: the creator's Azteca receipts carry,
+by default, the last seven digits of the receiving CLABE as the reference,
+so Azteca payers of one ISP who keep the default share it.
 
-On 2026-09-26 the creator measured the provider directly, 15 paid calls,
-and read three of Banxico's answers whole
+On 2026-09-26 the creator measured the provider directly (24 paid calls)
+and Banxico by batch (30 claves)
 (`.specify/bugs/reference-finds-other-transfer/measurement.md`). What holds
 this spec up:
 
 - A reference plus **amount plus sending bank plus day** separates
   transfers. Same reference at $3.00 and $3.01, or from Azteca and from Nu,
-  each returned its own CEP. Only the *time* is not a filter.
+  each returned its own CEP. The request has no field for the time.
 - When several transfers still match, the provider does not pick one and
   does not refuse: it answers "invalid, Banxico confirmed" and hands over a
   **ZIP with one signed Banxico CEP per match**, each with its credit time
   to the second.
 - A CEP validated before comes back again, marked as validated before.
-- The **printed day** of a transfer (the day the money moved) found every
-  transfer; the business day Banxico files it under missed once.
+- The **printed day** of a transfer — the day the money moved, which the
+  CEP calls the *fecha de abono* — is the date a search must carry.
+  Amended 2026-09-27 (lot 3 and Banxico's batch answer, same
+  `measurement.md`): Banxico found 16 of 16 transfers with the printed
+  day and **0 of 14** with the operation day it files them under, Saturday
+  transfers included. apiCEP also answered the Monday (and, by reference,
+  the Sunday) for Saturday transfers; that is the provider's own,
+  undocumented behaviour, and this spec does not rely on it.
+  One answer is not explained: asked by reference with the printed day
+  of a Friday, apiCEP returned one of three matching transfers and left
+  out the two made after 18:00 (one call; `measurement.md`, "What these
+  answers do not tell").
 - Banxico's own CEP query is **free**. One at a time it takes a reference
   but has an image captcha per query and runs 09:30–23:00. **By batch**
   (`cep-scl`) it takes a text file of up to 500 lines, one captcha per file,
@@ -146,9 +156,9 @@ and the action queued; confirm with a day where nothing exists and see the
    reconnection fires.
 2. **Given** a confirmation for a day where Banxico holds nothing, **When**
    the first search returns nothing, **Then** the payer sees that Devolada
-   is still looking, the search is retried on the next plausible day
-   without asking the payer again, and the payment expires with a clear
-   status if it is never found.
+   is still looking, the search is retried **on the same day given**
+   without asking the payer again, and
+   the payment expires with a clear status if it is never found.
 3. **Given** a reference, amount, bank and day that match **several**
    transfers (the payer paid twice that day), **When** the provider answers
    with the bundle of CEPs, **Then** no payment is confirmed automatically,
@@ -157,10 +167,12 @@ and the action queued; confirm with a day where nothing exists and see the
 4. **Given** a transfer already used to confirm another payment, **When**
    it comes back marked as validated before, **Then** it does not confirm a
    second payment and the payer is told which payment already used it.
-5. **Given** a payer who confirms the wrong day (the day before, a
-   weekend), **When** Banxico finds nothing on that day, **Then** the retry
-   asks the days a transfer of that date can be filed under, and the payer
-   is not asked to upload anything.
+5. **Given** a payer who confirms the wrong day (the day before, the day
+   after), **When** Banxico finds nothing on that day, **Then** a retry asks
+   the neighbouring calendar days — never the operation day Banxico files
+   the transfer under, by which Banxico finds nothing (measured 2026-09-26)
+   — and the
+   payer is not asked to upload anything.
 6. **Given** a payer who confirms with the amount wrong (their invoice is
    $350 and they sent $300), **When** the search by the invoice amount finds
    nothing, **Then** the payment is not confirmed, the payer is told the
@@ -283,8 +295,8 @@ see both confirmed with credit time and a seal check recorded.
   human layer picks by credit time, and the second transfer is a credit
   without an invoice (an overpayment the existing rules already name).
 - **The payer confirms before the transfer is filed.** A confirmation
-  minutes after the transfer may find nothing yet; the retry on the next
-  plausible day covers it without a second confirmation.
+  minutes after the transfer may find nothing yet; a retry on the same day
+  covers it without a second confirmation.
 - **The invoice amount changes between the transfer and the confirmation.**
   The search uses the invoice amount at confirmation time; a mismatch falls
   to the statement, which matches by the actual amount.
@@ -332,8 +344,9 @@ see both confirmed with credit time and a seal check recorded.
 - **FR-008**: A single valid match MUST confirm the payment and fire the
   existing action; the credit time MUST be recorded with it.
 - **FR-009**: Nothing found MUST NOT ask the payer again: Devolada retries
-  on the days a transfer of that date can be filed under, within the
-  bounded life of a payment, and shows "seguimos buscando".
+  on the day given (and, for a day the payer may have misremembered, the
+  neighbouring calendar days — never the operation day), within the bounded
+  life of a payment, and shows "seguimos buscando".
 - **FR-010**: Several matches MUST NOT confirm anything; the bundle of CEPs
   MUST be kept with the payment and the payment MUST enter the remainder
   queue with status "en revisión".
@@ -438,8 +451,10 @@ see both confirmed with credit time and a seal check recorded.
 - The invoice amount comes from WispHub as today; the profile never stores
   an amount.
 - The day the payer gives is the day the money moved (the date their app
-  prints); Devolada derives the days Banxico may file it under and asks the
-  printed day first (measured 2026-09-26: it never missed).
+  prints, the CEP's *fecha de abono*), and it is the only day Devolada asks
+  (amended 2026-09-27: Banxico found 16 of 16 by that day and 0 of 14 by
+  the operation day, measured 2026-09-26). The operation day Banxico files a transfer under is
+  recorded and compared, never asked.
 - The provider is the one the engine already uses; its answer to several
   matches (invalid + Banxico confirmed + a ZIP) is the measured behaviour
   of 2026-09-26 and this feature relies on it; its quota is a plan setting

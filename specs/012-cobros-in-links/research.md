@@ -395,3 +395,72 @@ honours.
 
 These need a tenant with open invoices. Run 2 goes to the pilot, where
 the collection only reads.
+
+### Run 2, 2026-09-27, demo tenant, after the day's billing run (10 open invoices)
+
+**M1: the invoice list pages by `offset`. Settled for D2.**
+
+- `next` carries every filter back, plus `limit` and `offset`:
+  `…/facturas/?desde=2026-03-31&estado=1&hasta=2026-09-28&limit=2&offset=2&tipo_fecha=fecha_emision`.
+- An explicit `offset=2` returned exactly the rows `next` returned
+  (`[8, 7]` both ways).
+- `count` is present (10).
+- **What D2 does now.** The cursor carries `desde`, `hasta`, `limit` and
+  `offset`, parsed from `next`. The server still rebuilds the path itself;
+  it never forwards one.
+- **The order it came in.** Newest id first (`10, 9, … 1`), with no order
+  parameter asked for. This is an observation, not a promise: the spec
+  still promises no order (Edge Cases).
+
+**M3: every money field on an invoice row is a JSON number. Settled for D5.**
+
+- The fields measured:
+
+  | Field | Value |
+  | --- | --- |
+  | `total` | `2.0` |
+  | `sub_total` | `2.0` |
+  | `saldo` | `0.0` |
+  | `saldo_nuevo` | `0.0` |
+  | `total_cobrado` | `2.0` |
+  | `descuento` | `0.0` |
+  | `impuestos_total` | `0.0` |
+
+- They all go through `amountToCents`. T003's two-shape helper stays as a
+  guard, because the customer record sends `saldo` as a string
+  (`"0.00"`), the same word with the other shape.
+- **The period** is the second line of the first line item:
+  `"Plan de Internet: Plan 2M/1M 2.00\r\nPeriodo del 1/Oct./2026 al 31/Oct./2026\r\n"`.
+  The period pattern captured `Periodo del 1/Oct./2026 al 31/Oct./2026`.
+  The line ends in `\r\n`, so the match must stop at whitespace, which it
+  does.
+- **The row's `estado` is a string** (`"Pendiente de Pago"`) on the list,
+  and `fecha_pago` is a full timestamp (`2026-10-01T00:00:00-05:00`).
+- **A demo quirk.** Five invoices were issued 2026-09-27 with
+  `fecha_vencimiento` 2026-09-17, overdue on the day they were issued.
+  The view shows those as *Venció 17 sep*. That is correct, not a bug.
+
+**M2, case (a), one open invoice: COINCIDE.**
+
+For `jacruz@wifiplus`:
+- The balance door, `/clientes/1/saldo/`, listed `[10]`, the same as the
+  invoice list, with its `saldo` 2.0 equal to the invoice's `total`.
+- The customer record said `saldo "0.00"`, "Pendiente de Pago".
+
+This confirms both halves of FR-015 again:
+- the door counts open invoices only;
+- the record's balance never includes an open invoice.
+
+The door answers eight fields: `username`, `facturas`, `url_pago`,
+`saldo`, `sectorial`, `nombre`, `router` and `estado`. Each invoice in it
+has `id`, `fecha_emision`, `fecha_vencimiento` and `total` (a number).
+`url_pago` again came back without a host (`http:///saldo/…`).
+
+**The door is also writable.** Its `allow` header lists `GET, PUT, PATCH,
+DELETE`. The adapter must only ever `GET` it (D10), and T026's comment
+should say so.
+
+**Still open: M2 cases (b), two open invoices, and (c), a short-payer.**
+The demo had neither: ten customers, one invoice each, no payment.
+Until (b) holds, US3 (T026–T030) waits. US1, US2 and US4 are unblocked:
+D2 and D5 are settled.

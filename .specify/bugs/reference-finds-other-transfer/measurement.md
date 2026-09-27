@@ -12,8 +12,10 @@
 - **Cost**: 24 paid apiCEP calls.
   - Lots 1–2 spent the old token's 50/month; it resets 2026-10-26.
   - Lot 3 ran on a new token of 800/month.
-- **Raw answers**: kept only on the creator's machine, in the git-ignored
-  `apicep-probe-lote*/`, and in the session scratchpad for Banxico's ZIP.
+- **Raw answers**: kept only on the creator's machine, in
+  `~/labs/devolada-evidencia/` — moved there on 2026-09-27 from the
+  git-ignored `apicep-probe-*/` of a worktree, with Banxico's unzipped
+  answer rescued from a session scratchpad (its `README.md` lists them).
   They carry the sender's name, RFC and account. This file keeps claves,
   days and times, nothing else.
 - **Serves**: this bug, `reference-search-business-day`,

@@ -2,11 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Devolada lets a Mexican ISP (the *business* / Negocio) collect customer payments
-by SPEI: permanent payment link → the customer transfers to the ISP's CLABE →
-Banxico validation through Consta → the action fires back in the ISP's system
-(WispHub reconnection). Identifiers, comments and commits are **English**;
-product copy is **es-MX**.
+Devolada lets Mexican businesses (the *business* / Negocio) collect payments by
+SPEI, with dedicated downstream automation for ISPs (constitution, Purpose):
+payment link → the payer transfers to the business's own CLABE → Banxico
+validation through Consta → the verdict fires the business's own action — for
+an ISP, the WispHub reconnection (its adapter); for a business on the `/v1`
+API, its webhook. The money never touches Devolada. Say "business", not "ISP",
+wherever a rule holds for every business; the ISP is one segment, served
+first. Identifiers, comments and commits are **English**; product copy is
+**es-MX**.
 
 ## How we talk during a session
 
@@ -17,7 +21,7 @@ technical expert implementing their vision. Two rules govern every message:
   own sake. This governs the conversation only — code, comments and commits
   stay English, product copy stays es-MX.
 - **Talk about the product, not the plumbing.** Keep the discussion on what a
-  feature does, what it is worth to the ISP or to the payer, and how it should
+  feature does, what it is worth to the business or to the payer, and how it should
   be designed. Technical detail earns its place when it changes a product
   decision: name what a trade-off costs, what it makes possible, or what it
   rules out — then let them decide. Implementation detail that leads to no
@@ -63,7 +67,7 @@ re-specify anything you rebuild.
 pnpm install                                  # pnpm 10 workspace, Node 22
 pnpm playground                               # packages/ui tokens + atoms showcase (5173)
 pnpm --filter @devolada/api dev               # product API + the validation engine: wrangler + local D1 (8787)
-pnpm --filter @devolada/admin dev             # ISP panel (5174)
+pnpm --filter @devolada/admin dev             # the business's panel (5174)
 pnpm --filter @devolada/pago dev              # public payment page (5175)
 pnpm --filter @devolada/landing dev           # public landing page (5176; Astro, no client framework)
 pnpm --filter @devolada/api sandbox           # apiCEP mock (8789), for validating without a provider token
@@ -127,7 +131,7 @@ apps/api      Hono 4 + Drizzle + zod on Workers/D1 — the only party that talks
               (Consta) as a module at `src/consta/`, reachable only
               in-process and attributed by `business_id`
 apps/pago     public payment page, no session, mobile-first (assets Worker)
-apps/admin    ISP panel, desktop-first, TanStack Router + Query (assets Worker)
+apps/admin    the business's panel, desktop-first, TanStack Router + Query (assets Worker)
 apps/landing  the product's front door at the root domain: an Astro static
               page on an assets Worker with a script in front (`www`
               redirect, `?ch=` channel tag into the forms, security

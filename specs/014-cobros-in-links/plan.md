@@ -1,8 +1,8 @@
 # Implementation Plan: Cobros in Links
 
-**Branch**: `claude/pr-237-propuesta-h2glb8` (spec directory `012-cobros-in-links`) | **Date**: 2026-09-25 | **Spec**: [spec.md](./spec.md)
+**Branch**: `claude/pr-237-propuesta-h2glb8` (spec directory `014-cobros-in-links`) | **Date**: 2026-09-25 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `specs/012-cobros-in-links/spec.md`
+**Input**: Feature specification from `specs/014-cobros-in-links/spec.md`
 
 ## Summary
 
@@ -103,7 +103,7 @@ them. M2 is the only measurement that can reopen a decision (D10).
 ### Documentation (this feature)
 
 ```text
-specs/012-cobros-in-links/
+specs/014-cobros-in-links/
 ├── spec.md
 ├── plan.md              # this file
 ├── research.md          # D1–D18

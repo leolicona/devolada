@@ -5,7 +5,7 @@ description: "Task list for Cobros in Links"
 
 # Tasks: Cobros in Links
 
-**Input**: Design documents from `specs/012-cobros-in-links/`
+**Input**: Design documents from `specs/014-cobros-in-links/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md),
 [research.md](./research.md), [data-model.md](./data-model.md),
@@ -52,7 +52,7 @@ Workspace paths are as `plan.md` fixes them: `apps/api/src/…`,
 the provider really answers, and who consumes the contract that is about
 to change.
 
-- [ ] T001 *(partly done 2026-09-27: F, M1, M3 settled, and M2 case (a) COINCIDE, on the demo; cases (b) and (c) still open. See research.md, "Measurements recorded".)* Run the collection *"WispHub · Mediciones para Por cobrar"* on the demo, then on the pilot (quickstart §0: F, M1, M2, M3). Record each answer, with its date, under the decision it settles in `specs/012-cobros-in-links/research.md`:
+- [ ] T001 *(partly done 2026-09-27: F, M1, M3 settled, and M2 case (a) COINCIDE, on the demo; cases (b) and (c) still open. See research.md, "Measurements recorded".)* Run the collection *"WispHub · Mediciones para Por cobrar"* on the demo, then on the pilot (quickstart §0: F, M1, M2, M3). Record each answer, with its date, under the decision it settles in `specs/014-cobros-in-links/research.md`:
   - **M1 → D2:** `next` pages by `offset` or by `page`, and `count` is present or absent;
   - **M3 → D5:** the JSON types of `saldo` and `sub_total`, and the period text;
   - **M2 → D10:** COINCIDE, COINCIDE_Y_TRAE_ANTIGUAS, or a mismatch;
@@ -320,7 +320,7 @@ so the analysis and research that cite them stay true.
   6. `pnpm -r --if-present test`
   7. `pnpm -r --if-present build`
   8. Constitution IX: `grep -rn "wisphub/" apps/api/src/routes/payment-requests apps/api/src/integrations/capabilities.ts` finds nothing, and the new `customerDebt` handler calls nothing from `wisphub/`.
-- [ ] T043 Walk quickstart §2, steps 1–7, against the local API with the demo key, and record anything that differs from the spec in `specs/012-cobros-in-links/quickstart.md`.
+- [ ] T043 Walk quickstart §2, steps 1–7, against the local API with the demo key, and record anything that differs from the spec in `specs/014-cobros-in-links/quickstart.md`.
 
 ---
 

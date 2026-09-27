@@ -2,7 +2,7 @@
 Sync Impact Report (v1.7.1, 2026-09-27)
 - Version change: 1.7.0 → 1.7.1 — PATCH. One sentence of Principle IX is
   reworded; no rule is added or removed.
-- Source: /speckit-analyze on specs/012-cobros-in-links, finding K1. IX said
+- Source: /speckit-analyze on specs/014-cobros-in-links, finding K1. IX said
   a business whose adapter lacks a capability "gets the core without that
   feature, and the screen says so". Read literally, every screen would have
   to announce every feature an adapter does not offer. The creator chose
@@ -20,13 +20,13 @@ Sync Impact Report (v1.7.0, 2026-09-27)
   Purpose paragraph is reworded to name adapters. No principle is removed or
   redefined, and nothing is renumbered.
 - Source: the creator, session 2026-09-27, while reviewing
-  specs/012-cobros-in-links: "Devoladapago is a product for validating SPEI
+  specs/014-cobros-in-links: "Devoladapago is a product for validating SPEI
   transfers for many kinds of businesses, not ISPs. It supports adapters
   for specific providers, in this case for ISPs that use WispHub. That is
   how we tell the base behaviour of Devoladapago from each adapter's."
   (translated from Spanish). The review found the read side (customers,
   open invoices, debt) had no boundary: 12 core files import the WispHub
-  folder, Consta included, and 012's plan would have added two core routes
+  folder, Consta included, and 014's plan would have added two core routes
   that build WispHub paths.
 - Added: IX. The Core Speaks Generic; Adapters Translate.
 - Modified: Purpose — "with dedicated downstream automation for ISPs" →
@@ -55,7 +55,7 @@ Sync Impact Report (v1.7.0, 2026-09-27)
   plan time, so IX gets its gate with no template change. No template file
   is edited.
 - Follow-up outside this file: CLAUDE.md's opening still says "a Mexican
-  ISP". specs/012-cobros-in-links is revised to follow IX before it is built.
+  ISP". specs/014-cobros-in-links is revised to follow IX before it is built.
 -->
 
 <!--

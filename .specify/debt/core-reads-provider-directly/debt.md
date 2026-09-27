@@ -30,7 +30,7 @@ The core calls the adapter by name:
   `::createLink` — build a `wisphubFor` instance and read `getCustomer` /
   customer pages directly.
 - `apps/api/src/routes/payment-requests/handler.ts` — today's whole-list
-  read. `specs/012-cobros-in-links` rewrites it through a capability
+  read. `specs/014-cobros-in-links` rewrites it through a capability
   (D18, T010), which pays this anchor.
 - `apps/api/src/direct-payments/validation.ts:21` and
   `apps/api/src/direct-payments/provisional.ts:8` — `wisphubFor`,
@@ -47,7 +47,7 @@ The core calls the adapter by name:
 A generic rule lives in the adapter's folder:
 - `apps/api/src/wisphub/money.ts` — the money parsers (Principle II),
   imported by Consta at `consta/provider/apicep.ts:9`,
-  `consta/extraction/gate.ts:2` and `consta/extract.ts:30`. 012's T003
+  `consta/extraction/gate.ts:2` and `consta/extract.ts:30`. 014's T003
   moves it to `apps/api/src/money.ts`, which pays this anchor.
 
 Browser-facing contracts carry the provider's name:
@@ -78,15 +78,15 @@ Core screens name the provider:
   that nothing links together.
 - The browser contracts would need a second vocabulary, or a breaking
   rename, the day a second provider exists. The admin already reads both
-  `WISPHUB_AUTH_FAILED` and, once 012 lands, `INTEGRATION_AUTH_FAILED` for
+  `WISPHUB_AUTH_FAILED` and, once 014 lands, `INTEGRATION_AUTH_FAILED` for
   the same message.
 - Consta, the SPEI engine every business depends on, imports from an
-  ISP adapter's folder until 012's T003 lands.
+  ISP adapter's folder until 014's T003 lands.
 
 ## Paying it
 
 Route every core read through the capability module that
-`specs/012-cobros-in-links` introduces (`apps/api/src/integrations/capabilities.ts`,
+`specs/014-cobros-in-links` introduces (`apps/api/src/integrations/capabilities.ts`,
 D18): the customers door, the link act, validation, the provisional
 promise, the reconnection queue and the cron sweep ask
 `capabilitiesOf(...)`. `classes.ts` reads the absorb-overpayment fact as a
@@ -113,7 +113,7 @@ call `wisphubFor` again.
 - Opened with constitution v1.7.0 (Principle IX), whose Governance says a
   gap between code and constitution is registered, never tolerated
   silently.
-- `specs/012-cobros-in-links` (D18) adds no new leak. It pays two anchors
+- `specs/014-cobros-in-links` (D18) adds no new leak. It pays two anchors
   (`payment-requests/handler.ts`, `wisphub/money.ts`), and keeps `usuario`
   on purpose so the vocabulary is renamed once, here, not split.
 - Related: `wisphub-host-is-platform-wide`, another WispHub-only

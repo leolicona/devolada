@@ -412,7 +412,7 @@ both capabilities and keeps everything that is WispHub's:
 **What stays as it is, and is registered as debt instead**
 (`.specify/debt/core-reads-provider-directly/`):
 - `usuario` in these contracts. It is already the payment link's identity
-  in the core table (`customer_usuario`, `admin-links-view` D5), so 012
+  in the core table (`customer_usuario`, `admin-links-view` D5), so 014
   keeps it rather than split the vocabulary. Renaming it is one change
   across every contract.
 - The customers door's `wisphub` field, the `WISPHUB_*` codes on older
@@ -426,7 +426,7 @@ Consta and the core stop importing from the adapter's folder.
 **Alternatives considered**:
 - Keep the logic in the core handlers, as Links (009) does. Rejected: IX
   forbids a new leak, and this feature would have added two.
-- A full adapter boundary for every existing read before 012. Rejected by
+- A full adapter boundary for every existing read before 014. Rejected by
   the creator (path 1 of 3, 2026-09-27): it delays Por cobrar for weeks.
   The existing reads are the debt entry above.
 

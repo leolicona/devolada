@@ -346,3 +346,52 @@ and text, which is a date and not a status.
 | Browser (Playwright + axe) | the chip at 360/768/1280 with no horizontal scroll, touch targets, and contrast of the two new badges in both themes |
 
 Each file cites `cobros-in-links US<n>`.
+
+---
+
+## Measurements recorded (T001)
+
+### Run 1, 2026-09-27, demo tenant (`api.wisphub.net`, 10 customers)
+
+The demo resets every day. That morning it held 10 customers, all
+"Pagadas", with no open invoice and no payment in the last 90 days. So
+this run could answer F, and part of M1.
+
+**F: `/clientes/` does not filter by debt. Settled.**
+
+- `OPTIONS /clientes/` documents exactly two query parameters, `limit`
+  and `offset`, and nothing about billing.
+- Eight probes were each compared with the unfiltered count of 10, and
+  all eight were ignored (each returned the whole base):
+  - `estado_facturas=Pendiente de Pago`;
+  - `estado_facturas__contains=Pendiente`;
+  - `estado_facturas__icontains=pendiente`;
+  - `estado_facturas=Pagadas`;
+  - `saldo__gt=0`;
+  - `saldo__gte=0.01`;
+  - `saldo__lt=0`;
+  - `saldo=0.00`.
+- This agrees with the pilot on 2026-09-23 (every billing filter tried
+  returned all 6,522 customers). The spec's premise stands: only the
+  invoice list can say who has an open invoice, and D8/D9 are not
+  reopened.
+
+The field filters `links-on-demand-search` uses (`nombre__contains` and
+the rest) still work, although this listing does not name them. The
+listing documents paging only. It is not the list of what the endpoint
+honours.
+
+**M1: `count` is present on the invoice list. The shape of `next` is still open.**
+
+- The invoice envelope carries `count` (it answered `0`), so FR-007's
+  count has a source (D5).
+- With no open invoice there was no `next` to read. D2's `offset`/`page`
+  question therefore stays open.
+
+**Still open:**
+- M1's `next`;
+- M2 (every case: nothing to compare);
+- M3 (no row to read types from).
+
+These need a tenant with open invoices. Run 2 goes to the pilot, where
+the collection only reads.

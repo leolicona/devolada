@@ -80,7 +80,7 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
 | `transfer_time` | text | yes | The receipt's time as read, `HH:MM` or `HH:MM:SS` — the receipt side of D6. From the reading the row was submitted with; NULL on typed rows |
 | `sender_tail` | text | yes | The sender account's visible digits as read (3+ digits) — the receipt side of D7. NULL when the receipt shows none |
 | `match_trail` | text (JSON) | yes | How a clave-less search was decided — see below. NULL for every row that never matched |
-| `match_distance_s` | integer | yes | `d` of the chosen candidate in whole seconds (D6); NULL when the time did not decide. What recalibrates the window |
+| `match_distance_s` | integer | yes | `d` of the chosen candidate in whole seconds (D6), whenever the receipt shows a time — even when the tail alone decided; NULL otherwise. What recalibrates the window |
 
 `match_trail`:
 
@@ -89,7 +89,7 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
   "source": "several | single",
   "bundleId": "…",
   "decided": "chosen | undecided",
-  "by": "tail | time | both | none",
+  "by": "tail | time | both | none | clave",
   "reason": "all_used | no_signal | too_close | none_fit | unreadable | too_large",
   "receipt": { "time": "07:10:58", "tail": "8301" },
   "candidates": [
@@ -100,7 +100,8 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
 }
 ```
 
-- `reason` only when `decided = "undecided"`; `by` only when `chosen`.
+- `reason` only when `decided = "undecided"`; `by` only when `chosen` —
+  `clave` when a typed clave fitted a kept candidate (D11).
 - `tail` in a candidate is the last four digits of its sender account —
   what the panel may show (FR-010).
 - Written by the lifecycle in the same update that confirms the row or
@@ -156,6 +157,7 @@ type Candidate = CepRecord;   // a row of cep_records, parsed
 type MatchPolicy = { beforeS: 60; afterS: 180; marginS: 30 };
 type MatchResult =
   | { decided: "chosen"; chosen: Candidate; by: "tail" | "time" | "both" | "none"; distanceS: number | null; trail: TrailCandidate[] }
+  // "clave" is written to match_trail.by by the lifecycle for a D11 fit, never by the matcher
   | { decided: "undecided"; reason: UndecidedReason; trail: TrailCandidate[] };
 ```
 

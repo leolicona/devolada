@@ -40,7 +40,7 @@ coincidencias" button that opens the proof dialog.
 match: z.object({
   source: z.enum(["several", "single"]),
   decided: z.enum(["chosen", "undecided"]),
-  by: z.enum(["tail", "time", "both", "none"]).nullable(),
+  by: z.enum(["tail", "time", "both", "none", "clave"]).nullable(),
   reason: z.enum([...undecided reasons]).nullable(),
   distanceS: z.number().int().nullable(),
   receipt: z.object({ time: z.string().nullable(), tail: z.string().nullable() }),

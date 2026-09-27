@@ -114,6 +114,7 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
 validating ──several / single without clave──▶ matcher
    matcher ── one left ──▶ (promoted valid) ──▶ existing valid branch
                                                 (confirmed | partial | unapplied | invalid …)
+   (a chosen clave another payment took meanwhile → joins `used`, the matcher runs again — D18)
    matcher ── none / several ──▶ validating
                                   last_error = CEP_UNDECIDED
                                   disputed_fields = ["trackingKey"]

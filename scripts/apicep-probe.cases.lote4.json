@@ -1,0 +1,24 @@
+{
+  "beneficiary": {
+    "bank": "BBVA MEXICO",
+    "clabe": "012290015579784417"
+  },
+  "cases": [
+    {
+      "id": "H1",
+      "date": "2026-09-26",
+      "amountCents": 300,
+      "bank": "AZTECA",
+      "trackingKey": "260928071158244710I",
+      "note": "spec 013 I2: T8 (sábado 11:40:47) solo apareció en ZIPs de varias coincidencias (E1, token viejo; G5, token nuevo) y nunca se validó (dev y prod sin fila, 2026-09-27). ¿Un ZIP la marca como 'validada antes'?"
+    },
+    {
+      "id": "H2",
+      "date": "2026-09-26",
+      "amountCents": 300,
+      "bank": "AZTECA",
+      "trackingKey": "260928071158256772I",
+      "note": "spec 013 I2: F1 (sábado 11:42:13) solo apareció en los ZIP de F1 y F2 (token viejo) y nunca se validó. Réplica de H1."
+    }
+  ]
+}

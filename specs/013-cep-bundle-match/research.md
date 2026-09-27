@@ -297,6 +297,19 @@ search, and the CEP it returns is the payer's (analyze A1, 2026-09-27).
 With neither a time nor a tail, nothing contradicts a single candidate and
 it confirms as today; several with no signal are undecided.
 
+**Decision (D18)** — analyze U3, 2026-09-27. The used claves are read
+before the decision and the clave is written after it, so two payments
+decided at the same moment can choose one transfer: the payer 1 of a
+bundle with X (11:43:20) and Y (11:44:30) and a receipt at 11:43:00, the
+payer 2 with a receipt at 11:43:10 and no tail — each finds X nearest. In
+turn, the second would see X used and take Y, its own. At once, the unique
+index refuses the second write, and today that reads as
+`TRANSFER_ALREADY_USED`: a payer who paid is refused. So a conflict on a
+clave *the matcher chose* adds it to `used` and decides again, at most
+twice; nothing left is `all_used`, the clave is asked. A clave the payer
+typed or the receipt showed is the payer's own claim, and another live
+payment holding it is a real second use: today's refusal stands.
+
 ## R10 — The undecided state
 
 **Found.** `REFERENCE_AMBIGUOUS` and `REFERENCE_SHARED` already put a row on

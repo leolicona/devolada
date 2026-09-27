@@ -100,7 +100,7 @@ matcher tables), ~20 lifecycle, ~4 panel routes, ~4 page, ~4 feed — cited
 
 The spec's clarifications (sessions 2026-09-26 and 2026-09-27) are the
 product decisions. The plan adds the ones below; code comments cite them as
-`cep-bundle-match D<n>` (constitution I). D17 came from the analysis of 2026-09-27.
+`cep-bundle-match D<n>` (constitution I). D17 and D18 came from the analysis of 2026-09-27.
 
 | # | Decision | Made in |
 | --- | --- | --- |
@@ -120,6 +120,7 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D14 | Other customers' CEPs by pull: a payment holding a clave looks up `cep_records` before any call; a stored bundle nudges the business's `validating` payments whose clave it holds (`next_validation_at = now`) | research R14 |
 | D15 | The reader asks `hora` with seconds when printed and `cuentaOrigen`; `QUESTIONS_VERSION` 3; `ConstaReading` and `extractions` carry the tail; the payment takes `transfer_time` and `sender_tail` from `verdict.ourReading` on every attempt that carries one, not only on `not_found` (analyze I1). The two answers are measured on spec 011's bench — which learns to mark them — before any test stub stands on them (constitution IV, analyze C1) | research R15 |
 | D17 | A business on the `/v1` API sees what an undecided payment awaits: `apiPayment` gains `awaiting` (`"payer_tracking_key"` or null) and `awaitingReason` (`all_used`, `ambiguous`, `no_match`, `unreadable`, or null), derived from `last_error = 'CEP_UNDECIDED'` and `match_trail.reason`; additive, no status word, no new event, the webhook body unchanged | research R19, clarified 2026-09-27 |
+| D18 | A clave the matcher chose that another payment took between the read and the write — the unique index refuses it — joins `used` and the matcher runs again, twice at most; such a payment is never `TRANSFER_ALREADY_USED` for a transfer it only chose, and with nothing left it is undecided (`all_used`). A clave the payer typed or the receipt showed keeps today's refusal | research R9, analyze U3 |
 | D16 | The download: only from `APICEP_STORAGE_ORIGIN` — a `wrangler.jsonc` var, no URL in code; unset, nothing is downloaded and the payment asks for the clave — 10 s, 4 MB, no credit; a failure is `CEP_BUNDLE_PENDING` and its next slot downloads, never calls; three failures `unreadable`, over the cap `too_large` — both undecided | research R16 |
 
 ## Constitution Check

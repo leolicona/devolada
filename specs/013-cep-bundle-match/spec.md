@@ -368,6 +368,10 @@ provider call in total.
   trusted is spec 012's decision.
 - **Reuse**: a CEP chosen from a bundle is recorded as used, so the same
   transfer cannot confirm a second payment from another bundle later.
+- **Two payments of one bundle are decided at the same moment** and both
+  choose the same transfer. The second chooses again without it — it is
+  never refused as "already used" for a transfer it only chose; with
+  nothing left, it asks for the clave.
 - **A single match the filter refused was marked "validated" by the
   provider** (a search by reference marks the clave as used). When its
   real owner's payment later finds it, the flag traces to Devolada's own

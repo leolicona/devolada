@@ -2134,3 +2134,51 @@ describe("cep-bundle-match US1: the ask when Banxico's answer did not say which 
     expect(screen.queryByLabelText("Clave de rastreo")).not.toBeInTheDocument();
   });
 });
+
+describe("cep-bundle-match US3: every transfer found was already used (D10)", () => {
+  const referenceOnly = () =>
+    ok(
+      rtRead({
+        amountCents: 300,
+        senderBank: "AZTECA",
+        referenceNumber: "9784417",
+        gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "ok" },
+        ask: null,
+      }),
+    );
+
+  it("CEP_ALL_USED says the payer may have paid already, and asks for the clave alone, focused", async () => {
+    server.use(...uploadHandlers(referenceOnly));
+    server.use(
+      handlers.status(() =>
+        ok(
+          validatingWith({
+            error: "CEP_ALL_USED",
+            disputedFields: ["trackingKey"],
+            nextValidationAt: null,
+            senderBank: "AZTECA",
+            transferDate: "2026-09-26",
+            claimedAmountCents: 300,
+            referenceNumber: "9784417",
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    await goToProof();
+    await rtUpload();
+
+    expect(
+      await screen.findByText(
+        "Las transferencias que encontramos con estos datos ya se usaron para otros pagos. Si ya habías pagado, tu pago puede estar confirmado. Si esta transferencia es nueva, escribe su clave de rastreo.",
+        {},
+        { timeout: 8000 },
+      ),
+    ).toBeInTheDocument();
+    const clave = screen.getByLabelText("Clave de rastreo");
+    await waitFor(() => expect(clave).toHaveFocus());
+    expect(screen.queryByLabelText("Número de referencia")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Banco desde el que pagaste")).toHaveValue("AZTECA");
+    await expectNoViolations(document.body);
+  });
+});

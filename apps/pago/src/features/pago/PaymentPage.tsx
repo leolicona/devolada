@@ -130,6 +130,10 @@ const payErrors: Record<string, string> = {
      the payer's — asked with the clave, like the two above */
   CEP_UNDECIDED:
     "Encontramos más de una transferencia que podría ser la tuya. Escribe tu clave de rastreo para saber cuál es.",
+  /* cep-bundle-match D10: every transfer found already paid something —
+     possibly this payer's own earlier payment, so it says so first */
+  CEP_ALL_USED:
+    "Las transferencias que encontramos con estos datos ya se usaron para otros pagos. Si ya habías pagado, tu pago puede estar confirmado. Si esta transferencia es nueva, escribe su clave de rastreo.",
 };
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
@@ -926,7 +930,10 @@ export function PaymentPage({ token }: { token: string }) {
                  that carried it */
               /* cep-bundle-match D10: and a bundle, or a single match, that
                  did not say which transfer is the payer's */
-              const clavesOnly = status.error === "REFERENCE_AMBIGUOUS" || status.error === "CEP_UNDECIDED";
+              /* cep-bundle-match D10: an undecided payment asks for the
+                 clave alone, focused, the other fields kept */
+              const undecided = status.error === "CEP_UNDECIDED" || status.error === "CEP_ALL_USED";
+              const clavesOnly = status.error === "REFERENCE_AMBIGUOUS" || undecided;
               const referenceAsk = clavesOnly || status.error === "REFERENCE_SHARED";
               const notFound = status.error === "TRANSFER_NOT_FOUND" || referenceAsk;
               /* D18: the receipt's own Estatus is the one discriminator
@@ -1159,7 +1166,7 @@ export function PaymentPage({ token }: { token: string }) {
                          D7: a shared reference needs the clave beside it */
                       keys={clavesOnly ? "clave" : "either"}
                       requireClave={status.error === "REFERENCE_SHARED"}
-                      focusClave={status.error === "CEP_UNDECIDED"}
+                      focusClave={undecided}
                       busy={busy}
                       /* The Card above is already aria-live="polite" */
                       announce={false}

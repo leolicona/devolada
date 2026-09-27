@@ -620,3 +620,223 @@ describe("cep-bundle-match US1: the reading record of a several answer", () => {
     expect(reading.validationId).not.toBeNull();
   });
 });
+
+describe("cep-bundle-match US2: the same payer twice on one day is told apart by time (D6)", () => {
+  /* One account, two transfers of the same amount to the same reference:
+     only the receipt's time can say which one it shows (research R7, F1) */
+  const EARLY = transfer("260926114299000031I", "2026-09-26", "11:42:13");
+  const LATE = transfer("260926114399000032I", "2026-09-26", "11:43:36");
+
+  async function decide(side: { transferTime: string | null; senderTail: string | null; transferDate?: string }, bundle: SyntheticTransfer[], confirms: boolean) {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedSettledRow(link, business, side);
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf(bundle));
+    if (confirms) mockConfirmation();
+    await sweepDirectPayments(testEnv, NOW());
+    return rowById(row.id);
+  }
+
+  const expectUndecided = (row: Awaited<ReturnType<typeof rowById>>, reason: string) => {
+    expect(row).toMatchObject({
+      status: "validating",
+      lastError: "CEP_UNDECIDED",
+      disputedFields: JSON.stringify(["trackingKey"]),
+      nextValidationAt: null,
+      trackingKey: null,
+    });
+    expect(trailOf(row)).toMatchObject({ decided: "undecided", reason });
+  };
+
+  it("a receipt at 11:43:20 is the 11:43:36 credit; the 11:42:13 one is outside the window", async () => {
+    const after = await decide({ transferTime: "11:43:20", senderTail: "8301" }, [EARLY, LATE], true);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: LATE.clave, matchDistanceS: 16 });
+    const trail = trailOf(after);
+    expect(trail).toMatchObject({ decided: "chosen", by: "time" });
+    expect(trail.candidates).toEqual([
+      expect.objectContaining({ clave: EARLY.clave, fate: "dropped", why: "window", distanceS: -67 }),
+      expect.objectContaining({ clave: LATE.clave, fate: "chosen", distanceS: 16 }),
+    ]);
+  });
+
+  it("a receipt at 11:42:05 is the 11:42:13 credit, 8 s after it; the other was farther", async () => {
+    const after = await decide({ transferTime: "11:42:05", senderTail: "8301" }, [EARLY, LATE], true);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: EARLY.clave, matchDistanceS: 8 });
+    const trail = trailOf(after);
+    expect(trail).toMatchObject({ decided: "chosen", by: "time" });
+    expect(trail.candidates).toEqual([
+      expect.objectContaining({ clave: EARLY.clave, fate: "chosen" }),
+      expect.objectContaining({ clave: LATE.clave, fate: "dropped", why: "farther", distanceS: 91 }),
+    ]);
+  });
+
+  it("two credits 20 s apart are too close to call: undecided, the clave asked", async () => {
+    const after = await decide(
+      { transferTime: "11:43:20", senderTail: "8301" },
+      [transfer("260926114399000033I", "2026-09-26", "11:43:25"), transfer("260926114399000034I", "2026-09-26", "11:43:45")],
+      false,
+    );
+    expectUndecided(after, "too_close");
+    expect(trailOf(after).candidates.map((c) => [c.fate, c.why])).toEqual([
+      ["kept", "too_close"],
+      ["kept", "too_close"],
+    ]);
+  });
+
+  it("no time on the receipt, one account: nothing tells them apart — no_signal", async () => {
+    expectUndecided(await decide({ transferTime: null, senderTail: "8301" }, [EARLY, LATE], false), "no_signal");
+  });
+
+  it("a receipt printed HH:MM with two credits inside that minute: too_close", async () => {
+    const after = await decide(
+      { transferTime: "11:43", senderTail: "8301" },
+      [transfer("260926114399000035I", "2026-09-26", "11:43:05"), transfer("260926114399000036I", "2026-09-26", "11:43:50")],
+      false,
+    );
+    expectUndecided(after, "too_close");
+    /* both inside the printed minute: 0 s from it, as near as each other */
+    expect(trailOf(after).candidates.map((c) => c.distanceS)).toEqual([0, 0]);
+  });
+
+  it("a receipt at 23:59:50 and a credit at 00:00:20 the next day: chosen across midnight", async () => {
+    const midnight = transfer("260926235999000037I", "2026-09-27", "00:00:20", SENDER_8301, { operationDay: "2026-09-26" });
+    const morning = transfer("260926071199000038I", "2026-09-26", "07:11:20", SENDER_8301, { operationDay: "2026-09-26" });
+    const after = await decide({ transferTime: "23:59:50", senderTail: "8301", transferDate: "2026-09-26" }, [morning, midnight], true);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: midnight.clave, matchDistanceS: 30 });
+    expect(trailOf(after)).toMatchObject({ by: "time" });
+  });
+});
+
+describe("cep-bundle-match US3: an undecided payment asks, waits without expiring, and a typed clave closes it (D10, D11)", () => {
+  /* The payer's correction from the page (contracts/payment-page.md): the
+     clave form with the other fields filled, sent with `supersedes` — the
+     pay route reads the debt first, as for any submission */
+  function mockSubmission(usuario = "cliente@wifiplus") {
+    const wh = () => fetchMock.get(WISPHUB);
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/") && p.includes("usuario=") })
+      .reply(...json({ count: 1, results: [wisphubCustomer("Suspendido", usuario)] }));
+    wh()
+      .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
+      .reply(...json({ next: null, count: 1, results: [{ id_factura: 42, cliente: { usuario }, total: 1.5 }] }));
+  }
+  const pay = async (token: string, body: unknown) =>
+    (await app()).request(
+      `/direct-payments/links/${token}/pay`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+      testEnv,
+    );
+  const status = async (id: string) => (await (await (await app()).request(`/direct-payments/${id}/status`, {}, testEnv)).json()).data;
+
+  /* An undecided row as the lifecycle leaves it: a settled receipt with
+     neither time nor tail, and a bundle of MINE and THEIRS */
+  async function undecided() {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedSettledRow(link, business, { transferTime: null, senderTail: null });
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([MINE, THEIRS]));
+    await sweepDirectPayments(testEnv, NOW());
+    const after = await rowById(row.id);
+    expect(after).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED" });
+    expect(trailOf(after)).toMatchObject({ reason: "no_signal" });
+    return { business, link, row: after };
+  }
+  const correction = (supersedes: string, trackingKey: string) => ({
+    transfer: { trackingKey, referenceNumber: REFERENCE, senderBank: "AZTECA", date: "2026-09-26", amountCents: 300 },
+    supersedes,
+  });
+
+  it("every transfer found already paid another payment: the status says CEP_ALL_USED, the clave is asked", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    /* both claves already confirmed two other payments of the business */
+    for (const [i, t] of [MINE, THEIRS].entries()) {
+      await seedRow(await seedLink(business, `tokheld000000${i}`, `pagado${i}@wifiplus`), business, {
+        status: "confirmed",
+        trackingKey: t.clave,
+        nextValidationAt: null,
+      });
+    }
+    const row = await seedSettledRow(link, business, { transferTime: "07:10:58", senderTail: "8301" });
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([MINE, THEIRS]));
+    await sweepDirectPayments(testEnv, NOW());
+
+    const after = await rowById(row.id);
+    expect(after).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED", nextValidationAt: null });
+    expect(trailOf(after)).toMatchObject({ reason: "all_used" });
+    expect(await status(row.id)).toMatchObject({
+      status: "validating",
+      error: "CEP_ALL_USED",
+      disputedFields: ["trackingKey"],
+      nextValidationAt: null,
+    });
+  });
+
+  it("three CEPs with no time and no tail: no_signal, and a sweep at +13 h leaves it validating with no new call", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedSettledRow(link, business, { transferTime: null, senderTail: null });
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(bundleOf([MINE, THEIRS, transfer("260928090099000017I", "2026-09-26", "09:00:00")]));
+    await sweepDirectPayments(testEnv, NOW());
+    expect(trailOf(await rowById(row.id))).toMatchObject({ decided: "undecided", reason: "no_signal" });
+
+    await sweepDirectPayments(testEnv, new Date(Date.now() + 13 * 3600 * 1000));
+    expect(await rowById(row.id)).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED", nextValidationAt: null });
+    expect(await calls()).toBe(1);
+    expect(await status(row.id)).toMatchObject({ error: "CEP_UNDECIDED" });
+  });
+
+  it("D10: a row something re-armed goes back to wait — no call, no expiry", async () => {
+    const { row } = await undecided();
+    await db().update(payments).set({ nextValidationAt: new Date(Date.now() - 1000) }).where(eq(payments.id, row.id));
+    /* no interceptor: a provider call would fail the test */
+    await sweepDirectPayments(testEnv, new Date(Date.now() + 24 * 3600 * 1000));
+    expect(await rowById(row.id)).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED", nextValidationAt: null });
+    expect(await calls()).toBe(1);
+  });
+
+  it("D11: the payer types the clave with an O for a 0 — confirmed from the record with no provider call, by clave", async () => {
+    const { row } = await undecided();
+    const typed = MINE.clave.replace("0", "o").toLowerCase();
+    expect(typed).not.toBe(MINE.clave);
+    mockSubmission();
+    mockConfirmation();
+    const res = await pay("tokazteca0000001", correction(row.id, typed));
+    expect(res.status).toBe(201);
+    const { data } = await res.json();
+
+    const fresh = await rowById(data.directPaymentId);
+    expect(fresh).toMatchObject({ status: "confirmed", supersedesId: row.id, trackingKey: MINE.clave, receivedCents: 300 });
+    expect(trailOf(fresh)).toMatchObject({ decided: "chosen", by: "clave" });
+    expect(trailOf(fresh).candidates).toEqual([
+      expect.objectContaining({ clave: MINE.clave, fate: "chosen" }),
+      expect.objectContaining({ clave: THEIRS.clave, fate: "kept" }),
+    ]);
+    expect(await rowById(row.id)).toMatchObject({ status: "superseded" });
+    /* the bundle's one paid call is the only one */
+    expect(await calls()).toBe(1);
+    expect(await status(fresh.id)).toMatchObject({ status: "confirmed", error: null });
+  });
+
+  it("D11: a clave that fits no candidate takes one ordinary clave call", async () => {
+    const { row } = await undecided();
+    mockSubmission();
+    mockApiCep(noneAnswer(), (body) => expect((body.sender as Record<string, unknown>).trackingKey).toBe("ZZZ4417ZZZ9999"));
+    const res = await pay("tokazteca0000001", correction(row.id, "ZZZ4417ZZZ9999"));
+    const { data } = await res.json();
+    expect(await rowById(data.directPaymentId)).toMatchObject({ trackingKey: "ZZZ4417ZZZ9999", lastError: "TRANSFER_NOT_FOUND" });
+    expect(await calls()).toBe(2);
+  });
+
+  it("D11: a clave that fits two candidates is no answer — the ordinary call", async () => {
+    const { row } = await undecided();
+    /* one character short of both MINE and THEIRS */
+    const typed = "26092807119900001I";
+    mockSubmission();
+    mockApiCep(noneAnswer(), (body) => expect((body.sender as Record<string, unknown>).trackingKey).toBe(typed));
+    const res = await pay("tokazteca0000001", correction(row.id, typed));
+    const { data } = await res.json();
+    expect(await rowById(data.directPaymentId)).toMatchObject({ trackingKey: typed, lastError: "TRANSFER_NOT_FOUND" });
+    expect(await calls()).toBe(2);
+  });
+});

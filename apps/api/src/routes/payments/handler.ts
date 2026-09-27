@@ -30,6 +30,7 @@ import type { Integration } from "../../integrations/store";
 import type { ProofMatch, ProofResponse, PulseResponse, ReviewDecisionRequest, ReviewDecisionResponse } from "./schema";
 import { recordsFor } from "../../consta/bundle/store";
 import { shownTail } from "../../consta/bundle/match";
+import { undecidedReasonOf } from "../../direct-payments/cep-match";
 import type { MatchTrail } from "../../consta/bundle/types";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -225,6 +226,8 @@ export async function listPaymentFeed(
           ...(charge.status === "validating" && charge.banxicoValidAt
             ? { banxicoConfirmedAt: charge.banxicoValidAt.getTime(), waitingOn: charge.lastError }
             : { banxicoConfirmedAt: null, waitingOn: null }),
+          /* cep-bundle-match D10: why it waits on the payer's clave */
+          undecided: undecidedReasonOf(charge),
         };
       }),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,

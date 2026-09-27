@@ -383,6 +383,20 @@ export async function runValidation(
     return row;
   };
 
+  /* cep-bundle-match D10: an undecided payment waits on its payer alone.
+     No slot brings it here — the undecided write clears
+     `next_validation_at` and the sweep selects only rows that have one —
+     so it never reaches `retryLater`'s expiry above: no call is made until
+     the clave arrives as a superseding row (D11), and it does not expire
+     meanwhile, however long the payer takes. Should a future path re-arm
+     it, it is put back to wait, with no call. A row provisionally released
+     before it went undecided keeps its WispHub promise until the promise
+     lapses on its own; `notifyProvisionalExpiry` runs on an expiry only,
+     so never for it. */
+  if (payment.status === "validating" && payment.lastError === "CEP_UNDECIDED") {
+    return update({ nextValidationAt: null });
+  }
+
   /* bug: valid-lost-on-later-failure — Banxico already confirmed this
      transfer on an earlier attempt, and what failed after it was WispHub.
      Resume there: no provider call, no credential needed, the CEP's facts

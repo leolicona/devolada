@@ -144,6 +144,20 @@ export function trailOf(
   };
 }
 
+/* D10, D17: why an undecided payment did not decide, from the trail the
+   same write left — read by the payer's status (`CEP_ALL_USED`), the feed
+   and the public read. Null for every row that is not validating with
+   `CEP_UNDECIDED`. */
+export function undecidedReasonOf(row: Pick<Payment, "status" | "lastError" | "matchTrail">): UndecidedReason | null {
+  if (row.status !== "validating" || row.lastError !== "CEP_UNDECIDED" || !row.matchTrail) return null;
+  try {
+    const trail = JSON.parse(row.matchTrail) as MatchTrail;
+    return trail.decided === "undecided" ? trail.reason : null;
+  } catch {
+    return null;
+  }
+}
+
 /* The bundle a payment is still waiting to read (D16): the latest pending
    one its own search received */
 export async function pendingBundleOf(db: DB, businessId: string, paymentId: string): Promise<string | null> {

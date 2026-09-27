@@ -506,6 +506,14 @@ function ChargeRow({
               {charge.banxicoConfirmedAt != null && (
                 <p className="mt-1 font-medium text-warning">{waitingCopy(charge.waitingOn)}</p>
               )}
+              {charge.undecided && (
+                /* cep-bundle-match D10: it waits on the payer, not on
+                   Banxico — said as such, never as a plain "Verificando" */
+                <>
+                  <p className="mt-1 font-medium text-warning">{undecidedCopy[charge.undecided]}.</p>
+                  <p className="mt-1">Se pidió la clave de rastreo al cliente.</p>
+                </>
+              )}
               {charge.actionError && <p className="mt-1 text-error">{reasonFor(charge.actionError)}</p>}
               {charge.actionDoneAt && (
                 <p className="mt-1 text-success">Reconectado a las {at(charge.actionDoneAt)}</p>
@@ -535,6 +543,7 @@ function ChargeRow({
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 {showsMoney && <ProofDialog charge={charge} />}
+                {charge.undecided && <ProofDialog charge={charge} label="Ver coincidencias" />}
                 {/* D5: promised to operators by the role matrix since
                     phase 2; kept until now only by waiting */}
                 {/* feedback-vocabulary-rollout D1/D4: an action the operator started

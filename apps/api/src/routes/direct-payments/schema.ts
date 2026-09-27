@@ -226,6 +226,10 @@ export const publicPaymentError = z.enum([
      expire meanwhile. (`CEP_BUNDLE_PENDING` is not public: the bundle is
      still downloading, and the page shows its ordinary wait.) */
   "CEP_UNDECIDED",
+  /* cep-bundle-match D10: every transfer found with these data already
+     confirmed another payment of the business — possibly the payer's own.
+     The same ask as CEP_UNDECIDED, with words that say so. */
+  "CEP_ALL_USED",
 ]);
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)

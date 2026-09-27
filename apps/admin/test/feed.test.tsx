@@ -807,3 +807,147 @@ describe("cep-bundle-match US1: the proof says how a search without a clave was 
     expect(within(section).getByText("Muy cerca de otra")).toBeInTheDocument();
   });
 });
+
+describe("cep-bundle-match US2: the proof says how far the credit was from the receipt's time", () => {
+  const byTime = (distanceS: number, receiptTime: string, candidates: Record<string, unknown>[]) =>
+    decidedProof({
+      source: "several",
+      decided: "chosen",
+      by: "time",
+      reason: null,
+      distanceS,
+      receipt: { time: receiptTime, tail: "8301" },
+      candidates,
+    });
+
+  it("after the receipt: the seconds, and the other credit outside the window", async () => {
+    const section = await openProof(
+      byTime(16, "11:43:20", [
+        candidate({ clave: THEIRS_CLAVE, creditTime: "11:42:13", fate: "dropped", why: "window" }),
+        candidate({ creditTime: "11:43:36" }),
+      ]),
+    );
+    expect(within(section).getByText("Varias coincidencias · resuelta por hora")).toBeInTheDocument();
+    expect(within(section).getByText(/16 s después de la hora del comprobante/)).toHaveTextContent(
+      "Abonada a las 11:43:36, 16 s después de la hora del comprobante",
+    );
+    const [early, late] = within(section).getAllByRole("listitem");
+    expect(within(early).getByText("Fuera de la ventana de hora")).toBeInTheDocument();
+    expect(within(late).getByText("Elegida")).toBeInTheDocument();
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("before the receipt, and inside a printed minute", async () => {
+    const before = await openProof(byTime(-12, "11:43:20", [candidate({ creditTime: "11:43:08" })]));
+    expect(within(before).getByText(/12 s antes de la hora del comprobante/)).toBeInTheDocument();
+  });
+
+  it("a receipt printed HH:MM: 0 s means inside its minute", async () => {
+    const minute = await openProof(byTime(0, "11:43", [candidate({ creditTime: "11:43:36" })]));
+    expect(within(minute).getByText(/dentro del minuto del comprobante/)).toBeInTheDocument();
+  });
+});
+
+describe("cep-bundle-match US3: an undecided row says why it waits, and shows what was found", () => {
+  it("the reason in words, the clave asked, and 'Ver coincidencias' opens the candidates", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(
+          feedOf(
+            url.searchParams.get("action") === "failed"
+              ? []
+              : [
+                  charge({
+                    status: "validating" as const,
+                    actionOutcome: null,
+                    reconciliationClass: null,
+                    actionDoneAt: null,
+                    actionAttempts: 0,
+                    undecided: "no_signal" as const,
+                  }),
+                ],
+          ),
+        ),
+      ),
+      handlers.paymentProof(() =>
+        ok(
+          proofResponse.parse({
+            folio: "",
+            proofMode: "receipt",
+            cep: null,
+            imageUrl: null,
+            match: {
+              source: "several",
+              decided: "undecided",
+              by: null,
+              reason: "no_signal",
+              distanceS: null,
+              receipt: { time: null, tail: null },
+              candidates: [
+                candidate({ fate: "kept" }),
+                candidate({ clave: THEIRS_CLAVE, creditTime: "11:40:47", senderTail: "4171", fate: "kept" }),
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+    renderApp("/");
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+
+    expect(
+      await screen.findByText("Varias coincidencias; el comprobante no muestra hora ni cuenta."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Se pidió la clave de rastreo al cliente.")).toBeInTheDocument();
+    /* the money never arrived as far as the row knows: no proof button */
+    expect(screen.queryByRole("button", { name: "Ver comprobante" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ver coincidencias" }));
+    const section = await screen.findByRole("region", { name: "Coincidencias" });
+    expect(within(section).getByText("Varias coincidencias; el comprobante no muestra hora ni cuenta")).toBeInTheDocument();
+    const items = within(section).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    for (const item of items) expect(within(item).getByText("Posible")).toBeInTheDocument();
+    /* no CEP yet, and the dialog does not pretend Banxico has not answered */
+    expect(screen.queryByText(/Banxico aún no confirma/)).not.toBeInTheDocument();
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("each reason reads in the operator's words", async () => {
+    const copy = {
+      all_used: "Varias coincidencias, todas ya usadas en otros pagos.",
+      too_close: "Varias coincidencias con menos de 30 s de diferencia.",
+      none_fit: "Ninguna transferencia encontrada coincide con el comprobante.",
+      unreadable: "No se pudo leer el archivo de coincidencias.",
+      too_large: "Demasiadas coincidencias para revisarlas.",
+    } as const;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(
+          feedOf(
+            url.searchParams.get("action") === "failed"
+              ? []
+              : Object.keys(copy).map((reason, i) =>
+                  charge({
+                    id: `ch-${reason}`,
+                    customerName: `Cliente ${i + 1}`,
+                    status: "validating" as const,
+                    actionOutcome: null,
+                    reconciliationClass: null,
+                    actionDoneAt: null,
+                    undecided: reason,
+                  }),
+                ),
+          ),
+        ),
+      ),
+    );
+    renderApp("/");
+    for (const [i, words] of Object.values(copy).entries()) {
+      await userEvent.click(await screen.findByRole("button", { name: new RegExp(`Cliente ${i + 1}`) }));
+      expect(await screen.findByText(words)).toBeInTheDocument();
+    }
+  });
+});

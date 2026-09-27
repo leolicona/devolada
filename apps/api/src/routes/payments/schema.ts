@@ -43,6 +43,9 @@ export const feedQuery = z.object({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+/* cep-bundle-match D10: why a search without a clave did not decide */
+export const MATCH_REASONS = ["all_used", "no_signal", "too_close", "none_fit", "unreadable", "too_large"] as const;
+
 export const feedCharge = z.object({
   id: z.string(),
   folio: z.string(),
@@ -109,6 +112,10 @@ export const feedCharge = z.object({
      fixtures born before it still parse. */
   banxicoConfirmedAt: z.number().int().nullable().default(null),
   waitingOn: z.string().nullable().default(null),
+  /* cep-bundle-match D10 (contracts/panel.md): set while the row is
+     validating with CEP_UNDECIDED — why the bundle did not decide. Only
+     the reason rides the 5 s poll; the candidates travel with the proof. */
+  undecided: z.enum(MATCH_REASONS).nullable().optional(),
 });
 
 export const feedResponse = z.object({
@@ -131,8 +138,6 @@ export const feedResponse = z.object({
   }),
 });
 
-/* cep-bundle-match D10: why a search without a clave did not decide */
-export const MATCH_REASONS = ["all_used", "no_signal", "too_close", "none_fit", "unreadable", "too_large"] as const;
 /* cep-bundle-match FR-013: why a candidate was not the one. `farther`: it
    was inside the time window, and another was nearer (D6). */
 export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amount", "account", "unreadable"] as const;

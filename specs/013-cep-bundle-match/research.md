@@ -11,8 +11,8 @@ decision, and what else was weighed. Decisions are numbered in the plan
 - **The provider's three answers to a search** — measured 2026-09-26 with
   `scripts/apicep-probe.sh` (lots 1–3, `.specify/bugs/reference-finds-
   other-transfer/measurement.md`) and read again whole on 2026-09-27 from
-  the git-ignored `apicep-probe-lote1/`, `apicep-probe-lote2/` of the
-  creator's machine (R1).
+  the creator's machine, where they now live in
+  `~/labs/devolada-evidencia/` (R1).
 - **Eight CEPs opened** — E1 (3), E6 (3), F1 (2), all to the demo BBVA
   account, all from one Azteca sender. Read on 2026-09-27 with a spike
   reader in the session scratchpad; nothing with a name, RFC or account

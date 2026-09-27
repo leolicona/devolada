@@ -36,13 +36,14 @@ pnpm -r --if-present build
 
 ## Step 0 — the reader against the real CEPs, locally (research R4, R18)
 
-The eight real CEPs stay on the creator's machine (git-ignored
-`apicep-probe-lote1/`, `apicep-probe-lote2/`). Before release, read them
+The eight real CEPs stay on the creator's machine, outside every
+worktree, in `~/labs/devolada-evidencia/`. Before release, read them
 with the shipped reader, in the real runtime, through a dev-only route
 (`POST /dev/cep-read`, 404 outside `ENVIRONMENT=dev` like `/dev/seed`):
 
 ```sh
-for f in apicep-probe-lote1/E1 apicep-probe-lote1/E6 apicep-probe-lote2/F1; do
+E=~/labs/devolada-evidencia
+for f in $E/apicep-probe-lote1/E1 $E/apicep-probe-lote1/E6 $E/apicep-probe-lote2/F1; do
   curl -s -X POST localhost:8787/dev/cep-read \
     -H 'content-type: application/zip' --data-binary "@$f.cep-bundle.zip"
 done

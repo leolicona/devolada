@@ -173,10 +173,9 @@ so the analysis and research that cite them stay true.
 
 ## Phase 4: User Story 2 - The Cobros section folds into Links (Priority: P2)
 
-**Goal**: the menu has no Cobros entry. The view lives in the address; the old address lands on Links with Por cobrar chosen.
+**Goal**: the menu has no Cobros entry, and its address is gone with no redirect. The view lives in the address.
 
 **Independent Test**:
-- open `/payment-requests`: you land on `/links?view=receivables`;
 - choose Por cobrar, go to Pagos and back, press back, then reload: it is still chosen each time;
 - the menu has no Cobros.
 
@@ -186,21 +185,20 @@ so the analysis and research that cite them stay true.
   - `view=receivables` in the address opens Por cobrar;
   - choosing the chip writes it into the address, keeping `q`;
   - an unknown `view` value reads as the customer view;
-  - `/payment-requests` redirects with any `q` kept;
   - the shell renders no Cobros entry, as a `shell.test.tsx` case or here;
-  - `apps/admin/test/cobros.test.tsx` shrinks to the redirect, and its US-R01 and link-act cases move into T007 and T025 where they still apply.
+  - `apps/admin/test/cobros.test.tsx` is deleted with the screen; its US-R01 and link-act cases move into T007 and T025 where they still apply, each citing the case it replaces (D12, D16).
 
 ### Implementation for User Story 2
 
 - [ ] T018 [US2] In `apps/admin/src/router.tsx`:
   - `linksSearch` gains `view?: "receivables"`, and any other value drops it;
-  - the `/payment-requests` route renders a `<Navigate to="/links" search={{ view: "receivables", q }} />` instead of `CobrosScreen` (`cobros-in-links D12`, FR-014);
+  - the `/payment-requests` route is removed, with no redirect (`cobros-in-links D12`, FR-014);
   - `LinksScreen.tsx` reads and writes `view` through the route search, replacing T015's local state.
 - [ ] T019 [P] [US2] Remove `{ to: "/payment-requests", label: "Cobros", … }` from `baseSections` in `apps/admin/src/features/shell/Shell.tsx`. Update the section-order comment above it (`cobros-in-links` FR-014).
 - [ ] T020 [US2] Key the local memory by view: in `apps/admin/src/features/links/seen.ts` and in the query keys of `useCustomers.ts` and `useReceivables.ts`, the view is part of the key, so the same text in two views is two answers (D12).
 - [ ] T021 [US2] Delete `apps/admin/src/features/cobros/CobrosScreen.tsx` once T014 has taken what it needs, and remove its import from `router.tsx` (`cobros-in-links D16`). Retire the Cobros cases of `apps/admin/test/presence-freshness.test.tsx` (scenario 3, and "US-P07: Cobros listens to Devolada's own pulse"). Each gets a comment saying D16 retired that promise for this screen, and FR-011 says what replaced it.
 
-**Checkpoint**: one section. The old address and every return to the page land on the view the operator left.
+**Checkpoint**: one section. Every return to the page lands on the view the operator left.
 
 ---
 

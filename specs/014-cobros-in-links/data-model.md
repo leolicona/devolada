@@ -134,4 +134,4 @@ Local memory (`seen.ts`) and query keys include the view (D12).
 | Retired | Replaced by |
 | --- | --- |
 | `paymentRequestsResponse.cobros`, `.complete`, `.readAt` | `results`, `nextCursor`, `total`, `integration` |
-| The admin route `/payment-requests` and `CobrosScreen` | the redirect, and the Por cobrar view in Links |
+| The admin route `/payment-requests` and `CobrosScreen` | the Por cobrar view in Links; the old address has no redirect (D12) |

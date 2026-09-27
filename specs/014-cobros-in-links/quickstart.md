@@ -31,7 +31,7 @@ pnpm -r --if-present typecheck
 pnpm --filter @devolada/api test -- test/cobros-in-links.test.ts
 pnpm --filter @devolada/admin test -- test/cobros-in-links.test.tsx
 pnpm --filter @devolada/api test          # payment-requests, presence-freshness and pending-invoice-cap still pass
-pnpm --filter @devolada/admin test        # links, cobros (redirect only), shell
+pnpm --filter @devolada/admin test        # links, shell
 pnpm e2e                                  # links.spec.ts: the chip at 360/768/1280, no horizontal scroll
 ```
 
@@ -69,8 +69,8 @@ no provider, and step 6 is what you should see.
    nothing reads *Sin adeudo*. Each row shows "Consultando adeudo" until
    its answer arrives, never a zero.
 5. **The address (US2).** Go to Pagos and back, press back, reload: still
-   on Por cobrar with the same text. Open `/payment-requests`: it lands on
-   `/links?view=receivables`. The menu has no Cobros.
+   on Por cobrar with the same text. The menu has no Cobros, and the old
+   `/payment-requests` panel address no longer exists.
 6. **No integration (US4).** Log in as a business with no integration. There
    is no Por cobrar chip. An address with `view=receivables` falls back to
    the customer view.

@@ -205,16 +205,15 @@ the number of open invoices WispHub reports.
 
 ### User Story 2 - The Cobros section folds into Links (Priority: P2)
 
-The panel's menu no longer has a Cobros section. An operator who saved the
-old address, or follows an old link to it, lands on Links with the Por cobrar
-chip already chosen. The chip that was chosen survives leaving the page,
-the back button and a reload, the way the search text already does.
+The panel's menu no longer has a Cobros section, and its address goes away
+with it: nothing redirects from it (creator, 2026-09-27). The chip that was
+chosen survives leaving the page, the back button and a reload, the way the
+search text already does.
 
 **Why this priority**: one section instead of two is the point of the
-change, and nobody should lose the page they relied on.
+change, and the view the operator chose must not be lost on the way back.
 
-**Independent Test**: open the old Cobros address and confirm that Links
-opens on the Por cobrar view; choose the Por cobrar view, go to Pagos and back,
+**Independent Test**: choose the Por cobrar view, go to Pagos and back,
 press back, reload, and confirm that it is still chosen each time; confirm
 that the menu has no Cobros entry.
 
@@ -222,8 +221,8 @@ that the menu has no Cobros entry.
 
 1. **Given** the panel menu, **When** the operator looks at it, **Then**
    there is no Cobros entry, and Links is where Cobros used to be.
-2. **Given** the old Cobros address, **When** it is opened, **Then** Links
-   opens with the Por cobrar chip chosen.
+2. *(Removed 2026-09-27: the old Cobros address is retired with no
+   redirect, creator's decision.)*
 3. **Given** the Por cobrar view chosen, **When** the operator leaves the page
    and returns, presses back, or reloads, **Then** the Por cobrar view is still
    chosen.
@@ -421,8 +420,10 @@ refused key, confirm that the page sends the operator to Integraciones.
   see the Por cobrar chip. The same rule holds for a search result's debt.
   *Amended 2026-09-27* (constitution IX): this said "with no WispHub
   connected".
-- **FR-014**: The Cobros section MUST leave the menu. Its old address MUST
-  open Links with the Por cobrar view chosen.
+- **FR-014**: The Cobros section MUST leave the menu, and its panel address
+  MUST be retired with it. Nothing redirects from the old address.
+  *Amended 2026-09-27* (creator): this said the old address MUST open Links
+  with the Por cobrar view chosen. No one relies on it, so it goes.
 - **FR-015**: The WispHub adapter MUST NOT answer any amount this feature
   shows from WispHub's one-call balance answer alone. It counts open
   invoices only and leaves out a carried balance (measured 2026-09-23).

@@ -291,14 +291,16 @@ creator before anything ships. Until then an unreadable answer is
   links to Integraciones, exactly as the customer view does
   (`bug: links-refused-key`).
 
-## D12 — The view lives in the address; the old address redirects
+## D12 — The view lives in the address; the old address is retired
 
 - **The address.** `/links` gains `view=receivables` beside `q`
   (`linksSearch`, the route's `validateSearch`). Absent means the customer
   view, which is also the default (FR-001).
-- **The old address.** The admin route `/payment-requests` becomes a
-  redirect to `/links?view=receivables` (FR-014), and it keeps any `q` it
-  was given.
+- **The old address.** The admin route `/payment-requests` is removed with
+  its screen, and nothing redirects from it (FR-014). *Amended 2026-09-27*
+  (creator): this was a redirect to `/links?view=receivables`. A bookmark
+  to it now gets the router's not-found answer. The API path of the same
+  name is a different thing and stays (D1).
 - **The menu** loses its Cobros entry.
 - **Why English words:** the value is an identifier, following the
   router's own rule that routes are English.
@@ -362,7 +364,7 @@ and text, which is a date and not a status.
 | Layer | What it proves |
 | --- | --- |
 | API (workerd + D1, `fetchMock` at the WispHub origin) | the block walk and its cursor, including a crafted cursor refused; the window carried across blocks; the three answers of D7; the debt door's three states with the measured cycle (299 carried then 798 open, never 1,097); `channel=panel`; SC-006, with a seeded snapshot whose rows differ from the live answer, and the door returns the live ones |
-| Component (MSW) | the chip and its address; grouping across two blocks; the empty-vs-unavailable distinction; a row's debt states and "Consultando adeudo"; the redirect; the chip absent without the `receivables` capability |
+| Component (MSW) | the chip and its address; grouping across two blocks; the empty-vs-unavailable distinction; a row's debt states and "Consultando adeudo"; the menu without Cobros; the chip absent without the `receivables` capability |
 | Browser (Playwright + axe) | the chip at 360/768/1280 with no horizontal scroll, touch targets, and contrast of the two new badges in both themes |
 
 Each file cites `cobros-in-links US<n>`.

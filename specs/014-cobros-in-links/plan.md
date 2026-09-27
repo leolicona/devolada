@@ -31,8 +31,8 @@ Four pieces make that work:
   door reads the customer record and WispHub's per-customer balance door
   in one operation, and composes them with the existing `debtFor` rule
   (D9–D11).
-- **Navigation.** The Cobros section leaves the menu. Its address
-  redirects to `/links?view=receivables` (D12).
+- **Navigation.** The Cobros section leaves the menu, and its panel
+  address is removed with no redirect (D12).
 
 The sweep and every money path are untouched.
 
@@ -146,7 +146,7 @@ apps/api/
 
 apps/admin/
 ├── src/features/auth/session.ts             # BusinessActor.integrationCapabilities (D13)
-├── src/router.tsx                           # linksSearch += view; /payment-requests → redirect (D12)
+├── src/router.tsx                           # linksSearch += view; the /payment-requests route removed (D12)
 ├── src/features/shell/Shell.tsx             # Cobros leaves baseSections
 ├── src/features/links/
 │   ├── LinksScreen.tsx                      # the chip; renders the view (D14)
@@ -158,7 +158,7 @@ apps/admin/
 ├── src/features/cobros/CobrosScreen.tsx     # deleted (D16)
 └── test/
     ├── cobros-in-links.test.tsx             # new
-    ├── cobros.test.tsx                      # reduced to the redirect
+    ├── cobros.test.tsx                      # deleted with the screen (D12, D16)
     ├── presence-freshness.test.tsx          # Cobros cases retired with D16
     └── msw.ts                               # fixtures for the new contracts
 

@@ -58,10 +58,13 @@ export function receiptSideOf(
   reading: ConstaVerdict["ourReading"] | null | undefined,
   searchedCents: number | null,
   accounts: RegisteredAccount[],
+  /* D16: the day a retried download's search asked — the receipt door's
+     row holds none, and the retry carries no reading (converge T054) */
+  askedDay: string | null = null,
 ): ReceiptSide {
   return {
     time: reading?.time ?? payment.transferTime ?? null,
-    day: reading?.date ?? payment.transferDate ?? null,
+    day: reading?.date ?? payment.transferDate ?? askedDay,
     tail: reading?.senderTail ?? payment.senderTail ?? null,
     amountCents: searchedCents,
     accounts,
@@ -159,14 +162,34 @@ export function undecidedReasonOf(row: Pick<Payment, "status" | "lastError" | "m
 }
 
 /* The bundle a payment is still waiting to read (D16): the latest pending
-   one its own search received */
-export async function pendingBundleOf(db: DB, businessId: string, paymentId: string): Promise<string | null> {
+   one its own search received, with the search it answered. A retried
+   download carries no reading, and a receipt-door row holds neither the
+   printed day nor the amount — only the time and the tail (D15) — so the
+   matcher's day, amount and bank come from what the first attempt asked
+   with (spec Assumptions: the receipt's day is the day asked). Without
+   them the window and the amount check were skipped, and a tail match
+   hours from the receipt confirmed (converge T054, probe 2026-09-28). */
+export type PendingBundle = {
+  id: string;
+  asked: { day: string | null; amountCents: number | null; senderBank: string | null };
+};
+
+export async function pendingBundleOf(db: DB, businessId: string, paymentId: string): Promise<PendingBundle | null> {
   const rows = await db
-    .select({ id: cepBundles.id, createdAt: cepBundles.createdAt })
+    .select({
+      id: cepBundles.id,
+      createdAt: cepBundles.createdAt,
+      day: cepBundles.transferDate,
+      amountCents: cepBundles.amountCents,
+      senderBank: cepBundles.senderBank,
+    })
     .from(cepBundles)
     .where(and(eq(cepBundles.businessId, businessId), eq(cepBundles.paymentRef, paymentId), eq(cepBundles.status, "pending")));
   rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  return rows[0]?.id ?? null;
+  const [latest] = rows;
+  return latest
+    ? { id: latest.id, asked: { day: latest.day, amountCents: latest.amountCents, senderBank: latest.senderBank } }
+    : null;
 }
 
 /* D13 (research R13): a transfer one of our own searches for this business

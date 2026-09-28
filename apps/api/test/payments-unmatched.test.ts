@@ -7,7 +7,7 @@ import { parseCadena } from "../src/consta/bundle/cadena";
 import { matchCandidates } from "../src/consta/bundle/match";
 import { recordsFor } from "../src/consta/bundle/store";
 import { trailOf } from "../src/direct-payments/cep-match";
-import { unmatchedTransfersResponse } from "../src/routes/payments/schema";
+import { feedResponse, unmatchedTransfersResponse } from "../src/routes/payments/schema";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 import { SENDER_4417, SENDER_8301, SYNTHETIC, transferCadena, type SyntheticTransfer } from "./consta/bundle-fixtures";
 
@@ -233,5 +233,56 @@ describe("cep-bundle-match US4: the transfers received that no payment holds (FR
     const res = await (await app()).request(`/direct-payments/${payment.id}/status`, {}, env);
     const text = JSON.stringify(await res.json());
     for (const other of [THEIRS.clave, SENDER_4417, "4171", "11:40:47"]) expect(text).not.toContain(other);
+  });
+});
+
+/* converge T055 (SC-004): the feed carries why an undecided payment waits —
+   the reason the panel shows in words, proven here at the layer that
+   computes it rather than through a fixture */
+describe("cep-bundle-match US3: the feed carries the undecided reason", () => {
+  it("each undecided row reads its trail's reason; a pending download, an ordinary wait and a confirmed row read null", async () => {
+    const business = await seedBusiness();
+    const reasons = ["all_used", "no_signal", "too_close", "none_fit", "unreadable", "too_large"] as const;
+    const waiting = { status: "validating" as const, actionOutcome: null, confirmedAt: null, receivedCents: null, registeredCents: null };
+    for (const reason of reasons) {
+      await seedConfirmedPayment(business, {
+        ...waiting,
+        customerName: `Indeciso ${reason}`,
+        lastError: "CEP_UNDECIDED",
+        disputedFields: JSON.stringify(["trackingKey"]),
+        nextValidationAt: null,
+        matchTrail: JSON.stringify(
+          trailOf("several", null, { time: null, tail: null }, { decided: "undecided", reason, trail: [] }),
+        ),
+      });
+    }
+    await seedConfirmedPayment(business, {
+      ...waiting,
+      customerName: "Descargando",
+      lastError: "CEP_BUNDLE_PENDING",
+      nextValidationAt: new Date(Date.now() + 120_000),
+    });
+    await seedConfirmedPayment(business, {
+      ...waiting,
+      customerName: "Esperando a Banxico",
+      lastError: "TRANSFER_NOT_FOUND",
+      nextValidationAt: new Date(Date.now() + 120_000),
+    });
+    await seedConfirmedPayment(business, { customerName: "Pagado" });
+
+    const res = await (await app()).request(
+      "/payments/feed",
+      { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { payments: rows } = feedResponse.parse((await res.json()).data);
+    const byName = Object.fromEntries(rows.map((r) => [r.customerName, r.undecided ?? null]));
+    expect(byName).toEqual({
+      ...Object.fromEntries(reasons.map((reason) => [`Indeciso ${reason}`, reason])),
+      Descargando: null,
+      "Esperando a Banxico": null,
+      Pagado: null,
+    });
   });
 });

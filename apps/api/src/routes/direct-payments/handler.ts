@@ -1151,6 +1151,9 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
       referenceNumber: reading.referenceNumber,
       ask,
       destinationSeen: visibleTail(reading.destination.digits) !== null,
+      /* cep-bundle-match D15 */
+      time: reading.time ?? null,
+      senderTail: reading.senderTail ?? null,
     },
   });
 }

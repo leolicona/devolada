@@ -28,7 +28,7 @@ top-ups write neither table (D5).
 | `claves` | text (JSON) | yes | The claves the entries' names carry, in entry order — the bundle's membership |
 | `unreadable` | text (JSON) | yes | `[{ entry, reason }]` for entries that could not be read (FR-002) |
 | `sha256` | text | yes | Of the file as downloaded |
-| `r2_key` | text | yes | `bundles/<business_id>/<id>.zip` in `PROOFS` |
+| `r2_key` | text | yes | `bundles/<business_id>/<id>.zip` in `PROOFS` — `.pdf` when the answer was one bare CEP, named by the file's content like everything else about it (D3; amended 2026-09-28) |
 | `byte_size` | integer | yes | As downloaded |
 | `created_at`, `read_at` | integer (ms) | no / yes | |
 
@@ -96,10 +96,17 @@ Not stored, by construction: names, RFC/CURP, concept (D4).
   "candidates": [
     { "cepId": "…", "clave": "…", "creditTime": "07:11:20", "tail": "8301",
       "fate": "chosen | dropped | kept",
-      "why": "used | tail | window | too_close | amount | account | unreadable" }
+      "why": "used | tail | window | farther | too_close | amount | account | unreadable",
+      "distanceS": 22 }
   ]
 }
 ```
+
+*Amended 2026-09-28 (converge T057), to what the lifecycle writes:* `why`
+gains `farther` — inside the window, and another was nearer (D6) — and a
+candidate the window measured carries its own `distanceS`, credit minus
+receipt in whole seconds (absent when the receipt showed no time). An
+entry that could not be read has `cepId`, `creditTime` and `tail` null.
 
 - `reason` only when `decided = "undecided"`; `by` only when `chosen` —
   `clave` when a typed clave fitted a kept candidate (D11).

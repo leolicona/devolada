@@ -7,6 +7,7 @@ import { chooseAndClaim, sweepDirectPayments } from "../src/direct-payments/vali
 import { recordsFor } from "../src/consta/bundle/store";
 import { resetShapeRules } from "../src/consta/extraction";
 import type { Bindings } from "../src/env";
+import { proofReadingResponse } from "../src/routes/direct-payments/schema";
 import { app, fakeProofs, seedBusiness } from "./helpers";
 import {
   aiReturning,
@@ -493,6 +494,9 @@ describe("cep-bundle-match US1: the shared-reference stop, narrowed (D12, FR-015
     );
     const { data } = await res.json();
     expect(data.ask).toBeNull();
+    /* converge T056 (D15, contracts/payment-page.md): the answer carries
+       what the stop was read from — the page shows neither */
+    expect(proofReadingResponse.parse(data)).toMatchObject({ time: "07:10:58", senderTail: "8301" });
   });
 
   it("(b) with neither time nor tail, each of the three still asks for the clave with no call", async () => {
@@ -602,6 +606,55 @@ describe("cep-bundle-match US1: the bundle downloads on the next slot, never wit
     const after = await rowById(row.id);
     expect(after).toMatchObject({ lastError: "CEP_UNDECIDED", nextValidationAt: null });
     expect(trailOf(after)).toMatchObject({ reason: "unreadable" });
+    expect(await calls()).toBe(1);
+  });
+
+  /* converge T054 (probe 2026-09-28): the receipt door's first attempt keeps
+     the receipt's time and tail on the row, but not its printed day nor the
+     amount — the retry has no reading of its own. Without the day the window
+     was skipped, and a tail match credited hours from the receipt confirmed
+     (bug: reference-finds-other-transfer, on the retry path). */
+  async function retriedOnReceiptDoor(retryBundle: SyntheticTransfer[]) {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedReceiptRow(link, business);
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage("unavailable", 503);
+    await sweepDirectPayments(readerEnv(AZTECA_SECONDS_TAIL_READING), NOW());
+    const pending = await rowById(row.id);
+    expect(pending).toMatchObject({ lastError: "CEP_BUNDLE_PENDING", transferDate: null, claimedAmountCents: null });
+    mockStorage(bundleOf(retryBundle));
+    await sweepDirectPayments(readerEnv(AZTECA_SECONDS_TAIL_READING), new Date(pending.nextValidationAt!.getTime() + 1000));
+    return rowById(row.id);
+  }
+
+  it("a receipt-door retry still reads the receipt's day: a tail match outside the window stays undecided (bug: reference-finds-other-transfer)", async () => {
+    const FAR = transfer("260926114099000051I", "2026-09-26", "11:40:00");
+    const OTHER = transfer("260926071199000052I", "2026-09-26", "07:11:00", SENDER_4417);
+    const after = await retriedOnReceiptDoor([FAR, OTHER]);
+    expect(after).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED", trackingKey: null, banxicoValidAt: null });
+    expect(trailOf(after)).toMatchObject({ decided: "undecided", reason: "none_fit", receipt: { time: "07:10:58", tail: "8301" } });
+    expect(trailOf(after).candidates).toEqual([
+      expect.objectContaining({ clave: FAR.clave, fate: "dropped", why: "window" }),
+      expect.objectContaining({ clave: OTHER.clave, fate: "dropped", why: "tail" }),
+    ]);
+    expect(await calls()).toBe(1);
+  });
+
+  it("…and the retry still checks the amount: a CEP of another amount is dropped", async () => {
+    const WRONG = transfer("260926071199000053I", "2026-09-26", "07:11:20", SENDER_8301, { amount: "5.00" });
+    const OTHER = transfer("260926071199000054I", "2026-09-26", "07:11:00", SENDER_4417);
+    const after = await retriedOnReceiptDoor([WRONG, OTHER]);
+    expect(after).toMatchObject({ lastError: "CEP_UNDECIDED", trackingKey: null });
+    expect(trailOf(after).candidates).toEqual([
+      expect.objectContaining({ clave: WRONG.clave, fate: "dropped", why: "amount" }),
+      expect.objectContaining({ clave: OTHER.clave, fate: "dropped", why: "tail" }),
+    ]);
+  });
+
+  it("…and a retried bundle that holds the payer's own transfer confirms it, as the first attempt would have", async () => {
+    mockConfirmation();
+    const after = await retriedOnReceiptDoor([MINE, THEIRS]);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: MINE.clave, matchDistanceS: 22 });
     expect(await calls()).toBe(1);
   });
 });

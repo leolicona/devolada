@@ -12,6 +12,7 @@ import {
   heldBefore,
   nudgeHolders,
   pendingBundleOf,
+  type PendingBundle,
   promote,
   receiptSideOf,
   trailOf,
@@ -569,6 +570,8 @@ export async function runValidation(
      `valid` branch below, or — the bundle — in the matcher. */
   let local: ConstaVerdict | null = null;
   let localTrail: MatchTrail | null = null;
+  /* D16: what a retried download's search asked with (converge T054) */
+  let asked: PendingBundle["asked"] | null = null;
 
   /* D11 (research R11): the row supersedes an undecided one, and its clave
      fits exactly one of that row's kept candidates — as typed, O read as
@@ -646,9 +649,10 @@ export async function runValidation(
      failure gives up (`unreadable`); what it reads goes to the matcher
      below exactly as a fresh several answer would. */
   if (!local && payment.lastError === "CEP_BUNDLE_PENDING") {
-    const pendingId = await pendingBundleOf(db, business.id, payment.id);
-    const bundle = pendingId ? await readPendingBundle(env, db, { businessId: business.id }, pendingId) : null;
+    const pending = await pendingBundleOf(db, business.id, payment.id);
+    const bundle = pending ? await readPendingBundle(env, db, { businessId: business.id }, pending.id) : null;
     if (bundle) {
+      asked = pending!.asked;
       local = {
         validationId: payment.constaValidationId ?? "",
         status: "invalid",
@@ -858,10 +862,12 @@ export async function runValidation(
        door; what the provider read on the image door */
     const imageDoor = receiptDoor || crossCheck;
     const searchedCents = imageDoor
-      ? (verdict.reading?.amountCents ?? read?.amountCents ?? payment.claimedAmountCents ?? null)
+      ? (verdict.reading?.amountCents ?? read?.amountCents ?? payment.claimedAmountCents ?? asked?.amountCents ?? null)
       : (payment.claimedAmountCents ?? payment.amountCents);
-    const searchedBank = imageDoor ? (verdict.reading?.senderBank ?? read?.senderBank ?? null) : payment.senderBank;
-    const receipt = receiptSideOf(payment, read, searchedCents, accounts);
+    const searchedBank = imageDoor
+      ? (verdict.reading?.senderBank ?? read?.senderBank ?? asked?.senderBank ?? null)
+      : payment.senderBank;
+    const receipt = receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null);
     const unreadable = unreadableCandidates(bundle?.unreadable ?? []);
     const source = several ? "several" : "single";
     const bundleId = bundle?.id ?? null;

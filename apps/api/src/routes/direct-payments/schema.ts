@@ -308,6 +308,13 @@ export const proofReadingResponse = z.object({
      were read — the guide's "Cuenta" item. The digits themselves, and the
      account they tied to, never reach the page. */
   destinationSeen: z.boolean().default(false),
+  /* cep-bundle-match D15 (contracts/payment-page.md): the receipt's time
+     ("HH:MM" or "HH:MM:SS") and the sender's visible digits, as read —
+     what D12's stop decided the ask with. The payer's own data, echoed to
+     the payer; the page shows neither. Defaulted so fixtures born before
+     them still parse. */
+  time: z.string().nullable().default(null),
+  senderTail: z.string().nullable().default(null),
 });
 
 export const payResponse = z.object({

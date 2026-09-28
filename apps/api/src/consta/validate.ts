@@ -618,12 +618,16 @@ export async function validate(
             senderBank: input.senderBank,
             amountCents: input.amountCents,
           }
-        : /* the image door searched with what the provider read */
+        : /* the image door searched with what the provider read. Where its
+             answer carries no reading — a several answer on this door is
+             unmeasured — our reading of the same receipt stands in: these
+             keys are also what a retried download decides with, when no
+             reading travels (converge T054) */
           {
-            referenceNumber: verdict.reading?.referenceNumber ?? null,
-            transferDate: verdict.reading?.date ?? null,
-            senderBank: verdict.reading?.senderBank ?? null,
-            amountCents: verdict.reading?.amountCents ?? null,
+            referenceNumber: verdict.reading?.referenceNumber ?? ours?.referenceNumber ?? null,
+            transferDate: verdict.reading?.date ?? ours?.date ?? null,
+            senderBank: verdict.reading?.senderBank ?? ours?.senderBank ?? null,
+            amountCents: verdict.reading?.amountCents ?? ours?.amountCents ?? null,
           };
     bundle = await storeBundle(env, db, owner, {
       paymentRef: body.paymentRef ?? null,

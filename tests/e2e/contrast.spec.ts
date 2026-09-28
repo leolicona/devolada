@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
-import { stubAdminApi, stubOperatorReaderApi, stubPagoClosed } from "./stubs";
+import { stubAdminApi, stubOperatorReaderApi, stubPagoClosed, stubPorCobrarSearch } from "./stubs";
 
 /* docs/legacy/polish/dark-and-contrast.spec.md, the half a token file cannot
    prove. contrast-lint measures the palette; this measures the pixels —
@@ -9,7 +9,15 @@ import { stubAdminApi, stubOperatorReaderApi, stubPagoClosed } from "./stubs";
    and only a browser knows which colours actually met. */
 
 const screens = [
-  { name: "Cobros", url: ADMIN, stub: stubAdminApi, ready: "Janely Guadalupe Reyes" },
+  /* The admin's landing screen, the feed. It carried the name "Cobros"
+     from before payments-and-classes D6; the Cobros section itself is
+     gone (cobros-in-links FR-014), so it says what it opens. */
+  { name: "Pagos", url: ADMIN, stub: stubAdminApi, ready: "Janely Guadalupe Reyes" },
+  /* cobros-in-links US1 and US3 (T040): the Por cobrar list — Venció in
+     its warning ink — and a search whose results carry the two new
+     badges, Sin adeudo and Sin confirmar (D15) */
+  { name: "Por cobrar", url: `${ADMIN}/links?view=receivables`, stub: stubAdminApi, ready: "Abraham Flores" },
+  { name: "Por cobrar búsqueda", url: `${ADMIN}/links?view=receivables&q=wif`, stub: stubPorCobrarSearch, ready: "Sin confirmar" },
   { name: "WispHub", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Ejecutar acciones automáticamente" },
   /* provider-address-per-isp US1 (T042): the installation picker and the
      two badges that mark a sandbox and an assumed default. A status told

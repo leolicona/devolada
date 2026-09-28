@@ -7,6 +7,7 @@ import { makeAuth } from "./better";
 import { isRole, roleCan, type Action, type Area, type Role } from "./roles";
 import { isPlatformOperator } from "../platform/settings";
 import { businessConfigured } from "../direct-payments/validation";
+import { capabilityNames } from "../integrations/registry";
 
 /* Resolves the Better Auth user to our actor (business-and-memberships
    D4): the memberships name the businesses, the session's active
@@ -65,6 +66,9 @@ export async function findActor(
        a key. D10: the shell reads it as "has an integration", never as
        "has WispHub" — an ISP is one kind of business. */
     integrationConfigured: Boolean(joined.integration?.apiKey),
+    /* cobros-in-links D13: the chip and the search's debt are offered by
+       capability, read with no network call */
+    integrationCapabilities: capabilityNames(joined.integration),
     /* receipt-triage D32: the cuenta de cobro, whatever its kind */
     speiConfigured: businessConfigured(business),
     observing: Boolean(joined.integration?.apiKey) && !joined.integration?.actionsEnabled,

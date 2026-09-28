@@ -1,5 +1,5 @@
 import { BANKS, type Bank } from "../../direct-payments/banks";
-import { amountToCents } from "../../wisphub/money";
+import { amountToCents } from "../../money";
 import type { Reading } from "./reader";
 import { isGenericReference } from "../../routes/direct-payments/schema";
 

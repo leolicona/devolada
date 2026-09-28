@@ -56,6 +56,10 @@ import {
 import { nextValidationSlot } from "../../direct-payments/schedule";
 import { toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { integrationOf } from "../../integrations/store";
+/* cobros-in-links D18: the debt door asks by capability, through the one
+   entry point, and calls nothing from an adapter's folder */
+import { capabilitiesOf } from "../../integrations/registry";
+import { IntegrationError } from "../../integrations/capabilities";
 import { dismissPruneNotice, pruneNoticeFor } from "../../links/prune";
 import { consta, ConstaError } from "../../consta";
 import { enqueueAndDeliver } from "../../webhooks/queue";
@@ -65,6 +69,8 @@ import {
   publicPaymentError,
   type CreateLinkRequest,
   type CreateLinkResponse,
+  type CustomerDebtQuery,
+  type CustomerDebtResponse,
   type CustomerRow,
   type CustomersQuery,
   type CustomersResponse,
@@ -1520,6 +1526,12 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
      from (FR-015). */
   const connected = Boolean(integration?.apiKey);
   const wisphub = connected ? wisphubFor(integration!, c.env) : null;
+  /* cobros-in-links D8: the Por cobrar view's search asks for panel rows
+     only — an API link has no customer and no debt in the business's
+     system (FR-010). Skipped HERE, on every path, rather than in the
+     browser, so the floor and the count never include a row that is
+     never shown. */
+  const panelOnly = query.channel === "panel";
 
   if (query.q !== undefined) {
     const needle = foldText(query.q);
@@ -1571,7 +1583,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
        only where they are actually needed — the first block of a live
        search, or any block of one the provider is not answering. */
     const apiRows =
-      firstBlock || away || !wisphub
+      !panelOnly && (firstBlock || away || !wisphub)
         ? (await apiLinksOf(db, actor.id))
             .filter(
               (link) =>
@@ -1638,10 +1650,13 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
      own API links by keyset first — Devolada owns that order, so it is
      stable — then the provider's list by offset, which is all the
      provider offers and why no order is promised (D6). */
-  const cursor = query.cursor === undefined ? FIRST_CURSOR : decodeCursor(query.cursor);
-  if (cursor === null) {
+  const decoded = query.cursor === undefined ? FIRST_CURSOR : decodeCursor(query.cursor);
+  if (decoded === null) {
     return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
   }
+  /* cobros-in-links D8: panel rows only means the API phase is never
+     walked — the browse starts, and stays, in the provider's list */
+  const cursor: BrowseCursor = panelOnly && decoded.phase === "api" ? { phase: "wisphub", offset: 0 } : decoded;
 
   const results: CustomerRow[] = [];
   let next: BrowseCursor | null = cursor;
@@ -1799,6 +1814,61 @@ export async function createLink(c: Ctx, body: CreateLinkRequest) {
       created,
     } satisfies CreateLinkResponse,
   });
+}
+
+/* GET /direct-payments/customers/debt — what one search result owes
+   (cobros-in-links D9, D11, D18; FR-017, FR-018).
+
+   Asked by the browser row by row, for the results of the blocks that
+   have loaded, and only while the Por cobrar view is chosen. One slow
+   customer never holds the others back, because each is its own
+   request (spec edge case).
+
+   The core asks the integration's `customerDebt` capability and maps
+   its answer. How the debt is read — which doors, in which order, and
+   the measured rule that makes it two reads — is the adapter's
+   (constitution IX). An outage is never a 5xx here: it is
+   `unconfirmed`, so one row says so and the rest keep working. */
+export async function customerDebt(c: Ctx, query: CustomerDebtQuery) {
+  const actor = c.get("actor");
+  if (actor.type !== "business") {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  const debt = capabilitiesOf(await integrationOf(db, actor.id), c.env).customerDebt;
+  if (!debt) {
+    /* D13, FR-013: no integration, or one that cannot say what a
+       customer owes — the panel never asks then */
+    return c.json({ success: false, error: { code: "NOT_CONFIGURED" } }, 409);
+  }
+  let answer;
+  try {
+    answer = await debt.of(query.usuario);
+  } catch (e) {
+    if (e instanceof IntegrationError && e.code === "INTEGRATION_AUTH_FAILED") {
+      /* D11: a refused key is setup — the page switches to the message
+         that links to Integraciones, as the customer view does */
+      console.error("integration failure:", e.code, e.message);
+      return c.json({ success: false, error: { code: "INTEGRATION_AUTH_FAILED" } }, 503);
+    }
+    if (e instanceof IntegrationError) {
+      /* An adapter's weather that escaped as an error is still weather
+         for this one row */
+      console.error("integration failure:", e.code, e.message);
+      return c.json({
+        success: true,
+        data: { usuario: query.usuario, state: "unconfirmed" } satisfies CustomerDebtResponse,
+      });
+    }
+    throw e;
+  }
+  const data: CustomerDebtResponse =
+    answer.state === "unconfirmed"
+      ? { usuario: query.usuario, state: "unconfirmed" }
+      : answer.state === "owes"
+        ? { usuario: query.usuario, ...answer, state: "owes" }
+        : { usuario: query.usuario, ...answer, state: "none", totalCents: 0 };
+  return c.json({ success: true, data });
 }
 
 /* GET /direct-payments/prune-notice — ISP session, `payments: read`.

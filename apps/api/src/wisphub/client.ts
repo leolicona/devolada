@@ -1,4 +1,4 @@
-import { amountToCents, decimalToCents } from "./money";
+import { amountToCents, decimalToCents, providerCents } from "../money";
 
 /* WispHub adapter. Contract verified in .design/devolada/WISPHUB_SPIKE.md.
    All WispHub traffic goes through this file (ARCHITECTURE.md rule). */
@@ -116,7 +116,38 @@ export type PendingInvoice = {
   /* YYYY-MM-DD, or null when the row lacks the field (cobros-live) */
   invoiceDate: string | null;
   dueDate: string | null;
+  /* cobros-in-links D5: three details the Por cobrar row shows, all in
+     the row already fetched — no extra call. OPTIONAL on purpose: this
+     type is shared with the money paths, and `debtOf`, the sweep and
+     the payer's page read `totalCents` alone. Absent or unreadable is
+     null; a row is never dropped for a detail. */
+  /* `sub_total`: what this period bills */
+  periodCents?: number | null;
+  /* The invoice's own `saldo`: the part carried from before, measured
+     299.00 inside a 798.00 invoice (2026-09-23, demo) */
+  carriedCents?: number | null;
+  /* The first line item whose text names the period */
+  period?: string | null;
 };
+
+/* cobros-in-links D5: how a line item names its period, measured
+   2026-09-27 (M3) as the second line of `descripcion`:
+   "Plan de Internet: Plan 2M/1M 2.00\r\nPeriodo del 1/Oct./2026 al 31/Oct./2026\r\n".
+   Each date is one run of non-space characters, so the match stops at
+   the `\r\n` that ends the line. */
+const PERIOD_PATTERN = /Per[ií]odo del\s+\S+\s+al\s+\S+/i;
+
+function periodOf(articulos: unknown): string | null {
+  if (!Array.isArray(articulos)) return null;
+  for (const item of articulos) {
+    const text = (item as { descripcion?: unknown } | null)?.descripcion;
+    if (typeof text !== "string") continue;
+    const match = PERIOD_PATTERN.exec(text);
+    if (match) return match[0].trim();
+  }
+  return null;
+}
+
 /* `source` says how old the list can be (bug: pending-invoice-cap): a
    `live` one was read from WispHub inside this operation, a `snapshot`
    one by the sweep, minutes ago — and the readers of a snapshot let the
@@ -133,7 +164,28 @@ export type PendingInvoices = {
    number to tell the two apart. */
 export const PENDING_LIVE_PAGES = 5;
 
-export type PendingPage = { invoices: PendingInvoice[]; next: string | null };
+/* The open-invoice filter every read of the list asks: `estado=1` is
+   Pendiente, windowed by issue date (debt-truth D1–D3). */
+export const PENDING_INVOICES_PATH = "/facturas/?estado=1&tipo_fecha=fecha_emision";
+
+/* The window every read of the list carries (debt-truth D3): 180 days
+   back by issue date — the suspended customer whose unpaid invoice is
+   months old — and one day ahead, because WispHub stamps in the
+   tenant's timezone, not UTC. The provider's own default is the current
+   month, which silently drops older arrears (cobros-in-links FR-004), so
+   no read relies on it. */
+export function pendingWindow(now: Date): { desde: string; hasta: string } {
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    desde: day(new Date(now.getTime() - 180 * 24 * 3600 * 1000)),
+    hasta: day(new Date(now.getTime() + 24 * 3600 * 1000)),
+  };
+}
+
+/* `total` is the envelope's own `count` for the filter, read
+   defensively: null when absent or not a count (cobros-in-links D5,
+   FR-007). Only the Por cobrar view reads it. */
+export type PendingPage = { invoices: PendingInvoice[]; next: string | null; total: number | null };
 export type CustomersPage = { customers: WispHubCustomer[]; next: string | null };
 
 /* links-on-demand-search D4: the four filters a search is put to, in
@@ -425,11 +477,8 @@ export class WispHub {
   /* The first page of the window above — where a pass begins, whether
      the live read's or the sweep's. */
   pendingInvoicesPath(now: Date): string {
-    const day = (d: Date) => d.toISOString().slice(0, 10);
-    const desde = day(new Date(now.getTime() - 180 * 24 * 3600 * 1000));
-    /* One day ahead: WispHub stamps in the tenant's timezone, not UTC */
-    const hasta = day(new Date(now.getTime() + 24 * 3600 * 1000));
-    return `/facturas/?estado=1&tipo_fecha=fecha_emision&desde=${desde}&hasta=${hasta}&limit=100`;
+    const { desde, hasta } = pendingWindow(now);
+    return `${PENDING_INVOICES_PATH}&desde=${desde}&hasta=${hasta}&limit=100`;
   }
 
   /* One page of the walk, and the path of the next — the unit the sweep
@@ -437,6 +486,9 @@ export class WispHub {
   async pendingInvoicesPage(path: string): Promise<PendingPage> {
     const data: {
       next: string | null;
+      /* cobros-in-links D5: present on this list (measured 2026-09-27,
+         M1) and still read as if it might not be */
+      count?: unknown;
       results: {
         id_factura: number;
         cliente: { usuario: string | null; nombre?: string | null };
@@ -449,6 +501,13 @@ export class WispHub {
            is a debt, and the Cobros section degrades to no date. */
         fecha_emision?: string | null;
         fecha_vencimiento?: string | null;
+        /* cobros-in-links D5: JSON numbers on this list (measured
+           2026-09-27, M3), converted through the two-shape helper all
+           the same — the customer record sends the same word as a
+           string */
+        sub_total?: unknown;
+        saldo?: unknown;
+        articulos?: unknown;
       }[];
     } = await this.get(path);
     const invoices: PendingInvoice[] = [];
@@ -463,12 +522,65 @@ export class WispHub {
           totalCents: f.total == null ? 0 : amountToCents(f.total),
           invoiceDate: day(f.fecha_emision),
           dueDate: day(f.fecha_vencimiento),
+          periodCents: providerCents(f.sub_total),
+          carriedCents: providerCents(f.saldo),
+          period: periodOf(f.articulos),
         });
       }
     }
     /* WispHub's `next` is absolute; keep only the API path */
     const next = data.next ? data.next.slice(data.next.indexOf("/facturas/")) : null;
-    return { invoices, next };
+    const total =
+      typeof data.count === "number" && Number.isSafeInteger(data.count) && data.count >= 0 ? data.count : null;
+    return { invoices, next, total };
+  }
+
+  /* The open invoices of ONE customer, from WispHub's one-call balance
+     door (cobros-in-links D10). It has no date window, so an invoice
+     older than the list's 180 days counts (FR-017).
+
+     Only `facturas[]` is read. The door's own `saldo` is deliberately
+     ignored: it counts open invoices only, and measured 2026-09-23 on
+     the demo it answered 0 while the customer carried 299.00 (FR-015).
+     `url_pago` is ignored too — it came back without a host
+     (`http:///saldo/…`). The debt is composed by the caller, from this
+     list AND the customer record, read together (D9).
+
+     Measured: the demo, 2026-09-23 (0 with no open invoice, then 798.00
+     with the invoice listed once the billing run issued it) and
+     2026-09-27 (M2 case (a): the same invoice ids as `/facturas/`).
+     Cases (b), two open invoices, and (c), a short-payer, are still to
+     be measured on the pilot (research, "Measurements recorded").
+
+     The door also answers PUT, PATCH and DELETE (its `allow` header,
+     measured 2026-09-27). This adapter only ever sends GET to it.
+
+     `usuario` comes from the caller — the record it just read — so the
+     rows join the debt rule by the same identity as every other list.
+     An answer it cannot read throws, and the caller says "could not
+     confirm", never zero. */
+  async openInvoicesOf(idServicio: number, usuario: string): Promise<PendingInvoice[]> {
+    const data = await this.get<{ facturas?: unknown }>(`/clientes/${idServicio}/saldo/`);
+    if (!Array.isArray(data?.facturas)) {
+      throw new WispHubError("WISPHUB_UNAVAILABLE", "balance door: unreadable body");
+    }
+    const day = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
+    return data.facturas.map((raw) => {
+      const f = raw as { id?: unknown; fecha_emision?: unknown; fecha_vencimiento?: unknown; total?: unknown };
+      const totalCents = providerCents(f.total);
+      /* A debt with an invoice nobody can read cannot be summed */
+      if (typeof f.id !== "number" || !Number.isSafeInteger(f.id) || totalCents === null) {
+        throw new WispHubError("WISPHUB_UNAVAILABLE", "balance door: unreadable invoice");
+      }
+      return {
+        invoiceId: f.id,
+        usuario,
+        customerName: null,
+        totalCents,
+        invoiceDate: day(f.fecha_emision),
+        dueDate: day(f.fecha_vencimiento),
+      };
+    });
   }
 
   /* Whether one invoice can still carry a payment — asked fresh, right

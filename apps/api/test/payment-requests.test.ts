@@ -9,7 +9,14 @@ import type { Bindings } from "../src/env";
 /* docs/legacy/reconciliation/cobros-live.spec.md — the live read (US-R01:
    scenarios 1, 4, 6, 7, 9) and the payer link's own Cobros (US-R04:
    scenario 8). No table exists; the DoD's "no migration" proof is this
-   whole file running against a schema without payment_requests. */
+   whole file running against a schema without payment_requests.
+
+   cobros-in-links US1 rewrote US-R01 for the block contract (D1): the
+   door answers one block of open invoices, live, through the
+   integration's `receivables` capability. Each case below says which
+   promise it replaced and which decision retired the old one. The new
+   contract's own suite is `cobros-in-links.test.ts`. US-R04, the payer's
+   page, is untouched: it still reads the sweep's list (D3). */
 
 const WISPHUB_ORIGIN = "https://api.wisphub.net";
 
@@ -44,8 +51,8 @@ const asBusiness = async (email = "demo@devolada.app") => ({
   headers: { Cookie: await sessionCookieHeader(email) },
 });
 
-describe("US-R01: the section reads WispHub live", () => {
-  it("scenario 1: maps every pending invoice with customer, amount and dates", async () => {
+describe("US-R01, as cobros-in-links US1 rewrote it: the view reads the integration live, one block at a time", () => {
+  it("scenario 1: maps every open invoice with customer, amount and dates — in the block contract", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     mockFacturas([
       invoiceRow(),
@@ -55,17 +62,26 @@ describe("US-R01: the section reads WispHub live", () => {
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(data.cobros).toHaveLength(2);
-    expect(data.cobros[0]).toEqual({
+    expect(data.results).toHaveLength(2);
+    /* A row with no `sub_total`, `saldo` or period line says null for
+       each — never a zero stand-in (cobros-in-links D5) */
+    expect(data.results[0]).toEqual({
       externalId: 42,
       customerUsuario: "greyes@wifiplus",
       customerName: "Janely",
       amountCents: 49900,
       invoiceDate: "2026-08-01",
       dueDate: "2026-08-11",
+      periodCents: null,
+      carriedCents: null,
+      period: null,
     });
-    expect(data.complete).toBe(true);
-    expect(data.readAt).toEqual(expect.any(Number));
+    expect(data.integration).toBe("ok");
+    expect(data.total).toBe(2);
+    /* cobros-in-links D1: `complete` and `readAt` retired — nothing is
+       read whole, and a block is read when it renders */
+    expect(data).not.toHaveProperty("complete");
+    expect(data).not.toHaveProperty("readAt");
   });
 
   /* links-on-demand-search US4 (D16): this used to assert that a debtor
@@ -99,7 +115,7 @@ describe("US-R01: the section reads WispHub live", () => {
 
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
     const { data } = await res.json();
-    for (const row of data.cobros) {
+    for (const row of data.results) {
       expect(row).not.toHaveProperty("linkUrl");
       expect(row).not.toHaveProperty("waLink");
       /* What the row DOES carry is the identity the act needs */
@@ -112,14 +128,14 @@ describe("US-R01: the section reads WispHub live", () => {
      and bound the business id, `source = 'panel'` AND 99 usuarios: 101,
      one over D1's cap, and the read died as a generic 500.
 
-     links-on-demand-search D16 retired the lookup itself, so the bind
-     that overran the cap cannot happen on this path any more. The case
-     stays, narrowed to what is still true and still worth guarding: a
-     tenant with more debtors than D1 will bind parameters for is read in
-     one page, whole. `test/setup.ts` still makes the cap real for every
+     links-on-demand-search D16 retired the lookup itself, and
+     cobros-in-links D1 made the read a block of at most 50. The case
+     stays, narrowed to what is still worth guarding: whatever the
+     provider answers for a block, no debtor on it costs a bound
+     parameter. `test/setup.ts` still makes the cap real for every
      statement the suite runs, so a new wide bind anywhere fails a test
      rather than a tenant. */
-  it("bug cobros-links-lookup-params: 120 debtors read in one page, none of them costing a bound parameter", async () => {
+  it("bug cobros-links-lookup-params: 120 debtors in one answer, none of them costing a bound parameter", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     const usuarios = Array.from({ length: 120 }, (_, i) => `cliente${String(i).padStart(3, "0")}@wifiplus`);
     mockFacturas(
@@ -131,47 +147,62 @@ describe("US-R01: the section reads WispHub live", () => {
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(data.cobros).toHaveLength(120);
+    expect(data.results).toHaveLength(120);
   });
 
-  it("scenario 4: two reads inside 30 seconds cost one provider call (the display cache)", async () => {
+  /* Scenario 4 asserted that two reads inside 30 seconds cost ONE
+     provider call — the display cache. cobros-in-links D3 retires that
+     for this door: a block is read when it renders, like a Links block,
+     and the view re-reads its first block on return to the tab at most
+     every 30 seconds on the CLIENT (FR-011). The cache itself stays, for
+     the payer's page (`presence-freshness.test.ts`, scenario 8). */
+  it("scenario 4, as D3 amended it: two reads inside 30 seconds are two live provider reads — no display cache", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockFacturas([invoiceRow()]); /* once — the second read must not fetch */
+    mockFacturas([invoiceRow()], null, 2);
 
     const first = await (await app()).request("/payment-requests", await asBusiness(), env);
     const second = await (await app()).request("/payment-requests", await asBusiness(), env);
     expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    expect((await second.json()).data.cobros).toHaveLength(1);
+    expect((await second.json()).data.results).toHaveLength(1);
   });
 
-  it("scenario 6: a fifth page with more behind it answers complete: false", async () => {
+  /* Scenario 6 asserted `complete: false` after a fifth page with more
+     behind it. cobros-in-links D1 retires the whole-list read: a block
+     with more behind it answers a cursor to the next block, and the
+     client asks for it when the operator scrolls toward it (FR-003). */
+  it("scenario 6, as D1 amended it: more behind a block is a cursor, never a truncation warning", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    mockFacturas([invoiceRow()], `${WISPHUB_ORIGIN}/api/facturas/?estado=1&page=2`, 5);
+    mockFacturas([invoiceRow()], `${WISPHUB_ORIGIN}/api/facturas/?estado=1&limit=20&offset=20`);
 
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
     const { data } = await res.json();
-    expect(data.complete).toBe(false);
-    expect(data.cobros).toHaveLength(5);
+    expect(data.nextCursor).toEqual(expect.any(String));
+    expect(data).not.toHaveProperty("complete");
+    expect(data.results).toHaveLength(1);
   });
 
-  it("scenario 7: a provider failure answers 503, never an empty list", async () => {
+  /* Scenario 7 answered a 503. cobros-in-links D7: the integration being
+     away is an ANSWER on this door, and it still never reads as an
+     empty list — `unavailable` is not `ok` (FR-012, SC-004). */
+  it("scenario 7, as D7 amended it: a provider failure is 'unavailable', never an empty 'ok'", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") })
       .reply(500, "boom");
 
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
-    expect(res.status).toBe(503);
-    const body = await res.json();
-    expect(body).toMatchObject({ success: false, error: { code: "WISPHUB_UNAVAILABLE" } });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data).toEqual({ results: [], nextCursor: null, total: null, integration: "unavailable" });
   });
 
   /* bug: cobros-installation-fallback — a refused key is a setup
      problem, and the screen can only send it to Integraciones if the
      code says which of the two it was. The 403 is what wisphub.net
-     answers a wisphub.io key (provider-address-per-isp D5). */
-  it("bug cobros-installation-fallback: a refused key answers 503 with WISPHUB_AUTH_FAILED, not the outage code", async () => {
+     answers a wisphub.io key (provider-address-per-isp D5).
+     cobros-in-links D7 (constitution IX) renamed the code to the core's
+     word: `INTEGRATION_AUTH_FAILED`. The distinction is the same. */
+  it("bug cobros-installation-fallback: a refused key answers 503 with INTEGRATION_AUTH_FAILED, not the outage answer", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-io" });
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") })
@@ -182,7 +213,7 @@ describe("US-R01: the section reads WispHub live", () => {
     const res = await (await app()).request("/payment-requests", await asBusiness(), env);
     expect(res.status).toBe(503);
     const body = await res.json();
-    expect(body).toMatchObject({ success: false, error: { code: "WISPHUB_AUTH_FAILED" } });
+    expect(body).toMatchObject({ success: false, error: { code: "INTEGRATION_AUTH_FAILED" } });
     /* The key never rides the wire, whatever the provider said */
     expect(JSON.stringify(body)).not.toContain("wh-key-io");
   });

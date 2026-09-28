@@ -4,7 +4,6 @@ import { Link, Navigate, Outlet, useNavigate, useRouter } from "@tanstack/react-
 import { useQuery } from "@tanstack/react-query";
 import {
   Banknote,
-  HandCoins,
   Landmark,
   Mail,
   MessageCircle,
@@ -24,11 +23,15 @@ import { CreditStrip } from "../credit/CreditStrip";
 import { Avatar } from "../account/Avatar";
 import { ObservationChip } from "../integrations/ObservationChip";
 
-/* payments-and-classes D6: the feed is Pagos the moment Cobros exists —
-   never two words for one thing, never one word for two (IA). */
+/* payments-and-classes D6: the feed is Pagos — never two words for one
+   thing, never one word for two (IA).
+
+   cobros-in-links FR-014: Cobros is no longer a section. Who has open
+   invoices is a view of Links (the Por cobrar chip), because knowing who
+   owes and sending them the link are one job, and Links sits where
+   Cobros used to. */
 const baseSections = [
   { to: "/payments", label: "Pagos", icon: Banknote, exact: false },
-  { to: "/payment-requests", label: "Cobros", icon: HandCoins, exact: false },
   /* "Links", not "Enlaces SPEI": the glossary's word for this is
      "Link de pago" (SPEC.md), so "Enlace" was a synonym for a concept
      already named — and the two words wrapped onto a second line in the

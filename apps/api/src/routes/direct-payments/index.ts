@@ -3,9 +3,10 @@ import { zValidator } from "@hono/zod-validator";
 import type { Context } from "hono";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
-import { createLinkRequest, customersQuery, payRequest, readProofRequest } from "./schema";
+import { createLinkRequest, customerDebtQuery, customersQuery, payRequest, readProofRequest } from "./schema";
 import {
   createLink,
+  customerDebt,
   dismissPrune,
   getDirectPaymentStatus,
   getLinkStatus,
@@ -45,6 +46,20 @@ directPaymentsRoute.get(
   zValidator("query", customersQuery, invalid),
   (c) => {
     return listCustomers(c, c.req.valid("query"));
+  },
+);
+
+/* cobros-in-links D9 (FR-017, FR-018): what one search result owes, read
+   when it is shown. `payments: read`, like the customers door — a viewer
+   reads it too. Registered right after `/customers` and before any
+   parameterised pattern, so nothing can shadow it. */
+directPaymentsRoute.get(
+  "/customers/debt",
+  requireSession,
+  requireArea("payments", "read"),
+  zValidator("query", customerDebtQuery, invalid),
+  (c) => {
+    return customerDebt(c, c.req.valid("query"));
   },
 );
 

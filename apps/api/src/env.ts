@@ -1,4 +1,5 @@
 import type { businesses } from "./db/schema";
+import type { CapabilityName } from "./integrations/capabilities";
 
 export type Bindings = {
   DB: D1Database;
@@ -170,6 +171,11 @@ export type Actor = {
   timeFormat: "12h" | "24h";
   /* integrations-hub D10: any provider — the shell never names one */
   integrationConfigured: boolean;
+  /* cobros-in-links D13 (constitution IX): what the integration can do,
+     by capability name, so the panel offers a feature because the
+     integration can answer it — never because it is one provider.
+     Empty with no integration. */
+  integrationCapabilities: CapabilityName[];
   /* business-and-memberships D5 (2026-09-02): a business is born without
      a CLABE; the shell's banner and the share buttons read this */
   speiConfigured: boolean;

@@ -11,6 +11,8 @@ export const businessActor = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   integrationConfigured: true,
+  /* cobros-in-links D13: a WispHub integration answers both */
+  integrationCapabilities: ["receivables", "customerDebt"],
   speiConfigured: true,
   role: "owner",
   orgId: "org_business-1",
@@ -51,9 +53,13 @@ export const handlers = {
     http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/feed", ({ request }) => r(new URL(request.url))),
-  /* cobros-live (US-R01) */
-  paymentRequests: (r: () => ReturnType<typeof ok | typeof fail>) =>
-    http.get("/payment-requests", () => r()),
+  /* cobros-in-links D1: the Por cobrar view's blocks. The URL carries
+     `limit` and the opaque `cursor`. */
+  paymentRequests: (r: (url: URL) => ReturnType<typeof ok | typeof fail> | Promise<ReturnType<typeof ok | typeof fail>>) =>
+    http.get("/payment-requests", ({ request }) => r(new URL(request.url))),
+  /* cobros-in-links D9: what one search result owes, row by row */
+  customerDebt: (r: (url: URL) => ReturnType<typeof ok | typeof fail> | Promise<ReturnType<typeof ok | typeof fail>>) =>
+    http.get("/direct-payments/customers/debt", ({ request }) => r(new URL(request.url))),
   /* presence-freshness D5 */
   paymentsPulse: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/pulse", () => r()),
@@ -98,7 +104,7 @@ export const handlers = {
      browsing and searching the ISP's customers, and one for the act
      that creates a link. Shared by the whole admin suite: every screen
      that renders /links takes its rows from here. */
-  customers: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+  customers: (r: (url: URL) => ReturnType<typeof ok | typeof fail> | Promise<ReturnType<typeof ok | typeof fail>>) =>
     http.get("/direct-payments/customers", ({ request }) => r(new URL(request.url))),
   createLink: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/direct-payments/links", async ({ request }) => r(await request.json())),

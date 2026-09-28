@@ -77,16 +77,26 @@ function write(key: string, value: unknown): void {
    and restoring rows without them would redraw the screen wrong. */
 type StoredResults = { at: number; block: CustomersResponse };
 
+/* cobros-in-links D12: which view asked. The same text in the customer
+   view and in Por cobrar is two questions — Por cobrar asks for panel
+   rows only (D8) — so it is two entries. The customer view keeps the
+   bare key it always had. */
+export type SearchView = "customers" | "receivables";
+const resultsKey = (text: string, view: SearchView) => {
+  const key = normalizeSearch(text);
+  return key === "" || view === "customers" ? key : `${view}:${key}`;
+};
+
 /* Null past the two minutes, so an expired entry is simply a search
    nobody stored — the caller asks the provider again (FR-012). */
-export function readResults(text: string): StoredResults | null {
-  const stored = read<Record<string, StoredResults>>(RESULTS)?.[normalizeSearch(text)];
+export function readResults(text: string, view: SearchView = "customers"): StoredResults | null {
+  const stored = read<Record<string, StoredResults>>(RESULTS)?.[resultsKey(text, view)];
   if (!stored) return null;
   return Date.now() - stored.at > RESULTS_TTL_MS ? null : stored;
 }
 
-export function writeResults(text: string, block: CustomersResponse): void {
-  const key = normalizeSearch(text);
+export function writeResults(text: string, block: CustomersResponse, view: SearchView = "customers"): void {
+  const key = resultsKey(text, view);
   /* An empty box leaves no entry behind: a browse is not a search */
   if (key === "") return;
   const all = read<Record<string, StoredResults>>(RESULTS) ?? {};

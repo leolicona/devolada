@@ -449,6 +449,13 @@ export const customersQuery = z.object({
      the cursor is how the operator reaches the 29 matches of «Leo» that
      did not fit on the first screen. */
   cursor: z.string().optional(),
+  /* cobros-in-links D8: the Por cobrar view's search asks for PANEL rows
+     only. Links created through the collections API have no customer and
+     no debt in the business's system (FR-010), and they are skipped on
+     the server — search, browse and the offline fallback — so the
+     "más de N" floor and the final count stay honest. Absent means
+     today's behaviour exactly. */
+  channel: z.enum(["panel"]).optional(),
 });
 
 /* One row shape for both channels and for both ways of finding one
@@ -497,6 +504,41 @@ export const customersResponse = z.object({
      links come from (constitution VIII). */
   wisphub: z.enum(["ok", "unavailable", "not_configured"]),
 });
+
+/* GET /direct-payments/customers/debt — what one search result owes
+   (cobros-in-links D9, FR-017, FR-018). A query parameter, not a path
+   segment: usuarios carry `@`. */
+export const customerDebtQuery = z.object({
+  usuario: z.string().trim().min(1),
+});
+
+const debtInvoice = z.object({
+  invoiceId: z.number().int(),
+  invoiceDate: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  totalCents: z.number().int(),
+});
+
+/* D9, FR-018: exactly three answers, never a guess.
+   - `owes`: the debt is above zero — open invoices plus the carried
+     balance (`debt-truth` D7), a credit already netted (D12);
+   - `none`: the integration answered and the customer owes nothing, and
+     the zero is proven (`nothingOwedIsProven`);
+   - `unconfirmed`: a read failed, the customer is gone, or the zero is
+     unproven. It carries NO amount, so nothing can render it as zero. */
+const debtAmounts = {
+  usuario: z.string(),
+  totalCents: z.number().int(),
+  invoiceCents: z.number().int(),
+  carriedBalanceCents: z.number().int().nonnegative(),
+  /* Every open invoice, with no date window (FR-017) */
+  invoices: z.array(debtInvoice),
+};
+export const customerDebtResponse = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("owes"), ...debtAmounts, totalCents: z.number().int().positive() }),
+  z.object({ state: z.literal("none"), ...debtAmounts, totalCents: z.literal(0) }),
+  z.object({ state: z.literal("unconfirmed"), usuario: z.string() }),
+]);
 
 /* POST /direct-payments/links — the act FR-008 names (D8).
 
@@ -548,4 +590,6 @@ export type CustomerRow = z.infer<typeof customerRow>;
 export type CustomersResponse = z.infer<typeof customersResponse>;
 export type CreateLinkRequest = z.infer<typeof createLinkRequest>;
 export type CreateLinkResponse = z.infer<typeof createLinkResponse>;
+export type CustomerDebtQuery = z.infer<typeof customerDebtQuery>;
+export type CustomerDebtResponse = z.infer<typeof customerDebtResponse>;
 export type PublicPaymentError = z.infer<typeof publicPaymentError>;

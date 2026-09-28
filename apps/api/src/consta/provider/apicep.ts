@@ -6,7 +6,7 @@ import {
   type TransferInput,
   type ValidationProvider,
 } from "./types";
-import { amountToCents } from "../../wisphub/money";
+import { amountToCents } from "../../money";
 
 /* apiCEP adapter (docs read 2026-08-17 at apicep.cloud/documentacion).
    One endpoint, POST /validate-transfer, Bearer auth. Our transfer door is

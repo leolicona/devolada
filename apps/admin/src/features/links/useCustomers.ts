@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/r
 import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
-import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults } from "./seen";
+import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults, type SearchView } from "./seen";
 
 /* links-on-demand-search US1: the page asks for what it shows.
 
@@ -38,8 +38,11 @@ const RESULTS_STALE_MS = 2 * 60_000;
 
 /* D3/FR-020: only the browser knows what fills its own viewport. The
    server clamps it to 10..50; asking for a screenful is what keeps the
-   first block one provider call instead of four. */
-function blockSize(): number {
+   first block one provider call instead of four.
+
+   Exported for Por cobrar (cobros-in-links D4): its blocks follow the
+   same rule, reused rather than copied. */
+export function blockSize(): number {
   const height = typeof window === "undefined" ? 0 : window.innerHeight;
   const rows = Math.ceil(Math.max(0, height - CHROME_PX) / ROW_HEIGHT_PX) + 2;
   return Math.min(BLOCK_MAX, Math.max(BLOCK_MIN, rows));
@@ -79,7 +82,8 @@ export type CustomersView = {
   retry: () => void;
 };
 
-export function useCustomers(search: string): CustomersView {
+export function useCustomers(search: string, opts: { view?: SearchView } = {}): CustomersView {
+  const view = opts.view ?? "customers";
   const client = useQueryClient();
   /* Measured once per mount: a key that moved with the window would
      throw away a cache on every resize */
@@ -104,7 +108,13 @@ export function useCustomers(search: string): CustomersView {
      the text it is asking about, and nothing else. The limit stays OUT
      of the key: it is the same rows either way, and a resize must not
      cost the two-minute memory (FR-012). */
-  const key = useMemo(() => ["links-customers", q ?? ""] as const, [q]);
+  /* cobros-in-links D12: the view is part of the key — the same text in
+     Por cobrar asks for panel rows only (D8), so it is another answer */
+  const key = useMemo(() => ["links-customers", view, q ?? ""] as const, [view, q]);
+  /* cobros-in-links FR-010: in Por cobrar the customers door is asked
+     only for a SEARCH. With no text the view is the open-invoice list,
+     which is another read (`useReceivables`). */
+  const enabled = view === "customers" || q !== undefined;
 
   /* FR-012 / D11: what this exact search answered last time, if it was
      within the two minutes. A TanStack cache dies on reload; this is
@@ -112,16 +122,20 @@ export function useCustomers(search: string): CustomersView {
      visible wait (US2 scenarios 2 and 4). Only the FIRST block is
      stored — the blocks below it are a scroll the operator can repeat,
      and storing a session's whole scroll is not a two-minute memory. */
-  const stored = useMemo(() => (q === undefined ? null : readResults(q)), [q]);
+  const stored = useMemo(() => (q === undefined ? null : readResults(q, view)), [q, view]);
 
   const url = useCallback(
     (cursor: string | null) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (q !== undefined) params.set("q", q);
       if (cursor !== null) params.set("cursor", cursor);
+      /* cobros-in-links D8: an API link has no customer and no debt in the
+         business's system, so Por cobrar's search leaves them out — on
+         the server, so the count stays honest */
+      if (view === "receivables") params.set("channel", "panel");
       return `/direct-payments/customers?${params.toString()}`;
     },
-    [limit, q],
+    [limit, q, view],
   );
 
   const query = useInfiniteQuery<CustomersResponse, ApiError, InfiniteData<CustomersResponse, string | null>, typeof key, string | null>({
@@ -129,6 +143,7 @@ export function useCustomers(search: string): CustomersView {
     queryFn: ({ pageParam }) => api<CustomersResponse>(url(pageParam)),
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
+    enabled,
     staleTime: RESULTS_STALE_MS,
     /* Seeded from the browser's own memory, with the age it really has:
        inside the two minutes it renders at once and asks nothing, past
@@ -224,8 +239,8 @@ export function useCustomers(search: string): CustomersView {
      two-minute memory would never expire (FR-012). */
   useEffect(() => {
     if (q === undefined || !first || first === stored?.block) return;
-    writeResults(q, first);
-  }, [q, first, stored]);
+    writeResults(q, first, view);
+  }, [q, first, stored, view]);
 
   /* FR-027 / D15: the page no longer reports its own age — a block is
      read when it renders, so there is nothing to print and nothing to

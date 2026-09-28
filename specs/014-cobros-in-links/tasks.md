@@ -320,7 +320,7 @@ so the analysis and research that cite them stay true.
   - SC-002: the first Por cobrar block is on screen within the 3 s ceiling (logged, with a generous ceiling, as `links.spec.ts` logs its SCs);
   - SC-001: from opening Links to pressing WhatsApp on a Por cobrar row, within the 10 s target (logged, 20 s ceiling).
 - [X] T041 [P] Update the comment in `apps/api/src/routes/payment-requests/handler.ts` and the header comments of the Links screen to cite `cobros-in-links` D1–D18 where rules changed. Also update `CLAUDE.md`'s architecture notes where they name the Cobros section.
-- [ ] T042 Run the CI order locally and fix what fails, never skipping a check:
+- [X] T042 *(2026-09-28: all eight steps green — 809 API, 280 admin, 50 ui, 84 pago, 10 landing tests; the IX grep finds nothing. The browser layer, which gates the deploy, passes 133 of 134 in this container; the one failure, `feedback.spec.ts` "nothing is painted… when the answer beats the threshold", fails the same way on `main`, on this container's older Chromium build.)* Run the CI order locally and fix what fails, never skipping a check:
   1. `node scripts/spec-lint.mjs`
   2. `node scripts/gen-banks.mjs --check`
   3. `node scripts/contrast-lint.mjs`
@@ -329,7 +329,7 @@ so the analysis and research that cite them stay true.
   6. `pnpm -r --if-present test`
   7. `pnpm -r --if-present build`
   8. Constitution IX: `grep -rn "wisphub/" apps/api/src/routes/payment-requests apps/api/src/integrations/capabilities.ts` finds nothing, and the new `customerDebt` handler calls nothing from `wisphub/`.
-- [ ] T043 Walk quickstart §2, steps 1–7, against the local API with the demo key, and record anything that differs from the spec in `specs/014-cobros-in-links/quickstart.md`.
+- [ ] T043 *(open 2026-09-28: needs the demo WispHub key in `apps/api/.dev.vars`, which this session does not have. Steps 1, 2, 5 and 6 are covered by the component and browser suites; steps 3, 4 and 7 need the real provider.)* Walk quickstart §2, steps 1–7, against the local API with the demo key, and record anything that differs from the spec in `specs/014-cobros-in-links/quickstart.md`.
 
 ---
 

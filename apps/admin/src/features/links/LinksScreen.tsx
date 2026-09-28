@@ -333,14 +333,25 @@ function CustomersResults({
             2026-09-23) — the same sentinel, because reaching the bottom
             of a search means the same thing as reaching the bottom of a
             browse. */}
-        {customers.hasMore && (
-          <div ref={customers.sentinelRef} className="mt-4 min-h-10">
-            {customers.loadingMore && (
-              <p role="status" className="text-sm text-muted-foreground">
-                Leyendo el siguiente bloque de clientes…
-              </p>
-            )}
+        {customers.nextFailed ? (
+          /* A next block that failed stops the walk here; the page never
+             retries on its own (cobros-in-links, review of 2026-09-28) */
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">No pudimos leer el siguiente bloque de clientes.</p>
+            <Button size="compact" variant="secondary" onClick={customers.retryNext}>
+              Reintentar
+            </Button>
           </div>
+        ) : (
+          customers.hasMore && (
+            <div ref={customers.sentinelRef} className="mt-4 min-h-10">
+              {customers.loadingMore && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Leyendo el siguiente bloque de clientes…
+                </p>
+              )}
+            </div>
+          )
         )}
       </Pending>
     </>

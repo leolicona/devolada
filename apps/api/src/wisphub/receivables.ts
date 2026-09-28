@@ -13,6 +13,7 @@ import {
   pendingWindow,
   WispHubError,
   type PendingInvoice,
+  type WispHubCustomer,
 } from "./client";
 import { debtFor, nothingOwedIsProven } from "./debt";
 import { wisphubFor, type WispHubAddress } from "./factory";
@@ -61,6 +62,18 @@ const fromBase64Url = (raw: string) => {
   return atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
 };
 
+/* A real calendar day, by round trip: `Date.parse` alone accepts a day
+   the month does not have ("2026-02-31" parses, as March 3 — checked
+   2026-09-28 in the review of this feature). */
+function isCalendarDay(day: string): boolean {
+  if (!DAY.test(day)) return false;
+  const at = Date.parse(`${day}T00:00:00Z`);
+  return !Number.isNaN(at) && new Date(at).toISOString().slice(0, 10) === day;
+}
+
+/* The widest window `pendingWindow` produces: 180 days back plus one ahead */
+const WINDOW_DAYS = 181;
+
 /* Same form as the customers door's cursor (`links-on-demand-search`
    D2): base64url, so it survives a query string without escaping. */
 export function encodeReceivablesCursor(cursor: ReceivablesCursor): string {
@@ -84,8 +97,10 @@ export function decodeReceivablesCursor(raw: string): ReceivablesCursor | null {
   const parts = plain.slice(PREFIX.length).split(":");
   if (parts.length !== 4) return null;
   const [desde, hasta, rawOffset, rawLimit] = parts;
-  if (!DAY.test(desde) || !DAY.test(hasta) || desde > hasta) return null;
-  if (Number.isNaN(Date.parse(desde)) || Number.isNaN(Date.parse(hasta))) return null;
+  if (!isCalendarDay(desde) || !isCalendarDay(hasta) || desde > hasta) return null;
+  /* No wider than the window this adapter writes (FR-004: 180 days back,
+     one day ahead). A hand-built cursor cannot widen the walk. */
+  if ((Date.parse(hasta) - Date.parse(desde)) / 86_400_000 > WINDOW_DAYS) return null;
   const offset = Number(rawOffset);
   const limit = Number(rawLimit);
   if (!Number.isSafeInteger(offset) || offset < 0) return null;
@@ -217,40 +232,47 @@ async function customerDebt(
   usuario: string,
 ): Promise<CustomerDebtAnswer> {
   const wisphub = wisphubFor(integration, env);
+  let record: WispHubCustomer;
+  let invoices: PendingInvoice[];
   try {
-    const record = await wisphub.getCustomer(usuario);
+    const found = await wisphub.getCustomer(usuario);
     /* Gone from WispHub: nothing can be confirmed about them */
-    if (!record) return { state: "unconfirmed" };
-    const invoices = await wisphub.openInvoicesOf(record.wisphubId, record.usuario);
-    const pending = { invoices, complete: true, source: "live" as const };
-    const debt = debtFor(record, pending);
-    const answer = {
-      totalCents: debt.totalCents,
-      invoiceCents: debt.invoiceCents,
-      carriedBalanceCents: debt.carriedBalanceCents,
-      /* Oldest first, the order the payer's page lists them (cobros-live D8) */
-      invoices: [...invoices]
-        .sort((a, b) => (a.invoiceDate ?? "").localeCompare(b.invoiceDate ?? "") || a.invoiceId - b.invoiceId)
-        .map((f) => ({
-          invoiceId: f.invoiceId,
-          invoiceDate: f.invoiceDate,
-          dueDate: f.dueDate,
-          totalCents: f.totalCents,
-        })),
-    };
-    if (debt.totalCents > 0) return { state: "owes", ...answer };
-    if (nothingOwedIsProven(record, pending)) return { state: "none", ...answer };
-    return { state: "unconfirmed" };
+    if (!found) return { state: "unconfirmed" };
+    record = found;
+    invoices = await wisphub.openInvoicesOf(record.wisphubId, record.usuario);
   } catch (e) {
-    if (!(e instanceof WispHubError)) throw e;
     /* A refused key is setup, and the whole page says so (D11) */
-    if (e.code === "WISPHUB_AUTH_FAILED") throw translate(e);
-    /* A stall, an outage or an unreadable answer: this ONE row could not
-       be confirmed, and the others keep working (FR-018). Logged, never
-       the key (007 FR-013). */
-    console.error("wisphub debt read failed:", e.code, e.message);
+    if (e instanceof WispHubError && e.code === "WISPHUB_AUTH_FAILED") throw translate(e);
+    /* A stall, an outage, or an answer that cannot be read — a body of the
+       wrong shape, a balance the money parser refuses — is weather for
+       this ONE row: it could not be confirmed, and the others keep
+       working (FR-018). Never a 5xx on this door (contract). Only the two
+       reads are inside this guard, so a bug in the composition below
+       still surfaces as one. Logged, never the key (007 FR-013). */
+    const code = e instanceof WispHubError ? e.code : "UNREADABLE";
+    console.error("wisphub debt read failed:", code, e instanceof Error ? e.message : String(e));
     return { state: "unconfirmed" };
   }
+
+  const pending = { invoices, complete: true, source: "live" as const };
+  const debt = debtFor(record, pending);
+  const answer = {
+    totalCents: debt.totalCents,
+    invoiceCents: debt.invoiceCents,
+    carriedBalanceCents: debt.carriedBalanceCents,
+    /* Oldest first, the order the payer's page lists them (cobros-live D8) */
+    invoices: [...invoices]
+      .sort((a, b) => (a.invoiceDate ?? "").localeCompare(b.invoiceDate ?? "") || a.invoiceId - b.invoiceId)
+      .map((f) => ({
+        invoiceId: f.invoiceId,
+        invoiceDate: f.invoiceDate,
+        dueDate: f.dueDate,
+        totalCents: f.totalCents,
+      })),
+  };
+  if (debt.totalCents > 0) return { state: "owes", ...answer };
+  if (nothingOwedIsProven(record, pending)) return { state: "none", ...answer };
+  return { state: "unconfirmed" };
 }
 
 /* Both capabilities, for one business's integration. Each call builds a

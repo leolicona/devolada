@@ -330,6 +330,11 @@ describe("cobros-in-links US1: GET /payment-requests answers one live block (D1�
       b64("inv:2026-03-01:2026-09-01:0:5000"),
       b64("inv:2026-03-01:2026-09-01:-20:20"),
       "%%%not-base64%%%",
+      /* Review of 2026-09-28: a day the month does not have — Date.parse
+         alone accepts it — and a window wider than the 181 days this
+         adapter ever writes */
+      b64("inv:2026-02-31:2026-03-01:0:20"),
+      b64("inv:2025-01-01:2026-09-01:0:20"),
     ];
     for (const cursor of crafted) {
       const res = await getBlock(`?cursor=${encodeURIComponent(cursor)}`);
@@ -651,6 +656,23 @@ describe("cobros-in-links US3: GET /direct-payments/customers/debt — what a re
       mockRecord(null);
       await expectUnconfirmed();
     });
+
+    /* Review of 2026-09-28: answers that parse as JSON but cannot be read
+       used to escape as a 500. The contract says an outage is never a
+       5xx on this door — the row says Sin confirmar and the others keep
+       working. */
+    it("an answer of the wrong shape: a null invoice, a record body with no results, a balance the parser refuses", async () => {
+      await seedBusiness({ wisphubApiKey: "wh-key-1" });
+      mockRecord(customerRecord());
+      mockBalance(6, [null]);
+      await expectUnconfirmed();
+
+      wh().intercept({ method: "GET", path: isRecordLookup }).reply(...json({ detail: "¿?" }));
+      await expectUnconfirmed();
+
+      mockRecord(customerRecord({ saldo: "1,299.00" }));
+      await expectUnconfirmed();
+    });
   });
 
   it("a refused key answers 503 INTEGRATION_AUTH_FAILED, and never carries the key", async () => {
@@ -694,6 +716,50 @@ describe("cobros-in-links US3: GET /direct-payments/customers/debt — what a re
   it("without a session the door is closed", async () => {
     const res = await (await app()).request("/direct-payments/customers/debt?usuario=greyes%40wifiplus", {}, env);
     expect(res.status).toBe(401);
+  });
+});
+
+/* ---- Tenant isolation (constitution V) ----
+
+   Review of 2026-09-28: every case above seeds one keyed business, and
+   the interceptors match on the path alone, so a door that resolved the
+   wrong business's integration would pass them all. Here two businesses
+   are connected with different keys, and each interceptor answers only
+   to its own key: a member of B must reach B's provider with B's key,
+   and A's interceptor must be left untouched. */
+describe("cobros-in-links US1, US3: each door asks the actor's own integration, with its own key", () => {
+  const withKey = (key: string) => ({ headers: { Authorization: `Api-Key ${key}` } });
+
+  async function twoBusinesses() {
+    await seedBusiness({ wisphubApiKey: "wh-key-A" });
+    await seedBusiness({ email: "b@isp.mx", wisphubApiKey: "wh-key-B" });
+  }
+
+  it("the Por cobrar block of business B is read with B's key, and shows only B's invoices", async () => {
+    await twoBusinesses();
+    wh()
+      .intercept({ method: "GET", path: isInvoiceList, ...withKey("wh-key-B") })
+      .reply(...json({ next: null, count: 1, results: [measuredRow({ id_factura: 2001, cliente: { usuario: "de-b@isp", nombre: "De B" } })] }));
+
+    const { data } = await (await getBlock("", "b@isp.mx")).json();
+    expect(data.results.map((r: { externalId: number }) => r.externalId)).toEqual([2001]);
+  });
+
+  it("the debt door of business B reads the record and the balance with B's key", async () => {
+    await twoBusinesses();
+    wh()
+      .intercept({ method: "GET", path: isRecordLookup, ...withKey("wh-key-B") })
+      .reply(...json({ count: 1, results: [customerRecord({ usuario: "de-b@isp", id_servicio: 77, saldo: "150.00", estado_facturas: "Pagadas" })] }));
+    wh()
+      .intercept({ method: "GET", path: "/api/clientes/77/saldo/", ...withKey("wh-key-B") })
+      .reply(...json({ username: "de-b@isp", facturas: [], saldo: 0 }));
+
+    const res = await (await app()).request(
+      "/direct-payments/customers/debt?usuario=de-b%40isp",
+      await asBusiness("b@isp.mx"),
+      env,
+    );
+    expect((await res.json()).data).toMatchObject({ state: "owes", totalCents: 15000 });
   });
 });
 

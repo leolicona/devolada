@@ -17,7 +17,9 @@ const screens = [
      its warning ink — and a search whose results carry the two new
      badges, Sin adeudo and Sin confirmar (D15) */
   { name: "Por cobrar", url: `${ADMIN}/links?view=receivables`, stub: stubAdminApi, ready: "Abraham Flores" },
-  { name: "Por cobrar búsqueda", url: `${ADMIN}/links?view=receivables&q=wif`, stub: stubPorCobrarSearch, ready: "Sin confirmar" },
+  /* Both badges must be on screen before axe measures them: they come
+     from two separate debt answers (review of 2026-09-28) */
+  { name: "Por cobrar búsqueda", url: `${ADMIN}/links?view=receivables&q=wif`, stub: stubPorCobrarSearch, ready: ["Sin confirmar", "Sin adeudo"] },
   { name: "WispHub", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Ejecutar acciones automáticamente" },
   /* provider-address-per-isp US1 (T042): the installation picker and the
      two badges that mark a sandbox and an assumed default. A status told
@@ -72,7 +74,9 @@ for (const theme of ["light", "dark"] as const) {
           await expect(page.getByText("Janely Guadalupe Reyes").first()).toBeVisible();
           await screen.open(page);
         }
-        await expect(page.getByText(screen.ready).first()).toBeVisible();
+        for (const ready of ([] as string[]).concat(screen.ready)) {
+          await expect(page.getByText(ready).first()).toBeVisible();
+        }
 
         const results = await new AxeBuilder({ page })
           /* Only the rules that need real rendering: the markup rules

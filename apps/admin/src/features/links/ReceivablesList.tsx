@@ -230,15 +230,27 @@ export function ReceivablesList({
         </div>
 
         {/* FR-003: the next block is asked for when the operator scrolls
-            toward this — never by the page walking to the end on its own */}
-        {receivables.hasMore && (
-          <div ref={receivables.sentinelRef} className="mt-4 min-h-10">
-            {receivables.loadingMore && (
-              <p role="status" className="text-sm text-muted-foreground">
-                Leyendo el siguiente bloque de facturas…
-              </p>
-            )}
+            toward this — never by the page walking to the end on its own.
+            A next block that could not be read stops the walk here, and
+            the operator asks again (review of 2026-09-28): the page never
+            retries on its own, which is how it used to loop. */}
+        {receivables.nextFailed ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">No pudimos leer el siguiente bloque de facturas.</p>
+            <Button size="compact" variant="secondary" onClick={receivables.retryNext}>
+              Reintentar
+            </Button>
           </div>
+        ) : (
+          receivables.hasMore && (
+            <div ref={receivables.sentinelRef} className="mt-4 min-h-10">
+              {receivables.loadingMore && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Leyendo el siguiente bloque de facturas…
+                </p>
+              )}
+            </div>
+          )
         )}
       </Pending>
     </>

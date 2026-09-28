@@ -125,7 +125,12 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
                — this list does not re-render when Links changes its
                address. Every other section opens as it always did. */
             search={to === "/links" ? () => lastLinksAddress(actor?.id) : undefined}
-            activeOptions={{ exact }}
+            /* The highlight follows the path alone. With the search counted,
+               the Links entry compared the page's address with the one it
+               last remembered — a step behind while the operator typed or
+               changed view — and lost `aria-current` on its own page
+               (review of 2026-09-28). */
+            activeOptions={{ exact, includeSearch: false }}
             aria-label={Icon === null ? accountName : undefined}
             className={
               sidebar
@@ -276,7 +281,10 @@ export function Shell() {
           <Alert variant="warning" className="m-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:mx-8 lg:mt-6">
             <span className="flex items-center gap-2">
               <Plug className="size-4 shrink-0" aria-hidden />
-              Conecta el sistema con el que cobras. Sin una integración no hay Cobros que validar.
+              {/* cobros-in-links FR-014: "cobros", the thing, not a section —
+                  the Cobros section is gone, and a capital named a place the
+                  menu no longer has (review of 2026-09-28) */}
+              Conecta el sistema con el que cobras. Sin una integración no hay cobros que validar.
             </span>
             <Link to="/integrations" className="block">
               <Button size="compact" variant="secondary">Ver integraciones</Button>

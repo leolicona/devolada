@@ -476,14 +476,25 @@ test.describe("cobros-in-links US1: Por cobrar holds in a real browser", () => {
 
   test("FR-003 / SC-003: pressing Por cobrar and not scrolling reads exactly one block; scrolling reads the next", async ({ page }) => {
     const asked = await stubPorCobrar(page, { delayMs: 50 });
+    let customerReads = 0;
+    await page.route("**/direct-payments/customers*", async (route) => {
+      if (route.request().resourceType() !== "document") customerReads++;
+      return route.fallback();
+    });
     await page.goto(`${ADMIN}/links`);
     await expect(page.getByText("Cliente 1 Pérez Domínguez")).toBeVisible();
+    await page.waitForTimeout(500);
+    const beforeChip = customerReads;
 
     await page.getByRole("tab", { name: /por cobrar/i }).click();
     await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
     await expect(page.getByText("193 facturas abiertas")).toBeVisible();
     await page.waitForTimeout(1_000);
     expect(asked.blocks, "the view read ahead with nobody scrolling").toBe(1);
+    /* SC-003, FR-016 (review of 2026-09-28): the one block is ALL it reads —
+       no customers door, no debt for the list's rows */
+    expect(customerReads, "Por cobrar's list asked the customers door").toBe(beforeChip);
+    expect(asked.debts, "Por cobrar's list read debts").toBe(0);
 
     const before = await page.getByRole("list", { name: /clientes con facturas abiertas/i }).getByRole("listitem").count();
     await page.getByRole("list", { name: /clientes con facturas abiertas/i }).getByRole("listitem").last().scrollIntoViewIfNeeded();

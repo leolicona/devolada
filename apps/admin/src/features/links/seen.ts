@@ -25,7 +25,13 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
 
    Every read and write is wrapped: `sessionStorage` throws in a private
    window and in an iframe with third-party storage blocked, and a page
-   that cannot remember must still work. */
+   that cannot remember must still work.
+
+   Every entry is per BUSINESS (cobros-in-links, review of 2026-09-28).
+   Switching business clears the query cache but not the session's
+   storage, so a search, a name or a mark remembered for one business was
+   served in another's list — and in Por cobrar each wrong row would then
+   ask the other business's integration what that usuario owes. */
 
 const RESULTS = "devolada.links.results.v1";
 const CUSTOMERS = "devolada.links.customers.v1";
@@ -48,6 +54,9 @@ export const foldText = (text: string) =>
   text.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
 export const normalizeSearch = (text: string) => foldText(text.trim()).replace(/\s+/g, " ");
+
+/* One business's corner of a store */
+const scoped = (businessId: string, key: string) => `${businessId}|${key}`;
 
 /* The identity a row is remembered by: the usuario for a panel row, the
    caller's reference for an API one (D6). Cobros passes a debtor's
@@ -86,21 +95,22 @@ type StoredResults = { at: number; block: CustomersResponse };
    rows only (D8) — so it is two entries. The customer view keeps the
    bare key it always had. */
 export type SearchView = "customers" | "receivables";
-const resultsKey = (text: string, view: SearchView) => {
+const resultsKey = (text: string, view: SearchView, businessId: string) => {
   const key = normalizeSearch(text);
-  return key === "" || view === "customers" ? key : `${view}:${key}`;
+  if (key === "") return "";
+  return scoped(businessId, view === "customers" ? key : `${view}:${key}`);
 };
 
 /* Null past the two minutes, so an expired entry is simply a search
    nobody stored — the caller asks the provider again (FR-012). */
-export function readResults(text: string, view: SearchView = "customers"): StoredResults | null {
-  const stored = read<Record<string, StoredResults>>(RESULTS)?.[resultsKey(text, view)];
+export function readResults(text: string, view: SearchView, businessId: string): StoredResults | null {
+  const stored = read<Record<string, StoredResults>>(RESULTS)?.[resultsKey(text, view, businessId)];
   if (!stored) return null;
   return Date.now() - stored.at > RESULTS_TTL_MS ? null : stored;
 }
 
-export function writeResults(text: string, block: CustomersResponse, view: SearchView = "customers"): void {
-  const key = resultsKey(text, view);
+export function writeResults(text: string, block: CustomersResponse, view: SearchView, businessId: string): void {
+  const key = resultsKey(text, view, businessId);
   /* An empty box leaves no entry behind: a browse is not a search */
   if (key === "") return;
   const all = read<Record<string, StoredResults>>(RESULTS) ?? {};
@@ -117,6 +127,7 @@ export function writeResults(text: string, block: CustomersResponse, view: Searc
 
 type SeenCustomer = {
   at: number;
+  businessId: string;
   usuario: string;
   wisphubId: number | null;
   name: string | null;
@@ -125,13 +136,14 @@ type SeenCustomer = {
 
 /* Every live answer overwrites what it covers: the cache can never
    contradict a provider that just spoke. */
-export function rememberCustomers(rows: CustomerRow[]): void {
+export function rememberCustomers(rows: CustomerRow[], businessId: string): void {
   const all = read<Record<string, SeenCustomer>>(CUSTOMERS) ?? {};
   const now = Date.now();
   for (const row of rows) {
     if (row.channel !== "panel" || row.usuario === null) continue;
-    all[row.usuario] = {
+    all[scoped(businessId, row.usuario)] = {
       at: now,
+      businessId,
       usuario: row.usuario,
       wisphubId: row.wisphubId,
       name: row.name,
@@ -142,16 +154,17 @@ export function rememberCustomers(rows: CustomerRow[]): void {
     .filter((entry) => now - entry.at <= CUSTOMERS_TTL_MS)
     .sort((a, b) => b.at - a.at)
     .slice(0, CUSTOMERS_MAX);
-  write(CUSTOMERS, Object.fromEntries(kept.map((entry) => [entry.usuario, entry])));
+  write(CUSTOMERS, Object.fromEntries(kept.map((entry) => [scoped(entry.businessId, entry.usuario), entry])));
 }
 
 /* Read ONLY when the provider did not answer (FR-014, FR-021): a name
    seen minutes ago is better than a blank row, and worse than a live
    one. Matching is the same contains promise the provider makes (FR-004). */
-export function recallCustomers(search: string): SeenCustomer[] {
+export function recallCustomers(search: string, businessId: string): SeenCustomer[] {
   const needle = normalizeSearch(search);
   const now = Date.now();
   return Object.values(read<Record<string, SeenCustomer>>(CUSTOMERS) ?? {})
+    .filter((entry) => entry.businessId === businessId)
     .filter((entry) => now - entry.at <= CUSTOMERS_TTL_MS)
     .filter(
       (entry) =>
@@ -167,13 +180,19 @@ export function recallCustomers(search: string): SeenCustomer[] {
 
 export type Mark = "copied" | "sent";
 
-export function readMarks(): Record<string, Mark> {
-  return read<Record<string, Mark>>(MARKS) ?? {};
+/* This business's marks, keyed by row identity */
+export function readMarks(businessId: string): Record<string, Mark> {
+  const prefix = scoped(businessId, "");
+  return Object.fromEntries(
+    Object.entries(read<Record<string, Mark>>(MARKS) ?? {})
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, mark]) => [key.slice(prefix.length), mark]),
+  );
 }
 
-export function writeMark(key: string, mark: Mark): void {
+export function writeMark(businessId: string, key: string, mark: Mark): void {
   if (key === "") return;
-  write(MARKS, { ...readMarks(), [key]: mark });
+  write(MARKS, { ...(read<Record<string, Mark>>(MARKS) ?? {}), [scoped(businessId, key)]: mark });
 }
 
 /* ---- 4. The last Links address (cobros-in-links FR-009, SC-005) ----

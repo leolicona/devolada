@@ -566,6 +566,9 @@ export class WispHub {
     }
     const day = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
     return data.facturas.map((raw) => {
+      if (!raw || typeof raw !== "object") {
+        throw new WispHubError("WISPHUB_UNAVAILABLE", "balance door: unreadable invoice");
+      }
       const f = raw as { id?: unknown; fecha_emision?: unknown; fecha_vencimiento?: unknown; total?: unknown };
       const totalCents = providerCents(f.total);
       /* A debt with an invoice nobody can read cannot be summed */

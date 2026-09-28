@@ -9,7 +9,7 @@ import { businessActor, fail, handlers, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 import { FOCUS_FLOOR_MS, resetPresenceForTests } from "../src/lib/presence";
-import { rememberLinksAddress, resetSeenForTests } from "../src/features/links/seen";
+import { rememberCustomers, rememberLinksAddress, resetSeenForTests, writeResults } from "../src/features/links/seen";
 import { DEBT_MAX_IN_FLIGHT, resetDebtGateForTests } from "../src/features/links/useCustomerDebt";
 
 /* cobros-in-links — the Por cobrar view of Links, in the panel.
@@ -130,6 +130,31 @@ function scrollToEnd() {
   }
 }
 
+/* A sentinel that is simply ON screen: a real IntersectionObserver
+   reports it the moment it observes. This is the case that used to loop
+   after a failed next block (review of 2026-09-28). */
+class VisibleObserver {
+  private gone = false;
+  constructor(private callback: IntersectionObserverCallback) {}
+  observe(node: Element) {
+    queueMicrotask(() => {
+      if (!this.gone) {
+        this.callback([{ isIntersecting: true, target: node } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+    });
+  }
+  disconnect() {
+    this.gone = true;
+  }
+  unobserve() {}
+  takeRecords() {
+    return [];
+  }
+}
+
+/* The customer view's two minutes, past which the view re-reads its first block */
+const TWO_MINUTES = 2 * 60_000;
+
 function setVisibility(state: "visible" | "hidden") {
   Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
   document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
@@ -234,6 +259,9 @@ describe("cobros-in-links US1: Por cobrar inside Links", () => {
                 [
                   invoice({ externalId: 88, customerUsuario: "aflores@wifiplus", customerName: "Abraham", amountCents: 19900 }),
                   invoice({ externalId: 57, amountCents: 30000, dueDate: day(+5) }),
+                  /* The list shifted between the two reads and hands invoice
+                     42 back again: counted once, never added twice */
+                  invoice({ dueDate: day(+3) }),
                 ],
                 { total: 3 },
               ),
@@ -300,7 +328,9 @@ describe("cobros-in-links US1: Por cobrar inside Links", () => {
               carriedCents: 29900,
               period: "Periodo del 15/Sept./2026 al 15/Oct./2026",
             }),
-            invoice({ externalId: 57, amountCents: 30000 }),
+            /* 0 is what most real rows carry (measured 2026-09-27, M3):
+               nothing carried says nothing */
+            invoice({ externalId: 57, amountCents: 30000, carriedCents: 0 }),
           ]),
         ),
     });
@@ -391,16 +421,28 @@ describe("cobros-in-links US1: Por cobrar inside Links", () => {
     expect(await screen.findByText("1 factura abierta")).toBeInTheDocument();
   });
 
-  it("returning to the tab re-reads the first block at most once every 30 s, and shows no read age (FR-011)", async () => {
+  it("returning to the tab re-reads the FIRST block only, at most once every 30 s, and shows no read age (FR-011)", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal("IntersectionObserver", ScrollObserver);
     const asked: (string | null)[] = [];
+    const firstReads = () => asked.filter((cursor) => cursor === null).length;
     arrange({
       receivables: (url) => {
-        asked.push(url.searchParams.get("cursor"));
-        return ok(block(asked.length === 1 ? [invoice()] : [invoice(), threeInvoices()[2]]));
+        const cursor = url.searchParams.get("cursor");
+        asked.push(cursor);
+        if (cursor !== null) {
+          return ok(block([invoice({ externalId: 99, customerUsuario: "mlopez@wifiplus", customerName: "María" })], { total: 3 }));
+        }
+        return ok(
+          block(firstReads() === 1 ? [invoice()] : [invoice(), threeInvoices()[2]], { nextCursor: "aW52OjE", total: 3 }),
+        );
       },
     });
     await screen.findByRole("button", { name: /janely/i });
+    /* Two blocks on screen before the operator leaves the tab */
+    scrollToEnd();
+    expect(await screen.findByRole("button", { name: /maría/i })).toBeInTheDocument();
+    expect(asked).toEqual([null, "aW52OjE"]);
     expect(screen.queryByText(/consultado hace/i)).not.toBeInTheDocument();
 
     /* Inside the floor: a return asks nothing */
@@ -408,15 +450,82 @@ describe("cobros-in-links US1: Por cobrar inside Links", () => {
     setVisibility("hidden");
     setVisibility("visible");
     await new Promise((r) => setTimeout(r, 50));
-    expect(asked).toHaveLength(1);
+    expect(asked).toHaveLength(2);
 
-    /* Past it: one read, of the first block */
+    /* Past it: ONE read, of the first block — the second block is not read
+       again, and its rows stay */
     vi.advanceTimersByTime(FOCUS_FLOOR_MS);
     setVisibility("hidden");
     setVisibility("visible");
     expect(await screen.findByRole("button", { name: /abraham/i })).toBeInTheDocument();
-    expect(asked).toEqual([null, null]);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(asked).toEqual([null, "aW52OjE", null]);
+    expect(screen.getByRole("button", { name: /maría/i })).toBeInTheDocument();
     expect(screen.queryByText(/consultado hace/i)).not.toBeInTheDocument();
+  });
+
+  /* Review of 2026-09-28 (FR-003): a stale infinite query re-reads every
+     page it holds when the view comes back. Past the two minutes, the
+     view re-reads its FIRST block only — the rest stay as they were. */
+  it("coming back to Por cobrar after two minutes re-reads the first block only", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal("IntersectionObserver", ScrollObserver);
+    const asked: (string | null)[] = [];
+    arrange({
+      receivables: (url) => {
+        const cursor = url.searchParams.get("cursor");
+        asked.push(cursor);
+        return cursor === null
+          ? ok(block([invoice()], { nextCursor: "aW52OjE", total: 2 }))
+          : ok(block([invoice({ externalId: 99, customerUsuario: "mlopez@wifiplus", customerName: "María" })], { total: 2 }));
+      },
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    scrollToEnd();
+    expect(await screen.findByRole("button", { name: /maría/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: /todos/i }));
+    await screen.findByText("Cliente de Todos");
+    vi.advanceTimersByTime(TWO_MINUTES + 1_000);
+    await userEvent.click(screen.getByRole("tab", { name: /por cobrar/i }));
+
+    expect(await screen.findByRole("button", { name: /maría/i })).toBeInTheDocument();
+    await waitFor(() => expect(asked).toEqual([null, "aW52OjE", null]));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(asked).toEqual([null, "aW52OjE", null]);
+  });
+
+  /* Review of 2026-09-28: the list is not read while it is not shown */
+  it("returning to the tab while Todos is chosen reads no open invoice", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let receivableReads = 0;
+    arrange({
+      receivables: () => {
+        receivableReads++;
+        return ok(block(threeInvoices()));
+      },
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    await userEvent.click(screen.getByRole("tab", { name: /todos/i }));
+    await screen.findByText("Cliente de Todos");
+    vi.advanceTimersByTime(FOCUS_FLOOR_MS + 1_000);
+    setVisibility("hidden");
+    setVisibility("visible");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(receivableReads).toBe(1);
+  });
+
+  /* Replaces cobros.test.tsx "FR-019: a record whose number the act cannot
+     read falls back to the picker" (links-on-demand-search US4) */
+  it("FR-008: a customer whose number the act cannot read gets WhatsApp's picker", async () => {
+    const opened = { location: { href: "" }, close: vi.fn(), opener: {} as unknown };
+    const open = vi.spyOn(window, "open").mockReturnValue(opened as unknown as Window);
+    arrange();
+    server.use(handlers.createLink(() => ok({ ...created, waLink: "https://wa.me/?text=hola" })));
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /whatsapp/i }));
+    await waitFor(() => expect(opened.location.href).toBe("https://wa.me/?text=hola"));
+    open.mockRestore();
   });
 
   it("switching views quickly never draws one view's late answer over the other, and keeps it for the way back", async () => {
@@ -551,6 +660,28 @@ describe("cobros-in-links US2: the Cobros section folds into Links", () => {
     await userEvent.click(screen.getAllByRole("link", { name: "Links" })[0]);
     expect(await screen.findByText("Cliente de Todos")).toBeInTheDocument();
     expect(router.state.location.search).toEqual({});
+  });
+
+  /* Review of 2026-09-28: with the remembered search counted, the Links
+     entry compared the page's address with the last one it remembered and
+     lost its highlight on its own page */
+  it("the Links entry stays marked as the current page while the operator types and changes view", async () => {
+    const router = arrange({
+      customers: () => ok(customersBlock([panelRow()], { matched: 1, total: null })),
+      debt: (url) => ok(none(url.searchParams.get("usuario")!)),
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    const linksEntriesCurrent = () =>
+      screen.getAllByRole("link", { name: "Links" }).every((link) => link.getAttribute("aria-current") === "page");
+    expect(linksEntriesCurrent()).toBe(true);
+
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "jan");
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: "jan", view: "receivables" }));
+    expect(linksEntriesCurrent()).toBe(true);
+
+    await userEvent.click(screen.getByRole("tab", { name: /todos/i }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: "jan" }));
+    expect(linksEntriesCurrent()).toBe(true);
   });
 
   it("the menu has no Cobros entry, and Links is where it was (FR-014)", async () => {
@@ -741,12 +872,19 @@ describe("cobros-in-links US3: find one debtor from the Por cobrar view", () => 
     expect(screen.queryByText("Janely Reyes")).not.toBeInTheDocument();
   });
 
-  it("only the answer for the text as it is now is shown", async () => {
+  it("only the answer for the text as it is now is shown — even when the old answer lands last (US3 scenario 8)", async () => {
+    /* The old text's answer is held until the new one is on screen, so it
+       truly arrives LAST (review of 2026-09-28: it used to land first,
+       which proved nothing) */
+    let releaseOld: () => void = () => {};
+    const oldHeld = new Promise<void>((resolve) => (releaseOld = resolve));
+    let oldAsked = false;
     arrange({
       customers: async (url) => {
         const q = url.searchParams.get("q");
         if (q === "wif") {
-          await delay(250);
+          oldAsked = true;
+          await oldHeld;
           return ok(customersBlock([panelRow({ name: "Respuesta vieja" })], { matched: 1, total: null }));
         }
         return ok(customersBlock([panelRow({ usuario: "nuevo@wifiplus", name: "Respuesta nueva" })], { matched: 1, total: null }));
@@ -756,11 +894,100 @@ describe("cobros-in-links US3: find one debtor from the Por cobrar view", () => 
     await screen.findByRole("button", { name: /janely/i });
     const box = screen.getByLabelText(/buscar cliente/i);
     await userEvent.type(box, "wif");
-    await new Promise((r) => setTimeout(r, 350));
+    await waitFor(() => expect(oldAsked).toBe(true));
     await userEvent.type(box, "iplus");
     expect(await screen.findByText("Respuesta nueva")).toBeInTheDocument();
-    await new Promise((r) => setTimeout(r, 300));
+
+    releaseOld();
+    await new Promise((r) => setTimeout(r, 150));
     expect(screen.queryByText("Respuesta vieja")).not.toBeInTheDocument();
+    expect(screen.getByText("Respuesta nueva")).toBeInTheDocument();
+  });
+
+  /* Review of 2026-09-28 (FR-018): a read that FAILS — not a 200
+     "unconfirmed" — still says it could not confirm, and never waits
+     forever or shows zero */
+  it("a debt read that fails reads Sin confirmar, and the other rows still answer", async () => {
+    arrange({
+      customers: () =>
+        ok(
+          customersBlock(
+            [panelRow(), panelRow({ usuario: "aflores@wifiplus", wisphubId: 102, name: "Abraham Flores" })],
+            { matched: 2, total: null },
+          ),
+        ),
+      debt: (url) =>
+        url.searchParams.get("usuario") === "greyes@wifiplus"
+          ? fail("INTERNAL_ERROR", 500)
+          : ok(owes("aflores@wifiplus", 19900)),
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "wif");
+    const janely = (await screen.findByText("Janely Reyes")).closest("li")!;
+    await waitFor(() => expect(within(janely).getByText("Sin confirmar")).toBeInTheDocument());
+    expect(within(janely).queryByText("Consultando adeudo")).not.toBeInTheDocument();
+    expect(within(janely).queryByText("$0.00")).not.toBeInTheDocument();
+    const abraham = screen.getByText("Abraham Flores").closest("li")!;
+    await waitFor(() => expect(within(abraham).getByText("$199.00")).toBeInTheDocument());
+  });
+
+  /* Review of 2026-09-28 (FR-001): the customer view's search is untouched
+     — it asks for every channel, and reads no debt */
+  it("a search in Todos asks no channel and reads no debt", async () => {
+    const asked: URL[] = [];
+    let debtAsked = 0;
+    arrange({
+      path: "/links",
+      customers: (url) => {
+        asked.push(url);
+        return ok(customersBlock([panelRow()], { matched: 1, total: null }));
+      },
+      debt: () => {
+        debtAsked++;
+        return ok(none("greyes@wifiplus"));
+      },
+    });
+    await screen.findByText("Janely Reyes");
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "wif");
+    await waitFor(() => expect(asked.some((url) => url.searchParams.get("q") === "wif")).toBe(true));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(asked.every((url) => !url.searchParams.has("channel"))).toBe(true);
+    expect(debtAsked).toBe(0);
+    expect(screen.queryByText("Consultando adeudo")).not.toBeInTheDocument();
+  });
+
+  /* Review of 2026-09-28: the session's memory is per business — a
+     search, or a name seen, in one business never answers in another's */
+  it("a search remembered for another business is asked again, never served", async () => {
+    writeResults(
+      "mar",
+      customersBlock([panelRow({ usuario: "ajeno@otro", name: "De otro negocio" })], { matched: 1, total: null }),
+      "receivables",
+      "otro-negocio",
+    );
+    let searched = 0;
+    arrange({
+      path: "/links?view=receivables&q=mar",
+      customers: (url) => {
+        if (url.searchParams.get("q") === "mar") searched++;
+        return ok(customersBlock([panelRow()], { matched: 1, total: null }));
+      },
+      debt: (url) => ok(none(url.searchParams.get("usuario")!)),
+    });
+    expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
+    expect(searched).toBe(1);
+    expect(screen.queryByText("De otro negocio")).not.toBeInTheDocument();
+  });
+
+  it("a name seen in another business is not offered when WispHub is away", async () => {
+    rememberCustomers([panelRow({ usuario: "maria@otro", name: "María De Otro" }) as never], "otro-negocio");
+    arrange({
+      path: "/links?view=receivables&q=mar",
+      customers: () => ok(customersBlock([], { matched: 0, total: null, wisphub: "unavailable" })),
+      debt: (url) => ok(none(url.searchParams.get("usuario")!)),
+    });
+    expect(await screen.findByText(/sin conexión a wisphub/i)).toBeInTheDocument();
+    expect(screen.queryByText("María De Otro")).not.toBeInTheDocument();
   });
 
   it("the text and the view survive leaving and returning (US3 scenario 9)", async () => {
@@ -853,6 +1080,113 @@ describe("cobros-in-links US4: the integration away is never read as 'nobody owe
     expect(screen.getByRole("button", { name: /janely/i })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/nadie tiene facturas abiertas/i)).not.toBeInTheDocument();
+  });
+
+  /* Review of 2026-09-28: a later block the integration could not read
+     used to end the walk for good — the note stayed after WispHub came
+     back and the rest of the list was out of reach. Reintentar asks again
+     from the last good cursor, and a success clears the note. */
+  it("a later block that could not be read can be asked again, and the walk goes on", async () => {
+    vi.stubGlobal("IntersectionObserver", ScrollObserver);
+    const cursors: (string | null)[] = [];
+    arrange({
+      receivables: (url) => {
+        const cursor = url.searchParams.get("cursor");
+        cursors.push(cursor);
+        if (cursor === null) return ok(block([invoice()], { nextCursor: "aW52OjE", total: 2 }));
+        return cursors.filter((c) => c === "aW52OjE").length === 1
+          ? ok(block([], { total: null, integration: "unavailable" }))
+          : ok(block([invoice({ externalId: 99, customerUsuario: "mlopez@wifiplus", customerName: "María" })], { total: 2 }));
+      },
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    scrollToEnd();
+    expect(await screen.findByText(/no pudimos leer el siguiente bloque de facturas/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+    expect(await screen.findByRole("button", { name: /maría/i })).toBeInTheDocument();
+    expect(cursors).toEqual([null, "aW52OjE", "aW52OjE"]);
+    expect(screen.queryByText(/sin conexión a wisphub/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos leer el siguiente bloque/i)).not.toBeInTheDocument();
+  });
+
+  it("the return to the tab heals a later block that could not be read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal("IntersectionObserver", ScrollObserver);
+    const cursors: (string | null)[] = [];
+    arrange({
+      receivables: (url) => {
+        const cursor = url.searchParams.get("cursor");
+        cursors.push(cursor);
+        if (cursor === null) return ok(block([invoice()], { nextCursor: "aW52OjE", total: 2 }));
+        return cursors.filter((c) => c === "aW52OjE").length === 1
+          ? ok(block([], { total: null, integration: "unavailable" }))
+          : ok(block([invoice({ externalId: 99, customerUsuario: "mlopez@wifiplus", customerName: "María" })], { total: 2 }));
+      },
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    scrollToEnd();
+    expect(await screen.findByText(/sin conexión a wisphub/i)).toBeInTheDocument();
+
+    vi.advanceTimersByTime(FOCUS_FLOOR_MS + 1_000);
+    setVisibility("hidden");
+    setVisibility("visible");
+    await waitFor(() => expect(screen.queryByText(/sin conexión a wisphub/i)).not.toBeInTheDocument());
+    /* The walk resumes from the last good cursor on the next scroll */
+    scrollToEnd();
+    expect(await screen.findByRole("button", { name: /maría/i })).toBeInTheDocument();
+    expect(cursors).toEqual([null, "aW52OjE", null, "aW52OjE"]);
+  });
+
+  /* Review of 2026-09-28: with the sentinel on screen, a next block that
+     FAILED was asked for again as fast as it failed — each failure made a
+     new observer, whose first report was the visible sentinel */
+  it("a next block that fails is not asked again on its own; Reintentar asks once", async () => {
+    vi.stubGlobal("IntersectionObserver", VisibleObserver);
+    const cursors: (string | null)[] = [];
+    arrange({
+      receivables: (url) => {
+        const cursor = url.searchParams.get("cursor");
+        cursors.push(cursor);
+        return cursor === null
+          ? ok(block([invoice()], { nextCursor: "aW52OjE", total: 2 }))
+          : fail("INTERNAL_ERROR", 500);
+      },
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    expect(await screen.findByText(/no pudimos leer el siguiente bloque de facturas/i)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(cursors).toEqual([null, "aW52OjE"]);
+    /* The rows stay; no error block */
+    expect(screen.getByRole("button", { name: /janely/i })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+    await waitFor(() => expect(cursors).toEqual([null, "aW52OjE", "aW52OjE"]));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(cursors).toHaveLength(3);
+  });
+
+  /* Review of 2026-09-28 (FR-012, US4 scenario 2): the return to the tab
+     that finds the integration away keeps the rows under the quiet note */
+  it("a return to the tab that finds the integration away keeps the rows under the quiet note", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reads = 0;
+    arrange({
+      receivables: () => {
+        reads++;
+        return reads === 1 ? ok(block(threeInvoices())) : ok(block([], { total: null, integration: "unavailable" }));
+      },
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    vi.advanceTimersByTime(FOCUS_FLOOR_MS + 1_000);
+    setVisibility("hidden");
+    setVisibility("visible");
+    expect(await screen.findByText(/sin conexión a wisphub/i)).toBeInTheDocument();
+    expect(reads).toBe(2);
+    expect(screen.getByRole("button", { name: /janely/i })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reintentar/i })).not.toBeInTheDocument();
   });
 
   /* Replaces cobros.test.tsx "bug cobros-installation-fallback:

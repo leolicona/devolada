@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/r
 import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
+import { useSession } from "../auth/session";
 import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults, type SearchView } from "./seen";
 
 /* links-on-demand-search US1: the page asks for what it shows.
@@ -78,6 +79,9 @@ export type CustomersView = {
   error: ApiError | null;
   hasMore: boolean;
   loadingMore: boolean;
+  /* The next block failed; the walk stops and the page offers Reintentar */
+  nextFailed: boolean;
+  retryNext: () => void;
   sentinelRef: (node: HTMLElement | null) => void;
   retry: () => void;
 };
@@ -85,6 +89,9 @@ export type CustomersView = {
 export function useCustomers(search: string, opts: { view?: SearchView } = {}): CustomersView {
   const view = opts.view ?? "customers";
   const client = useQueryClient();
+  /* Every memory is per business (seen.ts): a search remembered for one
+     business must never answer in another's list */
+  const businessId = useSession().data?.id ?? "";
   /* Measured once per mount: a key that moved with the window would
      throw away a cache on every resize */
   const [limit] = useState(blockSize);
@@ -110,7 +117,7 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
      cost the two-minute memory (FR-012). */
   /* cobros-in-links D12: the view is part of the key — the same text in
      Por cobrar asks for panel rows only (D8), so it is another answer */
-  const key = useMemo(() => ["links-customers", view, q ?? ""] as const, [view, q]);
+  const key = useMemo(() => ["links-customers", businessId, view, q ?? ""] as const, [businessId, view, q]);
   /* cobros-in-links FR-010: in Por cobrar the customers door is asked
      only for a SEARCH. With no text the view is the open-invoice list,
      which is another read (`useReceivables`). */
@@ -122,7 +129,7 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
      visible wait (US2 scenarios 2 and 4). Only the FIRST block is
      stored — the blocks below it are a scroll the operator can repeat,
      and storing a session's whole scroll is not a two-minute memory. */
-  const stored = useMemo(() => (q === undefined ? null : readResults(q, view)), [q, view]);
+  const stored = useMemo(() => (q === undefined ? null : readResults(q, view, businessId)), [q, view, businessId]);
 
   const url = useCallback(
     (cursor: string | null) => {
@@ -188,7 +195,7 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
        who has no link yet is not in the answer at all, so searching by
        their NAME — which needs WispHub — still finds them. */
     if (provider !== "ok") {
-      const remembered = new Map(recallCustomers(q ?? "").map((entry) => [entry.usuario, entry]));
+      const remembered = new Map(recallCustomers(q ?? "", businessId).map((entry) => [entry.usuario, entry]));
       for (const [i, row] of out.entries()) {
         const entry = row.usuario === null ? undefined : remembered.get(row.usuario);
         if (!entry) continue;
@@ -221,15 +228,15 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
       }
     }
     return out;
-  }, [pages, provider, q]);
+  }, [pages, provider, q, businessId]);
 
   /* FR-021: every live answer overwrites what it covers. Written here
      rather than in the query, because it is the RENDERED rows that the
      operator saw and may need back. */
   useEffect(() => {
     if (provider !== "ok" || rows.length === 0) return;
-    rememberCustomers(rows);
-  }, [provider, rows]);
+    rememberCustomers(rows, businessId);
+  }, [provider, rows, businessId]);
 
   const first = pages?.[0];
   const last = pages?.[pages.length - 1];
@@ -239,8 +246,8 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
      two-minute memory would never expire (FR-012). */
   useEffect(() => {
     if (q === undefined || !first || first === stored?.block) return;
-    writeResults(q, first, view);
-  }, [q, first, stored, view]);
+    writeResults(q, first, view, businessId);
+  }, [q, first, stored, view, businessId]);
 
   /* FR-027 / D15: the page no longer reports its own age — a block is
      read when it renders, so there is nothing to print and nothing to
@@ -289,7 +296,7 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
      (`useReceivables`, SC-003). */
   const lookahead = view === "receivables" ? "0px" : "320px";
   const observer = useRef<IntersectionObserver | null>(null);
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = query;
   const sentinelRef = useCallback(
     (node: HTMLElement | null) => {
       observer.current?.disconnect();
@@ -300,13 +307,17 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
       observer.current = new IntersectionObserver(
         (entries) => {
           if (!entries.some((entry) => entry.isIntersecting)) return;
-          if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          /* Never after a failed next block (cobros-in-links, review of
+             2026-09-28): each failure re-creates this observer, whose
+             first report is the still-visible sentinel, and the page asked
+             again as fast as the request failed. Reintentar asks instead. */
+          if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
         },
         { rootMargin: lookahead },
       );
       observer.current.observe(node);
     },
-    [hasNextPage, isFetchingNextPage, fetchNextPage, lookahead],
+    [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage, lookahead],
   );
   useEffect(() => () => observer.current?.disconnect(), []);
 
@@ -330,6 +341,8 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
     error: query.error ?? (background.refused ? new ApiError("WISPHUB_AUTH_FAILED", 503) : null),
     hasMore: Boolean(query.hasNextPage),
     loadingMore: query.isFetchingNextPage,
+    nextFailed: isFetchNextPageError && !isFetchingNextPage,
+    retryNext: () => void fetchNextPage(),
     sentinelRef,
     retry: () => void query.refetch(),
   };

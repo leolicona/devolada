@@ -24,7 +24,10 @@ import type { CadenaFacts } from "./types";
    certificate. Names, RFC/CURP and the concept never leave it — so no
    record can hold them (FR-006, FR-010), by construction rather than by
    discipline. Anything that does not look exactly as measured is `null`,
-   and the CEP it came from is unreadable: it confirms nothing (FR-002). */
+   and the CEP it came from is unreadable: it confirms nothing (FR-002).
+   D19 (the creator's Rule 1, 2026-09-28): a single `valid` has a second
+   source, its answer's own fields (`store.ts::singleFacts`); a bundle's
+   CEP has only this one. */
 
 const FIELDS = 43;
 /* The CEP's own footnote: "La hora de abono corresponde al huso horario
@@ -49,11 +52,22 @@ function time(hhmmss: string): string | null {
 
 const digits = (v: string) => /^\d+$/.test(v);
 
-export function parseCadena(text: string | null | undefined): CadenaFacts | null {
+/* bug: single-cep-unreadable — what a cadena gave: its facts, or the check
+   it failed. On dev (2026-09-28) a single `valid`'s cadena did not parse
+   and nothing kept why, so whether the answer lacked it or its shape
+   differed could not be told. The reason names the check and never a
+   value of the CEP — a name, an account — except the field count and a
+   short numeric version, the two facts that tell another shape from a
+   damaged one. */
+export type CadenaReading = { facts: CadenaFacts } | { why: string };
+
+export function readCadena(text: string | null | undefined): CadenaReading {
   const t = (text ?? "").trim();
-  if (!t.startsWith("||") || !t.endsWith("||") || t.length < 5) return null;
+  if (!t) return { why: "missing" };
+  if (!t.startsWith("||") || !t.endsWith("||") || t.length < 5) return { why: "not delimited" };
   const f = t.slice(2, -2).split("|");
-  if (f.length !== FIELDS || f[0] !== "01") return null;
+  if (f.length !== FIELDS) return { why: `${f.length} fields` };
+  if (f[0] !== "01") return { why: `version ${/^\d{1,3}$/.test(f[0]) ? f[0] : "?"}` };
 
   const operationDate = day(f[1]);
   const creditDate = day(f[2]);
@@ -63,27 +77,38 @@ export function parseCadena(text: string | null | undefined): CadenaFacts | null
   const amount = f[17];
   const certificateNumber = f[FIELDS - 1];
 
-  if (!operationDate || !creditDate || !creditTime) return null;
-  if (!receiverSpeiCode || !senderBank?.trim()) return null;
-  if (!/^\d{1,2}$/.test(senderAccountType) || !/^\d{1,2}$/.test(receiverAccountType)) return null;
-  if (!digits(senderAccount) || !digits(receiverAccount)) return null;
-  if (!/^\d+(\.\d{1,2})?$/.test(amount) || !digits(certificateNumber)) return null;
+  if (!operationDate) return { why: "operation day" };
+  if (!creditDate) return { why: "credit day" };
+  if (!creditTime) return { why: "credit time" };
+  if (!receiverSpeiCode) return { why: "SPEI code" };
+  if (!senderBank?.trim()) return { why: "sender bank" };
+  if (!/^\d{1,2}$/.test(senderAccountType) || !/^\d{1,2}$/.test(receiverAccountType)) return { why: "account type" };
+  if (!digits(senderAccount) || !digits(receiverAccount)) return { why: "account" };
+  if (!/^\d+(\.\d{1,2})?$/.test(amount)) return { why: "amount" };
+  if (!digits(certificateNumber)) return { why: "certificate" };
   /* Constitution II: the amount by string parsing, never `× 100` */
   const amountCents = decimalToCents(amount);
-  if (amountCents <= 0) return null;
+  if (amountCents <= 0) return { why: "amount" };
 
   return {
-    operationDate,
-    creditDate,
-    creditTime,
-    creditedAt: wallClockMs(CEP_TIMEZONE, creditDate, creditTime),
-    senderBank: senderBank.trim(),
-    senderAccountType,
-    senderAccount,
-    receiverSpeiCode,
-    receiverAccountType,
-    receiverAccount,
-    amountCents,
-    certificateNumber,
+    facts: {
+      operationDate,
+      creditDate,
+      creditTime,
+      creditedAt: wallClockMs(CEP_TIMEZONE, creditDate, creditTime),
+      senderBank: senderBank.trim(),
+      senderAccountType,
+      senderAccount,
+      receiverSpeiCode,
+      receiverAccountType,
+      receiverAccount,
+      amountCents,
+      certificateNumber,
+    },
   };
+}
+
+export function parseCadena(text: string | null | undefined): CadenaFacts | null {
+  const read = readCadena(text);
+  return "facts" in read ? read.facts : null;
 }

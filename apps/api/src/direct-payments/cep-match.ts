@@ -112,7 +112,8 @@ export function promote(
 }
 
 /* FR-002: entries that could not be read, as trail candidates — flagged,
-   never chosen */
+   never chosen. bug: single-cep-unreadable — each keeps the reader's
+   reason, so the payment says why without the bundle's row. */
 export function unreadableCandidates(unreadable: { entry: string; reason: string }[]): TrailCandidate[] {
   return unreadable.map((u) => ({
     cepId: null,
@@ -121,7 +122,14 @@ export function unreadableCandidates(unreadable: { entry: string; reason: string
     tail: null,
     fate: "dropped" as const,
     why: "unreadable" as const,
+    ...(u.reason ? { readWhy: u.reason } : {}),
   }));
+}
+
+/* bug: single-cep-unreadable (D19): the note on the one candidate a single
+   `valid`'s own fields stood in for */
+export function notedRead(trail: TrailCandidate[], clave: string | undefined, readWhy: string | undefined): TrailCandidate[] {
+  return clave && readWhy ? trail.map((c) => (c.clave === clave ? { ...c, readWhy } : c)) : trail;
 }
 
 /* data-model.md `match_trail`, from a matcher result or a bundle that
@@ -152,10 +160,18 @@ export function trailOf(
    and the public read. Null for every row that is not validating with
    `CEP_UNDECIDED`. */
 export function undecidedReasonOf(row: Pick<Payment, "status" | "lastError" | "matchTrail">): UndecidedReason | null {
+  return undecidedOf(row)?.reason ?? null;
+}
+
+/* bug: single-cep-unreadable: and whether one transfer or several were
+   found — the payer's words differ (`CEP_SINGLE_UNDECIDED`) */
+export function undecidedOf(
+  row: Pick<Payment, "status" | "lastError" | "matchTrail">,
+): { reason: UndecidedReason; source: MatchTrail["source"] } | null {
   if (row.status !== "validating" || row.lastError !== "CEP_UNDECIDED" || !row.matchTrail) return null;
   try {
     const trail = JSON.parse(row.matchTrail) as MatchTrail;
-    return trail.decided === "undecided" ? trail.reason : null;
+    return trail.decided === "undecided" && trail.reason ? { reason: trail.reason, source: trail.source } : null;
   } catch {
     return null;
   }

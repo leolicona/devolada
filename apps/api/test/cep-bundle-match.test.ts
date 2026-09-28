@@ -13,6 +13,7 @@ import {
   aiReturning,
   AZTECA_1858_READING,
   AZTECA_SECONDS_TAIL_READING,
+  NU_0914_READING,
   PNG,
   type StubbedReading,
 } from "./consta/helpers";
@@ -24,6 +25,7 @@ import {
   SENDER_4417,
   SENDER_8301,
   severalAnswer,
+  transferCadena,
   transferPdf,
   validAnswer,
   type SyntheticTransfer,
@@ -332,8 +334,9 @@ describe("cep-bundle-match US1: a shared reference resolves to the payer's own t
     await sweepDirectPayments(testEnv, NOW());
     const after = await rowById(row.id);
     expect(after).toMatchObject({ status: "confirmed", trackingKey: MINE.clave });
+    /* bug: single-cep-unreadable — and the payment keeps the reader's reason */
     expect(trailOf(after).candidates).toContainEqual(
-      expect.objectContaining({ clave: THEIRS.clave, cepId: null, fate: "dropped", why: "unreadable" }),
+      expect.objectContaining({ clave: THEIRS.clave, cepId: null, fate: "dropped", why: "unreadable", readWhy: "no_seal_label" }),
     );
   });
 
@@ -381,7 +384,9 @@ describe("cep-bundle-match US1: a shared reference resolves to the payer's own t
     expect(await recordsFor(db(), business.id, [MORNING.clave])).toHaveLength(1);
     const status = await (await app()).request(`/direct-payments/${row.id}/status`, {}, testEnv);
     const { data } = await status.json();
-    expect(data).toMatchObject({ status: "validating", error: "CEP_UNDECIDED", disputedFields: ["trackingKey"], nextValidationAt: null });
+    /* bug: single-cep-unreadable — one transfer was found, and the code
+       the page words its ask by says one */
+    expect(data).toMatchObject({ status: "validating", error: "CEP_SINGLE_UNDECIDED", disputedFields: ["trackingKey"], nextValidationAt: null });
   });
 
   it("(f) a single valid on a row with neither time nor tail confirms as today", async () => {
@@ -967,5 +972,173 @@ describe("cep-bundle-match US4: other customers' CEPs in the bundle confirm thei
     await sweepDirectPayments(testEnv, NOW());
     expect(await rowById(row.id)).toMatchObject({ status: "validating", lastError: "TRANSFER_NOT_FOUND" });
     expect(await calls()).toBe(2);
+  });
+});
+
+/* bug: single-cep-unreadable (cep-bundle-match D19) — a single `valid` of a
+   search without a clave, whose cadena cannot be read. On dev, 2026-09-28,
+   a Nu screenshot cut before its clave was searched by its reference
+   (280926, the date) and the provider answered one CEP; the cadena did not
+   parse, and the payment waited for a clave the screenshot did not show,
+   on a page that said "más de una transferencia" with no bank and no day
+   in the form. The creator's Rule 1: the answer's own fields stand in, on
+   the printed day; only when both fail is the CEP unreadable, and the
+   payment keeps why. */
+describe("bug: single-cep-unreadable — the answer's fields stand in for a cadena that cannot be read", () => {
+  /* Synthetic: a Nu transfer credited 09:15:04, 14 s after "09:14:50 AM" */
+  const NU = transfer("NU3AZZ0000000000000000000001", "2026-09-28", "09:15:04", "638180000000000011", { senderBank: "NUBANK" });
+  const statusOf = async (id: string) =>
+    (await (await (await app()).request(`/direct-payments/${id}/status`, {}, testEnv)).json()).data as Record<string, unknown>;
+  const withoutFields = (cadena: string, n: number) => {
+    const f = cadena.split("|");
+    f.splice(20, n);
+    return f.join("|");
+  };
+
+  it("the Nu screenshot of 2026-09-28 as it happened: no clave, one valid without a cadena — its fields stand in and it confirms by time", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedReceiptRow(link, business);
+    mockApiCep(validAnswer(NU, { cdaChain: null }), (body) => expect(String(body.imageUrl)).toContain("receipt-"));
+    mockConfirmation();
+
+    await sweepDirectPayments(readerEnv(NU_0914_READING), NOW());
+    const after = await rowById(row.id);
+    /* the receipt printed the minute (the reader lost the seconds): the
+       credit is 5 s past its end */
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: NU.clave, transferTime: "09:14", matchDistanceS: 5 });
+    expect(trailOf(after)).toMatchObject({
+      source: "single",
+      decided: "chosen",
+      receipt: { time: "09:14", tail: null },
+      candidates: [expect.objectContaining({ clave: NU.clave, fate: "chosen", readWhy: "cadena: missing" })],
+    });
+    const [record] = await recordsFor(db(), business.id, [NU.clave]);
+    expect(record).toMatchObject({
+      bundleId: null,
+      operationDate: "2026-09-28",
+      creditDate: "2026-09-28",
+      creditTime: "09:15:04",
+      senderBank: "NUBANK",
+    });
+  });
+
+  it("a cadena of 41 fields: the fields stand in, and the trail names the check the cadena failed", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedReceiptRow(link, business);
+    mockApiCep(validAnswer(NU, { cdaChain: withoutFields(transferCadena(NU), 2) }));
+    mockConfirmation();
+
+    await sweepDirectPayments(readerEnv(NU_0914_READING), NOW());
+    const after = await rowById(row.id);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: NU.clave });
+    expect(trailOf(after).candidates).toEqual([
+      expect.objectContaining({ clave: NU.clave, fate: "chosen", readWhy: "cadena: 41 fields" }),
+    ]);
+  });
+
+  it("the fields still guard the Janely case: printed 18:58, a cadena-less answer credited 07:19:52 does not confirm — and the row keeps Banxico's bank and the printed day", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedReceiptRow(link, business);
+    mockApiCep(validAnswer(MORNING, { cdaChain: null }));
+
+    await sweepDirectPayments(readerEnv(AZTECA_1858_READING), NOW());
+    const after = await rowById(row.id);
+    expect(after).toMatchObject({
+      status: "validating",
+      lastError: "CEP_UNDECIDED",
+      nextValidationAt: null,
+      trackingKey: null,
+      senderBank: "AZTECA",
+      transferDate: "2026-09-25",
+      transferTime: "18:58",
+    });
+    expect(after.banxicoValidAt).toBeNull();
+    expect(trailOf(after)).toMatchObject({
+      source: "single",
+      decided: "undecided",
+      reason: "none_fit",
+      candidates: [expect.objectContaining({ clave: MORNING.clave, fate: "dropped", why: "window", readWhy: "cadena: missing" })],
+    });
+    expect(await statusOf(row.id)).toMatchObject({
+      status: "validating",
+      error: "CEP_SINGLE_UNDECIDED",
+      senderBank: "AZTECA",
+      transferDate: "2026-09-25",
+      disputedFields: ["trackingKey"],
+    });
+  });
+
+  it("cadena and fields both fail: undecided, the one transfer named with both reasons, and the ask opens with Banxico's bank and the printed day", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedReceiptRow(link, business);
+    mockApiCep(validAnswer(NU, { cdaChain: null, processingTime: null }));
+
+    await sweepDirectPayments(readerEnv(NU_0914_READING), NOW());
+    const after = await rowById(row.id);
+    expect(after).toMatchObject({
+      status: "validating",
+      lastError: "CEP_UNDECIDED",
+      disputedFields: JSON.stringify(["trackingKey"]),
+      nextValidationAt: null,
+      trackingKey: null,
+      senderBank: "NUBANK",
+      transferDate: "2026-09-28",
+      transferTime: "09:14",
+    });
+    expect(trailOf(after)).toMatchObject({
+      source: "single",
+      decided: "undecided",
+      reason: "unreadable",
+      candidates: [
+        {
+          cepId: null,
+          clave: NU.clave,
+          creditTime: null,
+          tail: null,
+          fate: "dropped",
+          why: "unreadable",
+          readWhy: "cadena: missing; fields: credit time",
+        },
+      ],
+    });
+    expect(await recordsFor(db(), business.id, [NU.clave])).toHaveLength(0);
+    expect(await statusOf(row.id)).toMatchObject({
+      status: "validating",
+      error: "CEP_SINGLE_UNDECIDED",
+      senderBank: "NUBANK",
+      transferDate: "2026-09-28",
+      disputedFields: ["trackingKey"],
+      nextValidationAt: null,
+    });
+  });
+
+  it("a typed reference with no time: a cadena-less answer confirms as it always did, now with a record on the day typed", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedTypedRow(link, business);
+    mockApiCep(validAnswer(MINE, { cdaChain: null }));
+    mockConfirmation();
+
+    await sweepDirectPayments(testEnv, NOW());
+    const after = await rowById(row.id);
+    expect(after).toMatchObject({ status: "confirmed", trackingKey: MINE.clave, matchDistanceS: null });
+    expect(trailOf(after)).toMatchObject({
+      source: "single",
+      decided: "chosen",
+      by: "none",
+      candidates: [expect.objectContaining({ clave: MINE.clave, fate: "chosen", readWhy: "cadena: missing" })],
+    });
+    const [record] = await recordsFor(db(), business.id, [MINE.clave]);
+    expect(record).toMatchObject({ creditDate: "2026-09-26", creditTime: "07:11:20" });
+  });
+
+  it("with nothing on the receipt to compare and nothing to read, it still confirms as D9 always did", async () => {
+    const { business, link } = await seedAztecaBusiness();
+    const row = await seedTypedRow(link, business);
+    mockApiCep(validAnswer(MINE, { cdaChain: null, processingTime: null }));
+    mockConfirmation();
+
+    await sweepDirectPayments(testEnv, NOW());
+    expect(await rowById(row.id)).toMatchObject({ status: "confirmed", trackingKey: MINE.clave, matchTrail: null });
+    expect(await recordsFor(db(), business.id, [MINE.clave])).toHaveLength(0);
   });
 });

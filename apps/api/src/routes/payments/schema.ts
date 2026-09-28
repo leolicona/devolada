@@ -116,6 +116,10 @@ export const feedCharge = z.object({
      validating with CEP_UNDECIDED — why the bundle did not decide. Only
      the reason rides the 5 s poll; the candidates travel with the proof. */
   undecided: z.enum(MATCH_REASONS).nullable().optional(),
+  /* bug: single-cep-unreadable: whether that search found one transfer or
+     several — "varias coincidencias" is false for one. Null beside a null
+     `undecided`; defaulted so fixtures born before it still parse. */
+  undecidedSource: z.enum(["several", "single"]).nullable().default(null),
 });
 
 export const feedResponse = z.object({

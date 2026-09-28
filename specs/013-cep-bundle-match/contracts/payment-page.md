@@ -9,7 +9,7 @@ word "ZIP" (FR-010). What changes for them: an undecided payment asks for
 the clave, like `REFERENCE_AMBIGUOUS` does today, with words that fit what
 happened; a clave that fits a kept candidate confirms without a new wait.
 
-## `publicPaymentError` — two codes
+## `publicPaymentError` — three codes
 
 ```ts
 /* cep-bundle-match D10: the bundle, or a single match, did not say which
@@ -19,11 +19,15 @@ happened; a clave that fits a kept candidate confirms without a new wait.
 /* cep-bundle-match D10: every transfer found with these data already
    confirmed another payment of the business — possibly the payer's own */
 "CEP_ALL_USED",
+/* bug: single-cep-unreadable (D19): the search found ONE transfer and
+   could not confirm it is the payer's */
+"CEP_SINGLE_UNDECIDED",
 ```
 
 `getDirectPaymentStatus` maps `last_error = 'CEP_UNDECIDED'` to
-`CEP_ALL_USED` when `match_trail.reason = 'all_used'`, else to
-`CEP_UNDECIDED`. `CEP_BUNDLE_PENDING` is not public: `publicError()` turns
+`CEP_ALL_USED` when `match_trail.reason = 'all_used'`, to
+`CEP_SINGLE_UNDECIDED` when `match_trail.source = 'single'` (amended
+2026-09-28), else to `CEP_UNDECIDED`. `CEP_BUNDLE_PENDING` is not public: `publicError()` turns
 it into `null`, and the page shows its ordinary waiting state.
 
 `disputedFields` carries `["trackingKey"]` for both codes, as it does for
@@ -32,9 +36,12 @@ No other field of `directPaymentStatusResponse` changes.
 
 ## The page
 
-- Both codes open the same ask as `REFERENCE_AMBIGUOUS`: `TransferForm`
+- All three codes open the same ask as `REFERENCE_AMBIGUOUS`: `TransferForm`
   with `keys = "clave"`, the other fields filled from the row, focus on the
-  clave. The correction goes out with `supersedes` as today (two-eyes D18).
+  clave. The undecided write keeps the row's bank and day when it has
+  none — the bank Banxico named for a single, the one the search stood on
+  for a bundle, and the day the receipt printed (D19) — so a receipt-door
+  row opens the form filled too. The correction goes out with `supersedes` as today (two-eyes D18).
 - Copy (es-MX, in `payErrors`):
   - `CEP_UNDECIDED`: "Encontramos más de una transferencia que podría ser
     la tuya. Escribe tu clave de rastreo para saber cuál es."
@@ -42,6 +49,9 @@ No other field of `directPaymentStatusResponse` changes.
     se usaron para otros pagos. Si ya habías pagado, tu pago puede estar
     confirmado. Si esta transferencia es nueva, escribe su clave de
     rastreo."
+  - `CEP_SINGLE_UNDECIDED`: "Encontramos una transferencia con tus datos,
+    pero no pudimos confirmar que sea tuya. Escribe tu clave de rastreo
+    para confirmarla."
 - Icon + text, never colour alone; the existing `Alert` recipe; 48px
   fields and buttons; no new motion (constitution VI).
 - A clave that fits a kept candidate (D11) confirms in the attempt that

@@ -5,8 +5,9 @@ import type { Bindings } from "../../env";
 import { chunks, D1_MAX_PARAMS } from "../../db/params";
 import { sha256Hex } from "../extraction";
 import type { Owner } from "../index";
-import { parseCadena } from "./cadena";
+import { CEP_TIMEZONE, readCadena } from "./cadena";
 import { readCepPdf } from "./cep-pdf";
+import { wallClockMs } from "../../time/business-day";
 import type { BundleStatus, CadenaFacts, CepRecord } from "./types";
 import { claveOfEntry, listEntries, readEntries, sniff } from "./zip";
 
@@ -214,9 +215,10 @@ export async function readBundleBytes(
 
   const found: BundleReading["found"] = [];
   for (const cep of read) {
-    const facts = parseCadena(cep.cadena);
-    if (!facts) unreadable.push({ entry: cep.clave, reason: "cadena" });
-    else found.push({ clave: cep.clave, seal: cep.seal, facts });
+    const cadena = readCadena(cep.cadena);
+    /* bug: single-cep-unreadable — the check it failed, not just "cadena" */
+    if ("why" in cadena) unreadable.push({ entry: cep.clave, reason: `cadena: ${cadena.why}` });
+    else found.push({ clave: cep.clave, seal: cep.seal, facts: cadena.facts });
   }
   return { kind, claves: [...new Set(claves)], found, unreadable };
 }
@@ -364,30 +366,120 @@ export async function readPendingBundle(env: Bindings, db: Db, owner: Owner, bun
   return attempt(env, db, owner.businessId, row.id, row.url, row.downloadAttempts + 1);
 }
 
-/* D5, D9: the record of a single `valid`'s CEP, from its cadena — for a
-   search that had no clave. Null for the platform, and when the cadena is
-   not as measured (the lifecycle then treats the CEP as unreadable). The
-   seal is `digitalSignature`, kept and not verified (D2); empty when the
-   answer carried none. */
+/* What a single `valid` carries beside its cadena (research R1) — the
+   engine's `cep`, as the adapter maps `cepDetails` */
+export type SingleCep = {
+  trackingKey: string | null;
+  amountCents: number | null;
+  /* `operationDate`: the day Banxico files the transfer under */
+  date: string | null;
+  senderBank: string | null;
+  /* `processingTime`: the credit time, "HH:MM:SS" (measured 2026-09-26) */
+  creditTime?: string | null;
+  chain?: string | null;
+  senderAccountType?: string | null;
+  senderAccount?: string | null;
+  beneficiaryAccount?: string | null;
+  beneficiaryAccountType?: string | null;
+  certificateNumber?: string | null;
+  digitalSignature?: string | null;
+};
+
+/* bug: single-cep-unreadable — cep-bundle-match D19, the creator's Rule 1
+   (2026-09-28). A single `valid`'s facts come from its cadena; when the
+   cadena is missing or not as measured, from the same answer's own fields
+   — Banxico's data either way, never a reading. `why` says what did not
+   read: null from the cadena, the cadena's check when the fields stood in,
+   both when neither could.
+
+   The fields carry no credit day (only the cadena does, R5), so the day
+   the receipt printed stands in: the day Banxico files a transfer under
+   (batch A0E0097211, 16 of 16; lot 3). The operation day checks it — the
+   printed day or up to five days after it, a long weekend after 18:00 —
+   and a day outside that says the printed day is not this transfer's. A
+   credit past the printed day's midnight lands a day early, and the window
+   drops it: the clave is asked, never a wrong transfer taken. An account
+   not carried whole is unknown, empty, never its visible digits: an empty
+   sender account fails a receipt's tail (D7), an empty receiver ties as
+   unknown, never as a contradiction. */
+export function singleFacts(
+  cep: SingleCep,
+  printedDay: string | null,
+): { facts: CadenaFacts; why: string | null } | { facts: null; why: string } {
+  const cadena = readCadena(cep.chain);
+  if ("facts" in cadena) return { facts: cadena.facts, why: null };
+  const fields = fieldFacts(cep, printedDay);
+  if ("facts" in fields) return { facts: fields.facts, why: `cadena: ${cadena.why}` };
+  return { facts: null, why: `cadena: ${cadena.why}; fields: ${fields.why}` };
+}
+
+const MAX_FILING_LAG_DAYS = 5;
+const isoDay = (v: string | null | undefined): v is string => {
+  const m = v ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3]);
+};
+const clockTime = (v: string | null | undefined): v is string => {
+  const m = v ? /^(\d{2}):(\d{2}):(\d{2})$/.exec(v) : null;
+  return m !== null && Number(m[1]) <= 23 && Number(m[2]) <= 59 && Number(m[3]) <= 59;
+};
+const daysBetween = (from: string, to: string) => (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
+const accountType = (v: string | null | undefined) => (v && /^\d{1,2}$/.test(v) ? v : "");
+const wholeDigits = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? v : "");
+
+function fieldFacts(cep: SingleCep, printedDay: string | null): { facts: CadenaFacts } | { why: string } {
+  if (!clockTime(cep.creditTime)) return { why: "credit time" };
+  if (!isoDay(printedDay)) return { why: "printed day" };
+  if (!isoDay(cep.date)) return { why: "operation day" };
+  const lag = daysBetween(printedDay, cep.date);
+  if (lag < 0 || lag > MAX_FILING_LAG_DAYS) return { why: "operation day" };
+  if (cep.amountCents == null || !(cep.amountCents > 0)) return { why: "amount" };
+  return {
+    facts: {
+      operationDate: cep.date,
+      creditDate: printedDay,
+      creditTime: cep.creditTime,
+      creditedAt: wallClockMs(CEP_TIMEZONE, printedDay, cep.creditTime),
+      senderBank: cep.senderBank?.trim() ?? "",
+      senderAccountType: accountType(cep.senderAccountType),
+      senderAccount: wholeDigits(cep.senderAccount),
+      /* the fields do not carry it; nothing matches on it */
+      receiverSpeiCode: "",
+      receiverAccountType: accountType(cep.beneficiaryAccountType),
+      receiverAccount: wholeDigits(cep.beneficiaryAccount),
+      amountCents: cep.amountCents,
+      certificateNumber: wholeDigits(cep.certificateNumber),
+    },
+  };
+}
+
+/* D5, D9, D19: the record of a single `valid`'s CEP — for a search that had
+   no clave. No record for the platform, and none when neither the cadena
+   nor the fields read (the lifecycle then treats the CEP as unreadable,
+   and keeps `why`). The seal is `digitalSignature`, kept and not verified
+   (D2); empty when the answer carried none. */
 export async function storeSingleRecord(
   db: Db,
   owner: Owner,
-  cep: { trackingKey: string | null; chain?: string | null; digitalSignature?: string | null },
-): Promise<CepRecord | null> {
-  if (!("businessId" in owner) || !cep.trackingKey) return null;
-  const facts = parseCadena(cep.chain);
-  if (!facts) return null;
+  cep: SingleCep,
+  printedDay: string | null,
+): Promise<{ record: CepRecord | null; why: string | null }> {
+  if (!("businessId" in owner)) return { record: null, why: null };
+  if (!cep.trackingKey) return { record: null, why: "no clave" };
+  const read = singleFacts(cep, printedDay);
+  if (!read.facts) return { record: null, why: read.why };
   await db
     .insert(cepRecords)
     .values({
       businessId: owner.businessId,
       clave: cep.trackingKey,
       bundleId: null,
-      ...facts,
-      creditedAt: new Date(facts.creditedAt),
+      ...read.facts,
+      creditedAt: new Date(read.facts.creditedAt),
       seal: cep.digitalSignature ?? "",
     })
     .onConflictDoNothing();
   const [record] = await recordsFor(db, owner.businessId, [cep.trackingKey]);
-  return record ?? null;
+  return { record: record ?? null, why: read.why };
 }

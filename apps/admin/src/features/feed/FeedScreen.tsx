@@ -146,11 +146,22 @@ const undecidedCopy: Record<NonNullable<ProofMatch["reason"]>, string> = {
   too_large: "Demasiadas coincidencias para revisarlas",
 };
 
+/* bug: single-cep-unreadable: a search that found ONE transfer has no
+   "varias coincidencias" and no file of them — the reasons it can carry,
+   in its own words */
+const undecidedSingleCopy: Partial<Record<NonNullable<ProofMatch["reason"]>, string>> = {
+  all_used: "Una coincidencia, ya usada en otro pago",
+  none_fit: "La transferencia encontrada no coincide con el comprobante",
+  unreadable: "Una coincidencia; sus datos de Banxico no se pudieron leer",
+};
+const undecidedWords = (reason: NonNullable<ProofMatch["reason"]>, source: ProofMatch["source"] | null | undefined) =>
+  (source === "single" && undecidedSingleCopy[reason]) || undecidedCopy[reason];
+
 /* cep-bundle-match D8, FR-013: how the transfer was chosen. `none`: nothing
    the receipt said was needed — the others were another amount, another
    destination or already used, or there was only the one. */
 function decisionCopy(match: ProofMatch): string {
-  if (match.decided === "undecided") return match.reason ? undecidedCopy[match.reason] : "Sin decidir";
+  if (match.decided === "undecided") return match.reason ? undecidedWords(match.reason, match.source) : "Sin decidir";
   const found = match.source === "several" ? "Varias coincidencias" : "Una coincidencia";
   const how = {
     tail: "resuelta por cuenta",
@@ -570,7 +581,7 @@ function ChargeRow({
                 /* cep-bundle-match D10: it waits on the payer, not on
                    Banxico — said as such, never as a plain "Verificando" */
                 <>
-                  <p className="mt-1 font-medium text-warning">{undecidedCopy[charge.undecided]}.</p>
+                  <p className="mt-1 font-medium text-warning">{undecidedWords(charge.undecided, charge.undecidedSource)}.</p>
                   <p className="mt-1">Se pidió la clave de rastreo al cliente.</p>
                 </>
               )}

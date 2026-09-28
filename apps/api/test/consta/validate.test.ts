@@ -2727,6 +2727,59 @@ describe("cep-bundle-match US1: several matches, read and kept by the engine", (
     expect(await records()).toHaveLength(1);
   });
 
+  /* bug: single-cep-unreadable (D19) — on dev a single valid's cadena
+     could not be read, the record was null and nothing said why */
+  it("bug: single-cep-unreadable — a single valid without a cadena keeps a record from its own fields, on the day asked, and says why", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(validAnswer(T2, { cdaChain: null }));
+    const res = await postValidate(key, byReference);
+    expect(res.data.record).toMatchObject({
+      clave: T2.clave,
+      bundleId: null,
+      operationDate: "2026-09-28",
+      creditDate: "2026-09-26",
+      creditTime: "07:11:20",
+      senderAccount: SENDER_8301,
+      receiverAccount: BUSINESS_CLABE,
+      amountCents: 300,
+    });
+    expect(res.data.recordWhy).toBe("cadena: missing");
+    expect(await records()).toHaveLength(1);
+  });
+
+  it("bug: single-cep-unreadable — with neither a cadena nor a credit time there is no record, and the reasons of both ride the verdict", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(validAnswer(T2, { cdaChain: null, processingTime: null }));
+    const res = await postValidate(key, byReference);
+    expect(res.data.record).toBeNull();
+    expect(res.data.recordWhy).toBe("cadena: missing; fields: credit time");
+    expect(await records()).toHaveLength(0);
+  });
+
+  it("bug: single-cep-unreadable — a cadena that reads leaves no note", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(validAnswer(T2));
+    const res = await postValidate(key, byReference);
+    expect(res.data.record).toMatchObject({ clave: T2.clave });
+    expect(res.data.recordWhy).toBeUndefined();
+  });
+
+  it("bug: single-cep-unreadable — a bundle entry whose cadena is short is unreadable with the check it failed", async () => {
+    const { key } = await seedOwner();
+    const short = transferCadena(T1).split("|");
+    short.splice(20, 1);
+    mockApiCep(severalAnswer(BUNDLE_URL));
+    mockStorage(
+      buildBundleZip([
+        { name: entryName(T1.operationDay, T1.clave), bytes: transferPdf(T1, { cadena: short.join("|") }) },
+        { name: entryName(T2.operationDay, T2.clave), bytes: transferPdf(T2) },
+      ]),
+    );
+    const bundle = (await postValidate(key, byReference)).data.bundle as { candidates: { clave: string }[]; unreadable: unknown[] };
+    expect(bundle.candidates.map((c) => c.clave)).toEqual([T2.clave]);
+    expect(bundle.unreadable).toEqual([{ entry: T1.clave, reason: "cadena: 42 fields" }]);
+  });
+
   it("the platform's own top-up writes no record, and a several answer on it stays not_found (D5)", async () => {
     await mockProof(PNG(), "image/png");
     const topUp = { receipt: { proofKey: PROOF_KEY }, beneficiary: { bank: "BBVA MEXICO", clabe: BUSINESS_CLABE } } as ConstaRequest;

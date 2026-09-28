@@ -87,6 +87,11 @@ export type TrailCandidate = {
   /* D6: credit − receipt, in whole seconds, when the receipt showed a
      time and the candidate reached the window */
   distanceS?: number | null;
+  /* bug: single-cep-unreadable (D19): how Banxico's document did not read
+     — an unreadable entry's reason, or the cadena's failed check on a
+     single whose own fields stood in. Absent when the cadena read. Kept on
+     the payment for whoever asks why; no response schema carries it. */
+  readWhy?: string;
 };
 
 export type MatchResult =

@@ -166,6 +166,23 @@ link already identifies the customer.
   payer's clave — and why (all used, ambiguous, no match, unreadable), in
   two new fields that change nothing else. No status word, no new event.
 
+### Session 2026-09-28
+
+Asked after dev: a Nu screenshot cut before its clave found one transfer
+by its reference, the cadena could not be read, and the payment waited for
+a clave the screenshot did not show (bug `single-cep-unreadable`).
+
+- Q: When a single `valid`'s cadena is missing or not as measured, what
+  does the transfer's side of the match come from? → A: From the same
+  answer's own fields — the credit time, the accounts, the amount — with
+  the day the receipt printed as the credit day. Only when both fail is the
+  CEP unreadable, and the payment always records why. The time window
+  still decides (the creator's "Regla 1").
+- Q: What does the payer read when the search found one transfer and could
+  not confirm it? → A: That one transfer was found and could not be
+  confirmed as theirs; never "más de una transferencia". The clave form
+  opens with the bank Banxico named and the day the receipt printed.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - A shared reference resolves to the payer's own transfer (Priority: P1)
@@ -391,7 +408,9 @@ provider call in total.
   credit day, credit time, sending bank, sender account type and account,
   receiving bank, destination account and amount. A CEP that cannot be
   read confirms nothing and is flagged. The seal is kept with the CEP and
-  marked not verified.
+  marked not verified. A single `valid` whose cadena cannot be read is read
+  from the same answer's own fields instead, on the printed day (D19); it
+  is unreadable only when both fail, and the payment records why.
 - **FR-003**: Devolada MUST drop every CEP whose clave already confirmed a
   payment.
 - **FR-004**: When the receipt shows the sender's account tail, Devolada

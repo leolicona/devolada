@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { zipSync } from "fflate";
 import { claveOfEntry, listEntries, readEntries, sniff } from "../../src/consta/bundle/zip";
 import { readCepPdf } from "../../src/consta/bundle/cep-pdf";
-import { parseCadena } from "../../src/consta/bundle/cadena";
+import { parseCadena, readCadena } from "../../src/consta/bundle/cadena";
+import { singleFacts } from "../../src/consta/bundle/store";
 import { wallClockMs } from "../../src/time/business-day";
 import {
   buildBundleZip,
@@ -182,5 +183,109 @@ describe("cep-bundle-match US1: the cadena original (cadena.ts, D4)", () => {
       expect(values).not.toContain(personal);
       expect(values.join("|")).not.toContain(personal);
     }
+  });
+});
+
+/* bug: single-cep-unreadable (cep-bundle-match D19, the creator's Rule 1
+   of 2026-09-28) — a cadena that is not as measured says which check it
+   failed, and a single `valid`'s own fields stand in for it: the credit
+   time the answer carries, on the day the receipt printed. On dev a Nu
+   payment waited for a clave its screenshot did not show because the
+   cadena could not be read, and nothing recorded why. */
+describe("bug: single-cep-unreadable — the cadena says why, and a single valid's fields stand in (cadena.ts, store.ts)", () => {
+  /* Two fields fewer than the 43 measured */
+  const shortOf = (cadena: string, drop = 1) => {
+    const f = cadena.split("|");
+    f.splice(20, drop);
+    return f.join("|");
+  };
+
+  it("readCadena names the check that failed, and never echoes a value of the CEP", () => {
+    expect(readCadena(CADENA)).toEqual({ facts: parseCadena(CADENA) });
+    expect(readCadena(null)).toEqual({ why: "missing" });
+    expect(readCadena("   ")).toEqual({ why: "missing" });
+    expect(readCadena("|01|28092026|")).toEqual({ why: "not delimited" });
+    expect(readCadena(shortOf(CADENA))).toEqual({ why: "42 fields" });
+    expect(readCadena(shortOf(CADENA, 2))).toEqual({ why: "41 fields" });
+    expect(readCadena(cadenaOf({ ...FIELDS, version: "02" }))).toEqual({ why: "version 02" });
+    expect(readCadena(cadenaOf({ ...FIELDS, operationDay: "2026-02-30" }))).toEqual({ why: "operation day" });
+    expect(readCadena(cadenaOf({ ...FIELDS, creditDay: "2026-02-30" }))).toEqual({ why: "credit day" });
+    expect(readCadena(cadenaOf({ ...FIELDS, creditTime: "25:11:20" }))).toEqual({ why: "credit time" });
+    expect(readCadena(cadenaOf({ ...FIELDS, receiverSpeiCode: "" }))).toEqual({ why: "SPEI code" });
+    expect(readCadena(cadenaOf({ ...FIELDS, senderBank: " " }))).toEqual({ why: "sender bank" });
+    expect(readCadena(cadenaOf({ ...FIELDS, senderAccountType: "CLABE" }))).toEqual({ why: "account type" });
+    expect(readCadena(cadenaOf({ ...FIELDS, senderAccount: "***8301" }))).toEqual({ why: "account" });
+    expect(readCadena(cadenaOf({ ...FIELDS, amount: "3,00" }))).toEqual({ why: "amount" });
+    expect(readCadena(cadenaOf({ ...FIELDS, amount: "0.00" }))).toEqual({ why: "amount" });
+    expect(readCadena(cadenaOf({ ...FIELDS, certificateNumber: "N/A" }))).toEqual({ why: "certificate" });
+    /* a version that is not a short number is a value that could be
+       anything: it is never repeated */
+    expect(readCadena(cadenaOf({ ...FIELDS, version: SYNTHETIC.senderName }))).toEqual({ why: "version ?" });
+  });
+
+  /* A Nu transfer as a single `valid` carries it (research R1): the
+     accounts whole, the credit time in `processingTime` */
+  const NU_SENDER = "638180000000000011";
+  const CEP = {
+    trackingKey: "NU3AZZ0000000000000000000001",
+    amountCents: 300,
+    date: "2026-09-28",
+    senderBank: "NUBANK",
+    creditTime: "09:15:04",
+    chain: null as string | null,
+    senderAccountType: "40",
+    senderAccount: NU_SENDER,
+    beneficiaryAccount: BUSINESS_CLABE,
+    beneficiaryAccountType: "40",
+    certificateNumber: SYNTHETIC.certificateNumber,
+  };
+
+  it("a cadena that reads is the source, and nothing is noted", () => {
+    expect(singleFacts({ ...CEP, chain: CADENA }, "2026-09-26")).toEqual({ facts: parseCadena(CADENA), why: null });
+  });
+
+  it("without a cadena the answer's fields stand in, on the printed day, and the note says why", () => {
+    expect(singleFacts(CEP, "2026-09-28")).toEqual({
+      facts: {
+        operationDate: "2026-09-28",
+        creditDate: "2026-09-28",
+        creditTime: "09:15:04",
+        creditedAt: wallClockMs("America/Mexico_City", "2026-09-28", "09:15:04"),
+        senderBank: "NUBANK",
+        senderAccountType: "40",
+        senderAccount: NU_SENDER,
+        receiverSpeiCode: "",
+        receiverAccountType: "40",
+        receiverAccount: BUSINESS_CLABE,
+        amountCents: 300,
+        certificateNumber: SYNTHETIC.certificateNumber,
+      },
+      why: "cadena: missing",
+    });
+    expect(singleFacts({ ...CEP, chain: shortOf(CADENA, 2) }, "2026-09-28").why).toBe("cadena: 41 fields");
+  });
+
+  it("the operation day may follow the printed day by a long weekend — never precede it, never drift a week", () => {
+    /* printed Friday 25 after 18:00, filed Monday 28 (measured, lot 3) */
+    expect(singleFacts(CEP, "2026-09-25").facts).toMatchObject({ creditDate: "2026-09-25", operationDate: "2026-09-28" });
+    expect(singleFacts({ ...CEP, date: "2026-09-30" }, "2026-09-25").facts).toMatchObject({ operationDate: "2026-09-30" });
+    expect(singleFacts({ ...CEP, date: "2026-09-27" }, "2026-09-28")).toEqual({ facts: null, why: "cadena: missing; fields: operation day" });
+    expect(singleFacts({ ...CEP, date: "2026-10-04" }, "2026-09-28").why).toBe("cadena: missing; fields: operation day");
+    expect(singleFacts({ ...CEP, date: null }, "2026-09-28").why).toBe("cadena: missing; fields: operation day");
+  });
+
+  it("with neither source there are no facts, and both reasons are kept", () => {
+    expect(singleFacts({ ...CEP, creditTime: null }, "2026-09-28")).toEqual({ facts: null, why: "cadena: missing; fields: credit time" });
+    expect(singleFacts({ ...CEP, creditTime: "9:15" }, "2026-09-28").why).toBe("cadena: missing; fields: credit time");
+    expect(singleFacts(CEP, null).why).toBe("cadena: missing; fields: printed day");
+    expect(singleFacts({ ...CEP, amountCents: null }, "2026-09-28").why).toBe("cadena: missing; fields: amount");
+    expect(singleFacts({ ...CEP, chain: shortOf(CADENA), creditTime: null }, "2026-09-28").why).toBe(
+      "cadena: 42 fields; fields: credit time",
+    );
+  });
+
+  it("an account the answer does not carry whole is unknown — empty, never guessed from its visible digits", () => {
+    const facts = singleFacts({ ...CEP, senderAccount: "****0011", senderAccountType: null, beneficiaryAccount: null }, "2026-09-28").facts;
+    expect(facts).toMatchObject({ senderAccount: "", senderAccountType: "", receiverAccount: "", receiverAccountType: "40" });
   });
 });

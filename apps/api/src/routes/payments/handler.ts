@@ -39,7 +39,7 @@ import {
 } from "./schema";
 import { recordsFor } from "../../consta/bundle/store";
 import { shownTail, tailOf } from "../../consta/bundle/match";
-import { RELEASED, undecidedReasonOf } from "../../direct-payments/cep-match";
+import { RELEASED, undecidedOf } from "../../direct-payments/cep-match";
 import type { MatchTrail } from "../../consta/bundle/types";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
@@ -186,6 +186,7 @@ export async function listPaymentFeed(
         const receivedCents = charge.receivedCents ?? charge.amountCents;
         const askedCents =
           charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
+        const undecided = undecidedOf(charge);
         return {
           id: charge.id,
           folio: charge.folio ?? "",
@@ -236,7 +237,9 @@ export async function listPaymentFeed(
             ? { banxicoConfirmedAt: charge.banxicoValidAt.getTime(), waitingOn: charge.lastError }
             : { banxicoConfirmedAt: null, waitingOn: null }),
           /* cep-bundle-match D10: why it waits on the payer's clave */
-          undecided: undecidedReasonOf(charge),
+          undecided: undecided?.reason ?? null,
+          /* bug: single-cep-unreadable: and whether one transfer or several */
+          undecidedSource: undecided?.source ?? null,
         };
       }),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,

@@ -67,6 +67,14 @@ Index: `(business_id, credit_date, amount_cents)`.
 
 Not stored, by construction: names, RFC/CURP, concept (D4).
 
+*Amended 2026-09-28 (D19, bug single-cep-unreadable):* a single `valid`
+whose cadena is missing or not as measured is recorded from the same
+answer's own fields. `credit_date` is then the day the receipt printed (the
+fields carry no credit day), `credit_time` is `processingTime`,
+`operation_date` is `operationDate` (0–5 days after the printed day), and
+an account not carried whole, the SPEI code and a missing certificate are
+empty strings: unknown, never guessed.
+
 **Derived, never stored** (R6):
 
 - *used* — a live payment of the business holds the clave: `payments
@@ -107,6 +115,14 @@ gains `farther` — inside the window, and another was nearer (D6) — and a
 candidate the window measured carries its own `distanceS`, credit minus
 receipt in whole seconds (absent when the receipt showed no time). An
 entry that could not be read has `cepId`, `creditTime` and `tail` null.
+
+*Amended 2026-09-28 (D19, bug single-cep-unreadable):* a candidate gains
+`readWhy` whenever Banxico's document did not read as measured — an
+unreadable entry's reason (`"no_seal_label"`, `"cadena: 42 fields"`), or on
+a single read from its own fields the check its cadena failed (`"cadena:
+missing"`). A single that neither source could read rides the trail as one
+dropped `unreadable` candidate named by its clave, with both reasons.
+Stored only: no response schema carries it.
 
 - `reason` only when `decided = "undecided"`; `by` only when `chosen` —
   `clave` when a typed clave fitted a kept candidate (D11).

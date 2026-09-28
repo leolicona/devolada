@@ -134,6 +134,10 @@ const payErrors: Record<string, string> = {
      possibly this payer's own earlier payment, so it says so first */
   CEP_ALL_USED:
     "Las transferencias que encontramos con estos datos ya se usaron para otros pagos. Si ya habías pagado, tu pago puede estar confirmado. Si esta transferencia es nueva, escribe su clave de rastreo.",
+  /* bug: single-cep-unreadable: Banxico found one transfer, and it could
+     not be confirmed as the payer's — "más de una" was false here */
+  CEP_SINGLE_UNDECIDED:
+    "Encontramos una transferencia con tus datos, pero no pudimos confirmar que sea tuya. Escribe tu clave de rastreo para confirmarla.",
 };
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
@@ -932,7 +936,10 @@ export function PaymentPage({ token }: { token: string }) {
                  did not say which transfer is the payer's */
               /* cep-bundle-match D10: an undecided payment asks for the
                  clave alone, focused, the other fields kept */
-              const undecided = status.error === "CEP_UNDECIDED" || status.error === "CEP_ALL_USED";
+              const undecided =
+                status.error === "CEP_UNDECIDED" ||
+                status.error === "CEP_ALL_USED" ||
+                status.error === "CEP_SINGLE_UNDECIDED";
               const clavesOnly = status.error === "REFERENCE_AMBIGUOUS" || undecided;
               const referenceAsk = clavesOnly || status.error === "REFERENCE_SHARED";
               const notFound = status.error === "TRANSFER_NOT_FOUND" || referenceAsk;

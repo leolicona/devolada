@@ -54,9 +54,14 @@ bundle?: {
   unreadable: { entry: string; reason: string }[];
 };
 /* D5/D9: the record of a single valid's CEP, when the search was clave-less.
-   Null when the search was clave-less but the CEP's cadena did not parse:
-   the lifecycle treats that CEP as unreadable (amended 2026-09-28) */
+   D19 (2026-09-28): from its cadena, or else from the answer's own fields
+   on the printed day. Null only when both fail: the lifecycle treats that
+   CEP as unreadable */
 record?: CepRecord | null;
+/* D19: why the record is not the cadena's — "cadena: missing" when the
+   fields stood in, "cadena: missing; fields: credit time" when neither
+   read. Absent when the cadena read; never a value of the CEP */
+recordWhy?: string;
 ```
 
 `CepRecord` is a row of `cep_records` in camelCase (data-model.md), with no
@@ -79,7 +84,9 @@ In the same call, after the billing row is written with `reason:
    record.
 4. Read each new entry (`cep-pdf.ts`), parse its cadena (`cadena.ts`),
    check the printed clave equals the name's; insert `cep_records`
-   (ignore on conflict `(business_id, clave)`).
+   (ignore on conflict `(business_id, clave)`). An entry whose cadena is not
+   as measured is `unreadable` with the check it failed (`"cadena: 42
+   fields"`, D19).
 5. Put the file in `PROOFS` at `bundles/<business_id>/<bundle_id>.zip`
    (`.pdf` for a bare CEP — named by content, amended 2026-09-28);
    write `cep_bundles` with `status = "read"`, `claves`, `sha256`, and
@@ -115,6 +122,16 @@ the answer is `valid`: parse `cep.chain`, insert the
 record (ignore on conflict), and return it as `record`. On the transfer
 door the billing row's `tracking_key` is the CEP's clave when the request
 had none (D13).
+
+D19 (the creator's Rule 1, 2026-09-28; bug `single-cep-unreadable`): when
+`cep.chain` is missing or not as measured, the record comes from the same
+answer's own fields — `creditTime` (`processingTime`, `HH:MM:SS`), the
+printed day as the credit day (the transfer door's `date`; on the receipt
+door our reading's date, else the provider's), `date` as the operation day
+(0–5 days after the printed day, else the fields fail), the amount, the
+accounts when whole (else empty: unknown). Only when both sources fail is
+`record` null. `recordWhy` rides the verdict whenever the cadena did not
+read, and a warn line names the validation id and the reason.
 
 ## The matcher (D6, D7, D8) — `consta/bundle/match.ts`, pure
 

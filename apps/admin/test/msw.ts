@@ -68,6 +68,9 @@ export const handlers = {
     http.get("/payments/:id/proof", ({ params }) => r(String(params.id))),
   retryReconnection: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/payments/:id/retry-action", ({ params }) => r(String(params.id))),
+  /* cep-bundle-match US4: the transfers no payment holds */
+  unmatchedTransfers: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/payments/unmatched-transfers", ({ request }) => r(new URL(request.url))),
   /* integrations-hub (US-I01–I03) */
   integrations: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/integrations", () => r()),
   patchWisphub: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>

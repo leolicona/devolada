@@ -2,7 +2,11 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { fetchMock } from "cloudflare:test";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import { issueCredential } from "../src/api-clients/store";
-import { apiPayment, apiPaymentList } from "../src/routes/v1/schema";
+import { eq } from "drizzle-orm";
+import { payments } from "../src/db/schema";
+import { apiPayment, apiPaymentList, transferList } from "../src/routes/v1/schema";
+import { webhookEventData } from "../src/routes/v1/webhook/schema";
+import { trailOf } from "../src/direct-payments/cep-match";
 import {
   collectingCtx,
   db,
@@ -69,6 +73,9 @@ describe("scenario 1: a payment under validation, and what it was asked to be", 
       confirmedAt: null,
       createdAt: expect.any(Number),
       isTest: false,
+      /* cep-bundle-match D17: an ordinary wait waits on Banxico, not the payer */
+      awaiting: null,
+      awaitingReason: null,
     });
 
     const byRef = await v1(key, "GET", "/payments?customerRef=CLI-4471");
@@ -106,6 +113,7 @@ describe("scenario 2: the same reference after confirmation", () => {
       match: "exact",
     });
     expect(payment.folio).toMatch(/^DV-/);
+    expect(payment).toMatchObject({ awaiting: null, awaitingReason: null });
     expect(payment.confirmedAt).toEqual(expect.any(Number));
     expect(payment.confirmedAt!).toBeGreaterThanOrEqual(payment.createdAt);
 
@@ -171,5 +179,68 @@ describe("scenario 4: another business asks about this payment (FR-023)", () => 
     expect(byId.status).toBe(404);
     const byRef = await v1(test.plaintext, "GET", "/payments?customerRef=CLI-4471");
     expect(byRef.body.data).toEqual({ payments: [] });
+  });
+});
+
+describe("cep-bundle-match US3: an undecided payment says what it awaits (D17, contracts/public-api.md)", () => {
+  /* The row as the lifecycle leaves an undecided payment (D10): still
+     `validating`, no slot, the reason in its trail. The lifecycle that
+     writes it is proven in cep-bundle-match.test.ts; this is the read. */
+  async function undecided(paymentId: string, reason: "all_used" | "no_signal" | "too_close" | "none_fit" | "unreadable" | "too_large") {
+    const receipt = { time: null, tail: null };
+    await db()
+      .update(payments)
+      .set({
+        lastError: "CEP_UNDECIDED",
+        disputedFields: JSON.stringify(["trackingKey"]),
+        nextValidationAt: null,
+        matchTrail: JSON.stringify(trailOf("several", null, receipt, { decided: "undecided", reason, trail: [] })),
+      })
+      .where(eq(payments.id, paymentId));
+  }
+  const around = () => {
+    const day = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+    return `/transfers?from=${day(-1)}&to=${day(1)}`;
+  };
+
+  it("the payment reads say awaiting payer_tracking_key, each reason in its public word; the status and every other field unchanged", async () => {
+    const cases = [
+      ["all_used", "all_used"],
+      ["no_signal", "ambiguous"],
+      ["too_close", "ambiguous"],
+      ["none_fit", "no_match"],
+      ["unreadable", "unreadable"],
+      ["too_large", "unreadable"],
+    ] as const;
+    const { key } = await arrange("CLI-4471");
+    for (const [reason, word] of cases) {
+      /* one business, a link per case */
+      const link = (await v1(key, "POST", "/payment-links", { customerRef: `CLI-${reason}`, askCents: ASK, label: "Ana Ruiz" })).body.data!;
+      const token = String(link.url).split("/p/")[1];
+      const paymentId = await submitValidating(token, `TRACK${reason.replace("_", "").toUpperCase()}`);
+      const before = apiPayment.parse((await v1(key, "GET", `/payments/${paymentId}`)).body.data);
+      await undecided(paymentId, reason);
+
+      const byRef = apiPaymentList.parse((await v1(key, "GET", `/payments?customerRef=CLI-${reason}`)).body.data).payments;
+      expect(byRef).toEqual([{ ...before, awaiting: "payer_tracking_key", awaitingReason: word }]);
+      expect(apiPayment.parse((await v1(key, "GET", `/payments/${paymentId}`)).body.data)).toEqual(byRef[0]);
+    }
+  });
+
+  it("the transfers read carries the same shape: money received never awaits, and the undecided payment is not money received", async () => {
+    const { key, token } = await arrange("CLI-4471");
+    const waiting = await submitValidating(token, "TRACK000WAIT1");
+    await undecided(waiting, "no_signal");
+    const paid = await submitValidating(token, "TRACK000PAID1");
+    mockApiCep({ cep: { amountCents: ASK + FEE, trackingKey: "TRACK000PAID1" } });
+    await sweepDirectPayments(testEnv, new Date(Date.now() + minutes(3)));
+
+    const transfers = transferList.parse((await v1(key, "GET", around())).body.data).transfers;
+    expect(transfers.map((t) => [t.id, t.status, t.awaiting, t.awaitingReason])).toEqual([[paid, "confirmed", null, null]]);
+  });
+
+  it("the webhook body carries neither field: status is the only thing webhooks announce", () => {
+    expect(Object.keys(webhookEventData.shape)).not.toContain("awaiting");
+    expect(Object.keys(webhookEventData.shape)).not.toContain("awaitingReason");
   });
 });

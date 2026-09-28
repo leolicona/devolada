@@ -6,6 +6,7 @@ import { extractions, paymentLinks, platformSettings, user } from "../src/db/sch
 import type { Bindings } from "../src/env";
 import { consta, ConstaError, type ConstaRequest } from "../src/consta";
 import { readerModels, resetReaderModelsWarning } from "../src/consta/extraction/models";
+import { QUESTIONS_VERSION } from "../src/consta/extraction/reader";
 import { readerStateResponse } from "../src/routes/reader/schema";
 import { app, fakeProofs, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
 import { aiReturning, PDF, PNG, RECEIPT_TEXT } from "./consta/helpers";
@@ -123,7 +124,7 @@ describe("receipt-reader-tuning US1: the operator's choice (D8, FR-003, FR-005)"
       staleChoice: null,
       history: [],
       fallbacksLast7Days: 0,
-      questionVersion: "2",
+      questionVersion: QUESTIONS_VERSION,
       readerAvailable: false,
     });
     expect(before.models).toEqual([
@@ -218,7 +219,7 @@ describe("receipt-reader-tuning US1: the next reading uses the choice (D9, SC-00
     expect(call.input.max_tokens).toBe(400);
 
     const [row] = await db().select().from(extractions);
-    expect(row).toMatchObject({ model: OTHER, questionVersion: "2", fallbackFrom: null });
+    expect(row).toMatchObject({ model: OTHER, questionVersion: QUESTIONS_VERSION, fallbackFrom: null });
     expect(row.readerMs).toBeGreaterThanOrEqual(0);
   });
 
@@ -229,7 +230,7 @@ describe("receipt-reader-tuning US1: the next reading uses the choice (D9, SC-00
     await extractAs(id, aiReturning(READING, calls));
     expect(modelCalls(calls).map((c) => c.model)).toEqual([DEFAULT]);
     const [row] = await db().select().from(extractions);
-    expect(row).toMatchObject({ model: DEFAULT, questionVersion: "2", fallbackFrom: null });
+    expect(row).toMatchObject({ model: DEFAULT, questionVersion: QUESTIONS_VERSION, fallbackFrom: null });
   });
 });
 
@@ -250,7 +251,7 @@ describe("receipt-reader-tuning US1: a failing chosen model falls back to the de
       expect(reading.trackingKey).toBe(READING.claveDeRastreo);
       expect(modelCalls(calls).map((c) => c.model)).toEqual([OTHER, DEFAULT]);
       const [row] = await db().select().from(extractions);
-      expect(row).toMatchObject({ model: DEFAULT, fallbackFrom: OTHER, questionVersion: "2", outcome: "passed" });
+      expect(row).toMatchObject({ model: DEFAULT, fallbackFrom: OTHER, questionVersion: QUESTIONS_VERSION, outcome: "passed" });
       expect(row.readerMs).not.toBeNull();
     });
   }
@@ -395,7 +396,7 @@ describe("receipt-reader-tuning US1: a reused draft keeps the model that read it
     const rows = await db().select().from(extractions);
     const paid = rows.find((r) => r.validationId)!;
     expect(paid.rawOutput).toContain("reused from extraction");
-    expect(paid).toMatchObject({ model: OTHER, questionVersion: "2" });
+    expect(paid).toMatchObject({ model: OTHER, questionVersion: QUESTIONS_VERSION });
     expect(paid.readerMs).toBe(rows.find((r) => !r.validationId)!.readerMs);
   });
 });

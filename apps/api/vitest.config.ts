@@ -37,6 +37,11 @@ export default defineWorkersConfig(async () => {
                  tests — and the value never reaches a real host. */
               APICEP_BASE_URL: "https://api.apicep.cloud",
               APICEP_TOKEN: "test-apicep-token",
+              /* cep-bundle-match D16: the bundle's storage origin, pinned
+                 for the same reason — `.dev.vars` points it at the
+                 sandbox, and a suite that downloads a ZIP must meet the
+                 interceptor at the real origin. */
+              APICEP_STORAGE_ORIGIN: "https://storage.apicep.cloud",
               /* Same rule for the email provider: .dev.vars carries a real
                  key on a developer's machine, and without this pin every
                  seeded signup's OTP reached Resend for real (measured

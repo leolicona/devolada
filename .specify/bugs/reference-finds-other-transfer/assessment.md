@@ -173,3 +173,37 @@ with `scripts/apicep-probe.sh`. What they settle for this bug:
 - [NEEDS CLARIFICATION: product decision — on an ambiguous answer, open the
   provider's ZIP and pick by credit time / unused clave, or ask the payer
   for the clave?]
+
+## Fixed by spec 013 (2026-09-27)
+
+`specs/013-cep-bundle-match` answers the two open product decisions above
+and removes the cause. FR-014 (`cep-bundle-match D9`): a single `valid`
+found without a clave — by reference on the transfer door, or on the
+receipt door with no clave either reading passed — no longer confirms
+unchecked. Its CEP becomes a record and passes the same matcher as a
+several-matches bundle (integrity, used, the sender's four digits, the
+receipt's time within −60/+180 s); a CEP the receipt contradicts leaves the
+payment `validating` with `CEP_UNDECIDED`, and the payer is asked for the
+clave, with no further call and no expiry (D10). The ZIP of several matches
+is opened and decided by tail and credit time (D6–D8), which answers the
+second question; the first is moot, since the matcher's window replaces a
+separate day check.
+
+The trace for a flag our own search set is `cep-bundle-match D13`
+(FR-016): the true owner of a clave the matcher refused confirms when they
+find it by clave, instead of `TRANSFER_ALREADY_USED`.
+
+Proved by, in `apps/api/test/cep-bundle-match.test.ts`:
+
+- T020 (e) — "the Janely case as it happened: a receipt printed 18:58 with
+  no clave, answered by a single valid credited 07:19:52, does not confirm
+  — the clave is asked (bug: reference-finds-other-transfer)", on the
+  receipt door's first attempt;
+- T021 (c) — "the true owner of a clave the filter refused confirms when
+  they find it by clave — not TRANSFER_ALREADY_USED", and its bundle twin.
+
+Both read their receipts through provisional reader stubs until the bench
+measures version 3 of the questions (debt
+`cep-bundle-match-reader-unmeasured`). After merge, run
+`/speckit-bug-test` on this bug. The dev payment `7cd88a3a-…` is untouched:
+it is the creator's own money, and the question above still stands.

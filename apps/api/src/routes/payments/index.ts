@@ -2,8 +2,16 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import type { Bindings, Variables } from "../../env";
 import { requireArea, requireSession } from "../../auth/middleware";
-import { feedQuery, reviewDecisionRequest } from "./schema";
-import { executeAction, getPaymentProof, listPaymentFeed, paymentsPulse, retryAction, reviewDecision } from "./handler";
+import { feedQuery, reviewDecisionRequest, unmatchedTransfersQuery } from "./schema";
+import {
+  executeAction,
+  getPaymentProof,
+  listPaymentFeed,
+  listUnmatchedTransfers,
+  paymentsPulse,
+  retryAction,
+  reviewDecision,
+} from "./handler";
 
 /* Pure router: validation + wiring only (code organization law). The
    feed reads `payments` (business-and-memberships D6); the proof is
@@ -19,6 +27,17 @@ paymentsRoute.get("/feed", requireSession, requireArea("payments", "read"), zVal
 paymentsRoute.get("/pulse", requireSession, requireArea("payments", "read"), (c) => {
   return paymentsPulse(c);
 });
+
+/* cep-bundle-match US4: transfers received that no payment holds */
+paymentsRoute.get(
+  "/unmatched-transfers",
+  requireSession,
+  requireArea("payments", "read"),
+  zValidator("query", unmatchedTransfersQuery),
+  (c) => {
+    return listUnmatchedTransfers(c, c.req.valid("query"));
+  },
+);
 
 paymentsRoute.get("/:id/proof", requireSession, requireArea("payments", "read"), (c) => {
   return getPaymentProof(c, c.req.param("id"));

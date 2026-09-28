@@ -51,6 +51,10 @@ export const BENCH_FIELDS = [
   "receivingBank",
   "amount",
   "date",
+  /* cep-bundle-match D15: the two answers version 3 asks, marked before
+     any test stub may copy them (constitution IV, analyze C1) */
+  "time",
+  "senderTail",
   "destination",
 ] as const;
 export const benchField = z.enum(BENCH_FIELDS);
@@ -70,6 +74,11 @@ export const benchProductReading = z.object({
   receivingBank: z.string().nullable(),
   amountCents: z.number().int().nullable(),
   date: z.string().nullable(),
+  /* cep-bundle-match D15: "HH:MM:SS" or "HH:MM", and the sender account's
+     visible digits. Defaulted: a reading stored before version 3 never
+     asked either, and reads as "not shown". */
+  time: z.string().nullable().default(null),
+  senderTail: z.string().nullable().default(null),
   destination: z.object({
     kind: z.enum(["clabe", "card", "phone", "account"]).nullable(),
     digits: z.string().nullable(),

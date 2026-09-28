@@ -77,6 +77,15 @@ export function receivingOf(
    characters and Nu's carries 28. */
 const TRACKING_KEY = /^[A-Za-z0-9]{6,30}$/;
 
+/* The clave's verdict on its own. cep-bundle-match D9 asks it of the
+   provider's reading too: a receipt whose clave either side read is a
+   clave search, and its CEP is the payer's. */
+export function gateTrackingKey(value: string | null | undefined): Gate["trackingKey"] {
+  const key = value?.trim() ?? "";
+  if (!key) return "missing";
+  return TRACKING_KEY.test(key) ? "ok" : "malformed";
+}
+
 /* receipt-triage D12: apiCEP's own example carries seven digits, and a
    longer number on a receipt is a folio or an authorisation number */
 const REFERENCE = /^\d{1,7}$/;

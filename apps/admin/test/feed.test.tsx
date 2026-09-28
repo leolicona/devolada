@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { feedResponse } from "@devolada/api/payments-schema";
+import { feedResponse, proofResponse, unmatchedTransfersResponse } from "@devolada/api/payments-schema";
 import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
@@ -710,5 +710,296 @@ describe("bug: valid-lost-on-later-failure — confirmed by Banxico, waiting on 
     await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
     await screen.findByText(/Registrado a las/);
     expect(screen.queryByText(/Confirmado por Banxico/)).not.toBeInTheDocument();
+  });
+});
+
+/* cep-bundle-match (contracts/panel.md): the proof dialog of a payment a
+   search without a clave decided. Synthetic claves; other senders by four
+   digits only (FR-010). */
+const MINE_CLAVE = "260926071199000021I";
+const THEIRS_CLAVE = "260926114099000022I";
+const decidedProof = (match: Record<string, unknown>) =>
+  proofResponse.parse({
+    folio: "DV-FEED01",
+    proofMode: "receipt",
+    cep: {
+      trackingKey: MINE_CLAVE,
+      amountCents: 300,
+      date: "2026-09-26",
+      senderBank: "AZTECA",
+      senderName: null,
+      beneficiaryName: "WifiPlus SA de CV",
+    },
+    imageUrl: null,
+    match,
+  });
+const candidate = (over: Record<string, unknown>) => ({
+  clave: MINE_CLAVE,
+  creditDate: "2026-09-26",
+  creditTime: "07:11:20",
+  amountCents: 300,
+  senderBank: "AZTECA",
+  senderTail: "8301",
+  fate: "chosen",
+  why: null,
+  ...over,
+});
+
+async function openProof(proof: ReturnType<typeof decidedProof>) {
+  server.use(
+    handlers.session(() => ok(businessActor)),
+    handlers.feed((url) => ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()]))),
+    handlers.paymentProof((id) => (id === "ch-1" ? ok(proof) : fail("NOT_FOUND", 404))),
+  );
+  renderApp("/");
+  await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+  await userEvent.click(await screen.findByRole("button", { name: "Ver comprobante" }));
+  return screen.findByRole("region", { name: "Coincidencias" });
+}
+
+describe("cep-bundle-match US1: the proof says how a search without a clave was decided", () => {
+  it("the decision line, the credit time and each candidate's fate by four digits", async () => {
+    const section = await openProof(
+      decidedProof({
+        source: "several",
+        decided: "chosen",
+        by: "tail",
+        reason: null,
+        distanceS: 22,
+        receipt: { time: "07:10:58", tail: "8301" },
+        candidates: [
+          candidate({}),
+          candidate({ clave: THEIRS_CLAVE, creditTime: "11:40:47", senderTail: "4171", fate: "dropped", why: "tail" }),
+        ],
+      }),
+    );
+
+    expect(within(section).getByText("Varias coincidencias · resuelta por cuenta")).toBeInTheDocument();
+    expect(within(section).getByText(/Comprobante: 07:10:58 · cuenta …8301/)).toBeInTheDocument();
+    const [mine, theirs] = within(section).getAllByRole("listitem");
+    expect(within(mine).getByText(/cuenta …8301/)).toBeInTheDocument();
+    expect(within(mine).getByText(MINE_CLAVE)).toBeInTheDocument();
+    expect(within(mine).getByText("Elegida")).toBeInTheDocument();
+    expect(within(theirs).getByText(/11:40:47/)).toBeInTheDocument();
+    expect(within(theirs).getByText(/cuenta …4171/)).toBeInTheDocument();
+    expect(within(theirs).getByText("Otra cuenta")).toBeInTheDocument();
+    /* the CEP block beside it carries the same clave */
+    expect(screen.getAllByText(MINE_CLAVE)).toHaveLength(2);
+    /* the dialog is the screen: behind it, Radix's focus guards inside an
+       aria-hidden page trip axe in happy-dom whatever the dialog holds */
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("a payment the payer's own typed clave closed says so", async () => {
+    const section = await openProof(
+      decidedProof({
+        source: "several",
+        decided: "chosen",
+        by: "clave",
+        reason: null,
+        distanceS: null,
+        receipt: { time: null, tail: null },
+        candidates: [candidate({}), candidate({ clave: THEIRS_CLAVE, creditTime: "07:11:31", senderTail: "4171", fate: "kept", why: "too_close" })],
+      }),
+    );
+    expect(within(section).getByText("Varias coincidencias · resuelta por la clave de rastreo")).toBeInTheDocument();
+    expect(within(section).getByText("Comprobante: sin hora ni cuenta")).toBeInTheDocument();
+    expect(within(section).getByText("Muy cerca de otra")).toBeInTheDocument();
+  });
+});
+
+describe("cep-bundle-match US2: the proof says how far the credit was from the receipt's time", () => {
+  const byTime = (distanceS: number, receiptTime: string, candidates: Record<string, unknown>[]) =>
+    decidedProof({
+      source: "several",
+      decided: "chosen",
+      by: "time",
+      reason: null,
+      distanceS,
+      receipt: { time: receiptTime, tail: "8301" },
+      candidates,
+    });
+
+  it("after the receipt: the seconds, and the other credit outside the window", async () => {
+    const section = await openProof(
+      byTime(16, "11:43:20", [
+        candidate({ clave: THEIRS_CLAVE, creditTime: "11:42:13", fate: "dropped", why: "window" }),
+        candidate({ creditTime: "11:43:36" }),
+      ]),
+    );
+    expect(within(section).getByText("Varias coincidencias · resuelta por hora")).toBeInTheDocument();
+    expect(within(section).getByText(/16 s después de la hora del comprobante/)).toHaveTextContent(
+      "Abonada a las 11:43:36, 16 s después de la hora del comprobante",
+    );
+    const [early, late] = within(section).getAllByRole("listitem");
+    expect(within(early).getByText("Fuera de la ventana de hora")).toBeInTheDocument();
+    expect(within(late).getByText("Elegida")).toBeInTheDocument();
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("before the receipt, and inside a printed minute", async () => {
+    const before = await openProof(byTime(-12, "11:43:20", [candidate({ creditTime: "11:43:08" })]));
+    expect(within(before).getByText(/12 s antes de la hora del comprobante/)).toBeInTheDocument();
+  });
+
+  it("a receipt printed HH:MM: 0 s means inside its minute", async () => {
+    const minute = await openProof(byTime(0, "11:43", [candidate({ creditTime: "11:43:36" })]));
+    expect(within(minute).getByText(/dentro del minuto del comprobante/)).toBeInTheDocument();
+  });
+});
+
+describe("cep-bundle-match US3: an undecided row says why it waits, and shows what was found", () => {
+  it("the reason in words, the clave asked, and 'Ver coincidencias' opens the candidates", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(
+          feedOf(
+            url.searchParams.get("action") === "failed"
+              ? []
+              : [
+                  charge({
+                    status: "validating" as const,
+                    actionOutcome: null,
+                    reconciliationClass: null,
+                    actionDoneAt: null,
+                    actionAttempts: 0,
+                    undecided: "no_signal" as const,
+                  }),
+                ],
+          ),
+        ),
+      ),
+      handlers.paymentProof(() =>
+        ok(
+          proofResponse.parse({
+            folio: "",
+            proofMode: "receipt",
+            cep: null,
+            imageUrl: null,
+            match: {
+              source: "several",
+              decided: "undecided",
+              by: null,
+              reason: "no_signal",
+              distanceS: null,
+              receipt: { time: null, tail: null },
+              candidates: [
+                candidate({ fate: "kept" }),
+                candidate({ clave: THEIRS_CLAVE, creditTime: "11:40:47", senderTail: "4171", fate: "kept" }),
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+    renderApp("/");
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+
+    expect(
+      await screen.findByText("Varias coincidencias; el comprobante no muestra hora ni cuenta."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Se pidió la clave de rastreo al cliente.")).toBeInTheDocument();
+    /* the money never arrived as far as the row knows: no proof button */
+    expect(screen.queryByRole("button", { name: "Ver comprobante" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ver coincidencias" }));
+    const section = await screen.findByRole("region", { name: "Coincidencias" });
+    expect(within(section).getByText("Varias coincidencias; el comprobante no muestra hora ni cuenta")).toBeInTheDocument();
+    const items = within(section).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    for (const item of items) expect(within(item).getByText("Posible")).toBeInTheDocument();
+    /* no CEP yet, and the dialog does not pretend Banxico has not answered */
+    expect(screen.queryByText(/Banxico aún no confirma/)).not.toBeInTheDocument();
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("each reason reads in the operator's words", async () => {
+    const copy = {
+      all_used: "Varias coincidencias, todas ya usadas en otros pagos.",
+      too_close: "Varias coincidencias con menos de 30 s de diferencia.",
+      none_fit: "Ninguna transferencia encontrada coincide con el comprobante.",
+      unreadable: "No se pudo leer el archivo de coincidencias.",
+      too_large: "Demasiadas coincidencias para revisarlas.",
+    } as const;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(
+          feedOf(
+            url.searchParams.get("action") === "failed"
+              ? []
+              : Object.keys(copy).map((reason, i) =>
+                  charge({
+                    id: `ch-${reason}`,
+                    customerName: `Cliente ${i + 1}`,
+                    status: "validating" as const,
+                    actionOutcome: null,
+                    reconciliationClass: null,
+                    actionDoneAt: null,
+                    undecided: reason,
+                  }),
+                ),
+          ),
+        ),
+      ),
+    );
+    renderApp("/");
+    for (const [i, words] of Object.values(copy).entries()) {
+      await userEvent.click(await screen.findByRole("button", { name: new RegExp(`Cliente ${i + 1}`) }));
+      expect(await screen.findByText(words)).toBeInTheDocument();
+    }
+  });
+});
+
+describe("cep-bundle-match US4: the 'Sin pago' chip lists the transfers no payment holds", () => {
+  it("shows them in place of the charges — es-MX amounts, tabular numerals, four digits — axe clean", async () => {
+    const feedAsked: string[] = [];
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) => {
+        feedAsked.push(url.search);
+        return ok(feedOf(url.searchParams.get("action") === "failed" ? [] : [charge()]));
+      }),
+      handlers.unmatchedTransfers(() =>
+        ok(
+          unmatchedTransfersResponse.parse({
+            transfers: [
+              { clave: THEIRS_CLAVE, creditDate: "2026-09-26", creditTime: "11:40:47", amountCents: 123456, senderBank: "AZTECA", senderTail: "4171" },
+              { clave: "260926190099000023I", creditDate: "2026-09-25", creditTime: "19:00:05", amountCents: 300, senderBank: "BBVA MEXICO", senderTail: "2344" },
+            ],
+          }),
+        ),
+      ),
+    );
+    renderApp("/");
+    await screen.findByRole("button", { name: /janely/i });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Sin pago" }));
+    expect(await screen.findByText("Transferencias recibidas que ningún pago ha usado.")).toBeInTheDocument();
+    const list = await screen.findByRole("list", { name: "Transferencias sin pago" });
+    const [first, second] = within(list).getAllByRole("listitem");
+    expect(within(first).getByText("$1,234.56")).toHaveClass("tabular-nums");
+    expect(within(first).getByText(/AZTECA · cuenta …4171/)).toBeInTheDocument();
+    expect(within(first).getByText(THEIRS_CLAVE)).toBeInTheDocument();
+    expect(within(first).getByText(/11:40:47/)).toBeInTheDocument();
+    expect(within(second).getByText("$3.00")).toBeInTheDocument();
+    /* the charges are not shown, and the feed was never asked for "Sin pago" */
+    expect(screen.queryByRole("button", { name: /janely/i })).not.toBeInTheDocument();
+    expect(feedAsked.some((q) => q.includes("unmatched"))).toBe(false);
+    /* the search and the dates narrow charges; they leave with them */
+    expect(screen.queryByRole("searchbox", { name: "Buscar por nombre o usuario" })).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("an empty list says so", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed(() => ok(feedOf([]))),
+      handlers.unmatchedTransfers(() => ok({ transfers: [] })),
+    );
+    renderApp("/");
+    await userEvent.click(await screen.findByRole("tab", { name: "Sin pago" }));
+    expect(await screen.findByText("Ninguna transferencia sin pago en los últimos 30 días.")).toBeInTheDocument();
   });
 });

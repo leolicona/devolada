@@ -1,10 +1,24 @@
 import { and, eq, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { payments, businesses, paymentLinks, validations } from "../db/schema";
+import { cepRecords, payments, businesses, paymentLinks, validations } from "../db/schema";
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
-import { consta, ConstaError, type ConstaRequest, type RegisteredAccount } from "../consta";
+import { consta, ConstaError, type ConstaRequest, type ConstaVerdict, type RegisteredAccount } from "../consta";
+import { fitClave, matchCandidates, shownTail } from "../consta/bundle/match";
+import { readPendingBundle, recordsFor } from "../consta/bundle/store";
+import type { CepRecord, MatchResult, MatchTrail, UndecidedReason } from "../consta/bundle/types";
+import {
+  heldBefore,
+  nudgeHolders,
+  pendingBundleOf,
+  type PendingBundle,
+  promote,
+  receiptSideOf,
+  trailOf,
+  unreadableCandidates,
+  usedAmong,
+} from "./cep-match";
 import { asBeneficiary, sameAccount, tieCepAccount } from "../consta/extraction";
 import {
   collectAccount,
@@ -203,6 +217,9 @@ async function tracesToOwnAttempt(
   db: DB,
   payment: DirectPayment,
   cepTrackingKey: string | null,
+  /* The real clock when this attempt began: a record written by this
+     attempt's own search does not count as an earlier one */
+  startedAt: Date,
 ): Promise<boolean> {
   const attempted = (p: DirectPayment) => p.validationAttempts > 0 || p.constaStatus !== null;
 
@@ -251,7 +268,16 @@ async function tracesToOwnAttempt(
       ),
     )
     .limit(1);
-  return ours != null;
+  if (ours != null) return true;
+
+  /* cep-bundle-match D13 (FR-016): a search by reference that Banxico
+     answered with this transfer marked it "validated" at the provider —
+     measured for a single `valid` (F6), unmeasured for a bundle (R13) —
+     and the matcher may have refused it for that payment. When its true
+     owner later finds it, the flag is our own doing: the business's
+     records say one of our searches returned it before this attempt. The
+     unique clave index still refuses a second use inside Devolada. */
+  return heldBefore(db, payment.businessId, key, startedAt);
 }
 
 /* automated-collections-api D7/D17 (FR-013): every status an API
@@ -321,6 +347,9 @@ export async function runValidation(
   opts: { defer?: Defer } = {},
 ): Promise<DirectPayment> {
   const update = announcingWriter(env, db, payment, link, now, opts.defer);
+  /* cep-bundle-match D13: the real clock at the start of this attempt —
+     never `now`, which a sweep may carry from the past or the future */
+  const startedAt = new Date();
 
   /* A retryable failure rides the D7 schedule like a pending CEP; when
      the schedule is exhausted the honest terminal state is `expired` —
@@ -354,6 +383,20 @@ export async function runValidation(
     }
     return row;
   };
+
+  /* cep-bundle-match D10: an undecided payment waits on its payer alone.
+     No slot brings it here — the undecided write clears
+     `next_validation_at` and the sweep selects only rows that have one —
+     so it never reaches `retryLater`'s expiry above: no call is made until
+     the clave arrives as a superseding row (D11), and it does not expire
+     meanwhile, however long the payer takes. Should a future path re-arm
+     it, it is put back to wait, with no call. A row provisionally released
+     before it went undecided keeps its WispHub promise until the promise
+     lapses on its own; `notifyProvisionalExpiry` runs on an expiry only,
+     so never for it. */
+  if (payment.status === "validating" && payment.lastError === "CEP_UNDECIDED") {
+    return update({ nextValidationAt: null });
+  }
 
   /* bug: valid-lost-on-later-failure — Banxico already confirmed this
      transfer on an earlier attempt, and what failed after it was WispHub.
@@ -506,20 +549,130 @@ export async function runValidation(
      buys nothing on a second call with the same data. The row waits on
      its schedule for the payer's clave — their correction supersedes it
      (two-eyes D18) — and ends `expired` if none comes. No counter moves:
-     no call is made. */
+     no call is made. (cep-bundle-match D1: the provider answers several
+     matches with a bundle, never the 422 that `REFERENCE_AMBIGUOUS` was
+     written for — measured 2026-09-26; the row it would mark is kept for
+     the answer the provider documents.) */
   if (
     payment.trackingKey == null &&
     (payment.lastError === "REFERENCE_AMBIGUOUS" || payment.lastError === "REFERENCE_SHARED")
   ) {
     return retryLater(payment.lastError);
   }
+
+  /* ---- cep-bundle-match: what is decided here with no provider call ----
+
+     A transfer one of this business's searches already returned is kept as
+     a record (D5), so three attempts need no call at all: a clave the
+     payer typed that fits a candidate the undecided payment kept (D11), a
+     clave any payment holds that is already a record (D14), and a bundle
+     the last slot could not download (D16). Each ends in the ordinary
+     `valid` branch below, or — the bundle — in the matcher. */
+  let local: ConstaVerdict | null = null;
+  let localTrail: MatchTrail | null = null;
+  /* D16: what a retried download's search asked with (converge T054) */
+  let asked: PendingBundle["asked"] | null = null;
+
+  /* D11 (research R11): the row supersedes an undecided one, and its clave
+     fits exactly one of that row's kept candidates — as typed, O read as
+     0, I as 1, or one character short. Forgiveness only against what the
+     bundle held, never against Banxico. The fitted clave replaces the
+     typed one: it is Banxico's, and the unique index must hold the truth.
+     It is still the payer's claim, so another live payment holding it is a
+     real second use (D18). */
+  if (payment.trackingKey && payment.supersedesId && !crossCheck && !receiptDoor) {
+    const [prior] = await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.id, payment.supersedesId), eq(payments.businessId, business.id)));
+    const priorTrail = prior?.lastError === "CEP_UNDECIDED" && prior.matchTrail ? (JSON.parse(prior.matchTrail) as MatchTrail) : null;
+    if (priorTrail) {
+      const kept = priorTrail.candidates.filter((c) => c.cepId && c.why !== "amount" && c.why !== "account");
+      const fit = fitClave(payment.trackingKey, kept.map((c) => c.clave));
+      const [record] = fit ? await recordsFor(db, business.id, [fit]) : [];
+      if (record) {
+        if (record.clave !== payment.trackingKey) {
+          try {
+            await db.update(payments).set({ trackingKey: record.clave }).where(eq(payments.id, payment.id));
+          } catch (e) {
+            if (!isUniqueViolation(e)) throw e;
+            return update({ status: "invalid", nextValidationAt: null, lastError: "TRANSFER_ALREADY_USED" });
+          }
+        }
+        local = promote(record, { validationId: prior!.constaValidationId ?? "" }, payment.senderBank);
+        localTrail = {
+          ...priorTrail,
+          decided: "chosen",
+          by: "clave",
+          reason: null,
+          candidates: priorTrail.candidates.map((c) =>
+            c.clave === record.clave ? { ...c, fate: "chosen" as const, why: null } : c,
+          ),
+        };
+      }
+    }
+  }
+
+  /* D14 (research R14): other customers' CEPs, by pull. A payment that
+     holds a clave looks among the business's records before any paid
+     search: a transfer one of our searches already returned — typically
+     in another customer's bundle — confirms it with no call. Only the
+     transfer door by clave: the receipt door's clave is read inside the
+     engine, on the provider's first answer. */
+  if (!local && payment.trackingKey && !crossCheck && !receiptDoor) {
+    const [record] = await recordsFor(db, business.id, [payment.trackingKey]);
+    if (record) {
+      local = promote(record, null, payment.senderBank);
+      localTrail = {
+        source: record.bundleId ? "several" : "single",
+        bundleId: record.bundleId,
+        decided: "chosen",
+        by: "clave",
+        reason: null,
+        receipt: { time: payment.transferTime, tail: payment.senderTail },
+        candidates: [
+          {
+            cepId: record.id,
+            clave: record.clave,
+            creditTime: record.creditTime,
+            tail: shownTail(record, payment.senderTail),
+            fate: "chosen",
+            why: null,
+          },
+        ],
+      };
+    }
+  }
+
+  /* D16: the bundle the last slot could not download. The download is not
+     a provider call — no credit, no `validations` row — and the third
+     failure gives up (`unreadable`); what it reads goes to the matcher
+     below exactly as a fresh several answer would. */
+  if (!local && payment.lastError === "CEP_BUNDLE_PENDING") {
+    const pending = await pendingBundleOf(db, business.id, payment.id);
+    const bundle = pending ? await readPendingBundle(env, db, { businessId: business.id }, pending.id) : null;
+    if (bundle) {
+      asked = pending!.asked;
+      local = {
+        validationId: payment.constaValidationId ?? "",
+        status: "invalid",
+        reason: "several",
+        alreadyValidated: false,
+        bundle,
+      };
+    }
+  }
+
   /* receipt-triage D7 (FR-007): before any paid call that would search by
      a reference, another payment of the business with the same five data
      means the reference cannot find *this* transfer alone — the payer is
      asked for the clave instead of the provider being paid to say so.
-     Finding none is not proof the reference is unique; the 422 above is
-     the provider's answer for that. */
-  if (byReference) {
+     Finding none is not proof the reference is unique.
+     cep-bundle-match D12 (FR-015) narrows it: with the receipt's time or
+     its sender's digits on the row, the search runs — several matches come
+     back as a bundle, and the matcher tells them apart. Only a receipt
+     that shows neither is still asked with no call. */
+  if (!local && byReference && payment.transferTime == null && payment.senderTail == null) {
     const shared = await sharedReference(db, business, link, {
       paymentId: payment.id,
       reference: payment.referenceNumber!,
@@ -595,21 +748,25 @@ export async function runValidation(
      for exactly this reason: what matters is that a call may have
      landed, which is knowable only in advance. */
   const isRetry = payment.validationAttempts > 0 || payment.constaStatus !== null;
-  const attempts = payment.validationAttempts + 1;
-  /* bug: one-open-attempt — the claim is also the last look before a
-     paid call: an attempt the payer replaced since it was read (the
-     sweep's batch, the inline attempt's insert) is not asked about */
-  const [claimed] = await db
-    .update(payments)
-    .set({ validationAttempts: attempts })
-    .where(and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
-    .returning();
-  if (!claimed) {
-    const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
-    return current;
+  /* cep-bundle-match: a decision taken above made no call, so it counts
+     no attempt */
+  const attempts = payment.validationAttempts + (local ? 0 : 1);
+  if (!local) {
+    /* bug: one-open-attempt — the claim is also the last look before a
+       paid call: an attempt the payer replaced since it was read (the
+       sweep's batch, the inline attempt's insert) is not asked about */
+    const [claimed] = await db
+      .update(payments)
+      .set({ validationAttempts: attempts })
+      .where(and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
+      .returning();
+    if (!claimed) {
+      const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
+      return current;
+    }
   }
 
-  let verdict;
+  let verdict: ConstaVerdict;
   /* consta-api-merge D3: the business is the identity — the refs above
      accumulate history in this tenant's chains because the engine
      writes the row under `business_id` (payments-and-classes D7's key
@@ -617,43 +774,59 @@ export async function runValidation(
      wire). D6/FR-011: every engine failure still rides the schedule,
      whether or not waiting can help; the row keeps the engine's own
      code so the ISP can see which it was. */
-  try {
-    verdict = await consta(env, db, { businessId: business.id }, {
-      /* receipt-triage D7 (converge T060): the question only the lifecycle
-         can answer, asked by the engine on the receipt door */
-      referenceTaken: (r) =>
-        sharedReference(db, business, link, {
-          paymentId: payment.id,
-          reference: r.referenceNumber,
-          date: r.date,
-          senderBank: r.senderBank,
-          amountCents: r.amountCents,
-          account: fromBeneficiary(r.account),
-        }),
-    }).validate(request);
-  } catch (e) {
-    const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
-    console.error("consta validation failed:", code);
-    /* receipt-triage D17 (FR-007): the provider's 422 — the reference
-       matches more than one transfer. The one remedy is the clave, so the
-       payer is asked for it alone, and the slots stop calling (above)
-       until it arrives. */
-    if (e instanceof ConstaError && e.hint === "provide_tracking_key" && byReference) {
-      return retryLater("REFERENCE_AMBIGUOUS", { disputedFields: JSON.stringify(["trackingKey"]) });
+  if (local) {
+    verdict = local;
+  } else {
+    try {
+      verdict = await consta(env, db, { businessId: business.id }, {
+        /* receipt-triage D7 (converge T060): the question only the lifecycle
+           can answer, asked by the engine on the receipt door */
+        referenceTaken: (r) =>
+          sharedReference(db, business, link, {
+            paymentId: payment.id,
+            reference: r.referenceNumber,
+            date: r.date,
+            senderBank: r.senderBank,
+            amountCents: r.amountCents,
+            account: fromBeneficiary(r.account),
+          }),
+      }).validate(request);
+    } catch (e) {
+      const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
+      console.error("consta validation failed:", code);
+      /* receipt-triage D17 (FR-007): the provider's 422, as published —
+         "the reference matches more than one transfer". The one remedy is
+         the clave, so the payer is asked for it alone, and the slots stop
+         calling (above) until it arrives. cep-bundle-match D1: measured
+         2026-09-26, several matches never come back as this 422 (24
+         calls, none) but as a bundle of their CEPs, which the matcher
+         below decides; the branch stays for the answer the provider
+         documents. */
+      if (e instanceof ConstaError && e.hint === "provide_tracking_key" && byReference) {
+        return retryLater("REFERENCE_AMBIGUOUS", { disputedFields: JSON.stringify(["trackingKey"]) });
+      }
+      /* receipt-triage D7 (FR-007): the receipt door's own stop — the row
+         asks for the clave, and the slots after it make no call (above) */
+      if (e instanceof ConstaError && e.code === "RECEIPT_REFERENCE_SHARED") {
+        return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
+      }
+      return retryLater(code);
     }
-    /* receipt-triage D7 (FR-007): the receipt door's own stop — the row
-       asks for the clave, and the slots after it make no call (above) */
-    if (e instanceof ConstaError && e.code === "RECEIPT_REFERENCE_SHARED") {
-      return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
-    }
-    return retryLater(code);
   }
 
-  const base = {
+  /* cep-bundle-match D15 (analyze I1): the receipt's side of a match, from
+     the reading this attempt carried — `ourReading` rides every outcome of
+     a provider-first call, so the first attempt on the receipt door stores
+     it whatever the answer (a `valid` used to take the CEP's data and
+     leave both empty). Never overwriting what the row holds; never on a
+     typed row, whose form asks for neither. */
+  const read = verdict.ourReading ?? null;
+  const base: Partial<typeof payments.$inferInsert> = {
     /* Already written above; repeated so every terminal write carries a
        consistent row, and harmless because it is the same number. */
     validationAttempts: attempts,
-    constaValidationId: verdict.validationId,
+    /* A decision taken with no call keeps the call that bought its data */
+    constaValidationId: verdict.validationId || payment.constaValidationId,
     constaStatus: verdict.status,
     /* receipt-triage D22/D30: the account the engine named on the receipt
        door — the one the receipt's digits tied, retired ones included —
@@ -661,7 +834,88 @@ export async function runValidation(
     ...(verdict.beneficiaryUsed && !legacy
       ? { beneficiary: JSON.stringify(fromBeneficiary(verdict.beneficiaryUsed)) }
       : {}),
+    ...(read?.time && payment.transferTime == null ? { transferTime: read.time } : {}),
+    ...(read?.senderTail && payment.senderTail == null ? { senderTail: read.senderTail } : {}),
+    /* D11/D14: a clave fitted to a kept candidate, or pulled from a record */
+    ...(localTrail ? { matchTrail: JSON.stringify(localTrail), matchDistanceS: null } : {}),
   };
+
+  /* ---- cep-bundle-match D8, D9, D10, D16, D18 — a search without a clave.
+
+     Every CEP such a search found passes the matcher before it may confirm
+     (FR-014): the several answer's bundle, and the single `valid` alike —
+     the single one was confirmed unchecked until now, and a receipt
+     printed 18:58 took its payer's own 07:19 transfer (bug:
+     reference-finds-other-transfer). The engine read the documents; this
+     decides, with what only the database knows: the claves live payments
+     hold, and what the receipt said. One left is promoted to the ordinary
+     `valid` below. None or several is undecided (D10): `validating` with
+     `CEP_UNDECIDED`, the clave asked, and no slot — so no call and no
+     expiry, however long the payer takes. ---- */
+  if (
+    (verdict.status === "invalid" && verdict.reason === "several" && verdict.bundle) ||
+    (verdict.status === "valid" && verdict.record !== undefined && !localTrail)
+  ) {
+    const several = verdict.status === "invalid";
+    const bundle = verdict.bundle ?? null;
+    /* The search's own amount and bank: what travelled on the transfer
+       door; what the provider read on the image door */
+    const imageDoor = receiptDoor || crossCheck;
+    const searchedCents = imageDoor
+      ? (verdict.reading?.amountCents ?? read?.amountCents ?? payment.claimedAmountCents ?? asked?.amountCents ?? null)
+      : (payment.claimedAmountCents ?? payment.amountCents);
+    const searchedBank = imageDoor
+      ? (verdict.reading?.senderBank ?? read?.senderBank ?? asked?.senderBank ?? null)
+      : payment.senderBank;
+    const receipt = receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null);
+    const unreadable = unreadableCandidates(bundle?.unreadable ?? []);
+    const source = several ? "several" : "single";
+    const bundleId = bundle?.id ?? null;
+    const undecided = (reason: UndecidedReason, candidates: MatchResult["trail"] = []) =>
+      update({
+        ...base,
+        lastError: "CEP_UNDECIDED",
+        disputedFields: JSON.stringify(["trackingKey"]),
+        nextValidationAt: null,
+        matchTrail: JSON.stringify(
+          trailOf(source, bundleId, receipt, { decided: "undecided", reason, trail: candidates }, unreadable),
+        ),
+      });
+
+    /* D16: not downloaded yet — the next slot downloads, never calls. A
+       bundle is never a reason to expire, so past the schedule the retry
+       still comes. */
+    if (several && bundle!.status === "pending") {
+      return update({
+        ...base,
+        lastError: "CEP_BUNDLE_PENDING",
+        nextValidationAt: nextValidationSlot(payment.createdAt, now) ?? new Date(now.getTime() + minutes(2)),
+      });
+    }
+    if (several && bundle!.status !== "read") return undecided(bundle!.status as "unreadable" | "too_large");
+    if (several) await nudgeHolders(db, business.id, payment.id, bundle!.candidates.map((c) => c.clave), now);
+
+    const candidates: CepRecord[] = several ? bundle!.candidates : verdict.record ? [verdict.record] : [];
+    if (!several && !verdict.record) {
+      /* D9: a single `valid` whose cadena could not be read. With a time or
+         a tail on the receipt there is nothing to hold them against, so the
+         clave is asked; with neither, nothing contradicts it and it
+         confirms as it always did. */
+      if (receipt.time || receipt.tail) return undecided("unreadable");
+    } else if (!candidates.length) {
+      return undecided(unreadable.length ? "unreadable" : "none_fit");
+    } else {
+      const used = await usedAmong(db, business.id, payment.id, candidates.map((c) => c.clave));
+      const result = await chooseAndClaim(db, payment.id, receipt, candidates, used);
+      if (result.decided === "undecided") return undecided(result.reason, result.trail);
+      Object.assign(base, {
+        matchTrail: JSON.stringify(trailOf(source, bundleId, receipt, result, unreadable)),
+        matchDistanceS: result.distanceS,
+      });
+      /* D8: the chosen transfer becomes the ordinary `valid` verdict */
+      if (several) verdict = promote(result.chosen, verdict, searchedBank);
+    }
+  }
 
   /* receipt-triage D31 (FR-020a, converge T058): money paid to an account
      the business removed waits for the business's own decision, and a
@@ -858,7 +1112,7 @@ export async function runValidation(
   if (
     verdict.alreadyValidated &&
     !isRetry &&
-    !(await tracesToOwnAttempt(db, payment, verdict.cep?.trackingKey ?? null))
+    !(await tracesToOwnAttempt(db, payment, verdict.cep?.trackingKey ?? null, startedAt))
   ) {
     /* D8: the flag with no local record means the CEP was validated
        outside Devolada — rejected, but visible in the admin feed so
@@ -1088,6 +1342,51 @@ export async function runValidation(
     cepSenderName: cep?.senderName ?? null,
     reviewReason: hold,
   }, cep ?? null, hold);
+}
+
+/* cep-bundle-match D8, D18 (analyze U3) — decide, and take the clave the
+   matcher chose onto the row before anything confirms (the unique index is
+   what stops one transfer paying twice, direct-payment D8).
+
+   `used` is read before the decision and the clave written after it, so
+   two payments of one bundle decided at the same moment can both choose
+   one transfer. The index refuses the second write; that payment only
+   *chose* the clave, so it joins `used` and the matcher decides again —
+   twice at most — and with nothing left it is undecided (`all_used`),
+   never TRANSFER_ALREADY_USED: a payer who paid is never refused for a
+   transfer the machine picked. A clave the payer typed or the receipt
+   showed keeps today's refusal (`runValidation`). Exported so the race —
+   which no single sweep can stage — is testable against the real index. */
+export async function chooseAndClaim(
+  db: DB,
+  paymentId: string,
+  receipt: Parameters<typeof matchCandidates>[0],
+  candidates: CepRecord[],
+  used: Set<string>,
+): Promise<MatchResult> {
+  const claim = async (clave: string) => {
+    try {
+      await db.update(payments).set({ trackingKey: clave }).where(eq(payments.id, paymentId));
+      return true;
+    } catch (e) {
+      if (isUniqueViolation(e)) return false;
+      throw e;
+    }
+  };
+  let result: MatchResult = matchCandidates(receipt, candidates, used);
+  for (let round = 0; result.decided === "chosen"; round++) {
+    if (await claim(result.chosen.clave)) break;
+    used.add(result.chosen.clave.toUpperCase());
+    result = matchCandidates(receipt, candidates, used);
+    if (round === 1 && result.decided === "chosen") {
+      result = {
+        decided: "undecided",
+        reason: "all_used",
+        trail: result.trail.map((c) => (c.fate === "chosen" ? { ...c, fate: "kept" as const } : c)),
+      };
+    }
+  }
+  return result;
 }
 
 /* bug: valid-lost-on-later-failure — the panel half of a `valid`
@@ -1497,7 +1796,9 @@ export async function advanceTestPayment(
    other confirmed payment of the business" includes the payer's own
    earlier one (analyze 2026-09-24, I1). Never unique by design, so a
    match is a reason to ask for the clave — and finding none proves
-   nothing. */
+   nothing. cep-bundle-match D12: the three stops before a paid search ask
+   only when the receipt shows neither a time nor the sender's digits;
+   with either, the search runs and the bundle's matcher decides. */
 export async function sharedReference(
   db: DB,
   business: Pick<Isp, "id">,

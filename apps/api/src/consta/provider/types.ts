@@ -27,14 +27,22 @@ export type ReceiptInput = {
   potentialBeneficiaries?: Beneficiary[];
 };
 
-/* D11: an `invalid` is two different answers wearing one word.
+/* D11: an `invalid` is three different answers wearing one word.
    `contradicted` — a CEP came back and disagrees with the claim.
-   `not_found`   — nothing came back at all: no cepDetails, no cepStatus.
-   The second is ambiguous by construction (a transfer that never
+   `not_found`   — nothing came back at all: no cepDetails, no cepStatus,
+                   and Banxico did not confirm anything.
+   `several`     — cep-bundle-match D1: Banxico confirmed more than one
+                   transfer for the search, and instead of a CEP the
+                   provider linked a bundle of all of them (measured
+                   2026-09-26: `banxicoConfirmed: true`, no cepDetails, no
+                   cepStatus, `downloads.cepPdf`). Until then it read as
+                   `not_found` and rode twelve hours of paid retries.
+   `not_found` is ambiguous by construction (a transfer that never
    happened, a misread tracking key, a wrong sender bank, or a CEP
    Banxico has not published yet all look identical on the wire), so it
-   is never a verdict the caller may act on as "this is fake". */
-export type InvalidReason = "contradicted" | "not_found";
+   is never a verdict the caller may act on as "this is fake". Neither is
+   `several`: it says the transfers exist, not which one is the payer's. */
+export type InvalidReason = "contradicted" | "not_found" | "several";
 
 /* D14 — what the call cost and how long the provider took. Read from
    response headers; they ride 200s only (measured 2026-08-19), so any
@@ -70,6 +78,17 @@ export type ProviderVerdict = {
     /* receipt-triage D22: Banxico's own word on the receiving account */
     beneficiaryAccount: string | null;
     beneficiaryAccountType: string | null;
+    /* cep-bundle-match D1/D4: what a `valid` carries beyond what was read
+       until now (measured 2026-09-26). `creditTime` is
+       `cepDetails.processingTime`, the moment the business's bank credited
+       the money, "HH:MM:SS" — not the top-level `processingTime`, which is
+       the provider's own latency. `chain` is the cadena original in one
+       line, which `parseCadena` reads: the credit day lives only there. */
+    creditTime: string | null;
+    chain: string | null;
+    senderAccountType: string | null;
+    senderAccount: string | null;
+    certificateNumber: string | null;
   } | null;
   /* Provider-hosted CEP documents; their URLs expire (apiCEP: 15 days) */
   downloads: { cepXml?: string; cepPdf?: string } | null;

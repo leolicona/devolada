@@ -46,6 +46,11 @@ export type DisputedField = "trackingKey" | "referenceNumber" | "amount" | "date
 export type OurReading = GatedReading & {
   date: string | null;
   legibility?: "full" | "partial" | "none" | null;
+  /* cep-bundle-match D15: the receipt's side of a match, carried to the
+     verdict beside the rest. Never compared here: the two readings are
+     compared on the provider's search keys only. */
+  time?: string | null;
+  senderTail?: string | null;
 };
 
 /* What the provider's OCR read off the same file (`verdict.reading`).

@@ -181,6 +181,8 @@ export async function recordExtraction(
       sameBank:
         gated?.gate.senderBank === "ok" && gated.receiving.verdict === "ok" ? gated.receiving.sameBank : null,
       receivingBankTie: extra.receivingBankTie ?? null,
+      /* cep-bundle-match D15: the sender's visible digits, as read */
+      senderTail: reading?.senderTail ?? null,
       /* A row that read nothing says *why* instead of leaving the column
          empty — "handed over unread" is countable by cause (D19). */
       rawOutput:
@@ -289,8 +291,11 @@ export async function recentReading(
        outbound provider call makes (constitution II). */
     amount: row.amountCents == null ? null : row.amountCents / 100,
     date: row.transferDate,
-    /* bug: spei-date-rollover */
+    /* bug: spei-date-rollover; cep-bundle-match D15 — seconds included
+       when the receipt printed them */
     time: row.transferTime,
+    /* cep-bundle-match D15 */
+    senderTail: row.senderTail ?? null,
     status: row.receiptStatus,
     /* receipt-triage D28 */
     referenceNumber: row.referenceNumber,
@@ -362,6 +367,10 @@ export function readingPayload(
          (two-eyes-receipt D15). The page reads this branch exactly as it
          reads a reader that is down, and never refuses on it. */
       legibility: null,
+      /* cep-bundle-match D15: nothing read, so no time and no tail — the
+         shared-reference ask treats it as a reading without either (D12) */
+      time: null,
+      senderTail: null,
     };
   }
   const { reading, gated } = result;
@@ -389,6 +398,11 @@ export function readingPayload(
     /* Filled by the caller that holds the accounts (`extract`) */
     ask: null,
     tiedAccount: null,
+    /* cep-bundle-match D15: the receipt's side of a match, as read — the
+       gate never judges either. `/read` narrows its shared-reference ask
+       with them (D12); the page never shows them. */
+    time: reading.time,
+    senderTail: reading.senderTail,
   };
 }
 

@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO } from "../../playwright.config";
 import { stubAdminApi, stubOperatorReaderApi, stubPagoClosed, stubPorCobrarSearch } from "./stubs";
 
@@ -31,6 +31,28 @@ const screens = [
      page gained, so the one that needs its own pixels measured */
   { name: "Link pagado", url: `${PAGO}/p/tok123`, stub: stubPagoClosed("paid"), ready: "ya fue utilizado" },
   { name: "Link vencido", url: `${PAGO}/p/tok123`, stub: stubPagoClosed("expired"), ready: "venció" },
+  /* cep-bundle-match T049: the "Sin pago" list, and the proof dialog's
+     decision and candidates — text on the dialog's surface and on the
+     list's card, measured where they actually land */
+  {
+    name: "Sin pago",
+    url: ADMIN,
+    stub: stubAdminApi,
+    open: async (page: Page) => {
+      await page.getByRole("tab", { name: "Sin pago" }).click();
+    },
+    ready: "Transferencias recibidas que ningún pago ha usado.",
+  },
+  {
+    name: "Coincidencias",
+    url: ADMIN,
+    stub: stubAdminApi,
+    open: async (page: Page) => {
+      await page.getByRole("button", { name: /Janely Guadalupe Reyes/ }).first().click();
+      await page.getByRole("button", { name: "Ver comprobante" }).first().click();
+    },
+    ready: "Varias coincidencias · resuelta por cuenta y hora",
+  },
 ] as const;
 
 const WIDTHS = [
@@ -46,6 +68,10 @@ for (const theme of ["light", "dark"] as const) {
         await page.emulateMedia({ colorScheme: theme });
         await screen.stub(page);
         await page.goto(screen.url);
+        if ("open" in screen) {
+          await expect(page.getByText("Janely Guadalupe Reyes").first()).toBeVisible();
+          await screen.open(page);
+        }
         await expect(page.getByText(screen.ready).first()).toBeVisible();
 
         const results = await new AxeBuilder({ page })

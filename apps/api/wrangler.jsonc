@@ -49,7 +49,14 @@
     "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176",
     /* Not a secret. Repeated in every env block below because an env's
        `vars` replaces the top-level one rather than merging with it. */
-    "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
+    "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>",
+    /* cep-bundle-match D16: the one origin a bundle of CEPs is downloaded
+       from — apiCEP's storage (measured 2026-09-26: public links, no
+       token). A var, never a literal in code (constitution VIII); a link
+       on any other origin is never fetched. `.dev.vars` points it at the
+       sandbox (http://localhost:8789). Repeated below for the same
+       reason as EMAIL_FROM. */
+    "APICEP_STORAGE_ORIGIN": "https://storage.apicep.cloud"
   },
   /* Remote environments (CICD.md). Per-environment secrets set by CI
      after deploy: BETTER_AUTH_SECRET (required — auth cannot run without
@@ -92,7 +99,9 @@
            outcome pages */
         "LANDING_BASE_URL": "https://dev.devoladapago.com",
         "PASSKEY_RP_ID": "dev.devoladapago.com",
-        "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
+        "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>",
+        /* cep-bundle-match D16 */
+        "APICEP_STORAGE_ORIGIN": "https://storage.apicep.cloud"
       }
     },
     "prod": {
@@ -130,7 +139,9 @@
         "ALLOWED_ORIGINS": "https://app.devoladapago.com,https://link.devoladapago.com,https://devoladapago.com,https://www.devoladapago.com",
         "LANDING_BASE_URL": "https://devoladapago.com",
         "PASSKEY_RP_ID": "devoladapago.com",
-        "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>"
+        "EMAIL_FROM": "Devolada <no-reply@devoladapago.com>",
+        /* cep-bundle-match D16 */
+        "APICEP_STORAGE_ORIGIN": "https://storage.apicep.cloud"
       }
     }
   }

@@ -220,3 +220,35 @@ test.describe("receipt-reader-tuning US3: Lector at 360/768/1280", () => {
     });
   }
 });
+
+/* cep-bundle-match T049: the two surfaces the feature added to the panel,
+   in a real browser — the "Sin pago" list and the proof dialog's
+   candidates, whose claves are long unbroken strings — at the three
+   widths the floor sets */
+test.describe("cep-bundle-match US1/US4: the decision and the unmatched list hold at 360/768/1280", () => {
+  for (const size of [PHONE, TABLET, DESKTOP]) {
+    test(`the 'Sin pago' list neither scrolls sideways nor clips at ${size.width}px`, async ({ page }) => {
+      await stubAdminApi(page);
+      await page.setViewportSize(size);
+      await page.goto(ADMIN);
+      await expect(page.getByText("Janely Guadalupe Reyes")).toBeVisible();
+      await page.getByRole("tab", { name: "Sin pago" }).click();
+      await expect(page.getByRole("list", { name: "Transferencias sin pago" })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+    });
+
+    test(`the proof dialog's candidates fit at ${size.width}px`, async ({ page }) => {
+      await stubAdminApi(page);
+      await page.setViewportSize(size);
+      await page.goto(ADMIN);
+      await page.getByRole("button", { name: /Janely Guadalupe Reyes/ }).first().click();
+      await page.getByRole("button", { name: "Ver comprobante" }).first().click();
+      const region = page.getByRole("region", { name: "Coincidencias" });
+      await expect(region.getByText("Varias coincidencias · resuelta por cuenta y hora")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      const dialog = await page.getByRole("dialog").evaluate((d) => ({ scrollWidth: d.scrollWidth, clientWidth: d.clientWidth }));
+      expect(dialog.scrollWidth, "the dialog scrolls sideways").toBeLessThanOrEqual(dialog.clientWidth + 1);
+    });
+  }
+});

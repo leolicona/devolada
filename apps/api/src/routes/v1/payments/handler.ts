@@ -8,7 +8,9 @@ import { paymentFacts } from "../../../webhooks/events";
 import { nextIsoDate, startOfIsoDateMs } from "../../../time/business-day";
 import type { PaymentStatus } from "../webhook/schema";
 import { fail, ok } from "../envelope";
-import type { ApiPayment, ListTransfersQuery, TransferList } from "./schema";
+import { undecidedReasonOf } from "../../../direct-payments/cep-match";
+import type { UndecidedReason } from "../../../consta/bundle/types";
+import type { ApiPayment, AwaitingReason, ListTransfersQuery, TransferList } from "./schema";
 
 /* GET /v1/payments/:id · GET /v1/payments?customerRef= (automated-
    collections-api US3, FR-019, FR-023) and GET /v1/transfers (US4,
@@ -31,16 +33,33 @@ type DirectPayment = typeof payments.$inferSelect;
 const heldAsValidating = (payment: DirectPayment): DirectPayment =>
   payment.actionOutcome === "review" ? { ...payment, status: "validating" } : payment;
 
+/* cep-bundle-match D17 (contracts/public-api.md): the engine's reasons
+   in the public words — the business needs to know whether the payer may
+   have paid already, whether more than one transfer could be theirs,
+   whether the one found does not match, or whether Banxico's answer could
+   not be read; not which rule decided it */
+const AWAITING_REASON: Record<UndecidedReason, AwaitingReason> = {
+  all_used: "all_used",
+  no_signal: "ambiguous",
+  too_close: "ambiguous",
+  none_fit: "no_match",
+  unreadable: "unreadable",
+  too_large: "unreadable",
+};
+
 export function toPublic(row: DirectPayment, link: ApiLink): ApiPayment {
   const payment = heldAsValidating(row);
   /* the same facts the webhook carries, rendered by the same function
      so the two can never disagree (FR-014, FR-019) */
   const { paymentId: _paymentId, ...facts } = paymentFacts(payment, link);
+  const undecided = undecidedReasonOf(payment);
   return {
     id: payment.id,
     status: payment.status as PaymentStatus,
     createdAt: payment.createdAt.getTime(),
     ...facts,
+    awaiting: undecided ? "payer_tracking_key" : null,
+    awaitingReason: undecided ? AWAITING_REASON[undecided] : null,
   };
 }
 

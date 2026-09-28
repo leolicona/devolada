@@ -91,6 +91,19 @@ export function startOfIsoDateMs(timezone: string, isoDate: string): number {
   return midnightAsUtc - offsetMsAt(timezone, new Date(guess));
 }
 
+/* cep-bundle-match D4, D6: the instant a wall-clock date and time name in
+   a zone — a CEP's credit day and time, or a receipt's printed day and
+   time, both Mexico City's by the CEP's own footnote. The same two-pass
+   offset dance as above, at the given second instead of midnight. `time`
+   is "HH:MM" or "HH:MM:SS". */
+export function wallClockMs(timezone: string, isoDate: string, time: string): number {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const [hh, mm, ss] = time.split(":").map(Number);
+  const asUtc = Date.UTC(y, m - 1, d, hh, mm, ss ?? 0);
+  const guess = asUtc - offsetMsAt(timezone, new Date(asUtc));
+  return asUtc - offsetMsAt(timezone, new Date(guess));
+}
+
 /* The calendar day after an ISO date, for an inclusive `to` bound:
    "up to and including the 30th" is "before the 1st's midnight". Pure
    calendar arithmetic; the zone enters through startOfIsoDateMs. */

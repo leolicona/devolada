@@ -43,6 +43,9 @@ export const feedQuery = z.object({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+/* cep-bundle-match D10: why a search without a clave did not decide */
+export const MATCH_REASONS = ["all_used", "no_signal", "too_close", "none_fit", "unreadable", "too_large"] as const;
+
 export const feedCharge = z.object({
   id: z.string(),
   folio: z.string(),
@@ -109,6 +112,10 @@ export const feedCharge = z.object({
      fixtures born before it still parse. */
   banxicoConfirmedAt: z.number().int().nullable().default(null),
   waitingOn: z.string().nullable().default(null),
+  /* cep-bundle-match D10 (contracts/panel.md): set while the row is
+     validating with CEP_UNDECIDED — why the bundle did not decide. Only
+     the reason rides the 5 s poll; the candidates travel with the proof. */
+  undecided: z.enum(MATCH_REASONS).nullable().optional(),
 });
 
 export const feedResponse = z.object({
@@ -129,6 +136,63 @@ export const feedResponse = z.object({
     totalCents: z.number().int(),
     startedAtMs: z.number().int(),
   }),
+});
+
+/* cep-bundle-match FR-013: why a candidate was not the one. `farther`: it
+   was inside the time window, and another was nearer (D6). */
+export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amount", "account", "unreadable"] as const;
+
+/* cep-bundle-match D8, FR-013 (contracts/panel.md): how a search without a
+   clave was decided, and what happened to every transfer it found. Other
+   senders appear by the last four digits of their account and a clave —
+   the business's own incoming money, as its bank statement shows it —
+   never by name or whole account, and nothing of it reaches the payer. A
+   CEP that could not be read has no record: its clave and fate only. */
+export const proofMatch = z.object({
+  source: z.enum(["several", "single"]),
+  decided: z.enum(["chosen", "undecided"]),
+  by: z.enum(["tail", "time", "both", "none", "clave"]).nullable(),
+  reason: z.enum(MATCH_REASONS).nullable(),
+  /* D6: credit − receipt time of the chosen one, whole seconds */
+  distanceS: z.number().int().nullable(),
+  receipt: z.object({ time: z.string().nullable(), tail: z.string().nullable() }),
+  candidates: z.array(
+    z.object({
+      clave: z.string(),
+      /* YYYY-MM-DD and HH:MM:SS, Mexico City — the CEP's own clock */
+      creditDate: z.string().nullable(),
+      creditTime: z.string().nullable(),
+      amountCents: z.number().int().nullable(),
+      senderBank: z.string().nullable(),
+      /* The last four digits of the sender's account, never more */
+      senderTail: z.string().nullable(),
+      fate: z.enum(["chosen", "dropped", "kept"]),
+      why: z.enum(MATCH_WHY).nullable(),
+    }),
+  ),
+});
+
+/* cep-bundle-match US4, FR-009 (contracts/panel.md): the transfers the
+   business received that no payment holds, as its own searches found
+   them — typically another customer's, from a bundle. */
+export const unmatchedTransfersQuery = z.object({
+  /* A credit day, YYYY-MM-DD; the last 30 days when absent */
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+export const UNMATCHED_MAX = 200;
+export const unmatchedTransfersResponse = z.object({
+  transfers: z.array(
+    z.object({
+      clave: z.string(),
+      /* YYYY-MM-DD and HH:MM:SS, Mexico City — the CEP's own clock */
+      creditDate: z.string(),
+      creditTime: z.string(),
+      amountCents: z.number().int(),
+      senderBank: z.string(),
+      /* The last four digits of the sender's account, never more (FR-010) */
+      senderTail: z.string(),
+    }),
+  ),
 });
 
 /* payments-and-classes D4: the proof is the whole truth — what Banxico
@@ -152,6 +216,9 @@ export const proofResponse = z.object({
   /* Short-lived signed URL (direct-payment D12's own mechanism), null
      when the payer never uploaded a capture */
   imageUrl: z.string().nullable(),
+  /* cep-bundle-match: null for a row that never matched. Defaulted so
+     fixtures born before it still parse. */
+  match: proofMatch.nullable().default(null),
 });
 
 /* payments-and-classes D5 (retry) and integrations-hub D5 (execute):
@@ -184,6 +251,9 @@ export type PulseResponse = z.infer<typeof pulseResponse>;
 export type FeedCharge = z.infer<typeof feedCharge>;
 export type FeedResponse = z.infer<typeof feedResponse>;
 export type ProofResponse = z.infer<typeof proofResponse>;
+export type ProofMatch = z.infer<typeof proofMatch>;
+export type UnmatchedTransfersQuery = z.infer<typeof unmatchedTransfersQuery>;
+export type UnmatchedTransfersResponse = z.infer<typeof unmatchedTransfersResponse>;
 export type RetryResponse = z.infer<typeof retryResponse>;
 export type ReviewDecisionRequest = z.infer<typeof reviewDecisionRequest>;
 export type ReviewDecisionResponse = z.infer<typeof reviewDecisionResponse>;

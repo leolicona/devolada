@@ -56,6 +56,9 @@ const READ = {
   receivingBank: "AZTECA",
   amountCents: 35000,
   date: "2026-09-25",
+  /* cep-bundle-match D15: the two answers of version 3 */
+  time: "07:10:58",
+  senderTail: "8301",
   destination: { kind: "clabe", digits: "7897" },
   sameBank: true,
 };
@@ -253,13 +256,13 @@ describe("receipt-reader-tuning US3: the Lector tab — banco de pruebas and res
     await expectNoViolations(screen.getByRole("tabpanel"));
   });
 
-  it("the detail: nine rows, 'No se ve', the same-bank flag as icon + text, a failed column with its reason and raw answer", async () => {
+  it("the detail: eleven rows, 'No se ve', the same-bank flag as icon + text, a failed column with its reason and raw answer", async () => {
     objectUrls();
     arrange({ list });
     await openReader();
     await userEvent.click(await screen.findByRole("button", { name: /Mistral Small 3\.1: leído en 3\.1 s/ }));
     const mistral = await screen.findByRole("region", { name: "Mistral Small 3.1 · v2" });
-    for (const label of ["¿Es comprobante?", "Legibilidad", "Clave de rastreo", "Referencia", "Banco emisor", "Banco receptor", "Monto", "Fecha", "Destino"]) {
+    for (const label of ["¿Es comprobante?", "Legibilidad", "Clave de rastreo", "Referencia", "Banco emisor", "Banco receptor", "Monto", "Fecha", "Hora", "Cuenta de origen", "Destino"]) {
       expect(within(mistral).getByText(label)).toBeInTheDocument();
     }
     expect(within(mistral).getByText("No se ve")).toBeInTheDocument();
@@ -295,6 +298,30 @@ describe("receipt-reader-tuning US3: the Lector tab — banco de pruebas and res
     await vi.waitFor(() =>
       expect(sent).toEqual([{ id: "r1", body: { marks: { trackingKey: "absent", referenceNumber: "right" } } }]),
     );
+  });
+
+  it("cep-bundle-match US1: the time and the sender's account are shown and can be marked like any field (D15)", async () => {
+    objectUrls();
+    arrange({ list });
+    const sent: unknown[] = [];
+    server.use(
+      handlers.benchMarks((id, body) => {
+        sent.push({ id, body });
+        return ok(detail().readings[0]);
+      }),
+    );
+    await openReader();
+    await userEvent.click(await screen.findByRole("button", { name: /Mistral Small 3\.1: leído/ }));
+    const mistral = await screen.findByRole("region", { name: "Mistral Small 3.1 · v2" });
+    expect(within(mistral).getByText("07:10:58")).toBeInTheDocument();
+    expect(within(mistral).getByText("8301")).toBeInTheDocument();
+    const hora = within(mistral).getByRole("group", { name: "Revisión de Hora" });
+    await userEvent.click(within(hora).getByRole("button", { name: "Correcto" }));
+    const cuenta = within(mistral).getByRole("group", { name: "Revisión de Cuenta de origen" });
+    await userEvent.click(within(cuenta).getByRole("button", { name: "Incorrecto" }));
+    await userEvent.click(screen.getByRole("button", { name: "Guardar revisión" }));
+    await vi.waitFor(() => expect(sent).toEqual([{ id: "r1", body: { marks: { time: "right", senderTail: "wrong" } } }]));
+    await expectNoViolations(screen.getByRole("tabpanel"));
   });
 
   it("'Leer de nuevo' appears only when a model is missing; a gone file is said in words and the readings stay", async () => {

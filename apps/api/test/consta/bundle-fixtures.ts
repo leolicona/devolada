@@ -318,8 +318,17 @@ export function noneAnswer(over: Record<string, unknown> = {}) {
   };
 }
 
-export function validAnswer(t: SyntheticTransfer, over: { previouslyValidated?: boolean | null; validationId?: string } = {}) {
+/* bug: single-cep-unreadable — `cdaChain` and `processingTime` can be
+   replaced, or left out with null: the receipt door's `valid` that stopped
+   a Nu payment on dev (2026-09-28) gave the engine no cadena it could read,
+   and whether the key was absent or its shape differed was not kept */
+export function validAnswer(
+  t: SyntheticTransfer,
+  over: { previouslyValidated?: boolean | null; validationId?: string; cdaChain?: string | null; processingTime?: string | null } = {},
+) {
   const pesos = Number(t.amount);
+  const replaced = (key: "cdaChain" | "processingTime", own: string) =>
+    over[key] === undefined ? { [key]: own } : over[key] === null ? {} : { [key]: over[key] };
   return {
     validationId: over.validationId ?? "prov-valid-1",
     status: "valid",
@@ -338,8 +347,8 @@ export function validAnswer(t: SyntheticTransfer, over: { previouslyValidated?: 
         digitalSignature: syntheticSeal(7),
         beneficiaryAccount: t.beneficiaryAccount,
         beneficiaryAccountType: "40",
-        processingTime: t.creditTime,
-        cdaChain: transferCadena(t),
+        ...replaced("processingTime", t.creditTime),
+        ...replaced("cdaChain", transferCadena(t)),
         senderAccountType: t.senderAccountType ?? "40",
         senderAccount: t.senderAccount,
         senderRfc: SYNTHETIC.senderRfc,

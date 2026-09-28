@@ -32,13 +32,19 @@ export function productReading(gated: GatedReading, reading: Reading): BenchProd
     receivingBank: gated.receiving.bank,
     amountCents: gated.amountCents,
     date: reading.date,
+    /* cep-bundle-match D15: as read — the gate judges neither */
+    time: reading.time,
+    senderTail: reading.senderTail,
     destination: reading.destination,
     sameBank: gated.receiving.sameBank,
   };
 }
 
 /* "Not shown" per field, for judging `absent` (D17). `isReceipt` and
-   `legibility` always have an answer, so `absent` is never offered there. */
+   `legibility` always have an answer, so `absent` is never offered there.
+   cep-bundle-match D15: `time` and `senderTail` are "not shown" when null,
+   like every other field — including on a reading stored before version 3
+   asked them. */
 function notShown(reading: BenchProductReading, field: BenchField): boolean {
   switch (field) {
     case "isReceipt":

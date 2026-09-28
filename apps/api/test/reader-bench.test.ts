@@ -3,7 +3,8 @@ import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { benchReadings, benchReceipts, creditEntries, extractions, payments, validations } from "../src/db/schema";
 import type { Bindings } from "../src/env";
-import { benchLimits, BENCH_TIMEOUT_MS, p90, tally } from "../src/platform/bench";
+import { benchLimits, BENCH_TIMEOUT_MS, judge, p90, tally } from "../src/platform/bench";
+import { QUESTIONS_VERSION } from "../src/consta/extraction/reader";
 import {
   benchListResponse,
   benchReading as benchReadingSchema,
@@ -90,7 +91,7 @@ describe("receipt-reader-tuning US3: upload and read (D16)", () => {
     const detail = await detailOf(res);
     expect(t.modelCalls().map((c) => c.model).sort()).toEqual([DEFAULT, OTHER].sort());
     expect(detail.readings).toHaveLength(2);
-    expect(detail.readings.every((r) => r.status === "read" && r.readerMs >= 0 && r.questionVersion === "2")).toBe(true);
+    expect(detail.readings.every((r) => r.status === "read" && r.readerMs >= 0 && r.questionVersion === QUESTIONS_VERSION)).toBe(true);
     expect(byModel(detail, DEFAULT).reading).toMatchObject({
       trackingKey: "QVSBGOD7L",
       referenceNumber: "250926",
@@ -208,7 +209,7 @@ describe("receipt-reader-tuning US3: read again, the file, the list (D16)", () =
     const before = benchReceiptDetail.parse(
       (await (await (await app()).request(`/platform/reader/bench/${id}`, { headers: cookie }, wider)).json()).data,
     );
-    expect(before.missing).toEqual([{ model: "@cf/test/third", questionVersion: "2" }]);
+    expect(before.missing).toEqual([{ model: "@cf/test/third", questionVersion: QUESTIONS_VERSION }]);
 
     const res = await (await app()).request(`/platform/reader/bench/${id}/read`, { method: "POST", headers: cookie }, wider);
     expect(res.status).toBe(200);
@@ -307,7 +308,7 @@ describe("receipt-reader-tuning US3: marks and the tally (D17)", () => {
     const body = benchTallyResponse.parse((await res.json()).data);
     expect(body.asOf).toBeGreaterThan(0);
     const def = body.rows.find((r) => r.model === DEFAULT)!;
-    expect(def).toMatchObject({ modelLabel: "Default", questionVersion: "2", readings: 2, failures: 0, judged: 3, right: 2 });
+    expect(def).toMatchObject({ modelLabel: "Default", questionVersion: QUESTIONS_VERSION, readings: 2, failures: 0, judged: 3, right: 2 });
     expect(def.wrongByField.trackingKey).toBe(1);
     expect(def.p90Ms).not.toBeNull();
     const other = body.rows.find((r) => r.model === OTHER)!;
@@ -355,5 +356,48 @@ describe("receipt-reader-tuning US3: the guard (FR-021)", () => {
       expect((await res.json()).error.code).toBe("NOT_PLATFORM_OPERATOR");
     }
     expect(await db().select().from(benchReadings)).toHaveLength(0);
+  });
+});
+
+/* cep-bundle-match US1 — the bench learns the two answers version 3 asks,
+   so they are marked on real captures before any test stub copies them
+   (D15, constitution IV). */
+describe("cep-bundle-match US1: the bench marks the time and the sender's account (D15)", () => {
+  it("both are read and can be marked, and the tally counts them per model and question version", async () => {
+    await seedBusiness();
+    const t = setup({
+      [DEFAULT]: { ...READING, hora: "07:10:58", cuentaOrigen: "Guardadito ***8301" },
+      [OTHER]: { ...READING, hora: "07:10" },
+    });
+    const d = await detailOf(await t.upload(PNG()));
+    expect(byModel(d, DEFAULT).reading).toMatchObject({ time: "07:10:58", senderTail: "8301" });
+    expect(byModel(d, OTHER).reading).toMatchObject({ time: "07:10", senderTail: null });
+
+    expect((await t.mark(byModel(d, DEFAULT).id, { time: "wrong", senderTail: "right" })).status).toBe(200);
+    expect((await t.mark(byModel(d, OTHER).id, { time: "right", senderTail: "absent" })).status).toBe(200);
+
+    const tally = benchTallyResponse.parse((await (await t.request("/platform/reader/bench/tally")).json()).data);
+    const def = tally.rows.find((r) => r.model === DEFAULT)!;
+    expect(def).toMatchObject({ questionVersion: QUESTIONS_VERSION, judged: 2, right: 1 });
+    expect(def.wrongByField).toMatchObject({ time: 1, senderTail: 0 });
+    /* no tail read where the receipt shows none: "absent", judged right */
+    const other = tally.rows.find((r) => r.model === OTHER)!;
+    expect(other).toMatchObject({ judged: 2, right: 2 });
+  });
+
+  it("a reading stored before version 3 never asked either: both read as not shown", () => {
+    const stored = {
+      isReceipt: true,
+      legibility: "full" as const,
+      trackingKey: "QVSBGOD7L",
+      referenceNumber: null,
+      senderBank: "NUBANK",
+      receivingBank: null,
+      amountCents: 51400,
+      date: "2026-09-25",
+      destination: { kind: null, digits: null },
+      sameBank: false,
+    };
+    expect(judge(stored as never, { time: "absent", senderTail: "absent" })).toEqual({ time: "right", senderTail: "right" });
   });
 });

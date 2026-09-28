@@ -46,16 +46,26 @@ match: z.object({
   receipt: z.object({ time: z.string().nullable(), tail: z.string().nullable() }),
   candidates: z.array(z.object({
     clave: z.string(),
-    creditDate: z.string(),     // YYYY-MM-DD
-    creditTime: z.string(),     // HH:MM:SS
-    amountCents: z.number().int(),
-    senderBank: z.string(),
-    senderTail: z.string(),     // last four digits
+    creditDate: z.string().nullable(),     // YYYY-MM-DD
+    creditTime: z.string().nullable(),     // HH:MM:SS
+    amountCents: z.number().int().nullable(),
+    senderBank: z.string().nullable(),
+    senderTail: z.string().nullable(),     // four digits (below)
     fate: z.enum(["chosen", "dropped", "kept"]),
-    why: z.enum(["used", "tail", "window", "too_close", "amount", "account", "unreadable"]).nullable(),
+    why: z.enum(["used", "tail", "window", "farther", "too_close", "amount", "account", "unreadable"]).nullable(),
   })),
-}).nullable(),
+}).nullable().default(null),
 ```
+
+*Amended during implementation (2026-09-27).* The candidate's facts are
+nullable: a CEP that could not be read has no record — only its clave
+(from the entry's name) and its fate; and a trail outlives the records it
+names, in which case the trail's own credit time and tail stand. `farther`
+is a candidate inside the time window that another was nearer (D6).
+`senderTail` is the four digits the receipt's tail matched when it fitted
+the account number inside a CLABE — Azteca's "***8301" in a CLABE ending
+3010 (research R8) — so the operator can hold them against the receipt;
+otherwise the account's last four. Four digits either way (FR-010).
 
 - `requireArea("payments", "read")`, tenant-scoped, as today. `match` comes
   from `match_trail` joined to `cep_records` of the same business; `null`
@@ -66,7 +76,8 @@ match: z.object({
   ("abonada 22 s después de la hora del comprobante"). It lists the
   candidates: time, amount, bank, "cuenta …8301", clave, and what happened
   ("Elegida", "Ya usada", "Otra cuenta", "Fuera de la ventana de hora",
-  "Muy cerca de otra").
+  "Muy cerca de otra"; and "Más lejos de la hora", "Otro monto", "Otro
+  destino", "No se pudo leer", or "Posible" for one no rule dropped).
 
 ## `GET /payments/unmatched-transfers` — new (US4)
 

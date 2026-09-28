@@ -61,6 +61,7 @@ import { consta, ConstaError } from "../../consta";
 import { enqueueAndDeliver } from "../../webhooks/queue";
 import { deferOf } from "../defer";
 import type { DirectPayment } from "../../direct-payments/validation";
+import { undecidedReasonOf } from "../../direct-payments/cep-match";
 import {
   publicPaymentError,
   type CreateLinkRequest,
@@ -283,9 +284,13 @@ function channelOpen(
 }
 
 /* Only the enumerated codes travel to the customer; internal ones
-   (provider down, WispHub down) read as "still validating". */
-function publicError(lastError: string | null) {
-  const parsed = publicPaymentError.safeParse(lastError);
+   (provider down, WispHub down) read as "still validating".
+   cep-bundle-match D10: an undecided payment whose every candidate was
+   already used says so — the payer may have paid already — and the
+   bundle's other senders never travel, only the word. */
+function publicError(row: Pick<typeof payments.$inferSelect, "status" | "lastError" | "matchTrail">) {
+  if (undecidedReasonOf(row) === "all_used") return "CEP_ALL_USED" as const;
+  const parsed = publicPaymentError.safeParse(row.lastError);
   return parsed.success ? parsed.data : null;
 }
 
@@ -517,7 +522,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         data: {
           directPaymentId: same.id,
           status: same.status as (typeof OPEN_STATUSES)[number],
-          error: publicError(same.lastError),
+          error: publicError(same),
         },
       },
       200,
@@ -588,7 +593,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
         data: {
           directPaymentId: kept.id,
           status: kept.status as (typeof OPEN_STATUSES)[number],
-          error: publicError(kept.lastError),
+          error: publicError(kept),
         },
       },
       200,
@@ -729,7 +734,10 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      a reference another payment of the business already holds — same
      date, bank, amount and account, from another link — cannot find this
      transfer alone. Refused before anything is created or billed; the
-     page requires the clave (FR-005, FR-007). */
+     page requires the clave (FR-005, FR-007).
+     cep-bundle-match D12 narrows the three other stops to a receipt with
+     neither a time nor the sender's digits. This one is unchanged in
+     effect: the form asks for neither, so typed data never carries them. */
   if (body.transfer && !body.transfer.trackingKey && body.transfer.referenceNumber) {
     const shared = await sharedReference(db, business, link, {
       reference: body.transfer.referenceNumber,
@@ -896,7 +904,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           data: {
             directPaymentId: own.id,
             status: "validating" as const,
-            error: publicError(own.lastError),
+            error: publicError(own),
           },
         },
         200,
@@ -994,7 +1002,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
            longer produced inline — the page reads the outcome on its
            first poll (two-eyes-receipt D4). */
         status: row.status as "validating" | "confirmed" | "partial" | "invalid" | "unapplied" | "queued_for_credit",
-        error: publicError(row.lastError),
+        error: publicError(row),
       },
     },
     201,
@@ -1143,6 +1151,9 @@ export async function readProof(c: Ctx, token: string, proofId: string) {
       referenceNumber: reading.referenceNumber,
       ask,
       destinationSeen: visibleTail(reading.destination.digits) !== null,
+      /* cep-bundle-match D15 */
+      time: reading.time ?? null,
+      senderTail: reading.senderTail ?? null,
     },
   });
 }
@@ -1160,6 +1171,10 @@ async function sharedAsk(
   reading: Awaited<ReturnType<ReturnType<typeof consta>["extract"]>>,
 ) {
   if (reading.ask || reading.trackingKey || !reading.referenceNumber) return reading.ask;
+  /* cep-bundle-match D12 (FR-015): a receipt that shows its time or the
+     sender's digits is not asked — the payer continues, and if several
+     transfers share the reference the bundle decides which is theirs */
+  if (reading.time || reading.senderTail) return null;
   if (!reading.date || !reading.senderBank || reading.amountCents == null) return reading.ask;
   const account = reading.tiedAccount ? fromBeneficiary(reading.tiedAccount) : collectStored(business);
   const shared = await sharedReference(db, business, link, {
@@ -1257,7 +1272,7 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
         payment.status === "validating"
           ? (payment.nextValidationAt?.getTime() ?? null)
           : null,
-      error: publicError(payment.lastError),
+      error: publicError(payment),
       /* D18: enough for the confirmation screen to render from the row
          instead of from whatever the browser still holds. A reload must
          not lose the question — and all of this is the payer's own data,

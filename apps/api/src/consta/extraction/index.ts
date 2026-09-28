@@ -7,7 +7,7 @@ import { gateReading, type GatedReading } from "./gate";
 export { ProofFetchError, MAX_PROOF_BYTES, loadProof, readProofFromBucket, sha256Hex } from "./proof";
 export type { LoadedProof } from "./proof";
 export { ReaderError } from "./reader";
-export { gateReading, gateReference, passesGate, receivingOf, resolveBank } from "./gate";
+export { gateReading, gateReference, gateTrackingKey, passesGate, receivingOf, resolveBank } from "./gate";
 export { checkShape, loadShapeRules, resetShapeRules, suggestBank } from "./shape";
 export type { Reading } from "./reader";
 export type { Gate, GatedReading, ReceivingBank } from "./gate";

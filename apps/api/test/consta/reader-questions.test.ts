@@ -5,7 +5,7 @@ import { paymentLinks } from "../../src/db/schema";
 import type { Bindings } from "../../src/env";
 import { consta, type ConstaRequest } from "../../src/consta";
 import { gateReading, receivingBankTie } from "../../src/consta/extraction";
-import { PROMPT, QUESTIONS_VERSION, readProof, TEXT_PROMPT } from "../../src/consta/extraction/reader";
+import { PROMPT, QUESTIONS_VERSION, readProof, senderTailOf, TEXT_PROMPT, timeOf } from "../../src/consta/extraction/reader";
 import { proofReadingResponse } from "../../src/routes/direct-payments/schema";
 import { app, fakeProofs, seedBusiness } from "../helpers";
 import { aiReturning, extractions, PNG, putProof, seedOwner, type StubbedReading } from "./helpers";
@@ -45,11 +45,12 @@ async function sha256(text: string) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/* D12: the hash of the version-2 wording. A change to either prompt
+/* D12: the hash of each version's wording. A change to either prompt
    without bumping QUESTIONS_VERSION fails here — re-pin only together
-   with a new version. */
+   with a new version. "3" is cep-bundle-match D15's. */
 const PINNED: Record<string, string> = {
   "2": "bc7d32bad24a24fa4f2e76027a5bf7363af1284891fede497d4e9f5dba12d02c",
+  "3": "c0122e38e7fe87d2c33118653948f94c628da1e1c6292916fdb9876bcfeb7f03",
 };
 
 describe("receipt-reader-tuning US2: the questions, version 2 (D12, D13)", () => {
@@ -74,8 +75,68 @@ describe("receipt-reader-tuning US2: the questions, version 2 (D12, D13)", () =>
   });
 
   it("the pin: sha256(PROMPT + newline + TEXT_PROMPT) is the hash pinned for QUESTIONS_VERSION", async () => {
-    expect(QUESTIONS_VERSION).toBe("2");
+    /* cep-bundle-match US1: version 3 carries the time with seconds and
+       the sender's account (D15) */
+    expect(QUESTIONS_VERSION).toBe("3");
     expect(await sha256(`${PROMPT}\n${TEXT_PROMPT}`)).toBe(PINNED[QUESTIONS_VERSION]);
+  });
+});
+
+/* cep-bundle-match US1 — version 3 asks two things more, so a receipt can
+   be told apart from the other transfers that share its reference: the
+   time with its seconds, and the sender's account (D15). As above, a stub
+   proves the wording, the parsing and the recording — never accuracy,
+   which only the bench measures (tasks T015). */
+describe("cep-bundle-match US1: the questions, version 3 (D15)", () => {
+  const proof = { bytes: PNG(), kind: "image" as const, mediaType: "image/png", sha256: "x" };
+
+  it("both prompts ask for the sender's account from the sender's side only, and keep the printed seconds", () => {
+    for (const prompt of [PROMPT, TEXT_PROMPT]) {
+      expect(prompt).toContain('"cuentaOrigen": "<the digits of the account the money was sent FROM');
+      expect(prompt).toContain('"Cuenta origen", "Desde", "Ordenante", "Cuenta de retiro"');
+      expect(prompt).toContain("are NEVER the\n  cuentaOrigen");
+      expect(prompt).toContain('("Guardadito ***8301" is "8301")');
+      expect(prompt).toContain("HH:MM:SS when the receipt prints seconds, otherwise HH:MM");
+      expect(prompt).toContain("Keep the seconds when the receipt prints them");
+      /* version 2's rules, word for word */
+      expect(prompt).toContain('"destino" is the account the money was sent TO');
+    }
+  });
+
+  it("the time keeps its seconds or its minute, and nothing else is a time", () => {
+    expect(timeOf("07:10:58")).toBe("07:10:58");
+    expect(timeOf("7:10")).toBe("07:10");
+    expect(timeOf("18:58")).toBe("18:58");
+    for (const bad of ["24:00", "12:60", "12:00:60", "11:47 p.m.", "", null, 1847]) expect(timeOf(bad)).toBeNull();
+  });
+
+  it("the sender's tail is the visible digits, three or more; fewer is no tail", () => {
+    expect(senderTailOf("Guardadito ***8301")).toBe("8301");
+    expect(senderTailOf("•••• 8301")).toBe("8301");
+    expect(senderTailOf(8301)).toBe("8301");
+    expect(senderTailOf("**01")).toBeNull();
+    expect(senderTailOf(null)).toBeNull();
+    expect(senderTailOf("Cuenta")).toBeNull();
+  });
+
+  it("the reading carries both, and the recorded row keeps them as read", async () => {
+    const reading = await readProof(
+      aiReturning({ ...BASE, bancoEmisor: "AZTECA", hora: "07:10:58", cuentaOrigen: "Guardadito ***8301" }),
+      proof,
+      DEFAULT,
+    );
+    expect(reading).toMatchObject({ time: "07:10:58", senderTail: "8301", questionVersion: "3" });
+    const none = await readProof(aiReturning({ ...BASE, bancoEmisor: "AZTECA", hora: "18:58" }), proof, DEFAULT);
+    expect(none).toMatchObject({ time: "18:58", senderTail: null });
+
+    const { key } = await seedOwner();
+    await putProof(PROOFS, "link-1/receipt", PNG(), "image/png");
+    const read = await consta(testEnv({ AI: aiReturning({ ...BASE, bancoEmisor: "AZTECA", hora: "07:10:58", cuentaOrigen: "***8301" }) }), db(), {
+      businessId: key,
+    }).extract({ proofKey: "link-1/receipt" });
+    expect(read).toMatchObject({ time: "07:10:58", senderTail: "8301" });
+    const [row] = await db().select().from(extractions);
+    expect(row).toMatchObject({ transferTime: "07:10:58", senderTail: "8301", questionVersion: "3" });
   });
 });
 
@@ -83,7 +144,7 @@ describe("receipt-reader-tuning US2: parsing both banks (D13)", () => {
   const proof = { bytes: PNG(), kind: "image" as const, mediaType: "image/png", sha256: "x" };
   it("bancoEmisor and bancoReceptor parse; a reading with only `banco` still gives the sender", async () => {
     const both = await readProof(aiReturning({ ...BASE, bancoEmisor: "AZTECA", bancoReceptor: "BBVA MEXICO" }), proof, DEFAULT);
-    expect(both).toMatchObject({ senderBank: "AZTECA", receivingBank: "BBVA MEXICO", questionVersion: "2", fallbackFrom: null });
+    expect(both).toMatchObject({ senderBank: "AZTECA", receivingBank: "BBVA MEXICO", questionVersion: QUESTIONS_VERSION, fallbackFrom: null });
     const old = await readProof(aiReturning({ ...BASE, banco: "BANORTE" }), proof, DEFAULT);
     expect(old).toMatchObject({ senderBank: "BANORTE", receivingBank: null });
   });
@@ -101,7 +162,7 @@ describe("receipt-reader-tuning US2: parsing both banks (D13)", () => {
     const gated = (bancoReceptor: string | null) =>
       gateReading({
         isReceipt: true, legibility: "full", trackingKey: null, senderBank: "AZTECA", receivingBank: bancoReceptor,
-        amount: 350, date: null, time: null, status: null, referenceNumber: null,
+        amount: 350, date: null, time: null, senderTail: null, status: null, referenceNumber: null,
         destination: { kind: "clabe", digits: "7897" }, raw: "", model: DEFAULT.id, questionVersion: "2", ms: 1, fallbackFrom: null,
       });
     const tie = { tied: COBRO };
@@ -152,7 +213,7 @@ describe("receipt-reader-tuning US2: recording both banks, altering neither (D14
       gateReceivingBank: "ok",
       sameBank: true,
       receivingBankTie: "match",
-      questionVersion: "2",
+      questionVersion: QUESTIONS_VERSION,
     });
   });
 

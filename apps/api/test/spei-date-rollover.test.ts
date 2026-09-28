@@ -50,3 +50,28 @@ describe("bug: spei-date-rollover — the reader reads the time", () => {
     expect(row.transferTime).toBeNull();
   });
 });
+
+/* cep-bundle-match D15 (US2): the receipt's seconds are what tell two
+   transfers of one payer apart (research R7), so a time printed with
+   seconds is kept whole — from the reader's answer to the reading record */
+describe("cep-bundle-match US2: a time with seconds is kept whole", () => {
+  it("keeps HH:MM:SS and still refuses what is not a clock", () => {
+    expect(timeOf("07:10:58")).toBe("07:10:58");
+    expect(timeOf(" 7:10:58 ")).toBe("07:10:58");
+    expect(timeOf("23:59:59")).toBe("23:59:59");
+    expect(timeOf("07:10:60")).toBeNull();
+    expect(timeOf("07:10:5")).toBeNull();
+    expect(timeOf("07:10:58 a.m.")).toBeNull();
+  });
+
+  it("the reading record stores the seconds", async () => {
+    const { key } = await seedOwner();
+    const env = engineEnv();
+    await putProof(env.PROOFS, "link-1/receipt", PNG(), "image/png");
+    await consta({ ...env, AI: aiReturning({ ...RECEIPT_2_READING, hora: "07:10:58" }) }, db(), { businessId: key }).extract({
+      proofKey: "link-1/receipt",
+    });
+    const [row] = await db().select().from(extractions);
+    expect(row.transferTime).toBe("07:10:58");
+  });
+});

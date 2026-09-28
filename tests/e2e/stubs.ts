@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
 import { linkStatusResponse, proofReadingResponse } from "../../apps/api/src/routes/direct-payments/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
+import { proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
 import {
   benchListResponse,
   benchReceiptDetail,
@@ -297,10 +298,77 @@ export const settings = settingsResponse.parse({
   reconciliationPolicy: { toleranceCents: 0, overTreatment: "flag", effectiveOverTreatment: "flag" },
 });
 
+/* cep-bundle-match (T049): a payment a search without a clave decided —
+   the proof dialog's decision line and its candidates. Synthetic claves;
+   other senders by four digits only (FR-010). */
+export const decidedProof = proofResponse.parse({
+  folio: "DV-FEED01",
+  proofMode: "receipt",
+  cep: {
+    trackingKey: "260926071199000021I",
+    amountCents: 41400,
+    date: "2026-09-26",
+    senderBank: "AZTECA",
+    senderName: null,
+    beneficiaryName: "WifiPlus SA de CV",
+  },
+  imageUrl: null,
+  match: {
+    source: "several",
+    decided: "chosen",
+    by: "both",
+    reason: null,
+    distanceS: 22,
+    receipt: { time: "07:10:58", tail: "8301" },
+    candidates: [
+      {
+        clave: "260926071199000021I",
+        creditDate: "2026-09-26",
+        creditTime: "07:11:20",
+        amountCents: 41400,
+        senderBank: "AZTECA",
+        senderTail: "8301",
+        fate: "chosen",
+        why: null,
+      },
+      {
+        clave: "260926114099000022I",
+        creditDate: "2026-09-26",
+        creditTime: "11:40:47",
+        amountCents: 41400,
+        senderBank: "AZTECA",
+        senderTail: "4171",
+        fate: "dropped",
+        why: "tail",
+      },
+      {
+        clave: "MBAN01002609260099887766",
+        creditDate: "2026-09-26",
+        creditTime: "07:12:31",
+        amountCents: 41400,
+        senderBank: "BBVA MEXICO",
+        senderTail: "8301",
+        fate: "dropped",
+        why: "farther",
+      },
+    ],
+  },
+});
+
+/* cep-bundle-match US4 (T049): the transfers no payment holds */
+export const unmatchedTransfers = unmatchedTransfersResponse.parse({
+  transfers: [
+    { clave: "260926114099000022I", creditDate: "2026-09-26", creditTime: "11:40:47", amountCents: 41400, senderBank: "AZTECA", senderTail: "4171" },
+    { clave: "MBAN01002609250011223344", creditDate: "2026-09-25", creditTime: "19:00:05", amountCents: 123456, senderBank: "BANCO NACIONAL DE MEXICO", senderTail: "2344" },
+  ],
+});
+
 export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/auth/me", businessActor);
   await apiRoute(page, "**/settings", settings);
   await apiRoute(page, "**/payments/feed*", feed);
+  await apiRoute(page, "**/payments/unmatched-transfers*", unmatchedTransfers);
+  await apiRoute(page, "**/payments/*/proof", decidedProof);
   await apiRoute(page, "**/payment-requests", cobros);
   await apiRoute(page, "**/integrations", integrationsHub);
   await apiRoute(page, "**/integrations/api", apiIntegration);

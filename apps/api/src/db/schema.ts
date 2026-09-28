@@ -396,7 +396,13 @@ export const payments = sqliteTable(
        further call until a clave arrives), `REFERENCE_SHARED` (D7 —
        another payment of the business holds the same reference, date,
        bank, amount and account) and `REJECTED_BY_BUSINESS` (D31 — the ISP
-       rejected a held payment). */
+       rejected a held payment).
+       cep-bundle-match adds two: `CEP_UNDECIDED` (D10 — the bundle, or a
+       single match found without a clave, did not say which transfer is
+       the payer's; no call and no expiry until the clave arrives, the
+       reason in `match_trail`) and `CEP_BUNDLE_PENDING` (D16 — the bundle
+       has not been read yet; the next slot downloads it again and never
+       calls the provider). */
     lastError: text("last_error"),
     confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
     /* provisional-release D1/D11 (US-D15): the moment the vote of
@@ -490,6 +496,24 @@ export const payments = sqliteTable(
        exacto / corto / excedente; reserved now so the busiest table
        migrates once. */
     reconciliationClass: text("reconciliation_class", { enum: ["exact", "short", "over"] }),
+    /* ---- cep-bundle-match: the receipt's side of a match, and how a
+       search without a clave was decided. NULL on every row that never
+       matched, and on every row born before the feature. ---- */
+    /* D6/D15: the time the receipt printed, "HH:MM" or "HH:MM:SS", as
+       read — copied from the reading of every attempt that carries one,
+       never overwritten. NULL on a typed row: the form asks for no time. */
+    transferTime: text("transfer_time"),
+    /* D7/D15: the visible digits of the account the money left, as read
+       (three or more). NULL when the receipt shows none. */
+    senderTail: text("sender_tail"),
+    /* D8/FR-013: JSON — how a clave-less search was decided: the source,
+       the decision, what decided it (or why nothing did), the receipt's
+       side and every candidate's fate. Candidates appear by clave and the
+       last four digits of their account, never by name (FR-010). */
+    matchTrail: text("match_trail"),
+    /* D6: credit − receipt time of the chosen transfer, in whole seconds,
+       whenever the receipt showed a time — what recalibrates the window */
+    matchDistanceS: integer("match_distance_s"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -844,8 +868,11 @@ export const validations = sqliteTable(
     status: text("status", { enum: ["valid", "pending", "invalid"] }),
     /* D11: which kind of `invalid`. NULL for every other verdict — and the
        column that will finally say how often `not_found` is a real payment
-       we could not see rather than a claim we should refuse. */
-    reason: text("reason", { enum: ["contradicted", "not_found"] }),
+       we could not see rather than a claim we should refuse.
+       cep-bundle-match D1: `several` — Banxico confirmed more than one
+       transfer for the search and the provider linked a bundle of their
+       CEPs (measured 2026-09-26). TS enum only; SQLite keeps text. */
+    reason: text("reason", { enum: ["contradicted", "not_found", "several"] }),
     alreadyValidated: integer("already_validated", { mode: "boolean" }).notNull().default(false),
     /* What was claimed/extracted, for audit and support */
     trackingKey: text("tracking_key"),
@@ -956,7 +983,9 @@ export const extractions = sqliteTable(
        City time, and a receipt prints the calendar day. Since bug:
        reference-search-printed-day no search reads it (Banxico answers the
        printed day only, measured 2026-09-26); it stays as the receipt's
-       own clock, to pair it with one CEP when several share a reference */
+       own clock, to pair it with one CEP when several share a reference.
+       cep-bundle-match D15: that pairing exists now, and it wants the
+       seconds a receipt prints — "HH:MM:SS" when printed, else "HH:MM" */
     transferTime: text("transfer_time"),
     receiptStatus: text("receipt_status"),
     gateTrackingKey: text("gate_tracking_key"),
@@ -1029,6 +1058,10 @@ export const extractions = sqliteTable(
        bank did not resolve. The ISP's account is never written here
        (receipt-triage D21). */
     receivingBankTie: text("receiving_bank_tie", { enum: ["match", "mismatch"] }),
+    /* cep-bundle-match D15: the visible digits of the account the money
+       left, as the reader returned them (three or more, else NULL) — the
+       receipt's side of the tail rule (D7). Never the destination's. */
+    senderTail: text("sender_tail"),
     rawOutput: text("raw_output"),
     /* Set only when the reading went on to buy a provider call. NULL on
        every refusal, which is what makes "refused, and no credit spent" a
@@ -1037,6 +1070,114 @@ export const extractions = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("extractions_business_idx").on(t.businessId, t.createdAt)],
+);
+
+/* ---- cep-bundle-match: what Banxico's CEPs said, kept under the business
+   that received the money (constitution V). Written by the engine only,
+   and never for the platform's own top-ups (D5): a record belongs to a
+   business, and a top-up keeps today's path. ---- */
+
+/* D1, D5, D16: one row per provider answer that held a bundle — the
+   "several matches" answer, a ZIP of one CEP per matching transfer
+   (measured 2026-09-26). It records what the bundle answered and whether
+   it could be read; which transfer a payment took is the payment's own
+   `tracking_key`, never a column here. */
+export const cepBundles = sqliteTable(
+  "cep_bundles",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    /* The payment whose search received it — the same meaning as
+       `validations.payment_ref`. Empty only for a direct engine call that
+       named no payment; the lifecycle always names it. */
+    paymentRef: text("payment_ref").notNull(),
+    /* The paid call that returned it */
+    validationId: text("validation_id").references(() => validations.id),
+    /* `apicep` today; `banxico_batch` and `upload` are spec 012's (FR-012) */
+    source: text("source", { enum: ["apicep", "banxico_batch", "upload"] })
+      .notNull()
+      .default("apicep"),
+    /* The search keys it answered (R14) */
+    referenceNumber: text("reference_number"),
+    transferDate: text("transfer_date"),
+    senderBank: text("sender_bank"),
+    amountCents: integer("amount_cents"),
+    beneficiary: text("beneficiary"),
+    /* D16: `pending` until read; `unreadable` after three failed
+       downloads or a file that is no bundle; `too_large` over the cap */
+    status: text("status", { enum: ["pending", "read", "unreadable", "too_large"] }).notNull(),
+    downloadAttempts: integer("download_attempts").notNull().default(0),
+    /* The provider's link, only while `pending`: cleared once the file is
+       read or given up. Never in any response schema (FR-010). */
+    url: text("url"),
+    /* JSON — the claves the entries' names carry, in entry order: the
+       bundle's membership (D3) */
+    claves: text("claves"),
+    /* JSON — `[{ entry, reason }]` for entries that could not be read
+       (FR-002) */
+    unreadable: text("unreadable"),
+    /* Of the file as downloaded; the file itself sits in `PROOFS` at
+       `r2_key`, under the bucket's 15-day rule like every receipt */
+    sha256: text("sha256"),
+    r2Key: text("r2_key"),
+    byteSize: integer("byte_size"),
+    createdAt: createdAt(),
+    readAt: integer("read_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("cep_bundles_business_payment_idx").on(t.businessId, t.paymentRef)],
+);
+
+/* D4, D5, D13, D14: one row per transfer, per business, that a search
+   without a clave returned — from a bundle or from a single `valid`. A fact
+   read from Banxico's own document, never changed after. Names, RFC/CURP
+   and the concept are not stored, by construction: the parser never
+   returns them (FR-006, FR-010). "Used" and "unmatched" are queries over
+   `payments`, never a stored fate (R6). */
+export const cepRecords = sqliteTable(
+  "cep_records",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    /* The clave de rastreo: the entry name's, equal to the one printed
+       inside (D3) — or `cepDetails.trackingKey` for a single `valid` */
+    clave: text("clave").notNull(),
+    /* The bundle it was first read from; NULL for a single `valid` */
+    bundleId: text("bundle_id").references(() => cepBundles.id),
+    /* The cadena original's positions 2, 3 and 4 (R5) */
+    operationDate: text("operation_date").notNull(),
+    /* The printed day — the CEP's fecha de abono */
+    creditDate: text("credit_date").notNull(),
+    /* "HH:MM:SS", Mexico City time, as the CEP's own footnote says */
+    creditTime: text("credit_time").notNull(),
+    /* credit_date + credit_time in America/Mexico_City, epoch ms (D4) */
+    creditedAt: integer("credited_at", { mode: "timestamp_ms" }).notNull(),
+    senderBank: text("sender_bank").notNull(),
+    /* SPEI's type: `40` CLABE, `3` debit card, `10` phone (D7) */
+    senderAccountType: text("sender_account_type").notNull(),
+    /* Whole, under the business only: the panel shows its last four, and
+       no payer ever sees it (FR-010) */
+    senderAccount: text("sender_account").notNull(),
+    receiverSpeiCode: text("receiver_spei_code").notNull(),
+    receiverAccountType: text("receiver_account_type").notNull(),
+    receiverAccount: text("receiver_account").notNull(),
+    /* The cadena's amount by string parsing (constitution II) */
+    amountCents: integer("amount_cents").notNull(),
+    certificateNumber: text("certificate_number").notNull(),
+    /* D2: base64 as printed, or `digitalSignature` — kept, never verified:
+       the certificate its number names cannot be obtained (R2) */
+    seal: text("seal").notNull(),
+    sealStatus: text("seal_status", { enum: ["not_verified"] }).notNull().default("not_verified"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    /* The second sighting of a transfer, in another bundle, adds nothing */
+    uniqueIndex("cep_records_business_clave_idx").on(t.businessId, t.clave),
+    index("cep_records_business_day_amount_idx").on(t.businessId, t.creditDate, t.amountCents),
+  ],
 );
 
 /* ---- The public collections API (automated-collections-api): the

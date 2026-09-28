@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 
 /* Operador → Lector → one bench receipt (receipt-reader-tuning D17, D19;
    contracts/reader-api.md "Detail"). The picture above one column per
-   model's reading, the nine fields in the same order in every column, and
+   model's reading, the fields in the same order in every column (eleven
+   since cep-bundle-match D15 added the time and the sender's account), and
    a three-way mark per field. Below 768 px the columns stack. Marks,
    failures and the same-bank flag are icon + text, never
    colour alone (constitution VI). The file comes through the API client
@@ -33,6 +34,10 @@ export const FIELD_LABELS: Record<BenchField, string> = {
   receivingBank: "Banco receptor",
   amount: "Monto",
   date: "Fecha",
+  /* cep-bundle-match D15: what tells a receipt apart from the other
+     transfers that share its reference */
+  time: "Hora",
+  senderTail: "Cuenta de origen",
   destination: "Destino",
 };
 
@@ -53,7 +58,11 @@ const DESTINATION_KIND = { clabe: "CLABE", card: "Tarjeta", phone: "Celular", ac
 
 export const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
-const NOT_SHOWN = <span className="text-ink-faint">No se ve</span>;
+/* cep-bundle-match T049 (measured 2026-09-27 in both themes): "No se ve"
+   is an answer, not a placeholder — the faint ink measured 2.52:1 on the
+   card once the bench's two new fields rendered it, so it takes the
+   secondary ink every other read-only answer uses */
+const NOT_SHOWN = <span className="text-ink-soft">No se ve</span>;
 
 function FieldValue({ reading, field }: { reading: NonNullable<BenchReading["reading"]>; field: BenchField }) {
   switch (field) {
@@ -74,7 +83,10 @@ function FieldValue({ reading, field }: { reading: NonNullable<BenchReading["rea
       );
     case "trackingKey":
     case "referenceNumber":
+    case "senderTail":
       return reading[field] ? <span className="break-all font-mono">{reading[field]}</span> : NOT_SHOWN;
+    case "time":
+      return reading.time ? <span className="tabular-nums">{reading.time}</span> : NOT_SHOWN;
     default:
       return reading[field] ? <>{reading[field]}</> : NOT_SHOWN;
   }

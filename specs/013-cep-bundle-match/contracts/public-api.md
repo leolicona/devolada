@@ -34,7 +34,11 @@ awaitingReason: z.enum(["all_used", "ambiguous", "no_match", "unreadable"]).null
 - Set only while the row is `validating` with `last_error =
   'CEP_UNDECIDED'`; both null on every other row, confirmed ones included.
 - Both reads (`/v1/payments`, `/v1/transfers`) carry them; the shape stays
-  one (`transferList.transfers` is `apiPayment[]`).
+  one (`transferList.transfers` is `apiPayment[]`). *Clarified during
+  implementation (2026-09-27):* `/v1/transfers` lists money received
+  (confirmed, partial, unapplied), so an undecided payment — still
+  `validating` — is read through `/v1/payments` (by id or `customerRef`);
+  on the transfers read both fields are always null.
 - Unchanged: `status` and its vocabulary, the webhook event types, the
   webhook body (`webhookEventData`), and every existing field.
 - Tenant-scoped and authenticated as today; no bundle, candidate or other

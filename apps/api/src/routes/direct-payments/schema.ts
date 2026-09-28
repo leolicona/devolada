@@ -220,6 +220,16 @@ export const publicPaymentError = z.enum([
      amount and account. From the pay route nothing was created or billed;
      either way the page requires the clave. */
   "REFERENCE_SHARED",
+  /* cep-bundle-match D10: the bundle, or a single match found without a
+     clave, did not say which transfer is the payer's. Still `validating`;
+     no call is made until the clave arrives, and the payment does not
+     expire meanwhile. (`CEP_BUNDLE_PENDING` is not public: the bundle is
+     still downloading, and the page shows its ordinary wait.) */
+  "CEP_UNDECIDED",
+  /* cep-bundle-match D10: every transfer found with these data already
+     confirmed another payment of the business — possibly the payer's own.
+     The same ask as CEP_UNDECIDED, with words that say so. */
+  "CEP_ALL_USED",
 ]);
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)
@@ -298,6 +308,13 @@ export const proofReadingResponse = z.object({
      were read — the guide's "Cuenta" item. The digits themselves, and the
      account they tied to, never reach the page. */
   destinationSeen: z.boolean().default(false),
+  /* cep-bundle-match D15 (contracts/payment-page.md): the receipt's time
+     ("HH:MM" or "HH:MM:SS") and the sender's visible digits, as read —
+     what D12's stop decided the ask with. The payer's own data, echoed to
+     the payer; the page shows neither. Defaulted so fixtures born before
+     them still parse. */
+  time: z.string().nullable().default(null),
+  senderTail: z.string().nullable().default(null),
 });
 
 export const payResponse = z.object({

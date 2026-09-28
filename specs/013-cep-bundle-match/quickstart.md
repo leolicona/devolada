@@ -103,9 +103,11 @@ version 3 stops the work there.
   both asks render the clave form with their copy, axe clean.
 - **Public API**: `pnpm --filter @devolada/api test -- test/collections-api-verify.test.ts`:
   an undecided payment of an API link reads `awaiting:
-  "payer_tracking_key"` and its `awaitingReason` on `/v1/payments` and
-  `/v1/transfers`; every other payment reads both as `null`
-  (contracts/public-api.md).
+  "payer_tracking_key"` and its `awaitingReason` on `/v1/payments` (by id
+  and by `customerRef`); `/v1/transfers` lists money received only, so it
+  carries both as `null` and never lists the undecided payment; every other
+  payment reads both as `null` (contracts/public-api.md, clarified
+  2026-09-27).
 
 ## User Story 4 — other customers' CEPs (P3)
 

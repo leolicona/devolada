@@ -56,7 +56,24 @@ import type { ReaderModel } from "./models";
    are asked for (`bancoEmisor`, `bancoReceptor`), and each is read only
    from its own side. Everything else is word for word. Whether the new
    questions read better is measured on the bench, never asserted by a
-   stub (D20) — the tally goes here with its date (tasks T039). */
+   stub (D20) — the tally goes here with its date (tasks T039).
+
+   cep-bundle-match D15 — version "3" of the questions. A reference that
+   several transfers share is told apart by what the receipt carries
+   besides it: the time the payer's bank printed (Azteca prints seconds,
+   measured 2026-09-26) and the sender's account, masked ("Guardadito
+   ***8301"). So `hora` keeps the seconds when they are printed, and a new
+   `cuentaOrigen` asks for the visible digits of the account the money
+   LEFT, read only from the sender's side. Every other word is as in
+   version 2.
+
+   Measured with version 3 on the bench (tasks T015, quickstart Step 1):
+   **not run — this implementation environment cannot reach the Workers
+   AI binding, and the captures are the creator's** (2026-09-27). An
+   Azteca capture with seconds and "***8301", one that prints HH:MM only
+   and one with no sender account must be read on the bench with version
+   3 beside version 2 before the feature ships, and the table written
+   here; registered as debt (.specify/debt/cep-bundle-match-reader-unmeasured/). */
 
 export type Reading = {
   isReceipt: boolean;
@@ -78,15 +95,22 @@ export type Reading = {
      is what tells a payer their capture was taken too early. */
   amount: number | null;
   date: string | null;
-  /* bug: spei-date-rollover — the time printed beside the date, "HH:MM"
-     on a 24-hour clock, or null. SPEI changes its operation day at 18:00
+  /* bug: spei-date-rollover — the time printed beside the date on a
+     24-hour clock, or null. SPEI changes its operation day at 18:00
      (Banxico, "Información operativa del SPEI"), and a receipt prints the
      calendar day. Since bug: reference-search-printed-day it no longer
      decides the day a search asks — Banxico answers the printed day only
-     (measured 2026-09-26) — but it is kept: it is what pairs a receipt
-     with one CEP when several share a reference. Reported like the date,
-     never judged by the gate. */
+     (measured 2026-09-26). cep-bundle-match D6/D15: it is what pairs a
+     receipt with one CEP when several share a reference, within a window
+     of the CEP's credit time — so it is "HH:MM:SS" when the receipt
+     prints seconds and "HH:MM" otherwise (the whole minute). Reported
+     like the date, never judged by the gate. */
   time: string | null;
+  /* cep-bundle-match D7/D15: the visible digits of the account the money
+     LEFT, masks removed ("Guardadito ***8301" → "8301"); null with fewer
+     than three. Compared against each CEP's sender account by its type,
+     never against who the customer is. */
+  senderTail: string | null;
   status: string | null;
   /* receipt-triage D12: as printed — text, never a number, so "038195"
      keeps its zero. Judged by the gate, not here. */
@@ -127,10 +151,11 @@ export const DEFAULT_MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
 
 /* receipt-reader-tuning D12 — the name of the questions below, recorded
    on every reading so a tally never mixes two wordings. "1" names the
-   receipt-triage questions; "2" this feature's (D13). A test pins
-   `sha256(PROMPT + "\n" + TEXT_PROMPT)` to it: changing a word without
-   bumping the version fails the suite. */
-export const QUESTIONS_VERSION = "2";
+   receipt-triage questions; "2" receipt-reader-tuning's (D13); "3"
+   cep-bundle-match's (D15): the time with its seconds and the sender's
+   account. A test pins `sha256(PROMPT + "\n" + TEXT_PROMPT)` to it:
+   changing a word without bumping the version fails the suite. */
+export const QUESTIONS_VERSION = "3";
 
 /* The vocabulary goes into the prompt rather than into a table of aliases
    we maintain: a receipt says "Nu", "BBVA" or "Banco Azteca", and mapping
@@ -144,9 +169,10 @@ const FIELDS = `{"esComprobante": <true if this really is a bank transfer receip
  "bancoReceptor": "<the bank the money was sent TO, or null if the receipt does not show it>",
  "monto": <the amount in pesos as a number, or null>,
  "fecha": "<the operation date as YYYY-MM-DD, or null>",
- "hora": "<the time of the operation as HH:MM on a 24-hour clock, or null>",
+ "hora": "<the time of the operation on a 24-hour clock: HH:MM:SS when the receipt prints seconds, otherwise HH:MM, or null>",
  "estatus": "<the value of the 'Estatus' field, or null>",
  "referenciaNumerica": "<the value of the 'Referencia' or 'Referencia numérica' field, digits only, exactly as printed including leading zeros, or null>",
+ "cuentaOrigen": "<the digits of the account the money was sent FROM that you can see, without asterisks or dots, or null>",
  "destino": {"tipo": "<clabe | tarjeta | celular | cuenta, or null>", "digitos": "<the digits of the destination account you can see, without asterisks or dots, or null>"}}`;
 
 /* receipt-reader-tuning D13: the first three rules answer the three
@@ -188,9 +214,17 @@ ${BANKS.join(", ")}
 - "destino" is the account the money was sent TO (the beneficiary's), never
   the sender's. "tipo" is what its label says it is; "digitos" are only the
   digits you can actually see, often the last three or four.
+- "cuentaOrigen" is the account the money LEFT. Read it only from the
+  sender's side: "Cuenta origen", "Desde", "Ordenante", "Cuenta de retiro".
+  Return only the digits you can actually see, without asterisks, dots or
+  the account's name ("Guardadito ***8301" is "8301"). The destination
+  account's digits ("Cuenta destino", "Beneficiario", "Para") are NEVER the
+  cuentaOrigen. If the receipt does not show the sender's account, return
+  null.
 - "hora" is the time printed beside the date, converted to a 24-hour clock
-  ("11:47 p.m." is "23:47"). Return null if the receipt prints no time; never
-  guess one.
+  ("11:47 p.m." is "23:47"). Keep the seconds when the receipt prints them
+  ("07:10:58"); never add seconds it does not print. Return null if the
+  receipt prints no time; never guess one.
 - If this is not a bank transfer receipt, set "esComprobante" to false and
   every other field to null.`;
 
@@ -282,13 +316,28 @@ const referenceOf = (v: unknown): string | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 ? String(v) : str(v);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 /* bug: spei-date-rollover — a time is "HH:MM" on a 24-hour clock or it is
-   nothing: a word, a 12-hour clock or an impossible hour is not stored */
+   nothing: a word, a 12-hour clock or an impossible hour is not stored.
+   cep-bundle-match D15: "HH:MM:SS" too — the seconds are what tell two
+   transfers of one payer apart (D6), so they are kept exactly as printed
+   and never invented for a receipt that prints the minute alone. */
 export function timeOf(v: unknown): string | null {
   const t = str(v);
-  const m = t ? /^(\d{1,2}):(\d{2})$/.exec(t) : null;
+  const m = t ? /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t) : null;
   if (!m) return null;
-  const [h, min] = [Number(m[1]), Number(m[2])];
-  return h <= 23 && min <= 59 ? `${String(h).padStart(2, "0")}:${m[2]}` : null;
+  const [h, min, s] = [Number(m[1]), Number(m[2]), m[3] == null ? 0 : Number(m[3])];
+  if (h > 23 || min > 59 || s > 59) return null;
+  return `${String(h).padStart(2, "0")}:${m[2]}${m[3] == null ? "" : `:${m[3]}`}`;
+}
+
+/* cep-bundle-match D7/D15: the sender account's visible digits, every
+   mask removed. Fewer than three digits is no tail — too few to tell two
+   accounts apart, and a misread there must fail toward asking the clave.
+   A bank that prints more than four is compared on all it printed (spec
+   Assumptions). A JSON number is taken as the text of that number. */
+export function senderTailOf(v: unknown): string | null {
+  const raw = str(typeof v === "number" && Number.isInteger(v) && v >= 0 ? String(v) : v);
+  const digits = raw ? raw.replace(/\D/g, "") : "";
+  return digits.length >= 3 ? digits : null;
 }
 
 /* receipt-reader-tuning D10 — the answer's text. `response` is the
@@ -382,6 +431,8 @@ export async function readProof(
     amount: num(parsed.monto),
     date: str(parsed.fecha),
     time: timeOf(parsed.hora),
+    /* cep-bundle-match D15 */
+    senderTail: senderTailOf(parsed.cuentaOrigen),
     status: str(parsed.estatus),
     referenceNumber: referenceOf(parsed.referenciaNumerica),
     destination: destinationOf(parsed.destino),

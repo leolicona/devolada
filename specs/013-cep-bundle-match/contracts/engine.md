@@ -53,8 +53,10 @@ bundle?: {
   candidates: CepRecord[];   // every readable record of the bundle, new or already held
   unreadable: { entry: string; reason: string }[];
 };
-/* D5/D9: the record of a single valid's CEP, when the search was clave-less */
-record?: CepRecord;
+/* D5/D9: the record of a single valid's CEP, when the search was clave-less.
+   Null when the search was clave-less but the CEP's cadena did not parse:
+   the lifecycle treats that CEP as unreadable (amended 2026-09-28) */
+record?: CepRecord | null;
 ```
 
 `CepRecord` is a row of `cep_records` in camelCase (data-model.md), with no
@@ -78,7 +80,8 @@ In the same call, after the billing row is written with `reason:
 4. Read each new entry (`cep-pdf.ts`), parse its cadena (`cadena.ts`),
    check the printed clave equals the name's; insert `cep_records`
    (ignore on conflict `(business_id, clave)`).
-5. Put the file in `PROOFS` at `bundles/<business_id>/<bundle_id>.zip`;
+5. Put the file in `PROOFS` at `bundles/<business_id>/<bundle_id>.zip`
+   (`.pdf` for a bare CEP — named by content, amended 2026-09-28);
    write `cep_bundles` with `status = "read"`, `claves`, `sha256`, and
    `url = NULL`.
 6. Return `status: "invalid", reason: "several", bundle`.
@@ -86,6 +89,13 @@ In the same call, after the billing row is written with `reason:
 A failed download writes the bundle `pending` with the URL and
 `download_attempts = 1`, and returns `bundle.status = "pending"` with no
 candidates. Over the cap: `too_large`, URL cleared, nothing stored in R2.
+
+The search keys written with the bundle are the transfer door's own; on
+the image door, the provider's reading, and where its answer carries none
+(a several answer there is unmeasured), our reading of the same receipt.
+They are also what a retried download decides with — the day, amount and
+bank the matcher needs when no reading travels (amended 2026-09-28,
+converge T054).
 
 ## `readPendingBundle(bundleId)` — the retry (D16)
 

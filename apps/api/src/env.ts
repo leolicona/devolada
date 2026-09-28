@@ -74,6 +74,15 @@ export type Bindings = {
      process (consta-api-merge D10). Exists so tests can make a mock hang
      cheaply. */
   APICEP_DEADLINE_MS?: string;
+  /* cep-bundle-match D16: the origin of the provider's storage, the only
+     place a bundle of CEPs is downloaded from (a "several matches"
+     answer links a ZIP there — measured 2026-09-26). A var in
+     wrangler.jsonc for local, dev and prod, with no URL written in code
+     (constitution VIII). Unset → no bundle is ever downloaded: the
+     payment goes undecided and the payer is asked for the clave. A link
+     on any other origin is never fetched, set or not. `.dev.vars` points
+     it at the sandbox (http://localhost:8789); tests pin it. */
+  APICEP_STORAGE_ORIGIN?: string;
   /* The receipt reader (proof-extraction D1, D5), and since
      two-eyes-receipt D1 the PDF-to-text conversion beside it: the same
      binding's `toMarkdown` turns a PDF into text, which the same model

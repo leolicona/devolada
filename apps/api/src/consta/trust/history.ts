@@ -25,7 +25,9 @@ type Row = {
   paymentRef: string | null;
   trackingKey: string | null;
   status: "valid" | "pending" | "invalid" | null;
-  reason: "contradicted" | "not_found" | null;
+  /* cep-bundle-match D1: `several` weighs here as `not_found` does — an
+     answer that is no verdict on the payer's own transfer */
+  reason: "contradicted" | "not_found" | "several" | null;
   alreadyValidated: boolean;
   createdAt: Date;
 };

@@ -278,7 +278,16 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
   /* FR-020: the next block is asked for when the operator scrolls
      TOWARD it — a sentinel below the list, not a page walked to its
      end. `rootMargin` is what makes the block land before the operator
-     reaches the bottom rather than after. */
+     reaches the bottom rather than after.
+
+     cobros-in-links SC-009: not in Por cobrar. There every result costs
+     debt reads (two provider calls each, D9), and a block loaded ahead of
+     the scroll is debt read for rows nobody scrolled to. The first block
+     ends a row or two below the fold (D4), so a 320px look-ahead reaches
+     its sentinel on arrival; with none, a search that is never scrolled
+     reads its first block's debts and nothing more — the list's own rule
+     (`useReceivables`, SC-003). */
+  const lookahead = view === "receivables" ? "0px" : "320px";
   const observer = useRef<IntersectionObserver | null>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const sentinelRef = useCallback(
@@ -293,11 +302,11 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
           if (!entries.some((entry) => entry.isIntersecting)) return;
           if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
         },
-        { rootMargin: "320px" },
+        { rootMargin: lookahead },
       );
       observer.current.observe(node);
     },
-    [hasNextPage, isFetchingNextPage, fetchNextPage],
+    [hasNextPage, isFetchingNextPage, fetchNextPage, lookahead],
   );
   useEffect(() => () => observer.current?.disconnect(), []);
 

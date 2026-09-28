@@ -10,7 +10,7 @@ import { useDisplaySettings, useSession } from "../auth/session";
 import { OfflineNote } from "./OfflineNote";
 import { PruneNotice } from "./PruneNotice";
 import { ReceivablesList } from "./ReceivablesList";
-import { rowKey } from "./seen";
+import { rememberLinksAddress, rowKey } from "./seen";
 import { useCustomerDebt } from "./useCustomerDebt";
 import { SEARCH_MIN_CHARS, useCustomers, type CustomersView } from "./useCustomers";
 import { useLinkAction, type ActionState } from "./useLinkAction";
@@ -398,6 +398,15 @@ export function LinksScreen() {
       replace: true,
     });
   }, [customers.settled, q, viewParam, navigate]);
+
+  /* cobros-in-links SC-005 (FR-009): the address is the page's memory for
+     the back button and a reload; the menu's Links entry is a plain
+     `/links`, so it reads the last address from the session instead
+     (`seen.ts`, store 4; `Shell.tsx`). Written on every change, so the
+     way back is always the page the operator left. */
+  useEffect(() => {
+    if (actor) rememberLinksAddress(actor.id, { q, view: viewParam });
+  }, [actor, q, viewParam]);
 
   /* D13 / FR-013 (T038): an address that asks for Por cobrar when the
      integration cannot answer it — the session says so, or the door

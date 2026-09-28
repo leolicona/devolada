@@ -328,8 +328,16 @@ business with WispHub" and read the customers door's `wisphub` field.
   *Por cobrar*, using the shadcn `Tabs` already copied into
   `apps/admin/src/components/ui/tabs.tsx`. Today's Cobros screen already
   uses it, so no new primitive.
-- **Size.** Compact, 40px (desktop admin). It sits beside the search box
-  and wraps under it at 360px, with no horizontal scroll (browser layer).
+- **Size.** Compact, 40px (desktop admin), and 44px under a finger, as
+  the primitive already is. No horizontal scroll at 360px (browser layer).
+- **Where it sits.** *Amended 2026-09-28* (the creator's design,
+  claude.ai/artifact/CxH8UtG97ub9BvFvYgN8B7, drawn 2026-09-27): the chip
+  comes **before** the search box — to its left on the desktop, and on
+  its own row **above** it at 360px. This said "beside the search box,
+  wrapping under it at 360px". The design puts the choice of view first,
+  because it decides what the box searches (the helper text under the box
+  changes with it). The chosen chip carries a check icon as well as its
+  tint, so the choice is never told by colour alone.
 - **Which views it holds.** Only the two views. The due-date filters are
   out of scope (spec Assumptions).
 

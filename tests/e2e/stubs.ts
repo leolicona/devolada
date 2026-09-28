@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
 import {
   customerDebtResponse,
+  customersResponse,
   linkStatusResponse,
   proofReadingResponse,
 } from "../../apps/api/src/routes/direct-payments/schema";
@@ -424,7 +425,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
    after `stubAdminApi`, so these handlers win for their patterns. */
 export async function stubPorCobrarSearch(page: Page): Promise<void> {
   await stubAdminApi(page);
-  await apiRoute(page, "**/direct-payments/customers*", {
+  /* Constitution III (cobros-in-links T047): parsed like every fixture
+     here, so the search's block cannot drift from the contract */
+  await apiRoute(page, "**/direct-payments/customers*", customersResponse.parse({
     results: [
       { ...customersBlock.results[0] },
       {
@@ -442,7 +445,7 @@ export async function stubPorCobrarSearch(page: Page): Promise<void> {
     matched: 2,
     total: null,
     wisphub: "ok",
-  });
+  }));
   await page.route("**/direct-payments/customers/debt*", (route) => {
     const usuario = new URL(route.request().url()).searchParams.get("usuario") ?? "";
     return route.fulfill(

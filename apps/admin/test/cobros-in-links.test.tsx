@@ -9,7 +9,7 @@ import { businessActor, fail, handlers, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 import { FOCUS_FLOOR_MS, resetPresenceForTests } from "../src/lib/presence";
-import { resetSeenForTests } from "../src/features/links/seen";
+import { rememberLinksAddress, resetSeenForTests } from "../src/features/links/seen";
 import { DEBT_MAX_IN_FLIGHT, resetDebtGateForTests } from "../src/features/links/useCustomerDebt";
 
 /* cobros-in-links — the Por cobrar view of Links, in the panel.
@@ -478,19 +478,20 @@ describe("cobros-in-links US2: the Cobros section folds into Links", () => {
     expect(router.state.location.search).toEqual({});
   });
 
-  it("the view survives leaving the page and pressing back (US2 scenario 3)", async () => {
-    server.use(
-      handlers.feed(() =>
-        ok(
-          feedResponse.parse({
-            payments: [],
-            nextCursor: null,
-            effectiveOverTreatment: "flag",
-            today: { count: 0, totalCents: 0, startedAtMs: Date.now() },
-          }),
-        ),
+  const emptyFeed = () =>
+    handlers.feed(() =>
+      ok(
+        feedResponse.parse({
+          payments: [],
+          nextCursor: null,
+          effectiveOverTreatment: "flag",
+          today: { count: 0, totalCents: 0, startedAtMs: Date.now() },
+        }),
       ),
     );
+
+  it("the view survives leaving the page and pressing back (US2 scenario 3)", async () => {
+    server.use(emptyFeed());
     const router = arrange({ path: "/links?view=receivables" });
     await screen.findByRole("button", { name: /janely/i });
 
@@ -500,6 +501,56 @@ describe("cobros-in-links US2: the Cobros section folds into Links", () => {
     expect(await screen.findByRole("button", { name: /janely/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /por cobrar/i })).toHaveAttribute("aria-selected", "true");
     expect(router.state.location.search).toEqual({ view: "receivables" });
+  });
+
+  /* cobros-in-links SC-005 (T048): measured 2026-09-28, the menu's Links
+     entry — a plain `/links` — landed on the customer view with an empty
+     box. Every return, from another page included, comes back to the
+     view and the text the operator left. */
+  it("a return through the menu comes back to the view and the text the operator left (SC-005)", async () => {
+    server.use(emptyFeed());
+    const router = arrange({
+      customers: () => ok(customersBlock([panelRow()], { matched: 1, total: null })),
+      debt: (url) => ok(owes(url.searchParams.get("usuario")!, 29900)),
+    });
+    await screen.findByRole("button", { name: /janely/i });
+    await userEvent.type(screen.getByLabelText(/buscar cliente/i), "jan");
+    expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: "jan", view: "receivables" }));
+
+    await userEvent.click(screen.getAllByRole("link", { name: "Pagos" })[0]);
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("link", { name: "Links" })[0]);
+
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: "jan", view: "receivables" }));
+    expect(await screen.findByText("Janely Reyes")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /por cobrar/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText(/buscar cliente/i)).toHaveValue("jan");
+  });
+
+  it("the customer view comes back the same way, and a cleared box comes back empty", async () => {
+    server.use(emptyFeed());
+    const router = arrange({ path: "/links?q=jan" });
+    await screen.findByText("Cliente de Todos");
+    await userEvent.clear(screen.getByLabelText(/buscar cliente/i));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
+
+    await userEvent.click(screen.getAllByRole("link", { name: "Pagos" })[0]);
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("link", { name: "Links" })[0]);
+    expect(await screen.findByText("Cliente de Todos")).toBeInTheDocument();
+    expect(router.state.location.search).toEqual({});
+    expect(screen.getByRole("tab", { name: /todos/i })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("one business's last address is never carried into another's Links", async () => {
+    server.use(emptyFeed());
+    rememberLinksAddress("otro-negocio", { q: "ajeno", view: "receivables" });
+    const router = arrange({ path: "/payments" });
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("link", { name: "Links" })[0]);
+    expect(await screen.findByText("Cliente de Todos")).toBeInTheDocument();
+    expect(router.state.location.search).toEqual({});
   });
 
   it("the menu has no Cobros entry, and Links is where it was (FR-014)", async () => {

@@ -22,6 +22,7 @@ import { CreditBanner, CreditChip, STEP_COPY } from "../credit/CreditChip";
 import { CreditStrip } from "../credit/CreditStrip";
 import { Avatar } from "../account/Avatar";
 import { ObservationChip } from "../integrations/ObservationChip";
+import { lastLinksAddress } from "../links/seen";
 
 /* payments-and-classes D6: the feed is Pagos — never two words for one
    thing, never one word for two (IA).
@@ -118,6 +119,12 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
           <Link
             key={to}
             to={to}
+            /* cobros-in-links SC-005 (FR-009): the way back to Links is the
+               view and the text the operator left there, not a blank page.
+               A function, so it is read when the link is built and pressed
+               — this list does not re-render when Links changes its
+               address. Every other section opens as it always did. */
+            search={to === "/links" ? () => lastLinksAddress(actor?.id) : undefined}
             activeOptions={{ exact }}
             aria-label={Icon === null ? accountName : undefined}
             className={

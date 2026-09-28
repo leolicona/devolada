@@ -2,7 +2,7 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
 
 /* links-on-demand-search D11: the page's whole memory, in the browser.
 
-   Three stores, no server state, all of them `sessionStorage` because
+   Four stores, no server state, all of them `sessionStorage` because
    that is exactly what they mean — per operator, per session, promised
    to nobody else:
 
@@ -15,8 +15,11 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
    3. **Copied / sent marks** (FR-022). No delivery state is stored
       anywhere: Devolada has no record that a link was sent, and this
       mark promises nothing to another operator or a later session.
+   4. **The last Links address** (cobros-in-links SC-005), added below:
+      the view and the text, so a return through the menu lands where
+      the operator was.
 
-   All three live in one module on purpose: US2 wires the first into
+   All of them live in one module on purpose: US2 wires the first into
    `useCustomers`, US3 the second, and US1 renders the third. One file
    they each consume beats three phases each editing the same file.
 
@@ -27,6 +30,7 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
 const RESULTS = "devolada.links.results.v1";
 const CUSTOMERS = "devolada.links.customers.v1";
 const MARKS = "devolada.links.marks.v1";
+const ADDRESS = "devolada.links.address.v1";
 
 /* FR-012: results for the same text are reused for two minutes */
 export const RESULTS_TTL_MS = 2 * 60_000;
@@ -172,10 +176,44 @@ export function writeMark(key: string, mark: Mark): void {
   write(MARKS, { ...readMarks(), [key]: mark });
 }
 
-/* Tests only: three module-level stores outlive a test's render, and a
+/* ---- 4. The last Links address (cobros-in-links FR-009, SC-005) ----
+
+   The address carries the view and the search text, so the back button
+   and a reload land where the operator was. A return through the MENU
+   does not: its Links entry is a plain `/links`, and measured 2026-09-28
+   it landed on the customer view with an empty box. SC-005 asks that
+   every return — from another page included — comes back to the view and
+   the text the operator left. So the page writes its address here and
+   the menu's entry reads it (`Shell.tsx`).
+
+   Per business: an operator who switches business in the same tab must
+   not carry one business's search into another's list. Per session, like
+   the other stores: promised to nobody else. */
+
+export type LinksAddress = { q?: string; view?: "receivables" };
+type StoredAddress = { businessId: string; q: string | null; view: "receivables" | null };
+
+export function rememberLinksAddress(businessId: string, address: LinksAddress): void {
+  const q = typeof address.q === "string" && address.q.trim() !== "" ? address.q : null;
+  write(ADDRESS, { businessId, q, view: address.view === "receivables" ? "receivables" : null } satisfies StoredAddress);
+}
+
+/* Only what `linksSearch` itself would accept (router.tsx): a text that
+   is not blank, and the one view name there is. Anything else — another
+   business, a store written by an older version — is no address. */
+export function lastLinksAddress(businessId: string | undefined): LinksAddress {
+  const stored = read<Partial<StoredAddress>>(ADDRESS);
+  if (!stored || businessId === undefined || stored.businessId !== businessId) return {};
+  return {
+    ...(typeof stored.q === "string" && stored.q.trim() !== "" ? { q: stored.q } : {}),
+    ...(stored.view === "receivables" ? { view: "receivables" as const } : {}),
+  };
+}
+
+/* Tests only: four module-level stores outlive a test's render, and a
    test starts from empty or it is not a test. */
 export function resetSeenForTests(): void {
-  for (const key of [RESULTS, CUSTOMERS, MARKS]) {
+  for (const key of [RESULTS, CUSTOMERS, MARKS, ADDRESS]) {
     try {
       sessionStorage.removeItem(key);
     } catch {

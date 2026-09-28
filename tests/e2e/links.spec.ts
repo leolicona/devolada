@@ -2,6 +2,15 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { businessActor, settings } from "./stubs";
+/* Constitution III: every fixture below is parsed by the contract it
+   stands in for, so a stub cannot serve a shape the server never sends
+   (cobros-in-links T047). By path, as stubs.ts reaches them. */
+import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
+import {
+  createLinkResponse,
+  customerDebtResponse,
+  customersResponse,
+} from "../../apps/api/src/routes/direct-payments/schema";
 
 /* links-on-demand-search US1 — the questions only a browser can answer
    (constitution IV).
@@ -100,28 +109,32 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
         const seen = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
         const size = Math.min(limit, LEO_MATCHES - seen);
         return route.fulfill(
-          envelope({
-            results: Array.from({ length: size }, (_, i) =>
-              row(seen + i + 1, {
-                name: `Leo ${seen + i + 1} Hernández`,
-                usuario: `leo${seen + i + 1}@wifiplus`,
-              }),
-            ),
-            nextCursor: seen + size < LEO_MATCHES ? btoa(`sq:${seen + limit}:1`) : null,
-            matched: LEO_MATCHES,
-            total: null,
-            wisphub: "ok",
-          }),
+          envelope(
+            customersResponse.parse({
+              results: Array.from({ length: size }, (_, i) =>
+                row(seen + i + 1, {
+                  name: `Leo ${seen + i + 1} Hernández`,
+                  usuario: `leo${seen + i + 1}@wifiplus`,
+                }),
+              ),
+              nextCursor: seen + size < LEO_MATCHES ? btoa(`sq:${seen + limit}:1`) : null,
+              matched: LEO_MATCHES,
+              total: null,
+              wisphub: "ok",
+            }),
+          ),
         );
       }
       return route.fulfill(
-        envelope({
-          results: [row(1, { name: "María Fernanda López Ruiz", usuario: "maria.lopez@wifiplus" })],
-          nextCursor: null,
-          matched: 1,
-          total: null,
-          wisphub: "ok",
-        }),
+        envelope(
+          customersResponse.parse({
+            results: [row(1, { name: "María Fernanda López Ruiz", usuario: "maria.lopez@wifiplus" })],
+            nextCursor: null,
+            matched: 1,
+            total: null,
+            wisphub: "ok",
+          }),
+        ),
       );
     }
     /* An ISP with more customers than any page could hold: every block
@@ -129,13 +142,15 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
        its end on its own" is a claim the stub can actually falsify. */
     const offset = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
     return route.fulfill(
-      envelope({
-        results: Array.from({ length: limit }, (_, i) => row(offset + i + 1)),
-        nextCursor: btoa(`wh:${offset + limit}`),
-        matched: null,
-        total: 6513,
-        wisphub: "ok",
-      }),
+      envelope(
+        customersResponse.parse({
+          results: Array.from({ length: limit }, (_, i) => row(offset + i + 1)),
+          nextCursor: btoa(`wh:${offset + limit}`),
+          matched: null,
+          total: 6513,
+          wisphub: "ok",
+        }),
+      ),
     );
   });
 
@@ -143,12 +158,14 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
     if (route.request().method() !== "POST") return route.fallback();
     await new Promise((r) => setTimeout(r, delay));
     return route.fulfill(
-      envelope({
-        token: "tok-maria",
-        url: "https://link.dev.devoladapago.com/p/tok-maria",
-        waLink: "https://wa.me/525551234567?text=hola",
-        created: true,
-      }),
+      envelope(
+        createLinkResponse.parse({
+          token: "tok-maria",
+          url: "https://link.dev.devoladapago.com/p/tok-maria",
+          waLink: "https://wa.me/525551234567?text=hola",
+          created: true,
+        }),
+      ),
     );
   });
 }
@@ -400,7 +417,7 @@ test.describe("links-on-demand-search: what the operator waits for", () => {
 async function stubPorCobrar(page: Page, opts: { delayMs?: number } = {}) {
   const delay = opts.delayMs ?? PROVIDER_MS;
   await stubLinks(page, { delayMs: delay });
-  const asked = { blocks: 0 };
+  const asked = { blocks: 0, debts: 0 };
   await page.route("**/payment-requests*", async (route) => {
     if (route.request().resourceType() === "document") return route.fallback();
     asked.blocks++;
@@ -410,32 +427,45 @@ async function stubPorCobrar(page: Page, opts: { delayMs?: number } = {}) {
     const offset = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
     await new Promise((r) => setTimeout(r, delay));
     return route.fulfill(
-      envelope({
-        results: Array.from({ length: limit }, (_, i) => {
-          const n = offset + i + 1;
-          return {
-            externalId: 9000 + n,
-            customerUsuario: `deudor${n}@wifiplus`,
-            customerName: `Deudor ${n} Ramírez Olvera`,
-            amountCents: 49900 + n,
-            invoiceDate: "2026-09-01",
-            /* Every third one overdue, so Venció and its warning ink are on screen */
-            dueDate: n % 3 === 0 ? "2026-09-11" : "2099-01-11",
-            periodCents: 49900,
-            carriedCents: n % 3 === 0 ? 29900 : 0,
-            period: "Periodo del 1/Sept./2026 al 30/Sept./2026",
-          };
+      envelope(
+        paymentRequestsResponse.parse({
+          results: Array.from({ length: limit }, (_, i) => {
+            const n = offset + i + 1;
+            return {
+              externalId: 9000 + n,
+              customerUsuario: `deudor${n}@wifiplus`,
+              customerName: `Deudor ${n} Ramírez Olvera`,
+              amountCents: 49900 + n,
+              invoiceDate: "2026-09-01",
+              /* Every third one overdue, so Venció and its warning ink are on screen */
+              dueDate: n % 3 === 0 ? "2026-09-11" : "2099-01-11",
+              periodCents: 49900,
+              carriedCents: n % 3 === 0 ? 29900 : 0,
+              period: "Periodo del 1/Sept./2026 al 30/Sept./2026",
+            };
+          }),
+          /* The stub's own cursor: the offset the next block starts at */
+          nextCursor: btoa(`inv:${offset + limit}`),
+          total: 193,
+          integration: "ok",
         }),
-        nextCursor: btoa(`inv:x:${offset + limit}`),
-        total: 193,
-        integration: "ok",
-      }),
+      ),
     );
   });
   await page.route("**/direct-payments/customers/debt*", (route) => {
+    asked.debts++;
     const usuario = new URL(route.request().url()).searchParams.get("usuario") ?? "";
     return route.fulfill(
-      envelope({ usuario, state: "owes", totalCents: 29900, invoiceCents: 0, carriedBalanceCents: 29900, invoices: [] }),
+      envelope(
+        customerDebtResponse.parse({
+          usuario,
+          state: "owes",
+          totalCents: 29900,
+          invoiceCents: 0,
+          carriedBalanceCents: 29900,
+          invoices: [],
+        }),
+      ),
     );
   });
   return asked;
@@ -462,6 +492,38 @@ test.describe("cobros-in-links US1: Por cobrar holds in a real browser", () => {
       page.getByRole("list", { name: /clientes con facturas abiertas/i }).getByRole("listitem"),
     ).not.toHaveCount(before, { timeout: 5_000 });
     expect(asked.blocks).toBe(2);
+  });
+
+  /* cobros-in-links SC-009 (T049): every result costs a debt read of two
+     provider calls, so a block loaded ahead of the scroll is debt read for
+     rows nobody reached. Like the list (SC-003), the search reads one
+     block until the operator scrolls. */
+  test("SC-009: an unscrolled Por cobrar search reads its first block's debts, and nothing past it", async ({ page }) => {
+    const asked = await stubPorCobrar(page, { delayMs: 50 });
+    let searchBlocks = 0;
+    await page.route("**/direct-payments/customers*", async (route) => {
+      if (new URL(route.request().url()).searchParams.get("q") !== null) searchBlocks++;
+      return route.fallback();
+    });
+    await page.goto(`${ADMIN}/links?view=receivables`);
+    await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+
+    /* «leo» matches 39, one screenful at a time */
+    await page.getByRole("searchbox").fill("leo");
+    await expect(page.getByText("Leo 1 Hernández")).toBeVisible();
+    const firstBlock = await page.getByRole("listitem").count();
+    expect(firstBlock).toBeLessThan(39);
+    await expect.poll(() => asked.debts).toBe(firstBlock);
+    await page.waitForTimeout(1_000);
+    expect(searchBlocks, "the search read ahead with nobody scrolling").toBe(1);
+    expect(asked.debts, "debt was read for rows past the first block").toBe(firstBlock);
+
+    /* Scrolling toward the end reads the next block, and only then its debts */
+    await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 600);
+    await expect(page.getByRole("listitem")).not.toHaveCount(firstBlock, { timeout: 5_000 });
+    expect(searchBlocks).toBe(2);
+    await expect.poll(() => asked.debts).toBeGreaterThan(firstBlock);
   });
 
   for (const size of [PHONE, TABLET, DESKTOP]) {

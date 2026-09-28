@@ -109,10 +109,12 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
     await expectTabOrder(page, [
       /^Saldo:/ /* the credit chip (prepaid-credit D7) sits under the business name, before the spine */,
       /^Pagos$/,
-      /^Cobros$/ /* the live section (cobros-live), after the rename (payments-and-classes D6) */,
+      /* cobros-in-links FR-014: Cobros is no longer a section — its view is
+         Links' Por cobrar chip, below */
       /^Links$/,
       /^Integraciones$/ /* the hub (integrations-hub D1), owner-only */,
       /Cuenta$/ /* the account hub (US-A05): the avatar (its initials precede the word) is the fifth section; the sidebar's Cerrar sesión lives inside it now */,
+      /Todos/ /* cobros-in-links D14: the chip is one tab stop — the chosen tab; the arrow keys move between Todos and Por cobrar, as tabs do */,
       /Buscar por nombre/,
       /Copiar/ /* the first customer's actions — shown whether or not their link exists yet (FR-008) */,
       /WhatsApp/ /* one word for the channel (pilot-UX review) */,

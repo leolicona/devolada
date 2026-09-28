@@ -1,4 +1,4 @@
-import { decimalToCents } from "../../wisphub/money";
+import { decimalToCents } from "../../money";
 import { wallClockMs } from "../../time/business-day";
 import type { CadenaFacts } from "./types";
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { CreateLinkResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
+import { useSession } from "../auth/session";
 import { readMarks, rowKey, writeMark, type Mark } from "./seen";
 
 /* links-on-demand-search US1: the act.
@@ -42,7 +43,9 @@ export function useLinkAction() {
      costs no second call and never a second link (FR-005, FR-009) */
   const [acted, setActed] = useState<Record<string, Acted>>({});
   const [state, setState] = useState<Record<string, ActionState>>({});
-  const [marks, setMarks] = useState<Record<string, Mark>>(() => readMarks());
+  /* The marks are this business's own (seen.ts) */
+  const businessId = useSession().data?.id ?? "";
+  const [marks, setMarks] = useState<Record<string, Mark>>(() => readMarks(businessId));
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -64,9 +67,9 @@ export function useLinkAction() {
   }, []);
 
   const mark = useCallback((key: string, value: Mark) => {
-    writeMark(key, value);
+    writeMark(businessId, key, value);
     setMarks((all) => ({ ...all, [key]: value }));
-  }, []);
+  }, [businessId]);
 
   const create = useCallback(
     async (key: string, usuario: string): Promise<Acted> => {

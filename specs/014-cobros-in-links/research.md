@@ -328,8 +328,16 @@ business with WispHub" and read the customers door's `wisphub` field.
   *Por cobrar*, using the shadcn `Tabs` already copied into
   `apps/admin/src/components/ui/tabs.tsx`. Today's Cobros screen already
   uses it, so no new primitive.
-- **Size.** Compact, 40px (desktop admin). It sits beside the search box
-  and wraps under it at 360px, with no horizontal scroll (browser layer).
+- **Size.** Compact, 40px (desktop admin), and 44px under a finger, as
+  the primitive already is. No horizontal scroll at 360px (browser layer).
+- **Where it sits.** *Amended 2026-09-28* (the creator's design,
+  claude.ai/artifact/CxH8UtG97ub9BvFvYgN8B7, drawn 2026-09-27): the chip
+  comes **before** the search box — to its left on the desktop, and on
+  its own row **above** it at 360px. This said "beside the search box,
+  wrapping under it at 360px". The design puts the choice of view first,
+  because it decides what the box searches (the helper text under the box
+  changes with it). The chosen chip carries a check icon as well as its
+  tint, so the choice is never told by colour alone.
 - **Which views it holds.** Only the two views. The due-date filters are
   out of scope (spec Assumptions).
 
@@ -431,6 +439,49 @@ Consta and the core stop importing from the adapter's folder.
 - A full adapter boundary for every existing read before 014. Rejected by
   the creator (path 1 of 3, 2026-09-27): it delays Por cobrar for weeks.
   The existing reads are the debt entry above.
+
+## D19 — How the two views walk and re-read, after the review
+
+*Added 2026-09-28*, from the adversarial review of the implementation.
+Four rules, shared by the customer view and Por cobrar
+(`apps/admin/src/features/links/blocks.ts`):
+
+- **A later block that fails is a stop, never an error.** The stop is a
+  page of its own in the cache: empty, with no cursor. Reintentar lifts
+  it and asks from the last good cursor. The page never asks again on its
+  own: not on a scroll, not on a return to the tab, not when the view
+  comes back. The reason is measured in query-core 5.101: a query that
+  errored counts as stale whatever its `staleTime`. It then re-read every
+  block it held the next time the view was enabled, mounted or back
+  online, and it asked for the failed block again on the way. In Por
+  cobrar, a key refused or an integration gone on a later block is a stop
+  too. It shows the same setup message a first block would (D7, D13).
+- **Coming back reads the first block, never more.** When Por cobrar comes
+  back after two minutes (the chip, a cleared search, the menu), it
+  re-reads its first block only. The customer view re-reads every block
+  it holds on the same return, as it always did (FR-001). The difference
+  is on purpose (FR-003). Do not "fix" it to match. On a return to the tab
+  the two views behave the same (FR-011).
+- **A re-read and a next block never overlap.** A next block that started
+  while the first was being re-read carried the old first block with it,
+  and could write it back over the fresh one. Two returns inside one slow
+  re-read sent two reads, against FR-011's "once every 30 seconds". Now
+  the re-read runs one at a time, and a next block waits for it.
+- **The list is read only while it is on screen.** A search in Por cobrar
+  shows in place of the list (FR-010). While it does, the list is neither
+  read nor re-read, and clearing the search counts as the view coming
+  back.
+
+The session's memory follows the same review. Every Links store is kept
+per business (`seen.ts`). A tab whose business changes without its own
+switcher forgets all of it, because every tab shares the session: a
+switch in another tab reaches this tab only when it reads its session
+again, and until then it files the new business's answers under the old
+one. For the same reason, the page mounts again when the business
+changes. One known limit remains, and it predates this feature: until
+that session read, every screen of the tab shows the new business's
+answers under the old one's name. Only the server naming the business
+that answered would close it.
 
 ## Measurements recorded (T001)
 

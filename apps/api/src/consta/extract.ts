@@ -30,7 +30,7 @@ import type { Classification, OurReading, ProviderReading } from "./extraction/c
 import { ConstaError, type ConstaErrorCode } from "./failure";
 import { ownerId, type ConstaReading, type Owner, type RegisteredAccount } from "./index";
 import type { Ask } from "./extraction/ask";
-import { amountToCents } from "../wisphub/money";
+import { amountToCents } from "../money";
 
 /* The reading door (proof-extraction D6): read without spending a
    credit, so a caller can show a customer what was read before money

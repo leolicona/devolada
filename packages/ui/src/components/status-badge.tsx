@@ -113,7 +113,15 @@ export type Status =
      Neither is a verdict: a business on the default is not broken, and
      the sandbox is a legitimate choice for someone rehearsing. */
   | "installationTest"
-  | "installationAssumed";
+  | "installationAssumed"
+  /* cobros-in-links D15, FR-018: what a search result in Por cobrar owes,
+     when it is not an amount. An amount owed is not a status — it renders
+     with `Amount`. These are the two answers that carry none:
+     the integration answered and the customer owes nothing, and the read
+     for that customer could not confirm it. The second is never a zero:
+     warning, so it reads as "we don't know", not as "paid up". */
+  | "debtNone"
+  | "debtUnconfirmed";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -165,6 +173,8 @@ const statuses: Record<
      right. What it must never do is pass unnoticed on a live business. */
   installationTest: { tone: "warning", icon: FlaskConical, label: "Pruebas" },
   installationAssumed: { tone: "info", icon: CircleHelp, label: "Asumida" },
+  debtNone: { tone: "success", icon: Check, label: "Sin adeudo" },
+  debtUnconfirmed: { tone: "warning", icon: CircleHelp, label: "Sin confirmar" },
 };
 
 /* The shared control-size vocabulary (feedback-vocabulary-rollout D11,

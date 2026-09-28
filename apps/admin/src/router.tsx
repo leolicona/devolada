@@ -8,7 +8,6 @@ import {
 import { Shell } from "./features/shell/Shell";
 import { LoginPage, RecoverPage, SignupPage, VerifyEmailPage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
-import { CobrosScreen } from "./features/cobros/CobrosScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
 import {
   BusinessSettingsRedirect,
@@ -84,12 +83,10 @@ const indexRoute = createRoute({
   path: "/",
   component: () => <Navigate to="/payments" />,
 });
-/* cobros-live (US-R01): the live section */
-const cobrosRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/payment-requests",
-  component: CobrosScreen,
-});
+/* cobros-in-links D12, FR-014: the Cobros section's route is GONE, with
+   no redirect — its view lives inside Links now (`/links?view=receivables`).
+   A bookmark to the old address gets the router's not-found answer. The
+   API path of the same name is a different namespace and stays (D1). */
 /* integrations-hub D1: catalog + detail (routes are English, IA rule) */
 const integrationsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -136,9 +133,17 @@ const settingsSecurityRoute = createRoute({ getParentRoute: () => settingsRoute,
    browser's back button and a reload — and what gives a search an
    address at all, so an operator can send one to a colleague. An empty
    or blank `q` is no search: it becomes undefined, so the address of a
-   plain browse carries nothing. */
-export const linksSearch = (s: Record<string, unknown>): { q?: string } => ({
+   plain browse carries nothing.
+
+   cobros-in-links D12 (FR-009): the chosen VIEW lives beside it, for the
+   same four reasons. Absent is the customer view, the default (FR-001);
+   `receivables` is Por cobrar. Any other value drops it, so a mistyped
+   address opens on the customer view rather than on nothing. English,
+   because the value is an identifier (routes are English, IA rule). */
+export type LinksView = "customers" | "receivables";
+export const linksSearch = (s: Record<string, unknown>): { q?: string; view?: "receivables" } => ({
   q: typeof s.q === "string" && s.q.trim() !== "" ? s.q : undefined,
+  view: s.view === "receivables" ? "receivables" : undefined,
 });
 const linksRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -163,7 +168,6 @@ const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     feedRoute,
-    cobrosRoute,
     linksRoute,
     integrationsRoute,
     wisphubRoute,

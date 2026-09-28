@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
+import { drizzle } from "drizzle-orm/d1";
 import { app, seedBusiness, seedConfirmedPayment, sessionCookieHeader } from "./helpers";
 import { resetProviderCaches } from "../src/wisphub/cache";
+import { wisphubFor } from "../src/wisphub/factory";
+import { readPendingInvoices } from "../src/wisphub/snapshot";
 
 /* docs/legacy/polish/presence-freshness.spec.md (US-P07), API side: the pulse
    (scenario 7), the colo cache keyed by the tenant's last registration
@@ -82,18 +85,29 @@ describe("US-P07: the pulse says when WispHub last learned about a payment (D5)"
 });
 
 describe("US-P07: the colo cache is keyed by the last registration, and readAt is honest (D6, D7)", () => {
-  it("scenario 8: two reads inside the window share one provider read and one readAt; a registration between them asks WispHub again", async () => {
+  /* cobros-in-links D3: this scenario used to read through
+     `GET /payment-requests`, the Cobros section. The Por cobrar view
+     reads live and never this cache. The cache stays — the payer's page
+     reads the list through it (`readPendingInvoices` with `display`) —
+     so the scenario now asks that reader directly. What it proves is
+     unchanged: one provider read and one readAt inside the window, and
+     a registration in between is a new key. */
+  it("scenario 8: two display reads inside the window share one provider read and one readAt; a registration between them asks WispHub again", async () => {
     const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
-    const a = await app();
+    const db = drizzle(env.DB);
+    const display = () =>
+      readPendingInvoices(db, business.id, wisphubFor({ apiKey: "wh-key-1", installation: null }, env), new Date(), {
+        display: true,
+      });
 
     mockFacturas([invoiceRow()]);
-    const first = (await (await a.request("/payment-requests", await asBusiness(), env)).json()).data;
-    expect(first.cobros).toHaveLength(1);
+    const first = await display();
+    expect(first.invoices).toHaveLength(1);
 
     /* No interceptor: this read must be the cache's. BUG-018 — the
-       label's timestamp is the provider read's, so it repeats. */
-    const second = (await (await a.request("/payment-requests", await asBusiness(), env)).json()).data;
-    expect(second.cobros).toHaveLength(1);
+       timestamp is the provider read's, so it repeats. */
+    const second = await display();
+    expect(second.invoices).toHaveLength(1);
     expect(second.readAt).toBe(first.readAt);
 
     /* provider-latency D4 by key: the sweep registered a payment in
@@ -101,8 +115,8 @@ describe("US-P07: the colo cache is keyed by the last registration, and readAt i
        carries a new key and finds nothing under it. */
     await seedConfirmedPayment(business, { paymentRegisteredAt: new Date() });
     mockFacturas([]);
-    const third = (await (await a.request("/payment-requests", await asBusiness(), env)).json()).data;
-    expect(third.cobros).toHaveLength(0);
+    const third = await display();
+    expect(third.invoices).toHaveLength(0);
     expect(third.readAt).toBeGreaterThanOrEqual(first.readAt);
   });
 
@@ -121,6 +135,7 @@ describe("US-P07: the colo cache is keyed by the last registration, and readAt i
      returning to the tab, first block only, above its 30-second floor —
      proved in `apps/admin/test/presence-freshness.test.tsx`, which is
      where the floor lives. Scenario 8 above, the invoice read's own
-     cache and its honest `readAt`, is untouched: Cobros still serves a
-     cache and still says how old it is. */
+     cache and its honest `readAt`, still holds for the payer's page,
+     which serves that cache; the Por cobrar view no longer does
+     (cobros-in-links D3). */
 });

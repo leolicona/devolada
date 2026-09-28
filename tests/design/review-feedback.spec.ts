@@ -33,9 +33,13 @@ function json(page: Page, pattern: string, data: unknown) {
 async function stubAdmin(page: Page) {
   await json(page, "**/auth/me", businessActor);
   await json(page, "**/payments/feed*", feed);
-  await json(page, "**/payment-requests", cobros);
+  /* cobros-in-links D1: the block carries `?limit=` */
+  await json(page, "**/payment-requests*", cobros);
   await json(page, "**/integrations", integrationsHub);
   await json(page, "**/direct-payments/customers*", customersBlock);
+  /* cobros-in-links D12: the open invoices are a view of Links now, and
+     every render of Links asks for the one-time cleanup's count */
+  await json(page, "**/direct-payments/prune-notice", null);
 }
 
 /* The breath is an opacity animation, so a still frame of it is a coin toss.
@@ -65,7 +69,7 @@ for (const theme of ["light", "dark"] as const) {
          the later one wins for the same pattern. */
       let release!: () => void;
       const held = new Promise<void>((r) => (release = r));
-      await page.route("**/payment-requests", async (route) => {
+      await page.route("**/payment-requests*", async (route) => {
         /* The SPA route and the API path share this name, so a document
            request must fall through or the browser is handed JSON instead of
            the app and nothing renders at all. */
@@ -74,7 +78,9 @@ for (const theme of ["light", "dark"] as const) {
         return route.fulfill(envelope(cobros));
       });
 
-      await page.goto(`${ADMIN}/payment-requests`);
+      /* cobros-in-links D12: the open invoices are Links' Por cobrar view;
+         the Cobros section's address is retired */
+      await page.goto(`${ADMIN}/links?view=receivables`);
       await expect(page.locator('[data-motion="breath"]').first()).toBeVisible({ timeout: 15_000 });
       await pinBreath(page, phase);
       await page.screenshot({ path: `${OUT}/review-feedback-pending-${phase}-1280${suffix}.png` });

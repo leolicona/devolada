@@ -3,7 +3,13 @@ import type { Page } from "@playwright/test";
    API, and the contract's zod resolves from apps/api's own node_modules
    when the file is reached this way. */
 import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps/api/src/routes/landing/schema";
-import { linkStatusResponse, proofReadingResponse } from "../../apps/api/src/routes/direct-payments/schema";
+import {
+  customerDebtResponse,
+  customersResponse,
+  linkStatusResponse,
+  proofReadingResponse,
+} from "../../apps/api/src/routes/direct-payments/schema";
+import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
 import { proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
 import {
@@ -45,6 +51,8 @@ export const businessActor = {
   timezone: "America/Mexico_City",
   timeFormat: "12h",
   integrationConfigured: true,
+  /* cobros-in-links D13: a WispHub integration answers both */
+  integrationCapabilities: ["receivables", "customerDebt"],
   speiConfigured: true,
   role: "owner",
   orgId: "org_business-1",
@@ -112,20 +120,49 @@ export const feed = {
   today: { count: 2, totalCents: 92800, startedAtMs: Date.UTC(2026, 7, 14, 6) },
 };
 
-export const cobros = {
-  cobros: [
+/* cobros-in-links D1: one block of the Por cobrar view, parsed so the
+   stub cannot carry a shape the server would never send (constitution
+   III). Janely owes one invoice with a carried balance, overdue; Abraham
+   one not yet due. */
+export const cobros = paymentRequestsResponse.parse({
+  results: [
     {
       externalId: 42,
       customerUsuario: "greyes@wifiplus",
       customerName: "Janely Guadalupe Reyes",
-      amountCents: 49900,
+      amountCents: 79800,
       invoiceDate: "2026-08-01",
       dueDate: "2026-08-11",
+      periodCents: 49900,
+      carriedCents: 29900,
+      period: "Periodo del 1/Ago./2026 al 31/Ago./2026",
+    },
+    {
+      externalId: 88,
+      customerUsuario: "aflores@wifiplus",
+      customerName: "Abraham Flores",
+      amountCents: 19900,
+      invoiceDate: "2099-01-01",
+      dueDate: "2099-01-11",
+      periodCents: 19900,
+      carriedCents: 0,
+      period: null,
     },
   ],
-  complete: true,
-  readAt: at,
-};
+  nextCursor: null,
+  total: 2,
+  integration: "ok",
+});
+
+/* cobros-in-links D9: what a search result owes — the short-payer found */
+export const customerDebt = customerDebtResponse.parse({
+  usuario: "greyes@wifiplus",
+  state: "owes",
+  totalCents: 29900,
+  invoiceCents: 0,
+  carriedBalanceCents: 29900,
+  invoices: [],
+});
 
 export const integrationsHub = {
   wisphub: {
@@ -369,7 +406,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/payments/feed*", feed);
   await apiRoute(page, "**/payments/unmatched-transfers*", unmatchedTransfers);
   await apiRoute(page, "**/payments/*/proof", decidedProof);
-  await apiRoute(page, "**/payment-requests", cobros);
+  /* cobros-in-links D1: the block carries `?limit=` (and `cursor`) */
+  await apiRoute(page, "**/payment-requests*", cobros);
+  await apiRoute(page, "**/direct-payments/customers/debt*", customerDebt);
   await apiRoute(page, "**/integrations", integrationsHub);
   await apiRoute(page, "**/integrations/api", apiIntegration);
   await apiRoute(page, "**/direct-payments/customers*", customersBlock);
@@ -378,6 +417,47 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/prune-notice", null);
   await apiRoute(page, "**/direct-payments/links", createdLink);
   await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
+}
+
+/* cobros-in-links US3: a search in Por cobrar with both of a result's
+   non-amount answers on screen — Sin adeudo and Sin confirmar — so a
+   browser can measure the two badges in both themes (D15). Registered
+   after `stubAdminApi`, so these handlers win for their patterns. */
+export async function stubPorCobrarSearch(page: Page): Promise<void> {
+  await stubAdminApi(page);
+  /* Constitution III (cobros-in-links T047): parsed like every fixture
+     here, so the search's block cannot drift from the contract */
+  await apiRoute(page, "**/direct-payments/customers*", customersResponse.parse({
+    results: [
+      { ...customersBlock.results[0] },
+      {
+        ...customersBlock.results[0],
+        usuario: "aflores@wifiplus",
+        wisphubId: 7,
+        name: "Abraham Flores",
+        phone: null,
+        hasLink: false,
+        url: null,
+        waLink: null,
+      },
+    ],
+    nextCursor: null,
+    matched: 2,
+    total: null,
+    wisphub: "ok",
+  }));
+  await page.route("**/direct-payments/customers/debt*", (route) => {
+    const usuario = new URL(route.request().url()).searchParams.get("usuario") ?? "";
+    return route.fulfill(
+      envelope(
+        customerDebtResponse.parse(
+          usuario === "greyes@wifiplus"
+            ? { usuario, state: "none", totalCents: 0, invoiceCents: 0, carriedBalanceCents: 0, invoices: [] }
+            : { usuario, state: "unconfirmed" },
+        ),
+      ),
+    );
+  });
 }
 
 /* The customer's payment page (direct-payment D9): no session, so the

@@ -483,8 +483,22 @@ test.describe("cobros-in-links US1: Por cobrar holds in a real browser", () => {
     });
     await page.goto(`${ADMIN}/links`);
     await expect(page.getByText("Cliente 1 Pérez Domínguez")).toBeVisible();
-    await page.waitForTimeout(500);
-    const beforeChip = customerReads;
+    /* The customer view's look-ahead can read another block after the
+       first shows. Wait until its reads stop, so none of them is counted
+       against Por cobrar — a fixed wait was a race on a slow runner
+       (review of 2026-09-28). */
+    let beforeChip = -1;
+    await expect
+      .poll(
+        async () => {
+          const then = customerReads;
+          await page.waitForTimeout(300);
+          beforeChip = customerReads;
+          return then === customerReads;
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
     await page.getByRole("tab", { name: /por cobrar/i }).click();
     await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();

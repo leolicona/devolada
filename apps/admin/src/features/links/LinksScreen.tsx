@@ -358,7 +358,18 @@ function CustomersResults({
   );
 }
 
+/* One mount per business (cobros-in-links, review of 2026-09-28). The
+   business can change under a mounted page — another tab switched it and
+   this tab's session caught up — and the page's own state belonged to the
+   one before: the Copiado / Enviado marks, the links this session created
+   (a Copiar on the new business's row would have handed out the old
+   business's link), the text in the box. A new key drops all of it. */
 export function LinksScreen() {
+  const businessId = useSession().data?.id;
+  return <LinksPage key={businessId} />;
+}
+
+function LinksPage() {
   const { data: actor } = useSession();
   const { timezone } = useDisplaySettings();
   /* D5 (2026-09-02): a link nobody can pay is not shared — until the
@@ -389,7 +400,11 @@ export function LinksScreen() {
   const navigate = useNavigate();
   const [search, setSearch] = useState(q ?? "");
   const customers = useCustomers(search, { view });
-  const receivables = useReceivables(view === "receivables");
+  /* The list is read, and re-read, only while it is on screen: a search
+     in Por cobrar shows in its place (FR-010, below), and a list nobody
+     can see is provider calls nobody asked for (FR-003; review of
+     2026-09-28) */
+  const receivables = useReceivables(view === "receivables" && customers.answering === "");
   const action = useLinkAction();
   /* D11: one result's debt answering with a refused key switches the
      whole page to the setup message */

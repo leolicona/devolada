@@ -4,6 +4,7 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
 import { useSession } from "../auth/session";
+import { useFirstBlockReread } from "./blocks";
 import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults, type SearchView } from "./seen";
 
 /* links-on-demand-search US1: the page asks for what it shows.
@@ -36,6 +37,21 @@ export const SEARCH_DEBOUNCE_MS = 300;
    cache holds it inside this tab; `seen.ts` holds it across a reload,
    which a query cache cannot survive (D11). Both use this figure. */
 const RESULTS_STALE_MS = 2 * 60_000;
+
+/* A block as the cache holds it: the door's answer, or the stop standing
+   in for a later block that failed (cobros-in-links, blocks.ts). Only
+   weather stops here: a refused key on any block is the whole page's
+   setup message, as it always was (bug: links-refused-key). */
+type Block = CustomersResponse & { stopped?: "failed" };
+type Blocks = InfiniteData<Block, string | null>;
+const STOP: Block = { results: [], nextCursor: null, matched: null, total: null, wisphub: "ok", stopped: "failed" };
+
+/* Reintentar lifts the stop; the page before it keeps the cursor the
+   walk resumes from */
+function withoutStops(data: Blocks): Blocks {
+  const at = data.pages.findIndex((page) => page.stopped !== undefined);
+  return at < 0 ? data : { pages: data.pages.slice(0, at), pageParams: data.pageParams.slice(0, at) };
+}
 
 /* D3/FR-020: only the browser knows what fills its own viewport. The
    server clamps it to 10..50; asking for a screenful is what keeps the
@@ -104,6 +120,7 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
     refused: false,
     failed: false,
   });
+  const { busy: rereading, start, isRunning, settled: rereadSettled } = useFirstBlockReread();
 
   const settled = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const trimmed = settled.trim();
@@ -145,9 +162,19 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
     [limit, q, view],
   );
 
-  const query = useInfiniteQuery<CustomersResponse, ApiError, InfiniteData<CustomersResponse, string | null>, typeof key, string | null>({
+  const query = useInfiniteQuery<Block, ApiError, Blocks, typeof key, string | null>({
     queryKey: key,
-    queryFn: ({ pageParam }) => api<CustomersResponse>(url(pageParam)),
+    queryFn: async ({ pageParam }) => {
+      try {
+        return await api<CustomersResponse>(url(pageParam));
+      } catch (e) {
+        /* The first block has nothing on screen to keep, and a refused
+           key is setup: both are the screen's, as they always were. Any
+           other later block that fails is a stop (blocks.ts). */
+        if (pageParam === null || (e instanceof ApiError && e.code === "WISPHUB_AUTH_FAILED")) throw e;
+        return STOP;
+      }
+    },
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     enabled,
@@ -239,7 +266,10 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
   }, [provider, rows, businessId]);
 
   const first = pages?.[0];
-  const last = pages?.[pages.length - 1];
+  /* The last block the door answered: a stop carries no count */
+  const answeredPages = pages?.filter((page) => page.stopped === undefined);
+  const last = answeredPages?.[answeredPages.length - 1];
+  const stopped = answeredPages !== undefined && pages !== undefined && answeredPages.length < pages.length;
 
   /* Store what the provider answered, never what we restored: writing
      the restored block back would give it a fresh timestamp and the
@@ -255,32 +285,36 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
      the return to the tab re-reads, above a 30-second floor, and only
      the FIRST block. A screen left open overnight must not show
      yesterday's first page; re-reading five blocks because someone
-     came back is five provider calls nobody asked for. */
+     came back is five provider calls nobody asked for.
+
+     cobros-in-links (review of 2026-09-28): one re-read at a time, never
+     while a next block is on its way, and a stop below stays a stop — a
+     return to the tab is not a scroll (blocks.ts). */
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const onVisibility = async () => {
-      if (document.visibilityState !== "visible") return;
-      const state = client.getQueryState<InfiniteData<CustomersResponse, string | null>>(key);
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || isRunning()) return;
+      const state = client.getQueryState<Blocks>(key);
       if (!state?.data || state.fetchStatus !== "idle") return;
       if (Date.now() - state.dataUpdatedAt < FOCUS_FLOOR_MS) return;
-      try {
-        const fresh = await api<CustomersResponse>(url(null));
-        client.setQueryData<InfiniteData<CustomersResponse, string | null>>(key, (old) =>
-          old ? { ...old, pages: [fresh, ...old.pages.slice(1)] } : old,
-        );
-        setBackground({ refused: false, failed: false });
-      } catch (e) {
-        /* A failed background read keeps what is on screen: the rows
-           were true when they arrived (list-states D1). A REFUSED key
-           is the exception — it is setup, and the note would promise a
-           refresh that cannot happen. */
-        const refused = e instanceof ApiError && e.code === "WISPHUB_AUTH_FAILED";
-        setBackground({ refused, failed: true });
-      }
+      start(async () => {
+        try {
+          const fresh = await api<CustomersResponse>(url(null));
+          client.setQueryData<Blocks>(key, (old) => (old ? { ...old, pages: [fresh, ...old.pages.slice(1)] } : old));
+          setBackground({ refused: false, failed: false });
+        } catch (e) {
+          /* A failed background read keeps what is on screen: the rows
+             were true when they arrived (list-states D1). A REFUSED key
+             is the exception — it is setup, and the note would promise a
+             refresh that cannot happen. */
+          const refused = e instanceof ApiError && e.code === "WISPHUB_AUTH_FAILED";
+          setBackground({ refused, failed: true });
+        }
+      });
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [client, key, url]);
+  }, [client, key, url, isRunning, start]);
 
   /* FR-020: the next block is asked for when the operator scrolls
      TOWARD it — a sentinel below the list, not a page walked to its
@@ -296,7 +330,7 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
      (`useReceivables`, SC-003). */
   const lookahead = view === "receivables" ? "0px" : "320px";
   const observer = useRef<IntersectionObserver | null>(null);
-  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = query;
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const sentinelRef = useCallback(
     (node: HTMLElement | null) => {
       observer.current?.disconnect();
@@ -307,19 +341,34 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
       observer.current = new IntersectionObserver(
         (entries) => {
           if (!entries.some((entry) => entry.isIntersecting)) return;
-          /* Never after a failed next block (cobros-in-links, review of
-             2026-09-28): each failure re-creates this observer, whose
-             first report is the still-visible sentinel, and the page asked
-             again as fast as the request failed. Reintentar asks instead. */
-          if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+          /* A failed next block is a stop with no cursor, so it is never
+             asked again from here (cobros-in-links, review of 2026-09-28:
+             it used to be, as fast as it failed). Nor while the first
+             block is being re-read (blocks.ts). */
+          if (hasNextPage && !isFetchingNextPage && !isRunning()) void fetchNextPage();
         },
         { rootMargin: lookahead },
       );
       observer.current.observe(node);
     },
-    [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage, lookahead],
+    /* `rereading` rebuilds the observer when a re-read lands, so a
+       sentinel reached meanwhile reports again */
+    [hasNextPage, isFetchingNextPage, fetchNextPage, lookahead, isRunning, rereading],
   );
   useEffect(() => () => observer.current?.disconnect(), []);
+
+  /* Reintentar for the next block: lift the stop, then ask from the last
+     good cursor — after any re-read of the first block has landed */
+  const retryNext = useCallback(() => {
+    void rereadSettled().then(() => {
+      const state = client.getQueryState<Blocks>(key);
+      if (!state?.data) return;
+      const lifted = withoutStops(state.data);
+      /* Lifting a stop reads nothing, so the first block keeps its age */
+      if (lifted !== state.data) client.setQueryData<Blocks>(key, lifted, { updatedAt: state.dataUpdatedAt });
+      void fetchNextPage();
+    });
+  }, [client, key, fetchNextPage, rereadSettled]);
 
   return {
     rows,
@@ -339,10 +388,12 @@ export function useCustomers(search: string, opts: { view?: SearchView } = {}): 
     isPending: query.isPending,
     isError: query.isError,
     error: query.error ?? (background.refused ? new ApiError("WISPHUB_AUTH_FAILED", 503) : null),
-    hasMore: Boolean(query.hasNextPage),
+    /* A stop is more to come, not the end: the count keeps saying "más
+       de N" while Reintentar waits below it (D5) */
+    hasMore: Boolean(query.hasNextPage) || stopped,
     loadingMore: query.isFetchingNextPage,
-    nextFailed: isFetchNextPageError && !isFetchingNextPage,
-    retryNext: () => void fetchNextPage(),
+    nextFailed: stopped && !isFetchingNextPage,
+    retryNext,
     sentinelRef,
     retry: () => void query.refetch(),
   };

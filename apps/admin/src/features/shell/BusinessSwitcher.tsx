@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ROLE_LABELS } from "../settings/UsersCard";
 import { setActiveBusiness, type BusinessActor } from "../auth/session";
+import { choosingBusiness } from "../links/seen";
 
 const NEW = "__new__";
 
@@ -31,6 +32,9 @@ export function BusinessSwitcher({ actor }: { actor: BusinessActor }) {
     }
     const target = actor.businesses.find((b) => b.id === value);
     if (!target || target.id === actor.id) return;
+    /* This tab's own switch: its Links memory is per business, and stays
+       (seen.ts, cobros-in-links review of 2026-09-28) */
+    choosingBusiness(target.id);
     await setActiveBusiness(target.orgId);
     queryClient.clear();
     void navigate({ to: "/" });

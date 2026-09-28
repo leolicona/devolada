@@ -31,7 +31,14 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
    Switching business clears the query cache but not the session's
    storage, so a search, a name or a mark remembered for one business was
    served in another's list — and in Por cobrar each wrong row would then
-   ask the other business's integration what that usuario owes. */
+   ask the other business's integration what that usuario owes.
+
+   Per business is not enough on its own when the switch happens in
+   ANOTHER tab: every tab shares the session, and this one learns of the
+   change only when it reads its session again. Until then it files the
+   new business's answers under the old one. So a tab that sees its
+   business change without having chosen it forgets everything
+   (`businessChanged`, called by the shell). */
 
 const RESULTS = "devolada.links.results.v1";
 const CUSTOMERS = "devolada.links.customers.v1";
@@ -218,20 +225,26 @@ export function rememberLinksAddress(businessId: string, address: LinksAddress):
 }
 
 /* Only what `linksSearch` itself would accept (router.tsx): a text that
-   is not blank, and the one view name there is. Anything else — another
-   business, a store written by an older version — is no address. */
-export function lastLinksAddress(businessId: string | undefined): LinksAddress {
-  const stored = read<Partial<StoredAddress>>(ADDRESS);
-  if (!stored || businessId === undefined || stored.businessId !== businessId) return {};
+   is not blank, and the one view name there is. The shell reads the page's
+   own address through it too, while the operator is on Links. */
+export function linksAddress(search: { q?: unknown; view?: unknown }): LinksAddress {
   return {
-    ...(typeof stored.q === "string" && stored.q.trim() !== "" ? { q: stored.q } : {}),
-    ...(stored.view === "receivables" ? { view: "receivables" as const } : {}),
+    ...(typeof search.q === "string" && search.q.trim() !== "" ? { q: search.q } : {}),
+    ...(search.view === "receivables" ? { view: "receivables" as const } : {}),
   };
 }
 
-/* Tests only: four module-level stores outlive a test's render, and a
-   test starts from empty or it is not a test. */
-export function resetSeenForTests(): void {
+/* Another business's address, or a store written by an older version, is
+   no address */
+export function lastLinksAddress(businessId: string | undefined): LinksAddress {
+  const stored = read<Partial<StoredAddress>>(ADDRESS);
+  if (!stored || businessId === undefined || stored.businessId !== businessId) return {};
+  return linksAddress(stored);
+}
+
+/* ---- The business changing under the tab ---- */
+
+function forgetEverything(): void {
   for (const key of [RESULTS, CUSTOMERS, MARKS, ADDRESS]) {
     try {
       sessionStorage.removeItem(key);
@@ -239,4 +252,27 @@ export function resetSeenForTests(): void {
       /* nothing to clear */
     }
   }
+}
+
+/* The business this tab asked to switch to (BusinessSwitcher). That
+   change is this tab's own: nothing was filed under the wrong business,
+   and every store is already per business, so nothing is forgotten. */
+let chosen: string | null = null;
+export function choosingBusiness(businessId: string): void {
+  chosen = businessId;
+}
+
+/* The shell saw this tab's business change. Unless the tab chose it,
+   another tab did, and what this tab stored since then may be the new
+   business's answers under the old one's name: forget all of it. */
+export function businessChanged(to: string): void {
+  if (chosen !== to) forgetEverything();
+  chosen = null;
+}
+
+/* Tests only: four module-level stores outlive a test's render, and a
+   test starts from empty or it is not a test. */
+export function resetSeenForTests(): void {
+  forgetEverything();
+  chosen = null;
 }

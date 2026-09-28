@@ -410,3 +410,32 @@ T016  MSW fixtures                                 apps/admin/test/msw.ts
 - [X] T048 [US2] Make a return to Links from another page — the menu's Links entry after Pagos, not only the back button or a reload — land on the view and the settled search text the operator left, e.g. by keeping the last Links address (`view`, `q`) in the session memory in `apps/admin/src/features/links/seen.ts` and having the Links entry in `apps/admin/src/features/shell/Shell.tsx` carry it; add a component case in `apps/admin/test/cobros-in-links.test.tsx` (Por cobrar with «jan» → Pagos → Links keeps both; measured 2026-09-28: today it lands on `/links` with neither) per FR-009, SC-005, US2/AC3, US3/AC9 (partial)
 - [X] T049 [US3] Give Por cobrar's search the list's zero look-ahead — a `rootMargin` option on the sentinel in `apps/admin/src/features/links/useCustomers.ts`, `"0px"` when `view` is `receivables`, the customer view keeping its 320px — so a search whose results are never scrolled past the first block loads no second block and reads no debt beyond it; add a browser check in `tests/e2e/links.spec.ts` that counts `/direct-payments/customers/debt` requests for an unscrolled Por cobrar search per SC-009 (partial)
 - [X] T050 Record in `specs/014-cobros-in-links/research.md` D14 where the chip actually sits: before the search box, and above it at 360px, as the creator's design (claude.ai/artifact/CxH8UtG97ub9BvFvYgN8B7, 2026-09-27) draws it — so the decision and the code say the same thing per plan: D14 / T015 (contradicts)
+
+---
+
+## Phase 9: Review fixes (2026-09-28)
+
+Two rounds of adversarial review of the implementation. The first ran five
+reviewers with two skeptics each and a completeness critic; the second
+checked every fix of the first. Only confirmed findings are listed. Each
+fix has a test that fails without it, checked by removing the fix.
+
+**Round 1** (commit `ebc4d4d`)
+
+- [X] T051 [US3] The debt door answers `unconfirmed`, never a 500, for an answer it cannot read: a null invoice, a body of the wrong shape, or a balance the money parser refuses (`apps/api/src/wisphub/receivables.ts`, `client.ts`) per the contract.
+- [X] T052 [US1] The receivables cursor refuses a day the month does not have and a window wider than 181 days (`receivables.ts`) per D2.
+- [X] T053 Tenant isolation: two businesses with different keys, each interceptor answering only its own (`apps/api/test/cobros-in-links.test.ts`) per constitution V.
+- [X] T054 [US2] The menu's Links entry keeps `aria-current` on Links while the operator types or changes view (`Shell.tsx`).
+- [X] T055 [US4] A later block that could not be read no longer ends the walk for good: Reintentar asks again from the last good cursor, and a failed next block is never asked again on its own. It used to loop (`useReceivables.ts`, `useCustomers.ts`, `ReceivablesList.tsx`, `LinksScreen.tsx`).
+- [X] T056 [US1] Por cobrar is not read while Todos is chosen. Coming back after two minutes re-reads the first block only (`useReceivables.ts`) per FR-003, FR-011.
+- [X] T057 The session's memory is per business: search results, names seen, marks and the last address (`seen.ts`).
+
+**Round 2**
+
+- [X] T058 [US4] A later block that fails is a stop in the cache, never an error on the query, in both views (`blocks.ts`, `useReceivables.ts`, `useCustomers.ts`). An error made the query stale whatever its settings: coming back re-read every block and asked for the failed one again. A return to the tab re-reads the first block and leaves the stop to Reintentar. In Por cobrar, a later block refused for setup shows the setup message (D7, D13) per D19.
+- [X] T059 [US1] A re-read of the first block and a next block never overlap, and two returns inside one slow re-read send one read, in both views (`blocks.ts`) per FR-011, D19.
+- [X] T060 [US3] The Por cobrar list is read only while it is on screen: not behind a search, and clearing the search counts as coming back (`LinksScreen.tsx`) per FR-003, FR-010, D19.
+- [X] T061 [US2] While the operator is on Links, the menu's Links entry carries the page's own address, not the one before the last keystroke (`Shell.tsx`, `seen.ts`) per SC-005.
+- [X] T062 [US1] A business that changes under an open page: the page mounts again, and the tab forgets its Links memory unless its own switcher made the change (`LinksScreen.tsx`, `Shell.tsx`, `BusinessSwitcher.tsx`, `seen.ts`) per D19.
+- [X] T063 Test gaps: the crafted-cursor limit and offset cases get a window the door accepts, plus a control; tenant isolation asks from both businesses; the null invoice is told apart by its log code; marks per business; the customer view's Reintentar; the `window.open` spies are restored in `finally`; the SC-003 baseline waits for the customer view to settle (`apps/api/test/cobros-in-links.test.ts`, `apps/admin/test/cobros-in-links.test.tsx`, `tests/e2e/links.spec.ts`).
+- [X] T064 Record the rules above in `research.md` D19, so nobody "fixes" Por cobrar's first-block-only return back to the customer view's.

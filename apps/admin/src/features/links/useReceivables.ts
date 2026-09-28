@@ -4,6 +4,7 @@ import type { CobroRow, PaymentRequestsResponse } from "@devolada/api/payment-re
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
 import { useSession } from "../auth/session";
+import { useFirstBlockReread, type Stop } from "./blocks";
 import { blockSize } from "./useCustomers";
 
 /* cobros-in-links US1: the Por cobrar view of Links — the business's
@@ -19,20 +20,39 @@ import { blockSize } from "./useCustomers";
 /* The same two minutes the customer view keeps an answer for
    (links-on-demand-search FR-012): switching to Todos and back inside
    them asks nothing; past them, the view re-reads its FIRST block. */
-const RESULTS_STALE_MS = 2 * 60_000;
+export const RESULTS_STALE_MS = 2 * 60_000;
 
-type Blocks = InfiniteData<PaymentRequestsResponse, string | null>;
+/* A block as the cache holds it: the door's answer, or the stop standing
+   in for a later block that failed (blocks.ts) */
+type Block = PaymentRequestsResponse & { stopped?: Stop };
+type Blocks = InfiniteData<Block, string | null>;
 
-/* A later block the integration could not read ends the walk
-   (`nextCursor: null`, D7). Kept as the last page it would end it for
-   good: the note would stay after the integration came back, and the
-   rest of the list would be out of reach (review of 2026-09-28). So a
-   re-read that succeeds, and a Reintentar, drop it and every page after
-   it — the page before it keeps the cursor the walk resumes from. */
-function withoutUnreadableTail(data: Blocks): Blocks {
-  const at = data.pages.findIndex((page, i) => i > 0 && page.integration === "unavailable");
+/* D7, D13: a later block refused for SETUP says so the way a first block
+   would — the Integraciones message for a refused key, the customer view
+   for an integration that is gone — never "could not read" */
+const SETUP_STATUS = { INTEGRATION_AUTH_FAILED: 503, NOT_CONFIGURED: 409 } as const;
+type SetupStop = keyof typeof SETUP_STATUS;
+const isSetup = (code: unknown): code is SetupStop =>
+  typeof code === "string" && Object.prototype.hasOwnProperty.call(SETUP_STATUS, code);
+
+const stop = (stopped: Stop): Block => ({ results: [], nextCursor: null, total: null, integration: "ok", stopped });
+
+/* Where the walk stopped: a later block the integration could not read
+   (D7), or one that failed on the way */
+const isStop = (page: Block, i: number) => i > 0 && (page.integration === "unavailable" || page.stopped !== undefined);
+
+/* Reintentar lifts the stop and every page after it; the page before it
+   keeps the cursor the walk resumes from */
+function withoutStops(data: Blocks): Blocks {
+  const at = data.pages.findIndex(isStop);
   return at < 0 ? data : { pages: data.pages.slice(0, at), pageParams: data.pageParams.slice(0, at) };
 }
+
+/* The integration just answered, so no stop below still means "away" or
+   "refused": the note and the setup message go. Each stays a stop all the
+   same — the page never reads the next block on its own (FR-003), and a
+   return to the tab is not a scroll. Reintentar lifts it. */
+const answered = (page: Block, i: number): Block => (isStop(page, i) ? stop("failed") : page);
 
 /* One customer and the open invoices of theirs that have loaded — the
    spec's "Por cobrar row". The total and count cover what is on screen
@@ -127,6 +147,8 @@ export type ReceivablesView = {
   retry: () => void;
 };
 
+/* `enabled` is "the list is on screen": Por cobrar chosen, and no search
+   showing in its place (FR-010). Hidden, it is neither read nor re-read. */
 export function useReceivables(enabled: boolean): ReceivablesView {
   const client = useQueryClient();
   /* The view is in the key's name: this read only ever serves Por cobrar
@@ -142,6 +164,7 @@ export function useReceivables(enabled: boolean): ReceivablesView {
     refused: false,
     failed: false,
   });
+  const { busy: rereading, start, isRunning, settled } = useFirstBlockReread();
 
   const url = useCallback(
     (cursor: string | null) => {
@@ -152,19 +175,29 @@ export function useReceivables(enabled: boolean): ReceivablesView {
     [limit],
   );
 
-  const query = useInfiniteQuery<PaymentRequestsResponse, ApiError, Blocks, typeof key, string | null>({
+  const query = useInfiniteQuery<Block, ApiError, Blocks, typeof key, string | null>({
     queryKey: key,
-    queryFn: ({ pageParam }) => api<PaymentRequestsResponse>(url(pageParam)),
+    queryFn: async ({ pageParam }) => {
+      try {
+        return await api<PaymentRequestsResponse>(url(pageParam));
+      } catch (e) {
+        /* The first block has nothing on screen to keep: its failure is
+           the screen's (D7). A later one is a stop (blocks.ts). */
+        if (pageParam === null) throw e;
+        return stop(e instanceof ApiError && isSetup(e.code) ? e.code : "failed");
+      }
+    },
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
     enabled,
-    /* Never stale to TanStack. A stale infinite query refetches EVERY
+    /* Never stale to TanStack. A stale infinite query reads again EVERY
        page it holds when it mounts or is enabled again, so coming back
        to Por cobrar after two minutes with six blocks loaded read six
        blocks nobody scrolled toward (review of 2026-09-28, FR-003).
        Freshness is by hand instead, and always first block only:
        `rereadFirst` below, on return to the tab and when the view comes
-       back. */
+       back. A later block that fails is a stop, not an error, because an
+       error would make the query stale all the same (blocks.ts). */
     staleTime: Infinity,
     retry: false,
     refetchOnWindowFocus: false,
@@ -174,55 +207,71 @@ export function useReceivables(enabled: boolean): ReceivablesView {
   const invoices = useMemo(() => pages?.flatMap((page) => page.results) ?? [], [pages]);
   const firstUnavailable = pages?.[0]?.integration === "unavailable";
   const laterUnavailable = (pages?.slice(1) ?? []).some((page) => page.integration === "unavailable");
+  const stopped = (pages ?? []).some(isStop);
+  const setupStop = pages?.find((page) => isSetup(page.stopped))?.stopped as SetupStop | undefined;
 
   /* FR-011: a screen left open overnight must not show yesterday's first
      block; re-reading every block because someone came back is provider
      calls nobody asked for. One re-read, of the FIRST block only, above a
-     floor, for both ways of coming back. */
+     floor, for both ways of coming back — one at a time, and never while
+     a next block is on its way (blocks.ts). */
   const rereadFirst = useCallback(
-    async (floorMs: number) => {
+    (floorMs: number) => {
+      if (isRunning()) return;
       const state = client.getQueryState<Blocks>(key);
       if (!state?.data || state.fetchStatus !== "idle") return;
       if (Date.now() - state.dataUpdatedAt < floorMs) return;
-      try {
-        const fresh = await api<PaymentRequestsResponse>(url(null));
-        /* An unreadable re-read with rows already on screen keeps them:
-           the rows were true when they arrived (list-states D1) */
-        if (fresh.integration === "unavailable" && (state.data.pages[0]?.results.length ?? 0) > 0) {
-          setBackground({ refused: false, failed: true });
-          return;
+      const onScreen = state.data.pages[0]?.results.length ?? 0;
+      start(async () => {
+        try {
+          const fresh = await api<PaymentRequestsResponse>(url(null));
+          /* An unreadable re-read with rows already on screen keeps them:
+             the rows were true when they arrived (list-states D1) */
+          if (fresh.integration === "unavailable" && onScreen > 0) {
+            setBackground({ refused: false, failed: true });
+            return;
+          }
+          client.setQueryData<Blocks>(key, (old) => {
+            if (!old) return old;
+            const next = [fresh, ...old.pages.slice(1)];
+            return { ...old, pages: fresh.integration === "ok" ? next.map(answered) : next };
+          });
+          setBackground({ refused: false, failed: false });
+        } catch (e) {
+          const refused = e instanceof ApiError && e.code === "INTEGRATION_AUTH_FAILED";
+          setBackground({ refused, failed: true });
         }
-        client.setQueryData<Blocks>(key, (old) =>
-          old ? withoutUnreadableTail({ ...old, pages: [fresh, ...old.pages.slice(1)] }) : old,
-        );
-        setBackground({ refused: false, failed: false });
-      } catch (e) {
-        const refused = e instanceof ApiError && e.code === "INTEGRATION_AUTH_FAILED";
-        setBackground({ refused, failed: true });
-      }
+      });
     },
-    [client, key, url],
+    [client, key, url, isRunning, start],
   );
 
   /* The return to the tab, above the customer view's 30-second floor —
-     and only while Por cobrar is the view on screen. With Todos chosen
-     the list is not shown, so it is not read (review of 2026-09-28). */
+     and only while the list is on screen. With Todos chosen, or a search
+     showing in its place, the list is not shown, so it is not read
+     (review of 2026-09-28). */
   useEffect(() => {
     if (!enabled || typeof document === "undefined") return;
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void rereadFirst(FOCUS_FLOOR_MS);
+      if (document.visibilityState === "visible") rereadFirst(FOCUS_FLOOR_MS);
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [enabled, rereadFirst]);
 
-  /* The view coming back — the chip pressed again, or Links reached
-     again while the rows are still in memory — past the two minutes the
-     customer view keeps an answer: the first block again, the rest as
-     they were. */
+  /* The list coming back on screen — the chip pressed again, a search
+     cleared, or Links reached again while the rows are still in memory —
+     past the two minutes the customer view keeps an answer: the first
+     block again, the rest as they were. The customer view reads every
+     block it holds on the same return; this one does not, on purpose
+     (FR-003, cobros-in-links D19). A setup stop has no age
+     to wait out: coming back is how the operator asks whether the fix
+     took. */
   useEffect(() => {
-    if (enabled) void rereadFirst(RESULTS_STALE_MS);
-  }, [enabled, rereadFirst]);
+    if (!enabled) return;
+    const held = client.getQueryData<Blocks>(key)?.pages ?? [];
+    rereadFirst(held.some((page) => isSetup(page.stopped)) ? 0 : RESULTS_STALE_MS);
+  }, [enabled, rereadFirst, client, key]);
 
   /* The sentinel, as the customer view hangs it (FR-003) — with no
      margin. SC-003 asks that opening the view and not scrolling reads
@@ -230,9 +279,12 @@ export function useReceivables(enabled: boolean): ReceivablesView {
      (D4), so it ends a row or two below the fold; the customer view's
      320px look-ahead would reach that sentinel on arrival and read a
      second block nobody scrolled toward. Measured against the rendered
-     rows in tests/e2e/links.spec.ts. */
+     rows in tests/e2e/links.spec.ts.
+
+     A stop has no cursor, so there is no sentinel below it: a failed
+     block is never asked again on its own (review of 2026-09-28). */
   const observer = useRef<IntersectionObserver | null>(null);
-  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = query;
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const sentinelRef = useCallback(
     (node: HTMLElement | null) => {
       observer.current?.disconnect();
@@ -240,27 +292,31 @@ export function useReceivables(enabled: boolean): ReceivablesView {
       observer.current = new IntersectionObserver(
         (entries) => {
           if (!entries.some((entry) => entry.isIntersecting)) return;
-          /* Never after a failed next block: every failure re-creates
-             this observer, whose first report is the still-visible
-             sentinel, and the page would ask again as fast as the request
-             fails (review of 2026-09-28). Reintentar asks instead. */
-          if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+          if (hasNextPage && !isFetchingNextPage && !isRunning()) void fetchNextPage();
         },
         { rootMargin: "0px" },
       );
       observer.current.observe(node);
     },
-    [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage],
+    /* `rereading` rebuilds the observer when a re-read lands, so a
+       sentinel reached meanwhile reports again */
+    [hasNextPage, isFetchingNextPage, fetchNextPage, isRunning, rereading],
   );
   useEffect(() => () => observer.current?.disconnect(), []);
 
-  /* Reintentar for the next block: drop the block the integration could
-     not read, if that is why the walk stopped, and ask from the last
-     good cursor */
+  /* Reintentar for the next block: lift the stop, then ask from the last
+     good cursor — after any re-read of the first block has landed */
   const retryNext = useCallback(() => {
-    client.setQueryData<Blocks>(key, (old) => (old ? withoutUnreadableTail(old) : old));
-    void fetchNextPage();
-  }, [client, key, fetchNextPage]);
+    void settled().then(() => {
+      const state = client.getQueryState<Blocks>(key);
+      if (!state?.data) return;
+      const lifted = withoutStops(state.data);
+      /* Lifting a stop reads nothing, so the first block keeps its age —
+         the floors in `rereadFirst` measure it */
+      if (lifted !== state.data) client.setQueryData<Blocks>(key, lifted, { updatedAt: state.dataUpdatedAt });
+      void fetchNextPage();
+    });
+  }, [client, key, fetchNextPage, settled]);
 
   const hasRows = invoices.length > 0;
   return {
@@ -268,11 +324,17 @@ export function useReceivables(enabled: boolean): ReceivablesView {
     total: pages?.[0]?.total ?? null,
     unreadable: Boolean(pages) && firstUnavailable && !hasRows,
     offline: hasRows && (laterUnavailable || firstUnavailable || (background.failed && !background.refused)),
-    nextFailed: hasRows && !isFetchingNextPage && (laterUnavailable || isFetchNextPageError),
+    nextFailed: stopped && setupStop === undefined && !isFetchingNextPage,
     retryNext,
-    nobody: Boolean(pages) && !firstUnavailable && !laterUnavailable && !hasRows && !query.hasNextPage,
+    nobody: Boolean(pages) && !firstUnavailable && !stopped && !hasRows && !query.hasNextPage,
     isPending: enabled && query.isPending,
-    error: query.error ?? (background.refused ? new ApiError("INTEGRATION_AUTH_FAILED", 503) : null),
+    error:
+      query.error ??
+      (setupStop !== undefined
+        ? new ApiError(setupStop, SETUP_STATUS[setupStop])
+        : background.refused
+          ? new ApiError("INTEGRATION_AUTH_FAILED", 503)
+          : null),
     hasMore: Boolean(query.hasNextPage),
     loadingMore: query.isFetchingNextPage,
     sentinelRef,

@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
@@ -326,9 +326,12 @@ describe("cobros-in-links US1: GET /payment-requests answers one live block (D1�
       b64("wh:20"),
       /* desde after hasta */
       b64("inv:2026-09-01:2026-03-01:0:20"),
-      /* a block larger than one call of the band */
-      b64("inv:2026-03-01:2026-09-01:0:5000"),
-      b64("inv:2026-03-01:2026-09-01:-20:20"),
+      /* a block larger than one call of the band, and an offset before the
+         start — inside a window the door accepts (180 days, the control
+         below), so it is the limit and the offset that refuse them */
+      b64("inv:2026-03-05:2026-09-01:0:5000"),
+      b64("inv:2026-03-05:2026-09-01:0:9"),
+      b64("inv:2026-03-05:2026-09-01:-20:20"),
       "%%%not-base64%%%",
       /* Review of 2026-09-28: a day the month does not have — Date.parse
          alone accepts it — and a window wider than the 181 days this
@@ -341,6 +344,14 @@ describe("cobros-in-links US1: GET /payment-requests answers one live block (D1�
       expect(res.status, cursor).toBe(400);
       expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
     }
+
+    /* The control: the same window with a limit and an offset this
+       adapter writes is a block, so the refusals above are theirs */
+    const calls: string[] = [];
+    mockInvoices([measuredRow()], { calls });
+    const control = await getBlock(`?cursor=${b64("inv:2026-03-05:2026-09-01:20:20")}`);
+    expect(control.status).toBe(200);
+    expect(params(calls[0]).get("offset")).toBe("20");
   });
 
   it("a limit that is not an integer answers VALIDATION_ERROR in the project envelope", async () => {
@@ -663,9 +674,19 @@ describe("cobros-in-links US3: GET /direct-payments/customers/debt — what a re
        working. */
     it("an answer of the wrong shape: a null invoice, a record body with no results, a balance the parser refuses", async () => {
       await seedBusiness({ wisphubApiKey: "wh-key-1" });
-      mockRecord(customerRecord());
-      mockBalance(6, [null]);
-      await expectUnconfirmed();
+      /* The null invoice is refused by the adapter, as an outage it can
+         name. The door's catch-all would turn the crash into the same
+         Sin confirmar, so only the logged code tells the two apart. */
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        mockRecord(customerRecord());
+        mockBalance(6, [null]);
+        await expectUnconfirmed();
+        expect(logged).toHaveBeenCalledWith("wisphub debt read failed:", "WISPHUB_UNAVAILABLE", expect.any(String));
+        expect(logged).not.toHaveBeenCalledWith("wisphub debt read failed:", "UNREADABLE", expect.anything());
+      } finally {
+        logged.mockRestore();
+      }
 
       wh().intercept({ method: "GET", path: isRecordLookup }).reply(...json({ detail: "¿?" }));
       await expectUnconfirmed();
@@ -724,42 +745,65 @@ describe("cobros-in-links US3: GET /direct-payments/customers/debt — what a re
    Review of 2026-09-28: every case above seeds one keyed business, and
    the interceptors match on the path alone, so a door that resolved the
    wrong business's integration would pass them all. Here two businesses
-   are connected with different keys, and each interceptor answers only
-   to its own key: a member of B must reach B's provider with B's key,
-   and A's interceptor must be left untouched. */
+   are connected with different keys, each interceptor answers only to
+   its own key, and BOTH businesses ask — A, seeded first, and B, seeded
+   last — so a door that took the first or the last integration it found,
+   instead of the actor's, fails one of the two. A request sent with the
+   other key matches nothing and never reaches the network. */
 describe("cobros-in-links US1, US3: each door asks the actor's own integration, with its own key", () => {
   const withKey = (key: string) => ({ headers: { Authorization: `Api-Key ${key}` } });
+  const BUSINESSES = [
+    { name: "A", email: "demo@devolada.app", key: "wh-key-A", usuario: "de-a@isp", invoice: 1001, service: 76, saldo: "120.00" },
+    { name: "B", email: "b@isp.mx", key: "wh-key-B", usuario: "de-b@isp", invoice: 2001, service: 77, saldo: "150.00" },
+  ] as const;
 
   async function twoBusinesses() {
     await seedBusiness({ wisphubApiKey: "wh-key-A" });
     await seedBusiness({ email: "b@isp.mx", wisphubApiKey: "wh-key-B" });
   }
 
-  it("the Por cobrar block of business B is read with B's key, and shows only B's invoices", async () => {
+  it("the Por cobrar block of each business is read with its own key, and shows only its invoices", async () => {
     await twoBusinesses();
-    wh()
-      .intercept({ method: "GET", path: isInvoiceList, ...withKey("wh-key-B") })
-      .reply(...json({ next: null, count: 1, results: [measuredRow({ id_factura: 2001, cliente: { usuario: "de-b@isp", nombre: "De B" } })] }));
-
-    const { data } = await (await getBlock("", "b@isp.mx")).json();
-    expect(data.results.map((r: { externalId: number }) => r.externalId)).toEqual([2001]);
+    for (const business of BUSINESSES) {
+      wh()
+        .intercept({ method: "GET", path: isInvoiceList, ...withKey(business.key) })
+        .reply(
+          ...json({
+            next: null,
+            count: 1,
+            results: [measuredRow({ id_factura: business.invoice, cliente: { usuario: business.usuario, nombre: `De ${business.name}` } })],
+          }),
+        );
+      const { data } = await (await getBlock("", business.email)).json();
+      expect(data.results.map((r: { externalId: number }) => r.externalId), business.name).toEqual([business.invoice]);
+    }
   });
 
-  it("the debt door of business B reads the record and the balance with B's key", async () => {
+  it("the debt door of each business reads the record and the balance with its own key", async () => {
     await twoBusinesses();
-    wh()
-      .intercept({ method: "GET", path: isRecordLookup, ...withKey("wh-key-B") })
-      .reply(...json({ count: 1, results: [customerRecord({ usuario: "de-b@isp", id_servicio: 77, saldo: "150.00", estado_facturas: "Pagadas" })] }));
-    wh()
-      .intercept({ method: "GET", path: "/api/clientes/77/saldo/", ...withKey("wh-key-B") })
-      .reply(...json({ username: "de-b@isp", facturas: [], saldo: 0 }));
+    for (const business of BUSINESSES) {
+      wh()
+        .intercept({ method: "GET", path: isRecordLookup, ...withKey(business.key) })
+        .reply(
+          ...json({
+            count: 1,
+            results: [customerRecord({ usuario: business.usuario, id_servicio: business.service, saldo: business.saldo, estado_facturas: "Pagadas" })],
+          }),
+        );
+      wh()
+        .intercept({ method: "GET", path: `/api/clientes/${business.service}/saldo/`, ...withKey(business.key) })
+        .reply(...json({ username: business.usuario, facturas: [], saldo: 0 }));
 
-    const res = await (await app()).request(
-      "/direct-payments/customers/debt?usuario=de-b%40isp",
-      await asBusiness("b@isp.mx"),
-      env,
-    );
-    expect((await res.json()).data).toMatchObject({ state: "owes", totalCents: 15000 });
+      const res = await (await app()).request(
+        `/direct-payments/customers/debt?usuario=${encodeURIComponent(business.usuario)}`,
+        await asBusiness(business.email),
+        env,
+      );
+      expect((await res.json()).data, business.name).toMatchObject({
+        state: "owes",
+        totalCents: Number(business.saldo.replace(".", "")),
+      });
+    }
   });
 });
 

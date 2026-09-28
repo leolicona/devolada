@@ -1,6 +1,6 @@
 import { Alert, Button, Pending } from "@devolada/ui";
-import { useEffect, useRef } from "react";
-import { Link, Navigate, Outlet, useNavigate, useRouter } from "@tanstack/react-router";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { Link, Navigate, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Banknote,
@@ -22,7 +22,7 @@ import { CreditBanner, CreditChip, STEP_COPY } from "../credit/CreditChip";
 import { CreditStrip } from "../credit/CreditStrip";
 import { Avatar } from "../account/Avatar";
 import { ObservationChip } from "../integrations/ObservationChip";
-import { lastLinksAddress } from "../links/seen";
+import { businessChanged, lastLinksAddress, linksAddress, type LinksAddress } from "../links/seen";
 
 /* payments-and-classes D6: the feed is Pagos — never two words for one
    thing, never one word for two (IA).
@@ -94,6 +94,20 @@ function SuspendedScreen() {
 function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
   const sidebar = variant === "sidebar";
   const { data: actor } = useSession();
+  /* cobros-in-links SC-005: on Links, the entry carries the page's own
+     address. The remembered one is written by the page after it renders,
+     a step behind, and this list read it before the write with nothing to
+     re-render it after — so Ctrl-click, middle-click and "copy link"
+     opened the address from before the last keystroke (review of
+     2026-09-28). A string, so the list re-renders only when the address
+     moves, and only while on Links. */
+  const linksHere = useRouterState({
+    select: (state) => {
+      const match = state.matches.find((m) => m.routeId === "/app/links");
+      return match ? JSON.stringify(linksAddress(match.search)) : null;
+    },
+  });
+  const linksSearch = () => (linksHere !== null ? (JSON.parse(linksHere) as LinksAddress) : lastLinksAddress(actor?.id));
   const sections = [
     ...baseSections,
     ...(roleCan(actor?.role ?? "viewer", "integrations", "manage") ? [integrationsSection] : []),
@@ -121,10 +135,8 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
             to={to}
             /* cobros-in-links SC-005 (FR-009): the way back to Links is the
                view and the text the operator left there, not a blank page.
-               A function, so it is read when the link is built and pressed
-               — this list does not re-render when Links changes its
-               address. Every other section opens as it always did. */
-            search={to === "/links" ? () => lastLinksAddress(actor?.id) : undefined}
+               Every other section opens as it always did. */
+            search={to === "/links" ? linksSearch : undefined}
             /* The highlight follows the path alone. With the search counted,
                the Links entry compared the page's address with the one it
                last remembered — a step behind while the operator typed or
@@ -185,6 +197,20 @@ export function Shell() {
     const { pathname } = router.state.location;
     void navigate({ to: "/login", search: pathname === "/" ? {} : { next: pathname } });
   }, [bounced, navigate, router]);
+
+  /* cobros-in-links (review of 2026-09-28): the business changing under
+     this tab — through its own switcher, or through another tab's that
+     this session has just caught up with — is when the tab's Links
+     memory decides what to forget (seen.ts). The first business a tab
+     sees is not a change. A layout effect, so it runs before the page
+     the new business mounts starts writing its own memory. */
+  const businessId = actor?.id;
+  const lastBusiness = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (businessId === undefined) return;
+    if (lastBusiness.current !== undefined && lastBusiness.current !== businessId) businessChanged(businessId);
+    lastBusiness.current = businessId;
+  }, [businessId]);
 
   /* feedback-vocabulary-rollout D1/D5. The word used to appear the instant the
      request left, so a session check answered from cache flashed a full screen

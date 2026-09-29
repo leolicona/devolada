@@ -206,7 +206,11 @@ ladder here asks earlier (FR-028, FR-029).
   data after the third round** (about 10 minutes after confirming), **the
   clave after the fourth** (about 20 minutes), with "Sube tu comprobante"
   beside it; then at most two more rounds without news from the payer.
-  *Recommendation adopted in session; confirm at `/speckit-clarify`.*
+  *Confirmed by the creator at `/speckit-clarify` (option A of three).
+  Rejected: the receipt flow's pace (data at about 45 minutes, clave at
+  about 2 hours), which leaves a wrong detail waiting and spends more
+  calls; and asking at the first miss, which questions a payer whose
+  transfer is only a minute late.*
 
 ## User Scenarios & Testing *(mandatory)*
 

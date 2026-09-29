@@ -868,15 +868,35 @@ export async function runValidation(
       ? (verdict.reading?.senderBank ?? read?.senderBank ?? asked?.senderBank ?? null)
       : payment.senderBank;
     const receipt = receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null);
-    const unreadable = unreadableCandidates(bundle?.unreadable ?? []);
+    /* bug: single-cep-unreadable (D19): a single whose cadena did not read
+       is still the one transfer Banxico named — it rides the trail,
+       dropped, with the check the cadena failed */
+    const unreadable = unreadableCandidates(
+      several
+        ? (bundle?.unreadable ?? [])
+        : verdict.record === null
+          ? [{ entry: verdict.cep?.trackingKey ?? "", reason: verdict.recordWhy ?? "" }]
+          : [],
+    );
     const source = several ? "several" : "single";
     const bundleId = bundle?.id ?? null;
+    /* bug: single-cep-unreadable: the clave-only ask opens "with the other
+       fields filled from the row" (contracts/payment-page.md), and a
+       receipt-door row holds neither the bank nor the day. So the undecided
+       row keeps the bank Banxico named for a single, or the one the search
+       stood on — only a name of the vocabulary, the form's own — and the
+       day the receipt printed; never over what the row already says. */
+    const keptBank = [several ? null : verdict.cep?.senderBank, searchedBank].find(
+      (b): b is string => b != null && (BANKS as readonly string[]).includes(b),
+    );
     const undecided = (reason: UndecidedReason, candidates: MatchResult["trail"] = []) =>
       update({
         ...base,
         lastError: "CEP_UNDECIDED",
         disputedFields: JSON.stringify(["trackingKey"]),
         nextValidationAt: null,
+        ...(payment.senderBank == null && keptBank ? { senderBank: keptBank } : {}),
+        ...(payment.transferDate == null && receipt.day ? { transferDate: receipt.day } : {}),
         matchTrail: JSON.stringify(
           trailOf(source, bundleId, receipt, { decided: "undecided", reason, trail: candidates }, unreadable),
         ),
@@ -897,10 +917,10 @@ export async function runValidation(
 
     const candidates: CepRecord[] = several ? bundle!.candidates : verdict.record ? [verdict.record] : [];
     if (!several && !verdict.record) {
-      /* D9: a single `valid` whose cadena could not be read. With a time or
-         a tail on the receipt there is nothing to hold them against, so the
-         clave is asked; with neither, nothing contradicts it and it
-         confirms as it always did. */
+      /* D9: a single `valid` whose cadena could not be read (D4, D19).
+         With a time or a tail on the receipt there is nothing to hold them
+         against, so the clave is asked; with neither, nothing contradicts
+         it and it confirms as it always did. */
       if (receipt.time || receipt.tail) return undecided("unreadable");
     } else if (!candidates.length) {
       return undecided(unreadable.length ? "unreadable" : "none_fit");

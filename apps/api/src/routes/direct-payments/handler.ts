@@ -65,7 +65,7 @@ import { consta, ConstaError } from "../../consta";
 import { enqueueAndDeliver } from "../../webhooks/queue";
 import { deferOf } from "../defer";
 import type { DirectPayment } from "../../direct-payments/validation";
-import { undecidedReasonOf } from "../../direct-payments/cep-match";
+import { undecidedOf } from "../../direct-payments/cep-match";
 import {
   publicPaymentError,
   type CreateLinkRequest,
@@ -295,7 +295,10 @@ function channelOpen(
    already used says so — the payer may have paid already — and the
    bundle's other senders never travel, only the word. */
 function publicError(row: Pick<typeof payments.$inferSelect, "status" | "lastError" | "matchTrail">) {
-  if (undecidedReasonOf(row) === "all_used") return "CEP_ALL_USED" as const;
+  const undecided = undecidedOf(row);
+  if (undecided?.reason === "all_used") return "CEP_ALL_USED" as const;
+  /* bug: single-cep-unreadable: one transfer was found — the words say one */
+  if (undecided?.source === "single") return "CEP_SINGLE_UNDECIDED" as const;
   const parsed = publicPaymentError.safeParse(row.lastError);
   return parsed.success ? parsed.data : null;
 }

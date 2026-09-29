@@ -230,6 +230,11 @@ export const publicPaymentError = z.enum([
      confirmed another payment of the business — possibly the payer's own.
      The same ask as CEP_UNDECIDED, with words that say so. */
   "CEP_ALL_USED",
+  /* bug: single-cep-unreadable: the search found ONE transfer and could
+     not confirm it is the payer's — its time does not fit the receipt, or
+     Banxico's details could not be read. The same ask as CEP_UNDECIDED; its
+     words ("más de una transferencia") were false here. */
+  "CEP_SINGLE_UNDECIDED",
 ]);
 
 /* POST /direct-payments/links/:token/read (US-D11, D18)

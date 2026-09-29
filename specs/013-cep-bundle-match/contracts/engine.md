@@ -25,7 +25,7 @@ export type InvalidReason = "contradicted" | "not_found" | "several";
 
 // ProviderVerdict.cep gains (all nullable; read from cepDetails):
 creditTime: string | null;        // processingTime, "HH:MM:SS"
-chain: string | null;             // cdaChain — parsed by parseCadena (D4)
+chain: string | null;             // cdaChain — the cadena, then its seal; parsed by parseCadena (D4, amended 2026-09-29)
 senderAccountType: string | null;
 senderAccount: string | null;
 certificateNumber: string | null;
@@ -54,9 +54,13 @@ bundle?: {
   unreadable: { entry: string; reason: string }[];
 };
 /* D5/D9: the record of a single valid's CEP, when the search was clave-less.
-   Null when the search was clave-less but the CEP's cadena did not parse:
-   the lifecycle treats that CEP as unreadable (amended 2026-09-28) */
+   From its cadena alone (D19). Null when the cadena could not be read: the
+   lifecycle treats that CEP as unreadable */
 record?: CepRecord | null;
+/* D19: why the record is null — the check the cadena failed ("cadena:
+   missing", "cadena: 42 fields"), or "no CEP details". Absent when the
+   cadena read; never a value of the CEP */
+recordWhy?: string;
 ```
 
 `CepRecord` is a row of `cep_records` in camelCase (data-model.md), with no
@@ -79,7 +83,9 @@ In the same call, after the billing row is written with `reason:
    record.
 4. Read each new entry (`cep-pdf.ts`), parse its cadena (`cadena.ts`),
    check the printed clave equals the name's; insert `cep_records`
-   (ignore on conflict `(business_id, clave)`).
+   (ignore on conflict `(business_id, clave)`). An entry whose cadena is not
+   as measured is `unreadable` with the check it failed (`"cadena: 42
+   fields"`, D19).
 5. Put the file in `PROOFS` at `bundles/<business_id>/<bundle_id>.zip`
    (`.pdf` for a bare CEP — named by content, amended 2026-09-28);
    write `cep_bundles` with `status = "read"`, `claves`, `sha256`, and
@@ -115,6 +121,15 @@ the answer is `valid`: parse `cep.chain`, insert the
 record (ignore on conflict), and return it as `record`. On the transfer
 door the billing row's `tracking_key` is the CEP's clave when the request
 had none (D13).
+
+D4 amended 2026-09-29 (bug `single-cep-unreadable`): `cep.chain` is the
+cadena followed by its seal, `||<43 fields>||<seal>` (measured on Azteca,
+Nu and Klar). The parser takes the last `||` as the closing bars and drops
+the seal after them. D19: when `cep.chain` is missing or not as measured,
+`record` is null — the answer's own fields do not stand in (the creator's
+Rule 1 of 2026-09-28, withdrawn 2026-09-29). `recordWhy` rides the verdict
+whenever there is no record, and a warn line names the validation id and
+the reason.
 
 ## The matcher (D6, D7, D8) — `consta/bundle/match.ts`, pure
 

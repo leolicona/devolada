@@ -285,4 +285,37 @@ describe("cep-bundle-match US3: the feed carries the undecided reason", () => {
       Pagado: null,
     });
   });
+
+  /* bug: single-cep-unreadable — "varias coincidencias" was false for a
+     search that found one transfer; the panel words it by the source */
+  it("bug: single-cep-unreadable — each undecided row says whether one transfer or several were found; every other row reads null", async () => {
+    const business = await seedBusiness();
+    const waiting = { status: "validating" as const, actionOutcome: null, confirmedAt: null, receivedCents: null, registeredCents: null };
+    for (const source of ["single", "several"] as const) {
+      await seedConfirmedPayment(business, {
+        ...waiting,
+        customerName: `Indeciso ${source}`,
+        lastError: "CEP_UNDECIDED",
+        disputedFields: JSON.stringify(["trackingKey"]),
+        nextValidationAt: null,
+        matchTrail: JSON.stringify(
+          trailOf(source, null, { time: "09:14", tail: null }, { decided: "undecided", reason: "unreadable", trail: [] }),
+        ),
+      });
+    }
+    await seedConfirmedPayment(business, { customerName: "Pagado" });
+
+    const res = await (await app()).request(
+      "/payments/feed",
+      { headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } },
+      env,
+    );
+    const { payments: rows } = feedResponse.parse((await res.json()).data);
+    const byName = Object.fromEntries(rows.map((r) => [r.customerName, [r.undecided ?? null, r.undecidedSource]]));
+    expect(byName).toEqual({
+      "Indeciso single": ["unreadable", "single"],
+      "Indeciso several": ["unreadable", "several"],
+      Pagado: [null, null],
+    });
+  });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { zipSync } from "fflate";
 import { claveOfEntry, listEntries, readEntries, sniff } from "../../src/consta/bundle/zip";
 import { readCepPdf } from "../../src/consta/bundle/cep-pdf";
-import { parseCadena } from "../../src/consta/bundle/cadena";
+import { parseCadena, readCadena } from "../../src/consta/bundle/cadena";
 import { wallClockMs } from "../../src/time/business-day";
 import {
   buildBundleZip,
@@ -156,8 +156,8 @@ describe("cep-bundle-match US1: the cadena original (cadena.ts, D4)", () => {
     expect(parseCadena(CADENA)!.creditedAt).toBe(Date.UTC(2026, 8, 26, 13, 11, 20));
   });
 
-  it("a valid's cdaChain — one line — reads the same way", () => {
-    const chain = cadenaOf({ ...FIELDS, creditDay: "2026-09-25", creditTime: "07:19:52", amount: "1250.50" });
+  it("a valid's cdaChain — one line, its seal after the closing bars — reads the same way (D4 amended 2026-09-29, bug: single-cep-unreadable)", () => {
+    const chain = cadenaOf({ ...FIELDS, creditDay: "2026-09-25", creditTime: "07:19:52", amount: "1250.50" }) + syntheticSeal(3);
     expect(parseCadena(chain)).toMatchObject({ creditDate: "2026-09-25", creditTime: "07:19:52", amountCents: 125050 });
   });
 
@@ -182,5 +182,71 @@ describe("cep-bundle-match US1: the cadena original (cadena.ts, D4)", () => {
       expect(values).not.toContain(personal);
       expect(values.join("|")).not.toContain(personal);
     }
+  });
+});
+
+/* bug: single-cep-unreadable (cep-bundle-match D4 amended 2026-09-29) — on
+   dev a Nu payment waited for a clave its screenshot did not show: its
+   single `valid`'s cadena could not be read, and nothing recorded why.
+   Measured on six answers (Azteca, Nu, Klar): the cdaChain is the cadena
+   followed by its seal, and the reader demanded that it end in `||`. A
+   cadena reads with the seal or without it; one that does not read says
+   which check it failed. */
+describe("bug: single-cep-unreadable — the cadena reads with its seal, and says why when it does not (cadena.ts)", () => {
+  /* Two fields fewer than the 43 measured */
+  const shortOf = (cadena: string, drop = 1) => {
+    const f = cadena.split("|");
+    f.splice(20, drop);
+    return f.join("|");
+  };
+
+  it("the cdaChain as measured — the cadena, then a 344-character seal — gives the printed cadena's facts, and the seal never reaches them", () => {
+    const seal = syntheticSeal(9);
+    expect(seal).toHaveLength(344);
+    expect(readCadena(CADENA + seal)).toEqual({ facts: parseCadena(CADENA) });
+    expect(Object.values(parseCadena(CADENA + seal)!).map(String)).not.toContain(seal);
+  });
+
+  it("Klar after 18:00 (measured): filed under the 29th, credited the 28th at 19:31:09 — the credit instant is the 28th's", () => {
+    const klar = cadenaOf({ ...FIELDS, operationDay: "2026-09-29", creditDay: "2026-09-28", creditTime: "19:31:09", senderBank: "KLAR", amount: "2.00" });
+    const facts = parseCadena(klar + syntheticSeal(5));
+    expect(facts).toMatchObject({ operationDate: "2026-09-29", creditDate: "2026-09-28", creditTime: "19:31:09", senderBank: "KLAR", amountCents: 200 });
+    /* 19:31:09 in Mexico City is 01:31:09 UTC the next day */
+    expect(facts!.creditedAt).toBe(Date.UTC(2026, 8, 29, 1, 31, 9));
+  });
+
+  it("an empty field inside the cadena does not move the closing bars", () => {
+    const blank = cadenaOf({ ...FIELDS, concept: "" });
+    expect(blank).toContain("||0.00|");
+    expect(readCadena(blank)).toEqual({ facts: parseCadena(CADENA) });
+    expect(readCadena(blank + syntheticSeal(5))).toEqual({ facts: parseCadena(CADENA) });
+  });
+
+  it("readCadena names the check that failed, and never echoes a value of the CEP", () => {
+    expect(readCadena(CADENA)).toEqual({ facts: parseCadena(CADENA) });
+    expect(readCadena(null)).toEqual({ why: "missing" });
+    expect(readCadena("   ")).toEqual({ why: "missing" });
+    expect(readCadena("|01|28092026|")).toEqual({ why: "not delimited" });
+    /* after the closing bars comes a seal or nothing — never more fields
+       or words */
+    expect(readCadena(`${CADENA}sello no base64`)).toEqual({ why: "not delimited" });
+    expect(readCadena(`${CADENA}x|y`)).toEqual({ why: "not delimited" });
+    expect(readCadena(shortOf(CADENA))).toEqual({ why: "42 fields" });
+    expect(readCadena(shortOf(CADENA, 2))).toEqual({ why: "41 fields" });
+    expect(readCadena(shortOf(CADENA + syntheticSeal(5), 2))).toEqual({ why: "41 fields" });
+    expect(readCadena(cadenaOf({ ...FIELDS, version: "02" }))).toEqual({ why: "version 02" });
+    expect(readCadena(cadenaOf({ ...FIELDS, operationDay: "2026-02-30" }))).toEqual({ why: "operation day" });
+    expect(readCadena(cadenaOf({ ...FIELDS, creditDay: "2026-02-30" }))).toEqual({ why: "credit day" });
+    expect(readCadena(cadenaOf({ ...FIELDS, creditTime: "25:11:20" }))).toEqual({ why: "credit time" });
+    expect(readCadena(cadenaOf({ ...FIELDS, receiverSpeiCode: "" }))).toEqual({ why: "SPEI code" });
+    expect(readCadena(cadenaOf({ ...FIELDS, senderBank: " " }))).toEqual({ why: "sender bank" });
+    expect(readCadena(cadenaOf({ ...FIELDS, senderAccountType: "CLABE" }))).toEqual({ why: "account type" });
+    expect(readCadena(cadenaOf({ ...FIELDS, senderAccount: "***8301" }))).toEqual({ why: "account" });
+    expect(readCadena(cadenaOf({ ...FIELDS, amount: "3,00" }))).toEqual({ why: "amount" });
+    expect(readCadena(cadenaOf({ ...FIELDS, amount: "0.00" }))).toEqual({ why: "amount" });
+    expect(readCadena(cadenaOf({ ...FIELDS, certificateNumber: "N/A" }))).toEqual({ why: "certificate" });
+    /* a version that is not a short number is a value that could be
+       anything: it is never repeated */
+    expect(readCadena(cadenaOf({ ...FIELDS, version: SYNTHETIC.senderName }))).toEqual({ why: "version ?" });
   });
 });

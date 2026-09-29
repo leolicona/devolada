@@ -226,6 +226,10 @@ export type ConstaVerdict = {
      clave but the CEP's cadena could not be read: nothing can be compared
      with the receipt. Absent on a clave search and for the platform. */
   record?: CepRecord | null;
+  /* bug: single-cep-unreadable (D19): why that record is null — the check
+     the cadena failed ("cadena: missing", "cadena: 42 fields"), or "no CEP
+     details". Absent when the cadena read. Never a value of the CEP. */
+  recordWhy?: string;
   /* proof-extraction D11: what the provider's OCR read off the image —
      a reading, never a verdict. Present on provider-OCR calls only, and
      it survives failure (measured 2026-08-26), which is exactly when the

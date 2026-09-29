@@ -5,7 +5,7 @@ import type { Bindings } from "../../env";
 import { chunks, D1_MAX_PARAMS } from "../../db/params";
 import { sha256Hex } from "../extraction";
 import type { Owner } from "../index";
-import { parseCadena } from "./cadena";
+import { readCadena } from "./cadena";
 import { readCepPdf } from "./cep-pdf";
 import type { BundleStatus, CadenaFacts, CepRecord } from "./types";
 import { claveOfEntry, listEntries, readEntries, sniff } from "./zip";
@@ -214,9 +214,10 @@ export async function readBundleBytes(
 
   const found: BundleReading["found"] = [];
   for (const cep of read) {
-    const facts = parseCadena(cep.cadena);
-    if (!facts) unreadable.push({ entry: cep.clave, reason: "cadena" });
-    else found.push({ clave: cep.clave, seal: cep.seal, facts });
+    const cadena = readCadena(cep.cadena);
+    /* bug: single-cep-unreadable — the check it failed, not just "cadena" */
+    if ("why" in cadena) unreadable.push({ entry: cep.clave, reason: `cadena: ${cadena.why}` });
+    else found.push({ clave: cep.clave, seal: cep.seal, facts: cadena.facts });
   }
   return { kind, claves: [...new Set(claves)], found, unreadable };
 }
@@ -364,30 +365,35 @@ export async function readPendingBundle(env: Bindings, db: Db, owner: Owner, bun
   return attempt(env, db, owner.businessId, row.id, row.url, row.downloadAttempts + 1);
 }
 
-/* D5, D9: the record of a single `valid`'s CEP, from its cadena — for a
-   search that had no clave. Null for the platform, and when the cadena is
-   not as measured (the lifecycle then treats the CEP as unreadable). The
-   seal is `digitalSignature`, kept and not verified (D2); empty when the
-   answer carried none. */
+/* D5, D9, D19: the record of a single `valid`'s CEP, from its cadena — for
+   a search that had no clave. No record for the platform, and none when the
+   cadena is not as measured: the lifecycle then treats the CEP as
+   unreadable and keeps `why`, the check the cadena failed (bug:
+   single-cep-unreadable). The cadena is the one source (FR-002): the
+   answer's own fields stood in for it for a day, and were withdrawn by the
+   creator on 2026-09-29 once the cadena was measured whole on Azteca, Nu
+   and Klar (D19). The seal is `digitalSignature`, kept and not verified
+   (D2); empty when the answer carried none. */
 export async function storeSingleRecord(
   db: Db,
   owner: Owner,
   cep: { trackingKey: string | null; chain?: string | null; digitalSignature?: string | null },
-): Promise<CepRecord | null> {
-  if (!("businessId" in owner) || !cep.trackingKey) return null;
-  const facts = parseCadena(cep.chain);
-  if (!facts) return null;
+): Promise<{ record: CepRecord | null; why: string | null }> {
+  if (!("businessId" in owner)) return { record: null, why: null };
+  if (!cep.trackingKey) return { record: null, why: "no clave" };
+  const cadena = readCadena(cep.chain);
+  if ("why" in cadena) return { record: null, why: `cadena: ${cadena.why}` };
   await db
     .insert(cepRecords)
     .values({
       businessId: owner.businessId,
       clave: cep.trackingKey,
       bundleId: null,
-      ...facts,
-      creditedAt: new Date(facts.creditedAt),
+      ...cadena.facts,
+      creditedAt: new Date(cadena.facts.creditedAt),
       seal: cep.digitalSignature ?? "",
     })
     .onConflictDoNothing();
   const [record] = await recordsFor(db, owner.businessId, [cep.trackingKey]);
-  return record ?? null;
+  return { record: record ?? null, why: null };
 }

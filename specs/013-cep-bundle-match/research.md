@@ -50,7 +50,8 @@ decision, and what else was weighed. Decisions are numbered in the plan
   is the business's CLABE's last seven digits.
 - A one-match `valid` carries in `cepDetails` more than the adapter reads
   today: `processingTime` (the credit time, `HH:MM:SS`), `speiKey`,
-  `cdaChain` (the cadena original in one line), `certificateNumber`,
+  `cdaChain` (the cadena original in one line, followed by its seal —
+  R5, amended 2026-09-29), `certificateNumber`,
   `senderAccountType`, `senderAccount` (whole), `senderRfc`,
   `beneficiaryRfc`, `paymentConcept`, `iva`. `operationDate` is the
   **operation** day; the credit day is only in `cdaChain`.
@@ -195,6 +196,22 @@ parser (FR-006, FR-010 by construction). The credit instant is the credit
 day and time in `America/Mexico_City` — the CEP's own footnote — as epoch
 ms. Joining without spaces is exact for every field kept: none holds a
 space; the names it glues are the ones dropped.
+
+**Amended 2026-09-29** (bug `single-cep-unreadable`). A `valid`'s
+`cdaChain` does not end at its closing bars: its seal follows them,
+`||<43 fields>||<344 base64 characters>`. Found on six answers the creator
+asked for again with `scripts/apicep-probe.sh` — Azteca 1, Nu 4 (three
+transfers), Klar 1; by clave and by reference; first and repeated — read
+through a filter that kept each field's kind and length and no value. The
+eight CEPs' printed cadenas do end at the bars. Every one of the six had
+the same 43 fields and version `01`, `processingTime` equal to the
+cadena's credit time, and the credit day of the day the money arrived:
+Klar's, sent 2026-09-28 at 19:30:50 and filed under the 29th, kept the
+28th. A parser that required `||` at the end read none of them — dev held
+no record of a single `valid` by 2026-09-29. The decision stands with one
+change: the closing bars are the last `||`, and what follows them is a
+base64 seal or nothing; the seal is dropped there, and the record keeps
+`digitalSignature` (D2).
 
 ## R6 — What is kept, and where
 

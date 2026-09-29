@@ -952,6 +952,112 @@ describe("cep-bundle-match US3: an undecided row says why it waits, and shows wh
   });
 });
 
+/* bug: single-cep-unreadable — a search that found ONE transfer read
+   "Varias coincidencias" and "el archivo de coincidencias" in the panel */
+describe("bug: single-cep-unreadable — a single undecided row reads one transfer, in the row and in its matches", () => {
+  it("the row and 'Ver coincidencias' say one transfer whose Banxico data could not be read — never a file of matches", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(
+          feedOf(
+            url.searchParams.get("action") === "failed"
+              ? []
+              : [
+                  charge({
+                    status: "validating" as const,
+                    actionOutcome: null,
+                    reconciliationClass: null,
+                    actionDoneAt: null,
+                    actionAttempts: 0,
+                    undecided: "unreadable" as const,
+                    undecidedSource: "single" as const,
+                  }),
+                ],
+          ),
+        ),
+      ),
+      handlers.paymentProof(() =>
+        ok(
+          proofResponse.parse({
+            folio: "",
+            proofMode: "receipt",
+            cep: null,
+            imageUrl: null,
+            match: {
+              source: "single",
+              decided: "undecided",
+              by: null,
+              reason: "unreadable",
+              distanceS: null,
+              receipt: { time: "09:14", tail: null },
+              candidates: [
+                candidate({
+                  clave: "NU3AZZ0000000000000000000001",
+                  creditDate: null,
+                  creditTime: null,
+                  amountCents: null,
+                  senderBank: null,
+                  senderTail: null,
+                  fate: "dropped",
+                  why: "unreadable",
+                }),
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+    renderApp("/");
+    await userEvent.click(await screen.findByRole("button", { name: /janely/i }));
+
+    expect(await screen.findByText("Una coincidencia; sus datos de Banxico no se pudieron leer.")).toBeInTheDocument();
+    expect(screen.queryByText(/archivo de coincidencias|Varias coincidencias/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Ver coincidencias" }));
+    const section = await screen.findByRole("region", { name: "Coincidencias" });
+    expect(within(section).getByText("Una coincidencia; sus datos de Banxico no se pudieron leer")).toBeInTheDocument();
+    expect(within(section).getByText("No se pudo leer")).toBeInTheDocument();
+    await expectNoViolations(screen.getByRole("dialog"));
+  });
+
+  it("a single's other reasons read one too; a bundle's keep their words", async () => {
+    const rows = [
+      { reason: "none_fit", source: "single", words: "La transferencia encontrada no coincide con el comprobante." },
+      { reason: "all_used", source: "single", words: "Una coincidencia, ya usada en otro pago." },
+      { reason: "unreadable", source: "several", words: "No se pudo leer el archivo de coincidencias." },
+    ] as const;
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.feed((url) =>
+        ok(
+          feedOf(
+            url.searchParams.get("action") === "failed"
+              ? []
+              : rows.map((r, i) =>
+                  charge({
+                    id: `ch-${i}`,
+                    customerName: `Cliente ${i + 1}`,
+                    status: "validating" as const,
+                    actionOutcome: null,
+                    reconciliationClass: null,
+                    actionDoneAt: null,
+                    undecided: r.reason,
+                    undecidedSource: r.source,
+                  }),
+                ),
+          ),
+        ),
+      ),
+    );
+    renderApp("/");
+    for (const [i, r] of rows.entries()) {
+      await userEvent.click(await screen.findByRole("button", { name: new RegExp(`Cliente ${i + 1}`) }));
+      expect(await screen.findByText(r.words)).toBeInTheDocument();
+    }
+  });
+});
+
 describe("cep-bundle-match US4: the 'Sin pago' chip lists the transfers no payment holds", () => {
   it("shows them in place of the charges — es-MX amounts, tabular numerals, four digits — axe clean", async () => {
     const feedAsked: string[] = [];

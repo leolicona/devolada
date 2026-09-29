@@ -108,6 +108,13 @@ candidate the window measured carries its own `distanceS`, credit minus
 receipt in whole seconds (absent when the receipt showed no time). An
 entry that could not be read has `cepId`, `creditTime` and `tail` null.
 
+*Amended 2026-09-28 (D19, bug single-cep-unreadable):* a candidate gains
+`readWhy` whenever Banxico's document did not read as measured — an
+unreadable entry's reason (`"no_seal_label"`, `"cadena: 42 fields"`), or
+the check a single's cadena failed (`"cadena: missing"`). A single whose
+cadena did not read rides the trail as one dropped `unreadable` candidate
+named by its clave. Stored only: no response schema carries it.
+
 - `reason` only when `decided = "undecided"`; `by` only when `chosen` —
   `clave` when a typed clave fitted a kept candidate (D11).
 - `tail` in a candidate is four digits of its sender account — what the

@@ -653,7 +653,18 @@ export async function validate(
         gateTrackingKey(ours?.trackingKey) !== "ok" &&
         gateTrackingKey(verdict.reading?.trackingKey) !== "ok";
   const recorded = verdict.status === "valid" && claveless && businessId !== null;
-  const record: CepRecord | null = recorded && verdict.cep ? await storeSingleRecord(db, owner, verdict.cep) : null;
+  /* bug: single-cep-unreadable (D19): no record says why — the check the
+     cadena failed, or a `valid` with no CEP details at all */
+  const single = recorded
+    ? verdict.cep
+      ? await storeSingleRecord(db, owner, verdict.cep)
+      : { record: null, why: "no CEP details" }
+    : null;
+  const record: CepRecord | null = single?.record ?? null;
+  const recordWhy = single?.why ?? null;
+  /* A single that confirms with nothing on the receipt to compare (D9)
+     leaves no trail, so the log is where its reason survives */
+  if (recordWhy) console.warn(`validation ${row.id}: single CEP unreadable (${recordWhy})`);
 
   /* two-eyes-receipt D5: the comparison, at minute zero.
 
@@ -776,5 +787,7 @@ export async function validate(
        record of a clave-less single `valid` — the lifecycle's to decide */
     ...(bundle ? { bundle } : {}),
     ...(recorded ? { record } : {}),
+    /* bug: single-cep-unreadable (D19): why there is no record */
+    ...(recorded && recordWhy ? { recordWhy } : {}),
   };
 }

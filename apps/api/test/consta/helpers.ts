@@ -181,6 +181,28 @@ export const MINUTE_ONLY_READING: StubbedReading = {
   cuentaOrigen: null,
 };
 
+/* bug: single-cep-unreadable — MEASURED: the raw answer of version 3 on
+   `@cf/mistralai/mistral-small-3.1-24b-instruct`, dev, 2026-09-28
+   (extraction faf55c47), for a Nu screenshot cut before its clave and its
+   sender account: $3.00 to the business, reference 280926 — the date —
+   and "Autorización 28 SEP 2026, 09:14:50 AM". The model answered the
+   minute alone (bug: reader-drops-seconds) and "NU", a name the bank
+   vocabulary does not hold, so the gate keeps no bank. */
+export const NU_0914_READING: StubbedReading = {
+  esComprobante: true,
+  claveDeRastreo: null,
+  bancoEmisor: "NU",
+  bancoReceptor: null,
+  monto: 3.0,
+  fecha: "2026-09-28",
+  hora: "09:14",
+  estatus: null,
+  referenciaNumerica: "280926",
+  cuentaOrigen: null,
+  destino: { tipo: null, digitos: null },
+  legibilidad: "completa",
+};
+
 /* two-eyes-receipt D1/D15: what the PDF-to-text conversion would return
    for a receipt, seeded rather than converted. The binding is the one
    thing a test stands in for (constitution IV), and that covers both of

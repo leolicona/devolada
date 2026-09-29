@@ -9,13 +9,16 @@ undecided payment with its reason (SC-004), and the transfers received that
 no payment holds (FR-009). Other senders appear by the last four digits of
 their account, never by name, and never on the payer's page (FR-010).
 
-## `feedCharge` — one field
+## `feedCharge` — two fields
 
 ```ts
 /* cep-bundle-match D10: set while the row is validating with
    last_error CEP_UNDECIDED — why the bundle did not decide */
 undecided: z.enum(["all_used", "no_signal", "too_close", "none_fit",
                    "unreadable", "too_large"]).nullable().optional(),
+/* D19 (bug single-cep-unreadable, 2026-09-28): whether that search found
+   one transfer or several — null beside a null `undecided` */
+undecidedSource: z.enum(["several", "single"]).nullable().default(null),
 ```
 
 The feed polls every 5 s, so only this enum rides it; the candidates travel
@@ -30,6 +33,16 @@ detail's right column adds the reason in words:
 | `none_fit` | "Ninguna transferencia encontrada coincide con el comprobante" |
 | `unreadable` | "No se pudo leer el archivo de coincidencias" |
 | `too_large` | "Demasiadas coincidencias para revisarlas" |
+
+A search that found one transfer (`undecidedSource: "single"`, and
+`match.source = "single"` in the dialog) has no "varias coincidencias" and
+no file of them (D19):
+
+| `undecided`, one transfer | Copy |
+| --- | --- |
+| `all_used` | "Una coincidencia, ya usada en otro pago" |
+| `none_fit` | "La transferencia encontrada no coincide con el comprobante" |
+| `unreadable` | "Una coincidencia; sus datos de Banxico no se pudieron leer" |
 
 …followed by "Se pidió la clave de rastreo al cliente." and a "Ver
 coincidencias" button that opens the proof dialog.

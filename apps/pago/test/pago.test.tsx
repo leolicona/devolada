@@ -2135,6 +2135,61 @@ describe("cep-bundle-match US1: the ask when Banxico's answer did not say which 
   });
 });
 
+/* bug: single-cep-unreadable — on dev (2026-09-28) a Nu screenshot with no
+   clave found ONE transfer that could not be confirmed as the payer's, and
+   the page said "más de una transferencia" over a form with no bank and no
+   day. The status now says one, and carries the bank Banxico named and the
+   day the receipt printed. */
+describe("bug: single-cep-unreadable — one transfer found and not confirmed: the ask says one", () => {
+  const referenceOnly = () =>
+    ok(
+      rtRead({
+        amountCents: 300,
+        senderBank: "AZTECA",
+        referenceNumber: "9784417",
+        gate: { trackingKey: "missing", senderBank: "ok", amount: "ok", referenceNumber: "ok" },
+        ask: null,
+      }),
+    );
+
+  it("CEP_SINGLE_UNDECIDED says one transfer was found, asks for the clave alone, focused, with Banxico's bank and the printed day filled", async () => {
+    server.use(...uploadHandlers(referenceOnly));
+    server.use(
+      handlers.status(() =>
+        ok(
+          validatingWith({
+            error: "CEP_SINGLE_UNDECIDED",
+            disputedFields: ["trackingKey"],
+            nextValidationAt: null,
+            senderBank: "NUBANK",
+            transferDate: "2026-09-28",
+            claimedAmountCents: 300,
+          }),
+        ),
+      ),
+    );
+    renderPage();
+    await goToProof();
+    await rtUpload();
+
+    expect(
+      await screen.findByText(
+        "Encontramos una transferencia con tus datos, pero no pudimos confirmar que sea tuya. Escribe tu clave de rastreo para confirmarla.",
+        {},
+        { timeout: 8000 },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/más de una transferencia/i)).not.toBeInTheDocument();
+    const clave = screen.getByLabelText("Clave de rastreo");
+    await waitFor(() => expect(clave).toHaveFocus());
+    expect(screen.queryByLabelText("Número de referencia")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Banco desde el que pagaste")).toHaveValue("NUBANK");
+    expect(screen.getByLabelText("Fecha de la transferencia")).toHaveValue("2026-09-28");
+    expect(screen.getByLabelText("Monto transferido")).toHaveValue("3.00");
+    await expectNoViolations(document.body);
+  });
+});
+
 describe("cep-bundle-match US3: every transfer found was already used (D10)", () => {
   const referenceOnly = () =>
     ok(

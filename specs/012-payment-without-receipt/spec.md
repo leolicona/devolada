@@ -195,12 +195,14 @@ ladder here asks earlier (FR-028, FR-029).
   already learned an account of this customer that ties the transfer,
   nothing is asked. Otherwise the payer types the last four digits of the
   account they paid from. Suggesting would show account digits on a page
-  without a session. *Recommendation adopted in session; confirm at
-  `/speckit-clarify`.*
+  without a session. *Confirmed by the creator at `/speckit-clarify`
+  (option A of three). Rejected: always asking the four digits, a step
+  more for a payer Devolada already knows; and dropping the typed
+  reference, which leaves only the clave and the receipt to a payer who
+  has a seven-digit number in front of them.*
 - Q: Is the data being searched visible while it validates, with a way to
   correct it? → A: **Yes, always**, with "Corregir" on every state that is
-  not final. *Recommendation adopted in session; confirm at
-  `/speckit-clarify`.*
+  not final. *The creator's own request of the same session.*
 - Q: If it is not found, at which retry does the payer confirm the data,
   and at which is the clave asked, with the receipt second? → A: **The
   data after the third round** (about 10 minutes after confirming), **the

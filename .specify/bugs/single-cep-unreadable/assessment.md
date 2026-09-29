@@ -1,10 +1,11 @@
-# Bug Assessment: a single CEP found without a clave waits for the clave when its cadena cannot be read
+# Bug Assessment: a single CEP's cadena is never read, because its seal follows the closing bars
 
 - **Slug**: single-cep-unreadable
-- **Created**: 2026-09-28
-- **Source**: pasted text (product creator, in session, 2026-09-28), plus a
-  read-only look at the dev D1 the same morning. No URL supplied, so the URL
-  Trust Policy did not apply and nothing was fetched.
+- **Created**: 2026-09-29 (re-assessed; first assessed 2026-09-28)
+- **Source**: pasted text (product creator, in session, 2026-09-28 and
+  2026-09-29), the creator's probe of apiCEP on 2026-09-29, and a
+  read-only look at the dev D1. No URL supplied, so the URL Trust Policy
+  did not apply and nothing was fetched.
 - **Verdict**: valid
 - **Severity**: high
 
@@ -14,254 +15,58 @@
 > de la 013. El primer de AZTECA, el segundo de azteca con numero de
 > referencia repetido: se confirmaron con éxito. El tercero con NU."
 
-The Nu payment did not confirm. The creator then decided the remediation's
-core rule in session ("Regla 1", 2026-09-28): Banxico's details come from
-the cadena; when it is missing or not as measured, from the separate fields
-of the same answer; only when both fail is the CEP unreadable, and the
-payment records why.
+The Nu payment did not confirm (2026-09-28). A second Nu screenshot at
+13:20 stopped the same way, and a manual entry by reference confirmed.
+
+The first assessment (2026-09-28) could not tell why the cadena did not
+parse. Its two hypotheses were (A) the receipt door's answer carries none,
+or (B) its shape differs. Its fix let the answer's own fields stand in for
+the cadena (the creator's "Regla 1"). On 2026-09-29 the creator asked apiCEP
+again, directly, for six answers, and reported:
+
+> "La cadena real es `||campos||sello` (el sello de 344 caracteres va
+> después de las barras finales)"
+
+The creator then decided: read the cadena as it arrives, and withdraw Rule
+1 ("Sí, hazlo en el PR #255 y quita la Regla 1").
 
 ## Symptom
 
-On the receipt door, a screenshot that shows no clave is searched by its
-reference. When the provider answers `valid` with one CEP whose cadena the
-engine cannot read, the payment stops in `validating` + `CEP_UNDECIDED`
-with no slot and no expiry, and the page asks for the clave. Before
-cep-bundle-match it confirmed at once. Expected: the CEP is checked against
-the receipt with the details the answer does carry, and confirms when the
-time fits.
+A search without a clave that apiCEP answers with one `valid` never yields
+the CEP's record, because the engine cannot read its cadena. This holds on
+the receipt door and on the transfer door by reference. With a time or a
+tail on the receipt, the payment stops in `validating` + `CEP_UNDECIDED`
+(`unreadable`) and asks for the clave. With neither, it confirms unchecked
+(D9). Expected: the cadena reads, the matcher holds its credit time against
+the receipt, and the payment confirms when it fits.
 
-The same screen shows two more defects:
+The same screen had three more defects:
+- It said "Encontramos más de una transferencia…", but one was found.
+- The clave form opened with the bank and the date empty.
+- Nothing recorded why the cadena did not read.
 
-- It says "Encontramos más de una transferencia…", but one was found.
-- The clave form opens with the bank and the date empty.
+## Evidence
 
-## Evidence (dev D1, read-only, 2026-09-28)
+**Dev D1** (read-only, 2026-09-28 and 2026-09-29):
+- **09:16, Nu receipt, reference 280926:** `validating`, `CEP_UNDECIDED`,
+  trail `single` / `unreadable` with no candidates, bank and day empty. The
+  clave typed at 10:02 superseded it and confirmed.
+- **13:23, Nu receipt, reference 2546382:** the same. The clave typed at
+  14:13 superseded it.
+- **13:35, manual entry by reference 2573955** (Nu, $2.00): confirmed, but
+  only because the form carries no time and no tail (D9). Its cadena did
+  not read either.
+- **`cep_records` with no bundle:** 0. No single `valid` was ever recorded
+  on dev, from any bank.
+- **The three Azteca receipts of that morning** ended in bundles, because
+  their reference repeats. They confirmed: 7 of 7 CEP PDFs read.
+- **The seals dev keeps from printed CEPs:** 3 of 3 are 344 characters of
+  standard base64, padded `==`.
 
-- **The payment** (created 09:16:46): `validating`, `last_error
-  CEP_UNDECIDED`, `next_validation_at` NULL, `disputed_fields
-  ["trackingKey"]`, `transfer_time "09:14"`, and `sender_bank`,
-  `transfer_date`, `sender_tail` and `tracking_key` all NULL. Match trail:
-  `{"source":"single","bundleId":null,"decided":"undecided","by":null,
-  "reason":"unreadable","receipt":{"time":"09:14","tail":null},
-  "candidates":[]}`.
-- **The paid call** (09:17:04, 16.6 s, HTTP 200), mode `receipt`: status
-  `valid`, `LIQUIDADO`, never validated before. The CEP is a 28-character
-  clave `NU3A…`, NUBANK, 300 cents, operation day 2026-09-28.
-- **The readings** (reader v3, mistral-small-3.1): neither ours nor the
-  provider's carried a clave (gate `missing`). Both read a 6-digit
-  reference, 280926, which is the date. Ours read 300 cents, day
-  2026-09-28, time "09:14" and no bank. The screenshot prints "Autorización
-  … 09:14:50 AM"; the lost seconds are their own bug.
-- **No `cep_records` row** for that clave. `storeSingleRecord` returned null.
-- **The same morning**, three Azteca several-matches answers were read whole:
-  7 of 7 CEP PDFs, 0 unreadable. They confirmed 35, 21 and 14 s after their
-  receipts' times. The bundle path reads real CEPs. The single path had never
-  met a real `cdaChain` before this call.
-- **The screenshot**, which the creator shared in session and which is not
-  kept in the repo: Nu's "Comprobante de transferencia", cut before "Clave de
-  rastreo" and "Cuenta origen". The full receipt carries both.
-
-## Reproduction
-
-1. A receipt-door payment whose readings carry no clave the gate passes, and
-   a time.
-2. The provider answers `valid` with `cepDetails` whose `cdaChain` is absent,
-   or not 43 fields of version `01` with digit accounts. `processingTime`,
-   `senderAccount` and the amount are present.
-3. The sweep runs: the row stays `validating` + `CEP_UNDECIDED` with trail
-   reason `unreadable` and no candidates.
-4. `GET /direct-payments/:id/status` answers `error: "CEP_UNDECIDED"`, the
-   page copy says "más de una transferencia", and `senderBank` and
-   `transferDate` are null.
-
-No test covers this path. Every single-`valid` fixture carries a `cdaChain`
-built by `cadenaOf` (`apps/api/test/consta/bundle-fixtures.ts`), which is
-the same understanding the parser has. The D9 branch "no record, but a time
-or a tail" has no test.
-
-## Suspected Code Paths
-
-- `apps/api/src/consta/validate.ts`, from `const claveless = …`: a
-  clave-less single `valid` calls `storeSingleRecord(db, owner,
-  verdict.cep)`. The verdict carries `record: null` and nothing says why.
-- `apps/api/src/consta/bundle/store.ts::storeSingleRecord`: `parseCadena(cep.chain)`
-  or null. There is no other source, and no reason is kept.
-- `apps/api/src/consta/bundle/cadena.ts::parseCadena`: strict by design (D4,
-  FR-002). It returns null, without saying which check failed.
-- `apps/api/src/direct-payments/validation.ts`, the matcher phase: `if
-  (!several && !verdict.record) { if (receipt.time || receipt.tail) return
-  undecided("unreadable"); }` (D9). `undecided()` writes `lastError`,
-  `disputedFields`, `nextValidationAt` and the trail, but not the bank or
-  the day the search used.
-- `apps/api/src/routes/direct-payments/handler.ts::publicError`: every
-  undecided row that is not `all_used` becomes `CEP_UNDECIDED`, whose copy
-  (`apps/pago/src/features/pago/PaymentPage.tsx`, `payErrors`) was written
-  for a bundle.
-- `apps/admin/src/features/feed/FeedScreen.tsx::undecidedCopy`: `unreadable`
-  reads "No se pudo leer el archivo de coincidencias", and a single has no
-  such file.
-- `specs/013-cep-bundle-match/contracts/payment-page.md` promises "the other
-  fields filled from the row", which the receipt door's row cannot keep today.
-
-## Root Cause Hypothesis
-
-**How the payment stopped**, confidence **high**: a clave-less single
-`valid` got no record because its `cdaChain` did not parse. The receipt
-carried a time, so D9 made the payment undecided.
-
-**Why the cadena did not parse**, not knowable from what was stored:
-
-- **(A)** The receipt door's `valid` carries no `cdaChain`. Research R1
-  measured it on transfer-door calls only; every probe lot was a direct call.
-- **(B)** Its cadena differs from the shape measured on Azteca CEPs, and the
-  strict parser refuses it.
-
-Neither the row nor the log says which. That missing reason is a second
-defect in its own right. The fix below does not depend on which cause it was.
-
-## Proposed Remediation
-
-**Preferred**: the creator's Rule 1, plus the three defects around it.
-
-1. **The cadena says why** (`cadena.ts`). `readCadena(text)` returns the
-   facts, or a short reason naming the check that failed: `missing`,
-   `not delimited`, `<n> fields`, `version <v>`, `operation day`, `credit
-   day`, `credit time`, `SPEI code`, `sender bank`, `account type`,
-   `account`, `amount` or `certificate`. The reason never carries a value,
-   except the field count and the version. `parseCadena` stays as a wrapper.
-2. **The fields stand in** (`store.ts`). When the cadena fails, a single
-   `valid`'s record is built from the same answer:
-   - **credit time**: `processingTime`, `HH:MM:SS`.
-   - **credit day**: the receipt's printed day, which is the day Banxico
-     files a transfer under (the batch A0E0097211 measured 16 of 16, lot 3).
-   - **operation day**: `operationDate`. It must fall on the printed day or
-     up to 5 days after it, since the operation day is the next business day
-     after hours.
-   - **amount**: greater than 0.
-   - **accounts and their types**: kept when well formed, else empty
-     (unknown). An empty sender account fails the tail check only when the
-     receipt shows a tail. An empty receiving account ties as unknown, never
-     as a contradiction.
-   - **certificate and seal**: as carried, else empty.
-
-   `storeSingleRecord` returns the record and the reasons of every source
-   that failed ("cadena: missing", "cadena: missing; fields: no credit
-   time").
-3. **The engine passes the printed day and the reason on** (`validate.ts`).
-   - The printed day is `input.date` on the transfer door, and our reading's
-     date (else the provider's) on the receipt door.
-   - The verdict gains `recordWhy` whenever the record was not read from the
-     cadena.
-   - A warn line names the validation id and the reason, so a single
-     confirmed with nothing to compare still leaves a trace.
-4. **The payment keeps the reason, the bank and the day** (`validation.ts`,
-   `cep-match.ts`, `types.ts`).
-   - `TrailCandidate` gains an optional `readWhy`. It is set on the
-     candidate a single's fields stood in for, on the single that could not
-     be read (now one dropped candidate, named by its clave), and on every
-     unreadable bundle entry.
-   - The undecided write keeps `sender_bank` and `transfer_date` when the row
-     has none. The bank is the CEP's for a single and the searched one for a
-     bundle. The day is the receipt's printed day.
-5. **Words that say one** (`schema.ts`, `handler.ts`, `PaymentPage.tsx`,
-   `FeedScreen.tsx`).
-   - A new public code, `CEP_SINGLE_UNDECIDED`, for an undecided single that
-     is not `all_used`. It opens the same clave-only ask, with its own copy:
-     "Encontramos una transferencia con tus datos, pero no pudimos confirmar
-     que sea tuya. Escribe tu clave de rastreo para confirmarla."
-   - The panel's undecided copy follows the source ("Una coincidencia…").
-6. **Spec 013 amended.** D19 records Rule 1, and D4, D9, D10, FR-002 and
-   FR-014 point to it. The engine, payment-page and panel contracts and the
-   data model are updated to match.
-
-**Alternatives**:
-
-- **Keep D4/D9 strict and fix only the words, the fields and the reason.**
-  Every unreadable single then asks for a clave the payer's screenshot may
-  not show. The creator ruled this out.
-- **Confirm an unreadable single unchecked**, as before 013. This reopens
-  `reference-finds-other-transfer`: a receipt printed 18:58 took its payer's
-  07:19 transfer.
-- **Take the credit day from `operationDate`.** It is wrong after 18:00 and
-  on weekends (measured), so it would move the credit a business day away
-  and the payment would ask for the clave for no reason.
-
-**Files likely to change**:
-
-- `apps/api/src/consta/bundle/cadena.ts`, `store.ts` and `types.ts`
-- `apps/api/src/consta/validate.ts` and `apps/api/src/consta/index.ts`
-  (verdict type)
-- `apps/api/src/direct-payments/validation.ts` and `cep-match.ts`
-- `apps/api/src/routes/direct-payments/schema.ts` and `handler.ts`
-- `apps/pago/src/features/pago/PaymentPage.tsx`
-- `apps/admin/src/features/feed/FeedScreen.tsx`
-- Tests: `apps/api/test/consta/bundle.test.ts`, `apps/api/test/consta/validate.test.ts`,
-  a new `apps/api/test/single-cep-unreadable.test.ts`, and the page's and
-  panel's component tests
-- `specs/013-cep-bundle-match/{spec,plan,data-model}.md` and
-  `contracts/{engine,payment-page,panel}.md`
-
-**Tests to add or update** (`bug: single-cep-unreadable`):
-
-- **Receipt door, answer without `cdaChain`**: the receipt printed 09:14 and
-  `processingTime` is 09:14:58. The payment confirms by time. The record's
-  credit day is the printed day, and the trail's candidate carries
-  `readWhy: "cadena: missing"`.
-- **A 41-field `cdaChain`**: confirms from the fields, with `readWhy
-  "cadena: 41 fields"`.
-- **The fields still guard the old bug**: a receipt printed 18:58 against a
-  cadena-less answer credited 07:19:52 does not confirm (`none_fit`).
-- **Cadena and fields both fail** (no `processingTime`): undecided
-  `unreadable`, with one dropped candidate named by its clave and carrying
-  both reasons. The row keeps `sender_bank NUBANK` and the printed day, and
-  the status answers `CEP_SINGLE_UNDECIDED` with those fields.
-- **An operation day before the printed day** makes the fields unreadable.
-- **A typed reference with no time**: a cadena-less answer still confirms,
-  as D9 always did, now with a record whose credit day is the typed day.
-- **A bundle entry whose cadena is short**: the reason ("cadena: 42 fields")
-  reaches `cep_bundles.unreadable` and the trail.
-- **`readCadena`**: each check's reason, and no value leaks.
-- **The page**: `CEP_SINGLE_UNDECIDED` renders its copy and the clave-only
-  ask with the bank and date filled. **The panel**: the undecided single
-  reads "Una coincidencia…".
-
-## Risks & Considerations
-
-- **Rule 1 relaxes FR-002's "anything not as measured confirms nothing"**
-  for a single's own fields. The time window still decides, and the fields
-  come from Banxico's answer, not from a reading. This is the creator's
-  decision of 2026-09-28.
-- **A record from the fields assumes credit day = printed day.** A transfer
-  printed before midnight and credited after it lands about 24 h early, the
-  window drops it, and the payer is asked for the clave. It fails safe.
-- **`processingTime` as the credit time** was measured on direct answers. If
-  the receipt door lacks it too, the payment stays undecided, now with the
-  reason recorded. The next such payment on dev tells whether cause (A) or
-  (B) holds.
-- **No migration.** `match_trail` is JSON. `cep_records` keeps NOT NULL,
-  with empty strings for unknown accounts, SPEI code and certificate.
-- **The new public code touches the page schema.** The `/v1` contract
-  (`awaitingReason`) is unchanged.
-- **The dev payment of 09:16 stays undecided**: an undecided row has no
-  slot, and the fix does not re-run it. The creator can close it with the
-  clave.
-
-## Open Questions
-
-- None blocking. The creator decided Rule 1, and the rest follows existing
-  decisions (D9, D10) and contracts.
-
-## Re-assessment (2026-09-29)
-
-- **Source**: the creator's probe, run from their machine with
-  `scripts/apicep-probe.sh` on 2026-09-29 (six paid calls), read through a
-  jq filter that printed each answer's keys and each cadena field's kind
-  and length, never a value. The full answers stay on the creator's
-  machine (`~/labs/devolada-evidencia/cadena-nu-klar/`).
-- **Verdict**: valid. The root cause is now known, and it is neither (A)
-  nor (B) as written above.
-
-### What was measured
+**The probe** (2026-09-29, the creator's machine): `scripts/apicep-probe.sh`,
+six paid calls, read through a jq filter that printed each answer's keys and
+each cadena field's kind and length, never a value. The full answers stay on
+the creator's machine.
 
 | Case | Bank | Search | Validated before | `cdaChain` | Fields | Version | `processingTime` | Operation / credit day |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -272,55 +77,184 @@ defect in its own right. The fix below does not depend on which cause it was.
 | N4 | Nu | reference | yes | cadena + seal (344) | 43 | 01 | 13:29:46 | 28 / 28 |
 | K1 | Klar | reference | no | cadena + seal (344) | 43 | 01 | 19:31:09 | 29 / 28 |
 
-- Every answer carried `cdaChain`, and every one had the same shape:
-  `||<43 fields>||<a 344-character base64 seal>`. With the seal set apart,
-  all eleven checks of the parser pass on the 43 fields. The banks differ
-  only in the bank's name, the concept's length and, for Klar, a CURP (18)
-  where the others carry an RFC (13), a field the parser drops.
-- The cadena's credit time equals `processingTime` in all six.
-- Klar's transfer, printed 2026-09-28 19:30:50, was filed under the 29th
-  and credited on the 28th: the cadena's credit day is the day the money
-  arrived.
-- Klar's receipt shows no clave de rastreo, when sent or once confirmed. A
-  Klar payer can only be found by reference.
-- On dev, no record of a single `valid` was ever written (`cep_records`
-  with no bundle: 0), for Azteca or anyone.
+- **Every answer carried `cdaChain`, all in the same shape:**
+  `||<43 fields>||<344-character base64 seal>`. With the seal set apart,
+  all eleven checks of the parser pass. The banks differ only in:
+  - the bank's name;
+  - the concept's length;
+  - for Klar, a CURP (18) where the others carry an RFC (13), in a field
+    the parser drops.
+- **The cadena's credit time equals `processingTime`** in all six.
+- **Klar was filed under the next day but credited the same day.** It was
+  printed 2026-09-28 at 19:30:50, filed under the 29th, and credited on the
+  28th at 19:31:09.
+- **Klar's receipt shows no clave de rastreo**, either when sent or once
+  confirmed.
 
-### Root cause
+## Reproduction
 
-`readCadena` (and `parseCadena` before it) demands that the cadena end in
-`||`. A `valid`'s `cdaChain` never does, because its seal follows the
-closing bars. So every clave-less single `valid` was unreadable, from any
-bank. It showed first on Nu because a Nu reference names one transfer, so
-its searches end in a single `valid`. An Azteca reference repeats, so its
-searches end in a bundle, whose PDFs print the cadena and the seal under
-separate labels: the path that worked. Research R5 recorded "`||` at both
-ends" for the `valid`'s cdaChain too, and the test fixtures built it that
-way, so every test agreed with the parser and none with the provider.
-Confidence: high.
+1. A search without a clave: the receipt door, when no reading carries a
+   clave the gate passes, or the transfer door by reference. apiCEP answers
+   `valid` with one CEP.
+2. Its `cepDetails.cdaChain` arrives as the provider sends it:
+   `||<43 fields>||<344-character base64 seal>`.
+3. `storeSingleRecord` calls `parseCadena`, which returns null because the
+   text does not end in `||`. `verdict.record` is null.
+4. The sweep. With a time or a tail on the receipt, the payment becomes
+   `undecided("unreadable")` and the page shows `CEP_UNDECIDED` ("más de
+   una transferencia"). With neither, it confirms with no trail.
+5. In the test suite: once `validAnswer` carries the seal, the reader of
+   `main` fails 52 of the 195 tests in `consta/bundle.test.ts`,
+   `consta/validate.test.ts` and `cep-bundle-match.test.ts`.
 
-### Revised remediation (decided by the creator, 2026-09-29)
+## Suspected Code Paths
 
-1. **Read the cadena as it arrives** (`cadena.ts`): the closing bars are
-   the last `||`, and what follows them is a base64 seal or nothing, which
-   is dropped. The printed cadena, with no seal, reads as before.
-2. **Withdraw Rule 1**: the answer's own fields no longer stand in for a
-   cadena that cannot be read. The cadena is the one source (FR-002); a
-   single whose cadena does not read is unreadable, the clave is asked,
-   and the payment records why.
-3. **Keep the rest of the first fix**: the reason on the verdict and the
-   trail, the warn line, `CEP_SINGLE_UNDECIDED` and its words, the panel's
-   single copy, and the bank and day kept for the clave form.
-4. **Fixtures as measured**: a `valid`'s `cdaChain` carries its seal.
-5. **Spec 013**: R5 and D4 amended, D19 rewritten, FR-002 and the
-   2026-09-28 clarification updated, a 2026-09-29 clarification added.
+Line numbers are those of `main` at `a9392b8`.
 
-### Open questions (not blocking)
+- `apps/api/src/consta/bundle/cadena.ts:54`: `parseCadena` returns null
+  unless the text ends in `||`, and `:55` cuts two characters off each end.
+- `apps/api/src/consta/bundle/store.ts:378-379`: `storeSingleRecord` has
+  only `parseCadena(cep.chain)` and keeps no reason.
+- `apps/api/src/consta/provider/apicep.ts:334-335`: `chain` is `cdaChain`
+  as sent, and `creditTime` is `processingTime`.
+- `apps/api/src/consta/validate.ts:655-656`: a clave-less single `valid`
+  stores its record, and a null says nothing.
+- `apps/api/src/direct-payments/validation.ts:899-904`: D9, where no record
+  plus a time or a tail means undecided `unreadable`.
+- `apps/api/src/consta/bundle/cep-pdf.ts:295-296`: the bundle path takes
+  the cadena and the seal from separate labels. This is why that path
+  worked.
+- `apps/api/test/consta/bundle-fixtures.ts:91, 342`: the fixture cadena
+  ends in `||`, and `validAnswer` sends it as `cdaChain`. The tests shared
+  the parser's assumption.
+- `specs/013-cep-bundle-match/research.md:179`: R5 says "`||` at both
+  ends", and said it of the `valid`'s cdaChain too.
+- The words:
+  - `apps/pago/src/features/pago/PaymentPage.tsx:131`: the
+    `CEP_UNDECIDED` copy says "más de una transferencia".
+  - `apps/api/src/routes/direct-payments/handler.ts:297`: `publicError`
+    has no code for a single.
+  - `apps/admin/src/features/feed/FeedScreen.tsx:140-145`:
+    `undecidedCopy.unreadable` says "No se pudo leer el archivo de
+    coincidencias", a file a single does not have.
 
-- **A payer whose bank shows no clave** (Klar): when a single or a bundle
-  stays undecided, the clave-only ask has no answer. What to ask instead
-  is a product decision for later.
-- **Case in a clave**: Klar's clave mixes cases, and the transfer door
-  upper-cases every typed clave. Whether Banxico matches it either way was
-  not measured. With Klar's receipt showing no clave, no payer types one
-  today.
+## Root Cause Hypothesis
+
+`parseCadena` demands that the cadena end in `||`, and a `valid`'s
+`cdaChain` never does, because its seal follows the closing bars. This was
+measured on six answers across three banks. So every clave-less single
+`valid` is unreadable, from any bank.
+
+It showed first on Nu because a Nu reference names one transfer, so its
+searches end in a single `valid`. Azteca's references repeat, so its
+searches end in bundles, whose PDFs carry the cadena and the seal under
+separate labels. Research R5 and the fixtures carried the parser's
+assumption, so the tests agreed with the parser and not with the provider.
+
+The first assessment's causes (A) and (B) are both ruled out: the cadena is
+present, and its 43 fields are exactly as measured. Confidence: **high**
+(measured, and reproduced in the test suite).
+
+## Proposed Remediation
+
+**Preferred**: read the cadena as it arrives, and withdraw Rule 1.
+
+1. **`readCadena`** (`cadena.ts`, cep-bundle-match D4 amended):
+   - The closing bars are the last `||`.
+   - After them comes a base64 seal or nothing. The seal is dropped; the
+     record keeps `digitalSignature` (D2).
+   - It returns the facts or the check that failed. The reason is never a
+     value, except the field count and a short version.
+   - `parseCadena` wraps it. The printed cadena, with no seal, reads as
+     before.
+2. **The cadena is the only source** (FR-002; the creator withdrew Rule 1
+   on 2026-09-29). Remove from the first fix:
+   - the fields fallback (`singleFacts`, `fieldFacts`);
+   - the printed-day argument;
+   - the trail note on a single read from its fields.
+3. **Keep from the first fix**:
+   - `recordWhy` on the verdict, and a warn line;
+   - `readWhy` on the trail's candidates;
+   - a single whose cadena does not read rides the trail as one dropped
+     candidate named by its clave;
+   - the undecided row keeps the vocabulary bank and the printed day, for
+     the clave form;
+   - `CEP_SINGLE_UNDECIDED` and its words;
+   - the panel's single copy, through `feedCharge.undecidedSource`.
+4. **Fixtures as measured**: `cdaChainOf(t)` is the cadena followed by a
+   seal, and `validAnswer` answers with it by default.
+5. **Spec 013**:
+   - R5 and D4 amended;
+   - D19 rewritten;
+   - FR-002 updated;
+   - clarifications of 2026-09-28 (Q1 withdrawn) and of 2026-09-29;
+   - the data model and the engine contract.
+
+**Alternatives**:
+- **Keep Rule 1 as a backup.** The creator declined. With the cadena read,
+  the fields would stand in only when it is absent, and no answer showed
+  that (6 of 6 carried it).
+- **Cut a fixed 344-character tail.** It would break on a longer key, from
+  another certificate, and would hide a real change of shape.
+- **Read the CEP PDF from `downloads.cepPdf`.** One download per single,
+  for data the answer already carries.
+
+**Files likely to change**:
+- `apps/api/src/consta/bundle/cadena.ts`, `store.ts` and `types.ts`
+- `apps/api/src/consta/validate.ts` and `apps/api/src/consta/index.ts`
+- `apps/api/src/direct-payments/validation.ts` and `cep-match.ts`
+- `apps/api/src/routes/direct-payments/{schema,handler}.ts` and
+  `apps/api/src/routes/payments/{schema,handler}.ts`
+- `apps/pago/src/features/pago/PaymentPage.tsx` and
+  `apps/admin/src/features/feed/FeedScreen.tsx`
+- `apps/api/test/consta/bundle-fixtures.ts` and `helpers.ts`
+- `specs/013-cep-bundle-match/{spec,plan,research,data-model}.md` and
+  `contracts/{engine,payment-page,panel}.md`
+
+**Tests to add or update** (`bug: single-cep-unreadable`):
+- **`readCadena`**:
+  - the measured shape reads to the printed cadena's facts, and the seal
+    never reaches them;
+  - an empty field does not move the closing bars;
+  - a tail that is not a seal reads "not delimited";
+  - each check names itself, and no value leaks.
+- **Klar after 18:00**: the operation day is the 29th, the credit day the
+  28th, and the credit instant is 01:31:09 UTC on the 29th.
+- **The engine**:
+  - a cdaChain with its seal keeps its record and leaves no note;
+  - no cadena gives no record and "cadena: missing";
+  - another shape gives "cadena: 41 fields".
+- **The lifecycle**:
+  - the Nu screenshot as it happened confirms by time, from the cadena;
+  - Klar after 18:00 confirms on the manual door;
+  - a cadena of another shape, or none, is undecided `unreadable`: the one
+    transfer is named with its check, NUBANK and the printed day are kept,
+    and the status reads `CEP_SINGLE_UNDECIDED`;
+  - with nothing to compare and no cadena, D9 still confirms.
+- **The 013 tests that encoded the old shape** now carry the seal.
+- **The feed, the page and the panel**: their single wording.
+
+## Risks & Considerations
+
+- **The seal's alphabet.** A seal in any other alphabet (URL-safe, or with
+  line breaks) reads "not delimited". The CEP is then unreadable and the
+  clave is asked: it fails safe and says why. The seals kept from printed
+  CEPs match (3 of 3).
+- **With Rule 1 withdrawn, a missing cadena asks for the clave.** A Klar
+  payer cannot give one, because their receipt shows none. This is an open
+  question.
+- **No migration.** No API change beyond `CEP_SINGLE_UNDECIDED` and
+  `feedCharge.undecidedSource`. `match_trail` is JSON.
+- **Not in production.** Spec 013 has been on `main` since 2026-09-28, and
+  the last release is v1.2.0 (2026-09-20). A release before this merge
+  would ship the bug.
+- **Past payments are not re-run.** The two dev payments were superseded
+  by their claves.
+
+## Open Questions
+
+- [NEEDS CLARIFICATION: what to ask a payer whose bank shows no clave
+  (Klar) when a payment stays undecided. A product decision, not blocking.]
+- [NEEDS CLARIFICATION: whether Banxico matches a clave regardless of
+  case. Klar's claves mix cases and the transfer door upper-cases typed
+  ones. Not measured, and not blocking.]

@@ -3,7 +3,9 @@ import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/r
 import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-payments-schema";
 import { api, ApiError } from "@/lib/api";
 import { FOCUS_FLOOR_MS } from "@/lib/presence";
-import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults } from "./seen";
+import { useSession } from "../auth/session";
+import { useFirstBlockReread } from "./blocks";
+import { readResults, recallCustomers, rememberCustomers, rowKey, writeResults, type SearchView } from "./seen";
 
 /* links-on-demand-search US1: the page asks for what it shows.
 
@@ -36,10 +38,28 @@ export const SEARCH_DEBOUNCE_MS = 300;
    which a query cache cannot survive (D11). Both use this figure. */
 const RESULTS_STALE_MS = 2 * 60_000;
 
+/* A block as the cache holds it: the door's answer, or the stop standing
+   in for a later block that failed (cobros-in-links, blocks.ts). Only
+   weather stops here: a refused key on any block is the whole page's
+   setup message, as it always was (bug: links-refused-key). */
+type Block = CustomersResponse & { stopped?: "failed" };
+type Blocks = InfiniteData<Block, string | null>;
+const STOP: Block = { results: [], nextCursor: null, matched: null, total: null, wisphub: "ok", stopped: "failed" };
+
+/* Reintentar lifts the stop; the page before it keeps the cursor the
+   walk resumes from */
+function withoutStops(data: Blocks): Blocks {
+  const at = data.pages.findIndex((page) => page.stopped !== undefined);
+  return at < 0 ? data : { pages: data.pages.slice(0, at), pageParams: data.pageParams.slice(0, at) };
+}
+
 /* D3/FR-020: only the browser knows what fills its own viewport. The
    server clamps it to 10..50; asking for a screenful is what keeps the
-   first block one provider call instead of four. */
-function blockSize(): number {
+   first block one provider call instead of four.
+
+   Exported for Por cobrar (cobros-in-links D4): its blocks follow the
+   same rule, reused rather than copied. */
+export function blockSize(): number {
   const height = typeof window === "undefined" ? 0 : window.innerHeight;
   const rows = Math.ceil(Math.max(0, height - CHROME_PX) / ROW_HEIGHT_PX) + 2;
   return Math.min(BLOCK_MAX, Math.max(BLOCK_MIN, rows));
@@ -75,12 +95,19 @@ export type CustomersView = {
   error: ApiError | null;
   hasMore: boolean;
   loadingMore: boolean;
+  /* The next block failed; the walk stops and the page offers Reintentar */
+  nextFailed: boolean;
+  retryNext: () => void;
   sentinelRef: (node: HTMLElement | null) => void;
   retry: () => void;
 };
 
-export function useCustomers(search: string): CustomersView {
+export function useCustomers(search: string, opts: { view?: SearchView } = {}): CustomersView {
+  const view = opts.view ?? "customers";
   const client = useQueryClient();
+  /* Every memory is per business (seen.ts): a search remembered for one
+     business must never answer in another's list */
+  const businessId = useSession().data?.id ?? "";
   /* Measured once per mount: a key that moved with the window would
      throw away a cache on every resize */
   const [limit] = useState(blockSize);
@@ -93,6 +120,7 @@ export function useCustomers(search: string): CustomersView {
     refused: false,
     failed: false,
   });
+  const { busy: rereading, start, isRunning, settled: rereadSettled } = useFirstBlockReread();
 
   const settled = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const trimmed = settled.trim();
@@ -104,7 +132,13 @@ export function useCustomers(search: string): CustomersView {
      the text it is asking about, and nothing else. The limit stays OUT
      of the key: it is the same rows either way, and a resize must not
      cost the two-minute memory (FR-012). */
-  const key = useMemo(() => ["links-customers", q ?? ""] as const, [q]);
+  /* cobros-in-links D12: the view is part of the key — the same text in
+     Por cobrar asks for panel rows only (D8), so it is another answer */
+  const key = useMemo(() => ["links-customers", businessId, view, q ?? ""] as const, [businessId, view, q]);
+  /* cobros-in-links FR-010: in Por cobrar the customers door is asked
+     only for a SEARCH. With no text the view is the open-invoice list,
+     which is another read (`useReceivables`). */
+  const enabled = view === "customers" || q !== undefined;
 
   /* FR-012 / D11: what this exact search answered last time, if it was
      within the two minutes. A TanStack cache dies on reload; this is
@@ -112,23 +146,38 @@ export function useCustomers(search: string): CustomersView {
      visible wait (US2 scenarios 2 and 4). Only the FIRST block is
      stored — the blocks below it are a scroll the operator can repeat,
      and storing a session's whole scroll is not a two-minute memory. */
-  const stored = useMemo(() => (q === undefined ? null : readResults(q)), [q]);
+  const stored = useMemo(() => (q === undefined ? null : readResults(q, view, businessId)), [q, view, businessId]);
 
   const url = useCallback(
     (cursor: string | null) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (q !== undefined) params.set("q", q);
       if (cursor !== null) params.set("cursor", cursor);
+      /* cobros-in-links D8: an API link has no customer and no debt in the
+         business's system, so Por cobrar's search leaves them out — on
+         the server, so the count stays honest */
+      if (view === "receivables") params.set("channel", "panel");
       return `/direct-payments/customers?${params.toString()}`;
     },
-    [limit, q],
+    [limit, q, view],
   );
 
-  const query = useInfiniteQuery<CustomersResponse, ApiError, InfiniteData<CustomersResponse, string | null>, typeof key, string | null>({
+  const query = useInfiniteQuery<Block, ApiError, Blocks, typeof key, string | null>({
     queryKey: key,
-    queryFn: ({ pageParam }) => api<CustomersResponse>(url(pageParam)),
+    queryFn: async ({ pageParam }) => {
+      try {
+        return await api<CustomersResponse>(url(pageParam));
+      } catch (e) {
+        /* The first block has nothing on screen to keep, and a refused
+           key is setup: both are the screen's, as they always were. Any
+           other later block that fails is a stop (blocks.ts). */
+        if (pageParam === null || (e instanceof ApiError && e.code === "WISPHUB_AUTH_FAILED")) throw e;
+        return STOP;
+      }
+    },
     initialPageParam: null,
     getNextPageParam: (last) => last.nextCursor,
+    enabled,
     staleTime: RESULTS_STALE_MS,
     /* Seeded from the browser's own memory, with the age it really has:
        inside the two minutes it renders at once and asks nothing, past
@@ -173,7 +222,7 @@ export function useCustomers(search: string): CustomersView {
        who has no link yet is not in the answer at all, so searching by
        their NAME — which needs WispHub — still finds them. */
     if (provider !== "ok") {
-      const remembered = new Map(recallCustomers(q ?? "").map((entry) => [entry.usuario, entry]));
+      const remembered = new Map(recallCustomers(q ?? "", businessId).map((entry) => [entry.usuario, entry]));
       for (const [i, row] of out.entries()) {
         const entry = row.usuario === null ? undefined : remembered.get(row.usuario);
         if (!entry) continue;
@@ -206,26 +255,29 @@ export function useCustomers(search: string): CustomersView {
       }
     }
     return out;
-  }, [pages, provider, q]);
+  }, [pages, provider, q, businessId]);
 
   /* FR-021: every live answer overwrites what it covers. Written here
      rather than in the query, because it is the RENDERED rows that the
      operator saw and may need back. */
   useEffect(() => {
     if (provider !== "ok" || rows.length === 0) return;
-    rememberCustomers(rows);
-  }, [provider, rows]);
+    rememberCustomers(rows, businessId);
+  }, [provider, rows, businessId]);
 
   const first = pages?.[0];
-  const last = pages?.[pages.length - 1];
+  /* The last block the door answered: a stop carries no count */
+  const answeredPages = pages?.filter((page) => page.stopped === undefined);
+  const last = answeredPages?.[answeredPages.length - 1];
+  const stopped = answeredPages !== undefined && pages !== undefined && answeredPages.length < pages.length;
 
   /* Store what the provider answered, never what we restored: writing
      the restored block back would give it a fresh timestamp and the
      two-minute memory would never expire (FR-012). */
   useEffect(() => {
     if (q === undefined || !first || first === stored?.block) return;
-    writeResults(q, first);
-  }, [q, first, stored]);
+    writeResults(q, first, view, businessId);
+  }, [q, first, stored, view, businessId]);
 
   /* FR-027 / D15: the page no longer reports its own age — a block is
      read when it renders, so there is nothing to print and nothing to
@@ -233,37 +285,50 @@ export function useCustomers(search: string): CustomersView {
      the return to the tab re-reads, above a 30-second floor, and only
      the FIRST block. A screen left open overnight must not show
      yesterday's first page; re-reading five blocks because someone
-     came back is five provider calls nobody asked for. */
+     came back is five provider calls nobody asked for.
+
+     cobros-in-links (review of 2026-09-28): one re-read at a time, never
+     while a next block is on its way, and a stop below stays a stop — a
+     return to the tab is not a scroll (blocks.ts). */
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const onVisibility = async () => {
-      if (document.visibilityState !== "visible") return;
-      const state = client.getQueryState<InfiniteData<CustomersResponse, string | null>>(key);
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || isRunning()) return;
+      const state = client.getQueryState<Blocks>(key);
       if (!state?.data || state.fetchStatus !== "idle") return;
       if (Date.now() - state.dataUpdatedAt < FOCUS_FLOOR_MS) return;
-      try {
-        const fresh = await api<CustomersResponse>(url(null));
-        client.setQueryData<InfiniteData<CustomersResponse, string | null>>(key, (old) =>
-          old ? { ...old, pages: [fresh, ...old.pages.slice(1)] } : old,
-        );
-        setBackground({ refused: false, failed: false });
-      } catch (e) {
-        /* A failed background read keeps what is on screen: the rows
-           were true when they arrived (list-states D1). A REFUSED key
-           is the exception — it is setup, and the note would promise a
-           refresh that cannot happen. */
-        const refused = e instanceof ApiError && e.code === "WISPHUB_AUTH_FAILED";
-        setBackground({ refused, failed: true });
-      }
+      start(async () => {
+        try {
+          const fresh = await api<CustomersResponse>(url(null));
+          client.setQueryData<Blocks>(key, (old) => (old ? { ...old, pages: [fresh, ...old.pages.slice(1)] } : old));
+          setBackground({ refused: false, failed: false });
+        } catch (e) {
+          /* A failed background read keeps what is on screen: the rows
+             were true when they arrived (list-states D1). A REFUSED key
+             is the exception — it is setup, and the note would promise a
+             refresh that cannot happen. */
+          const refused = e instanceof ApiError && e.code === "WISPHUB_AUTH_FAILED";
+          setBackground({ refused, failed: true });
+        }
+      });
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [client, key, url]);
+  }, [client, key, url, isRunning, start]);
 
   /* FR-020: the next block is asked for when the operator scrolls
      TOWARD it — a sentinel below the list, not a page walked to its
      end. `rootMargin` is what makes the block land before the operator
-     reaches the bottom rather than after. */
+     reaches the bottom rather than after.
+
+     cobros-in-links SC-009: not in Por cobrar. There every result costs
+     debt reads (two provider calls each, D9), and a block loaded ahead of
+     the scroll is debt read for rows nobody scrolled to. The first block
+     ends a row or two below the fold (D4), so a 320px look-ahead reaches
+     its sentinel on arrival; with none, a search that is never scrolled
+     reads its first block's debts and nothing more — the list's own rule
+     (`useReceivables`, SC-003). */
+  const lookahead = view === "receivables" ? "0px" : "320px";
   const observer = useRef<IntersectionObserver | null>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const sentinelRef = useCallback(
@@ -276,15 +341,34 @@ export function useCustomers(search: string): CustomersView {
       observer.current = new IntersectionObserver(
         (entries) => {
           if (!entries.some((entry) => entry.isIntersecting)) return;
-          if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          /* A failed next block is a stop with no cursor, so it is never
+             asked again from here (cobros-in-links, review of 2026-09-28:
+             it used to be, as fast as it failed). Nor while the first
+             block is being re-read (blocks.ts). */
+          if (hasNextPage && !isFetchingNextPage && !isRunning()) void fetchNextPage();
         },
-        { rootMargin: "320px" },
+        { rootMargin: lookahead },
       );
       observer.current.observe(node);
     },
-    [hasNextPage, isFetchingNextPage, fetchNextPage],
+    /* `rereading` rebuilds the observer when a re-read lands, so a
+       sentinel reached meanwhile reports again */
+    [hasNextPage, isFetchingNextPage, fetchNextPage, lookahead, isRunning, rereading],
   );
   useEffect(() => () => observer.current?.disconnect(), []);
+
+  /* Reintentar for the next block: lift the stop, then ask from the last
+     good cursor — after any re-read of the first block has landed */
+  const retryNext = useCallback(() => {
+    void rereadSettled().then(() => {
+      const state = client.getQueryState<Blocks>(key);
+      if (!state?.data) return;
+      const lifted = withoutStops(state.data);
+      /* Lifting a stop reads nothing, so the first block keeps its age */
+      if (lifted !== state.data) client.setQueryData<Blocks>(key, lifted, { updatedAt: state.dataUpdatedAt });
+      void fetchNextPage();
+    });
+  }, [client, key, fetchNextPage, rereadSettled]);
 
   return {
     rows,
@@ -304,8 +388,12 @@ export function useCustomers(search: string): CustomersView {
     isPending: query.isPending,
     isError: query.isError,
     error: query.error ?? (background.refused ? new ApiError("WISPHUB_AUTH_FAILED", 503) : null),
-    hasMore: Boolean(query.hasNextPage),
+    /* A stop is more to come, not the end: the count keeps saying "más
+       de N" while Reintentar waits below it (D5) */
+    hasMore: Boolean(query.hasNextPage) || stopped,
     loadingMore: query.isFetchingNextPage,
+    nextFailed: stopped && !isFetchingNextPage,
+    retryNext,
     sentinelRef,
     retry: () => void query.refetch(),
   };

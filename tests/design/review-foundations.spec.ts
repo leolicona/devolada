@@ -65,7 +65,8 @@ const proof = {
 async function stubAdmin(page: Page) {
   await json(page, "**/auth/me", businessActor);
   await json(page, "**/payments/feed*", feed);
-  await json(page, "**/payment-requests", cobros);
+  /* cobros-in-links D1: the block carries `?limit=` */
+  await json(page, "**/payment-requests*", cobros);
   await json(page, "**/integrations", integrationsHub);
   await json(page, "**/direct-payments/customers*", customersBlock);
   await json(page, "**/businesses/members", members);

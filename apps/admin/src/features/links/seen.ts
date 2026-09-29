@@ -2,7 +2,7 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
 
 /* links-on-demand-search D11: the page's whole memory, in the browser.
 
-   Three stores, no server state, all of them `sessionStorage` because
+   Four stores, no server state, all of them `sessionStorage` because
    that is exactly what they mean — per operator, per session, promised
    to nobody else:
 
@@ -15,18 +15,35 @@ import type { CustomerRow, CustomersResponse } from "@devolada/api/direct-paymen
    3. **Copied / sent marks** (FR-022). No delivery state is stored
       anywhere: Devolada has no record that a link was sent, and this
       mark promises nothing to another operator or a later session.
+   4. **The last Links address** (cobros-in-links SC-005), added below:
+      the view and the text, so a return through the menu lands where
+      the operator was.
 
-   All three live in one module on purpose: US2 wires the first into
+   All of them live in one module on purpose: US2 wires the first into
    `useCustomers`, US3 the second, and US1 renders the third. One file
    they each consume beats three phases each editing the same file.
 
    Every read and write is wrapped: `sessionStorage` throws in a private
    window and in an iframe with third-party storage blocked, and a page
-   that cannot remember must still work. */
+   that cannot remember must still work.
+
+   Every entry is per BUSINESS (cobros-in-links, review of 2026-09-28).
+   Switching business clears the query cache but not the session's
+   storage, so a search, a name or a mark remembered for one business was
+   served in another's list — and in Por cobrar each wrong row would then
+   ask the other business's integration what that usuario owes.
+
+   Per business is not enough on its own when the switch happens in
+   ANOTHER tab: every tab shares the session, and this one learns of the
+   change only when it reads its session again. Until then it files the
+   new business's answers under the old one. So a tab that sees its
+   business change without having chosen it forgets everything
+   (`businessChanged`, called by the shell). */
 
 const RESULTS = "devolada.links.results.v1";
 const CUSTOMERS = "devolada.links.customers.v1";
 const MARKS = "devolada.links.marks.v1";
+const ADDRESS = "devolada.links.address.v1";
 
 /* FR-012: results for the same text are reused for two minutes */
 export const RESULTS_TTL_MS = 2 * 60_000;
@@ -44,6 +61,9 @@ export const foldText = (text: string) =>
   text.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
 export const normalizeSearch = (text: string) => foldText(text.trim()).replace(/\s+/g, " ");
+
+/* One business's corner of a store */
+const scoped = (businessId: string, key: string) => `${businessId}|${key}`;
 
 /* The identity a row is remembered by: the usuario for a panel row, the
    caller's reference for an API one (D6). Cobros passes a debtor's
@@ -77,16 +97,27 @@ function write(key: string, value: unknown): void {
    and restoring rows without them would redraw the screen wrong. */
 type StoredResults = { at: number; block: CustomersResponse };
 
+/* cobros-in-links D12: which view asked. The same text in the customer
+   view and in Por cobrar is two questions — Por cobrar asks for panel
+   rows only (D8) — so it is two entries. The customer view keeps the
+   bare key it always had. */
+export type SearchView = "customers" | "receivables";
+const resultsKey = (text: string, view: SearchView, businessId: string) => {
+  const key = normalizeSearch(text);
+  if (key === "") return "";
+  return scoped(businessId, view === "customers" ? key : `${view}:${key}`);
+};
+
 /* Null past the two minutes, so an expired entry is simply a search
    nobody stored — the caller asks the provider again (FR-012). */
-export function readResults(text: string): StoredResults | null {
-  const stored = read<Record<string, StoredResults>>(RESULTS)?.[normalizeSearch(text)];
+export function readResults(text: string, view: SearchView, businessId: string): StoredResults | null {
+  const stored = read<Record<string, StoredResults>>(RESULTS)?.[resultsKey(text, view, businessId)];
   if (!stored) return null;
   return Date.now() - stored.at > RESULTS_TTL_MS ? null : stored;
 }
 
-export function writeResults(text: string, block: CustomersResponse): void {
-  const key = normalizeSearch(text);
+export function writeResults(text: string, block: CustomersResponse, view: SearchView, businessId: string): void {
+  const key = resultsKey(text, view, businessId);
   /* An empty box leaves no entry behind: a browse is not a search */
   if (key === "") return;
   const all = read<Record<string, StoredResults>>(RESULTS) ?? {};
@@ -103,6 +134,7 @@ export function writeResults(text: string, block: CustomersResponse): void {
 
 type SeenCustomer = {
   at: number;
+  businessId: string;
   usuario: string;
   wisphubId: number | null;
   name: string | null;
@@ -111,13 +143,14 @@ type SeenCustomer = {
 
 /* Every live answer overwrites what it covers: the cache can never
    contradict a provider that just spoke. */
-export function rememberCustomers(rows: CustomerRow[]): void {
+export function rememberCustomers(rows: CustomerRow[], businessId: string): void {
   const all = read<Record<string, SeenCustomer>>(CUSTOMERS) ?? {};
   const now = Date.now();
   for (const row of rows) {
     if (row.channel !== "panel" || row.usuario === null) continue;
-    all[row.usuario] = {
+    all[scoped(businessId, row.usuario)] = {
       at: now,
+      businessId,
       usuario: row.usuario,
       wisphubId: row.wisphubId,
       name: row.name,
@@ -128,16 +161,17 @@ export function rememberCustomers(rows: CustomerRow[]): void {
     .filter((entry) => now - entry.at <= CUSTOMERS_TTL_MS)
     .sort((a, b) => b.at - a.at)
     .slice(0, CUSTOMERS_MAX);
-  write(CUSTOMERS, Object.fromEntries(kept.map((entry) => [entry.usuario, entry])));
+  write(CUSTOMERS, Object.fromEntries(kept.map((entry) => [scoped(entry.businessId, entry.usuario), entry])));
 }
 
 /* Read ONLY when the provider did not answer (FR-014, FR-021): a name
    seen minutes ago is better than a blank row, and worse than a live
    one. Matching is the same contains promise the provider makes (FR-004). */
-export function recallCustomers(search: string): SeenCustomer[] {
+export function recallCustomers(search: string, businessId: string): SeenCustomer[] {
   const needle = normalizeSearch(search);
   const now = Date.now();
   return Object.values(read<Record<string, SeenCustomer>>(CUSTOMERS) ?? {})
+    .filter((entry) => entry.businessId === businessId)
     .filter((entry) => now - entry.at <= CUSTOMERS_TTL_MS)
     .filter(
       (entry) =>
@@ -153,23 +187,92 @@ export function recallCustomers(search: string): SeenCustomer[] {
 
 export type Mark = "copied" | "sent";
 
-export function readMarks(): Record<string, Mark> {
-  return read<Record<string, Mark>>(MARKS) ?? {};
+/* This business's marks, keyed by row identity */
+export function readMarks(businessId: string): Record<string, Mark> {
+  const prefix = scoped(businessId, "");
+  return Object.fromEntries(
+    Object.entries(read<Record<string, Mark>>(MARKS) ?? {})
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, mark]) => [key.slice(prefix.length), mark]),
+  );
 }
 
-export function writeMark(key: string, mark: Mark): void {
+export function writeMark(businessId: string, key: string, mark: Mark): void {
   if (key === "") return;
-  write(MARKS, { ...readMarks(), [key]: mark });
+  write(MARKS, { ...(read<Record<string, Mark>>(MARKS) ?? {}), [scoped(businessId, key)]: mark });
 }
 
-/* Tests only: three module-level stores outlive a test's render, and a
-   test starts from empty or it is not a test. */
-export function resetSeenForTests(): void {
-  for (const key of [RESULTS, CUSTOMERS, MARKS]) {
+/* ---- 4. The last Links address (cobros-in-links FR-009, SC-005) ----
+
+   The address carries the view and the search text, so the back button
+   and a reload land where the operator was. A return through the MENU
+   does not: its Links entry is a plain `/links`, and measured 2026-09-28
+   it landed on the customer view with an empty box. SC-005 asks that
+   every return — from another page included — comes back to the view and
+   the text the operator left. So the page writes its address here and
+   the menu's entry reads it (`Shell.tsx`).
+
+   Per business: an operator who switches business in the same tab must
+   not carry one business's search into another's list. Per session, like
+   the other stores: promised to nobody else. */
+
+export type LinksAddress = { q?: string; view?: "receivables" };
+type StoredAddress = { businessId: string; q: string | null; view: "receivables" | null };
+
+export function rememberLinksAddress(businessId: string, address: LinksAddress): void {
+  const q = typeof address.q === "string" && address.q.trim() !== "" ? address.q : null;
+  write(ADDRESS, { businessId, q, view: address.view === "receivables" ? "receivables" : null } satisfies StoredAddress);
+}
+
+/* Only what `linksSearch` itself would accept (router.tsx): a text that
+   is not blank, and the one view name there is. The shell reads the page's
+   own address through it too, while the operator is on Links. */
+export function linksAddress(search: { q?: unknown; view?: unknown }): LinksAddress {
+  return {
+    ...(typeof search.q === "string" && search.q.trim() !== "" ? { q: search.q } : {}),
+    ...(search.view === "receivables" ? { view: "receivables" as const } : {}),
+  };
+}
+
+/* Another business's address, or a store written by an older version, is
+   no address */
+export function lastLinksAddress(businessId: string | undefined): LinksAddress {
+  const stored = read<Partial<StoredAddress>>(ADDRESS);
+  if (!stored || businessId === undefined || stored.businessId !== businessId) return {};
+  return linksAddress(stored);
+}
+
+/* ---- The business changing under the tab ---- */
+
+function forgetEverything(): void {
+  for (const key of [RESULTS, CUSTOMERS, MARKS, ADDRESS]) {
     try {
       sessionStorage.removeItem(key);
     } catch {
       /* nothing to clear */
     }
   }
+}
+
+/* The business this tab asked to switch to (BusinessSwitcher). That
+   change is this tab's own: nothing was filed under the wrong business,
+   and every store is already per business, so nothing is forgotten. */
+let chosen: string | null = null;
+export function choosingBusiness(businessId: string): void {
+  chosen = businessId;
+}
+
+/* The shell saw this tab's business change. Unless the tab chose it,
+   another tab did, and what this tab stored since then may be the new
+   business's answers under the old one's name: forget all of it. */
+export function businessChanged(to: string): void {
+  if (chosen !== to) forgetEverything();
+  chosen = null;
+}
+
+/* Tests only: four module-level stores outlive a test's render, and a
+   test starts from empty or it is not a test. */
+export function resetSeenForTests(): void {
+  forgetEverything();
+  chosen = null;
 }

@@ -2,6 +2,15 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN } from "../../playwright.config";
 import { businessActor, settings } from "./stubs";
+/* Constitution III: every fixture below is parsed by the contract it
+   stands in for, so a stub cannot serve a shape the server never sends
+   (cobros-in-links T047). By path, as stubs.ts reaches them. */
+import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
+import {
+  createLinkResponse,
+  customerDebtResponse,
+  customersResponse,
+} from "../../apps/api/src/routes/direct-payments/schema";
 
 /* links-on-demand-search US1 — the questions only a browser can answer
    (constitution IV).
@@ -100,28 +109,32 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
         const seen = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
         const size = Math.min(limit, LEO_MATCHES - seen);
         return route.fulfill(
-          envelope({
-            results: Array.from({ length: size }, (_, i) =>
-              row(seen + i + 1, {
-                name: `Leo ${seen + i + 1} Hernández`,
-                usuario: `leo${seen + i + 1}@wifiplus`,
-              }),
-            ),
-            nextCursor: seen + size < LEO_MATCHES ? btoa(`sq:${seen + limit}:1`) : null,
-            matched: LEO_MATCHES,
-            total: null,
-            wisphub: "ok",
-          }),
+          envelope(
+            customersResponse.parse({
+              results: Array.from({ length: size }, (_, i) =>
+                row(seen + i + 1, {
+                  name: `Leo ${seen + i + 1} Hernández`,
+                  usuario: `leo${seen + i + 1}@wifiplus`,
+                }),
+              ),
+              nextCursor: seen + size < LEO_MATCHES ? btoa(`sq:${seen + limit}:1`) : null,
+              matched: LEO_MATCHES,
+              total: null,
+              wisphub: "ok",
+            }),
+          ),
         );
       }
       return route.fulfill(
-        envelope({
-          results: [row(1, { name: "María Fernanda López Ruiz", usuario: "maria.lopez@wifiplus" })],
-          nextCursor: null,
-          matched: 1,
-          total: null,
-          wisphub: "ok",
-        }),
+        envelope(
+          customersResponse.parse({
+            results: [row(1, { name: "María Fernanda López Ruiz", usuario: "maria.lopez@wifiplus" })],
+            nextCursor: null,
+            matched: 1,
+            total: null,
+            wisphub: "ok",
+          }),
+        ),
       );
     }
     /* An ISP with more customers than any page could hold: every block
@@ -129,13 +142,15 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
        its end on its own" is a claim the stub can actually falsify. */
     const offset = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
     return route.fulfill(
-      envelope({
-        results: Array.from({ length: limit }, (_, i) => row(offset + i + 1)),
-        nextCursor: btoa(`wh:${offset + limit}`),
-        matched: null,
-        total: 6513,
-        wisphub: "ok",
-      }),
+      envelope(
+        customersResponse.parse({
+          results: Array.from({ length: limit }, (_, i) => row(offset + i + 1)),
+          nextCursor: btoa(`wh:${offset + limit}`),
+          matched: null,
+          total: 6513,
+          wisphub: "ok",
+        }),
+      ),
     );
   });
 
@@ -143,12 +158,14 @@ async function stubLinks(page: Page, opts: { delayMs?: number } = {}) {
     if (route.request().method() !== "POST") return route.fallback();
     await new Promise((r) => setTimeout(r, delay));
     return route.fulfill(
-      envelope({
-        token: "tok-maria",
-        url: "https://link.dev.devoladapago.com/p/tok-maria",
-        waLink: "https://wa.me/525551234567?text=hola",
-        created: true,
-      }),
+      envelope(
+        createLinkResponse.parse({
+          token: "tok-maria",
+          url: "https://link.dev.devoladapago.com/p/tok-maria",
+          waLink: "https://wa.me/525551234567?text=hola",
+          created: true,
+        }),
+      ),
     );
   });
 }
@@ -370,5 +387,286 @@ test.describe("links-on-demand-search: what the operator waits for", () => {
        rather than WhatsApp because the send leaves the browser. */
     console.log(`SC-001 found and sent: ${sent}ms (target 15000ms, ceiling 20000ms)`);
     expect(sent, "finding and sending got slow").toBeLessThan(20_000);
+  });
+});
+
+/* ---- cobros-in-links US1 (T040): Por cobrar, in a real browser ----
+
+   The questions the component layer cannot answer about the chip and
+   the view (constitution IV): that opening Por cobrar and not scrolling
+   reads exactly ONE block (FR-003, SC-003) — which needs layout, because
+   the sentinel's position is what decides it — that the page holds at
+   360/768/1280 with the chip on it, that the chip is a real 40px target
+   on the desktop with a measured focus ring, and that its inks meet in
+   both themes. The two new badges are measured in contrast.spec.ts.
+
+   Measured 2026-09-28 against the stubbed API with the same 500 ms per
+   provider call as above:
+
+   | Criterion | Target | Measured | Ceiling asserted |
+   | --- | --- | --- | --- |
+   | SC-002 first Por cobrar block after the press | 3 s | **0.95 s** | 6 s |
+   | SC-001 open Links, Por cobrar, WhatsApp | 10 s | **2.29 s** | 20 s |
+
+   The same rule as above: the ceilings catch a page that got slow, and
+   the targets are measured against the real provider before release. */
+
+/* A business with more open invoices than any page could hold, one
+   block per call, every call paying what a real one pays. `blocks`
+   counts what the view asked for. */
+async function stubPorCobrar(page: Page, opts: { delayMs?: number } = {}) {
+  const delay = opts.delayMs ?? PROVIDER_MS;
+  await stubLinks(page, { delayMs: delay });
+  const asked = { blocks: 0, debts: 0 };
+  await page.route("**/payment-requests*", async (route) => {
+    if (route.request().resourceType() === "document") return route.fallback();
+    asked.blocks++;
+    const url = new URL(route.request().url());
+    const limit = Number(url.searchParams.get("limit") ?? 20);
+    const cursor = url.searchParams.get("cursor");
+    const offset = cursor === null ? 0 : Number(atob(cursor).split(":")[1] ?? 0);
+    await new Promise((r) => setTimeout(r, delay));
+    return route.fulfill(
+      envelope(
+        paymentRequestsResponse.parse({
+          results: Array.from({ length: limit }, (_, i) => {
+            const n = offset + i + 1;
+            return {
+              externalId: 9000 + n,
+              customerUsuario: `deudor${n}@wifiplus`,
+              customerName: `Deudor ${n} Ramírez Olvera`,
+              amountCents: 49900 + n,
+              invoiceDate: "2026-09-01",
+              /* Every third one overdue, so Venció and its warning ink are on screen */
+              dueDate: n % 3 === 0 ? "2026-09-11" : "2099-01-11",
+              periodCents: 49900,
+              carriedCents: n % 3 === 0 ? 29900 : 0,
+              period: "Periodo del 1/Sept./2026 al 30/Sept./2026",
+            };
+          }),
+          /* The stub's own cursor: the offset the next block starts at */
+          nextCursor: btoa(`inv:${offset + limit}`),
+          total: 193,
+          integration: "ok",
+        }),
+      ),
+    );
+  });
+  await page.route("**/direct-payments/customers/debt*", (route) => {
+    asked.debts++;
+    const usuario = new URL(route.request().url()).searchParams.get("usuario") ?? "";
+    return route.fulfill(
+      envelope(
+        customerDebtResponse.parse({
+          usuario,
+          state: "owes",
+          totalCents: 29900,
+          invoiceCents: 0,
+          carriedBalanceCents: 29900,
+          invoices: [],
+        }),
+      ),
+    );
+  });
+  return asked;
+}
+
+test.describe("cobros-in-links US1: Por cobrar holds in a real browser", () => {
+  test.use({ viewport: DESKTOP });
+
+  test("FR-003 / SC-003: pressing Por cobrar and not scrolling reads exactly one block; scrolling reads the next", async ({ page }) => {
+    const asked = await stubPorCobrar(page, { delayMs: 50 });
+    let customerReads = 0;
+    await page.route("**/direct-payments/customers*", async (route) => {
+      if (route.request().resourceType() !== "document") customerReads++;
+      return route.fallback();
+    });
+    await page.goto(`${ADMIN}/links`);
+    await expect(page.getByText("Cliente 1 Pérez Domínguez")).toBeVisible();
+    /* The customer view's look-ahead can read another block after the
+       first shows. Wait until its reads stop, so none of them is counted
+       against Por cobrar — a fixed wait was a race on a slow runner
+       (review of 2026-09-28). */
+    let beforeChip = -1;
+    await expect
+      .poll(
+        async () => {
+          const then = customerReads;
+          await page.waitForTimeout(300);
+          beforeChip = customerReads;
+          return then === customerReads;
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+
+    await page.getByRole("tab", { name: /por cobrar/i }).click();
+    await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+    await expect(page.getByText("193 facturas abiertas")).toBeVisible();
+    await page.waitForTimeout(1_000);
+    expect(asked.blocks, "the view read ahead with nobody scrolling").toBe(1);
+    /* SC-003, FR-016 (review of 2026-09-28): the one block is ALL it reads —
+       no customers door, no debt for the list's rows */
+    expect(customerReads, "Por cobrar's list asked the customers door").toBe(beforeChip);
+    expect(asked.debts, "Por cobrar's list read debts").toBe(0);
+
+    const before = await page.getByRole("list", { name: /clientes con facturas abiertas/i }).getByRole("listitem").count();
+    await page.getByRole("list", { name: /clientes con facturas abiertas/i }).getByRole("listitem").last().scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 600);
+    await expect(
+      page.getByRole("list", { name: /clientes con facturas abiertas/i }).getByRole("listitem"),
+    ).not.toHaveCount(before, { timeout: 5_000 });
+    expect(asked.blocks).toBe(2);
+  });
+
+  /* cobros-in-links SC-009 (T049): every result costs a debt read of two
+     provider calls, so a block loaded ahead of the scroll is debt read for
+     rows nobody reached. Like the list (SC-003), the search reads one
+     block until the operator scrolls. */
+  test("SC-009: an unscrolled Por cobrar search reads its first block's debts, and nothing past it", async ({ page }) => {
+    const asked = await stubPorCobrar(page, { delayMs: 50 });
+    let searchBlocks = 0;
+    await page.route("**/direct-payments/customers*", async (route) => {
+      if (new URL(route.request().url()).searchParams.get("q") !== null) searchBlocks++;
+      return route.fallback();
+    });
+    await page.goto(`${ADMIN}/links?view=receivables`);
+    await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+
+    /* «leo» matches 39, one screenful at a time */
+    await page.getByRole("searchbox").fill("leo");
+    await expect(page.getByText("Leo 1 Hernández")).toBeVisible();
+    const firstBlock = await page.getByRole("listitem").count();
+    expect(firstBlock).toBeLessThan(39);
+    await expect.poll(() => asked.debts).toBe(firstBlock);
+    await page.waitForTimeout(1_000);
+    expect(searchBlocks, "the search read ahead with nobody scrolling").toBe(1);
+    expect(asked.debts, "debt was read for rows past the first block").toBe(firstBlock);
+
+    /* Scrolling toward the end reads the next block, and only then its debts */
+    await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
+    await page.mouse.wheel(0, 600);
+    await expect(page.getByRole("listitem")).not.toHaveCount(firstBlock, { timeout: 5_000 });
+    expect(searchBlocks).toBe(2);
+    await expect.poll(() => asked.debts).toBeGreaterThan(firstBlock);
+  });
+
+  for (const size of [PHONE, TABLET, DESKTOP]) {
+    test(`the chip and Por cobrar do not scroll sideways at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubPorCobrar(page, { delayMs: 50 });
+      await page.goto(`${ADMIN}/links?view=receivables`);
+      await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+
+      /* A row opened, with its period and saldo anterior */
+      await page.getByRole("button", { name: /deudor 3 ramírez/i }).click();
+      await expect(page.getByText(/incluye saldo anterior/i).first()).toBeVisible();
+      await expectNoHorizontalScroll(page);
+
+      /* A search, with each result's debt on its row */
+      await page.getByRole("searchbox").fill("maria");
+      await expect(page.getByText("María Fernanda López Ruiz")).toBeVisible();
+      await expect(page.getByText("$299.00").first()).toBeVisible();
+      await expectNoHorizontalScroll(page);
+    });
+  }
+
+  test("D14: the chip is a 40px compact target on the desktop and 44px under a finger", async ({ page }) => {
+    await stubPorCobrar(page, { delayMs: 50 });
+    await page.goto(`${ADMIN}/links?view=receivables`);
+    await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+    for (const tab of await page.getByRole("tab").all()) {
+      const box = await tab.boundingBox();
+      expect(Math.round(box!.height), "a chip under the compact 40px").toBe(40);
+    }
+
+    await page.setViewportSize(PHONE);
+    for (const tab of await page.getByRole("tab").all()) {
+      const box = await tab.boundingBox();
+      expect(box!.height, "a chip under 44px on a phone").toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("the chip shows a focus indicator someone can see", async ({ page }) => {
+    await stubPorCobrar(page, { delayMs: 50 });
+    await page.goto(`${ADMIN}/links`);
+    await expect(page.getByText("Cliente 1 Pérez Domínguez")).toBeVisible();
+
+    const chip = page.getByRole("tab", { name: /todos/i });
+    await chip.evaluate((el) => ((el as HTMLElement).dataset.restingShadow = getComputedStyle(el).boxShadow));
+    await chip.focus();
+    const visible = await chip.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const outline = s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0;
+      const ring = s.boxShadow !== "none" && s.boxShadow !== (el as HTMLElement).dataset.restingShadow;
+      return { focusVisible: el.matches(":focus-visible"), indicator: outline || ring };
+    });
+    expect(visible.focusVisible, "the chip is not :focus-visible").toBe(true);
+    expect(visible.indicator, "the chip has no visible focus indicator").toBe(true);
+
+    /* The arrow key moves between the two views, as tabs do */
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: /por cobrar/i })).toBeFocused();
+    await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+  });
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test.describe(`cobros-in-links US1: Por cobrar's real contrast in ${theme}`, () => {
+    test("the chip, the list and a search with its debts have no contrast violations", async ({ page }) => {
+      await page.emulateMedia({ colorScheme: theme });
+      await stubPorCobrar(page, { delayMs: 50 });
+      await page.goto(`${ADMIN}/links?view=receivables`);
+      await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+      await page.getByRole("button", { name: /deudor 3 ramírez/i }).click();
+      await expect(page.getByText(/incluye saldo anterior/i).first()).toBeVisible();
+
+      const analyze = async () =>
+        (await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze()).violations.map(
+          (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
+        );
+      expect(await analyze(), `Por cobrar in ${theme}`).toEqual([]);
+
+      await page.getByRole("searchbox").fill("maria");
+      await expect(page.getByText("$299.00").first()).toBeVisible();
+      expect(await analyze(), `Por cobrar search in ${theme}`).toEqual([]);
+    });
+  });
+}
+
+test.describe("cobros-in-links: what the operator waits for in Por cobrar", () => {
+  test.use({ viewport: DESKTOP });
+
+  test("SC-002: the first Por cobrar block is on screen within the ceiling", async ({ page }) => {
+    await stubPorCobrar(page);
+    await page.goto(`${ADMIN}/links`);
+    await expect(page.getByRole("tab", { name: /por cobrar/i })).toBeVisible();
+
+    const pressed = Date.now();
+    await page.getByRole("tab", { name: /por cobrar/i }).click();
+    await expect(page.getByText("Deudor 1 Ramírez Olvera")).toBeVisible();
+    const shown = Date.now() - pressed;
+
+    console.log(`SC-002 first Por cobrar block: ${shown}ms (target 3000ms, ceiling 6000ms)`);
+    expect(shown, "the first block got slow").toBeLessThan(6_000);
+  });
+
+  test("SC-001: from opening Links to WhatsApp on a Por cobrar row, inside the ceiling", async ({ page, context }) => {
+    await context.route("https://wa.me/**", (route) => route.fulfill({ status: 200, body: "" }));
+    await stubPorCobrar(page);
+    const opened = Date.now();
+    await page.goto(`${ADMIN}/links`);
+
+    await page.getByRole("tab", { name: /por cobrar/i }).click();
+    await page.getByRole("button", { name: /deudor 1 ramírez/i }).click();
+    const popup = context.waitForEvent("page");
+    await page.getByRole("button", { name: /whatsapp/i }).first().click();
+    await popup;
+    await expect(page.getByText("Enviado").first()).toBeVisible();
+    const sent = Date.now() - opened;
+
+    console.log(`SC-001 open Links to WhatsApp on Por cobrar: ${sent}ms (target 10000ms, ceiling 20000ms)`);
+    expect(sent, "sending from Por cobrar got slow").toBeLessThan(20_000);
   });
 });

@@ -2,11 +2,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
-import { app, fakeProofs, seedBusiness, sessionCookieHeader } from "./helpers";
+import { app, fakeProofs, seedBusiness } from "./helpers";
 import { paymentLinks, payments, wisphubPages, wisphubSweeps } from "../src/db/schema";
 import { resetProviderCaches } from "../src/wisphub/cache";
 import { PENDING_LIVE_PAGES } from "../src/wisphub/client";
-import { REST_MS, SWEEP_PAGES, sweepWispHubLists, wakeSweep } from "../src/wisphub/snapshot";
+import { readPendingInvoices, REST_MS, SWEEP_PAGES, sweepWispHubLists, wakeSweep } from "../src/wisphub/snapshot";
+import { wisphubFor } from "../src/wisphub/factory";
 import type { Bindings } from "../src/env";
 
 /* bug: pending-invoice-cap — a customer whose invoice sat beyond the
@@ -143,8 +144,6 @@ const payTransfer = async () =>
     body: JSON.stringify(TRANSFER),
   }, testEnv);
 
-const asBusiness = async () => ({ headers: { Cookie: await sessionCookieHeader("demo@devolada.app") } });
-
 /* apiCEP confirms whatever amount the test says arrived */
 function mockApiCep(amountCents: number) {
   apicep()
@@ -260,7 +259,7 @@ describe("bug: pending-invoice-cap — a cut-off read is never 'owes nothing'", 
 });
 
 describe("bug: pending-invoice-cap — the sweep reads the tenant whole and every path serves it", () => {
-  it("the page shows the real invoice from page seven; Cobros lists all 700, complete", async () => {
+  it("the page shows the real invoice from page seven; the money paths' list holds all 700, complete", async () => {
     const business = await seedLinkedBusiness();
     await sweptTenant(business.id, sevenPagesWithMine());
     const row = await sweepRow(business.id);
@@ -278,11 +277,22 @@ describe("bug: pending-invoice-cap — the sweep reads the tenant whole and ever
     expect(data.totalCents).toBe(35000 + 1500);
     expect(data.cobros).toEqual([{ externalId: 7001, amountCents: 35000, invoiceDate: "2026-09-01" }]);
 
-    const cobros = await (await app()).request("/payment-requests", await asBusiness(), testEnv);
-    const body = await cobros.json();
-    expect(body.data.complete).toBe(true);
-    expect(body.data.cobros).toHaveLength(700);
-    expect(body.data.readAt).toBe(row.servedFinishedAt!.getTime());
+    /* cobros-in-links D3: this asserted through `GET /payment-requests`,
+       which served the finished pass to the Cobros section. The Por
+       cobrar view reads live, one block at a time, and never this copy
+       (SC-006). The copy still feeds every money path, so the assertion
+       moves to the reader they all share: whole, complete, the pass's
+       own time. */
+    const served = await readPendingInvoices(
+      drizzle(env.DB),
+      business.id,
+      wisphubFor({ apiKey: "wh-key-1", installation: null }, testEnv),
+      new Date(),
+    );
+    expect(served.source).toBe("snapshot");
+    expect(served.complete).toBe(true);
+    expect(served.invoices).toHaveLength(700);
+    expect(served.readAt).toBe(row.servedFinishedAt!.getTime());
   });
 
   it("the verdict settles against the real debt and registers on the real invoice, checked fresh", async () => {
@@ -363,9 +373,17 @@ describe("bug: pending-invoice-cap — the sweep reads the tenant whole and ever
     const { data } = await (await getPage()).json();
     expect(data.status).toBe("no_debt");
 
-    const cobros = await (await app()).request("/payment-requests", await asBusiness(), testEnv);
-    const listed = (await cobros.json()).data.cobros as { externalId: number }[];
-    expect(listed.some((f) => f.externalId === 7001)).toBe(false);
+    /* cobros-in-links D3: asserted on the money paths' reader rather than
+       the Por cobrar door, which no longer serves this copy */
+    const listed = (
+      await readPendingInvoices(
+        drizzle(env.DB),
+        business.id,
+        wisphubFor({ apiKey: "wh-key-1", installation: null }, testEnv),
+        new Date(),
+      )
+    ).invoices;
+    expect(listed.some((f) => f.invoiceId === 7001)).toBe(false);
     expect(listed).toHaveLength(699);
   });
 });

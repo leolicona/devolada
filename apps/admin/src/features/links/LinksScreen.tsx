@@ -1,14 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Search, Share2, Link as LinkIcon, AlertCircle, Check, TriangleAlert, WifiOff } from "lucide-react";
-import { Alert, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
+import { Search, Share2, Link as LinkIcon, AlertCircle, Check, TriangleAlert } from "lucide-react";
+import { Alert, Amount, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
 import type { CustomerRow } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
-import { useSession } from "../auth/session";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { LinksView } from "../../router";
+import { useDisplaySettings, useSession } from "../auth/session";
+import { OfflineNote } from "./OfflineNote";
 import { PruneNotice } from "./PruneNotice";
-import { rowKey } from "./seen";
-import { SEARCH_MIN_CHARS, useCustomers } from "./useCustomers";
+import { ReceivablesList } from "./ReceivablesList";
+import { rememberLinksAddress, rowKey } from "./seen";
+import { useCustomerDebt } from "./useCustomerDebt";
+import { SEARCH_MIN_CHARS, useCustomers, type CustomersView } from "./useCustomers";
 import { useLinkAction, type ActionState } from "./useLinkAction";
+import { useReceivables } from "./useReceivables";
 
 /* links-on-demand-search US1: the page stops reading the ISP's customer
    base and starts asking for what it shows.
@@ -32,7 +38,16 @@ import { useLinkAction, type ActionState } from "./useLinkAction";
      every block.
    - **A link for everyone.** FR-008: a row with no link shows the same
      two buttons as one with a link, and pressing either is what brings
-     the link into existence (D8, `useLinkAction`). */
+     the link into existence (D8, `useLinkAction`).
+
+   cobros-in-links: the page keeps its name and gains a second VIEW. A
+   chip beside the search box — *Todos* / *Por cobrar* — looks like a
+   filter and is a different read (spec Context): Por cobrar reads the
+   business's open invoices from its integration, one block per scroll,
+   live, never from the sweep's copy (D1–D7). The chip shows because the
+   integration can read open invoices, as the session says (D13). The
+   Cobros section it replaces is gone (D16). With Todos chosen, every
+   behaviour above is exactly as it was (FR-001). */
 
 const COUNT = new Intl.NumberFormat("es-MX");
 
@@ -95,14 +110,53 @@ function CustomerLine({ row }: { row: CustomerRow }) {
   );
 }
 
+/* cobros-in-links FR-018 (D11, D15): what a search result in Por cobrar
+   owes — one of three answers, never a guess, and never a zero while it
+   waits. The row shows the customer at once; one slow answer never holds
+   back the others, because each row asks on its own.
+
+   `ask` is false when the customers door itself answered from its
+   offline fallback: the integration is away, so nothing can be confirmed
+   and nothing is asked (FR-010). */
+function DebtCell({ usuario, ask, onRefused }: { usuario: string | null; ask: boolean; onRefused: () => void }) {
+  const debt = useCustomerDebt(usuario, ask);
+  useEffect(() => {
+    if (debt.refused) onRefused();
+  }, [debt.refused, onRefused]);
+
+  if (!ask) return <StatusBadge status="debtUnconfirmed" />;
+  if (debt.state === "waiting") {
+    return (
+      /* The row's own wait. The list already owns a live region, so this
+         one breathes without speaking (feedback-vocabulary-rollout D4). */
+      <Pending active announce={false} label="Consultando adeudo">
+        <span className="text-sm text-muted-foreground">Consultando adeudo</span>
+      </Pending>
+    );
+  }
+  if (debt.state === "owes" && debt.totalCents !== null) {
+    return (
+      <span className="text-sm">
+        <span className="text-muted-foreground">Debe </span>
+        <Amount cents={debt.totalCents} className="font-semibold" />
+      </span>
+    );
+  }
+  if (debt.state === "none") return <StatusBadge status="debtNone" />;
+  return <StatusBadge status="debtUnconfirmed" />;
+}
+
 function CustomerRowItem({
   row,
   canOperate,
   action,
+  debt,
 }: {
   row: CustomerRow;
   canOperate: boolean;
   action: ReturnType<typeof useLinkAction>;
+  /* cobros-in-links US3: the result's debt, in Por cobrar only */
+  debt?: ReactNode;
 }) {
   const state = action.stateOf(row);
   const mark = action.markOf(row);
@@ -118,6 +172,7 @@ function CustomerRowItem({
         </span>
         <CustomerLine row={row} />
       </div>
+      {debt !== undefined && <div className="shrink-0 justify-self-end">{debt}</div>}
       {/* business-and-memberships D3: sharing is `payments: operate`;
           a viewer sees the customer and nothing to press (FR-016) */}
       {canOperate && (
@@ -143,42 +198,24 @@ function CustomerRowItem({
   );
 }
 
-export function LinksScreen() {
-  const { data: actor } = useSession();
-  /* D5 (2026-09-02): a link nobody can pay is not shared — until the
-     CLABE lands, the customers read and the buttons wait */
-  const speiConfigured = actor?.speiConfigured ?? true;
-  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && speiConfigured;
-  const wisphubConnected = actor?.integrationConfigured ?? true;
-
-  /* FR-011 / D11: the address is where the search text lives, so a
-     pasted address opens on that search and the back button and a
-     reload both land on it. The box keeps its own state so typing stays
-     immediate; the address follows once the text settles — `replace`,
-     because a history entry per keystroke would make the back button
-     walk the word backwards instead of leaving the search. */
-  const { q } = useSearch({ from: "/app/links" });
-  const navigate = useNavigate();
-  const [search, setSearch] = useState(q ?? "");
-  const customers = useCustomers(search);
-  const action = useLinkAction();
-
-  /* The address changing from outside — back, forward, a pasted link */
-  useEffect(() => {
-    setSearch((current) => (current.trim() === (q ?? "") ? current : (q ?? "")));
-  }, [q]);
-
-  useEffect(() => {
-    if ((q ?? "") === customers.settled) return;
-    void navigate({
-      to: "/links",
-      search: customers.settled === "" ? {} : { q: customers.settled },
-      replace: true,
-    });
-  }, [customers.settled, q, navigate]);
-
-  const typed = search.trim();
-  const tooShort = typed.length > 0 && typed.length < SEARCH_MIN_CHARS;
+/* The customers door's answer, browse or search — one rendering for the
+   customer view and for Por cobrar's search, because FR-010 says the
+   search finds customers EXACTLY as the customer view's does: the same
+   rows, blocks, count line, empty states and offline note. What Por
+   cobrar adds is each result's debt (`debtOf`). */
+function CustomersResults({
+  customers,
+  canOperate,
+  action,
+  wisphubConnected,
+  debtOf,
+}: {
+  customers: CustomersView;
+  canOperate: boolean;
+  action: ReturnType<typeof useLinkAction>;
+  wisphubConnected: boolean;
+  debtOf?: (row: CustomerRow) => ReactNode;
+}) {
   const searching = customers.answering !== "";
   const shown = customers.rows.length;
   /* The count line stays up while the NEXT block loads — it is the same
@@ -187,81 +224,8 @@ export function LinksScreen() {
      its way, when the number on screen would be the last one's. */
   const showCount = searching && shown > 0 && (!customers.searching || customers.loadingMore);
 
-  /* automated-collections-api FR-011 / bug links-refused-key: a key the
-     installation refused is SETUP, not weather. It gets the Integraciones
-     door and the same sentence as Cobros — the installation before the
-     key (provider-address-per-isp D7) — never a Reintentar that re-sends
-     the same key to the same place. No search box and no rows: there is
-     nothing to search until the read is allowed again. */
-  if (customers.error?.code === "WISPHUB_AUTH_FAILED") {
-    return (
-      <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
-        <h1 className="text-xl font-semibold">Links de pago</h1>
-        {/* The shell's recipe for a setup problem with a way out */}
-        <Alert
-          variant="warning"
-          className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-        >
-          <span className="flex items-start gap-2">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <span>
-              WispHub rechazó la conexión. Una llave solo sirve en la instalación donde la
-              generaste: revisa primero la instalación y luego la llave en Integraciones.
-            </span>
-          </span>
-          <Link to="/integrations/wisphub" className="block">
-            <Button size="compact" variant="secondary">Ir a Integraciones</Button>
-          </Link>
-        </Alert>
-      </main>
-    );
-  }
-
   return (
-    <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        {/* The glossary's full term; the nav carries the short form */}
-        <h1 className="text-xl font-semibold">Links de pago</h1>
-        {/* FR-018: how many customers the ISP HAS — the provider answers
-            it with every block — in place of the old warning about a
-            list that might have been cut short */}
-        {customers.total !== null && (
-          <span className="text-sm text-muted-foreground">
-            {COUNT.format(customers.total)} clientes en WispHub
-          </span>
-        )}
-      </div>
-
-      {/* FR-023: the one-time cleanup's count, above the search, because
-          it explains a link a customer may already be holding */}
-      <PruneNotice />
-
-      <div className="mt-6">
-        <label className="relative block max-w-md">
-          <span className="sr-only">Buscar cliente</span>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
-          {/* name + autoComplete: without them, phone password managers
-              saw a field near the word "usuario" and offered credentials */}
-          <Input
-            size="compact"
-            type="search"
-            name="customer-search"
-            autoComplete="off"
-            placeholder="Buscar por nombre, usuario o teléfono..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-        {/* FR-002: below three characters the page says so and searches
-            nothing — while the first block stays where it was */}
-        <p className="mt-2 max-w-md text-sm text-muted-foreground">
-          {tooShort
-            ? "Escribe al menos 3 letras para buscar. Mientras tanto sigues viendo el primer bloque de tus clientes."
-            : "Escribe 3 letras o más del nombre, el usuario o el teléfono."}
-        </p>
-      </div>
-
+    <>
       {/* FR-014 / D9: the provider being away is a quiet note over the
           rows that are already there — never the error block, which is
           for a failure with nothing to show. The door says so itself,
@@ -269,26 +233,19 @@ export function LinksScreen() {
           background read that failed reads the same way to the operator
           and lands here too. */}
       {customers.offline && (
-        <p
-          role="status"
-          className="mt-6 flex max-w-lg items-start gap-2 rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
-        >
-          <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>
-            Sin conexión a WispHub. Mostrando la última lectura.
-            {/* FR-014 / FR-021: what the operator can still do, said
-                once and plainly. Searching by name needs WispHub —
-                Devolada's own rows carry the usuario and the reference
-                and nothing about the person (FR-010) — so a name only
-                finds someone this session already saw. */}
-            {searching && (
-              <span className="block">
-                Buscar por nombre necesita WispHub: por ahora encontramos por usuario, por
-                referencia y a quienes ya viste en esta sesión.
-              </span>
-            )}
-          </span>
-        </p>
+        <OfflineNote>
+          {/* FR-014 / FR-021: what the operator can still do, said once
+              and plainly. Searching by name needs WispHub — Devolada's own
+              rows carry the usuario and the reference and nothing about
+              the person (FR-010) — so a name only finds someone this
+              session already saw. */}
+          {searching && (
+            <span className="block">
+              Buscar por nombre necesita WispHub: por ahora encontramos por usuario, por
+              referencia y a quienes ya viste en esta sesión.
+            </span>
+          )}
+        </OfflineNote>
       )}
 
       {customers.isError && !customers.rows.length && !customers.isPending && (
@@ -357,7 +314,13 @@ export function LinksScreen() {
             <Card className="mt-6">
               <ul className="divide-y divide-line-soft">
                 {customers.rows.map((row) => (
-                  <CustomerRowItem key={rowKey(row)} row={row} canOperate={canOperate} action={action} />
+                  <CustomerRowItem
+                    key={rowKey(row)}
+                    row={row}
+                    canOperate={canOperate}
+                    action={action}
+                    debt={debtOf?.(row)}
+                  />
                 ))}
               </ul>
             </Card>
@@ -370,16 +333,301 @@ export function LinksScreen() {
             2026-09-23) — the same sentinel, because reaching the bottom
             of a search means the same thing as reaching the bottom of a
             browse. */}
-        {customers.hasMore && (
-          <div ref={customers.sentinelRef} className="mt-4 min-h-10">
-            {customers.loadingMore && (
-              <p role="status" className="text-sm text-muted-foreground">
-                Leyendo el siguiente bloque de clientes…
-              </p>
-            )}
+        {customers.nextFailed ? (
+          /* A next block that failed stops the walk here; the page never
+             retries on its own (cobros-in-links, review of 2026-09-28) */
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">No pudimos leer el siguiente bloque de clientes.</p>
+            <Button size="compact" variant="secondary" onClick={customers.retryNext}>
+              Reintentar
+            </Button>
           </div>
+        ) : (
+          customers.hasMore && (
+            <div ref={customers.sentinelRef} className="mt-4 min-h-10">
+              {customers.loadingMore && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Leyendo el siguiente bloque de clientes…
+                </p>
+              )}
+            </div>
+          )
         )}
       </Pending>
+    </>
+  );
+}
+
+/* One mount per business (cobros-in-links, review of 2026-09-28). The
+   business can change under a mounted page — another tab switched it and
+   this tab's session caught up — and the page's own state belonged to the
+   one before: the Copiado / Enviado marks, the links this session created
+   (a Copiar on the new business's row would have handed out the old
+   business's link), the text in the box. A new key drops all of it. */
+export function LinksScreen() {
+  const businessId = useSession().data?.id;
+  return <LinksPage key={businessId} />;
+}
+
+function LinksPage() {
+  const { data: actor } = useSession();
+  const { timezone } = useDisplaySettings();
+  /* D5 (2026-09-02): a link nobody can pay is not shared — until the
+     CLABE lands, the customers read and the buttons wait */
+  const speiConfigured = actor?.speiConfigured ?? true;
+  const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate") && speiConfigured;
+  const wisphubConnected = actor?.integrationConfigured ?? true;
+  /* cobros-in-links D13, FR-013 (constitution IX): the chip is offered
+     because the integration can read open invoices, and a result's debt
+     because it can say what one customer owes — never because it is
+     WispHub. Without the capability there is no chip, and the page is
+     the customer view as it always was. */
+  const capabilities = actor?.integrationCapabilities ?? [];
+  const canReadReceivables = capabilities.includes("receivables");
+  const canReadDebt = capabilities.includes("customerDebt");
+
+  /* FR-011 / D11: the address is where the search text lives, so a
+     pasted address opens on that search and the back button and a
+     reload both land on it. The box keeps its own state so typing stays
+     immediate; the address follows once the text settles — `replace`,
+     because a history entry per keystroke would make the back button
+     walk the word backwards instead of leaving the search.
+
+     cobros-in-links D12 (FR-009): the chosen view lives there too, for
+     the same reasons, and is written the same way. */
+  const { q, view: viewParam } = useSearch({ from: "/app/links" });
+  const view: LinksView = viewParam === "receivables" && canReadReceivables ? "receivables" : "customers";
+  const navigate = useNavigate();
+  const [search, setSearch] = useState(q ?? "");
+  const customers = useCustomers(search, { view });
+  /* The list is read, and re-read, only while it is on screen: a search
+     in Por cobrar shows in its place (FR-010, below), and a list nobody
+     can see is provider calls nobody asked for (FR-003; review of
+     2026-09-28) */
+  const receivables = useReceivables(view === "receivables" && customers.answering === "");
+  const action = useLinkAction();
+  /* D11: one result's debt answering with a refused key switches the
+     whole page to the setup message */
+  const [debtRefused, setDebtRefused] = useState(false);
+  const onDebtRefused = useCallback(() => setDebtRefused(true), []);
+
+  /* The address changing from outside — back, forward, a pasted link */
+  useEffect(() => {
+    setSearch((current) => (current.trim() === (q ?? "") ? current : (q ?? "")));
+  }, [q]);
+
+  useEffect(() => {
+    if ((q ?? "") === customers.settled) return;
+    void navigate({
+      to: "/links",
+      search: { q: customers.settled === "" ? undefined : customers.settled, view: viewParam },
+      replace: true,
+    });
+  }, [customers.settled, q, viewParam, navigate]);
+
+  /* cobros-in-links SC-005 (FR-009): the address is the page's memory for
+     the back button and a reload; the menu's Links entry is a plain
+     `/links`, so it reads the last address from the session instead
+     (`seen.ts`, store 4; `Shell.tsx`). Written on every change, so the
+     way back is always the page the operator left. */
+  useEffect(() => {
+    if (actor) rememberLinksAddress(actor.id, { q, view: viewParam });
+  }, [actor, q, viewParam]);
+
+  /* D13 / FR-013 (T038): an address that asks for Por cobrar when the
+     integration cannot answer it — the session says so, or the door
+     answers NOT_CONFIGURED because the key went meanwhile — falls back
+     to the customer view instead of showing an error. The view leaves
+     the address, so a reload does not ask again. */
+  const dropView =
+    viewParam === "receivables" &&
+    ((actor !== undefined && !canReadReceivables) || receivables.error?.code === "NOT_CONFIGURED");
+  useEffect(() => {
+    if (!dropView) return;
+    void navigate({ to: "/links", search: { q }, replace: true });
+  }, [dropView, q, navigate]);
+
+  const choose = (next: string) => {
+    void navigate({
+      to: "/links",
+      search: { q, view: next === "receivables" ? "receivables" : undefined },
+      replace: true,
+    });
+  };
+
+  const typed = search.trim();
+  const tooShort = typed.length > 0 && typed.length < SEARCH_MIN_CHARS;
+  /* Por cobrar with a search active shows the search, and only the
+     search: a list row and a search result are never on one screen
+     (FR-010) — the list's total is open invoices on screen, a result's
+     is the customer's whole debt (spec Assumptions). */
+  const receivablesSearching = view === "receivables" && customers.answering !== "";
+
+  /* automated-collections-api FR-011 / bug links-refused-key: a key the
+     installation refused is SETUP, not weather. It gets the Integraciones
+     door and the same sentence everywhere — the installation before the
+     key (provider-address-per-isp D7) — never a Reintentar that re-sends
+     the same key to the same place. No search box and no rows: there is
+     nothing to search until the read is allowed again.
+
+     cobros-in-links D7, D11: Por cobrar's list and a result's debt say it
+     with the core's code, `INTEGRATION_AUTH_FAILED`, and land here too. */
+  const refused =
+    customers.error?.code === "WISPHUB_AUTH_FAILED" ||
+    (view === "receivables" && receivables.error?.code === "INTEGRATION_AUTH_FAILED") ||
+    debtRefused;
+  if (refused) {
+    return (
+      <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
+        <h1 className="text-xl font-semibold">Links de pago</h1>
+        {/* The shell's recipe for a setup problem with a way out */}
+        <Alert
+          variant="warning"
+          className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+        >
+          <span className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              WispHub rechazó la conexión. Una llave solo sirve en la instalación donde la
+              generaste: revisa primero la instalación y luego la llave en Integraciones.
+            </span>
+          </span>
+          <Link to="/integrations/wisphub" className="block">
+            <Button size="compact" variant="secondary">Ir a Integraciones</Button>
+          </Link>
+        </Alert>
+      </main>
+    );
+  }
+
+  const searchBox = (
+    <div className="w-full max-w-md">
+      <label className="relative block">
+        <span className="sr-only">Buscar cliente</span>
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden />
+        {/* name + autoComplete: without them, phone password managers
+            saw a field near the word "usuario" and offered credentials */}
+        <Input
+          size="compact"
+          type="search"
+          name="customer-search"
+          autoComplete="off"
+          placeholder="Buscar por nombre, usuario o teléfono..."
+          className="pl-9"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </label>
+      {/* FR-002: below three characters the page says so and searches
+          nothing — while what the view shows stays where it was */}
+      <p className="mt-2 text-sm text-muted-foreground">
+        {view === "receivables"
+          ? tooShort
+            ? "Escribe al menos 3 letras para buscar. Mientras tanto sigues viendo quién tiene facturas abiertas."
+            : canReadDebt
+              ? /* cobros-in-links FR-010: the search finds ANY customer,
+                   with what they owe — a short-payer included, whom the
+                   list cannot hold until their next billing run */
+                "Busca a cualquier cliente y ve lo que debe hoy, aunque no esté en la lista."
+              : "Escribe 3 letras o más del nombre, el usuario o el teléfono."
+          : tooShort
+            ? "Escribe al menos 3 letras para buscar. Mientras tanto sigues viendo el primer bloque de tus clientes."
+            : "Escribe 3 letras o más del nombre, el usuario o el teléfono."}
+      </p>
+    </div>
+  );
+
+  const customersBody = (
+    <CustomersResults
+      customers={customers}
+      canOperate={canOperate}
+      action={action}
+      wisphubConnected={wisphubConnected}
+    />
+  );
+
+  /* The header's count names what the view counts (FR-007): customers
+     in the customer view, open INVOICES in Por cobrar — never customers,
+     because a customer with two invoices is two. Nothing when the
+     integration does not report one. */
+  const count =
+    view === "receivables"
+      ? !receivablesSearching && receivables.total !== null
+        ? `${COUNT.format(receivables.total)} ${receivables.total === 1 ? "factura abierta" : "facturas abiertas"}`
+        : null
+      : customers.total !== null
+        ? `${COUNT.format(customers.total)} clientes en WispHub`
+        : null;
+
+  return (
+    <main className="px-4 pt-4 lg:px-8 lg:pt-8 pb-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        {/* The glossary's full term; the nav carries the short form */}
+        <h1 className="text-xl font-semibold">Links de pago</h1>
+        {/* FR-018: how many customers the ISP HAS — the provider answers
+            it with every block — in place of the old warning about a
+            list that might have been cut short */}
+        {count !== null && <span className="text-sm text-muted-foreground">{count}</span>}
+      </div>
+
+      {/* FR-023: the one-time cleanup's count, above the search, because
+          it explains a link a customer may already be holding */}
+      <PruneNotice />
+
+      {canReadReceivables ? (
+        /* cobros-in-links D14: the chip is the admin's own Tabs, compact
+           40px on desktop and 44px under a finger. It sits before the
+           search box and wraps above it at 360px with no horizontal
+           scroll. The panels take no tab stop of their own: they hold
+           the rows' buttons. */
+        <Tabs value={view} onValueChange={choose}>
+          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start">
+            <TabsList aria-label="Qué ver" className="flex-nowrap">
+              <TabsTrigger value="customers" className="group gap-1.5 sm:h-10">
+                <Check className="hidden size-3.5 group-data-[state=active]:inline" aria-hidden />
+                Todos
+              </TabsTrigger>
+              <TabsTrigger value="receivables" className="group gap-1.5 sm:h-10">
+                <Check className="hidden size-3.5 group-data-[state=active]:inline" aria-hidden />
+                Por cobrar
+              </TabsTrigger>
+            </TabsList>
+            {searchBox}
+          </div>
+          <TabsContent value="customers" tabIndex={-1}>
+            {view === "customers" && customersBody}
+          </TabsContent>
+          <TabsContent value="receivables" tabIndex={-1}>
+            {view === "receivables" &&
+              (receivablesSearching ? (
+                <CustomersResults
+                  customers={customers}
+                  canOperate={canOperate}
+                  action={action}
+                  wisphubConnected={wisphubConnected}
+                  debtOf={
+                    canReadDebt
+                      ? (row) => (
+                          <DebtCell
+                            usuario={row.usuario}
+                            ask={customers.wisphub === "ok" && row.usuario !== null}
+                            onRefused={onDebtRefused}
+                          />
+                        )
+                      : undefined
+                  }
+                />
+              ) : (
+                <ReceivablesList receivables={receivables} canOperate={canOperate} action={action} timezone={timezone} />
+              ))}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <>
+          <div className="mt-6">{searchBox}</div>
+          {customersBody}
+        </>
+      )}
     </main>
   );
 }

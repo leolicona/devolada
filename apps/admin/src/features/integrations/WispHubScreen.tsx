@@ -204,7 +204,8 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
         {inUse.assumed
           ? "Nadie eligió esta instalación: es la que Devolada usa por omisión. Si entras a WispHub en otra dirección, elígela abajo — tu llave solo sirve en la tuya."
           : !wisphub.configured
-            ? "Con la llave, Devolada lee la deuda de tus clientes y tus Cobros."
+            ? /* cobros-in-links FR-014: the thing, not the retired section */
+              "Con la llave, Devolada lee la deuda de tus clientes y tus cobros."
             : null}
       </p>
       <div>

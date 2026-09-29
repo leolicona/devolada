@@ -62,6 +62,9 @@ const sampleStatuses: Status[] = [
   "channelApi",
   "credentialActive",
   "credentialRevoked",
+  /* cobros-in-links D15: a search result's debt when it is not an amount */
+  "debtNone",
+  "debtUnconfirmed",
 ];
 
 const ledgerEntries = [

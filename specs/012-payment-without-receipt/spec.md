@@ -211,6 +211,15 @@ ladder here asks earlier (FR-028, FR-029).
   about 2 hours), which leaves a wrong detail waiting and spends more
   calls; and asking at the first miss, which questions a payer whose
   transfer is only a minute late.*
+- Q: When several transfers match and no learned account picks one, what
+  happens to the payment until spec 016 exists? → A: **The payer is asked
+  for the clave, with "Sube tu comprobante" as the second option**; the
+  payment shows "en revisión" and never expires, as spec 013 does.
+  *Confirmed by the creator at `/speckit-clarify` (option A of three).
+  Rejected: waiting silently for spec 016, which nothing would close
+  before it ships; and asking the time of the transfer first, one more
+  step when the clave typed against kept candidates already forgives the
+  usual typos.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -305,7 +314,8 @@ payer picks the bank from the list.
    **Then** no payment is confirmed automatically, the bundle is kept with
    the payment, and the payment takes spec 013's undecided path: it shows
    "en revisión", spends no more provider calls, asks the payer for the
-   clave, and does not expire.
+   clave with "Sube tu comprobante" as the second option, and does not
+   expire.
 4. **Given** a transfer already used to confirm another payment, **When**
    it comes back marked as validated before, **Then** it does not confirm a
    second payment and the payer is told which payment already used it.
@@ -590,9 +600,10 @@ question.
   bundle of CEPs MUST be kept with the payment. When FR-021 does not
   decide, the payment MUST take the undecided path spec 013 gives a bundle
   it cannot decide (013 FR-008): "en revisión" with its reason, no further
-  provider calls, the payer asked for the clave, a clave that fits one kept
-  CEP confirming without a call, and no `expired` end. Devolada's people
-  take such payments once spec 016 ships.
+  provider calls, the payer asked for the clave with "Sube tu comprobante"
+  as the second option, a clave that fits one kept CEP confirming without
+  a call, and no `expired` end. Devolada's people take such payments once
+  spec 016 ships.
 
 **What Devolada learns**
 
@@ -759,11 +770,6 @@ question.
   is the measured behaviour of 2026-09-26, spec 013 already reads it, and
   this feature relies on it; its quota is a plan setting the platform
   operator watches.
-- A several-matches payment that no learned account settles asks the payer
-  for the clave, as spec 013 does for a receipt, rather than waiting
-  silently for spec 016. Chosen 2026-09-29 while narrowing: without spec 016
-  nothing else would ever close it. The creator confirms or changes it at
-  `/speckit-clarify`.
 - The ladder rides the existing validation schedule (direct-payment D7) and
   its learned middle (learned-retry D6). Its asks are tied to rounds, not
   to the clock, so a slot that moves carries its ask with it. The minutes

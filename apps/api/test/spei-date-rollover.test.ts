@@ -10,14 +10,16 @@ import { aiReturning, db, engineEnv, extractions, putProof, PNG, RECEIPT_2_READI
    in direct-payment.test.ts. */
 
 describe("bug: spei-date-rollover — the reader reads the time", () => {
-  it("keeps HH:MM on a 24-hour clock and drops anything else", () => {
+  it("keeps HH:MM on a 24-hour clock and drops what is not a clock", () => {
     expect(timeOf("23:47")).toBe("23:47");
     expect(timeOf(" 7:05 ")).toBe("07:05");
     expect(timeOf("00:00")).toBe("00:00");
     expect(timeOf("25:10")).toBeNull();
     expect(timeOf("12:60")).toBeNull();
     expect(timeOf("7pm")).toBeNull();
-    expect(timeOf("11:47 p.m.")).toBeNull();
+    /* bug: reader-drops-seconds — a 12-hour time with its mark is
+       converted in code now, since version 4 asks for it as printed */
+    expect(timeOf("11:47 p.m.")).toBe("23:47");
     expect(timeOf(2347)).toBeNull();
     expect(timeOf(null)).toBeNull();
     expect(timeOf(undefined)).toBeNull();
@@ -61,7 +63,8 @@ describe("cep-bundle-match US2: a time with seconds is kept whole", () => {
     expect(timeOf("23:59:59")).toBe("23:59:59");
     expect(timeOf("07:10:60")).toBeNull();
     expect(timeOf("07:10:5")).toBeNull();
-    expect(timeOf("07:10:58 a.m.")).toBeNull();
+    /* bug: reader-drops-seconds — converted, seconds kept */
+    expect(timeOf("07:10:58 a.m.")).toBe("07:10:58");
   });
 
   it("the reading record stores the seconds", async () => {

@@ -73,7 +73,21 @@ import type { ReaderModel } from "./models";
    Azteca capture with seconds and "***8301", one that prints HH:MM only
    and one with no sender account must be read on the bench with version
    3 beside version 2 before the feature ships, and the table written
-   here; registered as debt (.specify/debt/cep-bundle-match-reader-unmeasured/). */
+   here; registered as debt (.specify/debt/cep-bundle-match-reader-unmeasured/).
+
+   bug: reader-drops-seconds — version "4" of the questions. Version 3 asked
+   the model to convert the time to a 24-hour clock and keep its seconds in
+   one step, and its one 12-hour example had no seconds. On dev (2026-09-28)
+   it dropped the seconds on two of five Nu readings, each on a transfer
+   whose other capture it read with seconds; Azteca kept them 3 of 3. So
+   `hora` now asks for the time copied as printed — seconds and a.m./p.m.
+   mark included — with the Nu receipt as the worked example, and `timeOf`
+   converts: copying is the reader's job, converting is code's. Every
+   other word is as in version 3. Measured with version 4 on the bench:
+   **not run — this implementation environment cannot reach the Workers AI
+   binding** (2026-09-29). The Nu 09:14 and 13:20 pairs of 2026-09-28 and
+   the three Azteca receipts must be read with version 4 beside version 3;
+   the same debt carries it. */
 
 export type Reading = {
   isReceipt: boolean;
@@ -153,9 +167,10 @@ export const DEFAULT_MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
    on every reading so a tally never mixes two wordings. "1" names the
    receipt-triage questions; "2" receipt-reader-tuning's (D13); "3"
    cep-bundle-match's (D15): the time with its seconds and the sender's
-   account. A test pins `sha256(PROMPT + "\n" + TEXT_PROMPT)` to it:
-   changing a word without bumping the version fails the suite. */
-export const QUESTIONS_VERSION = "3";
+   account; "4" bug: reader-drops-seconds's: the time copied as printed,
+   converted by `timeOf`. A test pins `sha256(PROMPT + "\n" + TEXT_PROMPT)`
+   to it: changing a word without bumping the version fails the suite. */
+export const QUESTIONS_VERSION = "4";
 
 /* The vocabulary goes into the prompt rather than into a table of aliases
    we maintain: a receipt says "Nu", "BBVA" or "Banco Azteca", and mapping
@@ -169,7 +184,7 @@ const FIELDS = `{"esComprobante": <true if this really is a bank transfer receip
  "bancoReceptor": "<the bank the money was sent TO, or null if the receipt does not show it>",
  "monto": <the amount in pesos as a number, or null>,
  "fecha": "<the operation date as YYYY-MM-DD, or null>",
- "hora": "<the time of the operation on a 24-hour clock: HH:MM:SS when the receipt prints seconds, otherwise HH:MM, or null>",
+ "hora": "<the time printed beside the date, copied exactly as printed: hours, minutes, and the seconds and the a.m./p.m. mark when they are printed; no date, no zone, nothing else; or null>",
  "estatus": "<the value of the 'Estatus' field, or null>",
  "referenciaNumerica": "<the value of the 'Referencia' or 'Referencia numérica' field, digits only, exactly as printed including leading zeros, or null>",
  "cuentaOrigen": "<the digits of the account the money was sent FROM that you can see, without asterisks or dots, or null>",
@@ -221,10 +236,12 @@ ${BANKS.join(", ")}
   account's digits ("Cuenta destino", "Beneficiario", "Para") are NEVER the
   cuentaOrigen. If the receipt does not show the sender's account, return
   null.
-- "hora" is the time printed beside the date, converted to a 24-hour clock
-  ("11:47 p.m." is "23:47"). Keep the seconds when the receipt prints them
-  ("07:10:58"); never add seconds it does not print. Return null if the
-  receipt prints no time; never guess one.
+- "hora" is the time printed beside the date, copied exactly as printed —
+  never converted to another clock. Keep the seconds when the receipt prints
+  them, and keep the a.m./p.m. mark when it prints one: "Autorización 28 SEP
+  2026, 09:14:50 AM (hora de CDMX)" is "09:14:50 AM", and "07:10:58" is
+  "07:10:58". Write no date and no zone. Never add seconds it does not print.
+  Return null if the receipt prints no time; never guess one.
 - If this is not a bank transfer receipt, set "esComprobante" to false and
   every other field to null.`;
 
@@ -316,15 +333,31 @@ const referenceOf = (v: unknown): string | null =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 ? String(v) : str(v);
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 /* bug: spei-date-rollover — a time is "HH:MM" on a 24-hour clock or it is
-   nothing: a word, a 12-hour clock or an impossible hour is not stored.
+   nothing: a word or an impossible hour is not stored.
    cep-bundle-match D15: "HH:MM:SS" too — the seconds are what tell two
    transfers of one payer apart (D6), so they are kept exactly as printed
-   and never invented for a receipt that prints the minute alone. */
+   and never invented for a receipt that prints the minute alone.
+   bug: reader-drops-seconds — version 4 asks for the time as printed, so
+   the 12-hour clock is converted here, not by the model: measured
+   2026-09-28, version 3 answered "09:14" for a Nu receipt printed
+   "09:14:50 AM", and "13:20" for a Nu capture whose other capture of the
+   same transfer it read as "13:20:10". The mark comes in the spellings
+   Mexican receipts print ("AM", "a.m.", "a. m.", any case); 12 a.m. is 00
+   and 12 p.m. is 12, and a mark on an hour outside 1–12 is no time. A
+   time with no mark reads as 24-hour, as before: only the receipt's own
+   mark removes the doubt. A trailing "hrs" or "h" is the receipt's, not
+   the model's, and is dropped. */
+const TIME = /^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*([ap])\.?\s*m\.?)?(?:\s*(?:hrs|h)\.?)?$/i;
 export function timeOf(v: unknown): string | null {
   const t = str(v);
-  const m = t ? /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t) : null;
+  const m = t ? TIME.exec(t) : null;
   if (!m) return null;
-  const [h, min, s] = [Number(m[1]), Number(m[2]), m[3] == null ? 0 : Number(m[3])];
+  const [min, s] = [Number(m[2]), m[3] == null ? 0 : Number(m[3])];
+  let h = Number(m[1]);
+  if (m[4]) {
+    if (h < 1 || h > 12) return null;
+    h = (h % 12) + (m[4].toLowerCase() === "p" ? 12 : 0);
+  }
   if (h > 23 || min > 59 || s > 59) return null;
   return `${String(h).padStart(2, "0")}:${m[2]}${m[3] == null ? "" : `:${m[3]}`}`;
 }

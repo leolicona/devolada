@@ -126,12 +126,6 @@ export function unreadableCandidates(unreadable: { entry: string; reason: string
   }));
 }
 
-/* bug: single-cep-unreadable (D19): the note on the one candidate a single
-   `valid`'s own fields stood in for */
-export function notedRead(trail: TrailCandidate[], clave: string | undefined, readWhy: string | undefined): TrailCandidate[] {
-  return clave && readWhy ? trail.map((c) => (c.clave === clave ? { ...c, readWhy } : c)) : trail;
-}
-
 /* data-model.md `match_trail`, from a matcher result or a bundle that
    could not be read at all */
 export function trailOf(

@@ -12,6 +12,7 @@ import { MAX_BUNDLE_BYTES, readPendingBundle } from "../../src/consta/bundle/sto
 import {
   buildBundleZip,
   bundleOf,
+  cdaChainOf,
   entryName,
   noneAnswer,
   SENDER_4417,
@@ -2559,7 +2560,9 @@ describe("cep-bundle-match US1: several matches, read and kept by the engine", (
     const res = await postValidate(key, byClave(T2.clave));
     expect(res.data.cep).toMatchObject({
       creditTime: "07:11:20",
-      chain: transferCadena(T2),
+      /* as the answer carries it, seal and all (measured 2026-09-29, bug:
+         single-cep-unreadable) */
+      chain: cdaChainOf(T2),
       senderAccountType: "40",
       senderAccount: SENDER_8301,
       certificateNumber: SYNTHETIC.certificateNumber,
@@ -2727,11 +2730,12 @@ describe("cep-bundle-match US1: several matches, read and kept by the engine", (
     expect(await records()).toHaveLength(1);
   });
 
-  /* bug: single-cep-unreadable (D19) — on dev a single valid's cadena
-     could not be read, the record was null and nothing said why */
-  it("bug: single-cep-unreadable — a single valid without a cadena keeps a record from its own fields, on the day asked, and says why", async () => {
+  /* bug: single-cep-unreadable (D4 amended 2026-09-29, D19) — on dev a
+     single valid's cadena could not be read, the record was null and
+     nothing said why: its seal follows the closing bars (measured) */
+  it("bug: single-cep-unreadable — a cdaChain as measured, its seal after the closing bars, keeps its record from the cadena and leaves no note", async () => {
     const { key } = await seedOwner();
-    mockApiCep(validAnswer(T2, { cdaChain: null }));
+    mockApiCep(validAnswer(T2, { cdaChain: cdaChainOf(T2) }));
     const res = await postValidate(key, byReference);
     expect(res.data.record).toMatchObject({
       clave: T2.clave,
@@ -2743,25 +2747,27 @@ describe("cep-bundle-match US1: several matches, read and kept by the engine", (
       receiverAccount: BUSINESS_CLABE,
       amountCents: 300,
     });
-    expect(res.data.recordWhy).toBe("cadena: missing");
+    expect(res.data.recordWhy).toBeUndefined();
     expect(await records()).toHaveLength(1);
   });
 
-  it("bug: single-cep-unreadable — with neither a cadena nor a credit time there is no record, and the reasons of both ride the verdict", async () => {
+  it("bug: single-cep-unreadable — a single valid without a cadena keeps no record, and the verdict says why", async () => {
     const { key } = await seedOwner();
-    mockApiCep(validAnswer(T2, { cdaChain: null, processingTime: null }));
+    mockApiCep(validAnswer(T2, { cdaChain: null }));
     const res = await postValidate(key, byReference);
     expect(res.data.record).toBeNull();
-    expect(res.data.recordWhy).toBe("cadena: missing; fields: credit time");
+    expect(res.data.recordWhy).toBe("cadena: missing");
     expect(await records()).toHaveLength(0);
   });
 
-  it("bug: single-cep-unreadable — a cadena that reads leaves no note", async () => {
+  it("bug: single-cep-unreadable — a cadena of another shape keeps no record, and names the check it failed", async () => {
     const { key } = await seedOwner();
-    mockApiCep(validAnswer(T2));
+    const short = cdaChainOf(T2).split("|");
+    short.splice(20, 2);
+    mockApiCep(validAnswer(T2, { cdaChain: short.join("|") }));
     const res = await postValidate(key, byReference);
-    expect(res.data.record).toMatchObject({ clave: T2.clave });
-    expect(res.data.recordWhy).toBeUndefined();
+    expect(res.data.record).toBeNull();
+    expect(res.data.recordWhy).toBe("cadena: 41 fields");
   });
 
   it("bug: single-cep-unreadable — a bundle entry whose cadena is short is unreadable with the check it failed", async () => {

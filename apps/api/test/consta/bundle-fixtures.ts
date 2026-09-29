@@ -289,6 +289,13 @@ export const transferCadena = (t: SyntheticTransfer) =>
     senderBank: t.senderBank,
   });
 
+/* A `valid`'s cdaChain as measured 2026-09-29 on six answers (Azteca, Nu,
+   Klar): the cadena, then its seal after the closing bars — `||<43
+   fields>||<344 base64 characters>` (cep-bundle-match D4 amended, bug:
+   single-cep-unreadable). Whether that seal equals `digitalSignature` was
+   not compared; nothing reads it. */
+export const cdaChainOf = (t: SyntheticTransfer) => `${transferCadena(t)}${syntheticSeal(11)}`;
+
 export const transferPdf = (t: SyntheticTransfer, over: Partial<CepPdfOptions> = {}) =>
   buildCepPdf({ clave: t.clave, cadena: transferCadena(t), ...over });
 
@@ -318,10 +325,10 @@ export function noneAnswer(over: Record<string, unknown> = {}) {
   };
 }
 
-/* bug: single-cep-unreadable — `cdaChain` and `processingTime` can be
-   replaced, or left out with null: the receipt door's `valid` that stopped
-   a Nu payment on dev (2026-09-28) gave the engine no cadena it could read,
-   and whether the key was absent or its shape differed was not kept */
+/* bug: single-cep-unreadable — the cdaChain as measured, its seal after the
+   closing bars (`cdaChainOf`): the one a reader that demanded `||` at the
+   end refused, stopping a Nu payment on dev (2026-09-28). `cdaChain` and
+   `processingTime` can be replaced, or left out with null. */
 export function validAnswer(
   t: SyntheticTransfer,
   over: { previouslyValidated?: boolean | null; validationId?: string; cdaChain?: string | null; processingTime?: string | null } = {},
@@ -348,7 +355,7 @@ export function validAnswer(
         beneficiaryAccount: t.beneficiaryAccount,
         beneficiaryAccountType: "40",
         ...replaced("processingTime", t.creditTime),
-        ...replaced("cdaChain", transferCadena(t)),
+        ...replaced("cdaChain", cdaChainOf(t)),
         senderAccountType: t.senderAccountType ?? "40",
         senderAccount: t.senderAccount,
         senderRfc: SYNTHETIC.senderRfc,

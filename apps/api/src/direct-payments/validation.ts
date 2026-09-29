@@ -10,7 +10,6 @@ import { readPendingBundle, recordsFor } from "../consta/bundle/store";
 import type { CepRecord, MatchResult, MatchTrail, UndecidedReason } from "../consta/bundle/types";
 import {
   heldBefore,
-  notedRead,
   nudgeHolders,
   pendingBundleOf,
   type PendingBundle,
@@ -869,9 +868,9 @@ export async function runValidation(
       ? (verdict.reading?.senderBank ?? read?.senderBank ?? asked?.senderBank ?? null)
       : payment.senderBank;
     const receipt = receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null);
-    /* bug: single-cep-unreadable (D19): a single whose cadena and fields
-       both failed is still the one transfer Banxico named — it rides the
-       trail, dropped, with the reasons of both */
+    /* bug: single-cep-unreadable (D19): a single whose cadena did not read
+       is still the one transfer Banxico named — it rides the trail,
+       dropped, with the check the cadena failed */
     const unreadable = unreadableCandidates(
       several
         ? (bundle?.unreadable ?? [])
@@ -881,10 +880,6 @@ export async function runValidation(
     );
     const source = several ? "several" : "single";
     const bundleId = bundle?.id ?? null;
-    /* …and a single its own fields stood in for says which check the
-       cadena failed */
-    const noted = (trail: MatchResult["trail"]) =>
-      several ? trail : notedRead(trail, verdict.record?.clave, verdict.recordWhy);
     /* bug: single-cep-unreadable: the clave-only ask opens "with the other
        fields filled from the row" (contracts/payment-page.md), and a
        receipt-door row holds neither the bank nor the day. So the undecided
@@ -903,7 +898,7 @@ export async function runValidation(
         ...(payment.senderBank == null && keptBank ? { senderBank: keptBank } : {}),
         ...(payment.transferDate == null && receipt.day ? { transferDate: receipt.day } : {}),
         matchTrail: JSON.stringify(
-          trailOf(source, bundleId, receipt, { decided: "undecided", reason, trail: noted(candidates) }, unreadable),
+          trailOf(source, bundleId, receipt, { decided: "undecided", reason, trail: candidates }, unreadable),
         ),
       });
 
@@ -922,10 +917,10 @@ export async function runValidation(
 
     const candidates: CepRecord[] = several ? bundle!.candidates : verdict.record ? [verdict.record] : [];
     if (!several && !verdict.record) {
-      /* D9: a single `valid` neither its cadena nor its own fields could
-         read (D19). With a time or a tail on the receipt there is nothing to
-         hold them against, so the clave is asked; with neither, nothing
-         contradicts it and it confirms as it always did. */
+      /* D9: a single `valid` whose cadena could not be read (D4, D19).
+         With a time or a tail on the receipt there is nothing to hold them
+         against, so the clave is asked; with neither, nothing contradicts
+         it and it confirms as it always did. */
       if (receipt.time || receipt.tail) return undecided("unreadable");
     } else if (!candidates.length) {
       return undecided(unreadable.length ? "unreadable" : "none_fit");
@@ -934,7 +929,7 @@ export async function runValidation(
       const result = await chooseAndClaim(db, payment.id, receipt, candidates, used);
       if (result.decided === "undecided") return undecided(result.reason, result.trail);
       Object.assign(base, {
-        matchTrail: JSON.stringify(trailOf(source, bundleId, receipt, { ...result, trail: noted(result.trail) }, unreadable)),
+        matchTrail: JSON.stringify(trailOf(source, bundleId, receipt, result, unreadable)),
         matchDistanceS: result.distanceS,
       });
       /* D8: the chosen transfer becomes the ordinary `valid` verdict */

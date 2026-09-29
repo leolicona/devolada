@@ -250,3 +250,77 @@ defect in its own right. The fix below does not depend on which cause it was.
 
 - None blocking. The creator decided Rule 1, and the rest follows existing
   decisions (D9, D10) and contracts.
+
+## Re-assessment (2026-09-29)
+
+- **Source**: the creator's probe, run from their machine with
+  `scripts/apicep-probe.sh` on 2026-09-29 (six paid calls), read through a
+  jq filter that printed each answer's keys and each cadena field's kind
+  and length, never a value. The full answers stay on the creator's
+  machine (`~/labs/devolada-evidencia/cadena-nu-klar/`).
+- **Verdict**: valid. The root cause is now known, and it is neither (A)
+  nor (B) as written above.
+
+### What was measured
+
+| Case | Bank | Search | Validated before | `cdaChain` | Fields | Version | `processingTime` | Operation / credit day |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A1 | Azteca | clave | no | cadena + seal (344) | 43 | 01 | 08:35:01 | 28 / 28 |
+| N1 | Nu | clave | yes | cadena + seal (344) | 43 | 01 | 09:14:50 | 28 / 28 |
+| N2 | Nu | clave | yes | cadena + seal (344) | 43 | 01 | 13:20:12 | 28 / 28 |
+| N3 | Nu | clave | yes | cadena + seal (344) | 43 | 01 | 13:29:46 | 28 / 28 |
+| N4 | Nu | reference | yes | cadena + seal (344) | 43 | 01 | 13:29:46 | 28 / 28 |
+| K1 | Klar | reference | no | cadena + seal (344) | 43 | 01 | 19:31:09 | 29 / 28 |
+
+- Every answer carried `cdaChain`, and every one had the same shape:
+  `||<43 fields>||<a 344-character base64 seal>`. With the seal set apart,
+  all eleven checks of the parser pass on the 43 fields. The banks differ
+  only in the bank's name, the concept's length and, for Klar, a CURP (18)
+  where the others carry an RFC (13), a field the parser drops.
+- The cadena's credit time equals `processingTime` in all six.
+- Klar's transfer, printed 2026-09-28 19:30:50, was filed under the 29th
+  and credited on the 28th: the cadena's credit day is the day the money
+  arrived.
+- Klar's receipt shows no clave de rastreo, when sent or once confirmed. A
+  Klar payer can only be found by reference.
+- On dev, no record of a single `valid` was ever written (`cep_records`
+  with no bundle: 0), for Azteca or anyone.
+
+### Root cause
+
+`readCadena` (and `parseCadena` before it) demands that the cadena end in
+`||`. A `valid`'s `cdaChain` never does, because its seal follows the
+closing bars. So every clave-less single `valid` was unreadable, from any
+bank. It showed first on Nu because a Nu reference names one transfer, so
+its searches end in a single `valid`. An Azteca reference repeats, so its
+searches end in a bundle, whose PDFs print the cadena and the seal under
+separate labels: the path that worked. Research R5 recorded "`||` at both
+ends" for the `valid`'s cdaChain too, and the test fixtures built it that
+way, so every test agreed with the parser and none with the provider.
+Confidence: high.
+
+### Revised remediation (decided by the creator, 2026-09-29)
+
+1. **Read the cadena as it arrives** (`cadena.ts`): the closing bars are
+   the last `||`, and what follows them is a base64 seal or nothing, which
+   is dropped. The printed cadena, with no seal, reads as before.
+2. **Withdraw Rule 1**: the answer's own fields no longer stand in for a
+   cadena that cannot be read. The cadena is the one source (FR-002); a
+   single whose cadena does not read is unreadable, the clave is asked,
+   and the payment records why.
+3. **Keep the rest of the first fix**: the reason on the verdict and the
+   trail, the warn line, `CEP_SINGLE_UNDECIDED` and its words, the panel's
+   single copy, and the bank and day kept for the clave form.
+4. **Fixtures as measured**: a `valid`'s `cdaChain` carries its seal.
+5. **Spec 013**: R5 and D4 amended, D19 rewritten, FR-002 and the
+   2026-09-28 clarification updated, a 2026-09-29 clarification added.
+
+### Open questions (not blocking)
+
+- **A payer whose bank shows no clave** (Klar): when a single or a bundle
+  stays undecided, the clave-only ask has no answer. What to ask instead
+  is a product decision for later.
+- **Case in a clave**: Klar's clave mixes cases, and the transfer door
+  upper-cases every typed clave. Whether Banxico matches it either way was
+  not measured. With Klar's receipt showing no clave, no payer types one
+  today.

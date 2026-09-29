@@ -177,11 +177,26 @@ a clave the screenshot did not show (bug `single-cep-unreadable`).
   answer's own fields — the credit time, the accounts, the amount — with
   the day the receipt printed as the credit day. Only when both fail is the
   CEP unreadable, and the payment always records why. The time window
-  still decides (the creator's "Regla 1").
+  still decides (the creator's "Regla 1"). *Withdrawn 2026-09-29 — see
+  below.*
 - Q: What does the payer read when the search found one transfer and could
   not confirm it? → A: That one transfer was found and could not be
   confirmed as theirs; never "más de una transferencia". The clave form
   opens with the bank Banxico named and the day the receipt printed.
+
+### Session 2026-09-29
+
+The creator asked apiCEP directly for six `valid` answers — Azteca, Nu ×4
+(three transfers) and Klar, by clave and by reference, first and repeated
+— and read each one's shape without its values. Every `cdaChain` was the
+43-field cadena followed by its seal, `||<fields>||<seal>`; the parser
+demanded `||` at the end, so it had never read one (D4, amended).
+
+- Q: With the cadena read as it arrives, do the answer's own fields still
+  stand in when it cannot be read? → A: No — Rule 1 is withdrawn. The
+  cadena is the one source of a CEP's facts; one that cannot be read is
+  unreadable (FR-002 as written), the clave is asked, and the payment
+  records why.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -408,9 +423,9 @@ provider call in total.
   credit day, credit time, sending bank, sender account type and account,
   receiving bank, destination account and amount. A CEP that cannot be
   read confirms nothing and is flagged. The seal is kept with the CEP and
-  marked not verified. A single `valid` whose cadena cannot be read is read
-  from the same answer's own fields instead, on the printed day (D19); it
-  is unreadable only when both fail, and the payment records why.
+  marked not verified. A single `valid`'s cadena arrives with its seal
+  after the closing bars and is read the same way (D4, amended
+  2026-09-29); when it cannot be read, the payment records why (D19).
 - **FR-003**: Devolada MUST drop every CEP whose clave already confirmed a
   payment.
 - **FR-004**: When the receipt shows the sender's account tail, Devolada

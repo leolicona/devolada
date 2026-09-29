@@ -25,7 +25,7 @@ export type InvalidReason = "contradicted" | "not_found" | "several";
 
 // ProviderVerdict.cep gains (all nullable; read from cepDetails):
 creditTime: string | null;        // processingTime, "HH:MM:SS"
-chain: string | null;             // cdaChain — parsed by parseCadena (D4)
+chain: string | null;             // cdaChain — the cadena, then its seal; parsed by parseCadena (D4, amended 2026-09-29)
 senderAccountType: string | null;
 senderAccount: string | null;
 certificateNumber: string | null;
@@ -54,13 +54,12 @@ bundle?: {
   unreadable: { entry: string; reason: string }[];
 };
 /* D5/D9: the record of a single valid's CEP, when the search was clave-less.
-   D19 (2026-09-28): from its cadena, or else from the answer's own fields
-   on the printed day. Null only when both fail: the lifecycle treats that
-   CEP as unreadable */
+   From its cadena alone (D19). Null when the cadena could not be read: the
+   lifecycle treats that CEP as unreadable */
 record?: CepRecord | null;
-/* D19: why the record is not the cadena's — "cadena: missing" when the
-   fields stood in, "cadena: missing; fields: credit time" when neither
-   read. Absent when the cadena read; never a value of the CEP */
+/* D19: why the record is null — the check the cadena failed ("cadena:
+   missing", "cadena: 42 fields"), or "no CEP details". Absent when the
+   cadena read; never a value of the CEP */
 recordWhy?: string;
 ```
 
@@ -123,15 +122,14 @@ record (ignore on conflict), and return it as `record`. On the transfer
 door the billing row's `tracking_key` is the CEP's clave when the request
 had none (D13).
 
-D19 (the creator's Rule 1, 2026-09-28; bug `single-cep-unreadable`): when
-`cep.chain` is missing or not as measured, the record comes from the same
-answer's own fields — `creditTime` (`processingTime`, `HH:MM:SS`), the
-printed day as the credit day (the transfer door's `date`; on the receipt
-door our reading's date, else the provider's), `date` as the operation day
-(0–5 days after the printed day, else the fields fail), the amount, the
-accounts when whole (else empty: unknown). Only when both sources fail is
-`record` null. `recordWhy` rides the verdict whenever the cadena did not
-read, and a warn line names the validation id and the reason.
+D4 amended 2026-09-29 (bug `single-cep-unreadable`): `cep.chain` is the
+cadena followed by its seal, `||<43 fields>||<seal>` (measured on Azteca,
+Nu and Klar). The parser takes the last `||` as the closing bars and drops
+the seal after them. D19: when `cep.chain` is missing or not as measured,
+`record` is null — the answer's own fields do not stand in (the creator's
+Rule 1 of 2026-09-28, withdrawn 2026-09-29). `recordWhy` rides the verdict
+whenever there is no record, and a warn line names the validation id and
+the reason.
 
 ## The matcher (D6, D7, D8) — `consta/bundle/match.ts`, pure
 

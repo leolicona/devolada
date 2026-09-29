@@ -88,9 +88,9 @@ export type TrailCandidate = {
      time and the candidate reached the window */
   distanceS?: number | null;
   /* bug: single-cep-unreadable (D19): how Banxico's document did not read
-     — an unreadable entry's reason, or the cadena's failed check on a
-     single whose own fields stood in. Absent when the cadena read. Kept on
-     the payment for whoever asks why; no response schema carries it. */
+     — an unreadable bundle entry's reason, or the check a single's cadena
+     failed. Absent when it read. Kept on the payment for whoever asks why;
+     no response schema carries it. */
   readWhy?: string;
 };
 

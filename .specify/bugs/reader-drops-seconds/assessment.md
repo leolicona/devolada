@@ -52,6 +52,39 @@ Every reading below comes from questions version 3 on
   with its seconds can separate them whenever their credits are more than
   30 s apart.
 
+### Added 2026-09-29, at the fix (dev D1, read-only)
+
+Added at the creator's request ("add the 13:20 case to the assessment as
+evidence"). The remediation below is unchanged. A second miss happened after
+this assessment was written. It was on Nu too, on two captures of one
+transfer: reference 2546382, $3.00, printed 2026-09-28. Both were read with
+questions version 3 on the same model.
+
+| When (UTC) | Extraction | `bancoEmisor` | Answered `hora` | Gate |
+| --- | --- | --- | --- | --- |
+| 19:22 | eb725182 | "NU" | `13:20:10` | stopped: the bank is outside the vocabulary |
+| 19:23 | 1f340d86 | "NUBANK" | **`13:20`** | passed, and searched |
+
+- The same transfer was read with its seconds once and without them once, a
+  minute apart. The image was not looked at. The capture read "13:20:10" is
+  what says the receipt prints seconds.
+- This miss is worse than the 09:14 one. The reading without seconds is the
+  one that reached the search. The reading with seconds was stopped by the
+  bank name "NU". Payment 56c8e102 recorded the receipt's time as `13:20`,
+  and it ended `unreadable` for bug `single-cep-unreadable` (since fixed),
+  so no transfer was chosen by the minute alone.
+- Tally of fresh version-3 readings on dev whose receipt is known to print
+  seconds, from 2026-09-28 to 2026-09-29:
+  - Azteca kept the seconds 3 of 3.
+  - Nu kept them 3 of 5 (`09:14:50`, `13:20:10`, `22:16:59`) and lost them
+    twice (`09:14`, `13:20`).
+- Five readings answered `19:30` on 2026-09-29, all `esComprobante: false`.
+  They are left out, because nothing shows whether that capture prints
+  seconds.
+- "NU" in place of NUBANK appeared in three of the five Nu readings (the
+  09:14 screenshot, 13:20:10, 22:16:59). That is the out-of-scope finding
+  below, seen again.
+
 ## Reproduction
 
 1. A receipt image that prints a 12-hour time with seconds and an a.m./p.m.

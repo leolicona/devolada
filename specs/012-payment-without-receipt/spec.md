@@ -598,6 +598,14 @@ question.
   number, and whoever held the phone's digits keeps them (FR-003). The
   business joins or separates people from the panel when a name is
   written two ways or two people share one.
+- **A placeholder phone.** The business typed a stand-in number for
+  customers who gave none. When it looks like a bank app's default
+  (0000000000, 1234567890…), FR-002 already gives each an assigned number.
+  When it is a real-looking number on customers with different names, they
+  are different people and each gets their own. When it sits on a single
+  customer, it works as their reference — unique in the business — and the
+  business can give them a new number if the page's "son los últimos 7
+  números de tu celular" confuses them.
 - **One person, two services, one confirmation without a transfer.** With
   a shared reference, a service confirmed without paying can take the
   transfer meant for the other service. Accepted with the per-person
@@ -948,8 +956,12 @@ question.
   neighbour's phone and see their service and debt). The wallet the
   creator aims for — the phone as the payer's way in, with local
   authentication — needs the phone proven before anything is shown, and
-  is a feature of its own. The per-person reference is chosen so that
-  feature can build on it without changing any payer's number.
+  is a feature of its own: a code sent to the phone by SMS or WhatsApp
+  that the payer types back (the creator, 2026-09-30). A proven phone can
+  also correct what the business's records hold — a missing, wrong or
+  stand-in number — and settle "the same person" better than a name does.
+  The per-person reference is chosen so that feature can build on it
+  without changing any payer's number.
 - Out of scope: the bank statement upload and match (spec 015); the
   remainder queue, Banxico's batch file and any query to Banxico (spec 016);
   changes to the reader; the WhatsApp channel; the wallet; one transfer

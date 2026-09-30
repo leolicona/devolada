@@ -1,0 +1,273 @@
+# Research: confirmation-hierarchy
+
+**Date**: 2026-09-30 · **Spec**: [spec.md](./spec.md) · **Plan**: [plan.md](./plan.md)
+
+Spec 012 is designed but not built. Its plan (D1–D26), data model and
+contracts are the ground this feature stands on; the code below them is
+today's `main` (`e2ec70c`). Each item says what was found, what is
+decided, and what was set aside. Decisions are tabled in
+[plan.md](./plan.md#decisions) and cited in code as
+`confirmation-hierarchy D<n>`.
+
+## What was measured, and what could not be
+
+Nothing new was measured. The facts this plan leans on were measured by
+others and are cited where used: the claves that shared one bundle differ
+in their last characters (012 research R15: `…56772I`, `…73815I`); a clave
+typed by hand took four tries (2026-09-26, 012 "Where this comes from").
+How often a payer has the account's digits at hand, the clave, or neither,
+is not known before the pilot; SC-001 and SC-004 measure it.
+
+## R1 — The ties spec 012 already decides, and where
+
+**Found.** 012 plans three matcher modes in the pure
+`consta/bundle/match.ts` (012 D10, D11; `contracts/engine.md`):
+`receipt` (today's), `own` (integrity → used → learned account → earliest)
+and `typed` (integrity → used → learned account → typed tail). A
+several-matches answer that none decides becomes spec 013's undecided row:
+`validating`, `last_error = 'CEP_UNDECIDED'`, no slot, no expiry, the
+candidates kept in `match_trail` (`validation.ts:892-906`). A later row that
+supersedes it is fitted against those candidates without a call
+(`validation.ts:583-614`, spec 013 D11), with `fitClave`'s forgiveness (O as
+0, I as 1, one character missing; `match.ts:189-201`). 012 D17 adds
+`fitClaveTail`, the same reading on the last four characters. The
+account's digits are compared by `tailFits` (`match.ts:41-46`): a CLABE's
+end, or the account number inside it; a card or a phone on its own end.
+
+**Decision.** Keep every one of those pieces. This feature changes what
+the `typed` mode is given (exclusive accounts only, D4), when the payer is
+asked (after the search, D5), and how an answer is read (one function for
+both ways, D6). The receipt mode is untouched.
+
+## R2 — "Exclusive": which accounts may decide alone
+
+**Found.** 012 D12 learns an account per service: `cep_records.sender_account`
+where `clave` equals the `tracking_key` of a confirmed or partial payment of
+that customer's links. Nothing reads the other direction — which customers
+one account has paid. `cep_records` is indexed by `(business_id, clave)` and
+`(business_id, credit_date, amount_cents)` (`db/schema.ts:1178-1179`), not by
+account. A person is one phone and one name, decided when the reference is
+born and stored as the customers that share a `payer_references` row
+(012 D1, D4).
+
+**Decision (D4).** Exclusivity is a query, taken at the moment of a tie and
+over the candidates' accounts only (a bundle holds a handful). For each
+candidate account: the confirmed or partial payments whose adopted clave
+has a `cep_records` row from that account, their links' customers, and
+those customers' reference. The account is **exclusive to this person**
+when every one of those customers holds this person's reference. A customer
+with no reference counts as another person unless it is the customer being
+confirmed. The matcher receives two lists: `knownAccounts` — learned for
+this service and exclusive — and `othersAccounts` — accounts that paid
+another person. An additive index `cep_records (business_id,
+sender_account)` makes the lookup a seek.
+
+**Alternatives.** A stored `exclusive` flag on each account — rejected: it
+goes stale the day the account pays someone else, and 012 D12 already chose
+queries over stored fates. Exclusivity per service instead of per person —
+rejected by the spec: two services of one person share their accounts
+(Assumptions).
+
+## R3 — The answer, and what a wrong one leaves behind
+
+**Found.** 012 plans the account's digits as a correction that supersedes
+the waiting row (012 T048) and the clave's characters as a `claveTail` that
+requires `supersedes` (012 D17). A superseding row that fits nothing is not
+planned: a typed whole clave that fits no kept candidate is searched at
+Banxico (spec 013), but a tail is never searched.
+
+**Decision (D6).** An answer is a new row that supersedes the waiting one,
+carrying `senderTail`, `claveTail` or both, and the waiting row's
+reference, bank, day and amount. It never calls the provider. One pure
+function, `fitTieBreak`, reads it against the kept candidates:
+
+- each given way picks the candidates it fits (`tailFits` for the digits,
+  `fitClaveTail`'s reading for the characters);
+- with both ways given, the answer fits only the candidates both fit — a
+  way that fits nothing, or two ways that fit different transfers, make the
+  answer fit nothing, so sending both never tests two guesses at once;
+- exactly one fit confirms, unless only the digits picked it and its
+  account is in `othersAccounts` (then the characters are asked, FR-013);
+- several fits ask the way not yet given, then the whole clave.
+
+A row whose answer fits nothing stays waiting in its place: `validating`,
+`CEP_UNDECIDED`, the waiting row's trail copied onto it, so the next answer
+supersedes it and still finds the candidates.
+
+**Alternatives.** Answering on the waiting row itself, without a new row —
+rejected: 012 and spec 013 already record every payer input as a row in the
+chain, and the correction and round counters ride that chain.
+
+## R4 — The limit on wrong answers
+
+**Found.** Today a link allows five payment rows an hour
+(`HOURLY_ATTEMPT_BUDGET`, `routes/direct-payments/handler.ts:88`, counted by
+`attemptsInLastHour` over `payments_link_idx`). 012 D25 exempts a clave, a
+clave tail and a receipt from it; the account's digits are not exempt. A
+clave tail is tried only after the digits have narrowed the transfers
+(012 D15), which is what made the exemption safe. With the characters
+offered as a first answer, each tail is a free guess: at five a minute, a
+four-digit tail among three transfers is found within the hour.
+
+**Decision (D8).** At most three answers per link in 24 hours may fit
+nothing, both ways counted together. The count is the link's rows with
+`tie_break = 'none'` (D7) created in the last 24 hours, over the existing
+`payments_link_idx`. A fourth answer that carries a tail is refused with
+`409 TIE_BREAK_EXHAUSTED` before any row is written, and the status asks
+the whole clave instead. Answers of either way never count toward the
+hourly budget; this limit is what bounds them. The whole clave and the
+receipt stay outside every limit, as the creator chose (012 D25).
+
+Arithmetic, when a clave ends in four digits: three blind guesses among k
+transfers tie one about 3k in 10,000 a day — under 1 in 1,000 for k up to 3.
+Claves ending in letters are harder still.
+
+**Alternatives.** Per payment instead of per link — rejected: a new
+confirmation starts a new chain, so the limit would reset with each one.
+Counting answers in the hourly budget — rejected: five an hour shared with
+confirmations would block an honest payer's next confirmation, and it still
+allows 120 guesses a day.
+
+## R5 — The ask on the status
+
+**Found.** 012 plans `ask: "check_data" | "clave" | "sender_tail" |
+"clave_tail"` on `directPaymentStatusResponse`, derived from the row, never
+stored (012 D15, data-model "The ask"). The digits are asked before the
+characters.
+
+**Decision (D9).** `ask` becomes `"check_data" | "clave" | "tie_break"`,
+with `tieBreak: { ways, missed }` beside it: `ways` is the fields the page
+shows (`["sender_tail", "clave_tail"]` by default; `["clave_tail"]` when the
+digits already picked another person's account; `["sender_tail"]` when the
+characters left several and the digits were not given), and `missed` says
+that the last answer fitted nothing. When the link has reached the limit,
+the ask is `clave`. The `sender_tail` and `clave_tail` asks are never built.
+
+**Alternatives.** Two ask words for the two ways — rejected by the spec
+(FR-011, clarified 2026-09-30): one screen, two ways.
+
+## R6 — Searching before asking
+
+**Found.** 012 D11 refuses a typed confirmation with `409
+SENDER_TAIL_NEEDED` before anything is billed when no account is learned
+at the chosen bank, so the digits travel with the search.
+
+**Decision (D5).** The typed door searches at once. The clave's characters
+can only be compared with transfers already found, and the spec asks after
+the search (FR-011). `SENDER_TAIL_NEEDED` is never built. Cost: one provider
+call for a typed confirmation that finds transfers and whose payer then
+leaves — the call 012 spent after the digits anyway.
+
+## R7 — The step's three recipes
+
+**Found.** `@devolada/ui`'s one `Button` (`packages/ui/src/components/button.tsx`)
+has the three declared sizes — decisive 64px, standard 48px, compact 40px —
+and the variants `primary`, `secondary`, `ghost` and `link`. `link` has no
+box and drops its height (`h-auto p-0`), so it is not a 48px target. Today's
+quiet door on the proof step is a `ghost` button, 48px high, `text-sm`,
+full width: "No tengo el comprobante a la mano" (`PaymentPage.tsx:1936-1939`).
+012 plans the step in its own component, `ConfirmPayment.tsx`, with the
+decisive **Confirmar pago** (012 D21).
+
+**Decision (D2).** Option 1 keeps 012's recipe: the only `primary` /
+`decisive` button of the step. Option 2 is a `secondary` / `standard`
+button, "Usé otra referencia", right below it. Option 3 takes the recipe
+of today's quiet door — `ghost`, 48px, `text-sm`, full width, last — in one
+component, `ReceiptLink`, used everywhere a page with a reference offers the
+receipt: the step, option 2's form, every ask, the expired view. The
+receipt and today's manual door swap places, and no new recipe is made.
+
+**Alternatives.** The `link` variant — rejected: it is not a 48px target
+(constitution VI). A new "quiet" variant in `packages/ui` — rejected: the
+`ghost` recipe already reads as a text link and is already the page's quiet
+door.
+
+## R8 — Where options 2 and 3 open
+
+**Found.** Today's proof step shows the capture guide and the upload above
+everything (`PaymentPage.tsx:1907-1914`). 012 plans step 2 as
+`ConfirmPayment` and the typed path as today's `TransferForm` in `keys =
+"either"` (012 contract, "No puse la referencia").
+
+**Decision (D3).** The step has three views, switched in place: the
+confirmation (option 1, the default), the typed form (option 2) and the
+receipt (option 3: today's capture guide and upload, unchanged). Options 2
+and 3 each carry **Volver** to the confirmation. Answering "No" to 012's
+question opens the typed form. The view lives in the page's state, not on
+the device: a reload lands on the confirmation, which is the order the spec
+wants. On a link without a reference, the step is today's, receipt first.
+
+## R9 — The copy
+
+**Decision (D12).** es-MX, saying what was searched and never suggesting
+the payer lied (012 FR-037):
+
+| Where | Copy |
+| --- | --- |
+| Option 2 control | "Usé otra referencia" |
+| Option 2 form, intro | "Escribe la referencia que usaste o tu clave de rastreo. Con una basta." |
+| Option 3 | "Subir foto del comprobante" |
+| Back from options 2 and 3 | "Volver" |
+| Tie-break, one transfer found | "Encontramos una transferencia con esos datos. Para confirmar que es tuya, escribe uno de estos datos. Con uno basta." |
+| Tie-break, several found | "Encontramos más de una transferencia con esos datos. Para saber cuál es la tuya, escribe uno de estos datos. Con uno basta." |
+| Field, digits | "Últimos 4 dígitos de la cuenta o tarjeta con la que pagaste" |
+| Field, characters | "Últimos 4 caracteres de tu clave de rastreo" |
+| After a miss | "Ese dato no coincide con ninguna de las transferencias que encontramos. Revísalo en el detalle de tu transferencia." |
+| Only the characters | "Para confirmar que esta transferencia es tuya, escribe los últimos 4 caracteres de tu clave de rastreo." |
+| Only the digits | "Escribe también los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." |
+| Limit reached | 012's clave copy: "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app." |
+
+"Genérica" appears nowhere in this feature's copy (FR-007).
+
+## R10 — Reconciling spec 012
+
+**Found.** 012's plan, data model, contracts and tasks are written; two of
+its 56 tasks are marked (both dropped, nothing built). Its spec already
+points here ("Where spec 017 changes this spec").
+
+**Decision (D1).** One build. 012's tasks stay the backbone and keep their
+order; the ones this feature changes carry a note in 012's `tasks.md`, and
+this feature's `tasks.md` holds what they build instead. 012's plan, data
+model and contracts carry dated amendment notes that name the decision
+here. The amended 012 tasks: T021, T027 (step 2), T030, T035 (own mode with
+exclusive accounts), T038, T041, T042 (asks and the receipt's place), T043–T049
+(the typed path), T051 (the browser layer), T055, T056 (the transition's
+ask).
+
+**Alternatives.** Building 012 as written and changing it afterwards —
+rejected: its typed path and asks would be built twice. Rewriting 012's
+documents wholesale — rejected: the spec keeps this feature's decisions in
+their own place, and a dated note keeps the trail.
+
+## R11 — Tests, by the layer that can answer them
+
+**Decision.** Constitution IV and VII, citing `confirmation-hierarchy US<n>`:
+
+- **Pure** (`apps/api/test/consta/match.test.ts`): `fitTieBreak` tables —
+  each way alone, both agreeing, both disagreeing, one fitting nothing,
+  several, the digits picking another person's account; the `own` and
+  `typed` modes given `knownAccounts` and `othersAccounts`.
+- **Lifecycle** (`apps/api/test/confirmation-hierarchy.test.ts`, workerd, a
+  real D1, apiCEP at its pinned origin): exclusivity across two people
+  sharing an account; the search before the ask; an answer spending no
+  call; a miss carrying the candidates; the limit per link over 24 hours
+  and its refusal; the hourly budget untouched by answers; the transition's
+  ask.
+- **Page** (`apps/pago/test/confirmation-hierarchy.test.tsx`, MSW, axe):
+  the three options in order with their recipes; the views and **Volver**;
+  "No" opening option 2; the tie-break screen's fields by `ways`, its miss
+  line, and the whole clave at the limit; the receipt link last on every
+  view.
+- **Browser** (`tests/e2e/pago.spec.ts`): at 360, 768 and 1280 in both
+  themes — the decisive button 64px, option 2 and the receipt link 48px,
+  focus measured, tab order equal to the visual order, no horizontal scroll.
+
+## R12 — Measuring the success criteria
+
+**Decision (D7).** Queries over one business, like 012 D23:
+`match_trail.by` names what decided a confirmation (`learned_account`,
+`sender_tail`, `clave_tail`, or a clave); `payments.tie_break` gives each
+answer's outcome; `confirmation.tieBreakMisses` counts a confirmed chain's
+misses. SC-001 and SC-004 read those; SC-005 reads the receipt rows of
+links with a reference; SC-003 is the pay route's own latency for rows that
+make no provider call.

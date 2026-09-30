@@ -128,14 +128,14 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D7 | `bankOrder`: this business's confirmed payments of 90 days, most used banks first, five at most | research R20 |
 | D8 | The confirmation is the typed door with `referenceSource: "own"`; the server writes the digits; the day within today − 30 … today; `preselected` rides along | research R7 |
 | D9 | `own` and `typed` rows never meet a shared-reference stop; rows without a source keep today's four | research R8 |
-| D10 | Matcher `own` mode: integrity → used → learned account → earliest; undecided only as `all_used` | research R9 |
-| D11 | "No puse la referencia": another person's reference refused, a phone's digits typed by a second name on that phone included; digits no person holds (D3) go on as a shared reference; no tail and no learned account at that bank → `SENDER_TAIL_NEEDED` before anything is billed; learned accounts compared whole before the tail; no fit asks the four digits, fitted without a call | research R11 |
+| D10 | Matcher `own` mode: integrity → used → learned account → earliest; undecided only as `all_used` *Amended 2026-09-30 by spec 017 (confirmation-hierarchy D10): the learned account preferred is an exclusive one.* | research R9 |
+| D11 | "No puse la referencia": another person's reference refused, a phone's digits typed by a second name on that phone included; digits no person holds (D3) go on as a shared reference; no tail and no learned account at that bank → `SENDER_TAIL_NEEDED` before anything is billed; learned accounts compared whole before the tail; no fit asks the four digits, fitted without a call *Amended 2026-09-30 by spec 017 (confirmation-hierarchy D5, D6, D10): the typed door searches at once, `SENDER_TAIL_NEEDED` is never built, and the answer comes after the search, either way, through `fitTieBreak`.* | research R11 |
 | D12 | Learned banks per person and accounts per service are queries; a new account is learned with no mark | research R10 |
 | D13 | Spec 013 D5 widens: every `valid` of a business keeps a `cep_records` row | research R10 |
 | D14 | A round is an attempt that got an answer; `ladder_round` rides the correction chain; round 3 searches the neighbouring days; after round 4 the 2-hour and last slots; expiry after round 6 | research R12 |
-| D15 | Status `ask`: `check_data` after round 3, `clave` after round 4 or when typed digits fit nothing, `sender_tail` before `clave_tail`; "Todo está bien" lives on the device | research R13 |
+| D15 | Status `ask`: `check_data` after round 3, `clave` after round 4 or when typed digits fit nothing, `sender_tail` before `clave_tail`; "Todo está bien" lives on the device *Amended 2026-09-30 by spec 017 (confirmation-hierarchy D9): the asks are `check_data`, `clave` and `tie_break`.* | research R13 |
 | D16 | `correction_count` on the chain; a fourth search-spending correction without a clave or receipt → `CORRECTIONS_EXHAUSTED` | research R14 |
-| D17 | `fitClaveTail` on the kept candidates' last four characters; one fit confirms; never searched | research R15 |
+| D17 | `fitClaveTail` on the kept candidates' last four characters; one fit confirms; never searched *Amended 2026-09-30 by spec 017 (confirmation-hierarchy D6): the characters are a first answer beside the digits, not only after an undecided row.* | research R15 |
 | D18 | Provisional release unchanged: a confirmation is `human` evidence; only the copy of the asks changes | research R16 |
 | D19 | `provider_quota`, a platform row upserted from `X-RateLimit-Remaining`; shown in `/operador`; a `429` is not a round | research R17 |
 | D20 | `businesses.pay_by_reference`, under `settings: update`; off is today, exactly | research R18 |
@@ -143,8 +143,8 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D22 | The number is `payerReference` everywhere (`reference` stays the concepto); the share message and `/v1`'s `paymentLink` carry it | research R21 |
 | D23 | `reference_source`, `match_trail.by` and `payments.confirmation` make SC-001…SC-006 queries over one business | research R22 |
 | D24 | `usedBy { day, amountCents }` on a used transfer, only when the payment that used it is the same person's | research R24, creator 2026-09-30 |
-| D25 | A clave, a clave tail or a receipt never counts toward the link's hourly attempts; confirmations and corrections do | research R14, creator 2026-09-30 |
-| D26 | A phone beats an assigned number: the row passes to the phone's owner; the previous holder gets a new number, a notice and the "which reference" question; for 60 days or until they confirm with the new number, the previous holder's known accounts never pay the new owner, an unknown account asks the new owner's last four digits, and the previous holder's old digits confirm only with their account, their four digits, or the clave's last four | research R25, creator 2026-09-30 |
+| D25 | A clave, a clave tail or a receipt never counts toward the link's hourly attempts; confirmations and corrections do *Amended 2026-09-30 by spec 017 (confirmation-hierarchy D8): answers of either way are outside the hourly budget and bounded by three misses per link in 24 hours.* | research R14, creator 2026-09-30 |
+| D26 | A phone beats an assigned number: the row passes to the phone's owner; the previous holder gets a new number, a notice and the "which reference" question; for 60 days or until they confirm with the new number, the previous holder's known accounts never pay the new owner, an unknown account asks the new owner's last four digits, and the previous holder's old digits confirm only with their account, their four digits, or the clave's last four *Amended 2026-09-30 by spec 017 (confirmation-hierarchy D10): the transition's ask is `tie_break`, and only exclusive accounts decide.* | research R25, creator 2026-09-30 |
 
 ## Constitution Check
 

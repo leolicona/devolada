@@ -2,6 +2,14 @@
 
 **Date**: 2026-09-30 · **Plan**: [plan.md](./plan.md) · **Research**: [research.md](./research.md)
 
+> **Amended 2026-09-30 by spec 017** ([`confirmation-hierarchy`
+> data-model](../017-confirmation-hierarchy/data-model.md)): `payments`
+> gains `tie_break` and `cep_records` an index on `(business_id,
+> sender_account)`, both in this migration; "The ask" below is replaced by
+> 017's table (`check_data`, `clave`, `tie_break`); in the state diagram,
+> "several, typed — not tied" asks `tie_break` after the search, and an
+> answer that fits nothing stays undecided with its candidates.
+
 One additive migration, `0041_payment_without_receipt.sql`: three new
 tables, five columns on `payments`, one on `businesses`. Nothing is dropped,
 renamed or rebuilt; every existing row reads NULL or 0 on the new columns

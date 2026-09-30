@@ -4,6 +4,16 @@
 D14–D17, D21, D22, D24–D26 · **Route**: `apps/api/src/routes/direct-payments/{handler,schema}.ts`
 · **Page**: `apps/pago/src/features/pago/PaymentPage.tsx`
 
+> **Amended 2026-09-30 by spec 017** ([`confirmation-hierarchy` page
+> contract](../../017-confirmation-hierarchy/contracts/payment-page.md)).
+> Superseded here, and built as 017 says: `senderTail` and `claveTail` (both
+> answers to the tie-break, both requiring `supersedes`); the refusal
+> `SENDER_TAIL_NEEDED` (never built); `ask` (now `check_data`, `clave`,
+> `tie_break`, with `tieBreak`); step 2's item 6 (the small exits); the
+> "No puse la referencia" paragraph; the asks `sender_tail` and
+> `clave_tail`; and every placement of "Sube tu comprobante", which becomes
+> the quiet `ReceiptLink`, last. D25's line reads with 017 D8.
+
 Everything here is additive and exported from
 `@devolada/api/direct-payments-schema` (constitution III). With
 `pay_by_reference` off, every new field is absent or null and the page is

@@ -71,8 +71,9 @@ tie-break of a typed reference in a spec of their own,
 Where the two differ, spec 017 holds: FR-015 (the typed reference's ask),
 FR-021, FR-029 (the receipt's place), FR-031–FR-033, FR-041, User Story 2
 scenario 3, User Story 5 scenarios 1, 3–5, 7 and 8, the page contract's
-step 2 and asks, and plan decisions D11, D15, D17 and D25. Spec 017's plan
-reconciles this spec's plan, page contract and tasks before they are built.
+step 2 and asks, and plan decisions D11, D15, D17 and D25. Spec 017's plan reconciled
+them on 2026-09-30 (its D1): this spec's plan, data model and contracts
+carry dated notes, and its `tasks.md` names the tasks 017 builds instead.
 
 ## Where this comes from
 

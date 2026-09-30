@@ -25,6 +25,18 @@ already put a reference no one else has. US2 (the confirmation) makes it
 receipt-free. US3 (learning) and US4 (read-back and ladder) build on US2;
 US5 ("No puse la referencia") on US2 and US3.
 
+## Amended by spec 017
+
+On 2026-09-30 spec 017 (`confirmation-hierarchy`) changed the order of the
+confirmation step and the typed reference's tie-break; see its
+[plan](../017-confirmation-hierarchy/plan.md), decision D1. These tasks keep
+their place in this list and build what 017's `tasks.md` says instead:
+**T021, T027** (step 2's three views), **T030, T035** (`own` mode with
+exclusive accounts), **T038, T041, T042** (the asks and the receipt's
+place), **T043–T049** (the typed path: search first, the tie-break screen,
+`fitTieBreak`, the limit), **T051** (the browser layer), **T055, T056**
+(the transition's ask). Every other task stands as written.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: can run in parallel — different files, no dependency on unfinished work

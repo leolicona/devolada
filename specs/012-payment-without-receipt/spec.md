@@ -611,9 +611,14 @@ question.
   seven-digit number instead — one per customer — when the customer has no
   phone; when the phone is on more than three customers of the business,
   or the business marked it as not personal; when those digits are already
-  another person's reference; or when they equal the last seven digits of
-  the business's own receiving account. An assigned number is never one
-  already in use in the business.
+  another person's reference; when they equal the last seven digits of
+  an account the business receives on; or when they look like a bank
+  app's default — one digit repeated (0000000) or a straight run up or
+  down (2345678, 7654321) — or start with 0. An assigned number never falls
+  in any of these cases and is never one already used in the business.
+  *Amended 2026-09-30 by the plan (payment-without-receipt D3): the
+  default-looking and leading-zero cases are new; the creator confirms
+  them with the plan.*
 - **FR-003**: A reference MUST NOT change by itself once shown. A customer
   added later with a shared phone joins its reference while the phone
   stays within three customers; one who takes it past three gets an

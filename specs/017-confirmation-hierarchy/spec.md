@@ -112,6 +112,16 @@ rounds, what Devolada learns, and the switch per business.
   row. It is not asked only once: it comes back after an answer that fits
   nothing (up to FR-016's limit), and an answer that fits several leads to
   the other way and then to the whole clave. *The creator, the same day.*
+- Q: On which screens does the quiet receipt link appear while a payment is
+  not confirmed? → A: **Wherever the payer is asked something or the attempt
+  has stopped** — the confirmation, option 2's form, every ask (data check,
+  clave, tie-break), "Ya se usó para…", every refusal, and the expired
+  state — **but not during the plain wait of the first rounds**, when the
+  page asks nothing (012 FR-027). *The creator at `/speckit-clarify`, option
+  B of three. Rejected: every unconfirmed state, which invites captures in
+  the first minutes and spends calls; only the confirmation and the expired
+  state, which leaves a payer asked for a clave they do not have with no
+  way out.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -159,14 +169,18 @@ without a reference and see today's page.
    **When** they answer "No", **Then** option 2 opens and nothing is
    searched.
 4. **Given** any ask of the page — the data check, the clave, the tie-break
-   — or the expired state, **When** it is shown, **Then** the receipt is
-   offered as the same quiet text link, after every other action.
-5. **Given** a link without a reference (the feature off, or the reference
+   — "Ya se usó para…", a refusal, or the expired state, **When** it is
+   shown, **Then** the receipt is offered as the same quiet text link,
+   after every other action.
+5. **Given** a payment in the plain wait of the first rounds ("Seguimos
+   buscando"), when the page asks nothing, **When** it is shown, **Then** no
+   receipt link appears; it appears with the first ask.
+6. **Given** a link without a reference (the feature off, or the reference
    not ready yet), **When** it opens, **Then** the page is today's page,
    with the receipt first.
-6. **Given** a payer who taps the receipt link, **When** they upload a
+7. **Given** a payer who taps the receipt link, **When** they upload a
    capture, **Then** the receipt path works as it does today.
-7. **Given** a 360-pixel phone, a keyboard or a screen reader, **When** the
+8. **Given** a 360-pixel phone, a keyboard or a screen reader, **When** the
    payer moves through the step, **Then** they reach the three options in
    the same order, each with visible focus, and the receipt link is a
    48-pixel touch target.
@@ -286,7 +300,7 @@ one person's account.
 ### Edge Cases
 
 - **The payer has neither the account's digits nor the clave** at hand.
-  The receipt link is quiet but always there. Without an answer the payment
+  The receipt link is quiet but there, on the tie-break screen. Without an answer the payment
   waits "en revisión" and never expires, until spec 016's people take it.
 - **Both ways are given at once.** When they fit the same transfer, it
   confirms. When they fit different transfers, nothing confirms, and it
@@ -309,6 +323,9 @@ one person's account.
   Nothing is searched.
 - **Option 1 finds nothing.** The ladder's asks follow (012 FR-028, FR-029),
   with the receipt link quiet and last.
+- **The first minutes of the wait.** "Seguimos buscando" shows no receipt
+  link: nothing is asked yet, and a capture sent then would only spend
+  calls. The link comes back with the first ask (FR-005).
 - **Dark mode, reduced motion, a 360-pixel screen.** The order and the
   sizes hold; there is no horizontal scroll.
 
@@ -334,10 +351,14 @@ one person's account.
 - **FR-004**: Option 3 MUST be a text link with no button styling, placed
   after every other action, with a 48-pixel touch target and visible
   focus. Wherever the page offers the receipt on a link with a reference —
-  the step, option 2's form, every ask and the expired state — it MUST take
-  this form and this last place.
-- **FR-005**: The receipt MUST stay reachable in every state of the page
-  (012 FR-039). Quiet never means hidden.
+  the places FR-005 names — it MUST take this form and this last place.
+- **FR-005**: On a link with a reference, the receipt MUST be offered
+  wherever the payer is asked something or the attempt has stopped: the
+  confirmation, option 2's form, every ask (data check, clave, tie-break),
+  "Ya se usó para…", every refusal, and the expired state (012 FR-039). It
+  MUST NOT be offered during the plain wait of the first rounds, when the
+  page asks nothing (012 FR-027). Quiet never means hidden where the payer
+  needs a way out.
 - **FR-006**: A link without a reference — the feature off, or the reference
   not ready yet — MUST keep today's page, with the receipt first.
 - **FR-007**: The copy MUST name option 2 by what the payer did ("Usé otra

@@ -29,6 +29,13 @@ WispHub: `telefono__contains=<last seven>` on the customers list, paged at
 A refused key or an outage throws `IntegrationError`; the caller makes no
 reference (D5).
 
+*Amended 2026-09-30 at implementation (tasks T013, T014):* the capability
+also carries `phoneOf(usuario): Promise<string | null>` — one customer's
+phone as the business typed it. The backfill (D5) holds a link, not a
+customer, and reading the phone through the adapter keeps the core from
+calling WispHub itself (constitution IX). The session lists the
+capability's name as `customersWithPhone`.
+
 ## `ensurePayerReference` — `apps/api/src/direct-payments/payer-reference.ts` (D1, D3–D6)
 
 ```ts

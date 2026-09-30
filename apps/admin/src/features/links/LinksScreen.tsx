@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Search, Share2, Link as LinkIcon, AlertCircle, Check, TriangleAlert } from "lucide-react";
 import { Alert, Amount, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge } from "@devolada/ui";
-import type { CustomerRow } from "@devolada/api/direct-payments-schema";
+import { groupReferenceDigits, type CustomerRow } from "@devolada/api/direct-payments-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { LinksView } from "../../router";
@@ -87,7 +87,37 @@ function CopyLabel({ state }: { state: ActionState }) {
   );
 }
 
+/* payment-without-receipt D6 (FR-006): whether the seven digits are the
+   phone's or a number the system assigned, in the operator's words */
+const REFERENCE_ORIGIN: Record<NonNullable<CustomerRow["payerReference"]>["origin"], string> = {
+  phone: "celular",
+  assigned: "asignada",
+};
+
+/* The row's lines under the name: who the customer is, then — when the
+   customer has one — their reference. With no `payerReference` (the
+   feature off, no link yet, or no reference yet: D1, D20) the row is
+   exactly today's. */
 function CustomerLine({ row }: { row: CustomerRow }) {
+  return (
+    <>
+      <CustomerIdentity row={row} />
+      {row.payerReference && (
+        /* payment-without-receipt D6 (clarified 2026-09-30): text to read,
+           never a control. The system decides every reference alone, so
+           the panel offers nothing to press here and opens no profile —
+           an action would only add work for the business. Grouped the way
+           the payer reads it (D21, D22). */
+        <span className="block text-sm text-muted-foreground">
+          Ref. {groupReferenceDigits(row.payerReference.digits)} ·{" "}
+          {REFERENCE_ORIGIN[row.payerReference.origin]}
+        </span>
+      )}
+    </>
+  );
+}
+
+function CustomerIdentity({ row }: { row: CustomerRow }) {
   if (row.channel === "api") {
     /* An API row's second line: the reference (when a label heads the
        row), the ask, and a closed link's state in words */

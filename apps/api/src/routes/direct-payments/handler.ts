@@ -19,12 +19,15 @@ import { NO_DEBT, debtFor, nothingOwedIsProven } from "../../wisphub/debt";
 import {
   askAvailable,
   businessConfigured,
+  confirmationOf,
   isUniqueViolation,
   runValidation,
   sharedReference,
   speiFeeCents,
   validationAvailable,
 } from "../../direct-payments/validation";
+import { businessWallClock } from "../../time/business-day";
+import type { MatchTrail } from "../../consta/bundle/types";
 import {
   collectStored,
   fromBeneficiary,
@@ -80,6 +83,20 @@ import {
   type PayRequest,
 } from "./schema";
 import { decodeCursor, encodeCursor, FIRST_CURSOR, type BrowseCursor } from "./cursor";
+import {
+  bankOrder,
+  customerKeyOf,
+  ensurePayerReference,
+  isProven,
+  learnedAccounts,
+  learnedBanks,
+  referenceOfLink,
+  referencesFor,
+  type CustomerKey,
+  type PayerReference,
+} from "../../direct-payments/payer-reference";
+import { payerReferences } from "../../db/schema";
+import { groupReferenceDigits } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -103,6 +120,11 @@ async function attemptsInLastHour(
   db: ReturnType<typeof drizzle>,
   linkId: string,
   now: Date,
+  /* payment-without-receipt D25: with the feature on, a row that carries a
+     clave, a clave tail or a receipt is not an attempt this budget counts
+     — the safe exits stay open (the creator, 2026-09-30). Rows by the
+     payer's reference, confirmations and corrections, still count. */
+  safeExitsFree = false,
 ): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)` })
@@ -111,10 +133,27 @@ async function attemptsInLastHour(
       and(
         eq(payments.paymentLinkId, linkId),
         gte(payments.createdAt, new Date(now.getTime() - 3600 * 1000)),
+        ...(safeExitsFree
+          ? [
+              sql`NOT (${payments.proofKey} IS NOT NULL OR ${payments.claveTail} IS NOT NULL OR (${payments.referenceSource} IS NULL AND ${payments.trackingKey} IS NOT NULL))`,
+            ]
+          : []),
       ),
     );
   return Number(row?.n ?? 0);
 }
+
+/* payment-without-receipt D8: "today" and the 30 days before it, in the
+   business's timezone — the only days a confirmation may name */
+const shiftIsoDay = (day: string, days: number) => {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+/* payment-without-receipt D16 (FR-024): at most three corrections per
+   payment spend a search */
+const CORRECTIONS_BUDGET = 3;
 
 /* bug: one-open-attempt — the statuses of an attempt still in review:
    it has no verdict yet and will be polled (or released) again. */
@@ -181,7 +220,11 @@ async function identicalAttempt(
           (t.referenceNumber == null || !clave || r.referenceNumber === t.referenceNumber) &&
           r.senderBank === t.senderBank &&
           r.transferDate === t.date &&
-          (t.amountCents == null || t.amountCents === (r.claimedAmountCents ?? r.amountCents)),
+          (t.amountCents == null || t.amountCents === (r.claimedAmountCents ?? r.amountCents)) &&
+          /* payment-without-receipt D11, D17: a tail typed to answer an ask
+             is a new fact, never the same attempt */
+          (t.referenceSource == null ||
+            ((t.senderTail ?? null) === r.senderTail && (t.claveTail?.toUpperCase() ?? null) === r.claveTail)),
       ) ?? null
     );
   }
@@ -316,6 +359,36 @@ function transferAccount(business: typeof businesses.$inferSelect): Partial<Link
   };
 }
 
+/* payment-without-receipt D1, D7, D12, D22: what the payer's page shows
+   of their reference — the digits, whether they are the phone's, whether
+   a confirmation already found them (FR-010), the previous digits during
+   a D26 transition — and the banks the confirmation offers first. Only
+   for a business with the feature on and a reference already born; the
+   page is today's otherwise. */
+async function payerFields(
+  db: DrizzleD1Database,
+  business: typeof businesses.$inferSelect,
+  reference: PayerReference | null,
+  now: Date,
+): Promise<Pick<LinkStatusResponse, "payerReference" | "learnedBanks" | "bankOrder">> {
+  if (!business.payByReference || !reference) return {};
+  const [proven, banks, order] = await Promise.all([
+    isProven(db, business.id, reference),
+    learnedBanks(db, business.id, reference.id),
+    bankOrder(db, business.id, now),
+  ]);
+  return {
+    payerReference: {
+      digits: reference.digits,
+      fromPhone: reference.origin === "phone",
+      proven,
+      previousDigits: reference.previousDigits,
+    },
+    learnedBanks: banks,
+    bankOrder: order,
+  };
+}
+
 /* receipt-triage D25: the account the draft reading of this proof tied
    to, when `/read` ran on it — so the payment is born checked against the
    account the receipt names. The engine ties again on the receipt door
@@ -375,6 +448,14 @@ export async function getLinkStatus(c: Ctx, token: string) {
       return c.json({ success: true, data });
     }
     const serviceFeeCents = speiFeeCents(business);
+    /* payment-without-receipt D5: born on the payer's read when the link
+       has none yet — an API customer has no phone, so it is an assigned
+       number and asks no integration (D2, D4) */
+    const reference = await ensurePayerReference(ctx.db, c.env, business, integration, {
+      source: "api",
+      key: link.customerRef,
+      phone: null,
+    }, now);
     const data: LinkStatusResponse = {
       ispName: business.name,
       ...(link.label ? { customerName: link.label } : {}),
@@ -391,6 +472,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
       reference: link.customerRef,
       cobros: [],
       timezone: business.timezone,
+      ...(await payerFields(ctx.db, business, reference, now)),
     };
     return c.json({ success: true, data });
   }
@@ -438,6 +520,15 @@ export async function getLinkStatus(c: Ctx, token: string) {
        for one invoice's total would ask for a number that reconnects
        nobody. */
     const serviceFeeCents = speiFeeCents(business);
+    /* payment-without-receipt D5: born on the payer's read when the link
+       has none yet, from the phone this read already brought. Null when
+       the phone could not be counted: the page is today's page until it
+       can. */
+    const reference = await ensurePayerReference(ctx.db, c.env, business, integration, {
+      source: "panel",
+      key: link.customerUsuario,
+      phone: customer.phone,
+    }, now);
     const data: LinkStatusResponse = {
       ispName: business.name,
       customerName,
@@ -459,6 +550,7 @@ export async function getLinkStatus(c: Ctx, token: string) {
         .map((f) => ({ externalId: f.invoiceId, amountCents: f.totalCents, invoiceDate: f.invoiceDate })),
       timezone: business.timezone,
       ...(await inReviewOf(ctx.db, link.id)),
+      ...(await payerFields(ctx.db, business, reference, now)),
     };
     return c.json({ success: true, data });
   } catch (e) {
@@ -479,7 +571,14 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     return c.json({ success: false, error: { code: "BUSINESS_SUSPENDED" } }, 409);
   }
 
-  if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
+  /* payment-without-receipt D25: a clave, a clave tail or a receipt is
+     never refused by the hourly budget, and never counts toward it —
+     with the feature on; off, the budget is today's */
+  const safeExit = Boolean(body.transfer?.trackingKey || body.transfer?.claveTail || body.proofId);
+  if (
+    !(business.payByReference && safeExit) &&
+    (await attemptsInLastHour(db, link.id, now, business.payByReference)) >= HOURLY_ATTEMPT_BUDGET
+  ) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
   if (!channelOpen(c.env, business, link, integration)) {
@@ -493,6 +592,52 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      the page open past the deadline. A reusable link is always open. */
   if (isApiLink(link) && !linkAcceptsPayments(link, now)) {
     return c.json({ success: false, error: { code: "LINK_CLOSED" } }, 409);
+  }
+
+  /* ---- payment-without-receipt D8, D11, D26: a confirmation with bank
+     and day. Every refusal here comes before anything is created or
+     billed (contracts/payment-page.md). ---- */
+  if (body.transfer?.referenceSource) {
+    const refuse = (code: string) => c.json({ success: false, error: { code } }, 409);
+    /* D20: the business has the feature off — the page is today's page */
+    if (!business.payByReference) return refuse("REFERENCE_NOT_READY");
+    const mine = await referenceOfLink(db, link, now);
+    let t = body.transfer;
+    /* D11: the payer's own digits typed are their own reference */
+    if (t.referenceSource === "typed" && mine && t.referenceNumber === mine.digits) {
+      t = { ...t, referenceSource: "own" };
+    }
+    if (t.referenceSource === "own") {
+      /* D8: the server writes the link's reference and ignores any sent */
+      if (!mine) return refuse("REFERENCE_NOT_READY");
+      t = { ...t, referenceNumber: mine.digits };
+    }
+    /* D8: today − 30 … today, in the business's timezone */
+    const today = businessWallClock(business.timezone, now).date;
+    if (t.date > today || t.date < shiftIsoDay(today, -30)) return refuse("TRANSFER_DATE_OUT_OF_RANGE");
+    if (t.referenceSource === "typed" && !t.trackingKey) {
+      /* FR-034: another person's reference is never searched for this payer
+         — but the payer's own previous digits during a transition go on,
+         guarded by FR-041 (D26), and digits no person holds go on as any
+         shared reference (D11, analysis I8) */
+      const previous = mine?.previousDigits != null && t.referenceNumber === mine.previousDigits;
+      if (!previous) {
+        const [held] = await db
+          .select({ id: payerReferences.id })
+          .from(payerReferences)
+          .where(and(eq(payerReferences.businessId, business.id), eq(payerReferences.digits, t.referenceNumber ?? "")));
+        if (held && held.id !== mine?.id) return refuse("REFERENCE_OF_ANOTHER");
+      }
+      /* FR-032: the four digits are asked only when no account learned for
+         this service at that bank can tie the transfer; a clave tail
+         answers an undecided row and needs neither */
+      const key = customerKeyOf(link);
+      if (!t.senderTail && !t.claveTail) {
+        const known = key ? await learnedAccounts(db, business.id, [key], { bank: t.senderBank }) : [];
+        if (!known.length) return refuse("SENDER_TAIL_NEEDED");
+      }
+    }
+    body = { ...body, transfer: t };
   }
   /* prepaid-credit D8: below the cap, what is new waits without spending
      — no provider call, no extraction. The payer did nothing wrong (D9).
@@ -574,7 +719,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           eq(payments.paymentLinkId, link.id),
         ),
       );
-    if (!prior || prior.status !== "validating") {
+    /* payment-without-receipt FR-023 (T057): a row searched by a payer's
+       reference keeps "Corregir" while the business is paused — the
+       correction replaces the queued row and waits queued like it
+       (prepaid-credit D8). Every other row keeps today's rule. */
+    const correctable =
+      prior?.status === "validating" || (prior?.status === "queued_for_credit" && prior.referenceSource != null);
+    if (!prior || !correctable) {
       return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
     }
     superseded = prior;
@@ -747,7 +898,10 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
      cep-bundle-match D12 narrows the three other stops to a receipt with
      neither a time nor the sender's digits. This one is unchanged in
      effect: the form asks for neither, so typed data never carries them. */
-  if (body.transfer && !body.transfer.trackingKey && body.transfer.referenceNumber) {
+  /* payment-without-receipt D9: never for a row searched by a payer's
+     reference — the own one is one person's, and a typed one never
+     confirms without a second fact */
+  if (body.transfer && !body.transfer.referenceSource && !body.transfer.trackingKey && body.transfer.referenceNumber) {
     const shared = await sharedReference(db, business, link, {
       reference: body.transfer.referenceNumber,
       date: body.transfer.date,
@@ -758,6 +912,29 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     if (shared) {
       return c.json({ success: false, error: { code: "REFERENCE_SHARED" } }, 409);
     }
+  }
+
+  /* payment-without-receipt D14, D16: a confirmation that replaces one of
+     its own chain is a correction — it carries the chain's rounds and
+     corrections. One that only answers an undecided row with a tail of the
+     same search spends no call, so it is no correction that counts. */
+  const sourcedT = body.transfer?.referenceSource ?? null;
+  const chain = sourcedT && superseded?.referenceSource ? superseded : null;
+  const fitsWithoutCall = Boolean(
+    chain &&
+      chain.lastError === "CEP_UNDECIDED" &&
+      (body.transfer?.senderTail || body.transfer?.claveTail) &&
+      chain.referenceNumber === (body.transfer?.referenceNumber ?? null) &&
+      chain.senderBank === body.transfer?.senderBank &&
+      chain.transferDate === body.transfer?.date &&
+      (claimedCents == null || claimedCents === (chain.claimedAmountCents ?? chain.amountCents)),
+  );
+  /* A queued row was never searched: replacing it spends no search the
+     chain would not have spent anyway (T057) */
+  const spendsSearch = Boolean(chain && !fitsWithoutCall && chain.status !== "queued_for_credit");
+  const correctionCount = (chain?.correctionCount ?? 0) + (spendsSearch ? 1 : 0);
+  if (spendsSearch && correctionCount > CORRECTIONS_BUDGET && !safeExit) {
+    return c.json({ success: false, error: { code: "CORRECTIONS_EXHAUSTED" } }, 409);
   }
 
   /* Release the old claim *before* the insert: the corrected row may well
@@ -804,6 +981,22 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
        rate. `transfer` in a pay body means exactly this since D13: a
        machine reading travels as the file alone. */
     ...(body.transfer ? { acceptedFrom: "human" as const } : {}),
+    /* payment-without-receipt D8, D11, D14, D16, D17, D23 */
+    ...(sourcedT
+      ? {
+          referenceSource: sourcedT,
+          ladderRound: chain?.ladderRound ?? 0,
+          correctionCount,
+          senderTail: body.transfer?.senderTail ?? (fitsWithoutCall ? chain!.senderTail : null),
+          claveTail: body.transfer?.claveTail?.toUpperCase() ?? null,
+          confirmation: JSON.stringify({
+            preselectedBank: body.transfer?.preselected?.bank ?? null,
+            preselectedDay: body.transfer?.preselected?.day ?? null,
+            /* the chain's read-back keeps every day its rounds searched */
+            days: chain ? confirmationOf(chain).days : [],
+          }),
+        }
+      : {}),
     ...ask.customer,
     askedCents: ask.askedCents,
     /* automated-collections-api D12: a payment on a test link is a test
@@ -1022,7 +1215,7 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
 export async function uploadProof(c: Ctx, token: string) {
   const ctx = await resolveLink(c, token);
   if ("error" in ctx) return ctx.error;
-  const { db, link } = ctx;
+  const { db, link, business } = ctx;
   const now = new Date();
 
   /* Two budgets, because an upload can outrun a submission (D13). The
@@ -1031,7 +1224,10 @@ export async function uploadProof(c: Ctx, token: string) {
      cheap one — uploading never creates a `direct_payments` row, so
      without its own count a leaked link is free anonymous hosting under
      our domain for as long as the token lives. */
-  if ((await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
+  /* payment-without-receipt D25: with the feature on, a receipt is a safe
+     exit the pay budget never closes — the upload budget below still
+     bounds the bucket */
+  if (!business.payByReference && (await attemptsInLastHour(db, link.id, now)) >= HOURLY_ATTEMPT_BUDGET) {
     return c.json({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } }, 429);
   }
   if ((await uploadsInLastHour(c.env.PROOFS, link.id, now)) >= UPLOAD_HOURLY_BUDGET) {
@@ -1220,6 +1416,91 @@ export async function serveProof(c: Ctx, linkId: string, file: string) {
   });
 }
 
+/* payment-without-receipt D15 — what the page asks now, on a validating
+   row searched by a payer's reference (data-model.md "The ask", read top
+   to bottom): the account's four digits before the clave's four
+   characters; after round 3 found nothing, the data checked; after round
+   4, the whole clave. Never stored: derived from the row on every read. */
+export function askOf(
+  row: Pick<DirectPayment, "status" | "referenceSource" | "lastError" | "matchTrail" | "senderTail" | "claveTail" | "ladderRound">,
+): "check_data" | "clave" | "sender_tail" | "clave_tail" | null {
+  if (row.status !== "validating" || !row.referenceSource) return null;
+  if (row.lastError === "CEP_UNDECIDED") {
+    let trail: MatchTrail | null = null;
+    try {
+      trail = row.matchTrail ? (JSON.parse(row.matchTrail) as MatchTrail) : null;
+    } catch {
+      trail = null;
+    }
+    const kept = trail?.candidates.filter((c) => c.fate === "kept").length ?? 0;
+    if (row.referenceSource === "own") {
+      /* D10: every transfer found already paid something — CEP_ALL_USED
+         says so, with nothing to ask for */
+      if (trail?.reason === "all_used") return null;
+      /* D26 (FR-041): a transfer held during a transition */
+      return row.senderTail ? "clave" : "sender_tail";
+    }
+    /* D11: no learned account tied one of those kept */
+    if (!row.senderTail) return kept > 0 ? "sender_tail" : "clave";
+    /* D17: the four characters did not choose one */
+    if (row.claveTail) return "clave";
+    /* several still fit the four digits; none fitting is FR-033 */
+    return kept >= 2 ? "clave_tail" : "clave";
+  }
+  if (row.lastError === "TRANSFER_NOT_FOUND") {
+    if (row.ladderRound >= 4) return "clave";
+    if (row.ladderRound === 3) return "check_data";
+  }
+  return null;
+}
+
+/* payment-without-receipt D24 (FR-013): on a transfer already used, the
+   payment that used it — only when its customer is the same person (holds
+   the same reference as this payment's customer); its confirmation day in
+   the business's timezone and what it received. Nothing of another
+   person's payment ever reaches a payer (FR-019). */
+async function usedByOf(
+  db: DrizzleD1Database,
+  payment: DirectPayment,
+): Promise<{ day: string; amountCents: number } | null> {
+  const error = publicError(payment);
+  let claves: string[] = [];
+  if (error === "TRANSFER_ALREADY_USED") {
+    const clave = confirmationOf(payment).usedClave;
+    if (clave) claves = [clave];
+  } else if (error === "CEP_ALL_USED" && payment.matchTrail) {
+    const trail = JSON.parse(payment.matchTrail) as MatchTrail;
+    claves = trail.candidates.filter((c) => c.why === "used").map((c) => c.clave);
+  }
+  if (!claves.length) return null;
+  const [link] = await db.select().from(paymentLinks).where(eq(paymentLinks.id, payment.paymentLinkId));
+  const mine = link ? await referenceOfLink(db, link) : null;
+  if (!mine) return null;
+  const holders = await db
+    .select({ payment: payments, link: paymentLinks })
+    .from(payments)
+    .innerJoin(paymentLinks, eq(paymentLinks.id, payments.paymentLinkId))
+    .where(
+      and(
+        eq(payments.businessId, payment.businessId),
+        eq(paymentLinks.businessId, payment.businessId),
+        inArray(payments.trackingKey, claves),
+        inArray(payments.status, ["confirmed", "partial", "unapplied"]),
+        sql`${payments.id} != ${payment.id}`,
+      ),
+    );
+  const [business] = await db.select({ timezone: businesses.timezone }).from(businesses).where(eq(businesses.id, payment.businessId));
+  for (const holder of holders) {
+    const theirs = await referenceOfLink(db, holder.link);
+    if (theirs?.id !== mine.id || !holder.payment.confirmedAt) continue;
+    return {
+      day: businessWallClock(business?.timezone ?? "America/Mexico_City", holder.payment.confirmedAt).date,
+      amountCents: holder.payment.receivedCents ?? holder.payment.amountCents,
+    };
+  }
+  return null;
+}
+
 /* GET /direct-payments/:id/status (US-D03, US-D04) */
 export async function getDirectPaymentStatus(c: Ctx, id: string) {
   const db = drizzle(c.env.DB);
@@ -1323,6 +1604,19 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
             },
           }
         : {}),
+      /* payment-without-receipt D11, D14, D15, D23, D24: a row searched by
+         a payer's reference says which path it is, reads back what was
+         searched — the tail as typed, every day the rounds asked — and
+         what the page asks now. Absent on every other row. */
+      ...(payment.referenceSource
+        ? {
+            referenceSource: payment.referenceSource,
+            senderTail: payment.senderTail,
+            searchedDays: confirmationOf(payment).days,
+            ask: askOf(payment),
+            usedBy: await usedByOf(db, payment),
+          }
+        : {}),
     },
   });
 }
@@ -1335,12 +1629,56 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
    Here, not in the admin, for the same reason the receipt's text lives
    in the API (receipt spec D2): the words reach the customer the same
    way whoever sends them. */
-const shareText = (url: string) =>
-  `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${url}`;
+/* payment-without-receipt D22 (FR-005): with the feature on, the message
+   carries the payer's reference, grouped as the page shows it — the one
+   thing the payer must put in the transfer. Absent while it is off or
+   before the reference is born: today's message, word for word. */
+const referenceLine = (digits: string | null | undefined) =>
+  digits ? `Tu referencia para transferir: ${groupReferenceDigits(digits)}\n\n` : "";
+
+const shareText = (url: string, digits?: string | null) =>
+  `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${referenceLine(digits)}${url}`;
 
 /* The share text for an API link names no service: the business may be
    a gym or a school, and the link may be one-time (FR-028) */
-const apiShareText = (url: string) => `Hola, aquí está tu link de pago:\n\n${url}`;
+const apiShareText = (url: string, digits?: string | null) => `Hola, aquí está tu link de pago:\n\n${referenceLine(digits)}${url}`;
+
+/* payment-without-receipt D1/D6/D22 (FR-005, FR-006): one pass over the
+   rows a door answers — every path, the provider's rows and Devolada's
+   own alike — setting each row's reference, to read, and the message its
+   WhatsApp button prepares. Nothing changes while the business has the
+   feature off: its rows are today's rows, field for field. One read for
+   the whole block. */
+async function withReferences(
+  db: DrizzleD1Database,
+  business: Pick<typeof businesses.$inferSelect, "id" | "payByReference"> | undefined,
+  rows: CustomerRow[],
+): Promise<CustomerRow[]> {
+  if (!business?.payByReference) return rows;
+  const keyOf = (row: CustomerRow): CustomerKey | null =>
+    row.channel === "api"
+      ? row.customerRef ? { source: "api", key: row.customerRef } : null
+      : row.usuario ? { source: "panel", key: row.usuario } : null;
+  const refs = await referencesFor(
+    db,
+    business.id,
+    rows.flatMap((row) => {
+      const key = row.hasLink ? keyOf(row) : null;
+      return key ? [key] : [];
+    }),
+  );
+  return rows.map((row) => {
+    const key = keyOf(row);
+    const found = row.hasLink && key ? refs.get(`${key.source}:${key.key}`) : undefined;
+    if (!found) return { ...row, payerReference: null };
+    const text = row.channel === "api" ? apiShareText(row.url!, found.digits) : shareText(row.url!, found.digits);
+    return {
+      ...row,
+      payerReference: { digits: found.digits, origin: found.origin },
+      waLink: whatsAppLink(text, toWhatsAppPhone(row.phone)),
+    };
+  });
+}
 
 /* ---- links-on-demand-search: the customers door and the act ---- */
 
@@ -1538,6 +1876,11 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
   const base = c.env.PAGO_BASE_URL;
   const now = new Date();
   const limit = query.limit;
+  /* payment-without-receipt D20: read only for the switch */
+  const [business] = await db
+    .select({ id: businesses.id, payByReference: businesses.payByReference })
+    .from(businesses)
+    .where(eq(businesses.id, actor.id));
 
   /* constitution VIII: no key is a state of the world, not a failure.
      The business sees its API links and the page says where links come
@@ -1624,7 +1967,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
       return c.json({
         success: true,
         data: {
-          results: page,
+          results: await withReferences(db, business, page),
           nextCursor: offset + limit < all.length ? onward(0) : null,
           matched: all.length,
           total: null,
@@ -1655,7 +1998,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
     return c.json({
       success: true,
       data: {
-        results,
+        results: await withReferences(db, business, results),
         nextCursor: more.length ? onward(maskOf(more)) : null,
         matched: Math.max(apiRows.length, results.length, ...counts),
         total: null,
@@ -1754,7 +2097,7 @@ export async function listCustomers(c: Ctx, query: CustomersQuery) {
   return c.json({
     success: true,
     data: {
-      results,
+      results: await withReferences(db, business, results),
       nextCursor: next === null ? null : encodeCursor(next),
       matched: null,
       /* FR-018: no "la lista puede estar incompleta" — nothing is read
@@ -1820,6 +2163,15 @@ export async function createLink(c: Ctx, body: CreateLinkRequest) {
 
   const { token, created } = await ensureLink(db, actor.id, customer);
   const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
+  /* payment-without-receipt D5: a reference is born with the link, from
+     the phone this act just read, so the first message already carries
+     it. Null (the feature off, or the phone not countable now) sends
+     today's message; the payer's first read tries again. */
+  const reference = await ensurePayerReference(db, c.env, business, integration, {
+    source: "panel",
+    key: customer.usuario,
+    phone: customer.phone,
+  });
   return c.json({
     success: true,
     data: {
@@ -1828,7 +2180,7 @@ export async function createLink(c: Ctx, body: CreateLinkRequest) {
       /* FR-019/FR-028: `toWhatsAppPhone` still owns the rules — Mexico's
          52 in front, a refusal for a number it cannot read, which falls
          back to the picker. That fallback is now the exception. */
-      waLink: whatsAppLink(shareText(url), toWhatsAppPhone(customer.phone)),
+      waLink: whatsAppLink(shareText(url, reference?.digits), toWhatsAppPhone(customer.phone)),
       created,
     } satisfies CreateLinkResponse,
   });

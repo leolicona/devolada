@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -104,6 +105,12 @@ export const businesses = sqliteTable("businesses", {
      Worker's SELECT for the life of the PR (research R10). The drop is
      registered as debt `retired-consta-key-column`. */
   constaApiKey: text("consta_api_key"),
+  /* payment-without-receipt D20 (FR-039): the feature is turned on per
+     business, under `settings: update`. Off (the birth default) is
+     today's flow exactly: no reference is born, shown or read, and no
+     column this feature adds is read on any path. Turning it off keeps
+     every reference for when it is turned on again. */
+  payByReference: integer("pay_by_reference", { mode: "boolean" }).notNull().default(false),
   createdAt: createdAt(),
 });
 
@@ -224,6 +231,81 @@ export const linkPrunes = sqliteTable("link_prunes", {
   deletedCount: integer("deleted_count").notNull().default(0),
   noticeSeen: integer("notice_seen", { mode: "boolean" }).notNull().default(false),
 });
+
+/* payment-without-receipt D1, D3, D6, D26 — a person's reference inside
+   one business: the seven digits they put in the transfer's «Referencia
+   numérica». Keyed by customer (`payer_reference_customers`), never by
+   link: a link is identity-only (links-on-demand-search FR-010) and can
+   be pruned and made again, while the reference lives in the payer's
+   bank app. The digits are stored because they ARE the reference —
+   shown to the payer and printed on every transfer. The whole phone is
+   never stored, and neither is a name.
+
+   No state column: nothing retires a reference — the panel has no action
+   over one (clarified 2026-09-30) — so a row lives as long as the
+   business, and its digits are never given to anyone else. The one way
+   digits change hands is D26: the same row passes, digits and all, from
+   an assigned holder to the phone's owner. */
+export const payerReferences = sqliteTable(
+  "payer_references",
+  {
+    id: id(),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    /* Exactly seven digits, first 1–9, never generic, never the tail of a
+       registered receiving account (D3) */
+    digits: text("digits").notNull(),
+    /* D4/D6: `phone` — the last seven digits of the phone of the first
+       person to receive them; `assigned` — drawn at random, no pattern.
+       An `assigned` row becomes `phone` when it passes (D26). */
+    origin: text("origin", { enum: ["phone", "assigned"] }).notNull(),
+    /* D26: on a row that passed to a phone's owner — the new row its
+       previous holder moved to */
+    previousReferenceId: text("previous_reference_id"),
+    /* D26/FR-041: 60 days after the row passed; set to now when the
+       previous holder confirms with their new number. The guards hold
+       while it is ahead. */
+    transitionEndsAt: integer("transition_ends_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    /* D26: when the row passed to the phone's owner; NULL otherwise */
+    changedAt: integer("changed_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    /* D6: unique for ever — digits are never reused in a business, so a
+       new number can never catch an old transfer */
+    uniqueIndex("payer_references_business_digits_idx").on(t.businessId, t.digits),
+  ],
+);
+
+/* payment-without-receipt D1, D4, D5 — which customers hold a reference.
+   Keyed like the links are (`panel` + usuario, `api` + customerRef), so a
+   pruned and recreated link finds its number again. A customer holds one
+   reference at a time, and a reference's customers are one person: one
+   phone and one name when it was assigned (compared live through the
+   integration, never stored). Only the machine writes here —
+   `ensurePayerReference` and the D26 pass; nobody moves a customer by
+   hand (clarified 2026-09-30). */
+export const payerReferenceCustomers = sqliteTable(
+  "payer_reference_customers",
+  {
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    referenceId: text("reference_id")
+      .notNull()
+      .references(() => payerReferences.id),
+    /* As `payment_links.source` */
+    source: text("source", { enum: ["panel", "api"] }).notNull(),
+    /* The usuario (panel) or the customerRef (API): the identity a link carries */
+    customerKey: text("customer_key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.businessId, t.source, t.customerKey] }),
+    index("payer_reference_customers_reference_idx").on(t.referenceId),
+  ],
+);
 
 /* One submitted SPEI proof and its validation lifecycle
    (direct-payment spec). The row is also the re-validation queue (D7):
@@ -514,6 +596,32 @@ export const payments = sqliteTable(
     /* D6: credit − receipt time of the chosen transfer, in whole seconds,
        whenever the receipt showed a time — what recalibrates the window */
     matchDistanceS: integer("match_distance_s"),
+    /* ---- payment-without-receipt: the confirmation with bank and day.
+       NULL or 0 on every row born before it, and on every row of a
+       business with the feature off. ---- */
+    /* D8/D11/D23: the path this row searches by — `own`, the payer's
+       own reference, written by the server; `typed`, "No puse la
+       referencia". NULL on a clave, a receipt, and today's typed door. A
+       row with a source never meets a shared-reference stop (D9) and
+       rides the ladder of rounds (D14). */
+    referenceSource: text("reference_source", { enum: ["own", "typed"] }),
+    /* D14: rounds that got an answer from the provider — a `429`, an
+       outage or a missing credential is not a round — carried from the
+       row a correction supersedes, so the ladder spans the chain. Read
+       only on rows with a `reference_source`. */
+    ladderRound: integer("ladder_round").notNull().default(0),
+    /* D16: corrections along the chain that spent a search. A fourth
+       without a clave or a receipt is refused (CORRECTIONS_EXHAUSTED). */
+    correctionCount: integer("correction_count").notNull().default(0),
+    /* D17: the clave's last four characters the payer typed to choose
+       among the transfers an undecided row kept. Never searched at
+       Banxico: it only ever chooses among transfers already found. */
+    claveTail: text("clave_tail"),
+    /* D14/D23: JSON `{ preselectedBank, preselectedDay, days }` — what the
+       page offered (SC-005) and every day the rounds searched (the
+       read-back). D24 adds `usedClave` on a row refused as already used,
+       so the status can say which payment used it. */
+    confirmation: text("confirmation"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -751,6 +859,19 @@ export const platformSettings = sqliteTable(
   (t) => [index("platform_settings_key_created_idx").on(t.key, t.createdAt)],
 );
 
+/* payment-without-receipt D19 (FR-038): the provider's remaining calls,
+   a platform row like `platform_settings` — no `business_id`, so reading
+   it reads no business and is no cross-business statistic (constitution
+   V). Upserted from `X-RateLimit-Remaining` beside the call's telemetry;
+   read only by the platform operator's screen. */
+export const providerQuota = sqliteTable("provider_quota", {
+  /* `apicep` */
+  provider: text("provider").primaryKey(),
+  remaining: integer("remaining").notNull(),
+  /* When the answer that carried it came */
+  observedAt: integer("observed_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 /* prepaid-credit D6: a top-up is the platform's own transaction —
    the business pays, the platform receives — with the payment lifecycle's
    proof columns and none of its debt columns. */
@@ -896,9 +1017,11 @@ export const validations = sqliteTable(
     /* D14 — what the call cost and how long it took. From response
        headers, which ride 200s only, so NULL is normal on failures.
        `provider_ms` is the instrument that will say whether a faceless
-       `invalid` ever reached Banxico (1–2 s early fail vs 6–7 s lookup);
-       `quota_remaining` makes the 800-per-period plan visible before the
-       429 does. */
+       `invalid` ever reached Banxico (1–2 s early fail vs 6–7 s lookup).
+       `quota_remaining` is the call's own record; what the operator reads
+       is `provider_quota` (payment-without-receipt D19) — reading the
+       latest of this column would read `validations` across businesses,
+       a derived statistic constitution V admits only by amendment. */
     providerHttpStatus: integer("provider_http_status"),
     providerMs: integer("provider_ms"),
     quotaRemaining: integer("quota_remaining"),
@@ -1130,7 +1253,10 @@ export const cepBundles = sqliteTable(
 );
 
 /* D4, D5, D13, D14: one row per transfer, per business, that a search
-   without a clave returned — from a bundle or from a single `valid`. A fact
+   returned — from a bundle or from a single `valid`. payment-without-receipt
+   D13 widened spec 013's D5 ("without a clave"): every `valid` of a
+   business keeps its record, so every confirmation teaches the account it
+   came from (D12's learned accounts are a query over these). A fact
    read from Banxico's own document, never changed after. Names, RFC/CURP
    and the concept are not stored, by construction: the parser never
    returns them (FR-006, FR-010). "Used" and "unmatched" are queries over

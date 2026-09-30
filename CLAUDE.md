@@ -181,6 +181,13 @@ Invariants worth knowing before you touch anything:
   `auth/role-matrix.ts` is the one source of truth and must never import server
   code, because the admin imports it. Platform operators come from
   `PLATFORM_OPERATOR_EMAILS` — changing that set is a deploy.
+- **A payer's reference belongs to a person inside one business**: seven
+  digits in `payer_references`, held by customers through
+  `payer_reference_customers` — beside the link, never on it (a link row
+  stays identity-only). The whole phone is never stored, nor a name: they
+  are read live through the integration's `customersWithPhone` and
+  forgotten. Only `direct-payments/payer-reference.ts` writes the holders
+  (payment-without-receipt D1).
 - **`payments` is one row for the whole life of a payment**: proof → validation
   (`validating → confirmed | partial | invalid | unapplied | expired |
   superseded | queued_for_credit`) → the action queue on the same row

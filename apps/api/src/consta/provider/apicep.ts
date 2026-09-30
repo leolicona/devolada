@@ -7,6 +7,8 @@ import {
   type ValidationProvider,
 } from "./types";
 import { amountToCents } from "../../money";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+import { providerQuota } from "../../db/schema";
 
 /* apiCEP adapter (docs read 2026-08-17 at apicep.cloud/documentacion).
    One endpoint, POST /validate-transfer, Bearer auth. Our transfer door is
@@ -109,6 +111,27 @@ function requestBody(input: TransferInput | ReceiptInput): Record<string, unknow
     ...(input.beneficiary ? { beneficiary: input.beneficiary } : {}),
     ...(input.potentialBeneficiaries ? { potentialBeneficiaries: input.potentialBeneficiaries } : {}),
   };
+}
+
+/* payment-without-receipt D19 (FR-038): what `X-RateLimit-Remaining` said
+   last, as a platform row the operator reads — upserted wherever the call's
+   telemetry becomes a `validations` row. A failed upsert is a lost
+   observation, never a failed validation: it is logged and swallowed. */
+export async function observeQuota(
+  db: DrizzleD1Database,
+  telemetry: Pick<ProviderTelemetry, "quotaRemaining"> | null | undefined,
+  now: Date = new Date(),
+): Promise<void> {
+  const remaining = telemetry?.quotaRemaining;
+  if (remaining == null) return;
+  try {
+    await db
+      .insert(providerQuota)
+      .values({ provider: "apicep", remaining, observedAt: now })
+      .onConflictDoUpdate({ target: providerQuota.provider, set: { remaining, observedAt: now } });
+  } catch (e) {
+    console.error("provider quota: observation lost:", String(e));
+  }
 }
 
 /* D14 — the headers ride 200s only (measured 2026-08-19: a 400 carries

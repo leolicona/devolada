@@ -6,6 +6,7 @@ import { paymentLinks } from "../../../db/schema";
 import { channelGap, isUniqueViolation, validationAvailable } from "../../../direct-payments/validation";
 import { isApiLink, linkState, makeLinkToken, type ApiLink } from "../../../direct-payments/links";
 import { fail, ok, type V1Notice } from "../envelope";
+import { ensurePayerReference } from "../../../direct-payments/payer-reference";
 import type { CreatePaymentLinkRequest, PatchPaymentLinkRequest, PaymentLink } from "./schema";
 
 /* POST/PATCH/GET /v1/payment-links (automated-collections-api US1, FR-006
@@ -29,7 +30,7 @@ function notices(env: Bindings): V1Notice[] {
   return validationAvailable(env) ? [] : [{ code: "VALIDATION_UNAVAILABLE" }];
 }
 
-function toPublic(c: Ctx, link: ApiLink, now: Date): PaymentLink {
+function toPublic(c: Ctx, link: ApiLink, now: Date, payerReference: string | null = null): PaymentLink {
   return {
     id: link.id,
     url: `${c.env.PAGO_BASE_URL}/p/${link.token}`,
@@ -44,7 +45,25 @@ function toPublic(c: Ctx, link: ApiLink, now: Date): PaymentLink {
     isTest: link.isTest,
     createdAt: link.createdAt.getTime(),
     notices: notices(c.env),
+    /* payment-without-receipt D22 */
+    payerReference,
   };
+}
+
+/* payment-without-receipt D1/D5/D22 (FR-005): the seven digits this
+   customer puts in the transfer, born on the first read that needs them.
+   An API customer has no phone, so it is an assigned number and asks no
+   integration (D2, D4); every link of one `customerRef` shares it. Null
+   while the business has the feature off. */
+async function payerReferenceOf(c: Ctx, customerRef: string): Promise<string | null> {
+  const { business } = c.get("apiClient");
+  if (!business.payByReference) return null;
+  const reference = await ensurePayerReference(drizzle(c.env.DB), c.env, business, null, {
+    source: "api",
+    key: customerRef,
+    phone: null,
+  });
+  return reference?.digits ?? null;
 }
 
 /* One link of this business, in this credential's mode (research D12: a
@@ -122,10 +141,10 @@ export async function createPaymentLink(c: Ctx, body: CreatePaymentLinkRequest) 
         `customerRef already holds a reusable link under a ${existing.isTest ? "test" : "real"} credential`,
       );
     }
-    return ok(c, toPublic(c, existing, now), 200);
+    return ok(c, toPublic(c, existing, now, await payerReferenceOf(c, existing.customerRef)), 200);
   }
   if (!isApiLink(link)) throw new Error(`link ${link.id} was written without its API columns`);
-  return ok(c, toPublic(c, link, now), 201);
+  return ok(c, toPublic(c, link, now, await payerReferenceOf(c, link.customerRef)), 201);
 }
 
 export async function patchPaymentLink(c: Ctx, id: string, body: PatchPaymentLinkRequest) {
@@ -153,20 +172,20 @@ export async function patchPaymentLink(c: Ctx, id: string, body: PatchPaymentLin
     if (linkState(link, now) === "open") patch.closedAt = now;
   }
 
-  if (Object.keys(patch).length === 0) return ok(c, toPublic(c, link, now));
+  if (Object.keys(patch).length === 0) return ok(c, toPublic(c, link, now, await payerReferenceOf(c, link.customerRef)));
   const [updated] = await db
     .update(paymentLinks)
     .set(patch)
     .where(eq(paymentLinks.id, link.id))
     .returning();
   if (!isApiLink(updated)) throw new Error(`link ${link.id} lost its API columns on update`);
-  return ok(c, toPublic(c, updated, now));
+  return ok(c, toPublic(c, updated, now, await payerReferenceOf(c, updated.customerRef)));
 }
 
 export async function getPaymentLink(c: Ctx, id: string) {
   const link = await ownLink(c, id);
   if (!link) return fail(c, "NOT_FOUND");
-  return ok(c, toPublic(c, link, new Date()));
+  return ok(c, toPublic(c, link, new Date(), await payerReferenceOf(c, link.customerRef)));
 }
 
 /* A reference with no link answers an empty list, never NOT_FOUND — the
@@ -186,5 +205,8 @@ export async function listPaymentLinks(c: Ctx, customerRef: string) {
       ),
     )
     .orderBy(desc(paymentLinks.createdAt));
-  return ok(c, { links: rows.filter(isApiLink).map((link) => toPublic(c, link, now)) });
+  const links = rows.filter(isApiLink);
+  /* One customer, one reference: read once for the whole list (D1) */
+  const reference = links.length ? await payerReferenceOf(c, customerRef) : null;
+  return ok(c, { links: links.map((link) => toPublic(c, link, now, reference)) });
 }

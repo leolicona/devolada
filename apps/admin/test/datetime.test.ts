@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateToIso, formatDateRange, isoDateIn, isoToDate, monthStartIso, shiftIsoDate } from "../src/lib/datetime";
+import { dateToIso, formatAgo, formatDateRange, isoDateIn, isoToDate, monthStartIso, shiftIsoDate } from "../src/lib/datetime";
 
 /* payments-and-classes D4 (amended 2026-09-02): the compact range on the
    `Fechas` trigger. US-R03. */
@@ -50,5 +50,23 @@ describe("US-R03: calendar dates come from the business's zone, not the browser'
   it("round-trips through the picker's local Dates without sliding a day", () => {
     expect(dateToIso(isoToDate("2026-08-14"))).toBe("2026-08-14");
     expect(dateToIso(isoToDate("2026-01-01"))).toBe("2026-01-01");
+  });
+});
+
+/* payment-without-receipt D19: how old the provider's quota is, in fixed
+   es-MX words. Floored — a minute is claimed only once it has passed. */
+describe("payment-without-receipt US4: the quota's age reads «hace 3 min»", () => {
+  const now = Date.UTC(2026, 8, 30, 18, 0);
+  it.each([
+    ["seconds ago", now - 20_000, "hace un momento"],
+    ["a clock ahead of the server", now + 5_000, "hace un momento"],
+    ["one minute", now - 60_000, "hace 1 min"],
+    ["three minutes and change", now - 3 * 60_000 - 59_000, "hace 3 min"],
+    ["under an hour", now - 59 * 60_000, "hace 59 min"],
+    ["two hours", now - 2 * 3_600_000 - 1_000, "hace 2 h"],
+    ["one day", now - 24 * 3_600_000, "hace 1 día"],
+    ["three days", now - 3 * 24 * 3_600_000, "hace 3 días"],
+  ])("%s", (_name, at, expected) => {
+    expect(formatAgo(at, now)).toBe(expected);
   });
 });

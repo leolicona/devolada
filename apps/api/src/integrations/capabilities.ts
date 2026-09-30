@@ -71,6 +71,17 @@ export type CustomerDebtAnswer =
     }
   | { state: "unconfirmed" };
 
+/* payment-without-receipt D4: one customer whose phone is the phone
+   asked, with its name. The key is the customer's identity in the
+   business's system (the usuario, as `OpenInvoice` names it); the name
+   comes in the integration's two halves. The core compares and forgets
+   them — no phone and no name is ever stored (D1). */
+export type CustomerWithPhone = {
+  usuario: string;
+  firstName: string;
+  lastName: string;
+};
+
 /* What an integration can do for the core. Each capability is optional:
    an adapter that cannot answer one leaves it out, and the core does not
    offer the feature (constitution IX, FR-013). */
@@ -84,6 +95,18 @@ export type IntegrationCapabilities = {
   /* What one customer owes right now, read when it is shown (D9) */
   customerDebt?: {
     of(usuario: string): Promise<CustomerDebtAnswer>;
+  };
+  /* payment-without-receipt D4: every customer of this business whose
+     phone is `phone` — ten national digits, as `nationalPhone` reads them
+     — read to the end. The core groups them into people by name when a
+     payer's reference is born. Throws `IntegrationError` when it cannot
+     answer; the core then makes no reference (D5). `phoneOf` reads one
+     customer's phone as the business typed it (null when it has none, or
+     when the customer is gone), for the backfill, which holds a link and
+     not a customer (D5). */
+  customersWithPhone?: {
+    of(phone: string): Promise<CustomerWithPhone[]>;
+    phoneOf(usuario: string): Promise<string | null>;
   };
 };
 

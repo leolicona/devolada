@@ -554,6 +554,25 @@ export async function stubPagoApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/links/*/read", proofReading);
 }
 
+/* payment-without-receipt US2 (T051): the same link with the payer's own
+   reference (contracts/payment-page.md), a returning payer's two banks and
+   the business's usual ones — parsed, like every fixture here, so the
+   stub cannot carry a shape the server would never send. Proven, so step 2
+   opens straight on the bank and the day: those are the controls whose
+   sizes, focus and contrast only a browser can measure. */
+export const referenceLink = linkStatusResponse.parse({
+  ...paymentLink,
+  timezone: "America/Mexico_City",
+  payerReference: { digits: "2345678", fromPhone: true, proven: true, previousDigits: null },
+  learnedBanks: ["AZTECA", "NUBANK"],
+  bankOrder: ["BBVA MEXICO", "AZTECA", "NUBANK"],
+});
+
+/* Registered after stubPagoApi: Playwright tries the newest route first */
+export async function stubPagoReference(page: Page): Promise<void> {
+  await apiRoute(page, "**/direct-payments/links/*", referenceLink);
+}
+
 /* automated-collections-api D6 / FR-031 (US1 scenarios 3 and 4): the one
    state an API link adds to the payer's page — a one-time link that was
    paid, or whose deadline passed. Static copy, no CLABE; the two reasons

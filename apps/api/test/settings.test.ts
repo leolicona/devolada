@@ -261,3 +261,41 @@ describe("receipt-triage US3: the accounts an ISP is paid at", () => {
     expect(data.spei).toMatchObject({ clabe: "••••0004", card: "••••1111", phone: "••••5678" });
   });
 });
+
+describe("payment-without-receipt US1: the switch (D20, FR-039)", () => {
+  const patchAs = async (cookie: string, body: unknown) =>
+    (await app()).request(
+      "/settings",
+      { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) },
+      env,
+    );
+
+  it("is off by default, and the owner and an admin turn it on and off", async () => {
+    const business = await seedBusiness();
+    const { seedMember } = await import("./helpers");
+    await seedMember(business, "admin@wifiplus.mx", "admin");
+
+    const read = await (await app()).request("/settings", asBusiness, env);
+    expect((await read.json()).data.payByReference).toBe(false);
+
+    const byOwner = await patchAs(await sessionCookieHeader("demo@devolada.app"), { payByReference: true });
+    expect(byOwner.status).toBe(200);
+    expect((await byOwner.json()).data.payByReference).toBe(true);
+
+    const byAdmin = await patchAs(await sessionCookieHeader("admin@wifiplus.mx"), { payByReference: false });
+    expect(byAdmin.status).toBe(200);
+    expect((await byAdmin.json()).data.payByReference).toBe(false);
+    const [stored] = await drizzle(env.DB).select().from(businesses);
+    expect(stored.payByReference).toBe(false);
+  });
+
+  it("an operator cannot turn it on (settings: update)", async () => {
+    const business = await seedBusiness();
+    const { seedMember } = await import("./helpers");
+    await seedMember(business, "operador@wifiplus.mx", "operator");
+    const res = await patchAs(await sessionCookieHeader("operador@wifiplus.mx"), { payByReference: true });
+    expect(res.status).toBe(403);
+    const [stored] = await drizzle(env.DB).select().from(businesses);
+    expect(stored.payByReference).toBe(false);
+  });
+});

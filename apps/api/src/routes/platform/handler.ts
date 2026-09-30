@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, desc, eq, inArray, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, member, user as userTable } from "../../db/schema";
+import { businesses, member, providerQuota, user as userTable } from "../../db/schema";
 import {
   adjustCredit,
   balanceCents,
@@ -17,13 +17,24 @@ import {
   setSetting,
   validateSetting,
 } from "../../platform/settings";
-import type { PlatformBusinessRow } from "./schema";
+import type { PlatformBusinessRow, ProviderQuotaResponse } from "./schema";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
 export async function getPlatformSettings(c: Ctx) {
   const db = drizzle(c.env.DB);
   return c.json({ success: true, data: { settings: await listSettings(db) } });
+}
+
+/* payment-without-receipt D19 (FR-038): the provider's remaining calls as
+   its latest answer said — a platform row, naming no business. Null until
+   an answer carried the header. */
+export async function getProviderQuota(c: Ctx) {
+  const [row] = await drizzle(c.env.DB).select().from(providerQuota).where(eq(providerQuota.provider, "apicep"));
+  const data: ProviderQuotaResponse = row
+    ? { provider: "apicep", remaining: row.remaining, observedAt: row.observedAt.getTime() }
+    : null;
+  return c.json({ success: true, data });
 }
 
 /* operator-panel D4: one key per write, validated per D1, appended with its author */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitClave, matchCandidates, MATCH_POLICY, shownTail, tailFits } from "../../src/consta/bundle/match";
+import { fitClave, fitClaveTail, matchCandidates, MATCH_POLICY, shownTail, tailFits } from "../../src/consta/bundle/match";
 import type { CepRecord, ReceiptSide } from "../../src/consta/bundle/types";
 import type { RegisteredAccount } from "../../src/consta";
 import { wallClockMs } from "../../src/time/business-day";
@@ -218,5 +218,143 @@ describe("cep-bundle-match US3: a typed clave against the kept candidates (fitCl
     expect(fitClave("2609280711582", ["26092807115821", "26092807115823"])).toBeNull();
     expect(fitClave("999999999999999999I", KEPT)).toBeNull();
     expect(fitClave("", KEPT)).toBeNull();
+  });
+});
+
+/* ---- payment-without-receipt: the payer's own reference and a typed one ---- */
+
+const own = (r: ReceiptSide, cands: CepRecord[], used: ReadonlySet<string> = none) =>
+  matchCandidates(r, cands, used, MATCH_POLICY, "own");
+const typed = (r: ReceiptSide, cands: CepRecord[], used: ReadonlySet<string> = none) =>
+  matchCandidates(r, cands, used, MATCH_POLICY, "typed");
+
+describe("payment-without-receipt US2: `own` mode — every transfer found is the payer's (T020, D10)", () => {
+  it("keeps integrity: another amount or another destination is dropped exactly as in `receipt` mode", () => {
+    const right = cep("07:13:02");
+    const amount = cep("07:11:20", { amountCents: 301 });
+    const account = cep("07:11:25", { receiverAccount: "646180157000000004" });
+    const r = own(receipt(), [amount, account, right]);
+    expect(r).toMatchObject({ decided: "chosen", chosen: { id: right.id }, by: "earliest" });
+    expect(fateOf(r, amount)).toMatchObject({ fate: "dropped", why: "amount" });
+    expect(fateOf(r, account)).toMatchObject({ fate: "dropped", why: "account" });
+  });
+
+  it("drops used claves and takes the earliest credited of the rest; the others stay kept for the next confirmation", () => {
+    const first = cep("07:11:20");
+    const second = cep("07:13:02");
+    const third = cep("07:15:40");
+    const r = own(receipt(), [third, second, first], new Set([first.clave]));
+    expect(r).toMatchObject({ decided: "chosen", chosen: { id: second.id }, by: "earliest", distanceS: null });
+    expect(fateOf(r, first)).toMatchObject({ fate: "dropped", why: "used" });
+    expect(fateOf(r, third)).toMatchObject({ fate: "kept", why: null });
+  });
+
+  it("is undecided only as all_used — never no_signal, too_close or none_fit on the payer's own transfers", () => {
+    const a = cep("07:11:20");
+    const b = cep("07:11:21");
+    expect(own(receipt(), [a, b], new Set([a.clave, b.clave]))).toMatchObject({ decided: "undecided", reason: "all_used" });
+    /* two a second apart — `receipt` mode's too_close — are both the payer's */
+    expect(own(receipt(), [b, a])).toMatchObject({ decided: "chosen", chosen: { id: a.id } });
+    /* no time, no tail — `receipt` mode's no_signal */
+    expect(matchCandidates(receipt(), [a, b], none)).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(own(receipt(), [a, b])).toMatchObject({ decided: "chosen" });
+  });
+
+  it("every `receipt` table above is unchanged: the default mode is `receipt`", () => {
+    const a = cep("07:11:20");
+    const b = cep("11:40:47", { senderAccount: SENDER_4417 });
+    const r = receipt({ tail: "8301" });
+    expect(matchCandidates(r, [a, b], none)).toEqual(matchCandidates(r, [a, b], none, MATCH_POLICY, "receipt"));
+  });
+});
+
+describe("payment-without-receipt US3: `own` mode prefers an account learned for the service (T030, D10, FR-021)", () => {
+  it("a candidate from a known account is chosen, even when not the earliest", () => {
+    const early = cep("07:11:20", { senderAccount: SENDER_8301 });
+    const known = cep("11:40:47", { senderAccount: SENDER_4417 });
+    const r = own(receipt({ knownAccounts: [SENDER_4417] }), [early, known]);
+    expect(r).toMatchObject({ decided: "chosen", chosen: { id: known.id }, by: "learned_account" });
+    expect(fateOf(r, early)).toMatchObject({ fate: "kept" });
+  });
+
+  it("an empty list changes nothing", () => {
+    const early = cep("07:11:20");
+    const late = cep("11:40:47", { senderAccount: SENDER_4417 });
+    expect(own(receipt({ knownAccounts: [] }), [late, early])).toEqual(own(receipt(), [late, early]));
+  });
+});
+
+describe("payment-without-receipt US5: `typed` mode — a second fact ties the transfer (T044, D11)", () => {
+  const a = () => cep("07:11:20", { senderAccount: SENDER_8301 });
+  const b = () => cep("11:40:47", { senderAccount: SENDER_4417 });
+
+  it("a known account ties exactly one → learned_account; it is compared whole, before the tail", () => {
+    const [x, y] = [a(), b()];
+    expect(typed(receipt({ knownAccounts: [SENDER_4417], tail: "8301" }), [x, y])).toMatchObject({
+      decided: "chosen",
+      chosen: { id: y.id },
+      by: "learned_account",
+    });
+  });
+
+  it("then the typed four digits → sender_tail; they fitting none is none_fit; several, no_signal", () => {
+    const [x, y] = [a(), b()];
+    expect(typed(receipt({ tail: "4417" }), [x, y])).toMatchObject({ decided: "chosen", chosen: { id: y.id }, by: "sender_tail" });
+    expect(typed(receipt({ tail: "9999" }), [x, y])).toMatchObject({ decided: "undecided", reason: "none_fit" });
+    const z = cep("08:00:00", { senderAccount: SENDER_8301 });
+    const twice = typed(receipt({ tail: "8301" }), [x, y, z]);
+    expect(twice).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(fateOf(twice, y)).toMatchObject({ fate: "dropped", why: "tail" });
+    expect(fateOf(twice, x)).toMatchObject({ fate: "kept" });
+  });
+
+  it("with neither, even one transfer is undecided — a typed reference alone never confirms (FR-032)", () => {
+    const x = a();
+    const r = typed(receipt(), [x]);
+    expect(r).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(fateOf(r, x)).toMatchObject({ fate: "kept" });
+  });
+
+  it("never reads the window: a typed row carries no time", () => {
+    const x = a();
+    expect(typed(receipt({ time: "23:59", tail: "8301" }), [x])).toMatchObject({ decided: "chosen", by: "sender_tail" });
+  });
+});
+
+describe("payment-without-receipt US5: fitClaveTail (T044, D17)", () => {
+  const kept = ["260928071199000011I", "260928071199000012I", "MOCKAZT0000000004417"];
+
+  it("reads O as 0 and I as 1 on both sides, and answers exactly one fit", () => {
+    expect(fitClaveTail("011I", kept)).toBe("260928071199000011I");
+    expect(fitClaveTail("o11i", kept)).toBe("260928071199000011I");
+    expect(fitClaveTail("0111", kept)).toBe("260928071199000011I");
+    expect(fitClaveTail("44I7", kept)).toBe("MOCKAZT0000000004417");
+  });
+
+  it("two candidates sharing the four, or none, is no answer; never a candidate outside the list", () => {
+    expect(fitClaveTail("011I", ["AAAA0011I", "BBBB0011I"])).toBeNull();
+    expect(fitClaveTail("9999", kept)).toBeNull();
+    expect(fitClaveTail("11I", kept)).toBeNull();
+  });
+});
+
+describe("payment-without-receipt US5: `own` mode during a transition (T055, D26, FR-041)", () => {
+  it("drops the previous holder's accounts, and holds a transfer from an account not known for the new owner", () => {
+    const juans = cep("07:11:20", { senderAccount: SENDER_8301 });
+    const strangers = cep("11:40:47", { senderAccount: SENDER_4417 });
+    const held = own(receipt({ excludedAccounts: [SENDER_8301], knownAccounts: [] }), [juans, strangers]);
+    expect(held).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(fateOf(held, juans)).toMatchObject({ fate: "dropped", why: "excluded" });
+    expect(fateOf(held, strangers)).toMatchObject({ fate: "kept" });
+    /* her four digits, or an account already hers, confirm it */
+    expect(own(receipt({ excludedAccounts: [SENDER_8301], tail: "4417" }), [juans, strangers])).toMatchObject({
+      decided: "chosen",
+      chosen: { id: strangers.id },
+      by: "sender_tail",
+    });
+    expect(own(receipt({ excludedAccounts: [SENDER_8301], knownAccounts: [SENDER_4417] }), [juans, strangers])).toMatchObject({
+      decided: "chosen",
+      by: "learned_account",
+    });
   });
 });

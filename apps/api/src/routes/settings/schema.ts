@@ -91,6 +91,10 @@ export const settingsResponse = z.object({
     overTreatment: z.enum(["flag", "credit"]),
     effectiveOverTreatment: z.enum(["flag", "credit"]),
   }),
+  /* payment-without-receipt D20 (FR-039): payers pay with their own
+     reference and confirm with bank and day; the receipt stays one tap
+     away. Off by default. Defaulted so fixtures born before it parse. */
+  payByReference: z.boolean().default(false),
 });
 
 /* D9: the service fee has one control and it writes `speiServiceFeeCents`
@@ -124,6 +128,10 @@ export const settingsPatchRequest = z
     /* payments-and-classes D1 */
     toleranceCents: z.number().int().min(0).max(10000),
     overTreatment: z.enum(["flag", "credit"]),
+    /* payment-without-receipt D20: under `settings: update` (owner,
+       admin), like the rest of this body. Turning it on starts the
+       references' backfill (D5); off keeps every reference. */
+    payByReference: z.boolean(),
   })
   .partial();
 

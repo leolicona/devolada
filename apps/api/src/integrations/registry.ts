@@ -14,8 +14,10 @@ import { WISPHUB_CAPABILITY_NAMES, wisphubCapabilities } from "../wisphub/receiv
    finds nothing, and that is the audit. */
 
 /* Only what an adapter needs to address its provider. The factory's own
-   rule: it reads no threshold and no switch. */
-type RegistryEnv = { WISPHUB_BASE_URL?: string };
+   rule: it reads no threshold and no switch. Exported so a core module
+   that asks for a capability types its env by this, never by a
+   provider's binding (payment-without-receipt T060, constitution IX). */
+export type RegistryEnv = { WISPHUB_BASE_URL?: string };
 
 /* The integration's capabilities, ready to call. No integration, or a
    row with no credential, is "not connected" (integrations-hub D2) and

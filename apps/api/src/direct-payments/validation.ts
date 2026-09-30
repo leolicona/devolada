@@ -5,9 +5,9 @@ import { cepRecords, payments, businesses, paymentLinks, validations } from "../
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
 import { consta, ConstaError, type ConstaRequest, type ConstaVerdict, type RegisteredAccount } from "../consta";
-import { fitClave, matchCandidates, shownTail } from "../consta/bundle/match";
+import { fitClave, fitClaveTail, matchCandidates, shownTail, tailFits } from "../consta/bundle/match";
 import { readPendingBundle, recordsFor } from "../consta/bundle/store";
-import type { CepRecord, MatchResult, MatchTrail, UndecidedReason } from "../consta/bundle/types";
+import type { CepRecord, MatchMode, MatchResult, MatchTrail, ReceiptSide, UndecidedReason } from "../consta/bundle/types";
 import {
   heldBefore,
   nudgeHolders,
@@ -39,7 +39,7 @@ import { settle } from "./partial";
 import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../routes/payments/handler";
-import { nextValidationSlot, suggestedSlot } from "./schedule";
+import { ladderSlot, nextValidationSlot, suggestedSlot } from "./schedule";
 import { businessWallClock } from "../time/business-day";
 import { classifyPayment, type ReconciliationClass } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
@@ -58,6 +58,14 @@ import {
 } from "./provisional";
 import { isApiLink, isPanelLink, realOnly, type ApiLink, type PanelLink } from "./links";
 import { enqueueAndDeliver, type Defer } from "../webhooks/queue";
+import {
+  customerKeyOf,
+  endTransitionOnConfirm,
+  holdersOf,
+  learnedAccounts,
+  referenceOfLink,
+  transitionOf,
+} from "./payer-reference";
 
 /* One validation attempt of a direct payment (direct-payment spec).
    Shared by the inline attempt on submission and the sweep's
@@ -319,6 +327,9 @@ function announcingWriter(
     /* prepaid-credit D2: the fee keys on the terminal verdict, once per
        payment — idempotent in the book, so every path may call it */
     await debitValidationFee(env, db, row);
+    /* payment-without-receipt D26: the previous holder's first confirmation
+       with their new number ends the transition early */
+    if (paid && row.referenceSource === "own") await endTransitionOnConfirm(db, row, now);
     /* receipt-triage D31: a held payment is announced by the ISP's
        decision, never before — `announced` stays where it was so the
        accept (or the reject) is what the endpoint hears */
@@ -327,6 +338,84 @@ function announcingWriter(
       await enqueueAndDeliver(env, db, { payment: row, link, now }, defer);
     }
     return row;
+  };
+}
+
+/* payment-without-receipt D14: the calendar days either side of the day
+   the payer gave — never after today, and never the operation day Banxico
+   files a night transfer under (it finds nothing by it, measured
+   2026-09-26: bug reference-search-printed-day). The fix of that bug left
+   the misremembered day to this round. */
+export function neighbourDays(day: string, today: string): string[] {
+  const shift = (n: number) => {
+    const d = new Date(`${day}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  return [shift(-1), shift(1)].filter((d) => d <= today);
+}
+
+/* payment-without-receipt D14/D23: `payments.confirmation`, read safely */
+export type Confirmation = {
+  preselectedBank: string | null;
+  preselectedDay: string | null;
+  days: string[];
+  /* D24: the clave a row refused as already used was refused for */
+  usedClave?: string | null;
+};
+export function confirmationOf(row: Pick<DirectPayment, "confirmation">): Confirmation {
+  try {
+    const parsed = row.confirmation ? (JSON.parse(row.confirmation) as Partial<Confirmation>) : {};
+    return {
+      preselectedBank: parsed.preselectedBank ?? null,
+      preselectedDay: parsed.preselectedDay ?? null,
+      days: Array.isArray(parsed.days) ? parsed.days : [],
+      ...(parsed.usedClave ? { usedClave: parsed.usedClave } : {}),
+    };
+  } catch {
+    return { preselectedBank: null, preselectedDay: null, days: [] };
+  }
+}
+
+/* The searched data two rows of one chain share — what makes a tail
+   typed on the newer one an answer to the older one's candidates */
+const sameSearch = (a: DirectPayment, b: DirectPayment) =>
+  a.referenceNumber === b.referenceNumber &&
+  a.senderBank === b.senderBank &&
+  a.transferDate === b.transferDate &&
+  (a.claimedAmountCents ?? a.amountCents) === (b.claimedAmountCents ?? b.amountCents);
+
+/* payment-without-receipt D10, D11, D26: what the matcher knows of the
+   payer, for a row searched by a reference. `own` — the accounts learned
+   for this service, and during a D26 transition the new owner's across
+   their services, with the previous holder's to drop; `typed` — the
+   accounts learned for this service at the bank the payer named. */
+async function payerSide(
+  db: DB,
+  payment: DirectPayment,
+  link: PaymentLink,
+  now: Date,
+): Promise<{ mode: MatchMode; side: Pick<ReceiptSide, "knownAccounts" | "excludedAccounts"> }> {
+  const key = customerKeyOf(link);
+  if (!payment.referenceSource || !key) return { mode: "receipt", side: {} };
+  if (payment.referenceSource === "typed") {
+    return { mode: "typed", side: { knownAccounts: await learnedAccounts(db, payment.businessId, [key], { bank: payment.senderBank }) } };
+  }
+  const reference = await referenceOfLink(db, link, now);
+  const transition = reference ? await transitionOf(db, payment.businessId, reference, now) : null;
+  if (!reference || !transition) {
+    return { mode: "own", side: { knownAccounts: await learnedAccounts(db, payment.businessId, [key]) } };
+  }
+  const [mine, previous] = await Promise.all([
+    holdersOf(db, payment.businessId, reference.id),
+    holdersOf(db, payment.businessId, transition.previousReferenceId),
+  ]);
+  return {
+    mode: "own",
+    side: {
+      knownAccounts: await learnedAccounts(db, payment.businessId, mine),
+      excludedAccounts: await learnedAccounts(db, payment.businessId, previous),
+    },
   };
 }
 
@@ -367,8 +456,13 @@ export async function runValidation(
        and its retries cost no provider call, so past the schedule it
        keeps being retried on the hour */
     const kept = payment.banxicoValidAt != null || base.banxicoValidAt != null;
+    /* payment-without-receipt D14: a row searched by a reference rides the
+       ladder of rounds that got an answer — this attempt's, when `base`
+       carries it, else the row's (a `429` or an outage is not a round) */
     const slot =
-      nextValidationSlot(payment.createdAt, now, opts) ??
+      (payment.referenceSource != null
+        ? ladderSlot(payment.createdAt, now, base.ladderRound ?? payment.ladderRound, opts)
+        : nextValidationSlot(payment.createdAt, now, opts)) ??
       (kept ? new Date(now.getTime() + minutes(KEPT_RETRY_MINUTES)) : null);
     const row = await update(
       slot
@@ -552,13 +646,19 @@ export async function runValidation(
      no call is made. (cep-bundle-match D1: the provider answers several
      matches with a bundle, never the 422 that `REFERENCE_AMBIGUOUS` was
      written for — measured 2026-09-26; the row it would mark is kept for
-     the answer the provider documents.) */
+     the answer the provider documents.) payment-without-receipt D9: a row
+     with a `reference_source` is never marked REFERENCE_SHARED — the
+     stops below guard the rows without one. */
   if (
     payment.trackingKey == null &&
     (payment.lastError === "REFERENCE_AMBIGUOUS" || payment.lastError === "REFERENCE_SHARED")
   ) {
     return retryLater(payment.lastError);
   }
+
+  /* payment-without-receipt D14: which round this attempt is, for a row
+     searched by a reference */
+  const sourced = payment.referenceSource != null;
 
   /* ---- cep-bundle-match: what is decided here with no provider call ----
 
@@ -609,6 +709,75 @@ export async function runValidation(
             c.clave === record.clave ? { ...c, fate: "chosen" as const, why: null } : c,
           ),
         };
+      }
+    }
+  }
+
+  /* payment-without-receipt D11, D17 (FR-033, FR-015): a tail the payer
+     typed to answer an undecided row of their own chain — the sending
+     account's four digits, or the clave's last four characters — is
+     fitted against that row's kept transfers, with no call, exactly as
+     cep-bundle-match D11 fits a whole clave. A tail is never searched at
+     Banxico. One fit confirms from the record; none or several stays
+     undecided, and the page asks the next thing (D15). Only when the
+     searched data are the ones the older row searched: a correction of
+     the bank, the day, the amount or the reference searches again. */
+  if (!local && sourced && payment.supersedesId && !payment.trackingKey && (payment.claveTail || payment.senderTail) && !crossCheck && !receiptDoor) {
+    const [prior] = await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.id, payment.supersedesId), eq(payments.businessId, business.id)));
+    const priorTrail = prior?.lastError === "CEP_UNDECIDED" && prior.matchTrail ? (JSON.parse(prior.matchTrail) as MatchTrail) : null;
+    if (prior && priorTrail && sameSearch(prior, payment)) {
+      const keptClaves = priorTrail.candidates
+        .filter((c) => c.cepId && !["amount", "account", "used", "excluded", "unreadable"].includes(c.why ?? ""))
+        .map((c) => c.clave);
+      const usedNow = await usedAmong(db, business.id, payment.id, keptClaves);
+      const free = (await recordsFor(db, business.id, keptClaves)).filter((r) => !usedNow.has(r.clave.toUpperCase()));
+      let fits: CepRecord[];
+      let by: "clave_tail" | "sender_tail";
+      if (payment.claveTail) {
+        const fit = fitClaveTail(payment.claveTail, free.map((r) => r.clave));
+        fits = fit ? free.filter((r) => r.clave === fit) : [];
+        by = "clave_tail";
+      } else {
+        fits = free.filter((r) => tailFits(payment.senderTail!, r));
+        by = "sender_tail";
+      }
+      const claimed = fits.length === 1 ? await chooseAndClaimOne(db, payment.id, fits[0].clave) : false;
+      if (claimed) {
+        local = promote(fits[0], { validationId: prior.constaValidationId ?? "" }, payment.senderBank);
+        localTrail = {
+          ...priorTrail,
+          decided: "chosen",
+          by,
+          reason: null,
+          receipt: { time: null, tail: payment.senderTail },
+          candidates: priorTrail.candidates.map((c) =>
+            c.clave === fits[0].clave ? { ...c, fate: "chosen" as const, why: null } : c,
+          ),
+        };
+      } else {
+        const left = new Set((fits.length > 1 ? fits : []).map((r) => r.clave));
+        return update({
+          lastError: "CEP_UNDECIDED",
+          disputedFields: JSON.stringify(["trackingKey"]),
+          nextValidationAt: null,
+          matchTrail: JSON.stringify({
+            ...priorTrail,
+            decided: "undecided",
+            by: null,
+            reason: left.size ? "no_signal" : fits.length === 1 ? "all_used" : "none_fit",
+            receipt: { time: null, tail: payment.senderTail },
+            candidates: priorTrail.candidates.map((c) =>
+              left.has(c.clave)
+                ? { ...c, fate: "kept" as const, why: null }
+                : c.fate === "kept"
+                  ? { ...c, fate: "dropped" as const, why: "tail" as const }
+                  : c,
+            ),
+          } satisfies MatchTrail),
+        });
       }
     }
   }
@@ -672,7 +841,10 @@ export async function runValidation(
      its sender's digits on the row, the search runs — several matches come
      back as a bundle, and the matcher tells them apart. Only a receipt
      that shows neither is still asked with no call. */
-  if (!local && byReference && payment.transferTime == null && payment.senderTail == null) {
+  /* payment-without-receipt D9: a row searched by a payer's reference
+     never meets this stop — an own reference is one person's, and a typed
+     one never confirms without a second fact (D11) */
+  if (!local && !sourced && byReference && payment.transferTime == null && payment.senderTail == null) {
     const shared = await sharedReference(db, business, link, {
       paymentId: payment.id,
       reference: payment.referenceNumber!,
@@ -685,7 +857,14 @@ export async function runValidation(
       return retryLater("REFERENCE_SHARED", { disputedFields: JSON.stringify(["trackingKey"]) });
     }
   }
-  const request: ConstaRequest = crossCheck
+  /* payment-without-receipt D14: round 3 of a row searched by a reference
+     asks each neighbouring day once; every other round, the day given */
+  const givenDay = payment.transferDate ?? businessWallClock(business.timezone, now).date;
+  const days =
+    sourced && byReference && payment.ladderRound + 1 === 3
+      ? neighbourDays(givenDay, businessWallClock(business.timezone, now).date)
+      : [givenDay];
+  const requestFor = (day: string): ConstaRequest => crossCheck
     ? {
         receipt: { proofKey: payment.proofKey ?? "" },
         beneficiary: asBeneficiary(beneficiary),
@@ -718,7 +897,7 @@ export async function runValidation(
                operation day), so the alternation spei-date-rollover
                added only spent calls. The fallback is the business's
                day: the UTC date is tomorrow from 18:00 in Mexico City. */
-            date: payment.transferDate ?? businessWallClock(business.timezone, now).date,
+            date: day,
             /* partial-payment D5: the amount is a **search criterion**,
                not an assertion. Asking with what we expected finds
                nothing when the payer fell short, so what travels is what
@@ -750,21 +929,25 @@ export async function runValidation(
   const isRetry = payment.validationAttempts > 0 || payment.constaStatus !== null;
   /* cep-bundle-match: a decision taken above made no call, so it counts
      no attempt */
-  const attempts = payment.validationAttempts + (local ? 0 : 1);
-  if (!local) {
-    /* bug: one-open-attempt — the claim is also the last look before a
-       paid call: an attempt the payer replaced since it was read (the
-       sweep's batch, the inline attempt's insert) is not asked about */
+  let attempts = payment.validationAttempts;
+  /* bug: one-open-attempt — the claim is also the last look before a
+     paid call: an attempt the payer replaced since it was read (the
+     sweep's batch, the inline attempt's insert) is not asked about.
+     payment-without-receipt D14: one claim per call, so a round that
+     searches two days counts two */
+  const claim = async (): Promise<DirectPayment | null> => {
+    attempts += 1;
     const [claimed] = await db
       .update(payments)
       .set({ validationAttempts: attempts })
       .where(and(eq(payments.id, payment.id), ne(payments.status, "superseded")))
       .returning();
-    if (!claimed) {
-      const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
-      return current;
-    }
-  }
+    if (claimed) return null;
+    const [current] = await db.select().from(payments).where(eq(payments.id, payment.id));
+    return current;
+  };
+  /* payment-without-receipt D14: the days this attempt's calls searched */
+  const searched: string[] = [];
 
   let verdict: ConstaVerdict;
   /* consta-api-merge D3: the business is the identity — the refs above
@@ -777,20 +960,38 @@ export async function runValidation(
   if (local) {
     verdict = local;
   } else {
+    let answer: ConstaVerdict | null = null;
+    let failure: unknown = null;
+    for (const day of days) {
+      const replaced = await claim();
+      if (replaced) return replaced;
+      try {
+        answer = await consta(env, db, { businessId: business.id }, {
+          /* receipt-triage D7 (converge T060): the question only the lifecycle
+             can answer, asked by the engine on the receipt door */
+          referenceTaken: (r) =>
+            sharedReference(db, business, link, {
+              paymentId: payment.id,
+              reference: r.referenceNumber,
+              date: r.date,
+              senderBank: r.senderBank,
+              amountCents: r.amountCents,
+              account: fromBeneficiary(r.account),
+            }),
+        }).validate(requestFor(day));
+        searched.push(day);
+      } catch (e) {
+        /* payment-without-receipt D14: a neighbouring day that got no
+           answer after one that did leaves the round to what came back */
+        if (!answer) failure = e;
+        break;
+      }
+      /* the next neighbouring day only after nothing was found on this one */
+      if (!(answer.status === "invalid" && answer.reason === "not_found")) break;
+    }
     try {
-      verdict = await consta(env, db, { businessId: business.id }, {
-        /* receipt-triage D7 (converge T060): the question only the lifecycle
-           can answer, asked by the engine on the receipt door */
-        referenceTaken: (r) =>
-          sharedReference(db, business, link, {
-            paymentId: payment.id,
-            reference: r.referenceNumber,
-            date: r.date,
-            senderBank: r.senderBank,
-            amountCents: r.amountCents,
-            account: fromBeneficiary(r.account),
-          }),
-      }).validate(request);
+      if (!answer) throw failure;
+      verdict = answer;
     } catch (e) {
       const code = e instanceof ConstaError ? e.code : "PROVIDER_UNAVAILABLE";
       console.error("consta validation failed:", code);
@@ -838,7 +1039,24 @@ export async function runValidation(
     ...(read?.senderTail && payment.senderTail == null ? { senderTail: read.senderTail } : {}),
     /* D11/D14: a clave fitted to a kept candidate, or pulled from a record */
     ...(localTrail ? { matchTrail: JSON.stringify(localTrail), matchDistanceS: null } : {}),
+    /* payment-without-receipt D14: an attempt that got an answer is a round,
+       and every day it searched joins the read-back */
+    ...(sourced && !local
+      ? {
+          ladderRound: payment.ladderRound + 1,
+          confirmation: JSON.stringify({
+            ...confirmationOf(payment),
+            days: [...new Set([...confirmationOf(payment).days, ...searched])],
+          }),
+        }
+      : {}),
   };
+  /* payment-without-receipt D24: the clave a row searched by a reference
+     was refused for, so its status can say which payment used it */
+  const refusedFor = (clave: string | null | undefined): Partial<typeof payments.$inferInsert> =>
+    sourced && clave
+      ? { confirmation: JSON.stringify({ ...confirmationOf({ confirmation: (base.confirmation as string | undefined) ?? payment.confirmation }), usedClave: clave }) }
+      : {};
 
   /* ---- cep-bundle-match D8, D9, D10, D16, D18 — a search without a clave.
 
@@ -867,7 +1085,10 @@ export async function runValidation(
     const searchedBank = imageDoor
       ? (verdict.reading?.senderBank ?? read?.senderBank ?? asked?.senderBank ?? null)
       : payment.senderBank;
-    const receipt = receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null);
+    /* payment-without-receipt D10, D11, D26: a row searched by a payer's
+       reference is judged in its own mode, with what was learned of them */
+    const payer = await payerSide(db, payment, link, now);
+    const receipt = { ...receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null), ...payer.side };
     /* bug: single-cep-unreadable (D19): a single whose cadena did not read
        is still the one transfer Banxico named — it rides the trail,
        dropped, with the check the cadena failed */
@@ -921,12 +1142,15 @@ export async function runValidation(
          With a time or a tail on the receipt there is nothing to hold them
          against, so the clave is asked; with neither, nothing contradicts
          it and it confirms as it always did. */
-      if (receipt.time || receipt.tail) return undecided("unreadable");
+      /* payment-without-receipt D11: a typed reference never confirms
+         without a second fact, and an unread cadena holds no account to
+         tie — so it is asked, like a receipt that shows a time */
+      if (receipt.time || receipt.tail || payment.referenceSource === "typed") return undecided("unreadable");
     } else if (!candidates.length) {
       return undecided(unreadable.length ? "unreadable" : "none_fit");
     } else {
       const used = await usedAmong(db, business.id, payment.id, candidates.map((c) => c.clave));
-      const result = await chooseAndClaim(db, payment.id, receipt, candidates, used);
+      const result = await chooseAndClaim(db, payment.id, receipt, candidates, used, payer.mode);
       if (result.decided === "undecided") return undecided(result.reason, result.trail);
       Object.assign(base, {
         matchTrail: JSON.stringify(trailOf(source, bundleId, receipt, result, unreadable)),
@@ -1111,11 +1335,13 @@ export async function runValidation(
       releasable(releaseEvidenceFor(payment, "pending")),
       now,
     );
-    const slot = nextValidationSlot(payment.createdAt, now, {
-      /* learned-retry D6: same consumption as not_found — no late slot,
-         per validation-status-ux D4 */
-      suggestedAt: suggestedSlot(verdict.retryAfter),
-    });
+    /* learned-retry D6: same consumption as not_found — no late slot,
+       per validation-status-ux D4. payment-without-receipt D14: a row
+       searched by a reference counts this answer as a round. */
+    const pendingOpts = { suggestedAt: suggestedSlot(verdict.retryAfter) };
+    const slot = sourced
+      ? ladderSlot(payment.createdAt, now, base.ladderRound ?? payment.ladderRound, pendingOpts)
+      : nextValidationSlot(payment.createdAt, now, pendingOpts);
     const row = await update(
       slot
         ? { ...base, ...release, ...shadow, nextValidationAt: slot, lastError: null }
@@ -1140,6 +1366,7 @@ export async function runValidation(
        have stopped the submission at the unique index already.) */
     return update({
       ...base,
+      ...refusedFor(verdict.cep?.trackingKey),
       status: "invalid",
       nextValidationAt: null,
       lastError: "TRANSFER_ALREADY_USED",
@@ -1275,6 +1502,7 @@ export async function runValidation(
       if (isUniqueViolation(e)) {
         return update({
           ...base,
+          ...refusedFor(cep.trackingKey),
           status: "invalid",
           nextValidationAt: null,
           lastError: "TRANSFER_ALREADY_USED",
@@ -1383,6 +1611,8 @@ export async function chooseAndClaim(
   receipt: Parameters<typeof matchCandidates>[0],
   candidates: CepRecord[],
   used: Set<string>,
+  /* payment-without-receipt D10/D11: the payer's own reference or a typed one */
+  mode: MatchMode = "receipt",
 ): Promise<MatchResult> {
   const claim = async (clave: string) => {
     try {
@@ -1393,11 +1623,11 @@ export async function chooseAndClaim(
       throw e;
     }
   };
-  let result: MatchResult = matchCandidates(receipt, candidates, used);
+  let result: MatchResult = matchCandidates(receipt, candidates, used, undefined, mode);
   for (let round = 0; result.decided === "chosen"; round++) {
     if (await claim(result.chosen.clave)) break;
     used.add(result.chosen.clave.toUpperCase());
-    result = matchCandidates(receipt, candidates, used);
+    result = matchCandidates(receipt, candidates, used, undefined, mode);
     if (round === 1 && result.decided === "chosen") {
       result = {
         decided: "undecided",
@@ -1407,6 +1637,19 @@ export async function chooseAndClaim(
     }
   }
   return result;
+}
+
+/* payment-without-receipt D11, D17: the one clave a typed tail chose, taken
+   onto the row before anything confirms — the unique index refuses it
+   when another live payment already holds it */
+async function chooseAndClaimOne(db: DB, paymentId: string, clave: string): Promise<boolean> {
+  try {
+    await db.update(payments).set({ trackingKey: clave }).where(eq(payments.id, paymentId));
+    return true;
+  } catch (e) {
+    if (isUniqueViolation(e)) return false;
+    throw e;
+  }
 }
 
 /* bug: valid-lost-on-later-failure — the panel half of a `valid`

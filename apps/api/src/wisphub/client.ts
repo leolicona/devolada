@@ -1,4 +1,5 @@
 import { amountToCents, decimalToCents, providerCents } from "../money";
+import { nationalPhone } from "../phone";
 
 /* WispHub adapter. Contract verified in .design/devolada/WISPHUB_SPIKE.md.
    All WispHub traffic goes through this file (ARCHITECTURE.md rule). */
@@ -218,6 +219,10 @@ type WispHubListItem = {
   id_servicio: number;
   usuario: string | null;
   nombre: string | null;
+  /* payment-without-receipt D4: read by `customersWithPhone` alone, which
+     groups a phone's customers by their whole name; the mapped customer
+     keeps `nombre` as its name, as it always did */
+  apellido?: string | null;
   telefono: string | null;
   estado: string | null;
   estado_facturas: string | null;
@@ -397,6 +402,31 @@ export class WispHub {
   async customersPage(path: string): Promise<CustomersPage> {
     const { customers, next } = await this.listPage(path);
     return { customers, next };
+  }
+
+  /* payment-without-receipt D4 — every customer whose phone is this one.
+     WispHub keeps `telefono` as the business typed it, so the filter asks
+     for the last seven digits (`__contains`, which any spelling of the
+     number holds) and pages to the end at 50, and each result is kept only
+     when its own `telefono` reads as the same national phone — a
+     `…2345678` in another area code is someone else. The name comes back
+     in WispHub's two halves; the core groups by it and stores neither. */
+  async customersWithPhone(phone: string): Promise<{ usuario: string; firstName: string; lastName: string }[]> {
+    const tail = encodeURIComponent(phone.slice(-7));
+    const out: { usuario: string; firstName: string; lastName: string }[] = [];
+    for (let offset = 0, page = 0; page < 100; page++) {
+      const data: { next: string | null; results: WispHubListItem[] } = await this.get(
+        `/clientes/?telefono__contains=${tail}&limit=50&offset=${offset}`,
+      );
+      for (const c of data.results) {
+        if (c.usuario && nationalPhone(c.telefono) === phone) {
+          out.push({ usuario: c.usuario, firstName: c.nombre ?? "", lastName: c.apellido ?? "" });
+        }
+      }
+      if (!data.next || data.results.length === 0) break;
+      offset += data.results.length;
+    }
+    return out;
   }
 
   /* D1 (charge-confirm spec): one customer loads through the list filter.

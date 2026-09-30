@@ -431,3 +431,40 @@ describe("scenario 10 / FR-028, FR-029: nothing names an ISP, and nothing reache
     expect(() => expectNoIspVocabulary({ cep: DEFAULT_CEP })).not.toThrow();
   });
 });
+
+describe("payment-without-receipt US1: payerReference on the /v1 link (T010, D22, FR-005)", () => {
+  it("rides create, list, get and patch; a reusable and a one-time link of one customerRef share it", async () => {
+    const { key } = await seedApiBusiness({ payByReference: true });
+    const created = await v1(key, "POST", "/payment-links", { customerRef: "CLI-4471", askCents: 49900 });
+    expect(created.status).toBe(201);
+    const digits = created.body.data!.payerReference as string;
+    expect(digits).toMatch(/^[1-9]\d{6}$/);
+
+    const once = await v1(key, "POST", "/payment-links", {
+      customerRef: "CLI-4471",
+      askCents: 12000,
+      mode: "one_time",
+      expiresAt: inAnHour(),
+    });
+    expect(once.body.data!.payerReference).toBe(digits);
+
+    const got = await v1(key, "GET", `/payment-links/${created.body.data!.id}`);
+    expect(got.body.data!.payerReference).toBe(digits);
+    const patched = await v1(key, "PATCH", `/payment-links/${created.body.data!.id}`, { askCents: 51000 });
+    expect(patched.body.data!.payerReference).toBe(digits);
+    const listed = await v1(key, "GET", "/payment-links?customerRef=CLI-4471");
+    const links = listed.body.data!.links as { payerReference: string | null }[];
+    expect(links).toHaveLength(2);
+    expect(links.every((l) => l.payerReference === digits)).toBe(true);
+
+    /* another customer of the business, another number */
+    const other = await v1(key, "POST", "/payment-links", { customerRef: "CLI-9000", askCents: 49900 });
+    expect(other.body.data!.payerReference).not.toBe(digits);
+  });
+
+  it("is null while the business has the feature off", async () => {
+    const { key } = await seedApiBusiness();
+    const created = await v1(key, "POST", "/payment-links", { customerRef: "CLI-4471", askCents: 49900 });
+    expect(created.body.data!.payerReference).toBeNull();
+  });
+});

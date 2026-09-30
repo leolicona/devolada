@@ -182,6 +182,10 @@ export const handlers = {
       r(String(params.readingId), await request.json()),
     ),
   benchFile: (r: (id: string) => Response) => http.get("/platform/reader/bench/:id/file", ({ params }) => r(String(params.id))),
+  /* payment-without-receipt D19 (US4): the provider's remaining calls,
+     on the operator's Reglas tab */
+  providerQuota: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/provider-quota", () => r()),
 };
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };
@@ -190,7 +194,13 @@ export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.ap
    event, and every render of /links asks for it. Answering `null` by
    default — "this business has nothing to be told" — keeps it out of
    every other suite's arrangement; the tests that care about the notice
-   override it with `handlers.pruneNotice(...)`. */
+   override it with `handlers.pruneNotice(...)`.
+
+   payment-without-receipt D19: the provider quota, likewise — every
+   render of /operador's Reglas tab asks for it, and `null` is what the
+   operator sees before any answer carried the header. The tests that
+   care override it with `handlers.providerQuota(...)`. */
 export const server = setupServer(
   http.get("/direct-payments/prune-notice", () => ok(null)),
+  http.get("/platform/provider-quota", () => ok(null)),
 );

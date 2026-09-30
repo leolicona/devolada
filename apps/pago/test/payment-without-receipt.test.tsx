@@ -617,6 +617,29 @@ describe("payment-without-receipt US4: while it validates", () => {
     });
   });
 
+  it("while the business is paused, Corregir still replaces the queued row, and the page keeps waiting (T057)", async () => {
+    const paid: unknown[] = [];
+    const queued = sourced({ status: "queued_for_credit", validationAttempts: 0 });
+    stub({
+      link: linkWith({ inReview: { directPaymentId: "dp-1", status: "queued_for_credit" } }),
+      paid,
+      status: queued,
+      payAnswer: () => ok(payResponse.parse({ directPaymentId: "dp-2", status: "queued_for_credit", error: null }), 201),
+    });
+    renderPage();
+    await screen.findByText(/pausó la validación de pagos/i, {}, { timeout: 8000 });
+    await openData();
+    await userEvent.click(screen.getByRole("button", { name: "Corregir" }));
+    await userEvent.selectOptions(screen.getByLabelText("Banco desde el que pagaste"), "NUBANK");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar estos datos" }));
+
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect(paid[0]).toMatchObject({ transfer: { referenceSource: "own", senderBank: "NUBANK" }, supersedes: "dp-1" });
+    expect(await screen.findByText(/pausó la validación de pagos/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no pudimos recibir/i)).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
   it("a correction that changes the reference travels as typed", async () => {
     const paid: unknown[] = [];
     stubInReview(sourced(), paid);

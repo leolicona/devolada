@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { eq } from "drizzle-orm";
-import { businesses, cepRecords, payerReferenceCustomers, payerReferences, paymentLinks, payments } from "../src/db/schema";
+import { businesses, cepRecords, creditEntries, payerReferenceCustomers, payerReferences, paymentLinks, payments } from "../src/db/schema";
 import {
   customersResponse,
   directPaymentStatusResponse,
@@ -702,6 +702,44 @@ describe("payment-without-receipt US4: the read-back, the ladder and the correct
     expect(sixth.body.error?.code).toBe("TOO_MANY_ATTEMPTS");
   });
 
+  it("while the business is paused, Corregir replaces the queued row and waits with it — no search, no correction counted (T057)", async () => {
+    const business = await seedReferenceBusiness();
+    /* prepaid-credit D8: below the cap (−$60.00 against −$50.00) */
+    await db()
+      .insert(creditEntries)
+      .values({ businessId: business.id, kind: "adjustment", cents: -6000, reason: "test: pause", authorUserId: null });
+    const { link } = await apiPayer(business);
+    const first = await confirm(link);
+    expect(first.body.data).toMatchObject({ status: "queued_for_credit" });
+    const id = first.body.data!.directPaymentId;
+
+    const fixed = await confirm(link, { senderBank: "BANORTE" }, { supersedes: id });
+    expect(fixed.status).toBe(201);
+    expect(await rowById(fixed.body.data!.directPaymentId)).toMatchObject({
+      status: "queued_for_credit",
+      referenceSource: "own",
+      senderBank: "BANORTE",
+      supersedesId: id,
+      correctionCount: 0,
+      nextValidationAt: null,
+    });
+    expect((await rowById(id)).status).toBe("superseded");
+    expect(await providerCalls()).toBe(0);
+
+    /* a row without a reference_source keeps today's rule: a queued
+       attempt is not one a named correction replaces */
+    const other = await seedApiLink(business, "gym-002", { askCents: 35000 });
+    const byClave = await pay(other.token, {
+      transfer: { trackingKey: "MBAN01002609300000000009", senderBank: "AZTECA", date: TODAY },
+    });
+    expect(byClave.body.data).toMatchObject({ status: "queued_for_credit" });
+    const refused = await pay(other.token, {
+      transfer: { trackingKey: "MBAN01002609300000000010", senderBank: "AZTECA", date: TODAY },
+      supersedes: byClave.body.data!.directPaymentId,
+    });
+    expect(refused.status).toBe(404);
+  });
+
   it("with a release standing, the asks never withdraw it", async () => {
     const business = await seedReferenceBusiness({ provisionalReleaseEnabled: true });
     const link = await seedPanelLink(business, ANA.usuario);
@@ -914,6 +952,59 @@ describe("payment-without-receipt US5: while a reference changes hands (T055, D2
 
     const answered = await confirm(ana, { senderTail: "4417" }, { supersedes: id });
     expect(await rowById(answered.body.data!.directPaymentId)).toMatchObject({ status: "confirmed", trackingKey: hers.clave });
+  });
+
+  it("Juan's previous digits from an account not learned for him are held and ask his four digits — which confirm with no call (T058)", async () => {
+    const business = await seedReferenceBusiness();
+    const { juan } = await handedOver(business);
+    const his = transfer(TODAY, "11:40:47", "351.50", SENDER_4417);
+    mockSeveral([transfer(TODAY, "07:11:20", "351.50", "127180555555512344"), his]);
+    const id = (await typed(juan, "7815678")).body.data!.directPaymentId;
+    expect(await rowById(id)).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED" });
+    expect((await status(id)).data.ask).toBe("sender_tail");
+
+    const calls = await providerCalls();
+    const answered = await typed(juan, "7815678", { senderTail: "4417" }, { supersedes: id });
+    const row = await rowById(answered.body.data!.directPaymentId);
+    expect(row).toMatchObject({ status: "confirmed", trackingKey: his.clave, referenceSource: "typed" });
+    expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "sender_tail" });
+    expect(await providerCalls()).toBe(calls);
+  });
+
+  it("when Juan's four digits leave several, the clave's last four characters decide (T058)", async () => {
+    const business = await seedReferenceBusiness();
+    const { juan } = await handedOver(business);
+    const a = transfer(TODAY, "07:11:20", "351.50", SENDER_4417, { clave: "MBAN0100260930000000C3P" });
+    const b = transfer(TODAY, "07:13:02", "351.50", SENDER_4417, { clave: "MBAN0100260930000000D5R" });
+    mockSeveral([a, b]);
+    const id = (await typed(juan, "7815678", { senderTail: "4417" })).body.data!.directPaymentId;
+    expect((await status(id)).data.ask).toBe("clave_tail");
+
+    const calls = await providerCalls();
+    const answered = await typed(juan, "7815678", { senderTail: "4417", claveTail: "0D5R" }, { supersedes: id });
+    const row = await rowById(answered.body.data!.directPaymentId);
+    expect(row).toMatchObject({ status: "confirmed", trackingKey: b.clave });
+    expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "clave_tail" });
+    expect(await providerCalls()).toBe(calls);
+  });
+
+  it("once the 60 days have passed, Ana's own search no longer drops Juan's accounts (T058)", async () => {
+    const business = await seedReferenceBusiness();
+    const { ana, passed } = await handedOver(business);
+    /* the transition's end is the column the guard reads: set in the past,
+       it is the day after the sixtieth */
+    await db()
+      .update(payerReferences)
+      .set({ transitionEndsAt: new Date(Date.now() - 86_400_000) })
+      .where(eq(payerReferences.id, passed.id));
+    const early = transfer(TODAY, "07:11:20", "351.50", SENDER_8301);
+    mockSeveral([early, transfer(TODAY, "11:40:47", "351.50", SENDER_4417)]);
+    const id = (await confirm(ana)).body.data!.directPaymentId;
+    const row = await rowById(id);
+    expect(row).toMatchObject({ status: "confirmed", trackingKey: early.clave });
+    const trail = JSON.parse(row.matchTrail!);
+    expect(trail).toMatchObject({ by: "earliest" });
+    expect(trail.candidates.some((c: { why?: string }) => c.why === "excluded")).toBe(false);
   });
 
   it("Juan's first confirmation with his new number ends the transition; after it, Ana's unknown accounts confirm", async () => {

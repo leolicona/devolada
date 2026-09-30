@@ -10,7 +10,7 @@ import {
   payments,
 } from "../db/schema";
 import { nationalPhone } from "../phone";
-import { capabilitiesOf } from "../integrations/registry";
+import { capabilitiesOf, type RegistryEnv } from "../integrations/registry";
 import { IntegrationError } from "../integrations/capabilities";
 import { integrationOf, type Integration } from "../integrations/store";
 import { isGenericReference } from "../routes/direct-payments/schema";
@@ -378,7 +378,7 @@ async function heldByAny(db: DB, businessId: string, keys: CustomerKey[]): Promi
    ONE assigned number, shared by their services (FR-001). */
 export async function ensurePayerReference(
   db: DB,
-  env: Pick<Bindings, "WISPHUB_BASE_URL">,
+  env: RegistryEnv,
   business: Business,
   integration: Integration | null,
   customer: CustomerKey & { phone: string | null },

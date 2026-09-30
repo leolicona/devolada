@@ -719,7 +719,13 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           eq(payments.paymentLinkId, link.id),
         ),
       );
-    if (!prior || prior.status !== "validating") {
+    /* payment-without-receipt FR-023 (T057): a row searched by a payer's
+       reference keeps "Corregir" while the business is paused — the
+       correction replaces the queued row and waits queued like it
+       (prepaid-credit D8). Every other row keeps today's rule. */
+    const correctable =
+      prior?.status === "validating" || (prior?.status === "queued_for_credit" && prior.referenceSource != null);
+    if (!prior || !correctable) {
       return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
     }
     superseded = prior;
@@ -923,8 +929,11 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
       chain.transferDate === body.transfer?.date &&
       (claimedCents == null || claimedCents === (chain.claimedAmountCents ?? chain.amountCents)),
   );
-  const correctionCount = (chain?.correctionCount ?? 0) + (chain && !fitsWithoutCall ? 1 : 0);
-  if (chain && !fitsWithoutCall && correctionCount > CORRECTIONS_BUDGET && !safeExit) {
+  /* A queued row was never searched: replacing it spends no search the
+     chain would not have spent anyway (T057) */
+  const spendsSearch = Boolean(chain && !fitsWithoutCall && chain.status !== "queued_for_credit");
+  const correctionCount = (chain?.correctionCount ?? 0) + (spendsSearch ? 1 : 0);
+  if (spendsSearch && correctionCount > CORRECTIONS_BUDGET && !safeExit) {
     return c.json({ success: false, error: { code: "CORRECTIONS_EXHAUSTED" } }, 409);
   }
 

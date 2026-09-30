@@ -103,10 +103,28 @@ each adopting a clave whose `cep_records` row comes from the account ending
    learned account shared with another person. **Expect**: the earliest
    transfer not yet used confirms.
 
+## US4 — The payer reads about their transfer
+
+1. `pnpm --filter @devolada/pago test -- test/payer-copy.test.ts`.
+   **Expect**: green — no string the page can render names Banxico or says
+   "internet".
+2. On a business with the feature off, submit a receipt the sandbox does
+   not find. **Expect**: "Seguimos buscando tu transferencia." and "Todavía
+   no la vemos…"; after expiry, "No pudimos confirmar tu pago a tiempo.
+   Contacta a {the business's name} con tu comprobante…".
+3. With a provisional release standing (012 quickstart), **Expect**: "Tu
+   servicio ya volvió…" — never "tu internet".
+4. Open `/l/does-not-exist` and the bare origin with no saved link.
+   **Expect**: "Pide el link correcto a quien te lo envió." and "Tu pago";
+   the browser tab reads "Tu pago".
+5. Open the typed form's bank list and "Otro banco". **Expect**: no
+   "BANXICO".
+
 ## Reading the success criteria
 
 With the business id `$B`, each is one query over that business
-(data-model.md), except SC-003, which is the pay route's latency on
-answer rows (T026 records it on the sandbox): SC-001 from `match_trail.by` on typed rows that found
+(data-model.md), except two: SC-003 is the pay route's latency on
+answer rows (T030 records it on the sandbox), and SC-006 is the copy scan
+(step 1 of US4). SC-001 from `match_trail.by` on typed rows that found
 transfers; SC-004 from links with three `tie_break = 'none'` rows in a
 window; SC-005 from the receipt rows of links with a reference.

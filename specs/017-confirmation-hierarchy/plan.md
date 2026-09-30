@@ -29,6 +29,11 @@ status word and no token:
   (D6). A miss carries the candidates forward.
 - **Wrong answers are bounded per link**: three misses in 24 hours, then
   the whole clave (D8). Answers never count toward the hourly budget.
+- **The payer's copy** (User Story 4, added 2026-09-30) is a sweep of the
+  page as built on `main`: fourteen Banxico sentences, fifteen ISP
+  phrases and two titles move to one vocabulary per moment (D13), the
+  business's own name (D14), a bank list without Banxico (D15), and a test
+  that reads every string the page can render (D16).
 
 Phase 0 found what this leans on and what it had to change:
 
@@ -83,8 +88,11 @@ receipt never limited
 `direct-payments/{validation,cep-match,payer-reference}.ts`,
 `routes/direct-payments/{handler,schema}.ts`, the sandbox. Page —
 `ConfirmPayment.tsx`, `PaymentPage.tsx`, a `ReceiptLink` and a
-`TieBreakForm` component. Tests: ~12 `fitTieBreak` cases, ~6 mode cases,
-~14 lifecycle, ~10 page, the e2e step — cited `confirmation-hierarchy US<n>`
+`TieBreakForm` component; for User Story 4, `PaymentPage.tsx`,
+`ConfirmPayment.tsx`, `RootScreen.tsx` and `index.html` (copy only), and
+seventeen assertions in six existing test files that name the old
+words. Tests: ~12 `fitTieBreak` cases, ~6 mode cases, ~14 lifecycle, ~10
+page, one copy scan, the e2e step — cited `confirmation-hierarchy US<n>`
 
 ## Decisions
 
@@ -106,6 +114,10 @@ D<n>` (constitution I).
 | D10 | `knownAccounts` holds exclusive accounts only, in every mode: `own` prefers them, then the earliest; `typed` takes one or goes undecided (the tail and the window leave the mode); a transition's held candidate asks `tie_break`. Amends 012 D10, D11, D26 | research R1, R2 |
 | D11 | A tail on a row whose superseded row does not wait on a tie-break is refused `409 TIE_BREAK_NOT_ASKED`: no row, no search. Two answers racing on one waiting row (two tabs) meet 012's one-open-attempt rule: the first supersedes it, so the second finds a row no longer waiting and is refused the same way | research R3 |
 | D12 | The es-MX copy of the three options, the views, the tie-break screen, the miss and the asks; "genérica" never appears | research R9 |
+| D13 | One wording per moment of a payment (spec FR-022), and the page's fourteen Banxico sentences mapped onto it one by one (contracts/payment-page.md, "The payer's copy"); the prototypes already speak it | research R13, creator 2026-09-30 |
+| D14 | The business by its own name (`ispName` of the link read, already on every link view) wherever the page sends the payer back; "a quien te envió el link" where no link is known; "tu servicio" for a service that came back; the tab and the no-link screen read "Tu pago" | research R13, constitution IX |
+| D15 | Banxico leaves the payer's bank list by one filter in `apps/pago` (`payerBanks`), used by `TransferForm` and by "Otro banco"; `banks.ts` stays generated and whole, because the API's vocabulary is the provider's; a draft that names Banxico drops its bank | research R13 |
+| D16 | SC-006 is a unit test in `apps/pago` that walks every string literal, template literal and JSX text of `apps/pago/src` (and the title of `index.html`) with the TypeScript compiler API and fails on `/banxico/i` or `/internet/i`; comments are not strings, so the decision comments that explain Banxico stay | research R13 |
 
 ## Constitution Check
 
@@ -116,15 +128,15 @@ Phase 1 (below the table).
 
 | # | Principle | Gate | Verdict |
 | --- | --- | --- | --- |
-| I | Spec-Driven, Every Decision Cited | Twelve decisions with the place each was made; code cites `confirmation-hierarchy D<n>`. The 012 decisions this amends (D10, D11, D15, D17, D25, D26) carry dated notes in 012's plan, so a reader of either finds the other; 012's spec already points here | PASS |
+| I | Spec-Driven, Every Decision Cited | Sixteen decisions with the place each was made; code cites `confirmation-hierarchy D<n>`. The 012 decisions this amends (D10, D11, D15, D17, D25, D26) carry dated notes in 012's plan, so a reader of either finds the other; 012's spec already points here | PASS |
 | II | Money Law | No amount changes path or shape; the answer carries no money; the 24-hour window and "today" stay in ms and the business's timezone | PASS |
 | III | One Contract, Pure Routers | Changes are to 012's not-yet-built shapes in `routes/direct-payments/schema.ts` (`ask`, `tieBreak`, the tails' refinement) plus two new codes; exported from `@devolada/api/direct-payments-schema`; no new route; the router stays pure, the rules live in the handler and the lifecycle | PASS |
 | IV | Tests Run on the Real Runtime | `fitTieBreak` and the modes are pure tables; the lifecycle runs in workerd on a real D1 with apiCEP at its pinned origin and asserts that answers make no call; the page on MSW with schema-validated fixtures and axe; order, sizes and focus on the browser layer | PASS |
 | V | Tenant Isolation and Authorization by Area | The exclusivity query filters every join by `business_id` and reads one business's records; nothing crosses businesses, so no cross-business statistic is added. No account, clave character or candidate reaches a payer schema: `tieBreak` is field names and booleans | PASS |
 | VI | Visual Foundations (NON-NEGOTIABLE) | Existing `Button` variants and declared sizes only: one decisive 64px per view, option 2 and the receipt link 48px, focus visible, tab order = visual order; the miss line is an `Alert` with icon and text; es-MX copy; no new token; no horizontal scroll at 360 | PASS |
-| VII | Every Test Cites Its Story | New tests cite `confirmation-hierarchy US1`…`US3`; tasks carry `[US<n>]`. 012's tests that this changes keep citing 012 and gain the 017 citation where they now prove this spec | PASS |
+| VII | Every Test Cites Its Story | New tests cite `confirmation-hierarchy US1`…`US4`; tasks carry `[US<n>]`. 012's tests that this changes keep citing 012 and gain the 017 citation where they now prove this spec | PASS |
 | VIII | Absent Configuration Degrades, Never Breaks | No new binding. Without the switch, nothing new is read. Without a provider credential the typed door rides the schedule as today; an answer needs no provider at all | PASS |
-| IX | The Core Speaks Generic; Adapters Translate | Accounts, claves, references and tails are SPEI's words, core facts; no provider name in contracts or copy; nothing enters an adapter | PASS |
+| IX | The Core Speaks Generic; Adapters Translate | Accounts, claves, references and tails are SPEI's words, core facts; no provider name in contracts or copy; nothing enters an adapter. User Story 4 pays a leak the page already had: fifteen phrases and two titles that assumed an ISP become the business's name and "tu servicio" (D14) | PASS |
 
 **Post-design re-check (after Phase 1).** Still PASS on all nine. Re-read
 on purpose: (III) `TIE_BREAK_EXHAUSTED` and `TIE_BREAK_NOT_ASKED` are new
@@ -177,8 +189,11 @@ apps/pago/
 ├── src/features/pago/ConfirmPayment.tsx           # ~ three views, option 2, the receipt link (D2, D3)
 ├── src/features/pago/ReceiptLink.tsx              # + the quiet receipt action (D2)
 ├── src/features/pago/TieBreakForm.tsx             # + the tie-break screen (D9, D12)
-├── src/features/pago/PaymentPage.tsx              # ~ the asks and the expired view use ReceiptLink and TieBreakForm
-└── test/confirmation-hierarchy.test.tsx           # + US1, US2 screens
+├── src/features/pago/PaymentPage.tsx              # ~ the asks and the expired view use ReceiptLink and TieBreakForm; US4 copy (D13, D14)
+├── src/features/pago/payer-banks.ts               # + payerBanks: BANKS without Banxico (D15)
+├── src/features/pago/RootScreen.tsx, index.html   # ~ "Tu pago", no ISP (D14)
+├── test/confirmation-hierarchy.test.tsx           # + US1, US2, US4 screens
+└── test/payer-copy.test.ts                        # + the copy scan (D16)
 
 tests/e2e/pago.spec.ts, stubs.ts                   # ~ order, sizes and focus at 360/768/1280, both themes
 ```

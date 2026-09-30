@@ -1,7 +1,7 @@
 # Contract: the payer's page — three options and the tie-break
 
 **Feature**: confirmation-hierarchy · **Decisions**: D2, D3, D5, D6, D8,
-D9, D11, D12 · **Route**: `apps/api/src/routes/direct-payments/{handler,schema}.ts`
+D9, D11–D16 · **Route**: `apps/api/src/routes/direct-payments/{handler,schema}.ts`
 · **Page**: `apps/pago/src/features/pago/{PaymentPage,ConfirmPayment}.tsx`
 
 A delta on [012's page contract](../../012-payment-without-receipt/contracts/payment-page.md).
@@ -138,3 +138,61 @@ on `SENDER_TAIL_NEEDED`.
 `ReceiptLink` 48px, focus visible; tab order is the visual order; tokens
 only; no horizontal scroll at 360; the miss line is an `Alert` with icon and
 text, never colour alone.
+
+## The payer's copy (User Story 4; D13–D16)
+
+Everything below applies to the payer page on every business, with the
+feature on or off. "{negocio}" is the link read's business name
+(`ispName`); `payErrorCopy` takes it where a sentence names the business.
+Lines are those of `main` at `77bc503`.
+
+### The vocabulary (spec FR-022)
+
+| Moment | Copy (es-MX) |
+| --- | --- |
+| A search is running | "Verificando tu transferencia…" — in a list of steps, "Verificamos tu transferencia" |
+| Nothing seen yet; we try again alone | "Seguimos buscando tu transferencia." + "Todavía no la vemos. Es normal al principio: volvemos a buscar solos, sin que hagas nada." |
+| The evidence is already good; only the last word is missing | "Solo falta confirmar tu transferencia" ("Solo falta confirmarla" right after the transfer was named); inside a sentence, "mientras terminamos de confirmar tu transferencia" |
+| Confirmed | "Confirmamos tu transferencia" (the badge keeps "Pago confirmado") |
+| Out of time | "No pudimos confirmar tu transferencia a tiempo" |
+
+### Sentence by sentence (`apps/pago/src/features/pago/PaymentPage.tsx` unless named)
+
+| Where | Today | Becomes |
+| --- | --- | --- |
+| 144, `payErrors.TRANSFER_NOT_FOUND` | "No encontramos tu transferencia en Banxico. Si ya la hiciste, contacta a tu proveedor de internet con tu comprobante para que la registre." | "No pudimos confirmar tu transferencia a tiempo. Si ya la hiciste, contacta a {negocio} con tu comprobante para que la registre." |
+| 848, sourced row, `ask: null` | "Seguimos buscando tu transferencia en Banxico." | "Seguimos buscando tu transferencia." |
+| 859, 1636, release after the payer confirmed their data | "Gracias por confirmar tus datos. Tu internet ya volvió mientras Banxico responde." | "Gracias por confirmar tus datos. Tu servicio ya volvió mientras terminamos de confirmar tu transferencia." |
+| 860, 1515, 1637, release, other evidence | "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada." | "Tu transferencia está en camino y tu servicio ya volvió. Solo falta confirmarla — no necesitas hacer nada." |
+| 1634, release, both readings agree | "Revisamos tu comprobante dos veces y los datos coinciden. Tu internet ya volvió mientras esperamos la respuesta de Banxico — no necesitas hacer nada." | "Revisamos tu comprobante dos veces y los datos coinciden. Tu servicio ya volvió mientras terminamos de confirmar tu transferencia — no necesitas hacer nada." |
+| 1653–1654, the long wait | "…Puedes cerrar esta página y volver después, o contactar a tu proveedor de internet con tu comprobante." | "…Puedes cerrar esta página y volver después, o contactar a {negocio} con tu comprobante." |
+| 1669–1670, both readings agree, no release | "Revisamos tu comprobante dos veces y los datos coinciden. Solo esperamos la respuesta de Banxico — no necesitas hacer nada." | "Revisamos tu comprobante dos veces y los datos coinciden. Solo falta confirmar tu transferencia — no necesitas hacer nada." |
+| 1681–1682, the default wait | "Validación en proceso: esperamos la respuesta de Banxico. No necesitas hacer nada." | "Seguimos buscando tu transferencia. Todavía no la vemos. Es normal al principio: volvemos a buscar solos, sin que hagas nada." |
+| 2013, expired after a release, retry open | "Banxico no publicó tu transferencia y tu servicio volvió a pausa. Si ya pagaste, reintenta ahora — o contacta a tu proveedor de internet con tu comprobante." | "No pudimos confirmar tu transferencia a tiempo y tu servicio volvió a pausa. Si ya pagaste, reintenta ahora — o contacta a {negocio} con tu comprobante." |
+| 2014, expired after a release | "Banxico no publicó tu transferencia y tu servicio volvió a pausa. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano." | "No pudimos confirmar tu transferencia a tiempo y tu servicio volvió a pausa. Contacta a {negocio} con tu comprobante — puede registrar tu pago a mano." |
+| 2017, expired, readings agreed, retry open | "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Si ya pagaste, reintenta ahora — o contacta a tu proveedor de internet con tu comprobante." | "Tus datos coinciden con tu comprobante, pero no pudimos confirmar la transferencia a tiempo. Si ya pagaste, reintenta ahora — o contacta a {negocio} con tu comprobante." |
+| 2018, expired, readings agreed | "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano." | "Tus datos coinciden con tu comprobante, pero no pudimos confirmar la transferencia a tiempo. Contacta a {negocio} con tu comprobante — puede registrar tu pago a mano." |
+| 2021, expired, default | "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo." | "No pudimos confirmar tu pago a tiempo. Contacta a {negocio} con tu comprobante para resolverlo." |
+| 1349, a link that does not exist | "Este link de pago no existe. Pide a tu proveedor de internet el link correcto." | "Este link de pago no existe. Pide el link correcto a quien te lo envió." |
+| `RootScreen.tsx:28`, no saved link, heading | "Pago de internet" | "Tu pago" |
+| `RootScreen.tsx:33–34`, no saved link | "Aún no tienes un link de pago guardado en este dispositivo. Pídeselo a tu proveedor de internet." | "Aún no tienes un link de pago guardado en este dispositivo. Pídeselo a quien te envió el link." |
+| `apps/pago/index.html:7`, the tab | "Pago de internet" | "Tu pago" |
+
+Comments that quote a sentence being changed follow it (for example the
+one at `PaymentPage.tsx:2026`, "the screen that just told them Banxico did
+not publish their transfer").
+
+### The bank list (D15)
+
+`payerBanks` — `BANKS` without `BANXICO` — in a new
+`apps/pago/src/features/pago/payer-banks.ts`, used by `TransferForm`
+(`PaymentPage.tsx:420`) and by "Otro banco" (`ConfirmPayment.tsx:159`). A
+draft or a status whose bank is `BANXICO` pre-selects nothing.
+
+### The check (D16, spec SC-006)
+
+`apps/pago/test/payer-copy.test.ts` (cite `confirmation-hierarchy US4`)
+walks every string literal, template literal and JSX text under
+`apps/pago/src` with the TypeScript compiler API, plus the `<title>` of
+`apps/pago/index.html`, and fails on `/banxico/i` or `/internet/i`, naming
+file and line. Comments are not read.

@@ -50,7 +50,8 @@ tasks at the points below of `specs/012-payment-without-receipt/tasks.md`:
 | T008–T012 (US1) | with 012's T021 and T027 (012 US2), finishing with T038 and T042 (012 US4) | 012 creates `ConfirmPayment` and the asks' view; US1 fixes their order |
 | T013–T021 (US2) | in place of 012's T043–T049 (012 US5), after 012 US4 | the typed path is built once, the new way |
 | T022–T024 (US3) | with 012's T030/T035 and T055/T056 | the `own` mode and the transition read exclusive accounts |
-| T025–T026 | with 012's T053–T054 | one sweep of comments, one quickstart run |
+| T025–T028 (US4) | any time: the copy it changes is on `main` already (012 is built, `70fe732`) | the payer page's copy, on every business |
+| T029–T030 | with 012's T053–T054 | one sweep of comments, one quickstart run |
 
 What happens to each amended 012 task:
 
@@ -177,10 +178,30 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Concerns
+## Phase 7: User Story 4 — The payer reads about their transfer, never about who checks it (Priority: P2)
 
-- [ ] T025 [P] Comments and records: every rule this feature adds cites `confirmation-hierarchy D<n>`; the comments 012 T053 sweeps for D11, D15, D17 and D25 say the amended meaning and cite both decisions; in `specs/012-payment-without-receipt/tasks.md`, each amended task checked off says "built per spec 017 T0xx"; the 012 tests those tasks changed (T021, T038) also cite `confirmation-hierarchy US1` where they now prove it.
-- [ ] T026 Run `specs/017-confirmation-hierarchy/quickstart.md` end to end on the sandbox, then every gate in CI order and `pnpm e2e`; record the commit and the test counts against T001's in this task's notes in `specs/017-confirmation-hierarchy/tasks.md`, and the pay route's latency for answer rows on the sandbox (SC-003's instrument).
+**Goal**: no text the payer reads names Banxico or assumes an ISP; each moment reads the same way; the payer's bank list has no Banxico.
+
+**Independent Test**: quickstart US4 — the copy scan passes; walking the page through waiting, not-yet-seen, released, expired and not-found states, and a link that does not exist, shows only the vocabulary of contracts/payment-page.md "The payer's copy".
+
+### Tests for User Story 4 (write first, see them fail)
+
+- [ ] T025 [P] [US4] The copy scan (`confirmation-hierarchy D16`, spec SC-006): a new `apps/pago/test/payer-copy.test.ts` (cite `confirmation-hierarchy US4`) that walks every `.ts`/`.tsx` file under `apps/pago/src` with the TypeScript compiler API (`typescript` is a dev dependency of `apps/pago`), collects every string literal, template-literal chunk and JSX text, reads the `<title>` of `apps/pago/index.html`, and fails on `/banxico/i` or `/internet/i` with the file, the line and the text; comments are never read. It fails today on the fourteen Banxico sentences, the fifteen ISP phrases and the two titles (research R13).
+- [ ] T026 [P] [US4] Page tests in `apps/pago/test/confirmation-hierarchy.test.tsx` (cite `confirmation-hierarchy US4`), MSW and schema-validated fixtures: the default wait reads "Seguimos buscando tu transferencia." and "Todavía no la vemos"; a release after agreement reads "Tu servicio ya volvió mientras terminamos de confirmar tu transferencia"; an expired row reads "No pudimos confirmar tu transferencia a tiempo" and names the fixture's business (`ispName`); a link that does not exist reads "Pide el link correcto a quien te lo envió."; the no-link root reads "Tu pago" and "a quien te envió el link"; the bank list of the typed form and of "Otro banco" has no "BANXICO" option; axe clean.
+
+### Implementation for User Story 4
+
+- [ ] T027 [US4] The copy (`confirmation-hierarchy D13`, `D14`; contracts/payment-page.md "The payer's copy"): every row of the sentence table in `apps/pago/src/features/pago/PaymentPage.tsx` (lines 144, 848, 859, 860, 1349, 1515, 1634, 1636, 1637, 1653–1654, 1669–1670, 1681–1682, 2013, 2014, 2017, 2018, 2021 at `77bc503`), `apps/pago/src/features/pago/RootScreen.tsx:28, 33–34` and `apps/pago/index.html:7`; `payErrorCopy` takes the business's name for `TRANSFER_NOT_FOUND`; comments that quote a changed sentence follow it (`PaymentPage.tsx:2026`). Then the seventeen assertions that name the old words, each to the new one: `apps/pago/test/pago.test.tsx:628, 648, 673, 939` (`/validación en proceso/i` → `/seguimos buscando tu transferencia/i`), `:740` (→ `/no pudimos confirmar la transferencia a tiempo/i`), `:762` (→ `/tu servicio ya volvió/i`), `:1112` (→ `/no pudimos confirmar tu transferencia a tiempo/i`); `apps/pago/test/payment-without-receipt.test.tsx:325, 563, 680, 686` (→ "Seguimos buscando tu transferencia."); `tests/design/review-pr88.spec.ts:115, 126` and `review-pr90.spec.ts:188` (→ "Seguimos buscando tu transferencia"), `review-pr94.spec.ts:142` (→ "no pudimos confirmar la transferencia a tiempo"), `review-pr104-105.spec.ts:132, 145` (→ "tu servicio ya volvió"). The "protect face" assertion (`pago.test.tsx:784`, absence of `/ya volvió/i`) stays as it is.
+- [ ] T028 [US4] The bank list (`confirmation-hierarchy D15`): a new `apps/pago/src/features/pago/payer-banks.ts` exporting `payerBanks` — `BANKS` without `"BANXICO"`, its comment citing D15 and why `banks.ts` stays whole (generated, the provider's vocabulary, read by the API); `TransferForm` (`PaymentPage.tsx:420`) and "Otro banco" (`ConfirmPayment.tsx:159`) list it; a draft or status whose bank is `BANXICO` pre-selects nothing. In `specs/012-payment-without-receipt/contracts/payment-page.md`, the asks table's `null` row reads "Seguimos buscando tu transferencia." with a dated note citing this spec.
+
+**Checkpoint**: US4 is complete — the copy scan passes, and every moment reads the same way on every business.
+
+---
+
+## Phase 8: Polish & Cross-Cutting Concerns
+
+- [ ] T029 [P] Comments and records: every rule this feature adds cites `confirmation-hierarchy D<n>`; the comments 012 T053 sweeps for D11, D15, D17 and D25 say the amended meaning and cite both decisions; in `specs/012-payment-without-receipt/tasks.md`, each amended task checked off says "built per spec 017 T0xx"; the 012 tests those tasks changed (T021, T038) also cite `confirmation-hierarchy US1` where they now prove it.
+- [ ] T030 Run `specs/017-confirmation-hierarchy/quickstart.md` end to end on the sandbox, then every gate in CI order and `pnpm e2e`; record the commit and the test counts against T001's in this task's notes in `specs/017-confirmation-hierarchy/tasks.md`, and the pay route's latency for answer rows on the sandbox (SC-003's instrument).
 
 ---
 
@@ -194,7 +215,8 @@ When one of those 012 tasks is checked off, its line says "built per spec
 - **US1 (T008–T012)**: after Foundational and 012's T027 (`ConfirmPayment` exists); T012 after 012's T042. It does not wait for Exclusive accounts.
 - **US2 (T013–T021)**: after Exclusive accounts and 012's US4 (T037–T042: the ladder and the ask route); it takes the place of 012's US5 typed tasks.
 - **US3 (T022–T024)**: after Exclusive accounts; T024 after T018 and 012's T056.
-- **Polish (T025–T026)**: after the stories wanted, with 012's T053–T054.
+- **US4 (T025–T028)**: after Setup only; it needs no other phase of this feature, and 012 is already built.
+- **Polish (T029–T030)**: after the stories wanted, with 012's T053–T054.
 
 ### User story dependencies
 
@@ -211,11 +233,12 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 - `apps/api/test/confirmation-hierarchy.test.ts`: T005, T014, T023 — sequential.
 - `apps/api/test/consta/match.test.ts`: T013, T022 — sequential.
-- `apps/pago/test/confirmation-hierarchy.test.tsx`: T008, T015 — sequential.
+- `apps/pago/test/confirmation-hierarchy.test.tsx`: T008, T015, T026 — sequential.
 - `apps/api/src/routes/direct-payments/handler.ts`: T019, T020, T024 — sequential.
 - `apps/api/src/direct-payments/validation.ts`: T018, T024 — sequential.
 - `apps/api/src/consta/bundle/match.ts`: T017, T024 — sequential.
-- `apps/pago/src/features/pago/PaymentPage.tsx`: T012, T021 — sequential.
+- `apps/pago/src/features/pago/PaymentPage.tsx`: T012, T021, T027, T028 — sequential.
+- `apps/pago/src/features/pago/ConfirmPayment.tsx`: T011, T028 — sequential.
 
 ## Parallel Examples
 
@@ -253,10 +276,11 @@ built.
    US5 typed tasks.
 4. US3 (T022–T024): exclusivity proven across the `own` mode and the
    transition.
-5. Polish (T025–T026).
+5. US4 (T025–T028): the payer's copy — it can also ship first, on its own.
+6. Polish (T029–T030).
 
 ## Notes
 
-- 26 tasks, all open; T001 records the baseline and T026 the result.
+- 30 tasks, all open; T001 records the baseline and T030 the result.
 - A task that turns out to need a decision not in plan.md stops and asks
   the creator; it does not make one silently.

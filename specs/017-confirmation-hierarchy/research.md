@@ -279,3 +279,72 @@ answer's outcome; `confirmation.tieBreakMisses` counts a confirmed chain's
 misses. SC-001 and SC-004 read those; SC-005 reads the receipt rows of
 links with a reference; SC-003 is the pay route's own latency for rows that
 make no provider call.
+
+## R13 — The payer's copy (User Story 4)
+
+**Found.** A sweep of `main` at `77bc503` (four readers in parallel: the
+page, the API's messages to payers, the specs' prescribed copy, the
+design prototypes; then one reader who re-opened every hit):
+
+- `apps/pago/src/features/pago/PaymentPage.tsx` renders **fourteen**
+  payer sentences that name Banxico (lines 144, 848, 859, 860, 1515, 1634,
+  1636, 1637, 1669–1670, 1681–1682, 2013, 2014, 2017, 2018), and every
+  other mention in that file is a comment.
+- The same page tells the payer to contact "tu proveedor de internet" in
+  **nine** places (144, 1349, 1653–1654, 2013, 2014, 2017, 2018, 2021,
+  `RootScreen.tsx:33–34`), says "tu internet ya volvió" in **six** (859,
+  860, 1515, 1634, 1636, 1637), and is titled "Pago de internet" twice
+  (`RootScreen.tsx:28`, `index.html:7`). Each assumes an ISP — a leak of
+  constitution IX older than this spec.
+- The sender-bank list comes from the generated `BANKS`
+  (`apps/api/src/direct-payments/banks.ts:40` lists `BANXICO`), rendered by
+  `TransferForm` (`PaymentPage.tsx:420`) and "Otro banco"
+  (`ConfirmPayment.tsx:159`).
+- The API sends the payer no text that names Banxico; the business's
+  email and panel do, and stay (spec Assumptions).
+- Spec 012's page contract prescribes "Seguimos buscando tu transferencia
+  en Banxico." for the waiting ask; it is the one prescribed payer
+  sentence that does.
+- The page already knows the business's name on every link view
+  (`data.ispName`: "Tu pago está en revisión con {ispName}",
+  `PaymentPage.tsx:1816`).
+- Six test files assert the old words, seventeen assertions in all:
+  `apps/pago/test/pago.test.tsx:628, 648, 673, 939, 740, 762, 1112`;
+  `apps/pago/test/payment-without-receipt.test.tsx:325, 563, 680, 686`;
+  `tests/design/review-pr88.spec.ts:115, 126`, `review-pr90.spec.ts:188`,
+  `review-pr94.spec.ts:142`, `review-pr104-105.spec.ts:132, 145`. The
+  "protect face" test (`pago.test.tsx:784`) asserts the absence of
+  `/ya volvió/i` and still holds with "tu servicio ya volvió".
+
+**Decision (D13).** One verb per moment: *verificar* while a search runs,
+*buscar* with "todavía no la vemos" while nothing is seen, *confirmar* for
+the last word ("Solo falta confirmar", "Confirmamos", "No pudimos confirmar
+… a tiempo"). The expired default already says "No pudimos confirmar tu
+pago a tiempo", so every expired branch now speaks the same way. The
+sentence-by-sentence map is in contracts/payment-page.md.
+
+**Decision (D14).** The business by its own name. Every view that sends
+the payer back has the link read, so "{negocio}" is its `ispName`. Where
+no link is known — a link that does not exist, a device with none saved —
+the payer is sent to "quien te envió el link". A service that came back is
+"tu servicio", the word the expired view already uses ("tu servicio volvió
+a pausa"). The tab and the no-link screen read "Tu pago".
+
+**Decision (D15).** Filter, do not regenerate. `banks.ts` is generated from
+the provider's own list (`gen-banks.mjs`, CI fails on drift) and serves the
+API's validation too, so Banxico stays in it. The page lists
+`payerBanks` — `BANKS` without `BANXICO` — in both places. A saved draft
+whose bank is Banxico drops the bank, and the payer picks again.
+
+**Decision (D16).** SC-006 is a test, not a review. A unit test in
+`apps/pago` parses every `.ts`/`.tsx` file under `apps/pago/src` with the
+TypeScript compiler API (already a dev dependency there) and reads every
+string literal, template literal and JSX text, plus the `<title>` of
+`apps/pago/index.html`; it fails on `/banxico/i` or `/internet/i` and
+names the file and line. Comments are not strings, so the decision trail
+that explains Banxico stays where it is.
+
+**Alternatives.** A CI script beside `pending-lint.mjs` — rejected: one
+test in the app's own suite runs in the same CI step, with no new gate to
+name. Removing `BANXICO` from `banks.data.md` — rejected: the file mirrors
+the provider's vocabulary, and the admin and the API read it too.

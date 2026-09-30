@@ -7,7 +7,9 @@
 **Status**: Draft — written from the creator's decisions of 2026-09-30.
 Builds on spec 012 (`payment-without-receipt`) as it stands on `main` at
 `e2ec70c`, and replaces the parts of it listed under "What this spec
-replaces in spec 012". No clarification is open.
+replaces in spec 012". No clarification is open. Extended the same day
+with User Story 4: the payer's copy never names Banxico and never assumes
+the business sells internet.
 
 **Input**: User description, in the creator's words (2026-09-30):
 "Evaluemos factorizar la UI para el flujo de confirmación de pago en
@@ -64,6 +66,19 @@ gaps showed up:
   and leaves those answers outside every attempt limit (012 D25). Offered
   as a first answer, four characters need a limit of their own.
 
+Reviewing the prototypes of this step, the creator added one rule for the
+whole payer page: *"el usuario que paga no tiene por qué ver copy que
+mencione a Banxico"*. Who checks a transfer behind the scenes is not the
+payer's concern; what happens to their transfer is. A sweep of the page as
+built on `main` (`77bc503`) found fourteen payer sentences that name
+Banxico; nine that send the payer to "tu proveedor de internet", six that
+say "tu internet ya volvió", and a page titled "Pago de internet" — words
+that hold only when the business is an ISP, which the core never assumes
+(constitution IX). The
+payer's bank list also offers Banxico, where no payer holds an account.
+User Story 4 fixes all of it, on every business and every state of the
+page, not only on the views this spec adds.
+
 ## What this spec replaces in spec 012
 
 Spec 012 is planned and tasked, not built (2026-09-30). Where this spec and
@@ -83,6 +98,7 @@ built.
 | User Story 2 scenario 3; User Story 5 scenarios 1, 3, 4, 5, 7 and 8 | Read with the rows above |
 | Page contract, step 2: the small exits (item 6), the "No puse la referencia" paragraph, the asks `sender_tail` and `clave_tail`, and every placement of "Sube tu comprobante" | Replaced by FR-001–FR-008 and FR-011 |
 | Plan decisions D11 (the refusal before the search), D15 (the digits before the characters), D17 (the characters only after an undecided payment) and D25 (the characters outside every limit, the digits inside the hourly one) | Revisited by this spec's plan; D25 by FR-016 |
+| Page contract, the asks table: `null` → "Seguimos buscando tu transferencia en Banxico." | "Seguimos buscando tu transferencia." (FR-020, FR-022) |
 
 Everything else in spec 012 stands: the reference and how it is born, the
 confirmation by bank and day, the read-back and "Corregir", the ladder's
@@ -142,6 +158,15 @@ rounds, what Devolada learns, and the switch per business.
   *The creator at `/speckit-clarify`, option A of three. Rejected: an
   underlined hyperlink, which needs a new look in the shared package; an
   outlined button like option 2, which is no longer quiet.*
+- Q: Does the payer ever read who verifies their transfer? → A: **No.**
+  *"El usuario que paga no tiene por qué ver copy que mencione a Banxico"*
+  — the creator, reviewing the prototypes. The page speaks of the payer's
+  transfer, their bank and their receipt, and of what "we" do with them.
+- Q: Where does that rule live, and does it cover the ISP words too? → A:
+  **In this spec, as User Story 4, built with the rest; and yes** — the
+  payer's copy never assumes the business sells internet either. *The
+  creator chose this option ("solo con la opción 1"). Rejected here: fixing
+  the page now through the bug path, which the creator did not choose.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -318,6 +343,57 @@ one person's account.
 
 ---
 
+### User Story 4 - The payer reads about their transfer, never about who checks it (Priority: P2)
+
+Everything the payer reads speaks of their own transfer and of what we do
+with it: we verify it, we keep looking for it, we confirm it, or we could
+not confirm it in time. It never names Banxico, the provider that searches
+for us, or any other institution. It never assumes the business sells
+internet: the payer is sent back to the business by its own name, and a
+service that came back is "tu servicio". The same moment always reads the
+same way, whichever path led to it. The bank list the payer picks from
+has no Banxico in it.
+
+**Why this priority**: an institution's name in a waiting message reads as
+a delay the payer might chase, and "tu proveedor de internet" is simply
+wrong for every business that is not an ISP. It is copy, not flow, so it is
+P2 — but it touches every state of the page, the ones built before this
+spec included.
+
+**Independent Test**: on any business — with the feature on or off, ISP or
+not — walk the page through waiting, not-yet-seen, provisionally released,
+confirmed, expired and not-found states and read every sentence: none names
+Banxico, none says "internet", and each moment reads as the vocabulary of
+FR-022 says. Open the bank list: no Banxico.
+
+**Acceptance Scenarios**:
+
+1. **Given** any state of the payer page, on any business, **When** it is
+   shown, **Then** no sentence, label or title names Banxico or any other
+   institution or provider.
+2. **Given** a payment still being searched, **When** the page waits,
+   **Then** it reads "Verificando tu transferencia…" while a search runs,
+   and "Seguimos buscando tu transferencia" with "Todavía no la vemos" when
+   nothing was found yet.
+3. **Given** a payment whose evidence is already good (both readings
+   agree, or the service came back), **When** it waits for the last word,
+   **Then** it reads "Solo falta confirmar tu transferencia".
+4. **Given** a payment that ran out of time, **When** the expired view is
+   shown, **Then** it reads "No pudimos confirmar tu transferencia a
+   tiempo" and sends the payer to the business by its name.
+5. **Given** a business that is not an ISP, **When** any view sends the
+   payer back to the business or says the service returned, **Then** it
+   uses the business's name and "tu servicio", never "tu proveedor de
+   internet" or "tu internet".
+6. **Given** a link that does not exist, or a device with no saved link,
+   **When** the page says so, **Then** it sends the payer to whoever sent
+   them the link, with no business named and no ISP assumed; the browser
+   tab reads "Tu pago".
+7. **Given** the list of banks the payer picks from, **When** it opens,
+   **Then** Banxico is not in it.
+
+---
+
 ### Edge Cases
 
 - **The payer has neither the account's digits nor the clave** at hand.
@@ -349,6 +425,11 @@ one person's account.
   calls. The link comes back with the first ask (FR-005).
 - **Dark mode, reduced motion, a 360-pixel screen.** The order and the
   sizes hold; there is no horizontal scroll.
+- **A saved draft names Banxico as the sender bank.** The option is gone
+  from the list; the draft's bank is dropped and the payer picks again. A
+  retail payer holds no account at Banxico, so this is near-impossible.
+- **The business's name is long, or odd.** It is shown as the business's
+  records hold it, like everywhere else on the page; the sentence wraps.
 
 ## Requirements *(mandatory)*
 
@@ -452,6 +533,29 @@ one person's account.
   clave's characters, or the whole clave — and how many wrong answers came
   before it (extending 012 FR-035).
 
+**The payer's copy**
+
+- **FR-020**: Text the payer reads — on any business, with the feature
+  on or off, in any state of the page, in titles and accessible names too
+  — MUST NOT name Banxico or any other institution or provider that verifies a
+  transfer. It speaks of the payer's transfer, bank and receipt, and of
+  what "we" do with them. The business's panel, its emails and the landing
+  page are not the payer's and may keep the word.
+- **FR-021**: Text the payer reads MUST NOT assume the business sells
+  internet. Where the page sends the payer back to the business it uses
+  the business's name; where no business is known (a link that does not
+  exist, a device with no saved link) it says "a quien te envió el link";
+  a service that came back is "tu servicio". The browser tab reads "Tu
+  pago".
+- **FR-022**: Each moment MUST read the same way wherever it appears: a
+  search running — "Verificando tu transferencia…" (in a list of steps,
+  "Verificamos tu transferencia"); nothing seen yet — "Seguimos buscando tu
+  transferencia" with "Todavía no la vemos"; the evidence already good —
+  "Solo falta confirmar tu transferencia"; confirmed — "Confirmamos tu
+  transferencia"; out of time — "No pudimos confirmar tu transferencia a
+  tiempo".
+- **FR-023**: The banks the payer picks from MUST NOT include Banxico.
+
 ### Key Entities
 
 - **Tie-break answer**: what a payer gives to tie a typed reference to one
@@ -465,6 +569,9 @@ one person's account.
   confirms a payment of another person.
 - **Confirmation** (spec 012): also records what decided it among this
   spec's facts, and the wrong answers before it.
+- **The payer's vocabulary**: one wording per moment of a payment (FR-022),
+  shared by every view that shows that moment. Copy, not data: nothing is
+  stored.
 
 ## Success Criteria *(mandatory)*
 
@@ -484,6 +591,9 @@ one person's account.
 - **SC-005**: Within two months of launch at the pilot business, at most
   20% of the confirmed payments of links with a reference come through a
   receipt.
+- **SC-006**: Zero payer-facing texts name Banxico or say "internet": the
+  check reads every string the payer page can render, and fails on the
+  first one.
 
 ## Assumptions
 
@@ -516,6 +626,12 @@ one person's account.
   decide and the payer is asked (plan D4).
 - The copy quoted here is es-MX and final in meaning. Its exact wording is
   settled with the page's other copy at the plan.
+- User Story 4 covers the payer page as it is built on `main`, including
+  the views specs 012 and earlier built, and the pages of businesses
+  without the feature. Its copy is the payer's only; the business's panel
+  (for example "Proteger el servicio mientras Banxico confirma"), the
+  emails to businesses and the landing page keep their words.
 - Out of scope: the payment instructions (step 1), the search by the
-  payer's own reference, the ladder's rounds, the receipt reader, the pages
-  of businesses without the feature, and the WhatsApp channel.
+  payer's own reference, the ladder's rounds, the receipt reader, and the
+  WhatsApp channel. The pages of businesses without the feature are out of
+  scope for User Stories 1–3 only; User Story 4 covers them.

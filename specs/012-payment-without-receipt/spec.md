@@ -63,6 +63,17 @@ model, and a few code comments around the bundle): those now mean spec 016.
 User Story 2, scenario 5, below. The rewrite of 2026-09-29 kept that
 scenario's number and meaning; the stories after User Story 2 are new.
 
+## Where spec 017 changes this spec
+
+On 2026-09-30 the creator fixed the order of the confirmation step and the
+tie-break of a typed reference in a spec of their own,
+[`specs/017-confirmation-hierarchy`](../017-confirmation-hierarchy/spec.md).
+Where the two differ, spec 017 holds: FR-015 (the typed reference's ask),
+FR-021, FR-029 (the receipt's place), FR-031–FR-033, FR-041, User Story 2
+scenario 3, User Story 5 scenarios 1, 3–5, 7 and 8, the page contract's
+step 2 and asks, and plan decisions D11, D15, D17 and D25. Spec 017's plan
+reconciles this spec's plan, page contract and tasks before they are built.
+
 ## Where this comes from
 
 Today a payment is proven by a **capture** of the bank's receipt. The

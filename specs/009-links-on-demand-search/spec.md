@@ -426,6 +426,12 @@ shows for that customer afterwards.
   Devolada's own operational fields (when it was created, its own state). It
   MUST NOT store the customer's name, phone or service state: to operate,
   those are always read fresh from WispHub.
+  *Note 2026-09-30 (spec 012, payment-without-receipt D1): a customer's
+  payer reference — the last seven digits of their phone when that phone
+  is one person's — is kept beside the link, in its own table keyed like
+  the link, never on the link row. Those seven digits are the reference
+  itself, shown to the payer and printed on their transfers; the whole
+  phone and the name are still never stored.*
 - **FR-011**: The search text MUST survive navigating to another page and
   back, the browser's back button and a reload, and a search MUST have an
   address that opens on that search.

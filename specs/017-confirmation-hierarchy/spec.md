@@ -73,13 +73,13 @@ built.
 
 | Spec 012 | What changes here |
 | --- | --- |
-| FR-015, on a typed reference: the undecided payment asks the clave's last four characters, with "Sube tu comprobante" as the second option | One ask with two ways to answer (FR-011–FR-014); the receipt is the quiet last option (FR-004) |
+| FR-015, on a typed reference: the undecided payment asks the clave's last four characters, with "Sube tu comprobante" as the second option | The tie-break screen: one screen with two ways to answer (FR-011–FR-014); the receipt is the quiet last option (FR-004) |
 | FR-021: an account learned for the customer decides a tie | Only an account that belongs to this person alone decides (FR-015) |
 | FR-029: the ladder's clave ask, with "Sube tu comprobante" as the second option | The receipt takes FR-004's form and place |
 | FR-031: "No puse la referencia" offers the reference or the clave, with the receipt second | It becomes option 2 of the step (FR-001, FR-003); the receipt is option 3 |
-| FR-032: the second fact is a learned account or the account's digits, which the plan asks before the search when no account is learned at that bank (012 D11) | The second fact is an exclusive learned account, or the account's digits, or the clave's last four characters; it is asked once, after the search found transfers (FR-009–FR-012) |
+| FR-032: the second fact is a learned account or the account's digits, which the plan asks before the search when no account is learned at that bank (012 D11) | The second fact is an exclusive learned account, or the account's digits, or the clave's last four characters, on one screen with two ways to answer, shown after the search found transfers (FR-009–FR-012) |
 | FR-033: digits that fit nothing lead to the clave and the receipt | A wrong answer is asked again, up to the limit of FR-016 |
-| FR-041: during a transition, the previous holder's account, then their digits, then the clave's characters; the new owner asked for their digits | The same one ask of FR-011; only exclusive accounts decide (FR-015) |
+| FR-041: during a transition, the previous holder's account, then their digits, then the clave's characters; the new owner asked for their digits | The same tie-break screen of FR-011; only exclusive accounts decide (FR-015) |
 | User Story 2 scenario 3; User Story 5 scenarios 1, 3, 4, 5, 7 and 8 | Read with the rows above |
 | Page contract, step 2: the small exits (item 6), the "No puse la referencia" paragraph, the asks `sender_tail` and `clave_tail`, and every placement of "Sube tu comprobante" | Replaced by FR-001–FR-008 and FR-011 |
 | Plan decisions D11 (the refusal before the search), D15 (the digits before the characters), D17 (the characters only after an undecided payment) and D25 (the characters outside every limit) | Revisited by this spec's plan |
@@ -106,6 +106,12 @@ rounds, what Devolada learns, and the switch per business.
   and today only for customer B must not hand B's transfer to A.
 - Q: A new spec, or an amendment typed into spec 012? → A: **A new spec**,
   which names what it replaces in spec 012.
+- Q: What is "the ask" of the tie-break? → A: **One screen with two ways to
+  answer** — the account's last four digits or the clave's last four
+  characters, either one enough — in place of spec 012's two questions in a
+  row. It is not asked only once: it comes back after an answer that fits
+  nothing (up to FR-016's limit), and an answer that fits several leads to
+  the other way and then to the whole clave. *The creator, the same day.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -174,10 +180,10 @@ Devolada searches with it. When the search finds one or more transfers,
 Devolada first looks at the payer's history: an account this customer paid
 from before that no other person of the business has used. If exactly one
 of the transfers comes from such an account, it confirms the payment and
-nothing is asked. Otherwise the page asks once, with two ways to answer —
-"los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste" or "los
-últimos 4 caracteres de tu clave de rastreo" — whichever the payer has at
-hand. The answer is checked against the transfers already found, with no new
+nothing is asked. Otherwise the page shows one screen with two ways to
+answer — "los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste"
+or "los últimos 4 caracteres de tu clave de rastreo" — and the payer uses
+whichever they have at hand. The answer is checked against the transfers already found, with no new
 search. After three answers that fit nothing in a day, only the whole clave
 and the receipt link are left on that link.
 
@@ -203,8 +209,8 @@ receipt link offered.
    learned account decided it.
 2. **Given** a typed reference that matches one or more transfers, none of
    them singled out by an exclusive learned account, **When** the search
-   answers, **Then** the page asks once, offers both ways to answer, and
-   says that either one is enough.
+   answers, **Then** the page shows the tie-break screen: one screen with
+   both ways to answer, saying that either one is enough.
 3. **Given** the ask, **When** the payer gives the clave's last four
    characters and they fit exactly one of the transfers found (O read as 0,
    I as 1), **Then** that transfer confirms the payment with no new search.
@@ -273,7 +279,7 @@ one person's account.
 5. **Given** a reference in transition (012 FR-041), **When** a transfer
    with the previous digits comes from an account that is not exclusive to
    the previous holder, **Then** it does not confirm for the previous holder
-   without the one ask of User Story 2.
+   without the tie-break screen of User Story 2.
 
 ---
 
@@ -352,10 +358,12 @@ one person's account.
   asking anything, and the payment records that a learned account decided
   it.
 - **FR-011**: When history does not single out one transfer, the page MUST
-  ask once, after the search found transfers, offering two ways to answer,
-  either one enough: the last four digits of the account or card the payer
-  paid from, or the last four characters of their clave de rastreo. It MUST
-  never suggest digits or characters.
+  show the tie-break screen, after the search found transfers: one screen
+  with two ways to answer, either one enough — the last four digits of the
+  account or card the payer paid from, or the last four characters of their
+  clave de rastreo. It is one screen, not two questions in a row; it is shown
+  again only as FR-013 and FR-014 say. It MUST never suggest digits or
+  characters.
 - **FR-012**: An answer MUST be checked only against the transfers already
   found, and checking it MUST NOT spend a provider call. The clave's
   characters are compared with O read as 0 and I as 1. The account's digits

@@ -83,16 +83,29 @@ A reload lands on the confirmation.
    "either"`, with the amount (the link's, editable), the bank and the day;
    then **Volver** (`ghost`, 48px) and `ReceiptLink`, last. The *No* of
    012's question opens this view.
-3. **The receipt** (option 3) — today's capture guide and upload,
-   unchanged, then **Volver**.
+3. **The receipt** (option 3) — `PaymentPage`'s existing receipt block
+   (capture guide, upload, the reader's refusals and asks), passed into
+   `ConfirmPayment` and shown here, never moved; then **Volver** (D3).
 
 **`ReceiptLink`** — one component in `apps/pago`: `Button
 variant="ghost"`, 48px high, `text-sm`, full width, "Subir foto del
 comprobante"; the recipe of today's "No tengo el comprobante a la mano"
-(`PaymentPage.tsx:1936-1939`). On a page with a reference it is the only way
-the receipt is offered, and it is always the last action of its view: the
-confirmation, the typed form, every ask (`check_data`, `clave`,
-`tie_break`), the expired view.
+(`PaymentPage.tsx:1936-1939`) — the quiet action the spec clarified. On a
+page with a reference it is the only way the receipt is offered, and it is
+always the last action of its view, on exactly the views spec FR-005 names:
+
+| View | `ReceiptLink` |
+| --- | --- |
+| The confirmation; the typed form | yes, last |
+| An ask: `check_data`, `clave`, `tie_break` | yes, last |
+| "Ya se usó para…" (`TRANSFER_ALREADY_USED`) | yes, last |
+| A refusal: `REFERENCE_OF_ANOTHER`, `TRANSFER_DATE_OUT_OF_RANGE`, `CORRECTIONS_EXHAUSTED`, `TIE_BREAK_EXHAUSTED` | yes, last |
+| Expired | yes, last |
+| The plain wait: `validating` with `ask: null` ("Seguimos buscando") | **no** — nothing is asked yet (012 FR-027) |
+| Confirmed, partial, unapplied, in review by the business | no — the transfer was found |
+
+On a row that waits or has stopped, it opens the receipt block on 012
+T042's re-submission path.
 
 **The tie-break screen** (`ask: "tie_break"`), under 012's read-back:
 

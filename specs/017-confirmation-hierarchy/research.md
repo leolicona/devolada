@@ -197,6 +197,13 @@ question opens the typed form. The view lives in the page's state, not on
 the device: a reload lands on the confirmation, which is the order the spec
 wants. On a link without a reference, the step is today's, receipt first.
 
+The receipt view does not move the upload. The capture guide, the upload
+mutation, the reader's refusals and receipt-triage's asks live in
+`PaymentPage` and stay there; `ConfirmPayment` receives that block and
+shows it in its receipt view. On a row that waits or has stopped, the same
+`ReceiptLink` opens the same block on the re-submission path 012 T042
+builds for the ladder. *Amended after `/speckit-analyze` (U1).*
+
 ## R9 — The copy
 
 **Decision (D12).** es-MX, saying what was searched and never suggesting
@@ -216,6 +223,7 @@ the payer lied (012 FR-037):
 | Only the characters | "Para confirmar que esta transferencia es tuya, escribe los últimos 4 caracteres de tu clave de rastreo." |
 | Only the digits | "Escribe también los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." |
 | Limit reached | 012's clave copy: "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app." |
+| 012's refusals that name the receipt (`REFERENCE_OF_ANOTHER`, `CORRECTIONS_EXHAUSTED`) | their words end "…o sube la foto de tu comprobante", matching the link's words (analysis T1) |
 
 "Genérica" appears nowhere in this feature's copy (FR-007).
 

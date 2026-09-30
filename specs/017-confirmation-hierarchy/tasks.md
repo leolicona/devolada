@@ -89,43 +89,51 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: the column, the index, the sandbox, the helpers, and the one query every story reads.
+**Purpose**: the column, the index, the sandbox and the helpers.
 
 **⚠️ CRITICAL**: no user story work begins until this phase is complete.
 
 - [ ] T002 Schema (data-model.md; `confirmation-hierarchy D4`, `D7`): in `apps/api/src/db/schema.ts` add `payments.tieBreak` — `text("tie_break", { enum: ["none", "one", "several"] })`, nullable, its comment citing D7 and saying NULL means the row carried no answer — and `index("cep_records_business_account_idx").on(t.businessId, t.senderAccount)` on `cepRecords`, its comment citing D4. If 012's `0041_payment_without_receipt.sql` has not landed on `main`, regenerate it with `pnpm --filter @devolada/api db:generate` so both join it; if it has, generate the next number and amend data-model.md's first paragraph. Apply with `pnpm --filter @devolada/api db:migrate:local`.
 - [ ] T003 [P] Sandbox scenarios in `apps/api/sandbox/apicep-mock.mjs` (quickstart "Sandbox additions"): fix the claves of `…44`'s two CEPs to end `…0412` (account tail 4417) and `…977I` (account tail 8301); add `…55` (two CEPs, tails 8301 and 4417, claves both ending `…5510`) and `…66` (one CEP, tail 8301, clave ending `…3O1K`).
 - [ ] T004 [P] Test helpers in `apps/api/test/payer-helpers.ts` (012 T007): `seedPaidBy(db, { businessId, customer, account, accountType, clave })` — a confirmed payment on that customer's link that adopted `clave`, with its `cep_records` row sending from `account`, so an account can be made learned for one customer or for two people; and apiCEP bundle answers for `…44`, `…55` and `…66` through `fetchMock` at the pinned origin, matching T003.
+**Checkpoint**: the schema, the sandbox and the helpers exist — US1 can start.
+
+---
+
+## Phase 3: Exclusive accounts (blocks US2 and US3, not US1)
+
+**Purpose**: the one query US2 and US3 read — which accounts have paid another person. US1 does not read it, so it can run before or beside this phase (analysis I1).
+
 - [ ] T005 [P] Tests for the exclusivity query in a new `apps/api/test/confirmation-hierarchy.test.ts` (cite `confirmation-hierarchy US3`), through `accountsOfOthers` with `seedPaidBy`: an account that paid only customer A → not in A's set; one that paid A and B, another person → in the set for A and for B; one that paid two services of one person → not in that person's set; a paid customer with no reference row → another person, unless it is the customer being confirmed; a row of another business with the same account → never read.
 - [ ] T006 `accountsOfOthers(db, businessId, referenceId, customer, accounts)` in `apps/api/src/direct-payments/payer-reference.ts` beside 012's `learnedAccounts` (contracts/engine.md; `confirmation-hierarchy D4`): one query from `cep_records` by `(business_id, sender_account)` through the confirmed or partial payments that adopted those claves, their links, and `payer_reference_customers`; every join filtered by `business_id`; returns the accounts that paid a customer outside `referenceId`.
 - [ ] T007 The receipt side (`confirmation-hierarchy D4`, `D10`; builds 012 T035): `othersAccounts?: string[]` in `ReceiptSide` (`apps/api/src/consta/bundle/types.ts`); `receiptSideOf` in `apps/api/src/direct-payments/cep-match.ts` passes `knownAccounts` = the service's learned accounts minus `accountsOfOthers(…)` over the candidates' accounts, and `othersAccounts` = that set, for `own` and `typed` rows.
 
-**Checkpoint**: the schema, the sandbox, the helpers and exclusivity exist — the stories can start.
+**Checkpoint**: exclusivity exists — US2 and US3 can start.
 
 ---
 
-## Phase 3: User Story 1 — Three ways to confirm, in a fixed order (Priority: P1) 🎯 MVP
+## Phase 4: User Story 1 — Three ways to confirm, in a fixed order (Priority: P1) 🎯 MVP
 
-**Goal**: step 2 on a link with a reference offers the own-reference confirmation first, "Usé otra referencia" second, and the receipt as a quiet link last, on every view.
+**Goal**: step 2 on a link with a reference offers the own-reference confirmation first, "Usé otra referencia" second, and the receipt as a quiet action last, on the views spec FR-005 names and never in the plain wait of the first rounds.
 
 **Independent Test**: quickstart US1 — open a link with a reference; see the three options in order; open the typed and receipt views and come back; see today's page on a link without a reference.
 
 ### Tests for User Story 1 (write first, see them fail)
 
-- [ ] T008 [P] [US1] Page tests in a new `apps/pago/test/confirmation-hierarchy.test.tsx` (cite `confirmation-hierarchy US1`), MSW with `onUnhandledRequest: "error"` and schema-validated fixtures: with `payerReference`, step 2's controls in DOM order — bank, day, read-back, "Pagué otra cantidad", **Confirmar pago**, **Usé otra referencia**, "Subir foto del comprobante" — and exactly one button of the decisive recipe; **Usé otra referencia** shows "Escribe la referencia que usaste o tu clave de rastreo. Con una basta.", the form, **Volver** and the receipt link last, and **Volver** returns with no request sent; the receipt link shows the capture guide, the upload and **Volver**; *No* to "¿Pusiste la referencia…?" opens the typed view with no request; a remount lands on the confirmation; the `check_data` ask, the `clave` ask and the expired view each end with the receipt link and offer no "Sube tu comprobante" beside anything; without `payerReference`, today's step (capture guide first, "No tengo el comprobante a la mano"); axe clean on every view.
+- [ ] T008 [P] [US1] Page tests in a new `apps/pago/test/confirmation-hierarchy.test.tsx` (cite `confirmation-hierarchy US1`), MSW with `onUnhandledRequest: "error"` and schema-validated fixtures: with `payerReference`, step 2's controls in DOM order — bank, day, read-back, "Pagué otra cantidad", **Confirmar pago**, **Usé otra referencia**, "Subir foto del comprobante" — and exactly one button of the decisive recipe; **Usé otra referencia** shows "Escribe la referencia que usaste o tu clave de rastreo. Con una basta.", the form, **Volver** and the receipt link last, and **Volver** returns with no request sent; the receipt link shows the capture guide, the upload and **Volver**; *No* to "¿Pusiste la referencia…?" opens the typed view with no request; a remount lands on the confirmation; the receipt link is the last action of every view the contract's `ReceiptLink` table marks "yes" — the `check_data`, `clave` and `tie_break` asks, "Ya se usó para…", each refusal (`REFERENCE_OF_ANOTHER`, `TRANSFER_DATE_OUT_OF_RANGE`, `CORRECTIONS_EXHAUSTED`, `TIE_BREAK_EXHAUSTED`) and the expired view — with no "Sube tu comprobante" beside anything; `validating` with `ask: null` ("Seguimos buscando") shows no receipt link; the word "genérica" appears on no view; without `payerReference`, today's step (capture guide first, "No tengo el comprobante a la mano"); axe clean on every view.
 - [ ] T009 [P] [US1] The browser layer in `tests/e2e/pago.spec.ts` with stubs in `tests/e2e/stubs.ts` validated by the exported schemas (cite `confirmation-hierarchy US1`): the confirmation, typed and receipt views at 360, 768 and 1280 in both themes — **Confirmar pago** 64px, **Usé otra referencia** and the receipt link at least 48px, a measured focus ring on each, Tab order equal to the visual order, no horizontal scroll, axe with contrast and target size on.
 
 ### Implementation for User Story 1
 
 - [ ] T010 [US1] `ReceiptLink` in a new `apps/pago/src/features/pago/ReceiptLink.tsx` (`confirmation-hierarchy D2`): `Button variant="ghost"` from `@devolada/ui`, `className="h-12 w-full text-sm"`, "Subir foto del comprobante", an `onClick` prop; its comment cites D2 and names the recipe it takes over from today's "No tengo el comprobante a la mano" (`PaymentPage.tsx:1936-1939`), and why not the `link` variant (not a 48px target).
-- [ ] T011 [US1] Three views in `apps/pago/src/features/pago/ConfirmPayment.tsx` (`confirmation-hierarchy D2`, `D3`; builds 012 T027 with this in place of its exits): a `view` state `"confirm" | "typed" | "receipt"` in the component, never persisted; under **Confirmar pago**, **Usé otra referencia** (`Button variant="secondary"`, standard, full width) and `ReceiptLink`; the typed view — the intro line, today's `TransferForm` in `keys = "either"` with the link's amount and the business's timezone — sending `referenceSource: "typed"` once T016 has landed, and until then today's typed door (no `referenceSource`), so US1 ships alone on today's guarded path — then **Volver** (`ghost`, `h-12`) and `ReceiptLink`; the receipt view — today's `CaptureGuide` and `ReceiptForm`, moved here for links with a reference, then **Volver**; 012's *No* sets the typed view.
-- [ ] T012 [US1] The asks and the expired view in `apps/pago/src/features/pago/PaymentPage.tsx` (`confirmation-hierarchy D2`; builds 012 T042 this way): on rows of a link with `payerReference`, the `check_data` and `clave` asks and the expired view end with `ReceiptLink`, which opens the receipt view; links without `payerReference` keep today's proof step untouched (FR-006).
+- [ ] T011 [US1] Three views in `apps/pago/src/features/pago/ConfirmPayment.tsx` (`confirmation-hierarchy D2`, `D3`; builds 012 T027 with this in place of its exits): a `view` state `"confirm" | "typed" | "receipt"` in the component, never persisted; under **Confirmar pago**, **Usé otra referencia** (`Button variant="secondary"`, standard, full width) and `ReceiptLink`; the typed view — the intro line, today's `TransferForm` in `keys = "either"` with the link's amount and the business's timezone — sending `referenceSource: "typed"` once T016 has landed, and until then today's typed door (no `referenceSource`), so US1 ships alone on today's guarded path — then **Volver** (`ghost`, `h-12`) and `ReceiptLink`; the receipt view — `PaymentPage`'s existing receipt block (capture guide, upload mutation, the reader's refusals and receipt-triage's asks), received as a prop and rendered here, never moved (D3), then **Volver**; 012's *No* sets the typed view.
+- [ ] T012 [US1] The asks and the expired view in `apps/pago/src/features/pago/PaymentPage.tsx` (`confirmation-hierarchy D2`; builds 012 T042 this way): on rows of a link with `payerReference`, every view the contract's `ReceiptLink` table marks "yes" ends with `ReceiptLink` — the asks, "Ya se usó para…", the refusals, the expired view — which opens the receipt block on 012 T042's re-submission path; the plain wait (`validating`, `ask: null`) shows none; 012's refusal copy that names the receipt ends "…o sube la foto de tu comprobante" (research R9); links without `payerReference` keep today's proof step untouched (FR-006).
 
-**Checkpoint**: US1 is complete — the step's order holds on every view, and a page without a reference is today's.
+**Checkpoint**: US1 is complete — the step's order holds on the views FR-005 names, the plain wait shows no receipt link, and a page without a reference is today's.
 
 ---
 
-## Phase 4: User Story 2 — A typed reference is tied to the payer by history, or by one short answer (Priority: P1)
+## Phase 5: User Story 2 — A typed reference is tied to the payer by history, or by one short answer (Priority: P1)
 
 **Goal**: a typed reference searches at once; an exclusive learned account decides alone; otherwise one screen with two ways to answer, read without a call, bounded to three misses per link a day.
 
@@ -134,7 +142,7 @@ When one of those 012 tasks is checked off, its line says "built per spec
 ### Tests for User Story 2 (write first, see them fail)
 
 - [ ] T013 [P] [US2] Pure tables in `apps/api/test/consta/match.test.ts` (cite `confirmation-hierarchy US2`): `fitTieBreak` — digits alone fit one, several, none (by `tailFits`, a CLABE's end and the account inside it); characters alone with O read as 0 and I as 1 (`9771` fits `…977I`, `3010` fits `…3O1K`); both agreeing → one, `by: "clave_tail"`; both disagreeing → none; one way fitting nothing while the other fits → none; digits alone choosing an account in `othersAccounts` → `needs ["clave_tail"]`, and the characters then fitting it → one; several on digits alone → `needs ["clave_tail"]`, on characters alone → `needs ["sender_tail"]`, on both → `clave`; never a candidate outside the list. `typed` mode: `knownAccounts` picking exactly one → chosen, `by: "learned_account"`; two or none → undecided; a `tail` or a time on the receipt side changes nothing in this mode.
-- [ ] T014 [P] [US2] Lifecycle tests in `apps/api/test/confirmation-hierarchy.test.ts` (cite `confirmation-hierarchy US2`), with `payer-helpers.ts`: a typed confirmation searches at once — one provider call, never `SENDER_TAIL_NEEDED`; `…44` → `validating`, `CEP_UNDECIDED`, status `ask: "tie_break"`, `tieBreak { ways: ["sender_tail", "clave_tail"], missed: false, several: true }`; `…66` (one transfer) → asked too, `several: false`; an exclusive learned account tying one → confirmed, nothing asked, `by: "learned_account"`; answering `0412` → confirmed from the kept record with no apiCEP call (`fetchMock` sees none), `by: "clave_tail"`, `tie_break = 'one'`, `confirmation.tieBreakMisses = 0`; answering the digits `4417` → confirmed, `by: "sender_tail"`; `8301` with `0412` → `tie_break = 'none'`, the trail carried, `missed: true`; `…55` answered `5510` → `tie_break = 'several'`, `ways: ["sender_tail"]`, then `4417` with the characters carried forward → confirmed; both given and several → `ask: "clave"`; three misses on one link → `ask: "clave"`, a fourth tail → `409 TIE_BREAK_EXHAUSTED` and no row, and the window reopens after 24 hours; six answers within an hour never meet `TOO_MANY_ATTEMPTS`; a tail superseding a row not waiting on a tie-break → `409 TIE_BREAK_NOT_ASKED`, no row, no call; an answer keeps `ladder_round` and `correction_count`; a candidate another payment claimed meanwhile is dropped at answer time; an unanswered tie-break keeps no slot and never expires; 012 T043's cases that stand — `REFERENCE_OF_ANOTHER`, D3-unsafe digits searched as a shared reference (now asking `tie_break`), the payer's own typed as `own`; no status or pay response carries account digits, candidate claves or a candidate list.
+- [ ] T014 [P] [US2] Lifecycle tests in `apps/api/test/confirmation-hierarchy.test.ts` (cite `confirmation-hierarchy US2`), with `payer-helpers.ts`: a typed confirmation searches at once — one provider call, never `SENDER_TAIL_NEEDED`; `…44` → `validating`, `CEP_UNDECIDED`, status `ask: "tie_break"`, `tieBreak { ways: ["sender_tail", "clave_tail"], missed: false, several: true }`; `…66` (one transfer) → asked too, `several: false`; an exclusive learned account tying one → confirmed, nothing asked, `by: "learned_account"`; answering `0412` → confirmed from the kept record with no apiCEP call (`fetchMock` sees none), `by: "clave_tail"`, `tie_break = 'one'`, `confirmation.tieBreakMisses = 0`; answering the digits `4417` → confirmed, `by: "sender_tail"`; `8301` with `0412` → `tie_break = 'none'`, the trail carried, `missed: true`; `…55` answered `5510` → `tie_break = 'several'`, `ways: ["sender_tail"]`, then `4417` with the characters carried forward → confirmed; both given and several → `ask: "clave"`; three misses on one link → `ask: "clave"`, a fourth tail → `409 TIE_BREAK_EXHAUSTED` and no row; the moving window — misses at t, t+1 h and t+2 h, then at t+24 h+1 min one more answer is accepted and a second is refused, since the oldest miss alone stopped counting; a miss followed by a fitting answer → confirmed with `confirmation.tieBreakMisses = 1`; answers never count toward `HOURLY_ATTEMPT_BUDGET` — with two misses and three confirmations or corrections in one hour, a sixth row that is an answer is accepted; a tail superseding a row not waiting on a tie-break → `409 TIE_BREAK_NOT_ASKED`, no row, no call; an answer keeps `ladder_round` and `correction_count`; a candidate another payment claimed meanwhile is dropped at answer time; an unanswered tie-break keeps no slot and never expires; 012 T043's cases that stand — `REFERENCE_OF_ANOTHER`, D3-unsafe digits searched as a shared reference (now asking `tie_break`), the payer's own typed as `own`; no status or pay response carries account digits, candidate claves or a candidate list.
 - [ ] T015 [P] [US2] Page tests in `apps/pago/test/confirmation-hierarchy.test.tsx` (cite `confirmation-hierarchy US2`): the tie-break screen by `tieBreak` — both fields with "o" between them and the opening sentence by `several`; `ways: ["clave_tail"]` → the characters field only, with its sentence; `ways: ["sender_tail"]` → the digits field only, with "Escribe también…"; `missed` → the miss line in an `Alert` with icon and text; **Confirmar** enabled only when a shown field is complete; it sends `supersedes` and the waiting row's reference, bank, day and amount with the tails typed; neither field pre-filled; the characters upper-cased as typed; `TIE_BREAK_EXHAUSTED` and `ask: "clave"` → 012's clave ask with `ReceiptLink` last; `TIE_BREAK_NOT_ASKED` → the status re-read; `ReceiptLink` last; axe clean.
 
 ### Implementation for User Story 2
@@ -150,7 +158,7 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 ---
 
-## Phase 5: User Story 3 — An account that pays for several people never decides alone (Priority: P2)
+## Phase 6: User Story 3 — An account that pays for several people never decides alone (Priority: P2)
 
 **Goal**: exclusivity holds in every mode — typed, own, and the transition.
 
@@ -159,7 +167,7 @@ When one of those 012 tasks is checked off, its line says "built per spec
 ### Tests for User Story 3 (write first, see them fail)
 
 - [ ] T022 [P] [US3] Pure tables in `apps/api/test/consta/match.test.ts` (cite `confirmation-hierarchy US3`; amends 012 T030): `own` mode with a learned account in `othersAccounts` and not in `knownAccounts` → the earliest not-used transfer wins, `by: "earliest"`; with an exclusive one → it goes first, `by: "learned_account"`; during a transition, a chosen candidate from an account not in `knownAccounts` is held.
-- [ ] T023 [P] [US3] Lifecycle tests in `apps/api/test/confirmation-hierarchy.test.ts` (cite `confirmation-hierarchy US3`; amends 012 T055's asks), with `seedPaidBy`: account 8301 having paid A and B (two people), A's typed `…44` → the tie-break screen, history not deciding; A answering the digits `8301` → `ways: ["clave_tail"]`, and the right characters confirm; a customer whose learned 4417 is exclusive → confirmed with no question; exclusivity read at the tie — a payment an account decided while exclusive stays as it is after the account pays another person, and the next tie is not decided by it; own reference, two of the person's transfers, the learned account shared with another person → the earliest not yet used confirms; the transition (012 D26): the previous holder's old digits with a transfer from an account not exclusive to them → `tie_break`, and the new owner's candidate from an account not known for them → `tie_break` with both ways.
+- [ ] T023 [P] [US3] Lifecycle tests in `apps/api/test/confirmation-hierarchy.test.ts` (cite `confirmation-hierarchy US3`; amends 012 T055's asks), with `seedPaidBy`: account 8301 having paid A and B (two people), A's typed `…44` → the tie-break screen, history not deciding; A answering the digits `8301` → `ways: ["clave_tail"]`, and the right characters confirm; the same for B, the other person, whose history does not decide either; a customer whose learned 4417 is exclusive → confirmed with no question; exclusivity read at the tie — a payment an account decided while exclusive stays as it is after the account pays another person, and the next tie is not decided by it; own reference, two of the person's transfers, the learned account shared with another person → the earliest not yet used confirms; the transition (012 D26): the previous holder's old digits with a transfer from an account not exclusive to them → `tie_break`, and the new owner's candidate from an account not known for them → `tie_break` with both ways.
 
 ### Implementation for User Story 3
 
@@ -169,10 +177,10 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T025 [P] Comments and records: every rule this feature adds cites `confirmation-hierarchy D<n>`; the comments 012 T053 sweeps for D11, D15, D17 and D25 say the amended meaning and cite both decisions; in `specs/012-payment-without-receipt/tasks.md`, each amended task checked off says "built per spec 017 T0xx".
-- [ ] T026 Run `specs/017-confirmation-hierarchy/quickstart.md` end to end on the sandbox, then every gate in CI order and `pnpm e2e`; record the commit and the test counts against T001's in this task's notes in `specs/017-confirmation-hierarchy/tasks.md`.
+- [ ] T025 [P] Comments and records: every rule this feature adds cites `confirmation-hierarchy D<n>`; the comments 012 T053 sweeps for D11, D15, D17 and D25 say the amended meaning and cite both decisions; in `specs/012-payment-without-receipt/tasks.md`, each amended task checked off says "built per spec 017 T0xx"; the 012 tests those tasks changed (T021, T038) also cite `confirmation-hierarchy US1` where they now prove it.
+- [ ] T026 Run `specs/017-confirmation-hierarchy/quickstart.md` end to end on the sandbox, then every gate in CI order and `pnpm e2e`; record the commit and the test counts against T001's in this task's notes in `specs/017-confirmation-hierarchy/tasks.md`, and the pay route's latency for answer rows on the sandbox (SC-003's instrument).
 
 ---
 
@@ -181,16 +189,17 @@ When one of those 012 tasks is checked off, its line says "built per spec
 ### Phase dependencies
 
 - **Setup (T001)**: after 012's T001–T008.
-- **Foundational (T002–T007)**: after T001. T005–T007 also need 012's T034 (`learnedAccounts`) and run with 012's T035.
-- **US1 (T008–T012)**: after Foundational and 012's T027 (`ConfirmPayment` exists); T012 after 012's T042.
-- **US2 (T013–T021)**: after Foundational and 012's US4 (T037–T042: the ladder and the ask route); it takes the place of 012's US5 typed tasks.
-- **US3 (T022–T024)**: after Foundational; T024 after T018 and 012's T056.
+- **Foundational (T002–T004)**: after T001.
+- **Exclusive accounts (T005–T007)**: after Foundational and 012's T034 (`learnedAccounts`); runs with 012's T035.
+- **US1 (T008–T012)**: after Foundational and 012's T027 (`ConfirmPayment` exists); T012 after 012's T042. It does not wait for Exclusive accounts.
+- **US2 (T013–T021)**: after Exclusive accounts and 012's US4 (T037–T042: the ladder and the ask route); it takes the place of 012's US5 typed tasks.
+- **US3 (T022–T024)**: after Exclusive accounts; T024 after T018 and 012's T056.
 - **Polish (T025–T026)**: after the stories wanted, with 012's T053–T054.
 
 ### User story dependencies
 
 - **US1** needs no other story of this feature.
-- **US2** needs no other story of this feature; it reads the exclusivity of Foundational.
+- **US2** needs no other story of this feature; it reads Exclusive accounts (T005–T007).
 - **US3** needs US2's answer path (T018) only for the transition's tie-break (T024).
 
 ### Within each story
@@ -212,7 +221,10 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 ```text
 # Foundational, once T002 has landed:
-T003 sandbox scenarios   |  T004 test helpers   |  T005 exclusivity tests
+T003 sandbox scenarios   |  T004 test helpers
+
+# Exclusive accounts beside US1 (different files):
+T005 exclusivity tests → T006 → T007   |  T008 page tests (US1)  |  T009 e2e (US1)
 
 # US1 and US2 tests together (different files):
 T008 page tests (US1)    |  T009 e2e (US1)      |  T013 fitTieBreak tables (US2)  |  T014 lifecycle tests (US2)
@@ -225,7 +237,7 @@ T016 schema.ts           |  T017 match.ts       |  T021 TieBreakForm.tsx (after 
 
 ### MVP first (User Story 1)
 
-With 012's US1 and US2 built, T001–T012 give the payer the new order: the
+With 012's US1 and US2 built, T001–T004 and T008–T012 give the payer the new order: the
 own reference in the centre, the typed form second, the receipt quiet.
 Until US2 lands, the typed form sends today's typed door, with today's
 shared-reference stops and matcher (T011), so a typed reference never
@@ -234,9 +246,9 @@ built.
 
 ### Incremental delivery
 
-1. Foundational (T002–T007): exclusivity exists; the `own` mode is already
-   safer, since `knownAccounts` holds exclusive accounts only.
-2. US1 (T008–T012): the order.
+1. Foundational (T002–T004), then US1 (T008–T012): the order.
+2. Exclusive accounts (T005–T007): the `own` mode is already safer, since
+   `knownAccounts` holds exclusive accounts only.
 3. US2 (T013–T021): the typed path and the tie-break, in place of 012's
    US5 typed tasks.
 4. US3 (T022–T024): exclusivity proven across the `own` mode and the

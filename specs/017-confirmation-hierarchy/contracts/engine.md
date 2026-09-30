@@ -85,9 +85,11 @@ Modes, amended (D10):
 - **An answer** (a row with `senderTail` and/or `claveTail`, superseding a
   row waiting on a tie-break):
   1. `submitPayment` refuses `TIE_BREAK_EXHAUSTED` when the link has three
-     rows with `tie_break = 'none'` in the last 24 hours, and
-     `TIE_BREAK_NOT_ASKED` when the superseded row is not waiting on a
-     tie-break; neither writes a row. The hourly budget does not count
+     rows with `tie_break = 'none'` created in the last 24 hours (a moving
+     window), and `TIE_BREAK_NOT_ASKED` when the superseded row is not
+     waiting on a tie-break — including one another answer superseded a
+     moment before (two tabs; 012's one-open-attempt rule); neither writes
+     a row. The hourly budget does not count
      the row (012 D25 amended).
   2. The row takes the waiting row's reference, bank, day, amount,
      `ladder_round` and `correction_count`; it never calls the provider and

@@ -48,8 +48,12 @@ pnpm e2e                              # the step at 360/768/1280, both themes
 4. On a reference never proven, answer *No* to "¿Pusiste la referencia…?".
    **Expect**: the typed form, no search.
 5. Reload on any view. **Expect**: the confirmation.
-6. Turn the switch off and reopen. **Expect**: today's page, receipt first.
-7. Keyboard only: Tab through the step. **Expect**: option 1's controls,
+6. Confirm with a reference the sandbox does not find. **Expect**:
+   "Seguimos buscando" with no receipt link; after round 3, the data check
+   with the receipt link last. Refuse a day outside the last 30 days, and
+   open a transfer already used: each view ends with the receipt link.
+7. Turn the switch off and reopen. **Expect**: today's page, receipt first.
+8. Keyboard only: Tab through the step. **Expect**: option 1's controls,
    then option 2, then the receipt link, each with a visible ring.
 
 ## US2 — The tie-break on a typed reference
@@ -72,8 +76,9 @@ pnpm e2e                              # the step at 360/768/1280, both themes
    transferencia…" — a single match is asked too. `3010` → confirmed.
 8. On one link, answer three misses. **Expect**: the miss line twice, then
    the whole clave only, with the receipt link. A fourth answer sent by
-   hand → `409 TIE_BREAK_EXHAUSTED`. Three misses never trip the hourly
-   `TOO_MANY_ATTEMPTS`.
+   hand → `409 TIE_BREAK_EXHAUSTED`. Answers never trip the hourly
+   `TOO_MANY_ATTEMPTS`. The window moves: 24 hours after the first miss,
+   one answer is accepted again (the lifecycle suite steps the clock).
 9. Leave a tie-break unanswered past the schedule. **Expect**: still "en
    revisión", no expiry, no further provider calls.
 
@@ -101,6 +106,7 @@ each adopting a clave whose `cep_records` row comes from the account ending
 ## Reading the success criteria
 
 With the business id `$B`, each is one query over that business
-(data-model.md): SC-001 from `match_trail.by` on typed rows that found
+(data-model.md), except SC-003, which is the pay route's latency on
+answer rows (T026 records it on the sandbox): SC-001 from `match_trail.by` on typed rows that found
 transfers; SC-004 from links with three `tie_break = 'none'` rows in a
 window; SC-005 from the receipt rows of links with a reference.

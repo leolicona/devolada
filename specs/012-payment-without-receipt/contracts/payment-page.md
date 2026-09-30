@@ -12,7 +12,8 @@ D14–D17, D21, D22, D24–D26 · **Route**: `apps/api/src/routes/direct-payment
 > `tie_break`, with `tieBreak`); step 2's item 6 (the small exits); the
 > "No puse la referencia" paragraph; the asks `sender_tail` and
 > `clave_tail`; and every placement of "Sube tu comprobante", which becomes
-> the quiet `ReceiptLink`, last. D25's line reads with 017 D8.
+> the quiet `ReceiptLink`, last, on the views 017's FR-005 names — never in
+> the plain wait of the first rounds. D25's line reads with 017 D8.
 
 Everything here is additive and exported from
 `@devolada/api/direct-payments-schema` (constitution III). With

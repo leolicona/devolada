@@ -510,7 +510,10 @@ one person's account.
   FR-013), which surfaces it. The pilot measures what the limit costs
   honest payers (SC-004) and whether anyone guesses (SC-002).
 - "Exclusive" uses spec 012's person: one phone and one name. Two services
-  of one person share their accounts, and that is not a second person.
+  of one person share their accounts, and that is not a second person. A
+  paid customer that has no reference yet counts as another person, unless
+  it is the customer being confirmed: when in doubt, history does not
+  decide and the payer is asked (plan D4).
 - The copy quoted here is es-MX and final in meaning. Its exact wording is
   settled with the page's other copy at the plan.
 - Out of scope: the payment instructions (step 1), the search by the

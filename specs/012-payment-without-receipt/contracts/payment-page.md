@@ -57,11 +57,13 @@ The refinement that demands a key (`schema.ts:144`) accepts
 | --- | --- | --- | --- |
 | 409 | `REFERENCE_NOT_READY` | `own` asked, and the link has no active reference (feature off, or not born yet) | today's receipt step |
 | 409 | `TRANSFER_DATE_OUT_OF_RANGE` | `own`/`typed` day before today − 30 or after today (business timezone) | the day row, with the copy below |
-| 409 | `REFERENCE_OF_ANOTHER` | `typed` reference is another person's in this business (FR-034) | the clave and the receipt |
+| 409 | `REFERENCE_OF_ANOTHER` | `typed` reference is another person's active reference in this business (FR-034); digits no person holds go on as a shared reference | the clave and the receipt |
 | 409 | `SENDER_TAIL_NEEDED` | `typed`, no `senderTail`, no account learned for this service at that bank (FR-032) | the four-digit field |
 | 409 | `CORRECTIONS_EXHAUSTED` | a fourth search-spending correction without a clave or a receipt (FR-024) | the clave and the receipt |
 
 `REFERENCE_SHARED` is never answered to `own` or `typed` (D9).
+`TOO_MANY_ATTEMPTS` (429) never refuses a row that carries a clave, a
+clave tail or a receipt (D25); confirmations and corrections still count.
 
 ## `directPaymentStatusResponse` — four fields
 
@@ -74,6 +76,9 @@ referenceSource: z.enum(["own", "typed"]).nullable().optional(),
 senderTail: z.string().nullable().optional(),
 /* D14: every day the rounds searched, for the read-back */
 searchedDays: z.array(isoDate).optional(),
+/* D24: on TRANSFER_ALREADY_USED, the payment that used the transfer —
+   only when it is one of the same person's; null otherwise (FR-013) */
+usedBy: z.object({ day: isoDate, amountCents: z.number().int() }).nullable().optional(),
 ```
 
 `publicPaymentError` gains no word: the asks are fields, and the existing
@@ -119,13 +124,20 @@ always there (FR-023). Then, by `ask`:
 | null | "Seguimos buscando tu transferencia en Banxico." | none |
 | `check_data` | "Todavía no encontramos tu transferencia. Revisa que estos datos sean los de tu app, y que hayas puesto la referencia 234 5678." | *Todo está bien* (remembered on the device, no call) · *Corregir* |
 | `clave` | "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app." | clave field, `focusClave` · "Sube tu comprobante" |
-| `sender_tail` | "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." | four digits |
+| `sender_tail` | "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." | four digits (asked before `clave_tail`, D15) |
 | `clave_tail` | "Encontramos más de una transferencia con esos datos. Escribe los últimos 4 caracteres de tu clave de rastreo." | four characters · "Sube tu comprobante" |
 
 With a provisional release standing, every ask adds: "Tu servicio sigue
 activo. Tu clave o tu comprobante confirman el pago antes de que venza."
 (D18). The copy says what was searched and what could differ; it never
 suggests the payer lied (FR-037).
+
+**Used before** (`TRANSFER_ALREADY_USED`): with `usedBy`, "Ya se usó para
+tu pago del 12 de septiembre por $350.00."; without it, today's sentence.
+
+**Expired** (a row with `referenceSource`): the clave field and "Sube tu
+comprobante" stay on the page (FR-030); there is no "Reintentar ahora",
+which needs a clave.
 
 **Refusals**: `TRANSFER_DATE_OUT_OF_RANGE` — "Elige un día de los últimos
 30 días."; `REFERENCE_OF_ANOTHER` — "Esa referencia es de otra persona.

@@ -10,8 +10,11 @@ creator's second session: the reference is the payer's phone, there is
 nothing to register, Devolada learns how each customer pays, and a short
 ladder takes over when a transfer is not found. Clarified 2026-09-29 and
 2026-09-30: the ladder, the undecided bundle and the account tail
-confirmed, and the reference made the person's, shared by the services of
-one phone. No clarification is open.
+confirmed, and the reference made the person's — one phone and one name —
+shared by that person's services. After `/speckit-analyze` (2026-09-30):
+new numbers for the whole person, banks only from the past, the detail of
+a used transfer only when it is the payer's own, and the clave and receipt
+outside the hourly limit. No clarification is open.
 
 **Input**: User description: "Pago sin comprobante. The payer registers a
 recurring payment profile (sending bank + unique reference from their
@@ -175,8 +178,8 @@ ladder here asks earlier (FR-028, FR-029).
   when they equal the tail of the business's own receiving account. The
   payer always sees the exact number. (This closes the question the first
   version left open on the reference format.) *Amended 2026-09-30: the
-  reference belongs to the person, so customers who share a phone share
-  it, up to three; see Session 2026-09-30.*
+  reference belongs to the person — one phone and one name — so that
+  person's services share it; see Session 2026-09-30.*
 - Q: Does the payer register anything? → A: **No.** The reference is shown
   from the first visit; the bank and the day are given, preselected, on
   every confirmation.
@@ -248,6 +251,9 @@ ladder here asks earlier (FR-028, FR-029).
   needs the phone proven first — a feature of its own (Assumptions).*
   Decided now because a reference lives in the payer's bank app: changing
   its unit later means every payer updating their saved contact.
+  *Amended the same day, after `/speckit-analyze`: "the same person" is
+  the same phone **and** the same name, not "up to three customers"; see
+  below.*
 - Q (the creator's): Same service, same amount, bank, sending account and
   reference — only the time and the clave differ. Would asking the last
   digits of the clave work? → A: **In that case nothing needs asking**:
@@ -260,6 +266,41 @@ ladder here asks earlier (FR-028, FR-029).
   without a call and with far less to type. The ladder's ask (FR-029)
   still wants the whole clave, because nothing has been found to compare
   a part with.
+
+After `/speckit-analyze` (same day), the creator decided five more:
+
+- Q: How does Devolada know that two customers with the same phone are the
+  same person? → A: **Same phone and same name** — first name and surname
+  as the business's records hold them, ignoring accents and letter case.
+  Customers with the same phone and different names are different people:
+  each person gets a number of their own, and the phone's digits go to no
+  one, since nobody can tell whose phone it is. The business corrects it
+  from the panel: "Es la misma persona" joins two customers into one
+  person; "No es la misma persona" separates one. *This replaces the
+  "more than three customers" line and the "not personal" mark: an office
+  number put on customers who gave none now separates by itself, because
+  the names differ. Rejected: the business deciding every repeated phone
+  by hand; the payer confirming their services, which needs the phone
+  proven first (the wallet).*
+- Q: When the business gives a customer a new reference, and that person
+  has several services on it, which services change? → A: **All of that
+  person's services**: the person keeps one number, now a new one.
+  *Rejected: only that service, which leaves one person with two numbers.*
+- Q: From payments made before this feature, what does Devolada learn? →
+  A: **The bank only.** The sending account of a receipt searched by clave
+  was never kept; accounts are learned from confirmations made after
+  launch. *Rejected: asking Banxico again for every old payment (one paid
+  call each), and re-reading stored captures (kept 15 days).*
+- Q: When the transfer already confirmed another payment, what is the
+  payer told? → A: **The detail only when that payment is theirs** — one
+  of the same person's services: "Ya se usó para tu pago del 12 de
+  septiembre por $350.00". Otherwise, today's general sentence. *Rejected:
+  never the detail; always the detail, which would show another person's
+  payment.*
+- Q: The link allows five attempts an hour; a payer who confirms and
+  corrects three times could not send their clave or receipt. → A: **The
+  clave and the receipt never count** toward that limit; corrections do.
+  Receipts keep their own upload limit (20 an hour).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -280,11 +321,11 @@ shared-reference ambiguity at its root, and it is the one thing the payer
 has to do differently. Every other story depends on it.
 
 **Independent Test**: on a business with the feature on, open the links of
-a customer with a phone of their own, of two customers who share a phone,
-and of four who share another; see the first three shown their phone's
-last seven digits (the two sharing one the same number) and the four an
-assigned number each; see the reference in the message the panel prepares
-for the link. Delivers value alone: from the first transfer, the business
+a customer with a phone of their own, of two customers with one phone and
+one name, and of two with one phone and different names; see the first
+three shown their phone's last seven digits (the two of one name the same
+number) and the last two an assigned number each; see the reference in
+the message the panel prepares for the link. Delivers value alone: from the first transfer, the business
 can tell its customers apart by reference on any receipt or statement.
 
 **Acceptance Scenarios**:
@@ -293,14 +334,14 @@ can tell its customers apart by reference on any receipt or statement.
    **When** they open their link, **Then** the page shows their reference
    (the phone's last seven digits, said to be so), copyable, with where to
    type it and the save-as-contact tip, and asks them nothing.
-2. **Given** two or three customers of one business whose records hold the
-   same phone (one person with several services), **When** each link is
-   opened, **Then** all show the same reference, the phone's digits.
+2. **Given** customers of one business whose records hold the same phone
+   and the same name (one person with several services), **When** each
+   link is opened, **Then** all show the same reference, the phone's
+   digits.
 3. **Given** a customer with no phone on record, a link made through the
-   collections API, or a phone that is on more than three customers or
-   that the business marked as not personal, **When** they open their
-   link, **Then** they see an assigned number of their own, and the page
-   does not call it their phone.
+   collections API, or a phone that customers with different names share,
+   **When** they open their link, **Then** they see an assigned number —
+   one per person — and the page does not call it their phone.
 4. **Given** a phone whose last seven digits are already another person's
    reference (a different phone ending the same), or equal the last seven
    digits of the business's own receiving account, **When** that
@@ -308,9 +349,11 @@ can tell its customers apart by reference on any receipt or statement.
    instead.
 5. **Given** a customer with a reference, **When** the business's operator
    opens that customer, **Then** they see the reference, whether it is the
-   phone's or assigned, and which other customers share it, and can reset
-   it or mark the phone as not personal; the affected links then show the
-   new numbers.
+   phone's or assigned, and which other customers share it, and can give
+   the person a new number (all their services change), join the customer
+   to another with the same phone ("Es la misma persona") or separate it
+   ("No es la misma persona"); the affected links then show the new
+   numbers.
 6. **Given** a customer who uploads a capture anyway, **When** the
    capture's reference differs from their own, **Then** the payment is
    still accepted on the receipt path and the payer is reminded of their
@@ -545,21 +588,29 @@ question.
 
 ### Edge Cases
 
-- **One phone on several customers.** Up to three, it is one person with
-  several services, and they share the phone's reference. More than three,
-  or marked by the business, it is an office number put on customers who
-  gave none: each gets an assigned number, so a payer who types that phone
-  out of habit matches nobody rather than somebody. A customer added later
-  who takes a phone past three gets an assigned number; the ones already
-  sharing it keep theirs.
-- **One household, two services, one confirmation without a transfer.**
-  With a shared reference, a service confirmed by someone who did not pay
-  can take the transfer meant for the other service. Accepted with the
-  per-person reference (Clarifications 2026-09-30): the mix stays inside
-  one phone's services, and a transfer from an account not learned for
-  that service is marked for the operator.
+- **One phone on several customers.** With one name, it is one person with
+  several services, and they share the phone's reference. With different
+  names — a family where each pays their own, or an office number put on
+  customers who gave none — each person gets an assigned number, and the
+  phone's digits go to no one, so a payer who types that phone out of
+  habit matches nobody rather than somebody. A customer added later with
+  that phone joins the person of the same name; a new name gets its own
+  number, and whoever held the phone's digits keeps them (FR-003). The
+  business joins or separates people from the panel when a name is
+  written two ways or two people share one.
+- **One person, two services, one confirmation without a transfer.** With
+  a shared reference, a service confirmed without paying can take the
+  transfer meant for the other service. Accepted with the per-person
+  reference (Clarifications 2026-09-30): the mix stays inside one person's
+  services, and a transfer from an account not learned for that service is
+  marked for the operator.
 - **The phone changes.** The reference does not follow it; the payer may
-  have saved it in their bank. The operator can reset it on purpose.
+  have saved it in their bank. The operator can give the person a new
+  number on purpose.
+- **A day outside the last 30 days.** A confirmation for a day after today,
+  or more than 30 days ago in the business's timezone, is refused before
+  any search; the page asks for a day within the last 30 days (older
+  transfers go through the receipt).
 - **The payer's bank app does not let them set the reference, or resets it
   to a default.** The instant path cannot find the transfer. The payer
   gets there through "No puse la referencia", the ladder's clave, or the
@@ -602,16 +653,19 @@ question.
 **The reference**
 
 - **FR-001**: Every customer of a business that has this feature on MUST
-  have a numeric reference of at most seven digits from the moment their
-  payment link exists. A reference belongs to a person: the customers of
-  the business whose records hold the same phone share it, and no two
-  persons share one. No registration is asked of the payer.
+  have a numeric reference of at most seven digits as soon as their
+  payment link exists and their phone can be checked; until it can (the
+  business's system not answering, or existing links still being
+  prepared), their link works as it does today. A reference belongs to a
+  person: the customers of the business whose records hold the same phone
+  and the same name share it, and no two persons share one. No
+  registration is asked of the payer.
 - **FR-002**: The reference MUST be the last seven digits of the customer's
   phone as the business's records hold it. Devolada MUST assign another
-  seven-digit number instead — one per customer — when the customer has no
-  phone; when the phone is on more than three customers of the business,
-  or the business marked it as not personal; when those digits are already
-  another person's reference; when they equal the last seven digits of
+  seven-digit number instead — one per person — when the customer has no
+  phone; when customers with different names share the phone, or the
+  business separated them; when those digits are already another person's
+  reference; when they equal the last seven digits of
   an account the business receives on; or when they look like a bank
   app's default — one digit repeated (0000000) or a straight run up or
   down (2345678, 7654321) — or start with 0. An assigned number never falls
@@ -620,11 +674,14 @@ question.
   default-looking and leading-zero cases are new; the creator confirms
   them with the plan.*
 - **FR-003**: A reference MUST NOT change by itself once shown. A customer
-  added later with a shared phone joins its reference while the phone
-  stays within three customers; one who takes it past three gets an
-  assigned number, and those already sharing it keep theirs. The
-  business's operator MAY reset a reference or mark a phone as not
-  personal; the affected links then show their new numbers.
+  added later with the phone and the name of a person joins that person's
+  reference; one with the phone and another name gets a number of their
+  own, and whoever already holds the phone's digits keeps them. The
+  business's operator MAY give a person a new number — every service of
+  that person changes — join a customer to another person with the same
+  phone ("Es la misma persona"), or separate a customer into a person of
+  their own ("No es la misma persona"); the affected links then show their
+  new numbers.
 - **FR-004**: The payment instructions MUST show the reference next to the
   amount and the receiving account, each copyable; say whether it is the
   phone's digits; say where it goes — in the payer's bank's own words when
@@ -637,7 +694,9 @@ question.
   API.
 - **FR-006**: The business's operator MUST see, per customer, the reference,
   whether it is the phone's or assigned, the other customers who share it,
-  the learned banks, and the learned accounts by their last four digits.
+  the other customers with the same phone and another name (the ones "Es la
+  misma persona" could join), the learned banks, and the learned accounts
+  by their last four digits.
 
 **The confirmation**
 
@@ -652,15 +711,18 @@ question.
   sent. The search uses it, exact to the cent, and the partial and
   overpayment rules that already exist settle the result.
 - **FR-010**: Until the payer's own reference has confirmed a payment, on
-  any of their services, "Ya pagué" MUST first ask whether they put it on the transfer. "No"
-  spends no search and leads to FR-031, or to the receipt path until
-  FR-031 ships.
+  any of their services, "Ya pagué" MUST first ask whether they put it on
+  the transfer. "No" spends no search and leads to FR-031, or to the
+  receipt path until FR-031 ships.
 - **FR-011**: On confirmation Devolada MUST search once by reference,
   amount, bank and day.
 - **FR-012**: A single valid match MUST confirm the payment and fire the
   existing action, recording the clave and the credit time.
 - **FR-013**: A CEP marked as validated before MUST NOT confirm a second
-  payment; the payer is told which payment already used it.
+  payment. When the payment that used it is one of the same person's, the
+  payer is told its day and amount ("Ya se usó para tu pago del 12 de
+  septiembre por $350.00"); otherwise the general sentence, and nothing of
+  another person's payment.
 - **FR-014**: Where the business's integration can restore the service
   while a payment is confirmed, a confirmation MUST count as the payer's
   own evidence, under the same rules and the same history revocation as a
@@ -682,17 +744,20 @@ question.
 
 **What Devolada learns**
 
-- **FR-016**: Devolada MUST learn, per customer, the sending banks and the
-  sending accounts of every confirmed payment of that customer, whatever
-  path confirmed it, including payments confirmed before this feature.
-- **FR-017**: The confirmation MUST offer the customer's learned banks
-  first, most recent first, at most three, with the most recent
-  preselected, and "Otro banco" after them.
+- **FR-016**: Devolada MUST learn the sending bank of every confirmed
+  payment, whatever path confirmed it, including payments confirmed before
+  this feature; and the sending account of every payment confirmed after
+  it. Banks are learned per person (every service sharing the reference),
+  accounts per service (the customer the payment was for).
+- **FR-017**: The confirmation MUST offer the person's learned banks first,
+  most recent first, at most three, with the most recent preselected, and
+  "Otro banco" after them.
 - **FR-018**: "Otro banco" MUST list first the banks this business's own
   customers use most. No other business's data informs the order.
 - **FR-019**: A sending account MUST never be shown to a payer, whole or in
-  part, and MUST never be suggested to them. Accounts are kept under the
-  business and shown only to its operators (last four digits) and to
+  part, and MUST never be suggested to them. Data read from CEPs (sender
+  names, accounts) is kept only under the business it belongs to and shown
+  only to its operators (accounts by their last four digits) and to
   platform operators.
 - **FR-020**: A transfer found with the customer's own reference and sent
   from an account not yet learned MUST still confirm; the account is
@@ -702,8 +767,8 @@ question.
   account learned for the customer being confirmed, that transfer MUST
   confirm the payment without asking the payer, and the payment records
   that a learned account decided it.
-- **FR-022**: Data read from CEPs (sender names, accounts) MUST be kept
-  only under the business it belongs to.
+- **FR-022**: *Merged into FR-019 on 2026-09-30 (the analysis found the two
+  said the same); the number is kept so later requirements keep theirs.*
 
 **While it validates, and the ladder**
 
@@ -714,11 +779,15 @@ question.
   search at once when a searched field changed; a correction that changes
   nothing spends none. At most three corrections per payment spend a
   search; after that the page offers the clave and the receipt.
+  Corrections count toward the link's limit of attempts per hour; a clave
+  or a receipt never does.
 - **FR-025**: Searches MUST follow the existing validation schedule, in
-  rounds. A round is one slot of the schedule or one correction, and
-  searches one day — except the neighbouring-days round, which searches
-  each neighbouring calendar day once, never a day after today and never
-  the operation day.
+  rounds. A round is one slot of the schedule, or one correction, whose
+  search got an answer from the provider — a slot that got none (the
+  quota spent, the provider down) is not a round. A round searches one
+  day, except the neighbouring-days round, which searches each
+  neighbouring calendar day once, never a day after today and never the
+  operation day.
 - **FR-026**: The first three rounds MUST be: the confirmation; the
   schedule's first slot (2 minutes today), on the day given; and its second
   slot (8 minutes today), on the neighbouring days.
@@ -755,7 +824,9 @@ question.
   confirm; the page offers the clave and the receipt.
 - **FR-034**: A typed reference that is another person's reference in the
   same business MUST NOT be searched for this payer; the page asks for
-  the clave or the receipt.
+  the clave or the receipt. Digits that belong to no person — a phone
+  customers with different names share — are an ordinary shared
+  reference: FR-032 applies.
 
 **Across the feature**
 
@@ -779,11 +850,13 @@ question.
 
 - **Payer reference**: a person's seven-digit number inside one business —
   the digits, whether they are a phone's or assigned, the customers
-  (services) that share it, when it was set or reset. No two persons of
-  the business share one; a phone marked as not personal holds none.
-- **Learned bank**: a bank a customer has paid from — when it was last
-  used, how many confirmed payments came from it.
-- **Learned account**: a sending account a customer has paid from — its
+  (services) that share it, when it was set or changed. A person is the
+  customers with one phone and one name, unless the business joined or
+  separated them. No two persons of the business share one; a phone shared
+  by different people gives its digits to no one.
+- **Learned bank**: a bank a person has paid from — when it was last used,
+  how many confirmed payments came from it.
+- **Learned account**: a sending account a service was paid from — its
   bank, its type and number as the CEP names them, when it was first and
   last seen. Kept under the business; never shown to a payer.
 - **Confirmation**: a payer's "Ya pagué" — the bank, the day, the amount
@@ -827,8 +900,11 @@ question.
   panel, read through the business's integration as the customer's other
   data is today; a link made through the collections API carries none, so
   its customer gets an assigned number. How many of the pilot business's
-  customers have no phone or share one is counted before planning, since
-  it says how often an assigned number appears.
+  customers have no phone, and how many share one under different names,
+  is counted before release, since it says how often an assigned number
+  appears. Names are compared as the business's records hold them,
+  ignoring accents and letter case; a name written two ways is joined by
+  the business from the panel.
 - The amount searched is the one the payer's link asks unless the payer
   gives another: read through the business's integration as today when the
   link was made in the panel (for an ISP, its open invoices), or stored on

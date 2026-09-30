@@ -18,9 +18,10 @@ Declared in `integrations/capabilities.ts` beside `receivables` and
 `capabilitiesOf(integration).customersWithPhone`.
 
 ```ts
-/* Every customer of this business whose phone normalises to `phone`.
-   The adapter pages to the end; the core only counts and keys. */
-customersWithPhone(phone: string): Promise<{ usuario: string }[]>;
+/* Every customer of this business whose phone normalises to `phone`,
+   with its name. The adapter pages to the end; the core groups by name,
+   and stores neither the phone nor the names. */
+customersWithPhone(phone: string): Promise<{ usuario: string; firstName: string; lastName: string }[]>;
 ```
 
 WispHub: `telefono__contains=<last seven>` on the customers list, paged at
@@ -40,16 +41,21 @@ export async function ensurePayerReference(
 1. The customer already holds an active reference → it.
 2. `nationalPhone(phone)` null, or its last seven fail D3 → a new
    assigned number.
-3. The digits exist in the business: `blocked` → assigned; `active` and
-   `phone`, held by customers whose phone is this one (live check through
-   `customersWithPhone`) → join it; any other holder → assigned.
-4. New digits → count `customersWithPhone(phone)`: ≤ 3 → a `phone`
-   reference, this customer its first holder; > 3 → a `blocked` row for
-   the digits (`shared_by_many`) and an assigned number.
+3. Read `customersWithPhone(phone)` and group by `personName(first, last)`
+   (lower case, no accents, spaces collapsed). This customer's person is
+   its name's group.
+4. A customer of that group already holds a reference → join it.
+5. The digits exist in the business as another holder's `phone` reference,
+   or `blocked` → an assigned number (FR-003: whoever holds the digits
+   keeps them).
+6. New digits: one name in the group list → a `phone` reference for this
+   person; several names → a `blocked` row for the digits
+   (`different_people`) and an assigned number for this person.
 
 `assignNumber(db, business)` draws until an insert under the unique
-`(business_id, digits)` succeeds (D6). `resetReference` and
-`markNotPersonal` implement the panel's two actions.
+`(business_id, digits)` succeeds (D6). `newNumberFor(person)`,
+`joinPerson(customer, withCustomer)` and `separate(customer)` implement the
+panel's three actions (contracts/panel.md).
 
 ## The backfill sweep (D5)
 

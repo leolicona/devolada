@@ -22,7 +22,7 @@ comprobante. El comprobante sigue disponible."
 ```ts
 /* D1: null when the customer has no link or no reference yet */
 payerReference: z
-  .object({ digits: z.string(), origin: z.enum(["phone", "assigned"]), sharedWith: z.number().int().min(0).max(2) })
+  .object({ digits: z.string(), origin: z.enum(["phone", "assigned"]), sharedWith: z.number().int().min(0) })
   .nullable()
   .optional(),
 ```
@@ -35,31 +35,31 @@ asignada", and "· compartida con 1" when `sharedWith > 0`.
 ```ts
 payerProfileResponse = z.object({
   reference: z.object({ digits, origin: z.enum(["phone", "assigned"]) }).nullable(),
-  /* the other customers holding the same reference (FR-006) */
-  sharedWith: z.array(z.object({ source: z.enum(["panel", "api"]), customerKey: z.string() })),
+  /* the other customers of the same person (FR-006) */
+  sharedWith: z.array(customerRef),
+  /* D4/FR-006: customers with the same phone and another name — the ones
+     "Es la misma persona" can join. Read live; no phone is returned */
+  samePhoneOthers: z.array(customerRef),
   /* D12: per person */
   banks: z.array(bank),
   /* D12: per service; the last four digits only — the whole account never
      leaves the API (FR-019, spec 013 FR-010) */
   accounts: z.array(z.object({ bank, accountType: z.string(), tail: z.string() })),
 });
+const customerRef = z.object({ linkId: z.string(), source: z.enum(["panel", "api"]), customerKey: z.string() });
 ```
 
 Errors: 404 `NOT_FOUND` (a link of another business, or none).
 
-## `POST /direct-payments/payer-profiles/:linkId/reset` — `payments: operate`
+## The three actions (D6) — `payments: operate`
 
-Retires the customer's reference and gives it a new assigned number (D6);
-the others who shared it keep theirs. Answers `payerProfileResponse`.
-Confirmation dialog: "El cliente tendrá que usar una referencia nueva. Si
-la guardó en su banco, deberá cambiarla."
+Each answers `payerProfileResponse` for the same link.
 
-## `POST /direct-payments/payer-profiles/:linkId/not-personal` — `payments: operate`
-
-Blocks the phone's digits and gives each customer who held them an
-assigned number of its own (D6). Only for a `phone` reference; 409
-`NOT_A_PHONE_REFERENCE` otherwise. Dialog: "Cada cliente con este teléfono
-recibirá su propia referencia."
+| Route | What it does | Dialog (es-MX) |
+| --- | --- | --- |
+| `POST /direct-payments/payer-profiles/:linkId/new-number` | The person's reference retires; every customer of that person moves to one new assigned number | "Todos los servicios de esta persona tendrán una referencia nueva. Si la guardó en su banco, deberá cambiarla." |
+| `POST /direct-payments/payer-profiles/:linkId/join` `{ withLinkId }` | This customer joins the person of `withLinkId`, which must be one of `samePhoneOthers`; 409 `NOT_SAME_PHONE` otherwise | "Este servicio usará la referencia 234 5678, igual que los demás de esta persona." |
+| `POST /direct-payments/payer-profiles/:linkId/separate` | This customer leaves its person for an assigned number of its own; 409 `ALREADY_ALONE` when no other customer shares it | "Este servicio tendrá su propia referencia. Si el cliente la guardó en su banco, deberá cambiarla." |
 
 ## The feed
 
@@ -67,7 +67,9 @@ recibirá su propia referencia."
 
 ```ts
 referenceSource: z.enum(["own", "typed"]).nullable().optional(),
-/* D10/D11/D17: what chose the transfer — null for a single match */
+/* D10/D11/D17: what chose the transfer — null for a single match found
+   without a clave; "clave" when the row searched by a clave (it carries
+   `tracking_key` before the search and no match trail) */
 decidedBy: z.enum(["learned_account", "earliest", "sender_tail", "clave_tail", "clave", "tail", "time"]).nullable().optional(),
 /* FR-020 */
 senderAccountNew: z.boolean().optional(),

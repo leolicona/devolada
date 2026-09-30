@@ -7,9 +7,11 @@ contributor runs. The shapes are in [contracts/](./contracts/) and
 ## Before tasks: two things only the creator can do
 
 1. **Count the pilot's phones** (research R4). In the pilot business's
-   WispHub, count customers with no phone and phones held by more than one
-   customer. Record the numbers in `research.md`, R4. They say how often an
-   assigned number appears, and whether "more than three" is the right line.
+   WispHub, count customers with no phone, phones held by several
+   customers under one name, and phones held under different names. Record
+   the numbers — never a phone or a name — in `research.md`, R4. They say
+   how often an assigned number appears and how often the business will
+   join or separate people by hand.
 2. **Verify Banco Azteca's field** (research R19, D21). In Azteca's app,
    note where a numeric reference is typed when sending, and whether a saved
    contact keeps it. That becomes the first `REFERENCE_HINTS` entry, with
@@ -77,8 +79,9 @@ pnpm --filter @devolada/admin test -- -t "payment-without-receipt US1"
 By hand: create a link (panel or `/v1`), open it on the page. Step 1 shows
 "Tu referencia" with a copy button, where it goes, and the save-as-contact
 tip; the WhatsApp message from the panel carries the number. Expected per
-the tests: a phone alone → its last seven; two customers, one phone → the
-same number; four → an assigned number each; no phone, `2345678`-like,
+the tests: a phone alone → its last seven; two customers with one phone
+and one name → the same number; one phone under two names → an assigned
+number per person; no phone, `2345678`-like,
 starting with 0, or the business's own account tail → assigned.
 
 ## User Story 2 — confirm with bank and day

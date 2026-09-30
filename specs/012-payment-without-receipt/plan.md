@@ -17,9 +17,11 @@ secret and no route area:
 
 - **The reference** lives in two new tables keyed by customer, not by
   link, because a link is identity-only by requirement and can be pruned
-  (D1). The whole phone is never stored. Whether a phone is shared is
-  counted live, through a new adapter capability, `customersWithPhone`
-  (D4). Seven digits that look like a bank app's default, start with 0, or
+  (D1). The whole phone is never stored. A person is one phone and one
+  name, compared live through a new adapter capability,
+  `customersWithPhone`; different names on one phone are different
+  people, and the business joins or separates them from the panel (D4,
+  D6). Seven digits that look like a bank app's default, start with 0, or
   end the business's own account never become a reference (D3 — an
   amendment to FR-002 the creator confirms).
 - **The confirmation** is today's typed door with one field,
@@ -120,18 +122,18 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D1 | The reference lives in `payer_references` + `payer_reference_customers`, keyed by customer (`panel`+usuario, `api`+customerRef), never on `payment_links`; the seven digits are stored because they are the reference; the whole phone never | research R2 |
 | D2 | A phone is ten digits after removing a leading `52`/`521` (`nationalPhone`, shared with `toWhatsAppPhone`); anything else is no phone | research R1 |
 | D3 | Seven digits are never a reference when generic (`isGenericReference`), starting with 0, the tail of any registered receiving account, or already held in any state; each case assigns a number. Amends FR-002 | research R3 |
-| D4 | Adapter capability `customersWithPhone`: the count is live and complete; ≤ 3 share, > 3 blocks the digits; no capability, no phone | research R4 |
+| D4 | Adapter capability `customersWithPhone` (keys and names, live); a person is one phone and one name; several names on a phone block its digits and each person gets a number; no capability, no phone. *Amended 2026-09-30 (analysis U1): replaced "≤ 3 share, > 3 blocks"* | research R4, creator 2026-09-30 |
 | D5 | `ensurePayerReference` at link creation (panel, API), at the payer's read, and in a backfill joining the every-minute cron (20 links per business per minute); an adapter that cannot answer means no reference yet, never a guess | research R5 |
-| D6 | Assigned numbers: random, first digit 1–9, outside D3, unique per business over all states for ever; reset retires one customer's number; "not personal" blocks the digits and gives each holder its own | research R6 |
+| D6 | Assigned numbers: random, first digit 1–9, outside D3, unique per business over all states for ever. Three panel actions: "Nuevo número" (the whole person), "Es la misma persona" (join), "No es la misma persona" (separate). *Amended 2026-09-30 (analysis I1, U1)* | research R6, creator 2026-09-30 |
 | D7 | `bankOrder`: this business's confirmed payments of 90 days, most used banks first, five at most | research R20 |
 | D8 | The confirmation is the typed door with `referenceSource: "own"`; the server writes the digits; the day within today − 30 … today; `preselected` rides along | research R7 |
 | D9 | `own` and `typed` rows never meet a shared-reference stop; rows without a source keep today's four | research R8 |
 | D10 | Matcher `own` mode: integrity → used → learned account → earliest; undecided only as `all_used` | research R9 |
-| D11 | "No puse la referencia": another person's reference refused; no tail and no learned account at that bank → `SENDER_TAIL_NEEDED` before anything is billed; learned accounts compared whole before the tail; no fit asks the four digits, fitted without a call | research R11 |
+| D11 | "No puse la referencia": another person's active reference refused (blocked digits go on as a shared reference); no tail and no learned account at that bank → `SENDER_TAIL_NEEDED` before anything is billed; learned accounts compared whole before the tail; no fit asks the four digits, fitted without a call | research R11 |
 | D12 | Learned banks per person and accounts per service are queries; `sender_account_new` marks a new account | research R10 |
 | D13 | Spec 013 D5 widens: every `valid` of a business keeps a `cep_records` row | research R10 |
 | D14 | A round is an attempt that got an answer; `ladder_round` rides the correction chain; round 3 searches the neighbouring days; after round 4 the 2-hour and last slots; expiry after round 6 | research R12 |
-| D15 | Status `ask`: `check_data` after round 3, `clave` after round 4, `sender_tail`, `clave_tail`; "Todo está bien" lives on the device | research R13 |
+| D15 | Status `ask`: `check_data` after round 3, `clave` after round 4 or when typed digits fit nothing, `sender_tail` before `clave_tail`; "Todo está bien" lives on the device | research R13 |
 | D16 | `correction_count` on the chain; a fourth search-spending correction without a clave or receipt → `CORRECTIONS_EXHAUSTED` | research R14 |
 | D17 | `fitClaveTail` on the kept candidates' last four characters; one fit confirms; never searched | research R15 |
 | D18 | Provisional release unchanged: a confirmation is `human` evidence; only the copy of the asks changes | research R16 |
@@ -140,6 +142,8 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D21 | `ChoiceGroup` on native radios in `apps/pago`; 48px choices, 64px **Confirmar pago**; `REFERENCE_HINTS` verified-only, Azteca first | research R19 |
 | D22 | The number is `payerReference` everywhere (`reference` stays the concepto); the share message and `/v1`'s `paymentLink` carry it | research R21 |
 | D23 | `reference_source`, `match_trail.by` and `payments.confirmation` make SC-001…SC-006 queries over one business | research R22 |
+| D24 | `usedBy { day, amountCents }` on a used transfer, only when the payment that used it is the same person's | research R24, creator 2026-09-30 |
+| D25 | A clave, a clave tail or a receipt never counts toward the link's hourly attempts; confirmations and corrections do | research R14, creator 2026-09-30 |
 
 ## Constitution Check
 
@@ -150,11 +154,11 @@ Phase 1 (below the table).
 
 | # | Principle | Gate | Verdict |
 | --- | --- | --- | --- |
-| I | Spec-Driven, Every Decision Cited | Twenty-three decisions with the place each was made; every new rule cites `payment-without-receipt D<n>`. Comments that stop being true are rewritten, not left beside the code: receipt-triage D7's stops (D9), spec 013 D5's "clave-less only" in `consta/bundle/store.ts` and `db/schema.ts` (D13), the `validations.quota_remaining` comment (D19). FR-002's amendment is dated in the spec | PASS |
+| I | Spec-Driven, Every Decision Cited | Twenty-five decisions with the place each was made; every new rule cites `payment-without-receipt D<n>`. Comments that stop being true are rewritten, not left beside the code: receipt-triage D7's stops (D9), spec 013 D5's "clave-less only" in `consta/bundle/store.ts` and `db/schema.ts` (D13), the `validations.quota_remaining` comment (D19). FR-002's amendment is dated in the spec | PASS |
 | II | Money Law | Amounts stay integer cents end to end; "Pagué otra cantidad" is parsed like every typed amount; the day bounds and "Hoy" use the business's timezone (`time/business-day.ts`), never the browser's | PASS |
 | III | One Contract, Pure Routers | `linkStatusResponse`, `payRequest`, `directPaymentStatusResponse`, `customerRow`, `feedCharge`, `settings*`, `/v1` `paymentLink` change additively; `payerProfileResponse` and the quota response are new schemas; all exported from `@devolada/api`. The two new routes (`payer-profiles`, `provider-quota`) join existing routers, which stay pure | PASS |
 | IV | Tests Run on the Real Runtime | apiCEP and WispHub intercepted at pinned origins; migrations per test; no database mocks; the matcher's new modes are pure tables; the page and panel on MSW with schema-validated fixtures and axe; sizes and focus on the browser layer | PASS |
-| V | Tenant Isolation and Authorization by Area | Both reference tables carry `business_id`; every read filters on it; digits are unique per business, so one business's numbers never touch another's. `provider_quota` is a platform row with no `business_id`, like `platform_settings` — reading it reads no business, so it is not a fourth cross-business statistic. `bankOrder` reads one business. Profile under `payments: read`, reset and not-personal under `payments: operate`, the switch under `settings: update` | PASS |
+| V | Tenant Isolation and Authorization by Area | Both reference tables carry `business_id`; every read filters on it; names and phones are compared live and never stored; digits are unique per business, so one business's numbers never touch another's. `provider_quota` is a platform row with no `business_id`, like `platform_settings` — reading it reads no business, so it is not a fourth cross-business statistic. `bankOrder` reads one business. Profile under `payments: read`; new number, join and separate under `payments: operate`, the switch under `settings: update` | PASS |
 | VI | Visual Foundations (NON-NEGOTIABLE) | `ChoiceGroup` from tokens, 48px, focus visible, the choice marked by icon and text; **Confirmar pago** 64px; the asks use the `Alert` recipe; the feed adds text beside `StatusBadge`; waiting breathes inside `<Pending>`; es-MX copy; no horizontal scroll at 360 | PASS |
 | VII | Every Test Cites Its Story | New tests cite `payment-without-receipt US1`…`US5`; tasks carry `[US<n>]` | PASS |
 | VIII | Absent Configuration Degrades, Never Breaks | No new binding. The switch is data, not configuration. An integration without `customersWithPhone`, or none, gives assigned numbers; an adapter that cannot answer leaves the link on today's flow until it can; no provider credential → no search, as today; a `429` never counts as a round and never reaches the payer as an error | PASS |
@@ -206,7 +210,7 @@ apps/api/
 │   │   ├── provider/apicep.ts                     # ~ provider_quota upsert (D19)
 │   │   └── bundle/match.ts, types.ts              # ~ own/typed modes, knownAccounts, fitClaveTail (D10, D11, D17)
 │   ├── direct-payments/
-│   │   ├── payer-reference.ts                     # + ensure, assign, reset, not personal, learned queries (D1, D3–D7, D12)
+│   │   ├── payer-reference.ts                     # + ensure, assign, new number, join, separate, learned queries (D1, D3–D7, D12)
 │   │   ├── validation.ts                          # ~ rounds, neighbouring days, stops, typed, clave tail, new account (D9–D17)
 │   │   └── cep-match.ts                           # ~ receipt side with knownAccounts
 │   └── routes/
@@ -216,7 +220,7 @@ apps/api/
 │       ├── platform/index.ts, handler.ts, schema.ts          # + provider-quota
 │       └── v1/payment-links/handler.ts, schema.ts            # ~ payerReference
 └── test/
-    ├── payer-reference.test.ts                    # + US1: phone, sharing, D3 cases, reset, not personal, backfill
+    ├── payer-reference.test.ts                    # + US1: phone and name, D3 cases, new number, join, separate, backfill
     ├── payment-without-receipt.test.ts            # + US2–US5: confirmation, rounds, asks, corrections, typed, learned
     ├── consta/match.test.ts                       # ~ own, typed, fitClaveTail tables
     ├── consta/validate.test.ts                    # ~ record for a clave valid; quota upsert
@@ -231,7 +235,7 @@ apps/pago/
 
 apps/admin/
 ├── src/features/links/LinksScreen.tsx             # ~ reference line
-├── src/features/links/PayerProfile.tsx            # + profile sheet, reset, not personal
+├── src/features/links/PayerProfile.tsx            # + profile sheet, new number, join, separate
 ├── src/features/feed/FeedScreen.tsx               # ~ source, "Cuenta nueva", days searched
 ├── src/features/settings/…                        # ~ the switch
 ├── src/features/operator/…                        # ~ quota line in "Reglas"

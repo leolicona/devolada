@@ -15,14 +15,14 @@ implementation, the next free number is used and this line is amended.)
 | `id` | text | no | uuid |
 | `business_id` | text | no | → `businesses.id`. Every read filters on it (constitution V) |
 | `digits` | text | no | Exactly seven digits, first digit 1–9, never generic (`isGenericReference`), never the last seven of a registered receiving account (D3) |
-| `origin` | text | no | `phone` — the last seven digits of a phone the customers share; `assigned` — drawn by Devolada (D6) |
-| `state` | text | no | `active` → `retired` (reset) · `blocked` (a phone's digits kept out of use: more than three customers, or marked not personal) |
-| `state_reason` | text | yes | `reset`, `not_personal`, `shared_by_many` |
-| `changed_by_user_id` | text | yes | → `user.id`: who reset or marked it; NULL when the machine blocked it |
+| `origin` | text | no | `phone` — the last seven digits of the phone of one person (one phone, one name, D4); `assigned` — drawn by Devolada (D6) |
+| `state` | text | no | `active` → `retired` (a new number, or the last customer left) · `blocked` (a phone's digits shared by different people, held by no one) |
+| `state_reason` | text | yes | `new_number`, `emptied`, `different_people` |
+| `changed_by_user_id` | text | yes | → `user.id`: who gave a new number, joined or separated; NULL when the machine did it |
 | `created_at`, `changed_at` | integer (ms) | no / yes | |
 
 Index: **unique `(business_id, digits)` over all states** — digits are
-never reused in a business, so a reset can never catch an old transfer.
+never reused in a business, so a new number can never catch an old transfer.
 
 The whole phone is never stored (D1). A `blocked` row carries the digits
 alone; a later customer whose phone ends in them gets an assigned number.
@@ -38,10 +38,13 @@ alone; a later customer whose phone ends in them gets an assigned number.
 | `created_at` | integer (ms) | no | |
 
 Primary key `(business_id, source, customer_key)`; index `(reference_id)`.
-A customer holds one reference at a time. A `phone` reference holds at most
-three customers — checked at assignment against the live count (D4), not by
-the database. A reset moves one customer to a new `assigned` reference; a
-not-personal mark moves every holder, each to its own.
+A customer holds one reference at a time, and a reference's customers are
+one person: the same phone and the same name when it was assigned (D4,
+compared live, never stored), or joined by the business. "Nuevo número"
+moves every customer of the person to one new `assigned` reference; "Es la
+misma persona" moves one customer to another person's reference; "No es
+la misma persona" moves one customer to a new `assigned` reference of its
+own (D6).
 
 Keyed by customer, not by link: a link pruned and made again
 (`links/prune.ts`) finds the same number (D1).
@@ -115,11 +118,20 @@ days, grouped by `sender_bank`, most first, five at most.
 
 | Condition | `ask` |
 | --- | --- |
-| `last_error = 'CEP_UNDECIDED'`, typed row, candidates kept | `clave_tail` |
 | typed row without `sender_tail`, candidates kept, none tied by a learned account | `sender_tail` |
+| `last_error = 'CEP_UNDECIDED'`, typed row, `sender_tail` given, several candidates still fit | `clave_tail` |
+| typed row, `sender_tail` given, no candidate fits (FR-033) | `clave` |
 | `last_error = 'TRANSFER_NOT_FOUND'`, `ladder_round ≥ 4` | `clave` |
 | `last_error = 'TRANSFER_NOT_FOUND'`, `ladder_round = 3` | `check_data` |
 | otherwise | null |
+
+Read top to bottom; the first row that holds wins. The account's four
+digits are asked before the clave's four characters (D15).
+
+**Used by** (D24) — for a row refused as `TRANSFER_ALREADY_USED`: the
+payment holding that clave in the business, when its customer holds the
+same reference as this payment's customer — its confirmation day in the
+business's timezone and its `received_cents`. Otherwise nothing.
 
 ## State of a confirmation
 
@@ -139,7 +151,7 @@ confirm ──► validating ─┬─ one match ──────────�
 
 - Seven digits, first 1–9, not generic, not a receiving tail, unique per
   business for ever (FR-001, FR-002, D3, D6).
-- A phone reference is shared by at most three customers (FR-001–FR-003).
+- A reference's customers are one person — one phone and one name, or joined by the business (FR-001–FR-003).
 - A payer never receives a sending account, whole or in part, in any
   schema (FR-019).
 - The day of an `own` or `typed` confirmation is between today − 30 and

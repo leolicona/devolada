@@ -84,36 +84,50 @@ type by default, and a lost leading zero is a transfer that is never
 found. **FR-002 is amended by this plan** (spec.md, dated note); the
 creator confirms it with the plan.
 
-## R4 — Counting the customers who share a phone
+## R4 — Who is the same person
 
 **Found.** Customers are read live. `searchCustomers` runs `__contains`
 filters over `nombre`, `apellido`, `usuario`, `telefono`
 (`client.ts:195, 333-368`), paged 10–50 (`client.ts:214-215, 380-385`);
 calls take 0.4–0.6 s (`snapshot.ts:45-48`). The large tenant holds about
-6,500 customers (`snapshot.ts:23`). The adapter declares capabilities
+6,500 customers (`snapshot.ts:23`). A customer carries its name
+(`WispHubCustomer`, `client.ts:47-69`). The adapter declares capabilities
 through `integrations/registry.ts:23` (`capabilitiesOf`) and
 `wisphub/receivables.ts:32,280`; the core asks by capability, never by
 provider (constitution IX).
 
-**Decision (D4).** A new adapter capability, `customersWithPhone(phone)`:
-the core passes a national ten-digit phone and receives the keys of every
-customer whose phone normalises to it. WispHub's adapter asks
+**Decision (D4)** — *amended 2026-09-30 after `/speckit-analyze` (U1): the
+first version shared a phone's reference among up to three customers and
+blocked it past three; the creator chose "same phone and same name"
+instead.* A new adapter capability, `customersWithPhone(phone)`: the core
+passes a national ten-digit phone and receives, for every customer whose
+phone normalises to it, its key and its name. WispHub's adapter asks
 `telefono__contains=<last seven>`, pages to the end, and compares after
 `nationalPhone` — the filter's words and paging stay in `wisphub/`. The
-count is live and complete, not limited to customers with a link, so an
-office number on forty customers is seen as forty on the first
-assignment. At most three → the phone's customers share its reference; more
-→ the digits are `blocked` and each customer gets an assigned number. A
-business whose integration lacks the capability — or has none, like a
-business on `/v1` alone — has no phone to count, and every customer gets an
+core groups them by `personName(nombre, apellido)`: lower case, accents
+removed, spaces collapsed.
+
+- **One name** → one person; the phone's digits are that person's
+  reference, shared by all their services.
+- **Several names** → several people; nobody can tell whose phone it is,
+  so each person gets an assigned number and the digits are `blocked`.
+- **Later**, a customer whose phone and name match a person joins that
+  person; a new name becomes a new person with an assigned number, and
+  whoever held the phone's digits keeps them (FR-003).
+
+The business corrects the grouping from the panel (D6). Names are read,
+compared and forgotten: the core stores no name and no phone. A business
+whose integration lacks the capability — or has none, like a business on
+`/v1` alone — has no phone to compare, and every customer gets an
 assigned number.
 
 *Rejected:* storing a hash of the phone to compare locally. Ten-digit
 Mexican numbers are few enough to reverse a hash in minutes, so it would be
-the phone under another name; and it would still need every customer read
-once. *Rejected:* reading the whole customer list once per business to
-group phones — cheaper for a first backfill, but it rebuilds the retired
-roster.
+the phone under another name. *Rejected:* reading the whole customer list
+once per business to group phones — cheaper for a first backfill, but it
+rebuilds the retired roster. *Rejected by the creator:* the business
+deciding every repeated phone by hand, and the payer confirming their
+services (the wallet).
 
 ## R5 — When a reference is born
 
@@ -134,22 +148,34 @@ adapter cannot answer (WispHub down, a refused key), no reference is made:
 the link reads as today's flow and the next read or sweep tries again.
 Never a guess: a reference born without its count could be a shared one.
 
-## R6 — Assigned numbers, resets and the "not personal" mark
+## R6 — Assigned numbers, new numbers, joining and separating
 
 **Found.** Nothing assigns numbers today. The unique index on
 `payments.tracking_key` shows the house way to make a value unique per
 business (`schema.ts:536-543`).
 
-**Decision (D6).** An assigned number is drawn at random from seven digits
-whose first is 1–9, skipping every D3 case, and inserted under a unique
-index on `(business_id, digits)` over **all** states — so no digits are
-ever reused in a business, and a retry draws again on a clash. A **reset**
-retires the customer's reference (`retired`, with who and when) and gives
-that customer a new assigned number; other customers who shared a phone
-reference keep it. **Not personal** turns the phone's digits `blocked` and
-gives each of its customers an assigned number of their own; a blocked row
-keeps its digits out of use for good (FR-003). Both are `payments:operate`
-actions.
+**Decision (D6)** — *amended 2026-09-30 after `/speckit-analyze` (I1, U1).*
+An assigned number is drawn at random from seven digits whose first is
+1–9, skipping every D3 case, and inserted under a unique index on
+`(business_id, digits)` over **all** states — so no digits are ever reused
+in a business, and a retry draws again on a clash. A reference row is one
+person; `payer_reference_customers` says which customers are that person.
+The panel's three actions, all `payments: operate`:
+
+- **Nuevo número** — the person's row becomes `retired` (who, when) and
+  every customer of that person moves to one new assigned number. The
+  person keeps one number (clarified 2026-09-30).
+- **Es la misma persona** — a customer joins another person whose customers
+  share its phone; it takes that person's reference. If the customer was
+  alone on an assigned number, that row is `retired`.
+- **No es la misma persona** — a customer leaves its person and gets an
+  assigned number of its own. When the person it leaves held the phone's
+  digits and the two now have different names on one phone, the digits
+  stay with the ones who kept them (FR-003: nothing changes by itself).
+
+A row's `state` is `active`, `retired` (a new number or an empty person)
+or `blocked` (a phone's digits shared by different people, held by no
+one). No digits are ever used again.
 
 ## R7 — The confirmation door
 
@@ -236,6 +262,11 @@ A confirmation from an account that customer never used, when it has at
 least one learned account, sets `payments.sender_account_new` for the
 operator (FR-020).
 
+The spec says the same since 2026-09-30 (FR-016 amended after the
+analysis, I2 and I4): banks from every confirmed payment, past ones
+included, per person; accounts from confirmations after launch, per
+service.
+
 **Decision (D13).** Spec 013 D5 widens: the engine keeps a `cep_records`
 row for **every** `valid` of a business, clave searches included, through
 the existing `storeSingleRecord`. From this feature on, every confirmation
@@ -252,9 +283,11 @@ accepts three digits or more and knows the CEP's account types
 **Decision (D11).** `referenceSource: "typed"` with the payer's
 `referenceNumber` and an optional `senderTail` (four digits):
 
-1. A reference that is another person's in the business (an `active` or
-   `blocked` row) is refused with `409 REFERENCE_OF_ANOTHER` (FR-034); the
-   payer's own is treated as `own`.
+1. A reference that is another person's in the business (an `active`
+   row) is refused with `409 REFERENCE_OF_ANOTHER` (FR-034); the payer's
+   own is treated as `own`. `blocked` digits — a phone different people
+   share — belong to no one and go on as any shared reference
+   (*amended 2026-09-30, analysis I8*).
 2. With no tail and no account learned for this service at the chosen bank,
    the request is refused with `409 SENDER_TAIL_NEEDED` before anything is
    created or billed; the page shows the four-digit field (FR-032).
@@ -306,8 +339,12 @@ schema carries no ask of its own (`schema.ts:341-415`).
 
 **Decision (D15).** `directPaymentStatusResponse` gains `ask`:
 `"check_data"` once round 3 found nothing (FR-028); `"clave"` once round 4
-found nothing (FR-029, the whole clave); `"sender_tail"` (D11);
-`"clave_tail"` (D17); null otherwise. Rows with a `reference_source` never
+found nothing (FR-029, the whole clave), and on a typed row whose four
+digits fit none of the transfers found (FR-033); `"sender_tail"` (D11);
+`"clave_tail"` (D17); null otherwise. When a typed row needs both, the
+account's four digits come first: they are one question for the payer and
+may decide alone; the clave's four characters only follow when the
+digits leave several (*amended 2026-09-30, analysis I6*). Rows with a `reference_source` never
 open the form by `validationAttempts`. "Todo está bien" is the page's own:
 remembered per payment on the device, like the step (`step.ts`), with no
 route and no state — the next round keeps its slot either way.
@@ -324,6 +361,15 @@ and carries neither a clave nor a receipt is refused with `409
 CORRECTIONS_EXHAUSTED`; the page then offers the clave and the receipt. The
 identical-attempt rule already makes a correction that changes nothing
 free.
+
+**Decision (D25)** — *added 2026-09-30 after `/speckit-analyze` (U2).* A
+row that carries a clave, a clave tail, or a receipt never counts toward
+`HOURLY_ATTEMPT_BUDGET` and is never refused by it; confirmations and
+corrections still count. Receipts keep `UPLOAD_HOURLY_BUDGET` (20 an
+hour, `proofs.ts:28`). A clave spends a call each time, so a payer who
+loops claves spends calls: the identical-attempt rule stops a repeated
+clave, and the quota row (D19) shows the platform operator any burn.
+Accepted by the creator, who chose that the safe exits are always open.
 
 ## R15 — The clave's last four characters
 
@@ -443,3 +489,19 @@ mode and `fitClaveTail` run without a database. The page and the panel get
 component tests with MSW and axe; the browser layer measures the new
 controls at 360, 768 and 1280 and the 64px action. Every test cites
 `payment-without-receipt US<n>`.
+
+## R24 — "Ya se usó para tu pago…"
+
+**Found.** A transfer that already paid something answers
+`TRANSFER_ALREADY_USED`, and the page says "Esta transferencia ya fue
+utilizada para otro pago." (`PaymentPage.tsx:116`). The unique index on
+`(business_id, tracking_key)` names the payment that holds the clave
+(`schema.ts:536-543`). Nothing tells the payer which one.
+
+**Decision (D24)** — *added 2026-09-30 after `/speckit-analyze` (C1).*
+`directPaymentStatusResponse` gains `usedBy: { day, amountCents } | null`.
+It is filled only when the payment holding the clave belongs to a customer
+of the same person (the same reference); `day` is its confirmation day in
+the business's timezone, `amountCents` what it received. Otherwise null,
+and the page keeps today's sentence: nothing of another person's payment
+reaches a payer (FR-013, FR-019).

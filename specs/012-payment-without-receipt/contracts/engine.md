@@ -3,6 +3,14 @@
 **Feature**: payment-without-receipt · **Decisions**: D1–D6, D9–D17, D19
 · Internal to `apps/api`; nothing here crosses a wire.
 
+> **Amended 2026-09-30 by spec 017** ([`confirmation-hierarchy` engine
+> contract](../../017-confirmation-hierarchy/contracts/engine.md)):
+> `knownAccounts` holds exclusive accounts only, beside a new
+> `othersAccounts`; the `typed` mode loses its tail and window steps, and
+> `fitTieBreak` reads the answer (either way) in place of the typed tail and
+> `fitClaveTail`'s standalone use; the lifecycle's `typed` bullet searches at
+> once and asks `tie_break`; a transition's held candidate asks `tie_break`.
+
 ## `nationalPhone(raw)` — `apps/api/src/phone.ts` (D2)
 
 ```ts

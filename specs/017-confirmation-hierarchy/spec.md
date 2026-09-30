@@ -122,6 +122,13 @@ rounds, what Devolada learns, and the switch per business.
   the first minutes and spends calls; only the confirmation and the expired
   state, which leaves a payer asked for a clave they do not have with no
   way out.*
+- Q: After three wrong answers on a link, when can the payer use the four
+  digits or characters again? → A: **A moving window: each wrong answer
+  stops counting 24 hours after it was given**, so a link never holds more
+  than three in any 24 hours in a row. *The creator at `/speckit-clarify`,
+  option A of three. Rejected: a fixed lock of 24 hours from the third
+  miss, which allows six misses in a little over a day; a reset at the
+  business's midnight, which allows six within minutes across it.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -198,8 +205,9 @@ nothing is asked. Otherwise the page shows one screen with two ways to
 answer — "los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste"
 or "los últimos 4 caracteres de tu clave de rastreo" — and the payer uses
 whichever they have at hand. The answer is checked against the transfers already found, with no new
-search. After three answers that fit nothing in a day, only the whole clave
-and the receipt link are left on that link.
+search. After three answers that fit nothing within 24 hours, only the
+whole clave and the receipt link are left on that link, until the oldest of
+the three is 24 hours old.
 
 **Why this priority**: option 2 is now on the first screen. Without a short
 tie-break, most of its payments would end on the whole clave or on a
@@ -243,7 +251,7 @@ receipt link offered.
    checked, **Then** nothing confirms, the page says the data matched none of
    the transfers found, and asks again; after the third such answer on this
    link within 24 hours, only the whole clave and the receipt link are
-   offered.
+   offered, until the oldest of the three is 24 hours old.
 8. **Given** a typed reference that finds a single transfer, not sent from
    an exclusive learned account, **When** the search answers, **Then** the
    ask is made as for several: one match on a shared reference is not proof.
@@ -411,10 +419,12 @@ one person's account.
   still learned, and a transfer from it still confirms when the payer ties
   it by the clave's characters or by the whole clave.
 - **FR-016**: A link MUST accept at most three answers that fit no transfer
-  within 24 hours, account digits and clave characters counted together.
-  After the third, only the whole clave and the receipt link are offered on
-  that link until the 24 hours pass. The whole clave and the receipt are
-  never limited by this rule. The clave's characters count toward this
+  in any 24 hours in a row, account digits and clave characters counted
+  together: each such answer stops counting 24 hours after it was given.
+  While three count, only the whole clave and the receipt link are offered
+  on that link; the four digits or characters return when the oldest of the
+  three stops counting. The whole clave and the receipt are never limited
+  by this rule. The clave's characters count toward this
   limit, in place of 012 D25.
 - **FR-017**: A payment whose payer does not answer MUST stay on spec 013's
   undecided path — "en revisión", no further searches, no expiry — with the
@@ -432,7 +442,8 @@ one person's account.
 - **Tie-break answer**: what a payer gives to tie a typed reference to one
   transfer — which way (the account's digits or the clave's characters),
   what it fitted (none, one or several of the transfers found), and when.
-  Answers that fit nothing are counted per link over 24 hours (FR-016).
+  Answers that fit nothing count on their link for 24 hours after they
+  were given (FR-016).
 - **Exclusive account**: a learned account (spec 012) whose confirmed
   payments all belong to one person of the business. It is read from the
   payments, never stored as a mark, and it stops being exclusive the day it

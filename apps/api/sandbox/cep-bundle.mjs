@@ -40,11 +40,13 @@ function cadenaOf(t) {
     "STP",
     BENEFICIARY_NAME,
     "40",
-    SANDBOX_BENEFICIARY,
+    /* payment-without-receipt T008: the searched account and amount when
+       a scenario names them, so the matcher's integrity check keeps them */
+    t.beneficiary ?? SANDBOX_BENEFICIARY,
     "IDE900101CD2",
     "PAGO DE SERVICIO",
     "0.00",
-    "3.00",
+    t.amount ?? "3.00",
     ...Array.from({ length: 24 }, () => "0"),
     CERTIFICATE,
   ];
@@ -126,12 +128,32 @@ function cepPdf(t) {
   return concat(parts);
 }
 
+/* payment-without-receipt T008: a single `valid`'s cdaChain as measured —
+   the cadena, then its seal after the closing bars (344 base64
+   characters) — so a sandbox confirmation keeps a record and teaches its
+   account (D13) */
+export function sandboxCdaChain(t) {
+  const seal = btoa(String.fromCharCode(...new Uint8Array(258).map((_, i) => (i * 17 + 5) % 256)));
+  return `${cadenaOf(t)}${seal}`;
+}
+
+/* The two senders the sandbox knows: Azteca tails 8301 and 4417 */
+export const SENDER_8301 = "127180123456683010";
+export const SENDER_4417 = "127180987654544171";
+
 /* `day`: the printed day the payer's search asked (YYYY-MM-DD) */
 export function sandboxBundle(day) {
-  const transfers = [
-    { clave: "MOCKAZT0000000008301", creditTime: "07:11:20", senderAccount: "127180123456683010" },
-    { clave: "MOCKAZT0000000004417", creditTime: "11:40:47", senderAccount: "127180987654544171" },
-  ].map((t) => ({ ...t, operationDay: day, creditDay: day }));
+  return sandboxBundleOf(
+    [
+      { clave: "MOCKAZT0000000008301", creditTime: "07:11:20", senderAccount: SENDER_8301 },
+      { clave: "MOCKAZT0000000004417", creditTime: "11:40:47", senderAccount: SENDER_4417 },
+    ].map((t) => ({ ...t, operationDay: day, creditDay: day })),
+  );
+}
+
+/* payment-without-receipt T008: any transfers — `{ clave, operationDay,
+   creditDay, creditTime, senderAccount, amount?, beneficiary? }` */
+export function sandboxBundleOf(transfers) {
   const chunks = [];
   const zip = new Zip((err, data) => {
     if (err) throw err;

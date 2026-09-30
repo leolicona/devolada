@@ -29,7 +29,12 @@ import { wisphubFor, type WispHubAddress } from "./factory";
    path, a cursor's insides or a `WispHubError`. */
 
 /* What this adapter can do, as the session names it (D13) */
-export const WISPHUB_CAPABILITY_NAMES = ["receivables", "customerDebt"] as const satisfies readonly CapabilityName[];
+export const WISPHUB_CAPABILITY_NAMES = [
+  "receivables",
+  "customerDebt",
+  /* payment-without-receipt D4 */
+  "customersWithPhone",
+] as const satisfies readonly CapabilityName[];
 
 type AdapterEnv = { WISPHUB_BASE_URL?: string };
 
@@ -158,6 +163,16 @@ function translate(e: WispHubError): IntegrationError {
   );
 }
 
+/* A read whose failures leave as the core's two words */
+async function translated<T>(read: () => Promise<T>, what: string): Promise<T> {
+  try {
+    return await read();
+  } catch (e) {
+    if (e instanceof WispHubError) throw translate(e);
+    throw new IntegrationError("INTEGRATION_UNAVAILABLE", `${what}: ${String(e)}`);
+  }
+}
+
 /* One block of open invoices, live (D3): one `pendingInvoicesPage`
    call on a fresh client, so the block has its own operation budget
    (provider-latency D1). It never reads `readPendingInvoices`, the
@@ -284,6 +299,13 @@ export function wisphubCapabilities(integration: WispHubAddress, env: AdapterEnv
     },
     customerDebt: {
       of: (usuario) => customerDebt(integration, env, usuario),
+    },
+    /* payment-without-receipt D4: the filter's words and its paging are
+       the client's; here WispHub's failures become the core's two */
+    customersWithPhone: {
+      of: (phone) => translated(() => wisphubFor(integration, env).customersWithPhone(phone), "customers by phone"),
+      phoneOf: (usuario) =>
+        translated(async () => (await wisphubFor(integration, env).getCustomer(usuario))?.phone ?? null, "customer phone"),
     },
   };
 }

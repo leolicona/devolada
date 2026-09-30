@@ -6,6 +6,7 @@ import { adjustmentRequest, patchBusinessRequest, setSettingRequest } from "./sc
 import {
   getPlatformBusiness,
   getPlatformSettings,
+  getProviderQuota,
   listPlatformBusinesses,
   patchPlatformBusiness,
   postAdjustment,
@@ -19,6 +20,8 @@ export const platformRoute = new Hono<{ Bindings: Bindings; Variables: Variables
 platformRoute.use("*", requireSession, requirePlatformOperator);
 
 platformRoute.get("/settings", (c) => getPlatformSettings(c));
+/* payment-without-receipt D19: the provider's quota, for "Reglas" */
+platformRoute.get("/provider-quota", (c) => getProviderQuota(c));
 platformRoute.post("/settings/:key", zValidator("json", setSettingRequest), (c) =>
   postPlatformSetting(c, c.req.param("key"), c.req.valid("json").value),
 );

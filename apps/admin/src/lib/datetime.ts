@@ -117,3 +117,19 @@ export const isoToDate = (iso: string) => {
 };
 export const dateToIso = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+/* payment-without-receipt D19: how old an observation is, "hace 3 min" —
+   the provider's quota as its latest answer said it. Fixed es-MX words
+   for the same reason as the month names above: this is copy, and
+   `Intl.RelativeTimeFormat`'s short style is each engine's to choose.
+   Floors, so "hace 3 min" never claims a minute that has not passed; a
+   clock that runs ahead of the server reads as just now. */
+export function formatAgo(ms: number, now: number = Date.now()): string {
+  const minutes = Math.floor((now - ms) / 60_000);
+  if (minutes < 1) return "hace un momento";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} ${days === 1 ? "día" : "días"}`;
+}

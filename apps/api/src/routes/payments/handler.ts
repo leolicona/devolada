@@ -240,6 +240,9 @@ export async function listPaymentFeed(
           undecided: undecided?.reason ?? null,
           /* bug: single-cep-unreadable: and whether one transfer or several */
           undecidedSource: undecided?.source ?? null,
+          /* payment-without-receipt D23: the path that confirmed it; absent
+             on every row without one, so a feed of today's rows is today's */
+          ...(charge.referenceSource ? { referenceSource: charge.referenceSource } : {}),
         };
       }),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,

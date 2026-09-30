@@ -62,3 +62,32 @@ export function suggestedSlot(raw: string | undefined): Date | null {
   const t = Date.parse(raw);
   return Number.isNaN(t) ? null : new Date(t);
 }
+
+/* payment-without-receipt D14 (FR-025 – FR-030) — the ladder of a row
+   searched by a payer's reference (`reference_source` set). A round is an
+   attempt that got an answer; rows count them in `ladder_round`, carried
+   along a correction chain. Rounds 1–4 ride the schedule above — the
+   confirmation, its first slot, its second (the neighbouring days), its
+   third — and after round 4 only two slots remain: the 2-hour one and the
+   last one (the late slot on a `not_found`). After round 6 the row
+   expires: seven calls at most without a new fact from the payer
+   (1 + 1 + 2 + 1 + 1 + 1, SC-003). A slot that got no answer (a `429`, an
+   outage) is not a round, and the ladder waits for the next slot. */
+export const LADDER_TAIL_MINUTES = 120;
+export const LADDER_ROUNDS = 6;
+
+export function ladderSlot(
+  createdAt: Date,
+  now: Date,
+  roundsDone: number,
+  opts: { lateSlot?: boolean; suggestedAt?: Date | null } = {},
+): Date | null {
+  if (roundsDone >= LADDER_ROUNDS) return null;
+  if (roundsDone < 4) return nextValidationSlot(createdAt, now, opts);
+  const last = opts.lateSlot ? LATE_SLOT_MINUTES : REVALIDATION_OFFSETS_MINUTES[REVALIDATION_OFFSETS_MINUTES.length - 1];
+  for (const offset of [LADDER_TAIL_MINUTES, last]) {
+    const at = createdAt.getTime() + minutes(offset);
+    if (at > now.getTime()) return new Date(at);
+  }
+  return null;
+}

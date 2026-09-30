@@ -1,7 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { PAGO } from "../../playwright.config";
-import { longTrackingKey, stubPagoApi, stubPagoKeylessReading, stubPagoSurplusReading } from "./stubs";
+import {
+  longTrackingKey,
+  stubPagoApi,
+  stubPagoKeylessReading,
+  stubPagoReference,
+  stubPagoSurplusReading,
+} from "./stubs";
 
 /* docs/legacy/direct-payment/direct-payment.spec.md (D16, D18, D19) — the
    customer's page in a real browser.
@@ -267,5 +273,117 @@ test.describe("receipt-triage US4: the capture guide", () => {
     const focused = await dropzone.evaluate((el) => getComputedStyle(el).boxShadow);
     expect(focused).not.toBe("none");
     expect(focused).not.toBe(resting);
+  });
+});
+
+/* payment-without-receipt US2 (T051; contracts/payment-page.md,
+   "Constitution VI"): the reference on step 1 and "Confirma tu pago" in a
+   real browser — what happy-dom cannot answer. Every choice is a 48px
+   target, "Confirmar pago" is the 64px decisive action, a choice shows a
+   focus ring the eye can see on the row (its radio is visually hidden),
+   nothing scrolls sideways from the 360px floor up, and axe runs with
+   contrast and target size ON, in both themes. */
+test.describe("payment-without-receipt US2: step 1 and 'Confirma tu pago' in a real browser", () => {
+  /* measured at rest: mid-fade, every ink reads lighter than it is */
+  async function settled(page: Page) {
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+    );
+  }
+
+  async function expectAxeClean(page: Page, what: string) {
+    await settled(page);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(
+      results.violations.map(
+        (v) =>
+          `${v.id}: ${v.nodes.map((n) => `${n.html.slice(0, 90)} → ${n.failureSummary?.split("\n").slice(-1)[0]}`).join(" | ")}`,
+      ),
+      what,
+    ).toEqual([]);
+  }
+
+  async function openReference(page: Page, width: number) {
+    await stubPagoApi(page);
+    await stubPagoReference(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${PAGO}/p/tok123`);
+    await page.getByRole("heading", { name: /haz tu transferencia/i }).waitFor();
+  }
+
+  for (const width of [360, 768, 1280]) {
+    for (const theme of ["light", "dark"] as const) {
+      test(`step 1 and the confirmation hold at ${width}px in ${theme}`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: theme });
+        await openReference(page, width);
+
+        /* Step 1: the reference beside the amount and the account */
+        await expect(page.getByText("234 5678")).toBeVisible();
+        await expectNoHorizontalScroll(page);
+        await expectAxeClean(page, `step 1 at ${width}px, ${theme}`);
+
+        await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+        await page.getByRole("heading", { name: "Confirma tu pago" }).waitFor();
+
+        /* Open both "otro" fields too: the select and the date field are
+           what could push the page wider than the phone. The row is what
+           a thumb taps — the radio inside it is visually hidden (D21). */
+        await page.locator("fieldset label", { hasText: "Otro banco" }).click();
+        await page.locator("fieldset label", { hasText: "Otro día" }).click();
+        await expect(page.getByRole("radio", { name: "Otro banco" })).toBeChecked();
+        await expect(page.getByRole("radio", { name: "Otro día" })).toBeChecked();
+        await expect(page.getByLabel("Elige tu banco")).toBeVisible();
+        await expect(page.getByLabel("Fecha de la transferencia")).toBeVisible();
+
+        /* D21: every choice is a 48px target — the whole row is the label */
+        const rows = page.locator("fieldset label");
+        const count = await rows.count();
+        expect(count).toBe(6);
+        for (let i = 0; i < count; i++) {
+          const box = (await rows.nth(i).boundingBox())!;
+          expect(box.height, `choice ${i + 1} is ${box.height}px tall`).toBeGreaterThanOrEqual(48);
+        }
+        /* the decisive action, declared at 64px (constitution VI) */
+        const confirm = page.getByRole("button", { name: "Confirmar pago" });
+        expect((await confirm.boundingBox())!.height).toBe(64);
+        /* the small exits keep the touch size */
+        for (const name of ["Pagué otra cantidad", "No puse la referencia", "Sube tu comprobante"]) {
+          const exit = (await page.getByRole("button", { name }).boundingBox())!;
+          expect(exit.height, name).toBeGreaterThanOrEqual(48);
+        }
+
+        await expectNoHorizontalScroll(page);
+        await expectAxeClean(page, `Confirma tu pago at ${width}px, ${theme}`);
+      });
+    }
+  }
+
+  test("a choice shows a focus ring the eye can see, and the arrow keys move the choice", async ({ page }) => {
+    await openReference(page, 360);
+    await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+    await page.getByRole("heading", { name: "Confirma tu pago" }).waitFor();
+
+    const azteca = page.locator("fieldset label", { hasText: "Banco Azteca" });
+    const resting = await azteca.evaluate((el) => getComputedStyle(el).boxShadow);
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press("Tab");
+      if (await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.type === "radio")) break;
+    }
+    /* the group's one tab stop is its chosen radio, and the ring is drawn
+       on the row around it */
+    await expect(page.getByRole("radio", { name: "Banco Azteca" })).toBeFocused();
+    const focused = await azteca.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(focused).not.toBe("none");
+    expect(focused).not.toBe(resting);
+
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("radio", { name: "Nu" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Nu" })).toBeFocused();
+    /* the chosen one says so in words as well as with its icon */
+    await expect(page.locator("fieldset label", { hasText: /^Nu/ })).toContainText("Elegido");
+    await expect(azteca).not.toContainText("Elegido");
+    await expect(page.getByText(/desde Nu, hoy/)).toBeVisible();
   });
 });

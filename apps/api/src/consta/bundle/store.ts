@@ -10,7 +10,9 @@ import { readCepPdf } from "./cep-pdf";
 import type { BundleStatus, CadenaFacts, CepRecord } from "./types";
 import { claveOfEntry, listEntries, readEntries, sniff } from "./zip";
 
-/* cep-bundle-match D5, D16 — keeping what a search without a clave found.
+/* cep-bundle-match D5, D16 — keeping what a search without a clave found
+   (and, since payment-without-receipt D13, what every `valid` of a
+   business found, clave searches included — `storeSingleRecord`).
 
    The engine writes two tables, under the business that received the
    money and never anyone else (constitution V): `cep_bundles`, one per
@@ -365,8 +367,10 @@ export async function readPendingBundle(env: Bindings, db: Db, owner: Owner, bun
   return attempt(env, db, owner.businessId, row.id, row.url, row.downloadAttempts + 1);
 }
 
-/* D5, D9, D19: the record of a single `valid`'s CEP, from its cadena — for
-   a search that had no clave. No record for the platform, and none when the
+/* D5, D9, D19: the record of a single `valid`'s CEP, from its cadena —
+   for every `valid` of a business since payment-without-receipt D13, clave
+   searches included (spec 013 D5 kept it to searches without a clave). No
+   record for the platform, and none when the
    cadena is not as measured: the lifecycle then treats the CEP as
    unreadable and keeps `why`, the check the cadena failed (bug:
    single-cep-unreadable). The cadena is the one source (FR-002): the

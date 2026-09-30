@@ -97,6 +97,13 @@ const lifecycleBadge: Partial<Record<FeedCharge["status"], Status>> = {
   unapplied: "unapplied",
 };
 
+/* payment-without-receipt D8/D11 (contracts/panel.md): the two paths
+   that confirm without a receipt, in the business's words */
+const REFERENCE_SOURCE: Record<NonNullable<FeedCharge["referenceSource"]>, string> = {
+  own: "Con su referencia",
+  typed: "Con referencia escrita",
+};
+
 /* integrations-hub D5: the recorded hypothesis, in the ISP's words */
 function hypothesisCopy(observed: string | null): string {
   if (observed === "register_only") return "Se habría registrado (solo registrar).";
@@ -169,6 +176,13 @@ function decisionCopy(match: ProofMatch): string {
     both: "resuelta por cuenta y hora",
     clave: "resuelta por la clave de rastreo",
     none: match.source === "several" ? "la única disponible" : "coincide con el comprobante",
+    /* payment-without-receipt D10, D11, D17: what decided a payment
+       confirmed with a reference — in the proof's detail only, never as a
+       mark on the row (contracts/panel.md) */
+    learned_account: "resuelta por una cuenta ya conocida del cliente",
+    earliest: "la primera de las del cliente",
+    sender_tail: "resuelta por los 4 dígitos de su cuenta",
+    clave_tail: "resuelta por los últimos 4 caracteres de la clave",
   }[match.by ?? "none"];
   return `${found} · ${how}`;
 }
@@ -207,6 +221,10 @@ function fateCopy(c: ProofMatch["candidates"][number]): string {
       return "Otro destino";
     case "unreadable":
       return "No se pudo leer";
+    /* payment-without-receipt D26: sent from the account of the person who
+       held this reference before */
+    case "excluded":
+      return "De la persona anterior";
     default:
       return "Posible";
   }
@@ -492,6 +510,17 @@ function ChargeRow({
           />
           <span className="col-span-2 flex flex-wrap gap-2 sm:contents">
             <StatusBadge status={badge} />
+            {/* payment-without-receipt D8/D11/D23: the path that confirmed
+                it, in text beside the badge — the payer's own reference, or
+                one typed under "No puse la referencia". Nothing else is
+                marked: what chose among several transfers stays in the row
+                for the success criteria, and a new account is not news
+                (clarified 2026-09-30). Null or absent is today's row. */}
+            {charge.referenceSource && (
+              <span className="self-center text-sm text-muted-foreground">
+                {REFERENCE_SOURCE[charge.referenceSource]}
+              </span>
+            )}
             {/* D4: the class next to the action outcome — a lenient
                 threshold can reconnect a short payment, and the class is
                 what keeps saying money is missing */}

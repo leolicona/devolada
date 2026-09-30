@@ -58,7 +58,24 @@ export type ReceiptSide = {
   /* The payment's registered accounts (receipt-triage D30): a CEP whose
      destination ties to none of them is not this business's transfer */
   accounts: RegisteredAccount[];
+  /* payment-without-receipt D10/D11: whole sending accounts learned for
+     the service being confirmed — compared before the tail, in the `own`
+     and `typed` modes only */
+  knownAccounts?: string[];
+  /* payment-without-receipt D26 (FR-041): during a transition, the
+     previous holder's learned accounts — never chosen for the new owner.
+     Present (even empty) means a transition is running: a candidate from
+     an account not in `knownAccounts` is then held, and the four digits
+     are asked before it confirms. */
+  excludedAccounts?: string[];
 };
+
+/* payment-without-receipt D10, D11: how the candidates are judged.
+   `receipt` — what a receipt said (cep-bundle-match D8), exactly as it
+   was; `own` — the payer's own reference: every transfer found is theirs;
+   `typed` — a reference the payer typed ("No puse la referencia"): only
+   a learned account or the typed four digits may tie a transfer to them. */
+export type MatchMode = "receipt" | "own" | "typed";
 
 /* D6: the window around the receipt's time and the margin under which
    the two nearest candidates are too close to tell apart */
@@ -72,7 +89,17 @@ export type UndecidedReason = "all_used" | "no_signal" | "too_close" | "none_fit
 /* FR-013: why a candidate was not chosen. `farther` is a candidate inside
    the window that another one, nearer the receipt's time, beat (D6) —
    "outside the window" would tell the operator something false about it. */
-export type TrailWhy = "used" | "tail" | "window" | "farther" | "too_close" | "amount" | "account" | "unreadable";
+export type TrailWhy =
+  | "used"
+  | "tail"
+  | "window"
+  | "farther"
+  | "too_close"
+  | "amount"
+  | "account"
+  | "unreadable"
+  /* payment-without-receipt D26: sent from the previous holder's account */
+  | "excluded";
 
 /* FR-013: one candidate's fate, as the operator reads it — by clave and
    the last four digits of the sender's account, never by name (FR-010).
@@ -100,8 +127,10 @@ export type MatchResult =
       chosen: CepRecord;
       /* Which of tail and time dropped something; `none` when neither was
          needed. `clave` is the lifecycle's word for a D11 fit, never the
-         matcher's. */
-      by: "tail" | "time" | "both" | "none";
+         matcher's. payment-without-receipt D10/D11 add what decided the
+         `own` and `typed` modes: an account learned for the service, the
+         earliest of the payer's own transfers, the four digits typed. */
+      by: "tail" | "time" | "both" | "none" | "learned_account" | "earliest" | "sender_tail";
       /* D6: whenever the receipt showed a time — even when the tail alone
          decided */
       distanceS: number | null;
@@ -117,7 +146,9 @@ export type MatchTrail = {
   source: "several" | "single";
   bundleId: string | null;
   decided: "chosen" | "undecided";
-  by: "tail" | "time" | "both" | "none" | "clave" | null;
+  /* payment-without-receipt D17: `clave_tail` — the clave's last four
+     characters chose among the kept candidates */
+  by: "tail" | "time" | "both" | "none" | "clave" | "learned_account" | "earliest" | "sender_tail" | "clave_tail" | null;
   reason: UndecidedReason | null;
   receipt: { time: string | null; tail: string | null };
   candidates: TrailCandidate[];

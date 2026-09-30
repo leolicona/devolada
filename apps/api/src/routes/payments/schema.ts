@@ -120,6 +120,11 @@ export const feedCharge = z.object({
      several — "varias coincidencias" is false for one. Null beside a null
      `undecided`; defaulted so fixtures born before it still parse. */
   undecidedSource: z.enum(["several", "single"]).nullable().default(null),
+  /* payment-without-receipt D8/D11/D23: the path that confirmed it — the
+     payer's own reference, or one typed under "No puse la referencia".
+     Null on a clave, a receipt, and every row of a business with the
+     feature off. The panel says it in text beside the StatusBadge. */
+  referenceSource: z.enum(["own", "typed"]).nullable().optional(),
 });
 
 export const feedResponse = z.object({
@@ -144,7 +149,33 @@ export const feedResponse = z.object({
 
 /* cep-bundle-match FR-013: why a candidate was not the one. `farther`: it
    was inside the time window, and another was nearer (D6). */
-export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amount", "account", "unreadable"] as const;
+export const MATCH_WHY = [
+  "used",
+  "tail",
+  "window",
+  "farther",
+  "too_close",
+  "amount",
+  "account",
+  "unreadable",
+  /* payment-without-receipt D26: sent from the previous holder's account */
+  "excluded",
+] as const;
+
+/* cep-bundle-match D8; payment-without-receipt D10, D11, D17 add what
+   decided the payer's own reference and a typed one (D23: the success
+   criteria read them from the trail) */
+export const MATCH_BY = [
+  "tail",
+  "time",
+  "both",
+  "none",
+  "clave",
+  "learned_account",
+  "earliest",
+  "sender_tail",
+  "clave_tail",
+] as const;
 
 /* cep-bundle-match D8, FR-013 (contracts/panel.md): how a search without a
    clave was decided, and what happened to every transfer it found. Other
@@ -155,7 +186,7 @@ export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amo
 export const proofMatch = z.object({
   source: z.enum(["several", "single"]),
   decided: z.enum(["chosen", "undecided"]),
-  by: z.enum(["tail", "time", "both", "none", "clave"]).nullable(),
+  by: z.enum(MATCH_BY).nullable(),
   reason: z.enum(MATCH_REASONS).nullable(),
   /* D6: credit − receipt time of the chosen one, whole seconds */
   distanceS: z.number().int().nullable(),

@@ -8,6 +8,7 @@ import { creditRoute } from "./routes/credit";
 import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
 import { sweepDirectPayments } from "./direct-payments/validation";
+import { backfillPayerReferences } from "./direct-payments/payer-reference";
 import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
 import { paymentsRoute } from "./routes/payments";
 import { paymentRequestsRoute } from "./routes/payment-requests";
@@ -114,6 +115,14 @@ export default {
         .then(() => sweepDirectPayments(env))
         .then((report) => {
           if (report.claimed) console.log("direct-payment sweep:", JSON.stringify(report));
+        })
+        /* payment-without-receipt D5: the references of the links that
+           existed when a business turned the feature on, twenty links per
+           business per minute, oldest first. Speaks only when it assigned
+           something. */
+        .then(() => backfillPayerReferences(env))
+        .then((report) => {
+          if (report.assigned) console.log("payer reference backfill:", JSON.stringify(report));
         })
         /* automated-collections-api D8: the webhook retries ride the
            same trigger, chained after the verdicts that produce them so

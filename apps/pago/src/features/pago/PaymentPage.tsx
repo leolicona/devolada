@@ -8,13 +8,14 @@ import {
   Card,
   cn,
   Field,
+  formatMoney,
   Input,
   Pending,
   Reveal,
   Skeleton,
   StatusBadge,
 } from "@devolada/ui";
-import { BANKS, isGenericReference } from "@devolada/api/direct-payments-schema";
+import { BANKS, groupReferenceDigits, isGenericReference } from "@devolada/api/direct-payments-schema";
 import type {
   DirectPaymentStatusResponse,
   LinkStatusResponse,
@@ -44,10 +45,14 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { api, ApiError } from "@/api";
+import { readAskAck, rememberAskAck } from "@/ask-ack";
 import { forgetLink, rememberLink } from "@/links";
 import { forgetStep, readStep, rememberStep, type Step } from "@/step";
 import { CaptureGuide, type GuideState } from "./CaptureGuide";
-import { bankHint, GENERAL_HINT } from "./bank-hints";
+import { ConfirmPayment } from "./ConfirmPayment";
+import { bankHint, bankLabel, GENERAL_HINT } from "./bank-hints";
+import { dayOfMonth, shiftDay, spokenDays, todayIn } from "./days";
+import { inlineReference, referenceHint } from "./reference-hints";
 
 /* The customer's payment page (direct-payment spec D9, D10): es-MX,
    "pago" never "cobro". Four flows — loading, instructions, verifying,
@@ -96,14 +101,30 @@ function CopyButton({
 }
 
 /* One SPEI field with its copy button. */
-function CopyField({ label, value }: { label: string; value: string }) {
+function CopyField({
+  label,
+  value,
+  copy,
+  note,
+}: {
+  label: string;
+  value: string;
+  /* payment-without-receipt D21/D22: what the button copies, when it is
+     not what the payer reads — the reference reads "234 5678" and a bank
+     takes "2345678" */
+  copy?: string;
+  /* A line under the value (FR-004: "Son los últimos 7 números de tu
+     celular") */
+  note?: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 py-2">
       <div className="min-w-0">
         <p className="text-sm text-ink-soft">{label}</p>
         <p className="break-all font-mono text-sm text-ink">{value}</p>
+        {note && <p className="text-sm text-ink-soft">{note}</p>}
       </div>
-      <CopyButton value={value} srSuffix={label} />
+      <CopyButton value={copy ?? value} srSuffix={label} />
     </div>
   );
 }
@@ -138,9 +159,31 @@ const payErrors: Record<string, string> = {
      not be confirmed as the payer's — "más de una" was false here */
   CEP_SINGLE_UNDECIDED:
     "Encontramos una transferencia con tus datos, pero no pudimos confirmar que sea tuya. Escribe tu clave de rastreo para confirmarla.",
+  /* payment-without-receipt (contracts/payment-page.md "Refusals"): the
+     pay route's five new refusals, each before anything is created or
+     billed. REFERENCE_NOT_READY has no sentence of its own: the page falls
+     back to the receipt step and says so there (D8). */
+  TRANSFER_DATE_OUT_OF_RANGE: "Elige un día de los últimos 30 días.",
+  REFERENCE_OF_ANOTHER: "Esa referencia es de otra persona. Escribe tu clave de rastreo o sube tu comprobante.",
+  /* D11 (FR-032): asked, never offered — the page does not know the digits */
+  SENDER_TAIL_NEEDED: "Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste.",
+  CORRECTIONS_EXHAUSTED:
+    "Ya corregiste tus datos varias veces. Escribe tu clave de rastreo o sube tu comprobante.",
 };
 const payErrorCopy = (code: string) =>
   payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
+
+/* payment-without-receipt D24 (FR-013): a used transfer names the payment
+   that used it — only when that payment is the same person's, which is
+   the only time the status carries `usedBy`. Otherwise today's sentence,
+   and nothing of anybody else's payment. */
+function statusErrorCopy(status: Pick<DirectPaymentStatusResponse, "error" | "usedBy">): string | null {
+  if (!status.error) return null;
+  if ((status.error === "TRANSFER_ALREADY_USED" || status.error === "CEP_ALL_USED") && status.usedBy) {
+    return `Ya se usó para tu pago del ${dayOfMonth(status.usedBy.day)} por ${formatMoney(status.usedBy.amountCents)}.`;
+  }
+  return payErrorCopy(status.error);
+}
 
 type TransferDraft = {
   trackingKey?: string | null;
@@ -156,6 +199,8 @@ type TypedTransfer = {
   senderBank: string;
   date: string;
   amountCents: number;
+  /* payment-without-receipt D11: only when the server asked for it */
+  senderTail?: string;
 };
 
 /* receipt-triage D2/D7: the one sentence for a reference that cannot find
@@ -163,22 +208,9 @@ type TypedTransfer = {
 const SHARED_REFERENCE_NOTE =
   "Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya.";
 
-/* bug: spei-date-rollover — "today" is the business's day. The UTC date
-   (`toISOString`) is already tomorrow from 18:00 in Mexico City, so an
-   evening payer was offered a day their receipt does not show. en-CA
-   writes YYYY-MM-DD, the date input's own shape; a zone this browser does
-   not know falls back to Mexico City's. */
-function todayIn(timezone: string | undefined): string {
-  const format = (timeZone: string) =>
-    new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
-      new Date(),
-    );
-  try {
-    return format(timezone ?? "America/Mexico_City");
-  } catch {
-    return format("America/Mexico_City");
-  }
-}
+/* bug: spei-date-rollover — "today" is the business's day: `todayIn`
+   lives in ./days since payment-without-receipt, whose day row counts
+   back from the same "today". */
 
 function TransferForm({
   onSubmit,
@@ -193,6 +225,10 @@ function TransferForm({
   focusClave = false,
   missing,
   onUploadInstead,
+  typed = false,
+  referenceLabel = "Número de referencia",
+  askSenderTail = false,
+  dateRange,
 }: {
   onSubmit: (t: TypedTransfer) => void;
   busy: boolean;
@@ -231,6 +267,20 @@ function TransferForm({
   missing?: ReadonlySet<"key" | "amount" | "date" | "senderBank">;
   /* receipt-triage D18: the way back to the picker, at the form's end */
   onUploadInstead?: () => void;
+  /* payment-without-receipt D11 (analysis I8): "No puse la referencia"
+     and the corrections of a row searched by reference. A default-looking
+     reference is not refused here: digits no person holds go on as a
+     shared reference, tied to this payer by a learned account or by the
+     four digits the server asks for — so the clave is not demanded */
+  typed?: boolean;
+  /* The reference field's label, for the door it serves */
+  referenceLabel?: string;
+  /* D11 (FR-032): the server answered SENDER_TAIL_NEEDED — the four digits
+     of the sending account, typed by the payer and never suggested. A
+     clave typed instead is enough on its own. */
+  askSenderTail?: boolean;
+  /* D8: the days a search by reference accepts, business time */
+  dateRange?: { min: string; max: string };
 }) {
   const [referenceNumber, setReferenceNumber] = useState(draft?.referenceNumber ?? "");
   const [trackingKey, setTrackingKey] = useState(draft?.trackingKey ?? "");
@@ -245,6 +295,7 @@ function TransferForm({
   const [amount, setAmount] = useState(
     amountCents != null ? (amountCents / 100).toFixed(2) : "",
   );
+  const [senderTail, setSenderTail] = useState("");
   /* Pesos in, integer cents out — the only place the page parses money,
      and only because the payer is the source of truth here (D1). */
   const amountOk = /^\d+(\.\d{1,2})?$/.test(amount.trim()) && Number.parseFloat(amount) > 0;
@@ -255,10 +306,15 @@ function TransferForm({
   const referenceOk = keys === "either" && /^\d{1,7}$/.test(referenceNumber);
   /* receipt-triage D2 (clarified 2026-09-24): the schema's own rule, so
      the page and a client that skipped it refuse the same reference */
-  const generic = keys === "either" && isGenericReference(referenceNumber);
+  const generic = keys === "either" && !typed && isGenericReference(referenceNumber);
   const claveRequired = keys === "clave" || generic || requireClave;
   const keyOk = claveRequired ? claveOk : claveOk || referenceOk;
-  const valid = keyOk && senderBank !== "" && /^\d{4}-\d{2}-\d{2}$/.test(date) && amountOk;
+  /* payment-without-receipt D11: the four digits tie a typed reference to
+     this payer; a clave needs no tie */
+  const tailOk = !askSenderTail || claveOk || /^\d{4}$/.test(senderTail);
+  const dateOk =
+    /^\d{4}-\d{2}-\d{2}$/.test(date) && (!dateRange || (date >= dateRange.min && date <= dateRange.max));
+  const valid = keyOk && tailOk && senderBank !== "" && dateOk && amountOk;
   const notInCapture = (field: "key" | "amount" | "date" | "senderBank") =>
     missing?.has(field) ? <p className="mt-1 text-sm text-ink-soft">No aparece en tu captura</p> : null;
   const claveField = (
@@ -293,7 +349,7 @@ function TransferForm({
            enough, unless the reference cannot find the transfer alone. */
         <div className="space-y-3">
           <div>
-            <Field label="Número de referencia">
+            <Field label={referenceLabel}>
               <Input
                 inputMode="numeric"
                 value={referenceNumber}
@@ -316,6 +372,21 @@ function TransferForm({
           <p className="text-sm text-ink-soft">
             {claveRequired ? "Escribe tu clave de rastreo." : "Con uno basta."}
           </p>
+        </div>
+      )}
+      {askSenderTail && (
+        <div>
+          <p className="mb-2 text-sm text-ink-soft">{payErrorCopy("SENDER_TAIL_NEEDED")}</p>
+          <Field label="Últimos 4 dígitos de tu cuenta o tarjeta">
+            <Input
+              inputMode="numeric"
+              value={senderTail}
+              onChange={(e) => setSenderTail(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              className="font-mono text-sm"
+              autoComplete="off"
+              autoFocus
+            />
+          </Field>
         </div>
       )}
       <div>
@@ -359,7 +430,13 @@ function TransferForm({
       </div>
       <div>
         <Field label="Fecha de la transferencia">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Input
+            type="date"
+            value={date}
+            min={dateRange?.min}
+            max={dateRange?.max}
+            onChange={(e) => setDate(e.target.value)}
+          />
         </Field>
         {notInCapture("date")}
       </div>
@@ -383,6 +460,7 @@ function TransferForm({
               senderBank: senderBank.trim(),
               date,
               amountCents: Math.round(Number.parseFloat(amount) * 100),
+              ...(askSenderTail && !claveOk ? { senderTail } : {}),
             })
           }
         >
@@ -526,6 +604,381 @@ function whereLine(bank: string | null | undefined): string | null {
   return found ? `En ${found.bank}: ${found.hint.where}.` : null;
 }
 
+/* ——— payment-without-receipt: a row searched by reference ———
+   A row with a `referenceSource` (D23) was confirmed with a bank and a day,
+   not proven by a capture, so what it searches is the payer's own word and
+   the page keeps it in front of them (FR-023). What it asks comes from the
+   server's `ask` (D15), never from the attempt count: such a row never
+   opens the form because `validationAttempts` reached five. */
+
+type PayBody = {
+  proofId?: string;
+  transfer?: object;
+  supersedes?: string;
+  receiptStatus?: string;
+  receiptAmountCents?: number;
+};
+
+/* D8/D11: the row's own search as a pay body's `transfer` — what an ask
+   re-sends beside the one fact it asked for. An own row sends no
+   reference: the server writes it. */
+function rowTransfer(s: DirectPaymentStatusResponse) {
+  const base = {
+    senderBank: s.senderBank ?? "",
+    date: s.transferDate ?? "",
+    ...(s.claimedAmountCents != null ? { amountCents: s.claimedAmountCents } : {}),
+  };
+  return s.referenceSource === "own"
+    ? { referenceSource: "own" as const, ...base }
+    : {
+        referenceSource: "typed" as const,
+        referenceNumber: s.referenceNumber ?? "",
+        ...base,
+        ...(s.senderTail ? { senderTail: s.senderTail } : {}),
+      };
+}
+
+/* FR-024: a correction keeps the row's path. Own stays own, with no
+   reference sent, while the payer leaves the reference as it was; a
+   changed reference is a typed one (D11); a clave is today's door, which
+   carries no path at all (D25 keeps it out of the hourly budget). */
+function correctionTransfer(t: TypedTransfer, s: DirectPaymentStatusResponse) {
+  const base = { senderBank: t.senderBank, date: t.date, amountCents: t.amountCents };
+  if (t.trackingKey) {
+    return {
+      trackingKey: t.trackingKey,
+      ...(t.referenceNumber ? { referenceNumber: t.referenceNumber } : {}),
+      ...base,
+    };
+  }
+  if (s.referenceSource === "own" && t.referenceNumber === s.referenceNumber) {
+    return { referenceSource: "own" as const, ...base };
+  }
+  const tail = t.senderTail ?? s.senderTail ?? undefined;
+  return {
+    referenceSource: "typed" as const,
+    referenceNumber: t.referenceNumber,
+    ...base,
+    ...(tail ? { senderTail: tail } : {}),
+  };
+}
+
+/* FR-023: what is searched, as the payer gave it — amount, reference,
+   bank, the day (or every day the rounds searched, D14) and the tail or
+   clave they typed. Never an account Devolada learned (FR-019): the status
+   carries none. */
+function SearchedData({ status, fallbackCents }: { status: DirectPaymentStatusResponse; fallbackCents?: number }) {
+  const days = status.searchedDays?.length ? status.searchedDays : status.transferDate ? [status.transferDate] : [];
+  const cents = status.claimedAmountCents ?? fallbackCents;
+  const rows: { label: string; value: string; mono?: boolean }[] = [
+    ...(cents != null ? [{ label: "Monto", value: formatMoney(cents) }] : []),
+    ...(status.referenceNumber
+      ? [{ label: "Referencia", value: groupReferenceDigits(status.referenceNumber), mono: true }]
+      : []),
+    ...(status.senderBank ? [{ label: "Banco", value: bankLabel(status.senderBank) }] : []),
+    ...(days.length
+      ? [{ label: days.length > 1 ? "Días buscados" : "Día", value: spokenDays(days) }]
+      : []),
+    ...(status.senderTail
+      ? [{ label: "Últimos 4 dígitos de tu cuenta", value: status.senderTail, mono: true }]
+      : []),
+    ...(status.trackingKey ? [{ label: "Clave de rastreo", value: status.trackingKey, mono: true }] : []),
+  ];
+  return (
+    <div className="divide-y divide-line-soft">
+      {rows.map((row) => (
+        <div key={row.label} className="py-2">
+          <p className="text-sm text-ink-soft">{row.label}</p>
+          {/* break-all for codes only: a sentence breaks between words */}
+          <p className={cn("text-sm text-ink", row.mono ? "break-all font-mono" : "break-words")}>{row.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* D11 (FR-032) and D17: four characters the payer types — the sending
+   account's last digits, or the clave's last characters. Never offered:
+   the page does not know them, and would not show them if it did. */
+function TailAsk({
+  label,
+  kind,
+  busy,
+  onSubmit,
+}: {
+  label: string;
+  kind: "digits" | "characters";
+  busy: boolean;
+  onSubmit: (value: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const ok = kind === "digits" ? /^\d{4}$/.test(value) : /^[A-Za-z0-9]{4}$/.test(value);
+  return (
+    <div className="space-y-4">
+      <Field label={label}>
+        <Input
+          inputMode={kind === "digits" ? "numeric" : "text"}
+          value={value}
+          onChange={(e) =>
+            setValue(
+              (kind === "digits" ? e.target.value.replace(/\D/g, "") : e.target.value.replace(/[^A-Za-z0-9]/g, "")).slice(
+                0,
+                4,
+              ),
+            )
+          }
+          className="font-mono text-sm"
+          autoComplete="off"
+          autoFocus
+        />
+      </Field>
+      {/* The Card around this is already aria-live="polite" */}
+      <Pending active={busy} announce={false} label="Estamos enviando tus datos.">
+        <Button size="decisive" disabled={!ok || busy} onClick={() => onSubmit(value)}>
+          <ShieldCheck className="size-5" aria-hidden />
+          {busy ? "Enviando…" : "Enviar"}
+        </Button>
+      </Pending>
+    </div>
+  );
+}
+
+/* D18: with a provisional release standing, an ask never reads as the
+   service being withdrawn — it says what settles the payment in time */
+const RELEASE_DURING_ASK =
+  "Tu servicio sigue activo. Tu clave o tu comprobante confirman el pago antes de que venza.";
+
+function SourcedReview({
+  status,
+  data,
+  directPaymentId,
+  busy,
+  payError,
+  paused = false,
+  onPay,
+  onReceipt,
+}: {
+  status: DirectPaymentStatusResponse;
+  data: LinkStatusResponse;
+  directPaymentId: string;
+  busy: boolean;
+  /* The refusal of this row's last correction or answer */
+  payError: ApiError | null;
+  /* prepaid-credit D9: the business paused validation — nothing is
+     searched, and the data stay correctable (FR-023) */
+  paused?: boolean;
+  onPay: (body: PayBody) => void;
+  onReceipt: () => void;
+}) {
+  /* D15: "Todo está bien" lives on this device, per payment */
+  const [acked, setAcked] = useState(() => readAskAck(directPaymentId));
+  const [correcting, setCorrecting] = useState(false);
+  const refused = payError?.code ?? null;
+  /* D16 (FR-024) and D11 (FR-034): after these two refusals the clave and
+     the receipt are what is left, and the page says so in the ask's place */
+  const clavesOnly = refused === "CORRECTIONS_EXHAUSTED" || refused === "REFERENCE_OF_ANOTHER";
+  const ask = paused
+    ? null
+    : clavesOnly
+      ? "clave"
+      : status.ask === "check_data" && acked
+        ? null
+        : (status.ask ?? null);
+  const editing = correcting && !clavesOnly;
+  const release = status.provisionalRelease ?? null;
+  const reference = status.referenceNumber ?? data.payerReference?.digits ?? null;
+  const today = todayIn(data.timezone);
+  /* D8: the days a search by reference accepts */
+  const dateRange = { min: shiftDay(today, -30), max: today };
+  const complete = Boolean(status.senderBank && status.transferDate);
+  const supersede = (transfer: object) => onPay({ transfer, supersedes: directPaymentId });
+  const used =
+    status.error === "TRANSFER_ALREADY_USED" || status.error === "CEP_ALL_USED" ? statusErrorCopy(status) : null;
+
+  /* contracts/payment-page.md, the asks: each says what was searched and
+     what could differ, and never suggests the payer lied (FR-037) */
+  const askCopy =
+    ask === "check_data"
+      ? `Todavía no encontramos tu transferencia. Revisa que estos datos sean los de tu app, y que hayas puesto la referencia ${reference ? inlineReference(reference) : ""}.`
+      : ask === "clave"
+        ? clavesOnly
+          ? payErrorCopy(refused!)
+          : "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app."
+        : ask === "sender_tail"
+          ? /* D26 (FR-041): an own row asked during a reference's transition
+               is being told apart from the previous holder — the digits are
+               not "shared by others" from where this payer stands */
+            status.referenceSource === "own"
+            ? "Para confirmar que esta transferencia es tuya, escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste."
+            : "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste."
+          : ask === "clave_tail"
+            ? "Encontramos más de una transferencia con esos datos. Escribe los últimos 4 caracteres de tu clave de rastreo."
+            : null;
+
+  /* An ask with its own field puts the receipt right after it, second
+     (FR-029, FR-031); otherwise the receipt waits at the end, quieter */
+  const askForm = !editing && (ask === "clave" || ((ask === "sender_tail" || ask === "clave_tail") && complete));
+  const receiptButton = (quiet: boolean) => (
+    <Button variant={quiet ? "ghost" : "secondary"} className="h-12 w-full text-sm" onClick={onReceipt}>
+      Sube tu comprobante
+    </Button>
+  );
+
+  return (
+    <div className="space-y-4">
+      {paused ? (
+        <Alert variant="warning" layout="icon">
+          <Info aria-hidden />
+          Este negocio pausó la validación de pagos. Tus datos quedaron guardados y se buscarán en cuanto
+          la reactiven. No tienes que hacer nada más.
+        </Alert>
+      ) : askCopy ? (
+        <Alert variant="warning" layout="icon">
+          <TriangleAlert aria-hidden />
+          <div className="space-y-2">
+            <p>{askCopy}</p>
+            {release && <p>{RELEASE_DURING_ASK}</p>}
+          </div>
+        </Alert>
+      ) : (
+        <>
+          {/* Waiting breathes (constitution VI). announce={false}: the Card
+              around this is already aria-live="polite". */}
+          <Pending active announce={false} label="Seguimos buscando tu transferencia.">
+            <p className="text-sm text-ink-soft">Seguimos buscando tu transferencia en Banxico.</p>
+          </Pending>
+          {release && (
+            /* provisional-release D9: one sentence, evidence fused with
+               consequence; a confirmation is `human` evidence (D18) */
+            <Reveal>
+              <Alert variant="success" layout="icon">
+                {release.kind === "protect" ? <ShieldCheck aria-hidden /> : <Wifi aria-hidden />}
+                {release.kind === "protect"
+                  ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
+                  : release.evidence === "human"
+                    ? "Gracias por confirmar tus datos. Tu internet ya volvió mientras Banxico responde."
+                    : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
+              </Alert>
+            </Reveal>
+          )}
+        </>
+      )}
+
+      {used && <p className="text-sm text-ink-soft">{used}</p>}
+
+      {askForm && ask === "clave" && (
+        /* FR-029: the whole clave, nothing having been found to compare a
+           part of it with; the rest of the search is kept. It travels by
+           today's door, with no path (contracts/payment-page.md). */
+        <TransferForm
+          keys="clave"
+          focusClave
+          busy={busy}
+          announce={false}
+          draft={{ trackingKey: null, senderBank: status.senderBank, date: status.transferDate }}
+          amountCents={status.claimedAmountCents ?? data.totalCents ?? null}
+          dateRange={dateRange}
+          submitLabel="Buscar con mi clave"
+          onSubmit={(t) => supersede(t)}
+        />
+      )}
+      {askForm && ask === "sender_tail" && (
+        <TailAsk
+          label="Últimos 4 dígitos de tu cuenta o tarjeta"
+          kind="digits"
+          busy={busy}
+          onSubmit={(senderTail) => supersede({ ...rowTransfer(status), senderTail })}
+        />
+      )}
+      {askForm && ask === "clave_tail" && (
+        <TailAsk
+          label="Últimos 4 caracteres de tu clave de rastreo"
+          kind="characters"
+          busy={busy}
+          onSubmit={(claveTail) => supersede({ ...rowTransfer(status), claveTail })}
+        />
+      )}
+      {askForm && receiptButton(false)}
+
+      {ask === "check_data" ? (
+        /* FR-028: the check is the read-back itself, open, with its two
+           answers. "Todo está bien" spends nothing and calls nothing. */
+        <div className="space-y-3 border-y border-line-soft pb-3">
+          <SearchedData status={status} fallbackCents={data.totalCents} />
+          {/* Stacked on a phone: side by side at 360px, "Todo está bien"
+              broke onto two lines inside a 48px button */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              variant="secondary"
+              className="h-12 w-full"
+              onClick={() => {
+                rememberAskAck(directPaymentId);
+                setAcked(true);
+              }}
+            >
+              Todo está bien
+            </Button>
+            <Button variant="secondary" className="h-12 w-full" onClick={() => setCorrecting(true)}>
+              Corregir
+            </Button>
+          </div>
+        </div>
+      ) : (
+        /* FR-023: verifying is free, editing is deliberate (the receipt
+           path's validation-status-ux D2) — and "Corregir" is there on
+           every state that is not final */
+        <Collapsible>
+          <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
+            Ver los datos que enviaste
+            <ChevronDown
+              className="size-5 transition-transform group-data-[state=open]:rotate-180"
+              aria-hidden
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="space-y-3 border-t border-line-soft pt-3">
+              <SearchedData status={status} fallbackCents={data.totalCents} />
+              <Button variant="secondary" onClick={() => setCorrecting(true)}>
+                Corregir
+              </Button>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {editing && (
+        /* FR-024: one search at once when a searched field changed; an
+           identical correction spends none (the server's rule) */
+        <TransferForm
+          typed
+          busy={busy}
+          announce={false}
+          draft={{
+            trackingKey: status.trackingKey,
+            referenceNumber: status.referenceNumber ?? null,
+            senderBank: status.senderBank,
+            date: status.transferDate,
+          }}
+          amountCents={status.claimedAmountCents ?? data.totalCents ?? null}
+          dateRange={dateRange}
+          askSenderTail={refused === "SENDER_TAIL_NEEDED"}
+          submitLabel="Confirmar estos datos"
+          onSubmit={(t) => supersede(correctionTransfer(t, status))}
+        />
+      )}
+
+      {payError && !clavesOnly && refused !== "SENDER_TAIL_NEEDED" && (
+        <Alert variant="destructive" layout="icon">
+          <TriangleAlert aria-hidden />
+          {payErrorCopy(payError.code)}
+        </Alert>
+      )}
+
+      {!askForm && receiptButton(true)}
+    </div>
+  );
+}
+
 export function PaymentPage({ token }: { token: string }) {
   const queryClient = useQueryClient();
   /* The payment this visit submitted. What the page watches is `payment`
@@ -557,6 +1010,21 @@ export function PaymentPage({ token }: { token: string }) {
   };
   /* The fallback door, opened on purpose and never closed again (D19) */
   const [manualDoor, setManualDoor] = useState(false);
+  /* payment-without-receipt D8/D21: with the payer's own reference, step 2
+     opens on "Confirma tu pago"; "No puse la referencia" (D11) and the
+     receipt are its two exits. Page state, not device state: the step
+     memory stays as it was (step.ts), and a new visit to step 2 starts
+     from the confirmation, the path that costs the payer least. */
+  const [proofView, setProofView] = useState<"confirm" | "typed" | "receipt">("confirm");
+  /* D8: the server answered REFERENCE_NOT_READY — the reference is not
+     born yet, so the receipt step says why it is the one shown */
+  const [referenceNotReady, setReferenceNotReady] = useState(false);
+  /* US1 scenario 6: the capture carried another reference, or none — the
+     payment goes on by receipt, and the payer is reminded of theirs */
+  const [referenceReminder, setReferenceReminder] = useState(false);
+  /* D23: the path of the last submission, so the first frame after it
+     already speaks the path's words before the first poll answers */
+  const [submittedSource, setSubmittedSource] = useState<"own" | "typed" | null>(null);
   /* validation-status-ux D7: the live payment a fresh proof supersedes —
      set when the payer walks out of "Verificando" through "Subir otro
      comprobante", cleared when the new submission lands. */
@@ -681,14 +1149,24 @@ export function PaymentPage({ token }: { token: string }) {
         method: "POST",
         body: JSON.stringify(body),
       }),
-    onSuccess: (result) => {
+    onSuccess: (result, body) => {
       setPayment(result);
       setResubmitOf(null);
       setCorrecting(false);
+      const source = (body.transfer as { referenceSource?: "own" | "typed" } | undefined)?.referenceSource;
+      setSubmittedSource(source ?? null);
       /* receipt-triage D18: the ask is consumed when the payment is born */
       setAsk(null);
       setAskForm(false);
       setGuide("idle");
+    },
+    onError: (error) => {
+      /* payment-without-receipt D8: `own` asked and the link has no
+         reference yet — today's receipt step, which works without one */
+      if (error.code === "REFERENCE_NOT_READY") {
+        setReferenceNotReady(true);
+        setProofView("receipt");
+      }
     },
   });
 
@@ -753,6 +1231,11 @@ export function PaymentPage({ token }: { token: string }) {
          no field can be read from. A `partial` legibility is *not* a
          refusal — it goes to the provider with its hole (FR-005). */
       setGuide(reading ? { reading } : "idle");
+      /* payment-without-receipt US1 scenario 6: the receipt path never
+         refuses a capture for its reference — it reminds the payer of
+         their own, for the next transfer */
+      const own = link.data?.payerReference?.digits;
+      setReferenceReminder(Boolean(own && reading && reading.referenceNumber !== own));
       if (reading && (reading.isReceipt === false || reading.legibility === "none")) {
         return { refusal: reading.isReceipt === false ? "not_receipt" : "illegible" } as const;
       }
@@ -828,6 +1311,7 @@ export function PaymentPage({ token }: { token: string }) {
       setRefusal(null);
       if ("directPaymentId" in result) {
         setPayment(result);
+        setSubmittedSource(null);
         setResubmitOf(null);
         setCorrecting(false);
         /* BUG-011: the draft is consumed when the payment is born. Left
@@ -892,12 +1376,18 @@ export function PaymentPage({ token }: { token: string }) {
           claimedAmountCents: null,
           readingCheck: null,
           receiptStatus: null,
+          referenceSource: submittedSource,
         }
       : null);
   if (payment && status) {
     const retry = () => {
       setPayment(null);
       setCorrecting(false);
+      /* payment-without-receipt D21: the next try starts from the
+         confirmation again, and the last capture's reminder is spent */
+      setProofView("confirm");
+      setReferenceReminder(false);
+      setSubmittedSource(null);
       /* BUG-011, second belt: whatever screen calls retry wants the step
          machine, never a stale draft rendering in front of it. */
       setDraft(null);
@@ -916,6 +1406,19 @@ export function PaymentPage({ token }: { token: string }) {
       pay.reset();
       upload.reset();
       goTo("proof");
+      /* payment-without-receipt FR-029/FR-031: "Sube tu comprobante" is
+         the receipt step itself, not the confirmation in front of it */
+      setProofView("receipt");
+      void queryClient.invalidateQueries({ queryKey: ["link", token] });
+    };
+    /* payment-without-receipt FR-030: an expired row is final — the
+       receipt starts a new payment, superseding nothing */
+    const receiptAfterExpiry = () => {
+      setPayment(null);
+      pay.reset();
+      upload.reset();
+      goTo("proof");
+      setProofView("receipt");
       void queryClient.invalidateQueries({ queryKey: ["link", token] });
     };
     return (
@@ -925,7 +1428,25 @@ export function PaymentPage({ token }: { token: string }) {
           {data.customerName && <p className="text-sm text-ink-soft">{data.customerName}</p>}
         </header>
 
-        {status.status === "validating" && (
+        {status.status === "validating" && status.referenceSource && (
+          /* payment-without-receipt D15, FR-023: a row searched by
+             reference reads back what is searched and asks by `ask` */
+          <>
+            <StatusBadge status="validating" size="standard" />
+            <SourcedReview
+              key={payment.directPaymentId}
+              status={status as DirectPaymentStatusResponse}
+              data={data}
+              directPaymentId={payment.directPaymentId}
+              busy={busy}
+              payError={pay.error}
+              onPay={(body) => pay.mutate(body)}
+              onReceipt={startOverWithReceipt}
+            />
+          </>
+        )}
+
+        {status.status === "validating" && !status.referenceSource && (
           <>
             <StatusBadge status="validating" size="standard" />
             {(() => {
@@ -1056,7 +1577,7 @@ export function PaymentPage({ token }: { token: string }) {
                   ) : referenceAsk ? (
                     /* receipt-triage D17/D7: only the clave can find this
                        transfer now, so it is the one thing asked */
-                    <p className="text-sm text-ink-soft">{payErrorCopy(status.error!)}</p>
+                    <p className="text-sm text-ink-soft">{statusErrorCopy(status)}</p>
                   ) : eitherKey ? (
                     <p className="text-sm text-ink-soft">
                       No encontramos tu transferencia todavía. Confirma tu clave de rastreo o tu número
@@ -1380,7 +1901,23 @@ export function PaymentPage({ token }: { token: string }) {
           </Reveal>
         )}
 
-        {status.status === "queued_for_credit" && (
+        {status.status === "queued_for_credit" && status.referenceSource && (
+          /* payment-without-receipt FR-023: not final, so the searched data
+             and "Corregir" stay; nothing is searched while it waits */
+          <SourcedReview
+            key={payment.directPaymentId}
+            status={status as DirectPaymentStatusResponse}
+            data={data}
+            directPaymentId={payment.directPaymentId}
+            busy={busy}
+            payError={pay.error}
+            paused
+            onPay={(body) => pay.mutate(body)}
+            onReceipt={startOverWithReceipt}
+          />
+        )}
+
+        {status.status === "queued_for_credit" && !status.referenceSource && (
           /* prepaid-credit D9: the business's fault, never the payer's —
              no "error", no hidden CLABE, no countdown. Calm, like D12's
              family; the poll above brings the payer back on its own. */
@@ -1396,9 +1933,10 @@ export function PaymentPage({ token }: { token: string }) {
           <Reveal className="space-y-4">
             <StatusBadge status="paymentInvalid" size="standard" />
             <p className="text-sm text-ink-soft">
-              {status.error
-                ? payErrorCopy(status.error)
-                : "No pudimos verificar tu transferencia. Revisa los datos e intenta de nuevo."}
+              {/* payment-without-receipt D24: a used transfer names the
+                  payer's own payment that used it, when it is theirs */}
+              {statusErrorCopy(status) ??
+                "No pudimos verificar tu transferencia. Revisa los datos e intenta de nuevo."}
             </p>
             <Button variant="secondary" onClick={retry}>
               Intentar de nuevo
@@ -1406,7 +1944,57 @@ export function PaymentPage({ token }: { token: string }) {
           </Reveal>
         )}
 
-        {status.status === "expired" && (
+        {status.status === "expired" && status.referenceSource && (
+          /* payment-without-receipt FR-030: the ladder ran out, and the
+             clave and the receipt stay on the page. No "Reintentar ahora":
+             that retry re-sends a clave, and this row searched without one
+             (provisional-release D7). */
+          <Reveal className="space-y-4">
+            <StatusBadge status="paymentExpired" size="standard" />
+            <p className="text-sm text-ink-soft">
+              {statusErrorCopy(status) && status.usedBy
+                ? statusErrorCopy(status)
+                : status.provisionalRelease
+                  ? "No encontramos tu transferencia a tiempo y tu servicio volvió a pausa."
+                  : "No encontramos tu transferencia con los datos que enviaste."}{" "}
+              Escribe tu clave de rastreo o sube tu comprobante para confirmar tu pago.
+            </p>
+            <TransferForm
+              keys="clave"
+              busy={busy}
+              announce={false}
+              draft={{ trackingKey: null, senderBank: status.senderBank, date: status.transferDate }}
+              amountCents={status.claimedAmountCents ?? data.totalCents ?? null}
+              submitLabel="Buscar con mi clave"
+              onSubmit={(transfer) => pay.mutate({ transfer })}
+            />
+            <Button variant="secondary" className="h-12 w-full text-sm" onClick={receiptAfterExpiry}>
+              Sube tu comprobante
+            </Button>
+            {pay.error && (
+              <Alert variant="destructive" layout="icon">
+                <TriangleAlert aria-hidden />
+                {payErrorCopy(pay.error.code)}
+              </Alert>
+            )}
+            <Collapsible>
+              <CollapsibleTrigger className="group flex h-12 w-full items-center justify-between text-sm font-medium text-ink-soft transition-colors hover:text-ink">
+                Ver los datos que enviaste
+                <ChevronDown
+                  className="size-5 transition-transform group-data-[state=open]:rotate-180"
+                  aria-hidden
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="border-t border-line-soft pt-1">
+                  <SearchedData status={status as DirectPaymentStatusResponse} fallbackCents={data.totalCents} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </Reveal>
+        )}
+
+        {status.status === "expired" && !status.referenceSource && (
           <Reveal className="space-y-4">
             <StatusBadge status="paymentExpired" size="standard" />
             {/* D17: "no pudimos verificarlo" is a statement about us, not
@@ -1475,6 +2063,16 @@ export function PaymentPage({ token }: { token: string }) {
               contactará para resolverlo.
             </p>
           </Reveal>
+        )}
+
+        {/* payment-without-receipt US1 scenario 6: accepted by receipt all
+            the same; the reminder is for the next transfer */}
+        {referenceReminder && data.payerReference && (
+          <Alert layout="icon">
+            <Info aria-hidden />
+            Tu referencia es {inlineReference(data.payerReference.digits)}. Escríbela en tu próxima
+            transferencia y podrás confirmar tu pago sin comprobante.
+          </Alert>
         )}
       </Card>
     );
@@ -1676,6 +2274,9 @@ export function PaymentPage({ token }: { token: string }) {
 
   /* ——— 3. Instrucciones de pago — two steps (D19) ——— */
   const account = collectAccountOf(data);
+  /* payment-without-receipt D1/D22: the payer's own number. Absent or
+     null, and the two steps are today's, exactly (D20). */
+  const payer = data.payerReference ?? null;
 
   /* ——— 3a. Paso 1 — haz tu transferencia ——— */
   if (step === "transfer") {
@@ -1739,19 +2340,59 @@ export function PaymentPage({ token }: { token: string }) {
               datos". The CLABE carries its bank in its own digits and
               keeps today's layout (SC-008). */}
           {account!.kind !== "clabe" && account!.bank && <CopyField label="Banco" value={account!.bank} />}
+          {/* payment-without-receipt FR-004 (D21, D22): the payer's
+              reference beside the amount and the account, grouped to be
+              read and copied as the digits a bank takes. Called the
+              phone's only when it is (FR-004). */}
+          {payer && (
+            <CopyField
+              label="Tu referencia"
+              value={groupReferenceDigits(payer.digits)}
+              copy={payer.digits}
+              note={payer.fromPhone ? "Son los últimos 7 números de tu celular" : undefined}
+            />
+          )}
         </div>
 
-        {/* receipt-triage D8/D20 (FR-022): the capture guide's first
-            moment — before the payer leaves for the bank */}
-        <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
-          <Camera className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
-          <div className="text-sm">
-            <p className="font-medium text-ink">Al terminar, toma captura del detalle</p>
-            <p className="text-ink-soft">
-              Ahí aparecen la clave de rastreo o el número de referencia que necesitamos.
-            </p>
+        {payer?.previousDigits && (
+          /* D26 (FR-040): the contact saved in the bank still has the
+             previous digits */
+          <Alert layout="icon">
+            <Info aria-hidden />
+            Tu referencia cambió: ahora es {inlineReference(payer.digits)}. Actualiza el contacto en tu
+            banco.
+          </Alert>
+        )}
+
+        {payer ? (
+          /* D21 (FR-004): where the reference goes — the payer's bank's own
+             words when a verified hint exists for their most recent bank,
+             the general sentence otherwise — and the tip that makes next
+             month one tap. It takes the capture tip's place: with a
+             reference, the capture is the second option, not the plan. */
+          <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
+            <Info className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+            <div className="space-y-1 text-sm">
+              <p className="font-medium text-ink">{referenceHint(data.learnedBanks?.[0])}</p>
+              <p className="text-ink-soft">
+                Guarda a {data.ispName} como contacto en tu banco con esta referencia, y el próximo mes ya
+                estará ahí.
+              </p>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* receipt-triage D8/D20 (FR-022): the capture guide's first
+             moment — before the payer leaves for the bank */
+          <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
+            <Camera className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+            <div className="text-sm">
+              <p className="font-medium text-ink">Al terminar, toma captura del detalle</p>
+              <p className="text-ink-soft">
+                Ahí aparecen la clave de rastreo o el número de referencia que necesitamos.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Beneficiario, banco and concepto are checked once, if at all:
             reachable, not stacked on top of the two that are used (D19) */}
@@ -1780,13 +2421,134 @@ export function PaymentPage({ token }: { token: string }) {
           {/* A way forward, not a claim we verify: the payer who already
               transferred yesterday arrives here too, and this is how
               they reach their receipt (D19). */}
-          <Button size="decisive" onClick={() => goTo("proof")}>
+          <Button
+            size="decisive"
+            onClick={() => {
+              /* payment-without-receipt D21: step 2 opens on the
+                 confirmation every time the payer arrives at it */
+              setProofView("confirm");
+              goTo("proof");
+            }}
+          >
             Ya hice mi transferencia
           </Button>
           <p className="text-center text-sm text-ink-soft">
-            Transfiere el monto exacto desde tu banco y vuelve aquí con tu comprobante.
+            {payer
+              ? "Transfiere el monto exacto con tu referencia y vuelve aquí para confirmar tu pago."
+              : "Transfiere el monto exacto desde tu banco y vuelve aquí con tu comprobante."}
           </p>
         </div>
+      </Card>
+    );
+  }
+
+  /* ——— 3b. Paso 2 — confirma tu pago (payment-without-receipt D8, D21) ———
+     The page's new first view of step 2, in its own component so this
+     file does not grow further (plan.md, Structure Decision). */
+  if (payer && proofView === "confirm") {
+    return (
+      <Card className="space-y-5 p-6">
+        <ConfirmPayment
+          data={data}
+          reference={payer}
+          header={stepHeader(2, "Confirma tu pago")}
+          busy={busy}
+          error={
+            pay.error && pay.error.code !== "REFERENCE_NOT_READY"
+              ? { code: pay.error.code, copy: payErrorCopy(pay.error.code) }
+              : null
+          }
+          onConfirm={(transfer) =>
+            pay.mutate({ transfer, ...(resubmitOf ? { supersedes: resubmitOf } : {}) })
+          }
+          onNoReference={() => {
+            pay.reset();
+            setProofView("typed");
+          }}
+          onReceipt={() => {
+            pay.reset();
+            setProofView("receipt");
+          }}
+          onBack={() => goTo("transfer")}
+        />
+      </Card>
+    );
+  }
+
+  /* ——— 3b. Paso 2 — no puse la referencia (payment-without-receipt D11) ———
+     FR-031: the reference the payer did use, or their clave, with the
+     receipt second. A typed reference travels as `typed`, and the server
+     asks for the account's four digits only when nothing it learned ties
+     the transfer to this payer (FR-032); a clave is today's door. */
+  if (payer && proofView === "typed") {
+    const refused = pay.error?.code ?? null;
+    const today = todayIn(data.timezone);
+    return (
+      <Card className="space-y-5 p-6">
+        <Button variant="ghost" className="-ml-2 h-10 px-2 text-sm" onClick={() => goTo("transfer")}>
+          <ChevronLeft className="size-4" aria-hidden />
+          Ver los datos otra vez
+        </Button>
+
+        {stepHeader(2, "No puse la referencia")}
+
+        <p className="text-sm text-ink-soft">
+          Escribe la referencia que pusiste en tu transferencia, o su clave de rastreo.
+        </p>
+
+        {refused && refused !== "SENDER_TAIL_NEEDED" && refused !== "REFERENCE_NOT_READY" && (
+          <Alert variant="destructive" layout="icon">
+            <TriangleAlert aria-hidden />
+            {payErrorCopy(refused)}
+          </Alert>
+        )}
+
+        <TransferForm
+          typed
+          /* FR-034: another person's reference is never searched for this
+             payer — what is left is the clave, then the receipt */
+          keys={refused === "REFERENCE_OF_ANOTHER" ? "clave" : "either"}
+          focusClave={refused === "REFERENCE_OF_ANOTHER"}
+          referenceLabel="Referencia que pusiste"
+          askSenderTail={refused === "SENDER_TAIL_NEEDED"}
+          busy={busy}
+          amountCents={data.totalCents ?? null}
+          timezone={data.timezone}
+          dateRange={{ min: shiftDay(today, -30), max: today }}
+          submitLabel="Buscar mi pago"
+          onSubmit={(t) =>
+            pay.mutate({
+              transfer: t.trackingKey
+                ? {
+                    trackingKey: t.trackingKey,
+                    ...(t.referenceNumber ? { referenceNumber: t.referenceNumber } : {}),
+                    senderBank: t.senderBank,
+                    date: t.date,
+                    amountCents: t.amountCents,
+                  }
+                : {
+                    referenceSource: "typed",
+                    referenceNumber: t.referenceNumber,
+                    senderBank: t.senderBank,
+                    date: t.date,
+                    amountCents: t.amountCents,
+                    ...(t.senderTail ? { senderTail: t.senderTail } : {}),
+                  },
+              ...(resubmitOf ? { supersedes: resubmitOf } : {}),
+            })
+          }
+        />
+
+        <Button
+          variant="secondary"
+          className="h-12 w-full"
+          onClick={() => {
+            pay.reset();
+            setProofView("receipt");
+          }}
+        >
+          Sube tu comprobante
+        </Button>
       </Card>
     );
   }
@@ -1802,6 +2564,16 @@ export function PaymentPage({ token }: { token: string }) {
       </Button>
 
       {stepHeader(2, "Envía tu comprobante")}
+
+      {payer && referenceNotReady && (
+        /* payment-without-receipt D8: REFERENCE_NOT_READY — the reference
+           is not ready on the server yet, and the receipt works without it */
+        <Alert layout="icon">
+          <Info aria-hidden />
+          Por ahora no podemos buscar tu pago con tu referencia. Sube tu comprobante o escribe los datos
+          de tu transferencia.
+        </Alert>
+      )}
 
       {/* two-eyes-receipt D2: the refusal sits above the picker, which
           stays open — the payer's next move is another photo. Two
@@ -1939,7 +2711,7 @@ export function PaymentPage({ token }: { token: string }) {
         </Button>
       )}
 
-      {submitError && (
+      {submitError && submitError.code !== "REFERENCE_NOT_READY" && (
         <Alert variant="destructive" layout="icon">
           <TriangleAlert aria-hidden />
           {payErrorCopy(submitError.code)}

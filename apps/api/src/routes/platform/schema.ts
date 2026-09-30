@@ -42,3 +42,16 @@ export const adjustmentRequest = z.object({
 export type SettingsListResponse = z.infer<typeof settingsListResponse>;
 export type BusinessesListResponse = z.infer<typeof businessesListResponse>;
 export type PlatformBusinessRow = z.infer<typeof businessRow>;
+
+/* payment-without-receipt D19 (FR-038): GET /platform/provider-quota — the
+   provider's remaining calls as its latest answer said, and when. Null
+   until an answer has carried the header. A platform row: it names no
+   business. */
+export const providerQuotaResponse = z
+  .object({
+    provider: z.literal("apicep"),
+    remaining: z.number().int(),
+    observedAt: z.number().int(),
+  })
+  .nullable();
+export type ProviderQuotaResponse = z.infer<typeof providerQuotaResponse>;

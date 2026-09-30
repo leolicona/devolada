@@ -83,6 +83,13 @@ export const paymentLink = z.object({
      validation unavailable in this environment. Never the business's to
      fix, never a refusal. */
   notices: z.array(v1Notice),
+  /* payment-without-receipt D22 (FR-005): the seven digits this customer
+     puts in the transfer's «Referencia numérica». An API link carries no
+     phone, so it is always an assigned number (D2, D4). A reusable and a
+     one-time link of one `customerRef` share it: the reference belongs to
+     the customer, not the link (D1). Null while the business has
+     `pay_by_reference` off. */
+  payerReference: z.string().regex(/^[1-9]\d{6}$/).nullable(),
 });
 
 export const paymentLinkList = z.object({

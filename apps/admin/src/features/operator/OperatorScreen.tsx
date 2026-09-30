@@ -2,7 +2,12 @@ import { Alert, Amount, Button, Card, Input, parseMoney, Pending, Skeleton } fro
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
-import type { BusinessesListResponse, PlatformBusinessRow, SettingsListResponse } from "@devolada/api/platform-schema";
+import type {
+  BusinessesListResponse,
+  PlatformBusinessRow,
+  ProviderQuotaResponse,
+  SettingsListResponse,
+} from "@devolada/api/platform-schema";
 import type { CreditEntriesResponse } from "@devolada/api/credit-schema";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,7 +16,7 @@ import { BANK_OPTIONS } from "@/lib/banks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { formatTime } from "@/lib/datetime";
+import { formatAgo, formatTime } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { useDisplaySettings, useSession } from "../auth/session";
 import { ENTRY_LABELS } from "../credit/CreditCard";
@@ -21,8 +26,9 @@ import { ReaderTab } from "./ReaderTab";
 
 /* /operador (operator-panel spec, US-L02): the platform's hands. Boring
    on purpose (IA). Four tabs — Reglas (D1's keys as typed fields with
-   their history), Negocios (D7's map, with the adjustment and override
-   forms), Landing (landing-page D17: the page's counts and requests) and
+   their history, under the provider's remaining calls —
+   payment-without-receipt D19), Negocios (D7's map, with the adjustment
+   and override forms), Landing (landing-page D17: the page's counts and requests) and
    Lector (receipt-reader-tuning D19: the model that reads receipts, its
    test bench and the results that pick it). The route is hidden unless the actor is the operator; the API guard is
    the real defense (D3). */
@@ -139,19 +145,47 @@ function SettingField({ setting }: { setting: Setting }) {
   );
 }
 
+const COUNT = new Intl.NumberFormat("es-MX");
+
+/* payment-without-receipt D19 (FR-038): the provider's remaining calls,
+   as its latest answer said, and how long ago. A platform row, so it
+   names no business (constitution V). Silent while it loads, when no
+   answer has carried the header yet (null), and when the read fails: the
+   line is a gauge beside the rules, never a gate on them, and running out
+   is handled where it happens — the payer keeps "Seguimos buscando" (D14). */
+function ProviderQuotaLine() {
+  const quota = useQuery<ProviderQuotaResponse, ApiError>({
+    queryKey: ["platform-provider-quota"],
+    queryFn: () => api<ProviderQuotaResponse>("/platform/provider-quota"),
+  });
+  if (!quota.data) return null;
+  return (
+    <p className="text-sm text-muted-foreground">
+      {`Consultas restantes del proveedor: ${COUNT.format(quota.data.remaining)} (${formatAgo(quota.data.observedAt)})`}
+    </p>
+  );
+}
+
 function RulesTab() {
   const settings = useQuery<SettingsListResponse, ApiError>({
     queryKey: ["platform-settings"],
     queryFn: () => api<SettingsListResponse>("/platform/settings"),
   });
-  if (settings.isPending) return <Skeleton className="h-40 w-full" />;
-  if (settings.error) return <Alert variant="destructive">No pudimos cargar las reglas.</Alert>;
   return (
-    <Card className="p-6">
-      {settings.data.settings.map((s) => (
-        <SettingField key={`${s.key}-${s.current ?? ""}`} setting={s} />
-      ))}
-    </Card>
+    <div className="space-y-4">
+      <ProviderQuotaLine />
+      {settings.isPending ? (
+        <Skeleton className="h-40 w-full" />
+      ) : settings.error ? (
+        <Alert variant="destructive">No pudimos cargar las reglas.</Alert>
+      ) : (
+        <Card className="p-6">
+          {settings.data.settings.map((s) => (
+            <SettingField key={`${s.key}-${s.current ?? ""}`} setting={s} />
+          ))}
+        </Card>
+      )}
+    </div>
   );
 }
 

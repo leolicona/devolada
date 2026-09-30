@@ -288,6 +288,13 @@
       "when": 1790538356579,
       "tag": "0040_cep_bundle_match",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1790794423766,
+      "tag": "0041_payment_without_receipt",
+      "breakpoints": true
     }
   ]
 }

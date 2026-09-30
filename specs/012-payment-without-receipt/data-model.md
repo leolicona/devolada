@@ -136,6 +136,14 @@ payment holding that clave in the business, when its customer holds the
 same reference as this payment's customer — its confirmation day in the
 business's timezone and its `received_cents`. Otherwise nothing.
 
+*Amended 2026-09-30 at implementation (tasks T019, T026):* on the payer's
+own reference, a transfer another service of the same person already
+used is dropped by the matcher as `used`, so the row ends `CEP_UNDECIDED`
+with `all_used` (D10 keeps that ask) rather than `TRANSFER_ALREADY_USED`.
+`usedBy` is therefore derived for both: the clave of a
+`TRANSFER_ALREADY_USED` row rides `confirmation.usedClave`; a
+`CEP_ALL_USED` row's are the trail's `used` candidates.
+
 ## State of a confirmation
 
 ```text

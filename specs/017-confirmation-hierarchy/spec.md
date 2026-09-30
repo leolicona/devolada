@@ -82,7 +82,7 @@ built.
 | FR-041: during a transition, the previous holder's account, then their digits, then the clave's characters; the new owner asked for their digits | The same tie-break screen of FR-011; only exclusive accounts decide (FR-015) |
 | User Story 2 scenario 3; User Story 5 scenarios 1, 3, 4, 5, 7 and 8 | Read with the rows above |
 | Page contract, step 2: the small exits (item 6), the "No puse la referencia" paragraph, the asks `sender_tail` and `clave_tail`, and every placement of "Sube tu comprobante" | Replaced by FR-001–FR-008 and FR-011 |
-| Plan decisions D11 (the refusal before the search), D15 (the digits before the characters), D17 (the characters only after an undecided payment) and D25 (the characters outside every limit) | Revisited by this spec's plan |
+| Plan decisions D11 (the refusal before the search), D15 (the digits before the characters), D17 (the characters only after an undecided payment) and D25 (the characters outside every limit, the digits inside the hourly one) | Revisited by this spec's plan; D25 by FR-016 |
 
 Everything else in spec 012 stands: the reference and how it is born, the
 confirmation by bank and day, the read-back and "Corregir", the ladder's
@@ -129,6 +129,13 @@ rounds, what Devolada learns, and the switch per business.
   option A of three. Rejected: a fixed lock of 24 hours from the third
   miss, which allows six misses in a little over a day; a reset at the
   business's midnight, which allows six within minutes across it.*
+- Q: Do tie-break answers count toward the link's limit of five attempts an
+  hour? → A: **No — neither way counts**; the three-miss window of FR-016 is
+  what bounds them. *The creator at `/speckit-clarify`, option A of three.
+  Rejected: the account's digits counting and the characters not, as 012
+  D25 had it, which can block an honest payer who confirmed and corrected
+  before answering; both counting, which adds that block and stops no
+  guess the three-miss window does not already stop.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -424,8 +431,9 @@ one person's account.
   While three count, only the whole clave and the receipt link are offered
   on that link; the four digits or characters return when the oldest of the
   three stops counting. The whole clave and the receipt are never limited
-  by this rule. The clave's characters count toward this
-  limit, in place of 012 D25.
+  by this rule. Answers of either way MUST NOT count toward the link's
+  hourly attempts; this rule is what bounds them (amending 012 D25, which
+  left the account's digits inside the hourly count).
 - **FR-017**: A payment whose payer does not answer MUST stay on spec 013's
   undecided path — "en revisión", no further searches, no expiry — with the
   ask still offered.

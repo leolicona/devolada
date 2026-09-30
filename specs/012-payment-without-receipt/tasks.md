@@ -35,7 +35,9 @@ their place in this list and build what 017's `tasks.md` says instead:
 exclusive accounts), **T038, T041, T042** (the asks and the receipt's
 place), **T043–T049** (the typed path: search first, the tie-break screen,
 `fitTieBreak`, the limit), **T051** (the browser layer), **T055, T056**
-(the transition's ask). Every other task stands as written.
+(the transition's ask). Every other task stands as written. Which 017
+task each of these becomes, and where 017's own tasks run in this list, is
+tabled in 017's [`tasks.md`](../017-confirmation-hierarchy/tasks.md#where-these-tasks-sit-in-spec-012s-order-plan-d1).
 
 ## Format: `[ID] [P?] [Story] Description`
 

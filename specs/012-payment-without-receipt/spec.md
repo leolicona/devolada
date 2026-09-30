@@ -192,6 +192,9 @@ ladder here asks earlier (FR-028, FR-029).
   operators by their last four digits, never to a payer: the payment link
   has no session, so anything it shows is shown to whoever holds the link,
   and spec 013 already keeps sending accounts for the business alone.
+  *The panel's list of each customer's learned banks and accounts was
+  withdrawn later the same day with the panel's actions: learning serves
+  the confirmation, and accounts stay where spec 013 already shows them.*
 - Q: Where the business's integration can restore the service while a
   payment is confirmed, does a confirmation count as evidence? → A: **Yes,
   under today's rules**, like a payment whose data the payer typed — and
@@ -279,7 +282,8 @@ After `/speckit-analyze` (same day), the creator decided five more:
   each person gets a number of their own, and the phone's digits go to no
   one, since nobody can tell whose phone it is. The business corrects it
   from the panel: "Es la misma persona" joins two customers into one
-  person; "No es la misma persona" separates one. *This replaces the
+  person; "No es la misma persona" separates one (*both withdrawn later
+  the same day: the system decides alone*). *This replaces the
   "more than three customers" line and the "not personal" mark: an office
   number put on customers who gave none now separates by itself, because
   the names differ. Rejected: the business deciding every repeated phone
@@ -290,7 +294,8 @@ After `/speckit-analyze` (same day), the creator decided five more:
 - Q: When the business gives a customer a new reference, and that person
   has several services on it, which services change? → A: **All of that
   person's services**: the person keeps one number, now a new one.
-  *Rejected: only that service, which leaves one person with two numbers.*
+  *Rejected: only that service, which leaves one person with two numbers.* *Withdrawn later the same day with the
+  panel's actions.*
 - Q: From payments made before this feature, what does Devolada learn? →
   A: **The bank only.** The sending account of a receipt searched by clave
   was never kept; accounts are learned from confirmations made after
@@ -335,6 +340,17 @@ And, the same day, how references are generated:
   them. *Rejected: the new customer getting another number (no one's
   reference changes); a 60-day wait with a temporary number for the new
   owner.*
+- Q: Does the panel give the business actions over references ("Nuevo
+  número", "Es la misma persona", "No es la misma persona"), a list of
+  each customer's banks and accounts, a "Cuenta nueva" mark or a "cambió"
+  label? → A: **No. The system decides alone; the panel only shows each
+  customer's reference and whether it is the phone's or assigned, and the
+  payments list says "Con su referencia".** The creator: the actions add
+  work for the business. The rare cases they fixed — a name written two
+  ways, two namesakes on one phone, a stand-in phone — are left to the
+  rules and, later, to the phone checked by message, which the payer does
+  themselves. *This withdraws the three actions and the "Nuevo número"
+  answer above.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -385,12 +401,9 @@ statement.
    customer's reference is set, **Then** an assigned number is used
    instead.
 5. **Given** a customer with a reference, **When** the business's operator
-   opens that customer, **Then** they see the reference, whether it is the
-   phone's or assigned, and which other customers share it, and can give
-   the person a new number (all their services change), join the customer
-   to another with the same phone ("Es la misma persona") or separate it
-   ("No es la misma persona"); the affected links then show the new
-   numbers.
+   looks at that customer in the panel, **Then** they see the reference
+   and whether it is the phone's or assigned — to read, with nothing to
+   do.
 6. **Given** a customer who uploads a capture anyway, **When** the
    capture's reference differs from their own, **Then** the payment is
    still accepted on the receipt path and the payer is reminded of their
@@ -512,8 +525,8 @@ known account, and see the payment confirmed without a question.
    decided it.
 5. **Given** a transfer found with the customer's own reference but sent
    from an account never seen for them, **When** it matches, **Then** it
-   confirms the payment (people pay for relatives), the account is learned,
-   and the operator sees the payment marked as paid from a new account.
+   confirms the payment (people pay for relatives) and the account is
+   learned.
 6. **Given** any state of the payment page, **When** it is shown, **Then**
    no sending account appears, whole or in part.
 
@@ -647,17 +660,19 @@ question.
   Devolada keeps the phone's digits, and every other person gets an
   assigned number drawn at random. A customer added later with that phone
   joins the person of the same name, or gets its own number with a new
-  name (FR-003). The business joins or separates people from the panel
-  when a name is written two ways or two people share one.
+  name (FR-003). The system decides alone: a name written two ways is two
+  people (each with their own number, the money never mixed), and two
+  people with one name and one phone are one person — rare cases the
+  phone's future check by message will settle (Assumptions).
 - **A placeholder phone.** The business typed a stand-in number for
   customers who gave none. When it looks like a bank app's default
   (0000000000, 1234567890…), FR-002 already gives each an assigned number.
   When it is a real-looking number on customers with different names, they
   are different people: the first keeps its digits and the others get
   their own. When it sits on a single
-  customer, it works as their reference — unique in the business — and the
-  business can give them a new number if the page's "son los últimos 7
-  números de tu celular" confuses them.
+  customer, it works as their reference — unique in the business — even
+  though the page's "son los últimos 7 números de tu celular" is not true
+  for them; the phone's future check by message corrects it.
 - **A new customer's phone ends in someone's assigned number.** Juan held
   7815678 as an assigned number; Ana arrives with a phone ending in
   781 5678. Ana takes the digits (a phone beats an assigned number); Juan
@@ -669,11 +684,10 @@ question.
   a shared reference, a service confirmed without paying can take the
   transfer meant for the other service. Accepted with the per-person
   reference (Clarifications 2026-09-30): the mix stays inside one person's
-  services, and a transfer from an account not learned for that service is
-  marked for the operator.
+  services, and among several transfers the one from an account learned
+  for that service goes first (FR-021).
 - **The phone changes.** The reference does not follow it; the payer may
-  have saved it in their bank. The operator can give the person a new
-  number on purpose.
+  have saved it in their bank.
 - **A day outside the last 30 days.** A confirmation for a day after today,
   or more than 30 days ago in the business's timezone, is refused before
   any search; the page asks for a day within the last 30 days (older
@@ -685,8 +699,8 @@ question.
   sending account. Each payment records its path, so the business can see
   which banks fail this way.
 - **The payer changes bank, or a relative pays.** They pick another bank at
-  the confirmation. A new sending account confirms and is marked for the
-  operator; it is never refused.
+  the confirmation. A new sending account confirms and is learned; it is
+  never refused, and nothing marks it (clarified 2026-09-30).
 - **The payer pays twice the same day with the same reference** — same
   service, amount, bank and account; only the time and the clave differ.
   Both transfers are theirs, so nothing is asked: the earliest one not yet
@@ -731,8 +745,8 @@ question.
   phone as the business's records hold it. Devolada MUST assign another
   seven-digit number instead — one per person, drawn at random, with no
   pattern — when the customer has no phone; when another person with the
-  same phone and another name received its digits first, or the business
-  separated them; when those digits are already another person's phone
+  same phone and another name received its digits first; when those
+  digits are already another person's phone
   reference; when they equal the last seven digits of
   an account the business receives on; or when they look like a bank
   app's default — one digit repeated (0000000) or a straight run up or
@@ -748,12 +762,8 @@ question.
   one exception of FR-040. A customer added later with the phone and the
   name of a person joins that person's reference; one with the phone and
   another name gets a number of their own, and whoever already holds the
-  phone's digits keeps them. The
-  business's operator MAY give a person a new number — every service of
-  that person changes — join a customer to another person with the same
-  phone ("Es la misma persona"), or separate a customer into a person of
-  their own ("No es la misma persona"); the affected links then show their
-  new numbers.
+  phone's digits keeps them. The system decides every case alone; the
+  panel has no action that changes a reference (clarified 2026-09-30).
 - **FR-004**: The payment instructions MUST show the reference next to the
   amount and the receiving account, each copyable; say whether it is the
   phone's digits; say where it goes — in the payer's bank's own words when
@@ -764,11 +774,9 @@ question.
   include the reference, and the reference MUST be part of what the
   business reads about a link, in the panel and through the collections
   API.
-- **FR-006**: The business's operator MUST see, per customer, the reference,
-  whether it is the phone's or assigned, the other customers who share it,
-  the other customers with the same phone and another name (the ones "Es la
-  misma persona" could join), the learned banks, and the learned accounts
-  by their last four digits.
+- **FR-006**: The business's operator MUST see, per customer, the reference
+  and whether it is the phone's or assigned — to read only: no action, no
+  list of banks or accounts (clarified 2026-09-30).
 - **FR-040**: A phone beats an assigned number. When a customer's phone
   ends in seven digits another person holds as an assigned number, the
   phone's owner MUST take them; the previous holder MUST get a new
@@ -850,9 +858,8 @@ question.
   only to its operators (accounts by their last four digits) and to
   platform operators.
 - **FR-020**: A transfer found with the customer's own reference and sent
-  from an account not yet learned MUST still confirm; the account is
-  learned and the payment is marked for the operator as paid from a new
-  account.
+  from an account not yet learned MUST still confirm, and the account is
+  learned.
 - **FR-021**: When several transfers match and exactly one comes from an
   account learned for the customer being confirmed, that transfer MUST
   confirm the payment without asking the payer, and the payment records
@@ -942,8 +949,8 @@ question.
 - **Payer reference**: a person's seven-digit number inside one business —
   the digits, whether they are a phone's or assigned, the customers
   (services) that share it, when it was set or changed. A person is the
-  customers with one phone and one name, unless the business joined or
-  separated them. No two persons of the business share one; when
+  customers with one phone and one name. No two persons of the business
+  share one; when
   different people share a phone, the first to receive a reference keeps
   its digits. A reference that passed from an assigned holder to a phone's
   owner records whom it passed from, until the transition ends (FR-041).
@@ -956,7 +963,7 @@ question.
   and the reference searched (their own or typed), any account digits or
   clave given, the corrections, the rounds it spent and the asks it showed.
 - **Payment** (existing): gains its confirmation source, what decided it,
-  the clave and the credit time, and the "new account" mark.
+  the clave and the credit time.
 
 ## Success Criteria *(mandatory)*
 
@@ -968,8 +975,8 @@ question.
 - **SC-002**: No payment is ever confirmed with a transfer that belongs to
   another person: 0 such confirmations in a month of pilot, checked
   against the pilot business's bank statement. A transfer moved between
-  the services of one phone is not counted here; the operator sees it
-  marked (Edge Cases).
+  the services of one person is not counted here: it stays inside that
+  person's services (Edge Cases).
 - **SC-003**: The instant path spends at most 2 provider calls per payment
   on average over a month, and no payment spends more than 7 without a new
   fact from the payer.
@@ -996,8 +1003,8 @@ question.
   customers have no phone, and how many share one under different names,
   is counted before release, since it says how often an assigned number
   appears. Names are compared as the business's records hold them,
-  ignoring accents and letter case; a name written two ways is joined by
-  the business from the panel.
+  ignoring accents and letter case; a name written two ways counts as two
+  people until the phone's future check by message.
 - The amount searched is the one the payer's link asks unless the payer
   gives another: read through the business's integration as today when the
   link was made in the panel (for an ISP, its open invoices), or stored on

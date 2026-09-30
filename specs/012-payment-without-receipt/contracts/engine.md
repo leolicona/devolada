@@ -38,7 +38,7 @@ export async function ensurePayerReference(
 ): Promise<PayerReference | null>;   // null: feature off, or the count could not be made
 ```
 
-1. The customer already holds an active reference → it.
+1. The customer already holds a reference → it.
 2. `nationalPhone(phone)` null, or its last seven fail D3 → a new
    assigned number (at random, no pattern).
 3. Read `customersWithPhone(phone)` and group by `personName(first, last)`
@@ -51,15 +51,14 @@ export async function ensurePayerReference(
    - as another person's `assigned` number → D26: the row passes to this
      person (`origin = phone`), its previous holders move to a new
      assigned row, `previous_reference_id` and `transition_ends_at`
-     (+60 days) are set;
-   - `retired` → an assigned number (retired digits are never used again).
+     (+60 days) are set.
 6. New digits → a `phone` reference for this person: the first to receive
    them keeps them, whatever other names the phone carries.
 
 `assignNumber(db, business)` draws until an insert under the unique
-`(business_id, digits)` succeeds (D6). `newNumberFor(person)`,
-`joinPerson(customer, withCustomer)` and `separate(customer)` implement the
-panel's three actions (contracts/panel.md).
+`(business_id, digits)` succeeds (D6). Only this function and the D26 pass
+write `payer_reference_customers`: the panel has no action that changes a
+reference (clarified 2026-09-30).
 
 ## The backfill sweep (D5)
 
@@ -123,7 +122,7 @@ upsert is a lost observation, never a failed validation.
 - `claveTail` on a row that supersedes an undecided one → `fitClaveTail`
   against the kept candidates; one fit confirms from the record, as spec
   013 D11 does for a whole clave.
-- On confirmation: `sender_account_new` per D12; `confirmation.days`
-  gains every day searched.
+- On confirmation: `confirmation.days` gains every day searched; the
+  confirming account is learned by the D12 query, with no mark.
 - A correction inherits `ladder_round` and `correction_count` from the row
   it supersedes, then searches at once.

@@ -10,8 +10,9 @@ contributor runs. The shapes are in [contracts/](./contracts/) and
    WispHub, count customers with no phone, phones held by several
    customers under one name, and phones held under different names. Record
    the numbers — never a phone or a name — in `research.md`, R4. They say
-   how often an assigned number appears and how often the business will
-   join or separate people by hand.
+   how often an assigned number appears, and how often one person may
+   hold two references because their name is written two ways (the system
+   decides alone; the panel has no action for it).
 2. **Verify Banco Azteca's field** (research R19, D21). In Azteca's app,
    note where a numeric reference is typed when sending, and whether a saved
    contact keeps it. That becomes the first `REFERENCE_HINTS` entry, with
@@ -66,7 +67,8 @@ curl -X PATCH localhost:8787/settings -H 'content-type: application/json' \
 ```
 
 Expected: within a minute, the business's existing links hold references
-(the backfill, D5); the Links page shows "Ref. … · celular" or "· asignada".
+(the backfill, D5); the Links page shows "Ref. … · celular" or "· asignada",
+as text with nothing to press.
 
 ## User Story 1 — the payer knows their reference
 
@@ -108,8 +110,9 @@ pnpm --filter @devolada/api test -- test/consta/match.test.ts -t "own"
 Expected: after a confirmed payment, the next confirmation preselects that
 bank; "Otro banco" lists the business's most used banks first; on `44`,
 with the 4417 account learned for this customer, that transfer confirms
-with no question; from a new account, the feed shows "Cuenta nueva". No
-screen of the page ever shows an account digit.
+with no question; a transfer from a new account confirms and the account
+is learned, with no mark in the feed. No screen of the page or the panel
+ever shows an account digit.
 
 ## User Story 4 — the read-back and the ladder
 

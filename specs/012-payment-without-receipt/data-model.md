@@ -3,7 +3,7 @@
 **Date**: 2026-09-30 · **Plan**: [plan.md](./plan.md) · **Research**: [research.md](./research.md)
 
 One additive migration, `0041_payment_without_receipt.sql`: three new
-tables, six columns on `payments`, one on `businesses`. Nothing is dropped,
+tables, five columns on `payments`, one on `businesses`. Nothing is dropped,
 renamed or rebuilt; every existing row reads NULL or 0 on the new columns
 and keeps today's meaning. (If `0041` is taken between planning and
 implementation, the next free number is used and this line is amended.)
@@ -16,14 +16,15 @@ implementation, the next free number is used and this line is amended.)
 | `business_id` | text | no | → `businesses.id`. Every read filters on it (constitution V) |
 | `digits` | text | no | Exactly seven digits, first digit 1–9, never generic (`isGenericReference`), never the last seven of a registered receiving account (D3) |
 | `origin` | text | no | `phone` — the last seven digits of the phone of the first person to receive them (D4); `assigned` — drawn at random by Devolada, no pattern (D6). An `assigned` row becomes `phone` when it passes to the phone's owner (D26) |
-| `state` | text | no | `active` → `retired` (a new number, or the last customer left) |
-| `state_reason` | text | yes | `new_number`, `emptied` |
-| `changed_by_user_id` | text | yes | → `user.id`: who gave a new number, joined or separated; NULL when the machine did it |
 | `previous_reference_id` | text | yes | → `payer_references.id`: set on a row that passed to a phone's owner — the new row its previous holder moved to (D26) |
 | `transition_ends_at` | integer (ms) | yes | 60 days after the row passed; set to now when the previous holder confirms with their new number. FR-041 applies while it is ahead |
-| `created_at`, `changed_at` | integer (ms) | no / yes | |
+| `created_at` | integer (ms) | no | |
+| `changed_at` | integer (ms) | yes | When the row passed to the phone's owner (D26); NULL otherwise |
 
-Index: **unique `(business_id, digits)` over all states** — digits are
+No state column: nothing retires a reference — the panel has no action
+over one (clarified 2026-09-30) — so a row lives as long as the business.
+
+Index: **unique `(business_id, digits)`** — digits are
 never reused in a business, so a new number can never catch an old
 transfer. The one way digits change hands is D26: the same row passes to
 the phone's owner, with the transition that guards it.
@@ -35,7 +36,7 @@ The whole phone is never stored (D1), and neither is a name.
 | Column | Type | Null | Rule |
 | --- | --- | --- | --- |
 | `business_id` | text | no | → `businesses.id` |
-| `reference_id` | text | no | → `payer_references.id`, an `active` one |
+| `reference_id` | text | no | → `payer_references.id` |
 | `source` | text | no | `panel` \| `api` — as `payment_links.source` |
 | `customer_key` | text | no | The usuario (panel) or the customerRef (API): the same identity a link carries |
 | `created_at` | integer (ms) | no | |
@@ -43,11 +44,10 @@ The whole phone is never stored (D1), and neither is a name.
 Primary key `(business_id, source, customer_key)`; index `(reference_id)`.
 A customer holds one reference at a time, and a reference's customers are
 one person: the same phone and the same name when it was assigned (D4,
-compared live, never stored), or joined by the business. "Nuevo número"
-moves every customer of the person to one new `assigned` reference; "Es la
-misma persona" moves one customer to another person's reference; "No es
-la misma persona" moves one customer to a new `assigned` reference of its
-own (D6).
+compared live, never stored). Only the machine writes this table:
+`ensurePayerReference` adds a customer, and the D26 pass moves a previous
+holder's customers to their new row. Nobody moves a customer by hand
+(clarified 2026-09-30).
 
 Keyed by customer, not by link: a link pruned and made again
 (`links/prune.ts`) finds the same number (D1).
@@ -70,7 +70,7 @@ Upserted by the adapter; read only by the platform operator's screen.
 | --- | --- | --- | --- |
 | `pay_by_reference` | integer | no | Default 0. 1 turns the feature on for this business (FR-039); `settings: update` |
 
-## `payments` — six columns (D8, D12, D14, D16, D17, D23)
+## `payments` — five columns (D8, D14, D16, D17, D23)
 
 | Column | Type | Null | Rule |
 | --- | --- | --- | --- |
@@ -78,7 +78,6 @@ Upserted by the adapter; read only by the platform operator's screen.
 | `ladder_round` | integer | no | Default 0. Rounds that got a provider answer, carried from the row a correction supersedes (D14). Read only on rows with a `reference_source` |
 | `correction_count` | integer | no | Default 0. Corrections along the chain that spent a search (D16) |
 | `clave_tail` | text | yes | Four characters the payer typed to choose among kept candidates (D17); never searched at Banxico |
-| `sender_account_new` | integer | yes | 1 when the confirming CEP's account was never seen for this customer and the customer had one learned (FR-020). NULL when nothing was learned before |
 | `confirmation` | text (JSON) | yes | `{ preselectedBank, preselectedDay, days }` — what the page offered, and every day the rounds searched (D14, D23) |
 
 The existing columns keep their meaning and carry the new paths:
@@ -100,7 +99,7 @@ Every `valid` a business receives now writes its record through
 ## Derived, never stored
 
 **A customer's reference** — `payer_reference_customers` joined to its
-`active` row. None while `pay_by_reference` is 0, or before
+row. None while `pay_by_reference` is 0, or before
 `ensurePayerReference` could count the phone (D5).
 
 **"Proven"** (FR-010) — any confirmed or partial payment with
@@ -156,7 +155,7 @@ confirm ──► validating ─┬─ one match ──────────�
 - Seven digits, first 1–9, not generic, not a receiving tail, unique per
   business for ever, except a row passing to its phone's owner (FR-001,
   FR-002, FR-040, D3, D6, D26).
-- A reference's customers are one person — one phone and one name, or joined by the business (FR-001–FR-003).
+- A reference's customers are one person — one phone and one name, decided by the system alone (FR-001–FR-003).
 - A payer never receives a sending account, whole or in part, in any
   schema (FR-019).
 - The day of an `own` or `typed` confirmation is between today − 30 and

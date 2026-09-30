@@ -1,10 +1,17 @@
-# Contract: the panel — the switch, a customer's payer profile, the feed, the quota
+# Contract: the panel — the switch, a customer's reference, the feed, the quota
 
-**Feature**: payment-without-receipt · **Decisions**: D5, D6, D12, D19,
-D20, D23 · **Routes**: `routes/settings`, `routes/direct-payments`,
+**Feature**: payment-without-receipt · **Decisions**: D5, D6, D19, D20,
+D23 · **Routes**: `routes/settings`, `routes/direct-payments`,
 `routes/payments`, `routes/platform` · **Screens**: `apps/admin`
 
 All additive; schemas exported from `@devolada/api` as today.
+
+The panel only reads. The system decides every reference alone — who is
+the same person, who gets an assigned number, when a phone takes digits
+back (D4, D6, D26) — and the panel has no action that changes one, and no
+sheet of a customer's banks or accounts (clarified 2026-09-30: the actions
+added work to the business; the one case the system cannot settle, a name
+written two ways, waits for the phone's future check by message).
 
 ## The switch (D20) — `settings: update`
 
@@ -15,7 +22,7 @@ reference for when it is turned on again. The settings screen shows it
 with one sentence: "Tus clientes pagan con su referencia y confirman sin
 comprobante. El comprobante sigue disponible."
 
-## A customer's reference on the Links page
+## A customer's reference on the Links page — `payments: read`
 
 `customerRow` (`routes/direct-payments/schema.ts:487-510`) gains
 
@@ -25,68 +32,30 @@ payerReference: z
   .object({
     digits: z.string(),
     origin: z.enum(["phone", "assigned"]),
-    sharedWith: z.number().int().min(0),
-    /* D26: when this person's reference changed, while in transition */
-    changedAt: z.number().int().nullable().optional(),
   })
   .nullable()
   .optional(),
 ```
 
 `CustomerLine` shows "Ref. 234 5678 · celular" or "Ref. 781 2044 ·
-asignada", and "· compartida con 1" when `sharedWith > 0`. A reference that
-changed by D26 adds "· cambió el 30 sep." while its holder is in
-transition (`changedAt` on the object, ms, nullable).
-
-## `GET /direct-payments/payer-profiles/:linkId` — `payments: read`
-
-```ts
-payerProfileResponse = z.object({
-  reference: z.object({ digits, origin: z.enum(["phone", "assigned"]) }).nullable(),
-  /* the other customers of the same person (FR-006) */
-  sharedWith: z.array(customerRef),
-  /* D4/FR-006: customers with the same phone and another name — the ones
-     "Es la misma persona" can join. Read live; no phone is returned */
-  samePhoneOthers: z.array(customerRef),
-  /* D12: per person */
-  banks: z.array(bank),
-  /* D12: per service; the last four digits only — the whole account never
-     leaves the API (FR-019, spec 013 FR-010) */
-  accounts: z.array(z.object({ bank, accountType: z.string(), tail: z.string() })),
-});
-const customerRef = z.object({ linkId: z.string(), source: z.enum(["panel", "api"]), customerKey: z.string() });
-```
-
-Errors: 404 `NOT_FOUND` (a link of another business, or none).
-
-## The three actions (D6) — `payments: operate`
-
-Each answers `payerProfileResponse` for the same link.
-
-| Route | What it does | Dialog (es-MX) |
-| --- | --- | --- |
-| `POST /direct-payments/payer-profiles/:linkId/new-number` | The person's reference retires; every customer of that person moves to one new assigned number | "Todos los servicios de esta persona tendrán una referencia nueva. Si la guardó en su banco, deberá cambiarla." |
-| `POST /direct-payments/payer-profiles/:linkId/join` `{ withLinkId }` | This customer joins the person of `withLinkId`, which must be one of `samePhoneOthers`; 409 `NOT_SAME_PHONE` otherwise | "Este servicio usará la referencia 234 5678, igual que los demás de esta persona." |
-| `POST /direct-payments/payer-profiles/:linkId/separate` | This customer leaves its person for an assigned number of its own; 409 `ALREADY_ALONE` when no other customer shares it | "Este servicio tendrá su propia referencia. Si el cliente la guardó en su banco, deberá cambiarla." |
+asignada" — text, with nothing to press. After a D26 pass it shows the
+current digits, like any other reference.
 
 ## The feed
 
 `feedCharge` (`routes/payments/schema.ts:49-123`) gains
 
 ```ts
+/* D8/D11/D23: the path that confirmed it; null on a clave, a receipt,
+   and every row of a business with the feature off */
 referenceSource: z.enum(["own", "typed"]).nullable().optional(),
-/* D10/D11/D17: what chose the transfer — null for a single match found
-   without a clave; "clave" when the row searched by a clave (it carries
-   `tracking_key` before the search and no match trail) */
-decidedBy: z.enum(["learned_account", "earliest", "sender_tail", "clave_tail", "clave", "tail", "time"]).nullable().optional(),
-/* FR-020 */
-senderAccountNew: z.boolean().optional(),
 ```
 
 `ChargeRow` adds, in text beside the existing `StatusBadge`: "Con su
-referencia" or "Con referencia escrita", and "Cuenta nueva" when
-`senderAccountNew`. The proof dialog lists `confirmation.days` — the days
-the rounds searched.
+referencia" (`own`) or "Con referencia escrita" (`typed`). No other mark: what chose among
+several transfers stays in the row (`match_trail`, D23) for the success
+criteria, not on the screen, and a confirmation from a new account is not
+marked (clarified 2026-09-30).
 
 ## The quota (D19) — platform operators only
 

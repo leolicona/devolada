@@ -52,8 +52,8 @@ must survive both. There is no local table of a business's customers
 (`wisphub/snapshot.ts:98-107`: the roster was retired).
 
 **Decision (D1).** Two new tables (data-model.md):
-`payer_references` — the number, its origin (`phone` | `assigned`) and its
-state (`active` | `retired`); `payer_reference_customers` —
+`payer_references` — the number and its origin (`phone` | `assigned`),
+kept for the life of the business; `payer_reference_customers` —
 which customers hold it, keyed like the links are (`panel` + usuario, `api`
 + customerRef), so a pruned and recreated link finds its number again. The
 digits are stored because they **are** the reference — shown to the payer
@@ -77,7 +77,7 @@ field is not measured.
 never assigned, when they are: generic by `isGenericReference`; starting
 with `0`; the last seven digits of any account the business has registered
 to receive (`registeredAccounts`, `direct-payments/accounts.ts:96`,
-retired ones included); or digits the business already holds in any state
+retired ones included); or digits the business already holds or has held
 (R6). Each case gives the customer an assigned number. The first two
 refine the spec: a generic phone tail is exactly the reference strangers
 type by default, and a lost leading zero is a transfer that is never
@@ -121,7 +121,8 @@ removed, spaces collapsed.
   person; a new name becomes a new person with an assigned number, and
   whoever held the phone's digits keeps them (FR-003).
 
-The business corrects the grouping from the panel (D6). Names are read,
+The system decides every case alone; the panel shows the result and
+offers no action over it (clarified 2026-09-30). Names are read,
 compared and forgotten: the core stores no name and no phone. A business
 whose integration lacks the capability — or has none, like a business on
 `/v1` alone — has no phone to compare, and every customer gets an
@@ -132,8 +133,11 @@ Mexican numbers are few enough to reverse a hash in minutes, so it would be
 the phone under another name. *Rejected:* reading the whole customer list
 once per business to group phones — cheaper for a first backfill, but it
 rebuilds the retired roster. *Rejected by the creator:* the business
-deciding every repeated phone by hand, and the payer confirming their
-services (the wallet).
+deciding every repeated phone by hand, the business correcting the grouping
+from the panel (new number, join, separate — withdrawn 2026-09-30: it adds
+work to the business, and a name written two ways waits for the phone's
+future check by message instead), and the payer confirming their services
+(the wallet).
 
 ## R5 — When a reference is born
 
@@ -154,37 +158,35 @@ adapter cannot answer (WispHub down, a refused key), no reference is made:
 the link reads as today's flow and the next read or sweep tries again.
 Never a guess: a reference born without its count could be a shared one.
 
-## R6 — Assigned numbers, new numbers, joining and separating
+## R6 — Assigned numbers
 
 **Found.** Nothing assigns numbers today. The unique index on
 `payments.tracking_key` shows the house way to make a value unique per
 business (`schema.ts:536-543`).
 
-**Decision (D6)** — *amended 2026-09-30 after `/speckit-analyze` (I1, U1).*
+**Decision (D6)** — *amended 2026-09-30 after `/speckit-analyze` (I1, U1),
+and again the same day by the creator: the panel's three actions (new
+number, join, separate) are withdrawn — the system decides alone.*
 An assigned number is drawn at random from seven digits whose first is
 1–9, skipping every D3 case, and inserted under a unique index on
 `(business_id, digits)` over **all** states — so no digits are ever reused
 in a business, and a retry draws again on a clash. A reference row is one
-person; `payer_reference_customers` says which customers are that person.
-The panel's three actions, all `payments: operate`:
+person; `payer_reference_customers` says which customers are that person,
+and only the machine writes it (D4, D5, D26).
 
-- **Nuevo número** — the person's row becomes `retired` (who, when) and
-  every customer of that person moves to one new assigned number. The
-  person keeps one number (clarified 2026-09-30).
-- **Es la misma persona** — a customer joins another person whose customers
-  share its phone; it takes that person's reference. If the customer was
-  alone on an assigned number, that row is `retired`.
-- **No es la misma persona** — a customer leaves its person and gets an
-  assigned number of its own. When the person it leaves held the phone's
-  digits and the two now have different names on one phone, the digits
-  stay with the ones who kept them (FR-003: nothing changes by itself).
+A row has no state: with no action to retire it, a reference lives as long
+as the business, and its digits are never given to anyone else — with the
+one exception of D26, where a row passes, with its digits, from an
+assigned holder to the phone's owner, and the previous holder moves to a
+new row. An assigned number
+has no pattern: a pattern built from the phone would invite the holder to
+type the phone, which is someone else's reference (clarified 2026-09-30).
 
-A row's `state` is `active` or `retired` (a new number, or an empty
-person). No digits are ever used again — with the one exception of D26,
-where a row passes, with its digits, from an assigned holder to the
-phone's owner. An assigned number has no pattern: a pattern built from
-the phone would invite the holder to type the phone, which is someone
-else's reference (clarified 2026-09-30).
+*Rejected:* the panel's "Nuevo número", "Es la misma persona" and "No es la
+misma persona". Each asks the business to judge something the system can
+settle, and the one case it cannot — a name written two ways — costs only
+a second reference for the same person, which the phone's future check by
+message will join (clarified 2026-09-30).
 
 ## R7 — The confirmation door
 
@@ -267,9 +269,10 @@ did for "used":
   a confirmed payment of that customer adopted. An account decides money
   between services, so it stays with the service it paid.
 
-A confirmation from an account that customer never used, when it has at
-least one learned account, sets `payments.sender_account_new` for the
-operator (FR-020).
+A confirmation from an account that customer never used still confirms,
+and the account is learned (FR-020). Nothing marks it for the operator:
+the "Cuenta nueva" mark was withdrawn with the panel's actions (clarified
+2026-09-30), because a mark with nothing to do is noise.
 
 The spec says the same since 2026-09-30 (FR-016 amended after the
 analysis, I2 and I4): banks from every confirmed payment, past ones

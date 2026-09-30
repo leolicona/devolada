@@ -129,7 +129,7 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D8 | The confirmation is the typed door with `referenceSource: "own"`; the server writes the digits; the day within today − 30 … today; `preselected` rides along | research R7 |
 | D9 | `own` and `typed` rows never meet a shared-reference stop; rows without a source keep today's four | research R8 |
 | D10 | Matcher `own` mode: integrity → used → learned account → earliest; undecided only as `all_used` | research R9 |
-| D11 | "No puse la referencia": another person's reference refused (blocked digits go on as a shared reference); no tail and no learned account at that bank → `SENDER_TAIL_NEEDED` before anything is billed; learned accounts compared whole before the tail; no fit asks the four digits, fitted without a call | research R11 |
+| D11 | "No puse la referencia": another person's reference refused, a phone's digits typed by a second name on that phone included; digits no person holds (D3) go on as a shared reference; no tail and no learned account at that bank → `SENDER_TAIL_NEEDED` before anything is billed; learned accounts compared whole before the tail; no fit asks the four digits, fitted without a call | research R11 |
 | D12 | Learned banks per person and accounts per service are queries; a new account is learned with no mark | research R10 |
 | D13 | Spec 013 D5 widens: every `valid` of a business keeps a `cep_records` row | research R10 |
 | D14 | A round is an attempt that got an answer; `ladder_round` rides the correction chain; round 3 searches the neighbouring days; after round 4 the 2-hour and last slots; expiry after round 6 | research R12 |
@@ -180,9 +180,9 @@ no account at all. (VIII) with `pay_by_reference = 0`, no new column is read on 
 ```text
 specs/012-payment-without-receipt/
 ├── plan.md              # This file
-├── spec.md              # five stories, FR-001…FR-039, clarified 2026-09-29/30; FR-002 amended by D3
-├── research.md          # Phase 0: R1–R23
-├── data-model.md        # Phase 1: three tables, seven columns, what is derived
+├── spec.md              # five stories, FR-001…FR-041, clarified 2026-09-29/30; FR-002 amended by D3
+├── research.md          # Phase 0: R1–R25
+├── data-model.md        # Phase 1: three tables, six columns, what is derived
 ├── quickstart.md        # Phase 1: two creator checks, validation per story, gates in CI order
 ├── contracts/
 │   ├── payment-page.md  # link read, pay, status, the page's screens and copy

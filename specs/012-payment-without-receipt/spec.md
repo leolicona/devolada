@@ -16,8 +16,9 @@ new numbers for the whole person, banks only from the past, the detail of
 a used transfer only when it is the payer's own, and the clave and receipt
 outside the hourly limit; then the first to receive a phone's digits keeps
 them, assigned numbers at random, the unsafe-digit cases always, and a
-phone beating an assigned number with a guarded transition. No
-clarification is open.
+phone beating an assigned number with a guarded transition. Last, the
+same day: the system decides every reference alone and the panel only
+shows it. No clarification is open.
 
 **Input**: User description: "Pago sin comprobante. The payer registers a
 recurring payment profile (sending bank + unique reference from their
@@ -495,9 +496,8 @@ confirmation offers that customer's banks first, the last one already
 selected, so a returning payer confirms with a single tap. A customer who
 has paid from two banks sees both. The accounts are never shown to the
 payer; they stay with the business, where they pick between two
-transfers without bothering the payer and flag a payment that came from an
-account never seen before. Customers who paid by receipt before this
-feature start with their banks already known.
+transfers without bothering the payer. Customers who paid by receipt
+before this feature start with their banks already known.
 
 **Why this priority**: it is what turns the confirmation into one tap, and
 what lets Devolada settle most several-matches cases alone. The instant
@@ -929,8 +929,9 @@ question.
 **Across the feature**
 
 - **FR-035**: Every confirmation MUST record its source — own reference,
-  typed reference, clave, or receipt — what decided it (a single match, a
-  learned account, typed digits, the clave), the clave and the credit time,
+  typed reference, clave, or receipt — what decided it (a single match,
+  the earliest of the payer's own, a learned account, typed digits, the
+  clave's last four characters, the clave), the clave and the credit time,
   so a payment can be traced to the transfer that paid it. Specs 015 and
   016 add their own sources to the same record.
 - **FR-036**: Amounts MUST be exact to the cent in every match; no
@@ -954,14 +955,16 @@ question.
   different people share a phone, the first to receive a reference keeps
   its digits. A reference that passed from an assigned holder to a phone's
   owner records whom it passed from, until the transition ends (FR-041).
-- **Learned bank**: a bank a person has paid from — when it was last used,
-  how many confirmed payments came from it.
+- **Learned bank**: a bank a person has paid from, read from their
+  confirmed payments, the most recent first; nothing is stored apart.
 - **Learned account**: a sending account a service was paid from — its
-  bank, its type and number as the CEP names them, when it was first and
-  last seen. Kept under the business; never shown to a payer.
+  bank, its type and number as the CEP names them, read from the CEPs that
+  confirmed that service's payments. Kept under the business; never shown
+  to a payer.
 - **Confirmation**: a payer's "Ya pagué" — the bank, the day, the amount
   and the reference searched (their own or typed), any account digits or
-  clave given, the corrections, the rounds it spent and the asks it showed.
+  clave given, the corrections and the rounds it spent; what the page asks
+  follows from those and is never stored.
 - **Payment** (existing): gains its confirmation source, what decided it,
   the clave and the credit time.
 

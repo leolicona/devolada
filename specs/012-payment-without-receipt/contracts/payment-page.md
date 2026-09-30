@@ -1,7 +1,7 @@
 # Contract: the payer's page — reference, confirmation, ladder
 
 **Feature**: payment-without-receipt · **Decisions**: D2, D7, D8, D11,
-D14–D17, D21, D22 · **Route**: `apps/api/src/routes/direct-payments/{handler,schema}.ts`
+D14–D17, D21, D22, D24–D26 · **Route**: `apps/api/src/routes/direct-payments/{handler,schema}.ts`
 · **Page**: `apps/pago/src/features/pago/PaymentPage.tsx`
 
 Everything here is additive and exported from
@@ -59,9 +59,9 @@ The refinement that demands a key (`schema.ts:144`) accepts
 
 | HTTP | `error.code` | When | Page |
 | --- | --- | --- | --- |
-| 409 | `REFERENCE_NOT_READY` | `own` asked, and the link has no active reference (feature off, or not born yet) | today's receipt step |
+| 409 | `REFERENCE_NOT_READY` | `own` asked, and the link has no reference (feature off, or not born yet) | today's receipt step |
 | 409 | `TRANSFER_DATE_OUT_OF_RANGE` | `own`/`typed` day before today − 30 or after today (business timezone) | the day row, with the copy below |
-| 409 | `REFERENCE_OF_ANOTHER` | `typed` reference is another person's active reference in this business (FR-034); the payer's own previous reference during a transition (FR-041) and digits no person holds go on | the clave and the receipt |
+| 409 | `REFERENCE_OF_ANOTHER` | `typed` reference is another person's reference in this business (FR-034); the payer's own previous reference during a transition (FR-041) and digits no person holds go on | the clave and the receipt |
 | 409 | `SENDER_TAIL_NEEDED` | `typed`, no `senderTail`, no account learned for this service at that bank (FR-032) | the four-digit field |
 | 409 | `CORRECTIONS_EXHAUSTED` | a fourth search-spending correction without a clave or a receipt (FR-024) | the clave and the receipt |
 

@@ -203,7 +203,7 @@ falls back to the business's day).
 **Decision (D8).** The confirmation is that door with one new field,
 `transfer.referenceSource`:
 
-- `"own"` — the server writes the link's active reference into
+- `"own"` — the server writes the link's reference into
   `reference_number` and ignores any the client sent; the amount defaults
   to what the link asks; the day must fall between today − 30 and today in
   the business's timezone (STALE_TRANSFER_DAYS, `validation.ts:75`).
@@ -295,8 +295,7 @@ accepts three digits or more and knows the CEP's account types
 **Decision (D11).** `referenceSource: "typed"` with the payer's
 `referenceNumber` and an optional `senderTail` (four digits):
 
-1. A reference that is another person's in the business (an `active`
-   row) is refused with `409 REFERENCE_OF_ANOTHER` (FR-034); the payer's
+1. A reference that is another person's in the business is refused with `409 REFERENCE_OF_ANOTHER` (FR-034); the payer's
    own is treated as `own`, and the payer's previous reference during a
    transition goes on under D26. Digits no person holds — a default-looking
    or other unsafe number (D3) — go on as any shared reference

@@ -136,6 +136,12 @@ rounds, what Devolada learns, and the switch per business.
   D25 had it, which can block an honest payer who confirmed and corrected
   before answering; both counting, which adds that block and stops no
   guess the three-miss window does not already stop.*
+- Q: How does the receipt link look? → A: **A quiet action** — no fill and
+  no border at rest, small text, a light background when touched, 48 pixels
+  high: the look today's "No tengo el comprobante a la mano" already has.
+  *The creator at `/speckit-clarify`, option A of three. Rejected: an
+  underlined hyperlink, which needs a new look in the shared package; an
+  outlined button like option 2, which is no longer quiet.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -148,7 +154,7 @@ referencia 234 5678, desde Banco Azteca, hoy martes 29.") and **Confirmar
 pago**. Below it is a clear second choice for the payer who did not put
 their reference: **"Usé otra referencia"**. It opens one form where either
 the reference they used or their clave de rastreo is enough. Last comes a
-quiet text link: "Subir foto del comprobante". The same order holds on every
+quiet action: "Subir foto del comprobante". The same order holds on every
 screen of the step. Inside the second option's form and inside every ask,
 the receipt link comes last and stays quiet.
 
@@ -160,8 +166,8 @@ reference not put on the transfer.
 
 **Independent Test**: on a business with the feature on, open a link that
 has a reference and go to the confirmation step. See option 1 with the only
-decisive action, option 2 as a standard control, and the receipt as a text
-link at the end. Open option 2 and see the reference-or-clave form with the
+decisive action, option 2 as a standard control, and the receipt as a
+quiet action at the end. Open option 2 and see the reference-or-clave form with the
 receipt link last. Open each ask and see the receipt link last. Open a link
 without a reference and see today's page.
 
@@ -171,7 +177,7 @@ without a reference and see today's page.
    opens, **Then** option 1 comes first — the bank, the day, the read-back
    and "Confirmar pago", the only decisive action on the step; option 2,
    "Usé otra referencia", is visible as a standard control without
-   opening anything; and "Subir foto del comprobante" is a text link, the
+   opening anything; and "Subir foto del comprobante" is a quiet action, the
    last thing on the step.
 2. **Given** the step, **When** the payer opens option 2, **Then** one form
    asks for the reference they used or their clave de rastreo — either one
@@ -184,7 +190,7 @@ without a reference and see today's page.
    searched.
 4. **Given** any ask of the page — the data check, the clave, the tie-break
    — "Ya se usó para…", a refusal, or the expired state, **When** it is
-   shown, **Then** the receipt is offered as the same quiet text link,
+   shown, **Then** the receipt is offered as the same quiet action,
    after every other action.
 5. **Given** a payment in the plain wait of the first rounds ("Seguimos
    buscando"), when the page asks nothing, **When** it is shown, **Then** no
@@ -363,9 +369,10 @@ one person's account.
   form where either the reference or the clave is enough, with the amount
   (the link's, editable), the bank and the day, and a way back to option 1.
   The "No" of 012 FR-010's question opens it.
-- **FR-004**: Option 3 MUST be a text link with no button styling, placed
-  after every other action, with a 48-pixel touch target and visible
-  focus. Wherever the page offers the receipt on a link with a reference —
+- **FR-004**: Option 3 MUST be a quiet action — no fill and no border at
+  rest, small text, a light background when touched — placed after every
+  other action, 48 pixels high, with visible focus: the look today's "No
+  tengo el comprobante a la mano" has, with no new look made for it. Wherever the page offers the receipt on a link with a reference —
   the places FR-005 names — it MUST take this form and this last place.
 - **FR-005**: On a link with a reference, the receipt MUST be offered
   wherever the payer is asked something or the attempt has stopped: the

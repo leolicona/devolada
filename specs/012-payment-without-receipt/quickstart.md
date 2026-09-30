@@ -80,8 +80,8 @@ By hand: create a link (panel or `/v1`), open it on the page. Step 1 shows
 "Tu referencia" with a copy button, where it goes, and the save-as-contact
 tip; the WhatsApp message from the panel carries the number. Expected per
 the tests: a phone alone → its last seven; two customers with one phone
-and one name → the same number; one phone under two names → an assigned
-number per person; no phone, `2345678`-like,
+and one name → the same number; one phone under two names → the first
+keeps the phone's digits, the second gets an assigned number; no phone, `2345678`-like,
 starting with 0, or the business's own account tail → assigned.
 
 ## User Story 2 — confirm with bank and day

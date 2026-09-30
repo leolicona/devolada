@@ -22,13 +22,21 @@ comprobante. El comprobante sigue disponible."
 ```ts
 /* D1: null when the customer has no link or no reference yet */
 payerReference: z
-  .object({ digits: z.string(), origin: z.enum(["phone", "assigned"]), sharedWith: z.number().int().min(0) })
+  .object({
+    digits: z.string(),
+    origin: z.enum(["phone", "assigned"]),
+    sharedWith: z.number().int().min(0),
+    /* D26: when this person's reference changed, while in transition */
+    changedAt: z.number().int().nullable().optional(),
+  })
   .nullable()
   .optional(),
 ```
 
 `CustomerLine` shows "Ref. 234 5678 · celular" or "Ref. 781 2044 ·
-asignada", and "· compartida con 1" when `sharedWith > 0`.
+asignada", and "· compartida con 1" when `sharedWith > 0`. A reference that
+changed by D26 adds "· cambió el 30 sep." while its holder is in
+transition (`changedAt` on the object, ms, nullable).
 
 ## `GET /direct-payments/payer-profiles/:linkId` — `payments: read`
 

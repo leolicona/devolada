@@ -23,6 +23,10 @@ payerReference: z
     fromPhone: z.boolean(),
     /* FR-010: some confirmation of this person already found it */
     proven: z.boolean(),
+    /* D26/FR-040: this person's previous digits, while their reference
+       changed and they have not yet confirmed with the new one; the page
+       shows the notice and asks which reference they put */
+    previousDigits: z.string().regex(/^[1-9]\d{6}$/).nullable(),
   })
   .nullable()
   .optional(),
@@ -57,7 +61,7 @@ The refinement that demands a key (`schema.ts:144`) accepts
 | --- | --- | --- | --- |
 | 409 | `REFERENCE_NOT_READY` | `own` asked, and the link has no active reference (feature off, or not born yet) | today's receipt step |
 | 409 | `TRANSFER_DATE_OUT_OF_RANGE` | `own`/`typed` day before today − 30 or after today (business timezone) | the day row, with the copy below |
-| 409 | `REFERENCE_OF_ANOTHER` | `typed` reference is another person's active reference in this business (FR-034); digits no person holds go on as a shared reference | the clave and the receipt |
+| 409 | `REFERENCE_OF_ANOTHER` | `typed` reference is another person's active reference in this business (FR-034); the payer's own previous reference during a transition (FR-041) and digits no person holds go on | the clave and the receipt |
 | 409 | `SENDER_TAIL_NEEDED` | `typed`, no `senderTail`, no account learned for this service at that bank (FR-032) | the four-digit field |
 | 409 | `CORRECTIONS_EXHAUSTED` | a fourth search-spending correction without a clave or a receipt (FR-024) | the clave and the receipt |
 
@@ -96,6 +100,13 @@ números de tu celular" when `fromPhone`. Below it, the where-to-type line
 **Step 2 — "Confirma tu pago"** replaces "Envía tu comprobante" as the
 first thing step 2 shows:
 
+0. With `previousDigits` (FR-040): the notice "Tu referencia cambió: ahora
+   es 402 9185. Actualiza el contacto en tu banco." and, before anything
+   else, "¿Qué referencia pusiste en tu transferencia?" — *402 9185* (the
+   new one, continues as below) or *781 5678* (the previous one: sends
+   `referenceSource: "typed"` with those digits, which the server accepts
+   as the payer's own previous reference and guards by FR-041).
+
 1. When `proven` is false: "¿Pusiste la referencia 234 5678 en tu
    transferencia?" — *Sí* continues; *No* opens "No puse la referencia"
    and spends nothing (FR-010).
@@ -124,7 +135,7 @@ always there (FR-023). Then, by `ask`:
 | null | "Seguimos buscando tu transferencia en Banxico." | none |
 | `check_data` | "Todavía no encontramos tu transferencia. Revisa que estos datos sean los de tu app, y que hayas puesto la referencia 234 5678." | *Todo está bien* (remembered on the device, no call) · *Corregir* |
 | `clave` | "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app." | clave field, `focusClave` · "Sube tu comprobante" |
-| `sender_tail` | "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." | four digits (asked before `clave_tail`, D15) |
+| `sender_tail` | "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." — on an own row during a transition (D26): "Para confirmar que esta transferencia es tuya, escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." | four digits (asked before `clave_tail`, D15) |
 | `clave_tail` | "Encontramos más de una transferencia con esos datos. Escribe los últimos 4 caracteres de tu clave de rastreo." | four characters · "Sube tu comprobante" |
 
 With a provisional release standing, every ask adds: "Tu servicio sigue

@@ -121,10 +121,10 @@ product decisions. The plan adds the ones below; code comments cite them as
 | --- | --- | --- |
 | D1 | The reference lives in `payer_references` + `payer_reference_customers`, keyed by customer (`panel`+usuario, `api`+customerRef), never on `payment_links`; the seven digits are stored because they are the reference; the whole phone never | research R2 |
 | D2 | A phone is ten digits after removing a leading `52`/`521` (`nationalPhone`, shared with `toWhatsAppPhone`); anything else is no phone | research R1 |
-| D3 | Seven digits are never a reference when generic (`isGenericReference`), starting with 0, the tail of any registered receiving account, or already held in any state; each case assigns a number. Amends FR-002 | research R3 |
-| D4 | Adapter capability `customersWithPhone` (keys and names, live); a person is one phone and one name; several names on a phone block its digits and each person gets a number; no capability, no phone. *Amended 2026-09-30 (analysis U1): replaced "≤ 3 share, > 3 blocks"* | research R4, creator 2026-09-30 |
+| D3 | Seven digits are never a reference when generic (`isGenericReference`), starting with 0, the tail of any registered receiving account, or already held in any state; each case assigns a number. Amends FR-002 — confirmed by the creator 2026-09-30; checked after knowing whose phone it is; the leading-zero case provisional until the pilot measures it | research R3, creator 2026-09-30 |
+| D4 | Adapter capability `customersWithPhone` (keys and names, live); a person is one phone and one name; with several names on a phone, the first person to receive a reference keeps the digits and the others get assigned numbers; no capability, no phone. *Amended twice on 2026-09-30 (analysis U1, then the creator)* | research R4, creator 2026-09-30 |
 | D5 | `ensurePayerReference` at link creation (panel, API), at the payer's read, and in a backfill joining the every-minute cron (20 links per business per minute); an adapter that cannot answer means no reference yet, never a guess | research R5 |
-| D6 | Assigned numbers: random, first digit 1–9, outside D3, unique per business over all states for ever. Three panel actions: "Nuevo número" (the whole person), "Es la misma persona" (join), "No es la misma persona" (separate). *Amended 2026-09-30 (analysis I1, U1)* | research R6, creator 2026-09-30 |
+| D6 | Assigned numbers: random with no pattern, first digit 1–9, outside D3, unique per business over all states for ever. Three panel actions: "Nuevo número" (the whole person), "Es la misma persona" (join), "No es la misma persona" (separate). *Amended 2026-09-30 (analysis I1, U1)* | research R6, creator 2026-09-30 |
 | D7 | `bankOrder`: this business's confirmed payments of 90 days, most used banks first, five at most | research R20 |
 | D8 | The confirmation is the typed door with `referenceSource: "own"`; the server writes the digits; the day within today − 30 … today; `preselected` rides along | research R7 |
 | D9 | `own` and `typed` rows never meet a shared-reference stop; rows without a source keep today's four | research R8 |
@@ -144,6 +144,7 @@ product decisions. The plan adds the ones below; code comments cite them as
 | D23 | `reference_source`, `match_trail.by` and `payments.confirmation` make SC-001…SC-006 queries over one business | research R22 |
 | D24 | `usedBy { day, amountCents }` on a used transfer, only when the payment that used it is the same person's | research R24, creator 2026-09-30 |
 | D25 | A clave, a clave tail or a receipt never counts toward the link's hourly attempts; confirmations and corrections do | research R14, creator 2026-09-30 |
+| D26 | A phone beats an assigned number: the row passes to the phone's owner; the previous holder gets a new number, a notice and the "which reference" question; for 60 days or until they confirm with the new number, the previous holder's known accounts never pay the new owner, an unknown account asks the new owner's last four digits, and the previous holder's old digits confirm only with their account, their four digits, or the clave's last four | research R25, creator 2026-09-30 |
 
 ## Constitution Check
 
@@ -154,7 +155,7 @@ Phase 1 (below the table).
 
 | # | Principle | Gate | Verdict |
 | --- | --- | --- | --- |
-| I | Spec-Driven, Every Decision Cited | Twenty-five decisions with the place each was made; every new rule cites `payment-without-receipt D<n>`. Comments that stop being true are rewritten, not left beside the code: receipt-triage D7's stops (D9), spec 013 D5's "clave-less only" in `consta/bundle/store.ts` and `db/schema.ts` (D13), the `validations.quota_remaining` comment (D19). FR-002's amendment is dated in the spec | PASS |
+| I | Spec-Driven, Every Decision Cited | Twenty-six decisions with the place each was made; every new rule cites `payment-without-receipt D<n>`. Comments that stop being true are rewritten, not left beside the code: receipt-triage D7's stops (D9), spec 013 D5's "clave-less only" in `consta/bundle/store.ts` and `db/schema.ts` (D13), the `validations.quota_remaining` comment (D19). FR-002's amendment is dated in the spec | PASS |
 | II | Money Law | Amounts stay integer cents end to end; "Pagué otra cantidad" is parsed like every typed amount; the day bounds and "Hoy" use the business's timezone (`time/business-day.ts`), never the browser's | PASS |
 | III | One Contract, Pure Routers | `linkStatusResponse`, `payRequest`, `directPaymentStatusResponse`, `customerRow`, `feedCharge`, `settings*`, `/v1` `paymentLink` change additively; `payerProfileResponse` and the quota response are new schemas; all exported from `@devolada/api`. The two new routes (`payer-profiles`, `provider-quota`) join existing routers, which stay pure | PASS |
 | IV | Tests Run on the Real Runtime | apiCEP and WispHub intercepted at pinned origins; migrations per test; no database mocks; the matcher's new modes are pure tables; the page and panel on MSW with schema-validated fixtures and axe; sizes and focus on the browser layer | PASS |

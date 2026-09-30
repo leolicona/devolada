@@ -8,24 +8,27 @@ renamed or rebuilt; every existing row reads NULL or 0 on the new columns
 and keeps today's meaning. (If `0041` is taken between planning and
 implementation, the next free number is used and this line is amended.)
 
-## `payer_references` — a person's number inside one business (D1, D3, D6)
+## `payer_references` — a person's number inside one business (D1, D3, D6, D26)
 
 | Column | Type | Null | Rule |
 | --- | --- | --- | --- |
 | `id` | text | no | uuid |
 | `business_id` | text | no | → `businesses.id`. Every read filters on it (constitution V) |
 | `digits` | text | no | Exactly seven digits, first digit 1–9, never generic (`isGenericReference`), never the last seven of a registered receiving account (D3) |
-| `origin` | text | no | `phone` — the last seven digits of the phone of one person (one phone, one name, D4); `assigned` — drawn by Devolada (D6) |
-| `state` | text | no | `active` → `retired` (a new number, or the last customer left) · `blocked` (a phone's digits shared by different people, held by no one) |
-| `state_reason` | text | yes | `new_number`, `emptied`, `different_people` |
+| `origin` | text | no | `phone` — the last seven digits of the phone of the first person to receive them (D4); `assigned` — drawn at random by Devolada, no pattern (D6). An `assigned` row becomes `phone` when it passes to the phone's owner (D26) |
+| `state` | text | no | `active` → `retired` (a new number, or the last customer left) |
+| `state_reason` | text | yes | `new_number`, `emptied` |
 | `changed_by_user_id` | text | yes | → `user.id`: who gave a new number, joined or separated; NULL when the machine did it |
+| `previous_reference_id` | text | yes | → `payer_references.id`: set on a row that passed to a phone's owner — the new row its previous holder moved to (D26) |
+| `transition_ends_at` | integer (ms) | yes | 60 days after the row passed; set to now when the previous holder confirms with their new number. FR-041 applies while it is ahead |
 | `created_at`, `changed_at` | integer (ms) | no / yes | |
 
 Index: **unique `(business_id, digits)` over all states** — digits are
-never reused in a business, so a new number can never catch an old transfer.
+never reused in a business, so a new number can never catch an old
+transfer. The one way digits change hands is D26: the same row passes to
+the phone's owner, with the transition that guards it.
 
-The whole phone is never stored (D1). A `blocked` row carries the digits
-alone; a later customer whose phone ends in them gets an assigned number.
+The whole phone is never stored (D1), and neither is a name.
 
 ## `payer_reference_customers` — who holds a reference (D1, D4, D5)
 
@@ -119,6 +122,7 @@ days, grouped by `sender_bank`, most first, five at most.
 | Condition | `ask` |
 | --- | --- |
 | typed row without `sender_tail`, candidates kept, none tied by a learned account | `sender_tail` |
+| own row during a transition (D26), a candidate from an account not learned for this person, no `sender_tail` | `sender_tail` |
 | `last_error = 'CEP_UNDECIDED'`, typed row, `sender_tail` given, several candidates still fit | `clave_tail` |
 | typed row, `sender_tail` given, no candidate fits (FR-033) | `clave` |
 | `last_error = 'TRANSFER_NOT_FOUND'`, `ladder_round ≥ 4` | `clave` |
@@ -150,11 +154,12 @@ confirm ──► validating ─┬─ one match ──────────�
 ## Validation rules (from the requirements)
 
 - Seven digits, first 1–9, not generic, not a receiving tail, unique per
-  business for ever (FR-001, FR-002, D3, D6).
+  business for ever, except a row passing to its phone's owner (FR-001,
+  FR-002, FR-040, D3, D6, D26).
 - A reference's customers are one person — one phone and one name, or joined by the business (FR-001–FR-003).
 - A payer never receives a sending account, whole or in part, in any
   schema (FR-019).
 - The day of an `own` or `typed` confirmation is between today − 30 and
   today in the business's timezone (D8).
-- A `typed` reference that is another person's is refused (FR-034).
+- A `typed` reference that is another person's is refused (FR-034), except the payer's own previous reference during a transition (FR-041).
 - Amounts are integer cents, compared exactly (FR-036).

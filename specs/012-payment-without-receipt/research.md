@@ -53,7 +53,7 @@ must survive both. There is no local table of a business's customers
 
 **Decision (D1).** Two new tables (data-model.md):
 `payer_references` — the number, its origin (`phone` | `assigned`) and its
-state (`active` | `retired` | `blocked`); `payer_reference_customers` —
+state (`active` | `retired`); `payer_reference_customers` —
 which customers hold it, keyed like the links are (`panel` + usuario, `api`
 + customerRef), so a pruned and recreated link finds its number again. The
 digits are stored because they **are** the reference — shown to the payer
@@ -81,8 +81,11 @@ retired ones included); or digits the business already holds in any state
 (R6). Each case gives the customer an assigned number. The first two
 refine the spec: a generic phone tail is exactly the reference strangers
 type by default, and a lost leading zero is a transfer that is never
-found. **FR-002 is amended by this plan** (spec.md, dated note); the
-creator confirms it with the plan.
+found. **FR-002 is amended by this plan** (spec.md, dated note), and the
+creator confirmed it on 2026-09-30: the cases are checked after knowing
+whose phone it is, and apply to a real phone of one person too. The
+leading-zero case is provisional: if the pilot shows the bank apps keep a
+leading 0, it is removed and those customers get their phone's digits.
 
 ## R4 — Who is the same person
 
@@ -109,8 +112,11 @@ removed, spaces collapsed.
 
 - **One name** → one person; the phone's digits are that person's
   reference, shared by all their services.
-- **Several names** → several people; nobody can tell whose phone it is,
-  so each person gets an assigned number and the digits are `blocked`.
+- **Several names** → several people. *Amended again the same day by the
+  creator:* the first person to receive a reference in Devolada keeps the
+  phone's digits; every other person gets an assigned number, drawn at
+  random with no pattern. When the feature is turned on, the backfill
+  handles links oldest first, so "first" is well defined.
 - **Later**, a customer whose phone and name match a person joins that
   person; a new name becomes a new person with an assigned number, and
   whoever held the phone's digits keeps them (FR-003).
@@ -173,9 +179,12 @@ The panel's three actions, all `payments: operate`:
   digits and the two now have different names on one phone, the digits
   stay with the ones who kept them (FR-003: nothing changes by itself).
 
-A row's `state` is `active`, `retired` (a new number or an empty person)
-or `blocked` (a phone's digits shared by different people, held by no
-one). No digits are ever used again.
+A row's `state` is `active` or `retired` (a new number, or an empty
+person). No digits are ever used again — with the one exception of D26,
+where a row passes, with its digits, from an assigned holder to the
+phone's owner. An assigned number has no pattern: a pattern built from
+the phone would invite the holder to type the phone, which is someone
+else's reference (clarified 2026-09-30).
 
 ## R7 — The confirmation door
 
@@ -285,8 +294,9 @@ accepts three digits or more and knows the CEP's account types
 
 1. A reference that is another person's in the business (an `active`
    row) is refused with `409 REFERENCE_OF_ANOTHER` (FR-034); the payer's
-   own is treated as `own`. `blocked` digits — a phone different people
-   share — belong to no one and go on as any shared reference
+   own is treated as `own`, and the payer's previous reference during a
+   transition goes on under D26. Digits no person holds — a default-looking
+   or other unsafe number (D3) — go on as any shared reference
    (*amended 2026-09-30, analysis I8*).
 2. With no tail and no account learned for this service at the chosen bank,
    the request is refused with `409 SENDER_TAIL_NEEDED` before anything is
@@ -505,3 +515,40 @@ of the same person (the same reference); `day` is its confirmation day in
 the business's timezone, `amountCents` what it received. Otherwise null,
 and the page keeps today's sentence: nothing of another person's payment
 reaches a payer (FR-013, FR-019).
+
+## R25 — A phone beats an assigned number
+
+**Found.** Assigned numbers are drawn at random over seven digits (D6). A
+customer who arrives later can have a phone ending in digits someone
+already holds as an assigned number — about one new customer in 10,000
+when a business holds a thousand assigned numbers. D6 alone would give the
+newcomer another number.
+
+**Decision (D26)** — *the creator, 2026-09-30.* The phone's owner takes the
+digits (FR-040). The row passes, digits and all: its holders change from
+the previous person to the new one, its `origin` becomes `phone`, and it
+records `previous_reference_id` — the new assigned row the previous person
+moved to — and `transition_ends_at`, 60 days later. The previous person's
+link shows the notice; their next confirmation asks which reference they
+put. The transition ends early when the previous person confirms a payment
+with the new number.
+
+During the transition (FR-041), who sent the money keeps them apart:
+
+- **The previous holder, with the previous digits** — a `typed` reference
+  that FR-034 lets through because it was theirs. It confirms only with a
+  second fact, in the creator's order: an account learned for them; the
+  last four digits of the account they type; then, when those leave more
+  than one or none, the last four characters of the clave, fitted against
+  the transfers found (D17), or the whole clave.
+- **The new owner, with their own reference** — the matcher drops every
+  candidate sent from an account learned for the previous holder; and a
+  candidate from an account not yet learned for the new owner asks
+  `sender_tail` before it confirms. After the new owner's first confirmed
+  payment their account is known and the question stops.
+
+*Rejected by the creator:* giving the newcomer another number, which
+leaves a phone's digits with someone who is not its owner; a 60-day wait
+with a temporary number for the new owner, which changes their reference
+twice; accepting the risk when the previous holder has no learned account
+yet.

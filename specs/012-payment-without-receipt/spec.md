@@ -14,7 +14,10 @@ confirmed, and the reference made the person's — one phone and one name —
 shared by that person's services. After `/speckit-analyze` (2026-09-30):
 new numbers for the whole person, banks only from the past, the detail of
 a used transfer only when it is the payer's own, and the clave and receipt
-outside the hourly limit. No clarification is open.
+outside the hourly limit; then the first to receive a phone's digits keeps
+them, assigned numbers at random, the unsafe-digit cases always, and a
+phone beating an assigned number with a guarded transition. No
+clarification is open.
 
 **Input**: User description: "Pago sin comprobante. The payer registers a
 recurring payment profile (sending bank + unique reference from their
@@ -281,7 +284,9 @@ After `/speckit-analyze` (same day), the creator decided five more:
   number put on customers who gave none now separates by itself, because
   the names differ. Rejected: the business deciding every repeated phone
   by hand; the payer confirming their services, which needs the phone
-  proven first (the wallet).*
+  proven first (the wallet).* *Amended later the same day: the first
+  person to receive a reference keeps the phone's digits; see the next
+  round.*
 - Q: When the business gives a customer a new reference, and that person
   has several services on it, which services change? → A: **All of that
   person's services**: the person keeps one number, now a new one.
@@ -301,6 +306,35 @@ After `/speckit-analyze` (same day), the creator decided five more:
   corrects three times could not send their clave or receipt. → A: **The
   clave and the receipt never count** toward that limit; corrections do.
   Receipts keep their own upload limit (20 an hour).
+
+And, the same day, how references are generated:
+
+- Q: When two people with different names share a phone, who keeps its
+  digits? → A: **The first to receive a reference in Devolada**; the
+  others get assigned numbers. When the feature is turned on, existing
+  links are handled oldest first. *Rejected: the customer oldest in the
+  business's records, which could take a reference away from someone who
+  already saved it.* This replaces "the digits go to no one".
+- Q: Does an assigned number follow a pattern (three digits of Devolada
+  and the last four of the phone)? → A: **No — at random.** A pattern
+  would show a payer the end of their phone and invite them to type the
+  whole phone, which is the reference of the person who kept it.
+- Q: Are the unsafe-digit cases checked even for a real phone of one
+  person? → A: **Yes, always**, after knowing whose phone it is: they ask
+  whether seven digits are safe as a reference, not whose they are. The
+  leading-zero case is provisional until the pilot measures it. This
+  confirms the plan's amendment of FR-002.
+- Q: A new customer's phone ends in someone's assigned number. → A: **The
+  phone's owner takes it** (FR-040); the previous holder gets a new number,
+  a notice, and at their next confirmation the question of which
+  reference they put. During the transition, who sent the money keeps
+  them apart (FR-041), in the creator's order: the previous holder's
+  known account, the last four digits of their account, then the last four
+  characters of the clave; and the new owner is asked for their account's
+  last four digits when a transfer comes from an account not known for
+  them. *Rejected: the new customer getting another number (no one's
+  reference changes); a 60-day wait with a temporary number for the new
+  owner.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -323,10 +357,12 @@ has to do differently. Every other story depends on it.
 **Independent Test**: on a business with the feature on, open the links of
 a customer with a phone of their own, of two customers with one phone and
 one name, and of two with one phone and different names; see the first
-three shown their phone's last seven digits (the two of one name the same
-number) and the last two an assigned number each; see the reference in
-the message the panel prepares for the link. Delivers value alone: from the first transfer, the business
-can tell its customers apart by reference on any receipt or statement.
+four shown their phone's last seven digits (the two of one name the same
+number, and the first of the two names the phone's digits too) and the
+last one an assigned number; see the reference in the message the panel
+prepares for the link. Delivers value alone: from the first transfer, the
+business can tell its customers apart by reference on any receipt or
+statement.
 
 **Acceptance Scenarios**:
 
@@ -339,9 +375,10 @@ can tell its customers apart by reference on any receipt or statement.
    link is opened, **Then** all show the same reference, the phone's
    digits.
 3. **Given** a customer with no phone on record, a link made through the
-   collections API, or a phone that customers with different names share,
-   **When** they open their link, **Then** they see an assigned number —
-   one per person — and the page does not call it their phone.
+   collections API, or a phone whose digits another person with another
+   name received first, **When** they open their link, **Then** they see
+   an assigned number of their own, drawn at random, and the page does
+   not call it their phone.
 4. **Given** a phone whose last seven digits are already another person's
    reference (a different phone ending the same), or equal the last seven
    digits of the business's own receiving account, **When** that
@@ -358,6 +395,11 @@ can tell its customers apart by reference on any receipt or statement.
    capture's reference differs from their own, **Then** the payment is
    still accepted on the receipt path and the payer is reminded of their
    reference.
+7. **Given** a person holding an assigned number, **When** a new customer
+   arrives whose phone ends in those seven digits, **Then** the new
+   customer's link shows the digits as their phone's, and the previous
+   holder's link shows a new number with the notice that it changed
+   (FR-040).
 
 ---
 
@@ -583,6 +625,16 @@ question.
 6. **Given** a typed reference that is another person's reference in the
    same business, **When** it is typed, **Then** Devolada does not search
    by it for this payer and asks for the clave or the receipt.
+7. **Given** a payer whose reference changed (FR-040), **When** they next
+   confirm and say they put the previous reference, **Then** the transfer
+   confirms only when it comes from an account learned for them, or fits
+   the last four digits of their account, or the last four characters of
+   its clave (FR-041).
+8. **Given** the new owner of those digits during the transition, **When**
+   a transfer with them comes from an account learned for the previous
+   holder, **Then** it never confirms for the new owner; **When** it comes
+   from an account not yet known for the new owner, **Then** they are
+   asked the last four digits of their account first (FR-041).
 
 ---
 
@@ -591,21 +643,28 @@ question.
 - **One phone on several customers.** With one name, it is one person with
   several services, and they share the phone's reference. With different
   names — a family where each pays their own, or an office number put on
-  customers who gave none — each person gets an assigned number, and the
-  phone's digits go to no one, so a payer who types that phone out of
-  habit matches nobody rather than somebody. A customer added later with
-  that phone joins the person of the same name; a new name gets its own
-  number, and whoever held the phone's digits keeps them (FR-003). The
-  business joins or separates people from the panel when a name is
-  written two ways or two people share one.
+  customers who gave none — the first person to receive a reference in
+  Devolada keeps the phone's digits, and every other person gets an
+  assigned number drawn at random. A customer added later with that phone
+  joins the person of the same name, or gets its own number with a new
+  name (FR-003). The business joins or separates people from the panel
+  when a name is written two ways or two people share one.
 - **A placeholder phone.** The business typed a stand-in number for
   customers who gave none. When it looks like a bank app's default
   (0000000000, 1234567890…), FR-002 already gives each an assigned number.
   When it is a real-looking number on customers with different names, they
-  are different people and each gets their own. When it sits on a single
+  are different people: the first keeps its digits and the others get
+  their own. When it sits on a single
   customer, it works as their reference — unique in the business — and the
   business can give them a new number if the page's "son los últimos 7
   números de tu celular" confuses them.
+- **A new customer's phone ends in someone's assigned number.** Juan held
+  7815678 as an assigned number; Ana arrives with a phone ending in
+  781 5678. Ana takes the digits (a phone beats an assigned number); Juan
+  gets a new number and a notice on his link, and his next confirmation
+  asks which reference he used, in case he paid with the old one before
+  seeing it. Until Juan confirms with his new number, or for 60 days, the
+  two are kept apart by who sent the money (FR-041).
 - **One person, two services, one confirmation without a transfer.** With
   a shared reference, a service confirmed without paying can take the
   transfer meant for the other service. Accepted with the per-person
@@ -670,21 +729,26 @@ question.
   registration is asked of the payer.
 - **FR-002**: The reference MUST be the last seven digits of the customer's
   phone as the business's records hold it. Devolada MUST assign another
-  seven-digit number instead — one per person — when the customer has no
-  phone; when customers with different names share the phone, or the
-  business separated them; when those digits are already another person's
+  seven-digit number instead — one per person, drawn at random, with no
+  pattern — when the customer has no phone; when another person with the
+  same phone and another name received its digits first, or the business
+  separated them; when those digits are already another person's phone
   reference; when they equal the last seven digits of
   an account the business receives on; or when they look like a bank
   app's default — one digit repeated (0000000) or a straight run up or
   down (2345678, 7654321) — or start with 0. An assigned number never falls
   in any of these cases and is never one already used in the business.
-  *Amended 2026-09-30 by the plan (payment-without-receipt D3): the
-  default-looking and leading-zero cases are new; the creator confirms
-  them with the plan.*
-- **FR-003**: A reference MUST NOT change by itself once shown. A customer
-  added later with the phone and the name of a person joins that person's
-  reference; one with the phone and another name gets a number of their
-  own, and whoever already holds the phone's digits keeps them. The
+  These cases are checked after Devolada knows whose phone it is, and
+  apply even to a real phone of one person: they ask whether seven digits
+  are safe as a reference, not whose they are. *Amended 2026-09-30 by the
+  plan (payment-without-receipt D3) and confirmed by the creator the same
+  day; the leading-zero case is provisional until the pilot measures
+  whether bank apps keep a leading 0.*
+- **FR-003**: A reference MUST NOT change by itself once shown, with the
+  one exception of FR-040. A customer added later with the phone and the
+  name of a person joins that person's reference; one with the phone and
+  another name gets a number of their own, and whoever already holds the
+  phone's digits keeps them. The
   business's operator MAY give a person a new number — every service of
   that person changes — join a customer to another person with the same
   phone ("Es la misma persona"), or separate a customer into a person of
@@ -705,6 +769,24 @@ question.
   the other customers with the same phone and another name (the ones "Es la
   misma persona" could join), the learned banks, and the learned accounts
   by their last four digits.
+- **FR-040**: A phone beats an assigned number. When a customer's phone
+  ends in seven digits another person holds as an assigned number, the
+  phone's owner MUST take them; the previous holder MUST get a new
+  assigned number and see, on their link, that their reference changed
+  and that the contact saved in their bank needs the new one. Their next
+  confirmation MUST ask which reference they put — the new one or the
+  previous one. *Added 2026-09-30 by the creator; numbered after FR-039 so
+  no other requirement moves.*
+- **FR-041**: Until the previous holder confirms a payment with their new
+  number, or for 60 days, the two people MUST be kept apart by who sent
+  the money: a transfer with the previous digits confirms for the previous
+  holder only when it comes from an account learned for them, or fits the
+  last four digits of the account they type, or — when that is not enough
+  — the last four characters of its clave; it never confirms for the new
+  owner when it comes from an account learned for the previous holder;
+  and a transfer from an account not learned for the new owner asks the
+  new owner for the last four digits of their account before it
+  confirms.
 
 **The confirmation**
 
@@ -832,9 +914,10 @@ question.
   confirm; the page offers the clave and the receipt.
 - **FR-034**: A typed reference that is another person's reference in the
   same business MUST NOT be searched for this payer; the page asks for
-  the clave or the receipt. Digits that belong to no person — a phone
-  customers with different names share — are an ordinary shared
-  reference: FR-032 applies.
+  the clave or the receipt, except the payer's own previous reference
+  (FR-041). Digits that belong to no person — a default-looking or other
+  unsafe number (FR-002) — are an ordinary shared reference: FR-032
+  applies.
 
 **Across the feature**
 
@@ -860,8 +943,10 @@ question.
   the digits, whether they are a phone's or assigned, the customers
   (services) that share it, when it was set or changed. A person is the
   customers with one phone and one name, unless the business joined or
-  separated them. No two persons of the business share one; a phone shared
-  by different people gives its digits to no one.
+  separated them. No two persons of the business share one; when
+  different people share a phone, the first to receive a reference keeps
+  its digits. A reference that passed from an assigned holder to a phone's
+  owner records whom it passed from, until the transition ends (FR-041).
 - **Learned bank**: a bank a person has paid from — when it was last used,
   how many confirmed payments came from it.
 - **Learned account**: a sending account a service was paid from — its

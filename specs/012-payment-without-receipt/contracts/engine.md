@@ -40,17 +40,21 @@ export async function ensurePayerReference(
 
 1. The customer already holds an active reference → it.
 2. `nationalPhone(phone)` null, or its last seven fail D3 → a new
-   assigned number.
+   assigned number (at random, no pattern).
 3. Read `customersWithPhone(phone)` and group by `personName(first, last)`
    (lower case, no accents, spaces collapsed). This customer's person is
    its name's group.
 4. A customer of that group already holds a reference → join it.
-5. The digits exist in the business as another holder's `phone` reference,
-   or `blocked` → an assigned number (FR-003: whoever holds the digits
-   keeps them).
-6. New digits: one name in the group list → a `phone` reference for this
-   person; several names → a `blocked` row for the digits
-   (`different_people`) and an assigned number for this person.
+5. The digits exist in the business:
+   - as another person's `phone` reference (another name got them first,
+     or another phone ends the same) → an assigned number;
+   - as another person's `assigned` number → D26: the row passes to this
+     person (`origin = phone`), its previous holders move to a new
+     assigned row, `previous_reference_id` and `transition_ends_at`
+     (+60 days) are set;
+   - `retired` → an assigned number (retired digits are never used again).
+6. New digits → a `phone` reference for this person: the first to receive
+   them keeps them, whatever other names the phone carries.
 
 `assignNumber(db, business)` draws until an insert under the unique
 `(business_id, digits)` succeeds (D6). `newNumberFor(person)`,
@@ -71,6 +75,9 @@ export type ReceiptSide = {
   /* …existing fields… */
   /* D11: whole accounts learned for the service; compared before the tail */
   knownAccounts?: string[];
+  /* D26: during a transition, the previous holder's learned accounts —
+     never chosen for the new owner */
+  excludedAccounts?: string[];
 };
 export type MatchMode = "receipt" | "own" | "typed";
 
@@ -78,9 +85,12 @@ export function matchCandidates(receipt, candidates, used, policy = MATCH_POLICY
 export function fitClaveTail(tail: string, candidates: string[]): string | null;
 ```
 
-- `own`: integrity → used → the candidates from `knownAccounts` first →
-  earliest `creditedAt`. `by: "learned_account" | "earliest"`. Undecided
-  only as `all_used`.
+- `own`: integrity → used → (during a D26 transition) every candidate
+  from `excludedAccounts` — the previous holder's learned accounts —
+  dropped → the candidates from `knownAccounts` first → earliest
+  `creditedAt`. `by: "learned_account" | "earliest"`. During a transition,
+  a chosen candidate from an account not in `knownAccounts` is held and
+  asks `sender_tail` (FR-041). Undecided only as `all_used`.
 - `typed`: integrity → used → `knownAccounts` → tail (the typed four) →
   window (never used: typed rows carry no time). `by: "learned_account" |
   "sender_tail"`. Undecided otherwise, as today.

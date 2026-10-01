@@ -9,7 +9,8 @@ import { SuspendedScreen, WrongAccountScreen } from "@/features/auth/Gate";
 /* cash-at-stores D26: three tabs — *Cobrar*, *Caja*, *Movimientos* — at
    the bottom, where a thumb reaches, each 64px (the decisive size: a tab
    is how the shopkeeper moves between the counter and the drawer).
-   Signing out and the passkey live in *Caja* (`cashbox` D3). */
+   Signing out and the passkey live in *Caja* (`cashbox` D3). From 1024px
+   the same three sections are a side menu (D32). */
 
 const TABS = [
   { to: "/", label: "Cobrar", icon: HandCoins, match: (p: string) => p === "/" || p.startsWith("/cobro") },
@@ -34,10 +35,51 @@ function useOnline() {
   return online;
 }
 
+/* D26, D32: the three sections, in both shapes. Both are in the page and
+   CSS shows one, as the panel's shell does; two names, so a screen reader
+   can tell the two landmarks apart (US-P04). */
+function Sections({ variant, pathname }: { variant: "side" | "bar"; pathname: string }) {
+  const navigate = useNavigate();
+  const side = variant === "side";
+  return (
+    <nav
+      aria-label={side ? "Secciones" : "Secciones, barra inferior"}
+      className={side ? "flex flex-col gap-1" : "sticky bottom-0 z-sticky grid grid-cols-3 border-t border-line bg-card lg:hidden"}
+    >
+      {TABS.map(({ to, label, icon: Icon, match }) => {
+        const current = match(pathname);
+        return (
+          <Link
+            key={to}
+            to={to}
+            aria-current={current ? "page" : undefined}
+            onClick={(e) => {
+              /* the same tab again is a fresh start of that tab */
+              if (current && to === "/") {
+                e.preventDefault();
+                void navigate({ to: "/", replace: true });
+              }
+            }}
+            className={
+              side
+                ? `flex h-12 items-center gap-3 rounded-md px-3 text-base font-medium ${
+                    current ? "bg-accent-soft text-link" : "text-ink-soft hover:bg-well hover:text-ink"
+                  }`
+                : `flex h-16 flex-col items-center justify-center gap-1 text-sm font-medium ${current ? "text-link" : "text-ink-soft"}`
+            }
+          >
+            <Icon className="size-5" aria-hidden />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function TabLayout() {
   const session = useSession();
   const online = useOnline();
-  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [suspended, setSuspended] = useState(false);
 
@@ -58,43 +100,31 @@ export function TabLayout() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
-      {!online && (
-        <p role="status" className="flex items-center gap-2 bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
-          <WifiOff className="size-4 shrink-0" aria-hidden />
-          Sin conexión. Revisa tu internet.
-        </p>
-      )}
-      <main className="flex-1 px-4 pb-6 pt-4">
-        <Pending active={session.isPending} label="Cargando tu tienda" shape={<Skeleton className="h-24 w-full" />}>
-          {session.data ? <Outlet /> : session.error ? <ListError what="tu tienda" onRetry={() => session.refetch()} /> : null}
-        </Pending>
-      </main>
-      <nav aria-label="Secciones" className="sticky bottom-0 z-sticky grid grid-cols-3 border-t border-line bg-card">
-        {TABS.map(({ to, label, icon: Icon, match }) => {
-          const current = match(pathname);
-          return (
-            <Link
-              key={to}
-              to={to}
-              aria-current={current ? "page" : undefined}
-              onClick={(e) => {
-                /* the same tab again is a fresh start of that tab */
-                if (current && to === "/") {
-                  e.preventDefault();
-                  void navigate({ to: "/", replace: true });
-                }
-              }}
-              className={`flex h-16 flex-col items-center justify-center gap-1 text-sm font-medium ${
-                current ? "text-link" : "text-ink-soft"
-              }`}
-            >
-              <Icon className="size-5" aria-hidden />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+    <div className="min-h-dvh lg:flex">
+      {/* D32: from 1024px the sections move to a side menu — the panel's
+          shell recipe (Shell.tsx), at the store app's 48px */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-card p-4 lg:sticky lg:top-0 lg:flex lg:h-dvh">
+        <p className="px-3 text-lg font-semibold tracking-tight">Devolada</p>
+        <p className="mb-6 mt-1 break-words px-3 text-sm text-ink-soft">{session.data?.name}</p>
+        <Sections variant="side" pathname={pathname} />
+      </aside>
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col lg:mx-0 lg:min-w-0 lg:max-w-none lg:flex-1">
+        {!online && (
+          <p role="status" className="flex items-center gap-2 bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
+            <WifiOff className="size-4 shrink-0" aria-hidden />
+            Sin conexión. Revisa tu internet.
+          </p>
+        )}
+        <main className="flex-1 px-4 pb-6 pt-4 lg:px-8 lg:pt-8">
+          {/* D32: the content stops at 72rem on a wide screen */}
+          <div className="lg:mx-auto lg:max-w-6xl">
+            <Pending active={session.isPending} label="Cargando tu tienda" shape={<Skeleton className="h-24 w-full" />}>
+              {session.data ? <Outlet /> : session.error ? <ListError what="tu tienda" onRetry={() => session.refetch()} /> : null}
+            </Pending>
+          </div>
+        </main>
+        <Sections variant="bar" pathname={pathname} />
+      </div>
     </div>
   );
 }

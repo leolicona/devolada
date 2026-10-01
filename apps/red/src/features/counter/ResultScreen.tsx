@@ -6,6 +6,7 @@ import { Alert, Amount, Button, Card, Field, Input, Pending, Reveal, Skeleton, S
 import type { CollectionOutcome, CollectionStatusResponse } from "@devolada/api/store-schema";
 import { nationalPhone } from "@/lib/phone";
 import { openExternal } from "@/lib/open";
+import { useWide } from "@/lib/wide";
 import { getCollection, getReceipt } from "./api";
 
 /* cash-at-stores D25, FR-025–FR-027: the folio at once, the outcome as it
@@ -138,8 +139,10 @@ function Receipt({ id }: { id: string }) {
               <MessageCircle className="size-5" aria-hidden />
               Enviar comprobante
             </Button>
-            {/* T094: the full label needs the width — stacked on a phone */}
-            <div className="grid gap-3 sm:grid-cols-2">
+            {/* T094: the full label needs the width — stacked on a phone
+                (the tokens' `sm` is 375px, a phone, so `md`), and in the
+                right half of *Cobrar* until that half is wide enough (D32) */}
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               {/* the spec's edge case: a wrong phone on file */}
               <Button
                 variant="secondary"
@@ -198,6 +201,8 @@ export function ResultScreen() {
     refetchInterval: (q) => (q.state.data?.outcome === "queued" ? POLL_MS : false),
   });
   const data = collection.data;
+  /* D32: on a computer this is the right half of *Cobrar* */
+  const Title = useWide() ? "h2" : "h1";
 
   return (
     <section className="space-y-4" aria-labelledby="resultado-title">
@@ -210,12 +215,12 @@ export function ResultScreen() {
             No pudimos cargar este pago. Revisa tu conexión.
           </Alert>
         ) : data ? (
-          <>
+          <div className="space-y-4">
             <Card className="space-y-4 p-6">
               <header className="space-y-1">
-                <h1 id="resultado-title" className="text-lg font-semibold">
+                <Title id="resultado-title" className="text-lg font-semibold">
                   Pago registrado
-                </h1>
+                </Title>
                 <p className="text-sm text-ink-soft">
                   {data.customerName} · {data.businessName}
                 </p>
@@ -266,7 +271,7 @@ export function ResultScreen() {
               <Plus className="size-5" aria-hidden />
               Nuevo cobro
             </Button>
-          </>
+          </div>
         ) : null}
       </Pending>
     </section>

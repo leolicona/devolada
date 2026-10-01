@@ -19,43 +19,59 @@ const STATUS: Record<StoreHandoverRow["status"], Status> = {
 };
 
 const when = (ms: number) => `${dateOf(ms)}, ${timeOf(ms)}`;
+/* es-MX times end in "p.m.": a sentence that ends on one takes no second
+   period (measured 2026-10-01, "2:35 p.m..") */
+const closed = (text: string) => (text.endsWith(".") ? text : `${text}.`);
 
 function sentence(h: StoreHandoverRow, business: string): string {
-  const declared = `La entregaste el ${when(h.declaredAt)}.`;
+  const declared = closed(`La entregaste el ${when(h.declaredAt)}`);
   if (h.status === "pending" || h.resolvedAt === null) return `${declared} Esperamos a que ${business} la confirme.`;
-  return `${declared} ${business} la ${h.status === "confirmed" ? "confirmó" : "disputó"} el ${when(h.resolvedAt)}.`;
+  return `${declared} ${closed(`${business} la ${h.status === "confirmed" ? "confirmó" : "disputó"} el ${when(h.resolvedAt)}`)}`;
 }
 
 export function HandoversScreen() {
   const { businessId } = useSearch({ strict: false }) as { businessId?: string };
+  return (
+    <div className="space-y-4">
+      <Link to="/caja" className="inline-flex min-h-12 items-center gap-2 text-base font-medium text-link">
+        <ArrowLeft className="size-5" aria-hidden />
+        Mi caja
+      </Link>
+      {businessId ? (
+        <HandoverHistory businessId={businessId} level="h1" />
+      ) : (
+        <p className="text-base text-ink-soft">No encontramos ese negocio en tu caja.</p>
+      )}
+    </div>
+  );
+}
+
+/* The history itself: its own screen on a phone (h1), and the right half
+   of *Mi caja* on a computer, one per business (h2, D32) */
+export function HandoverHistory({ businessId, level }: { businessId: string; level: "h1" | "h2" }) {
   const list = useInfiniteQuery({
-    queryKey: ["store-handovers", businessId ?? null],
-    queryFn: ({ pageParam }) => getHandovers(businessId ?? "", pageParam ?? undefined),
-    enabled: Boolean(businessId),
+    queryKey: ["store-handovers", businessId],
+    queryFn: ({ pageParam }) => getHandovers(businessId, pageParam ?? undefined),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });
   const business = list.data?.pages[0]?.businessName ?? "";
   const handovers = list.data?.pages.flatMap((p) => p.handovers) ?? [];
+  const Title = level;
+  const titleId = `entregas-${businessId}`;
 
   return (
-    <section className="space-y-4" aria-labelledby="entregas-title">
-      <Link to="/caja" className="inline-flex min-h-12 items-center gap-2 text-base font-medium text-link">
-        <ArrowLeft className="size-5" aria-hidden />
-        Mi caja
-      </Link>
+    <section className="space-y-4" aria-labelledby={titleId}>
       <header className="space-y-1">
-        <h1 id="entregas-title" className="text-xl font-semibold">
+        <Title id={titleId} className={level === "h1" ? "text-xl font-semibold" : "text-lg font-semibold"}>
           {business ? `Entregas a ${business}` : "Entregas"}
-        </h1>
+        </Title>
         <p className="text-sm text-ink-soft">
           Una entrega en disputa no cambia tu caja. Vuelve a registrarla cuando lleves el efectivo completo.
         </p>
       </header>
-      <Pending active={list.isPending && Boolean(businessId)} label="Cargando tus entregas" shape={<Skeleton className="h-40 w-full" />}>
-        {!businessId ? (
-          <p className="text-base text-ink-soft">No encontramos ese negocio en tu caja.</p>
-        ) : list.isError && handovers.length === 0 ? (
+      <Pending active={list.isPending} label="Cargando tus entregas" shape={<Skeleton className="h-40 w-full" />}>
+        {list.isError && handovers.length === 0 ? (
           <ListError what="tus entregas" onRetry={() => list.refetch()} />
         ) : list.data && handovers.length === 0 ? (
           <p className="text-base text-ink-soft">Todavía no has registrado entregas.</p>
@@ -82,7 +98,7 @@ export function HandoversScreen() {
       </Pending>
       {list.hasNextPage && (
         <Pending active={list.isFetchingNextPage} label="Cargando más entregas">
-          <Button variant="secondary" className="w-full" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+          <Button variant="secondary" className="w-full lg:w-auto" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
             Cargar más
           </Button>
         </Pending>

@@ -158,7 +158,7 @@ test.describe("cash-at-stores US1: the counter by keyboard", () => {
     await tabTo(page, page.getByRole("link", { name: "Buscar otro cliente" }), "the way back");
     await tabTo(page, page.getByRole("textbox", { name: "Monto a cobrar del adeudo" }), "the amount");
     await tabTo(page, page.getByRole("button", { name: /^Cobrar \$/ }), "Cobrar");
-    await tabTo(page, page.getByRole("navigation", { name: "Secciones" }).getByRole("link", { name: "Cobrar" }), "the Cobrar tab");
+    await tabTo(page, page.getByRole("navigation", { name: "Secciones, barra inferior" }).getByRole("link", { name: "Cobrar" }), "the Cobrar tab");
   });
 });
 

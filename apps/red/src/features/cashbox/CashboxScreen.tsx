@@ -6,7 +6,9 @@ import type { CashboxResponse } from "@devolada/api/store-schema";
 import { dateOf } from "@/lib/datetime";
 import { PasskeyCard } from "@/features/auth/PasskeyCard";
 import { signOut } from "@/features/auth/session";
+import { useWide } from "@/lib/wide";
 import { getCashbox } from "./api";
+import { HandoverHistory } from "./HandoversScreen";
 
 /* cash-at-stores FR-037, D19, D20: *Mi caja* — for each business the
    store collects for, the cash it holds and the fees it earned since its
@@ -15,8 +17,16 @@ import { getCashbox } from "./api";
 
 type Business = CashboxResponse["businesses"][number];
 
-function BusinessCash({ b }: { b: Business }) {
+/* D32: on a computer the card sits beside the hand-overs (`historyBeside`:
+   its last hand-over is a line, not a way into them) or beside the
+   hand-over form (`declare` off: the form is the action) */
+export function BusinessCash({ b, historyBeside = false, declare = true }: { b: Business; historyBeside?: boolean; declare?: boolean }) {
   const canDeclare = b.heldCents > 0 && !b.pendingHandover;
+  const lastLine = b.lastHandover ? (
+    <span>
+      Última entrega: {formatMoney(b.lastHandover.cents)} el {dateOf(b.lastHandover.at)}.
+    </span>
+  ) : null;
   return (
     <Card className="space-y-4 p-6">
       <h2 className="text-lg font-semibold">{b.businessName}</h2>
@@ -64,16 +74,18 @@ function BusinessCash({ b }: { b: Business }) {
           <StatusBadge status={b.lastHandover.status === "confirmed" ? "confirmed" : "disputed"} size="standard" />
           {/* T079, T080: the last hand-over opens into every hand-over to
               this business, disputes and their notes included */}
-          <Link
-            to="/caja/entregas"
-            search={{ businessId: b.businessId }}
-            className="flex min-h-12 items-center justify-between gap-3 text-base text-ink-soft"
-          >
-            <span>
-              Última entrega: {formatMoney(b.lastHandover.cents)} el {dateOf(b.lastHandover.at)}.
-            </span>
-            <ChevronRight className="size-5 shrink-0" aria-hidden />
-          </Link>
+          {historyBeside || !declare ? (
+            <p className="text-base text-ink-soft">{lastLine}</p>
+          ) : (
+            <Link
+              to="/caja/entregas"
+              search={{ businessId: b.businessId }}
+              className="flex min-h-12 items-center justify-between gap-3 text-base text-ink-soft"
+            >
+              {lastLine}
+              <ChevronRight className="size-5 shrink-0" aria-hidden />
+            </Link>
+          )}
           {b.lastHandover.status === "disputed" && b.lastHandover.note && (
             /* confirm-cash-drop D7: the store sees the business's note */
             <Alert variant="warning" layout="icon">
@@ -88,20 +100,22 @@ function BusinessCash({ b }: { b: Business }) {
           link cannot be :disabled, so the recipe's own disabled fill is
           spelled from its variant (design-review D6: a different fill,
           never an opacity) */}
-      <Link
-        to="/caja/entrega"
-        search={{ businessId: b.businessId }}
-        disabled={!canDeclare}
-        aria-disabled={!canDeclare}
-        className={cn(
-          buttonVariants({ size: "standard" }),
-          "w-full",
-          !canDeclare && "pointer-events-none border border-line bg-well text-ink-faint",
-        )}
-      >
-        Registrar entrega
-      </Link>
-      {!b.lastHandover && b.pendingHandover && (
+      {declare && (
+        <Link
+          to="/caja/entrega"
+          search={{ businessId: b.businessId }}
+          disabled={!canDeclare}
+          aria-disabled={!canDeclare}
+          className={cn(
+            buttonVariants({ size: "standard" }),
+            "w-full",
+            !canDeclare && "pointer-events-none border border-line bg-well text-ink-faint",
+          )}
+        >
+          Registrar entrega
+        </Link>
+      )}
+      {declare && !historyBeside && !b.lastHandover && b.pendingHandover && (
         <Link to="/caja/entregas" search={{ businessId: b.businessId }} className="inline-flex min-h-12 items-center text-base font-medium text-link">
           Ver entregas
         </Link>
@@ -114,21 +128,26 @@ export function CashboxScreen() {
   const cashbox = useQuery({ queryKey: ["store-cashbox"], queryFn: getCashbox });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const wide = useWide();
+  const businesses = cashbox.data?.businesses ?? [];
 
-  return (
-    <section className="space-y-4" aria-labelledby="caja-title">
-      <h1 id="caja-title" className="text-xl font-semibold">
-        Mi caja
-      </h1>
-      <Pending active={cashbox.isPending} label="Cargando tu caja" shape={<Skeleton className="h-48 w-full" />}>
-        {cashbox.isError ? (
-          <ListError what="tu caja" onRetry={() => cashbox.refetch()} />
-        ) : cashbox.data && cashbox.data.businesses.length === 0 ? (
-          <p className="text-base text-ink-soft">Todavía no tienes efectivo de ningún negocio.</p>
-        ) : (
-          cashbox.data?.businesses.map((b) => <BusinessCash key={b.businessId} b={b} />)
-        )}
-      </Pending>
+  const cash = (
+    <Pending active={cashbox.isPending} label="Cargando tu caja" shape={<Skeleton className="h-48 w-full" />}>
+      {cashbox.isError ? (
+        <ListError what="tu caja" onRetry={() => cashbox.refetch()} />
+      ) : cashbox.data && businesses.length === 0 ? (
+        <p className="text-base text-ink-soft">Todavía no tienes efectivo de ningún negocio.</p>
+      ) : (
+        <div className="space-y-4">
+          {businesses.map((b) => (
+            <BusinessCash key={b.businessId} b={b} historyBeside={wide} />
+          ))}
+        </div>
+      )}
+    </Pending>
+  );
+  const account = (
+    <>
       <PasskeyCard />
       <Button
         variant="ghost"
@@ -142,6 +161,34 @@ export function CashboxScreen() {
         <LogOut className="size-5" aria-hidden />
         Cerrar sesión
       </Button>
+    </>
+  );
+
+  return (
+    <section className={wide ? "space-y-6" : "space-y-4"} aria-labelledby="caja-title">
+      <h1 id="caja-title" className="text-xl font-semibold">
+        Mi caja
+      </h1>
+      {wide ? (
+        /* D32: the cash on the left, the hand-overs to each business on
+           the right — a dispute's note in view without another screen */
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <div className="space-y-4">
+            {cash}
+            {account}
+          </div>
+          <div className="space-y-8">
+            {businesses.map((b) => (
+              <HandoverHistory key={b.businessId} businessId={b.businessId} level="h2" />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          {cash}
+          {account}
+        </>
+      )}
     </section>
   );
 }

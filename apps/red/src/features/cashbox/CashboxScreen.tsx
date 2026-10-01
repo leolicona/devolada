@@ -20,30 +20,33 @@ function BusinessCash({ b }: { b: Business }) {
   return (
     <Card className="space-y-4 p-6">
       <h2 className="text-lg font-semibold">{b.businessName}</h2>
-      <dl className="space-y-2">
+      {/* `cashbox` D2: each number is a link into the movements behind
+          it — a link names itself by its words, so no definition list
+          (a <dl> may hold only its terms) */}
+      <div className="space-y-2">
         <Link
           to="/movimientos"
           search={{ businessId: b.businessId }}
           className="flex min-h-12 items-center justify-between gap-3 rounded-md bg-well px-4 py-2"
         >
-          <dt className="text-base">Efectivo que tienes</dt>
-          <dd className="flex items-center gap-2 text-xl font-semibold tabular-nums">
+          <span className="text-base">Efectivo que tienes</span>
+          <span className="flex items-center gap-2 text-xl font-semibold tabular-nums">
             {formatMoney(b.heldCents)}
             <ChevronRight className="size-5 text-ink-soft" aria-hidden />
-          </dd>
+          </span>
         </Link>
         <Link
           to="/movimientos"
           search={{ businessId: b.businessId, kind: "collection" }}
           className="flex min-h-12 items-center justify-between gap-3 rounded-md px-4 py-2"
         >
-          <dt className="text-base">Tus cargos desde la última entrega</dt>
-          <dd className="flex items-center gap-2 text-base font-semibold tabular-nums">
+          <span className="text-base">Tus cargos desde la última entrega</span>
+          <span className="flex items-center gap-2 text-base font-semibold tabular-nums">
             {formatMoney(b.feesSinceHandoverCents)}
             <ChevronRight className="size-5 text-ink-soft" aria-hidden />
-          </dd>
+          </span>
         </Link>
-      </dl>
+      </div>
 
       {b.pendingHandover && (
         <div className="space-y-1">

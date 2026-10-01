@@ -2,11 +2,18 @@ import { Alert, Amount, Button, Card, Input, parseMoney, Pending, Skeleton } fro
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
-import type {
-  BusinessesListResponse,
-  PlatformBusinessRow,
-  ProviderQuotaResponse,
-  SettingsListResponse,
+import {
+  RECEIPT_PLACEHOLDERS,
+  RECEIPT_PLACEHOLDER_HELP,
+  RECEIPT_TEMPLATE_MAX,
+  RECEIPT_TEMPLATE_MIN,
+  STORE_CHANNEL_CAPABILITIES,
+  receiptTemplateProblem,
+  renderReceipt,
+  type BusinessesListResponse,
+  type PlatformBusinessRow,
+  type ProviderQuotaResponse,
+  type SettingsListResponse,
 } from "@devolada/api/platform-schema";
 import type { CreditEntriesResponse } from "@devolada/api/credit-schema";
 import { Label } from "@/components/ui/label";
@@ -23,9 +30,12 @@ import { ENTRY_LABELS } from "../credit/CreditCard";
 import { STEP_COPY } from "../credit/CreditChip";
 import { LandingTab } from "./LandingTab";
 import { ReaderTab } from "./ReaderTab";
+import { StoresTab } from "./StoresTab";
+import { Switch } from "@/components/ui/switch";
 
 /* /operador (operator-panel spec, US-L02): the platform's hands. Boring
-   on purpose (IA). Four tabs — Reglas (D1's keys as typed fields with
+   on purpose (IA). Five tabs — Tiendas (cash-at-stores FR-001: the store
+   network) beside Reglas (D1's keys as typed fields with
    their history, under the provider's remaining calls —
    payment-without-receipt D19), Negocios (D7's map, with the adjustment
    and override forms), Landing (landing-page D17: the page's counts and requests) and
@@ -47,6 +57,9 @@ const KEY_LABELS: Record<string, string> = {
   default_fee_payer: "Quién paga el cargo por defecto",
   support_whatsapp: "WhatsApp de soporte (con lada, solo dígitos)",
   support_email: "Correo de soporte",
+  /* cash-at-stores D22, D31 */
+  store_fee_cents: "Cargo por servicio en tiendas",
+  store_receipt_template: "Mensaje del comprobante (WhatsApp)",
 };
 const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
   default_over_treatment: [
@@ -66,7 +79,99 @@ const ENUM_OPTIONS: Record<string, { value: string; label: string }[]> = {
 
 type Setting = SettingsListResponse["settings"][number];
 
+/* cash-at-stores D31: what the preview fills a draft with */
+const SAMPLE_RECEIPT = {
+  negocio: "WiFi Plus",
+  tienda: "Abarrotes Lupita",
+  folio: "DV-7K2Q9M",
+  cliente: "Guadalupe Reyes",
+  montoCents: 50000,
+  cargoCents: 1500,
+  pendienteCents: 29800,
+  at: Date.UTC(2026, 9, 1, 20, 35),
+  timezone: "America/Mexico_City",
+  timeFormat: "12h" as const,
+  estado: "Tu pago quedó registrado. Como no cubre todo tu adeudo, tu servicio sigue sin reactivarse.",
+};
+
+/* cash-at-stores D31 (FR-043): the receipt's message — a text area, the
+   placeholders listed, a live preview with sample data, and the API's own
+   three checks named before the save (one rule, `receiptTemplateProblem`) */
+function TemplateField({ setting }: { setting: Setting }) {
+  const queryClient = useQueryClient();
+  const { timezone, timeFormat } = useDisplaySettings();
+  const [value, setValue] = useState(setting.current ?? "");
+  const save = useMutation<unknown, ApiError, string>({
+    mutationFn: (v) => api(`/platform/settings/${setting.key}`, { method: "POST", body: JSON.stringify({ value: v }) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["platform-settings"] }),
+  });
+  const problem = receiptTemplateProblem(value);
+  const problemCopy =
+    problem?.kind === "length"
+      ? `El mensaje debe tener de ${RECEIPT_TEMPLATE_MIN} a ${RECEIPT_TEMPLATE_MAX} caracteres.`
+      : problem?.kind === "missing_folio"
+        ? "Falta {folio}: el comprobante necesita el folio."
+        : problem?.kind === "unknown_placeholder"
+          ? `No conocemos {${problem.name}}. Usa solo los marcadores de la lista.`
+          : null;
+  const changed = value.trim() !== (setting.current ?? "").trim();
+  const id = `setting-${setting.key}`;
+  return (
+    <div className="space-y-2 border-b border-line-soft py-4 last:border-0">
+      <Label htmlFor={id}>{KEY_LABELS[setting.key] ?? setting.key}</Label>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-2">
+          <Textarea id={id} rows={14} className="font-mono text-sm" value={value} onChange={(e) => setValue(e.target.value)} aria-describedby={`${id}-help`} />
+          {problemCopy && (
+            <p role="alert" className="text-sm font-medium text-error">
+              {problemCopy}
+            </p>
+          )}
+          <div id={`${id}-help`} className="text-sm text-ink-soft">
+            <p className="font-medium text-ink">Marcadores</p>
+            <ul className="mt-1 grid gap-x-4 sm:grid-cols-2">
+              {RECEIPT_PLACEHOLDERS.map((p) => (
+                <li key={p}>
+                  <code className="font-mono">{`{${p}}`}</code> — {RECEIPT_PLACEHOLDER_HELP[p]}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-medium">Vista previa con datos de ejemplo</p>
+          <pre aria-label="Vista previa del comprobante" className="mt-1 whitespace-pre-wrap rounded-md border border-line bg-well p-3 font-body text-sm">
+            {problem ? "—" : renderReceipt(value, SAMPLE_RECEIPT)}
+          </pre>
+        </div>
+      </div>
+      {setting.history.length > 0 && (
+        <p className="text-xs text-ink-soft">
+          Último cambio: {formatTime(setting.history[0].createdAt, timeFormat, timezone)} · {setting.history.length} cambio
+          {setting.history.length === 1 ? "" : "s"}
+        </p>
+      )}
+      {save.error && <p className="text-sm font-medium text-error">El mensaje no se guardó: revisa el folio y los marcadores.</p>}
+      <Pending active={save.isPending} label="Guardando el mensaje.">
+        <Button
+          size="compact"
+          aria-label={`Guardar ${KEY_LABELS[setting.key] ?? setting.key}`}
+          disabled={!changed || problem !== null || save.isPending}
+          onClick={() => save.mutate(value)}
+        >
+          Guardar
+        </Button>
+      </Pending>
+    </div>
+  );
+}
+
 function SettingField({ setting }: { setting: Setting }) {
+  if (setting.type === "template") return <TemplateField setting={setting} />;
+  return <PlainSettingField setting={setting} />;
+}
+
+function PlainSettingField({ setting }: { setting: Setting }) {
   const queryClient = useQueryClient();
   const { timezone, timeFormat } = useDisplaySettings();
   const isCents = setting.type === "cents";
@@ -189,6 +294,13 @@ function RulesTab() {
   );
 }
 
+/* cash-at-stores FR-007: what is missing, in the operator's words */
+const CAPABILITY_COPY: Record<(typeof STORE_CHANNEL_CAPABILITIES)[number], string> = {
+  customerSearch: "buscar clientes",
+  customerDebt: "leer el adeudo de un cliente",
+  paymentActions: "registrar pagos ni reconectar",
+};
+
 function BusinessDetail({ row, onClose }: { row: PlatformBusinessRow; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { timezone, timeFormat } = useDisplaySettings();
@@ -225,6 +337,13 @@ function BusinessDetail({ row, onClose }: { row: PlatformBusinessRow; onClose: (
     onSuccess: refresh,
   });
   const adjustValid = (parseMoney(cents) ?? 0) > 0 && reason.trim().length >= 10;
+  /* cash-at-stores D7 (FR-006, FR-007): the switch, and why it refuses */
+  const current = detail.data ?? row;
+  const channel = useMutation<unknown, ApiError, boolean>({
+    mutationFn: (on) => api(`/platform/businesses/${row.id}`, { method: "PATCH", body: JSON.stringify({ storeChannel: on }) }),
+    onSuccess: refresh,
+  });
+  const missing = STORE_CHANNEL_CAPABILITIES.filter((n) => !current.capabilities.includes(n));
 
   return (
     <Card className="space-y-4 p-6">
@@ -278,6 +397,40 @@ function BusinessDetail({ row, onClose }: { row: PlatformBusinessRow; onClose: (
             </Button>
           </Pending>
         </div>
+      </div>
+
+      <div className="space-y-2 rounded-md border border-border p-4">
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor={`store-channel-${row.id}`}>Efectivo en tiendas</Label>
+          <Switch
+            id={`store-channel-${row.id}`}
+            checked={current.storeChannel.on}
+            disabled={channel.isPending || (!current.storeChannel.on && missing.length > 0)}
+            onCheckedChange={(on) => channel.mutate(on)}
+          />
+        </div>
+        <p className="text-sm text-ink-soft">
+          {current.storeChannel.on
+            ? "Las tiendas de la red cobran en efectivo a los clientes de este negocio."
+            : "Las tiendas de la red no cobran para este negocio."}
+          {current.storeHeldCents !== 0 && (
+            <> Las tiendas tienen <Amount cents={current.storeHeldCents} /> de este negocio.</>
+          )}
+        </p>
+        {!current.storeChannel.on && missing.length > 0 && (
+          <p className="text-sm font-medium text-warning">
+            No se puede activar: la integración de este negocio no puede {missing.map((n) => CAPABILITY_COPY[n]).join(", ")}.
+          </p>
+        )}
+        {channel.error && (
+          <p role="alert" className="text-sm font-medium text-error">
+            {channel.error.code === "ONE_BUSINESS_AT_A_TIME"
+              ? "Otro negocio ya cobra en tiendas. Antes de sumar otro hay que decidir qué tiendas sirven a qué negocio."
+              : channel.error.code === "NOT_CAPABLE"
+                ? "La integración de este negocio no puede cobrar en tiendas."
+                : "No se pudo cambiar."}
+          </p>
+        )}
       </div>
 
       {detail.data && (
@@ -372,6 +525,8 @@ export function OperatorScreen() {
           <TabsTrigger value="businesses">Negocios</TabsTrigger>
           <TabsTrigger value="landing">Landing</TabsTrigger>
           <TabsTrigger value="reader">Lector</TabsTrigger>
+          {/* cash-at-stores FR-001 */}
+          <TabsTrigger value="stores">Tiendas</TabsTrigger>
         </TabsList>
         <TabsContent value="rules" className="mt-4">
           <RulesTab />
@@ -384,6 +539,9 @@ export function OperatorScreen() {
         </TabsContent>
         <TabsContent value="reader" className="mt-4">
           <ReaderTab />
+        </TabsContent>
+        <TabsContent value="stores" className="mt-4">
+          <StoresTab />
         </TabsContent>
       </Tabs>
     </main>

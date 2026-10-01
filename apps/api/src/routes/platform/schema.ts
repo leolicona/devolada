@@ -13,6 +13,9 @@ export {
   receiptTemplateProblem,
   type TemplateProblem,
 } from "../../receipt/template";
+/* cash-at-stores D31: the Reglas preview fills a draft with the same
+   renderer the receipt uses — pure, no server import */
+export { renderReceipt, type ReceiptValues } from "../../receipt";
 
 /* Shareable contract for the operator panel (operator-panel spec). */
 

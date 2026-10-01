@@ -23,6 +23,7 @@ import { IntegrationsScreen } from "./features/integrations/IntegrationsScreen";
 import { WispHubScreen } from "./features/integrations/WispHubScreen";
 import { ApiScreen } from "./features/integrations/ApiScreen";
 import { WebhookScreen } from "./features/integrations/WebhookScreen";
+import { CashPointsScreen } from "./features/cash-points/CashPointsScreen";
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
@@ -87,6 +88,14 @@ const indexRoute = createRoute({
    no redirect — its view lives inside Links now (`/links?view=receivables`).
    A bookmark to the old address gets the router's not-found answer. The
    API path of the same name is a different namespace and stays (D1). */
+/* cash-at-stores D23, T059: the business's cash at the network's stores,
+   at the address the plan names (`/puntos-de-pago`) — the one panel route
+   in Spanish, like the store app's own (D26) */
+const cashPointsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/puntos-de-pago",
+  component: CashPointsScreen,
+});
 /* integrations-hub D1: catalog + detail (routes are English, IA rule) */
 const integrationsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -169,6 +178,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     feedRoute,
     linksRoute,
+    cashPointsRoute,
     integrationsRoute,
     wisphubRoute,
     apiIntegrationRoute,

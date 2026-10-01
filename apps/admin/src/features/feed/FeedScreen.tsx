@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Search, TriangleAlert } from "lucide-react";
+import { ChevronDown, Landmark, Search, Store, TriangleAlert } from "lucide-react";
 import { Alert, Amount, AmountBreakdown, Button, Card, formatMoney, Input, ListError, Pending, Skeleton, StatusBadge, type Status } from "@devolada/ui";
 import type {
   FeedCharge,
@@ -16,7 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
-import { formatTime } from "@/lib/datetime";
+import { formatDateTime, formatTime } from "@/lib/datetime";
 import { useDisplaySettings, useSession } from "../auth/session";
 import { DateRangeField } from "./DateRangeField";
 
@@ -48,7 +48,15 @@ const statusFilters = [
 ] as const;
 const UNMATCHED = "unmatched";
 
-type Filters = { chip: string; q: string; from: string; to: string };
+/* cash-at-stores D23 (FR-031): the channel is its own question beside
+   the status — cash, SPEI, or both. Absent from the query is both. */
+const channelFilters = [
+  { value: ALL, label: "Todos" },
+  { value: "spei", label: "SPEI" },
+  { value: "store", label: "Efectivo" },
+] as const;
+
+type Filters = { chip: string; q: string; from: string; to: string; channel?: string };
 
 function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
   const params = new URLSearchParams();
@@ -59,6 +67,7 @@ function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
   if (opts.q?.trim()) params.set("q", opts.q.trim());
   if (opts.from) params.set("from", opts.from);
   if (opts.to) params.set("to", opts.to);
+  if (opts.channel && opts.channel !== ALL) params.set("channel", opts.channel);
   const qs = params.toString();
   return `/payments/feed${qs ? `?${qs}` : ""}`;
 }
@@ -66,6 +75,10 @@ function feedPath(opts: Partial<Filters> & { cursor?: number }): string {
 /* The queue writes a code; the ISP reads a sentence
    (reconnection-queue spec UI contract). */
 const reasons: Record<string, string> = {
+  /* cash-at-stores D9: the adapter now answers in the core's words; the
+     WISPHUB_* codes stay for the rows written before it */
+  INTEGRATION_AUTH_FAILED: "Tu sistema rechazó la llave. Revísala en Integraciones.",
+  INTEGRATION_UNAVAILABLE: "Tu sistema no respondió. Lo seguimos intentando.",
   WISPHUB_AUTH_FAILED: "WispHub rechazó la llave. Revísala en Integraciones.",
   WISPHUB_NOT_CONFIGURED: "Falta la llave de WispHub en Integraciones.",
   WISPHUB_UNAVAILABLE: "WispHub no respondió. Lo seguimos intentando.",
@@ -77,6 +90,7 @@ const reasonFor = (code: string) => reasons[code] ?? "WispHub no respondió. Lo 
    the payment waits on WispHub alone: said as such, never as a plain
    "Verificando", so the ISP knows the money arrived and what to fix */
 const waitingReasons: Record<string, string> = {
+  INTEGRATION_AUTH_FAILED: "tu llave no funciona. Revísala en Integraciones.",
   WISPHUB_AUTH_FAILED: "tu llave no funciona. Revísala en Integraciones.",
   WISPHUB_NOT_CONFIGURED: "falta la llave en Integraciones.",
   WISPHUB_READ_INCOMPLETE: "no pudimos leer completa la deuda del cliente. Lo seguimos intentando.",
@@ -434,6 +448,10 @@ function ChargeRow({
   const { timeFormat, timezone } = useDisplaySettings();
   const queryClient = useQueryClient();
   const at = (ms: number) => formatTime(ms, timeFormat, timezone);
+  const atDay = (ms: number) => formatDateTime(ms, timeFormat, timezone);
+  /* cash-at-stores D23: a cash row has no proof to open — the store's
+     record is the proof (the door answers 404, proof_mode 'none') */
+  const cash = charge.channel === "store";
 
   /* D5: one click buys exactly one fresh attempt; the sweep does the rest */
   const retry = useMutation<RetryResponse, ApiError>({
@@ -502,7 +520,19 @@ function ChargeRow({
           <span className="col-start-2 min-w-0 sm:flex-1">
             {/* design-review D1: identity wraps, it never truncates */}
             <span className="block text-sm font-medium">{charge.customerName}</span>
-            <span className="block text-sm text-muted-foreground">Pago directo · SPEI</span>
+            {/* cash-at-stores D23 (FR-031): the channel in icon and
+                text, never colour alone */}
+            {charge.channel === "store" ? (
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Store className="size-4 shrink-0" aria-hidden />
+                Efectivo · {charge.storeName ?? "tienda"}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Landmark className="size-4 shrink-0" aria-hidden />
+                Pago directo · SPEI
+              </span>
+            )}
           </span>
           <Amount
             cents={charge.receivedCents}
@@ -548,7 +578,9 @@ function ChargeRow({
                   ...(charge.carriedBalanceCents
                     ? [{ label: "Adeudo anterior", cents: charge.carriedBalanceCents }]
                     : []),
-                  { label: "Cargo por servicio", cents: charge.serviceFeeCents },
+                  /* cash-at-stores D23: a cash payment charges the payer no
+                     business fee — the counter's fee is the store's, below */
+                  ...(cash ? [] : [{ label: "Cargo por servicio", cents: charge.serviceFeeCents }]),
                 ]}
               />
               {(shortCents > 0 || charge.surplusCents > 0) && (
@@ -586,6 +618,7 @@ function ChargeRow({
               <p className="mt-3 font-mono text-sm text-muted-foreground">
                 Folio {charge.folio || "—"}
               </p>
+              {cash && <CashDetail charge={charge} atDay={atDay} />}
             </div>
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
@@ -642,7 +675,7 @@ function ChargeRow({
                 </p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
-                {showsMoney && <ProofDialog charge={charge} />}
+                {showsMoney && !cash && <ProofDialog charge={charge} />}
                 {charge.undecided && <ProofDialog charge={charge} label="Ver coincidencias" />}
                 {/* D5: promised to operators by the role matrix since
                     phase 2; kept until now only by waiting */}
@@ -690,6 +723,48 @@ function ChargeRow({
   );
 }
 
+/* cash-at-stores D23 (FR-032, FR-030): who held the money, the fee the
+   payer paid at the counter, and every correction the operator wrote in
+   the store's cash book for this payment — amount, reason, who and when */
+function CashDetail({ charge, atDay }: { charge: FeedCharge; atDay: (ms: number) => string }) {
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      <dl className="space-y-1">
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted-foreground">Tienda</dt>
+          <dd className="text-right font-medium">{charge.storeName ?? "—"}</dd>
+        </div>
+        {charge.storeFeeCents != null && (
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Cargo por servicio en tienda</dt>
+            <dd>
+              <Amount cents={charge.storeFeeCents} />
+            </dd>
+          </div>
+        )}
+      </dl>
+      <p className="text-muted-foreground">
+        Lo pagó el cliente en la tienda, aparte de su adeudo.
+      </p>
+      {charge.corrections.length > 0 && (
+        <div>
+          <p className="font-medium">Correcciones</p>
+          <ul className="mt-1 space-y-1">
+            {charge.corrections.map((c, i) => (
+              <li key={`${c.at}-${i}`}>
+                <Amount cents={c.cents} /> — {c.reason}
+                <span className="block text-muted-foreground">
+                  {c.author ?? "Devolada"} · {atDay(c.at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeedSkeleton() {
   return (
     <Card className="mt-4 p-4">
@@ -714,7 +789,12 @@ export function FeedScreen() {
   const [q, setQ] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [channel, setChannel] = useState<string>(ALL);
   const { data: actor } = useSession();
+  /* cash-at-stores D23: the channel filter is offered to a business that
+     has ever had cash at stores — the same signal that shows Puntos de
+     pago. For a SPEI-only business it would filter nothing. */
+  const hasStoreChannel = actor?.storeChannel?.since != null;
   const { timezone } = useDisplaySettings();
   const canOperate = roleCan(actor?.role ?? "viewer", "payments", "operate");
 
@@ -724,12 +804,13 @@ export function FeedScreen() {
     return () => clearTimeout(t);
   }, [qInput]);
 
-  const filters: Filters = { chip: status, q, from, to };
+  const filters: Filters = { chip: status, q, from, to, channel };
   /* D10: a list filtered down to nothing is not a business that was
      never paid — the empty copy must say which it is. */
-  const hasFilters = status !== ALL || q !== "" || from !== "" || to !== "";
+  const hasFilters = status !== ALL || q !== "" || from !== "" || to !== "" || channel !== ALL;
   const clearFilters = () => {
     setStatus(ALL);
+    setChannel(ALL);
     setQInput("");
     setQ("");
     setFrom("");
@@ -737,7 +818,7 @@ export function FeedScreen() {
   };
   const unmatched = status === UNMATCHED;
   const feed = useInfiniteQuery<FeedResponse, ApiError>({
-    queryKey: ["feed", status, q, from, to],
+    queryKey: ["feed", status, q, from, to, channel],
     /* "Sin pago" lists transfers, not charges: the feed rests meanwhile */
     enabled: !unmatched,
     queryFn: ({ pageParam }) =>
@@ -848,6 +929,22 @@ export function FeedScreen() {
               timezone={timezone}
               todayMs={today?.startedAtMs}
             />
+            {hasStoreChannel && (
+              <div className="flex gap-2" role="group" aria-label="Canal">
+                {channelFilters.map((c) => (
+                  <Button
+                    key={c.value}
+                    size="compact"
+                    variant={c.value === channel ? "primary" : "secondary"}
+                    aria-pressed={c.value === channel}
+                    onClick={() => setChannel(c.value)}
+                  >
+                    {c.value === "store" && <Store className="size-4" aria-hidden />}
+                    {c.label}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
           )}
         </section>

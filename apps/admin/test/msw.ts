@@ -22,6 +22,8 @@ export const businessActor = {
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },
   observing: false,
+  /* cash-at-stores D7, D23: a business that never had cash at stores */
+  storeChannel: { on: false, since: null },
 } as const;
 
 export const ok = (data: unknown, status = 200) =>
@@ -186,6 +188,30 @@ export const handlers = {
      on the operator's Reglas tab */
   providerQuota: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/platform/provider-quota", () => r()),
+  /* cash-at-stores US2: the operator's Tiendas tab and the switch */
+  patchBusiness: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/platform/businesses/:id", async ({ params, request }) => r(String(params.id), await request.json())),
+  platformStores: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/platform/stores", () => r()),
+  createStore: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/stores", async ({ request }) => r(await request.json())),
+  patchStore: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/platform/stores/:id", async ({ params, request }) => r(String(params.id), await request.json())),
+  resendStoreInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/stores/:id/invitation", ({ params }) => r(String(params.id))),
+  storeLedger: (r: (id: string, businessId: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/stores/:id/ledger/:businessId", ({ params }) => r(String(params.id), String(params.businessId))),
+  storeCorrection: (r: (id: string, businessId: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/stores/:id/ledger/:businessId/corrections", async ({ params, request }) =>
+      r(String(params.id), String(params.businessId), await request.json()),
+    ),
+  /* cash-at-stores US5: Puntos de pago */
+  cashPoints: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/cash-points", () => r()),
+  confirmHandover: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-points/handovers/:id/confirm", ({ params }) => r(String(params.id))),
+  disputeHandover: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-points/handovers/:id/dispute", async ({ params, request }) => r(String(params.id), await request.json())),
+  handoverHistory: (r: (storeId: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/cash-points/stores/:storeId/history", ({ params }) => r(String(params.storeId))),
 };
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };

@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Plug,
   ShieldCheck,
+  Store,
   WifiOff,
   Link as LinkIcon,
 } from "lucide-react";
@@ -39,6 +40,11 @@ const baseSections = [
      bottom bar at 360px while every neighbour stayed on one. */
   { to: "/links", label: "Links", icon: LinkIcon, exact: false },
 ] as const;
+
+/* cash-at-stores D23 (FR-034): the business's cash at the network's
+   stores — from the first time the channel was switched on, and kept
+   after, so its hand-overs and disputes stay readable. Every role reads it. */
+const cashPointsSection = { to: "/puntos-de-pago", label: "Puntos de pago", icon: Store, exact: false } as const;
 
 /* integrations-hub D1: the fifth and last section, owner/admin only —
    the law: hide, never disable. Operators read outcomes in Pagos. */
@@ -110,6 +116,7 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
   const linksSearch = () => (linksHere !== null ? (JSON.parse(linksHere) as LinksAddress) : lastLinksAddress(actor?.id));
   const sections = [
     ...baseSections,
+    ...(actor?.storeChannel?.since != null ? [cashPointsSection] : []),
     ...(roleCan(actor?.role ?? "viewer", "integrations", "manage") ? [integrationsSection] : []),
     accountSection,
   ];
@@ -176,7 +183,24 @@ function SectionLinks({ variant }: { variant: "sidebar" | "bottom" }) {
 /* The session errors the shell answers with a screen of their own
    (business-and-memberships D4, sessions rule 2); every other one is a
    bounce to login. */
-const HANDLED_CODES = ["ACCOUNT_SUSPENDED", "NO_BUSINESS", "NO_ACTIVE_BUSINESS", "MEMBERSHIP_REVOKED"];
+const HANDLED_CODES = ["ACCOUNT_SUSPENDED", "NO_BUSINESS", "NO_ACTIVE_BUSINESS", "MEMBERSHIP_REVOKED", "WRONG_ACTOR"];
+
+/* cash-at-stores D2 (FR-013): a store's account in the business panel —
+   never the business wizard. It is not a business and cannot make one. */
+function StoreAccountScreen() {
+  return (
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-background px-8 text-center">
+      <span className="flex size-16 items-center justify-center rounded-full border border-info-line bg-info-soft">
+        <Store className="size-8 text-info" aria-hidden />
+      </span>
+      <h1 className="text-xl font-semibold">Esta cuenta es de una tienda.</h1>
+      <p className="max-w-sm text-base text-muted-foreground">
+        Entra en <span className="font-medium text-foreground">red.devoladapago.com</span>.
+      </p>
+      <SignOutLink />
+    </main>
+  );
+}
 
 /* Desktop-first shell (spec D2): sidebar ≥ lg, bottom bar below. */
 export function Shell() {
@@ -232,6 +256,7 @@ export function Shell() {
     );
   }
   if (error?.code === "ACCOUNT_SUSPENDED") return <SuspendedScreen />;
+  if (error?.code === "WRONG_ACTOR") return <StoreAccountScreen />;
   /* business-and-memberships D4: the three ways a session has no business */
   if (error?.code === "NO_BUSINESS") return <Navigate to="/nuevo-negocio" />;
   if (error?.code === "NO_ACTIVE_BUSINESS") return <ChooseBusinessScreen reason="choose" />;

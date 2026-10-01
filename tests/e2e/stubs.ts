@@ -62,6 +62,8 @@ export const businessActor = {
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },
   observing: false,
+  /* cash-at-stores D7, D23: a business that never had cash at stores */
+  storeChannel: { on: false, since: null },
 };
 
 const at = Date.UTC(2026, 7, 14, 20, 30);

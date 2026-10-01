@@ -778,7 +778,7 @@ export async function stubOperatorReaderApi(page: Page): Promise<void> {
    stub cannot hand the browser a shape the API never sends — a phone in a
    search row fails here, at `.parse`, not in a screenshot. */
 
-const cashAt = Date.UTC(2026, 9, 1, 20, 35);
+const storeAt = Date.UTC(2026, 9, 1, 20, 35);
 
 export const storeMe = storeMeResponse.parse({
   type: "store",
@@ -813,7 +813,7 @@ export const storeCollection = (outcome: "reconnected" | "queued" = "reconnected
   collectionStatusResponse.parse({
     id: "pay-1",
     folio: "DV-7K2Q9M",
-    createdAt: cashAt,
+    createdAt: storeAt,
     businessName: "WiFi Plus",
     customerName: "Guadalupe Reyes Hernández",
     amountCents: 50000,
@@ -836,7 +836,7 @@ export const storeCashbox = cashboxResponse.parse({
       businessName: "WiFi Plus",
       heldCents: 435000,
       feesSinceHandoverCents: 4500,
-      lastHandover: { cents: 150000, status: "disputed", at: cashAt - 3 * 86_400_000, note: "Faltaron $200 en el sobre" },
+      lastHandover: { cents: 150000, status: "disputed", at: storeAt - 3 * 86_400_000, note: "Faltaron $200 en el sobre" },
       pendingHandover: null,
     },
   ],
@@ -844,9 +844,9 @@ export const storeCashbox = cashboxResponse.parse({
 
 export const storeLedger = storeLedgerResponse.parse({
   rows: [
-    { id: "l1", kind: "collection", cents: 50000, at: cashAt, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-7K2Q9M", customerName: "Guadalupe Reyes Hernández", feeCents: 1500, reason: null },
-    { id: "l2", kind: "handover", cents: -150000, at: cashAt - 86_400_000, businessId: "business-1", businessName: "WiFi Plus", folio: null, customerName: null, feeCents: null, reason: null },
-    { id: "l3", kind: "correction", cents: -5000, at: cashAt - 2 * 86_400_000, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-3M8P1Q", customerName: null, feeCents: null, reason: "Se capturó $50 de más" },
+    { id: "l1", kind: "collection", cents: 50000, at: storeAt, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-7K2Q9M", customerName: "Guadalupe Reyes Hernández", feeCents: 1500, reason: null },
+    { id: "l2", kind: "handover", cents: -150000, at: storeAt - 86_400_000, businessId: "business-1", businessName: "WiFi Plus", folio: null, customerName: null, feeCents: null, reason: null },
+    { id: "l3", kind: "correction", cents: -5000, at: storeAt - 2 * 86_400_000, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-3M8P1Q", customerName: null, feeCents: null, reason: "Se capturó $50 de más" },
   ],
   nextCursor: "next",
 });
@@ -869,11 +869,11 @@ export async function stubRedApi(page: Page, opts: { collection?: "reconnected" 
 
 /* A business that has had cash at stores (D7): Pagos offers the channel
    filter and the menu shows Puntos de pago */
-export const cashActor = { ...businessActor, storeChannel: { on: true, since: cashAt - 30 * 86_400_000 } };
+export const storeChannelActor = { ...businessActor, storeChannel: { on: true, since: storeAt - 30 * 86_400_000 } };
 
 /* cash-at-stores T051: a cash row among the SPEI ones, with its fee and a
    correction, parsed by the changed contract */
-export const cashFeed = feedResponse.parse({
+export const storeFeed = feedResponse.parse({
   ...feed,
   payments: [
     {
@@ -894,10 +894,10 @@ export const cashFeed = feedResponse.parse({
   ],
 });
 
-export async function stubAdminCashApi(page: Page): Promise<void> {
+export async function stubAdminStoreApi(page: Page): Promise<void> {
   await stubAdminApi(page);
-  await apiRoute(page, "**/auth/me", cashActor);
-  await apiRoute(page, "**/payments/feed*", cashFeed);
+  await apiRoute(page, "**/auth/me", storeChannelActor);
+  await apiRoute(page, "**/payments/feed*", storeFeed);
 }
 
 export const cashPoints = cashPointsResponse.parse({
@@ -909,8 +909,8 @@ export const cashPoints = cashPointsResponse.parse({
       address: "Av. Benito Juárez 1250, Col. Centro, Tlaquepaque",
       storeStatus: "active",
       heldCents: 435000,
-      lastConfirmed: { cents: 150000, at: cashAt - 7 * 86_400_000 },
-      pending: { id: "h1", cents: 200000, declaredAt: cashAt },
+      lastConfirmed: { cents: 150000, at: storeAt - 7 * 86_400_000 },
+      pending: { id: "h1", cents: 200000, declaredAt: storeAt },
     },
     {
       storeId: "s2",
@@ -926,14 +926,14 @@ export const cashPoints = cashPointsResponse.parse({
 
 export const handoverHistory = handoverHistoryResponse.parse({
   handovers: [
-    { id: "h0", storeId: "s1", cents: 150000, status: "disputed", note: "Faltaron $200 en el sobre", declaredAt: cashAt - 86_400_000, resolvedAt: cashAt - 80_000_000, resolvedBy: "owner@isp.mx" },
-    { id: "h-1", storeId: "s1", cents: 150000, status: "confirmed", note: null, declaredAt: cashAt - 7 * 86_400_000, resolvedAt: cashAt - 7 * 86_400_000, resolvedBy: "owner@isp.mx" },
+    { id: "h0", storeId: "s1", cents: 150000, status: "disputed", note: "Faltaron $200 en el sobre", declaredAt: storeAt - 86_400_000, resolvedAt: storeAt - 80_000_000, resolvedBy: "owner@isp.mx" },
+    { id: "h-1", storeId: "s1", cents: 150000, status: "confirmed", note: null, declaredAt: storeAt - 7 * 86_400_000, resolvedAt: storeAt - 7 * 86_400_000, resolvedBy: "owner@isp.mx" },
   ],
   nextCursor: null,
 });
 
 export async function stubCashPointsApi(page: Page): Promise<void> {
-  await stubAdminCashApi(page);
+  await stubAdminStoreApi(page);
   await apiRoute(page, "**/cash-points", cashPoints);
   await apiRoute(page, "**/cash-points/stores/*/history*", handoverHistory);
   await apiRoute(page, "**/cash-points/handovers/*/confirm", { id: "h1", status: "confirmed" });
@@ -949,11 +949,11 @@ export const platformStores = storesListResponse.parse({
       shopkeeperName: "Guadalupe Reyes",
       phone: "5512345678",
       status: "active",
-      createdAt: cashAt,
+      createdAt: storeAt,
       collectsFor: [{ businessId: "business-1", businessName: "WiFi Plus", heldCents: 435000 }],
     },
-    { id: "s2", name: "Papelería El Sol", address: "Calle 5 de Mayo 40", shopkeeperName: "Rosa Díaz", phone: "5587654321", status: "invited", createdAt: cashAt, collectsFor: [] },
-    { id: "s3", name: "Farmacia Luz", address: "Calle Hidalgo 3", shopkeeperName: "Luis Pérez", phone: "5511112222", status: "suspended", createdAt: cashAt, collectsFor: [] },
+    { id: "s2", name: "Papelería El Sol", address: "Calle 5 de Mayo 40", shopkeeperName: "Rosa Díaz", phone: "5587654321", status: "invited", createdAt: storeAt, collectsFor: [] },
+    { id: "s3", name: "Farmacia Luz", address: "Calle Hidalgo 3", shopkeeperName: "Luis Pérez", phone: "5511112222", status: "suspended", createdAt: storeAt, collectsFor: [] },
   ],
 });
 
@@ -961,8 +961,8 @@ export const platformStoreLedger = platformLedgerResponse.parse({
   heldCents: 435000,
   nextCursor: null,
   rows: [
-    { id: "l1", kind: "collection", cents: 50000, at: cashAt, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-7K2Q9M", customerName: "Guadalupe Reyes", feeCents: 1500, reason: null, paymentId: "p1", authorEmail: null },
-    { id: "l3", kind: "correction", cents: -5000, at: cashAt - 1, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-3M8P1Q", customerName: null, feeCents: null, reason: "Se capturó $50 de más", paymentId: "p0", authorEmail: "operador@devolada.app" },
+    { id: "l1", kind: "collection", cents: 50000, at: storeAt, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-7K2Q9M", customerName: "Guadalupe Reyes", feeCents: 1500, reason: null, paymentId: "p1", authorEmail: null },
+    { id: "l3", kind: "correction", cents: -5000, at: storeAt - 1, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-3M8P1Q", customerName: null, feeCents: null, reason: "Se capturó $50 de más", paymentId: "p0", authorEmail: "operador@devolada.app" },
   ],
 });
 

@@ -40,7 +40,7 @@ const spei = {
   customerName: "Janely Ruiz",
   storeName: null,
 };
-const cash = {
+const storeRow = {
   ...base,
   id: "p-cash",
   folio: "DV-CASH01",
@@ -74,7 +74,7 @@ function arrange(actor: object = withStores) {
       if (url.searchParams.get("action") === "failed") return ok(feedOf([]));
       asked.push(url);
       const channel = url.searchParams.get("channel");
-      return ok(feedOf(channel === "store" ? [cash] : channel === "spei" ? [spei] : [cash, spei]));
+      return ok(feedOf(channel === "store" ? [storeRow] : channel === "spei" ? [spei] : [storeRow, spei]));
     }),
   );
   renderApp("/payments");
@@ -144,7 +144,7 @@ describe("cash-at-stores US4: cash payments in Pagos", () => {
     server.use(
       handlers.session(() => ok(withStores)),
       handlers.feed(() =>
-        ok(feedOf([{ ...cash, actionOutcome: "failed", actionDoneAt: null, actionError: "INTEGRATION_UNAVAILABLE" }])),
+        ok(feedOf([{ ...storeRow, actionOutcome: "failed", actionDoneAt: null, actionError: "INTEGRATION_UNAVAILABLE" }])),
       ),
     );
     renderApp("/payments");

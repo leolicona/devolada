@@ -149,8 +149,8 @@ export async function listPaymentFeed(
     : [];
   /* cash-at-stores D21 (FR-030): the operator's corrections, with their
      author, for the cash rows on this page */
-  const cashIds = page.filter((r) => r.charge.channel === "store").map((r) => r.charge.id);
-  const correctionRows = cashIds.length
+  const storeRowIds = page.filter((r) => r.charge.channel === "store").map((r) => r.charge.id);
+  const correctionRows = storeRowIds.length
     ? await db
         .select({
           paymentId: storeLedger.paymentId,
@@ -161,7 +161,7 @@ export async function listPaymentFeed(
         })
         .from(storeLedger)
         .leftJoin(userTable, eq(userTable.id, storeLedger.authorUserId))
-        .where(and(eq(storeLedger.kind, "correction"), eq(storeLedger.businessId, actor.id), inArray(storeLedger.paymentId, cashIds)))
+        .where(and(eq(storeLedger.kind, "correction"), eq(storeLedger.businessId, actor.id), inArray(storeLedger.paymentId, storeRowIds)))
         .orderBy(storeLedger.createdAt)
     : [];
   const lastAction = new Map<string, "register_and_reconnect" | "register_only">();

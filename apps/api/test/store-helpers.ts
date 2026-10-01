@@ -82,7 +82,7 @@ export async function seedStoreChannel(business: { id: string }, at = new Date()
 
 /* A cash payment as the store's record writes it (D11, D13), for suites
    that need one without walking the counter (US2, US4, US5) */
-export async function seedCashPayment(
+export async function seedStorePayment(
   business: { id: string },
   store: { id: string; userId: string | null },
   over: Partial<typeof payments.$inferInsert> = {},

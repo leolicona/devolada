@@ -13,7 +13,7 @@ import {
   user as userTable,
 } from "../src/db/schema";
 import { createStoreResponse, platformLedgerResponse, storesListResponse } from "../src/routes/platform/schema";
-import { seedCashPayment, seedStore, seedStoreChannel, storeSession } from "./store-helpers";
+import { seedStorePayment, seedStore, seedStoreChannel, storeSession } from "./store-helpers";
 import type { Bindings } from "../src/env";
 import { renderReceipt } from "../src/receipt";
 import { DEFAULT_RECEIPT_TEMPLATE, receiptTemplateProblem } from "../src/receipt/template";
@@ -307,7 +307,7 @@ describe("cash-at-stores US2 — corrections in a store's cash book (D21, FR-030
     const store = await seedStore();
     await storeSession(store);
     const [fresh] = await db().select().from(stores).where(eq(stores.id, store.id));
-    const payment = await seedCashPayment(business, fresh);
+    const payment = await seedStorePayment(business, fresh);
     await db().insert(storeLedger).values({ storeId: store.id, businessId: business.id, kind: "collection", cents: 49900, paymentId: payment.id });
 
     const res = await asOperator(
@@ -333,7 +333,7 @@ describe("cash-at-stores US2 — corrections in a store's cash book (D21, FR-030
     const business = await seedBusiness();
     const mine = await seedStore();
     const other = await seedStore();
-    const payment = await seedCashPayment(business, other);
+    const payment = await seedStorePayment(business, other);
     const res = await asOperator(
       `/platform/stores/${mine.id}/ledger/${business.id}/corrections`,
       post({ paymentId: payment.id, cents: 100, reason: "por error" }),

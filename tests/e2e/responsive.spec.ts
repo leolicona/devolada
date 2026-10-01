@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, RED } from "../../playwright.config";
 import {
   stubAdminApi,
-  stubAdminCashApi,
+  stubAdminStoreApi,
   stubCashPointsApi,
   stubOperatorReaderApi,
   stubOperatorStoresApi,
@@ -340,7 +340,7 @@ test.describe("cash-at-stores US2/US4/US5: the panel's new screens", () => {
 
     test(`a cash row in Pagos fits ${size.width}px`, async ({ page }) => {
       await page.setViewportSize(size);
-      await stubAdminCashApi(page);
+      await stubAdminStoreApi(page);
       await page.goto(ADMIN);
       await page.getByRole("button", { name: /Mario Pérez Castañeda/ }).click();
       await expect(page.getByText("Cargo por servicio en tienda")).toBeVisible();
@@ -351,7 +351,7 @@ test.describe("cash-at-stores US2/US4/US5: the panel's new screens", () => {
 
   test("the channel filter clears 44px on a phone", async ({ page }) => {
     await page.setViewportSize(PHONE);
-    await stubAdminCashApi(page);
+    await stubAdminStoreApi(page);
     await page.goto(ADMIN);
     await expect(page.getByRole("group", { name: "Canal" })).toBeVisible();
     await expectTouchTargets(page, 44, 'section[aria-label="Filtros"]');

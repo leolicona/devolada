@@ -8,7 +8,7 @@ import { debitValidationFee } from "../src/credit";
 import { recordCorrection } from "../src/store-ledger";
 import { feedResponse } from "../src/routes/payments/schema";
 import { app, seedBusiness, seedConfirmedPayment, sessionCookieHeader } from "./helpers";
-import { mockAction, seedActiveStore, seedCashPayment, seedStoreChannel } from "./store-helpers";
+import { mockAction, seedActiveStore, seedStorePayment, seedStoreChannel } from "./store-helpers";
 
 /* cash-at-stores US4 (T047) — the business sees every peso collected in
    its name in the list it already reads: Pagos lists cash beside SPEI,
@@ -35,8 +35,8 @@ async function mixed() {
   const shop = await seedActiveStore();
   const t0 = Date.now() - 60 * 60_000;
   const spei = await seedConfirmedPayment(business, { createdAt: new Date(t0), customerUsuario: "a@wifiplus", folio: "DV-SPEI01" });
-  const whole = await seedCashPayment(business, shop.store, { createdAt: new Date(t0 + 60_000), customerUsuario: "b@wifiplus", folio: "DV-CASH01" });
-  const short = await seedCashPayment(business, shop.store, {
+  const whole = await seedStorePayment(business, shop.store, { createdAt: new Date(t0 + 60_000), customerUsuario: "b@wifiplus", folio: "DV-CASH01" });
+  const short = await seedStorePayment(business, shop.store, {
     createdAt: new Date(t0 + 120_000),
     customerUsuario: "c@wifiplus",
     folio: "DV-CASH02",
@@ -113,7 +113,7 @@ describe("cash-at-stores US4 — cash in Pagos, beside SPEI (D23, FR-031, FR-032
 
   it("retry and run-now work on a cash row, through paymentActions, with the row's own decision (D9)", async () => {
     const { business, shop } = await mixed();
-    const failed = await seedCashPayment(business, shop.store, {
+    const failed = await seedStorePayment(business, shop.store, {
       customerUsuario: "greyes@wifiplus",
       folio: "DV-CASH03",
       actionOutcome: "failed",
@@ -126,7 +126,7 @@ describe("cash-at-stores US4 — cash in Pagos, beside SPEI (D23, FR-031, FR-032
     const [event] = await db().select().from(integrationEvents).where(eq(integrationEvents.paymentId, failed.id));
     expect(event).toMatchObject({ action: "register_only", status: "dispatched" });
 
-    const observed = await seedCashPayment(business, shop.store, {
+    const observed = await seedStorePayment(business, shop.store, {
       customerUsuario: "greyes@wifiplus",
       folio: "DV-CASH04",
       actionOutcome: "observation",

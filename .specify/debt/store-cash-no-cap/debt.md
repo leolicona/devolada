@@ -30,7 +30,7 @@ by showing it" (spec, Clarifications; FR-040; research D30).
 - `apps/api/src/routes/store/handler.ts::recordStoreCollection` — the counter's
   record (`POST /store/collections`) refuses a changed debt, a changed fee and
   an amount above the debt, and nothing else about the amount.
-- `apps/api/src/platform/settings.ts::DEFINITIONS` — no cap setting beside
+- `apps/api/src/platform/settings.ts::SETTINGS` — no cap setting beside
   `store_fee_cents`; the operator has nothing to set.
 
 ## Interest
@@ -75,3 +75,8 @@ first time a store holds more than the pilot's agreement names.
   `specs/018-cash-at-stores` T022 and T027 land.
 - Related: FR-006's deferred decision (which stores serve which business)
   is lifted by the same future spec's moment.
+- *2026-10-01:* the code landed. Both anchors exist as named —
+  `store-ledger/index.ts::recordCollection` and
+  `routes/store/handler.ts::recordStoreCollection` — and neither reads a
+  limit; the settings anchor is `platform/settings.ts::SETTINGS` (it was
+  written `DEFINITIONS` before the code existed).

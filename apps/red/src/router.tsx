@@ -32,7 +32,7 @@ const cashboxRoute = createRoute({ getParentRoute: () => appRoute, path: "/caja"
    stand for (FR-037); anything else drops the value rather than send a
    request the API would refuse */
 const KINDS = ["collection", "handover", "correction"] as const;
-export const cashSearch = (s: Record<string, unknown>): { businessId?: string; kind?: (typeof KINDS)[number] } => ({
+export const bookSearch = (s: Record<string, unknown>): { businessId?: string; kind?: (typeof KINDS)[number] } => ({
   businessId: typeof s.businessId === "string" && s.businessId ? s.businessId : undefined,
   kind: KINDS.find((k) => k === s.kind),
 });
@@ -40,13 +40,13 @@ const handoverRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/caja/entrega",
   component: HandoverScreen,
-  validateSearch: (s: Record<string, unknown>): { businessId?: string } => ({ businessId: cashSearch(s).businessId }),
+  validateSearch: (s: Record<string, unknown>): { businessId?: string } => ({ businessId: bookSearch(s).businessId }),
 });
 const ledgerRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/movimientos",
   component: LedgerScreen,
-  validateSearch: cashSearch,
+  validateSearch: bookSearch,
 });
 
 const routeTree = rootRoute.addChildren([

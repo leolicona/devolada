@@ -451,7 +451,7 @@ function ChargeRow({
   const atDay = (ms: number) => formatDateTime(ms, timeFormat, timezone);
   /* cash-at-stores D23: a cash row has no proof to open — the store's
      record is the proof (the door answers 404, proof_mode 'none') */
-  const cash = charge.channel === "store";
+  const atStore = charge.channel === "store";
 
   /* D5: one click buys exactly one fresh attempt; the sweep does the rest */
   const retry = useMutation<RetryResponse, ApiError>({
@@ -580,7 +580,7 @@ function ChargeRow({
                     : []),
                   /* cash-at-stores D23: a cash payment charges the payer no
                      business fee — the counter's fee is the store's, below */
-                  ...(cash ? [] : [{ label: "Cargo por servicio", cents: charge.serviceFeeCents }]),
+                  ...(atStore ? [] : [{ label: "Cargo por servicio", cents: charge.serviceFeeCents }]),
                 ]}
               />
               {(shortCents > 0 || charge.surplusCents > 0) && (
@@ -618,7 +618,7 @@ function ChargeRow({
               <p className="mt-3 font-mono text-sm text-muted-foreground">
                 Folio {charge.folio || "—"}
               </p>
-              {cash && <CashDetail charge={charge} atDay={atDay} />}
+              {atStore && <StoreDetail charge={charge} atDay={atDay} />}
             </div>
             <div className="text-sm text-muted-foreground">
               <p>Registrado a las {at(charge.createdAt)}</p>
@@ -675,7 +675,7 @@ function ChargeRow({
                 </p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
-                {showsMoney && !cash && <ProofDialog charge={charge} />}
+                {showsMoney && !atStore && <ProofDialog charge={charge} />}
                 {charge.undecided && <ProofDialog charge={charge} label="Ver coincidencias" />}
                 {/* D5: promised to operators by the role matrix since
                     phase 2; kept until now only by waiting */}
@@ -726,7 +726,7 @@ function ChargeRow({
 /* cash-at-stores D23 (FR-032, FR-030): who held the money, the fee the
    payer paid at the counter, and every correction the operator wrote in
    the store's cash book for this payment — amount, reason, who and when */
-function CashDetail({ charge, atDay }: { charge: FeedCharge; atDay: (ms: number) => string }) {
+function StoreDetail({ charge, atDay }: { charge: FeedCharge; atDay: (ms: number) => string }) {
   return (
     <div className="mt-3 space-y-2 text-sm">
       <dl className="space-y-1">

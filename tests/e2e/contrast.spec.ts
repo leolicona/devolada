@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO, RED } from "../../playwright.config";
 import {
   stubAdminApi,
-  stubAdminCashApi,
+  stubAdminStoreApi,
   stubCashPointsApi,
   stubOperatorReaderApi,
   stubOperatorStoresApi,
@@ -156,7 +156,7 @@ for (const theme of ["light", "dark"] as const) {
    statuses there (Entrega pendiente, En disputa, Tienda suspendida, the
    correction's warning) are icon + text; only a browser can say whether
    their colours met the surfaces under them, in either theme. */
-const cashScreens: {
+const storeScreens: {
   name: string;
   url: string;
   stub: (page: Page) => Promise<void>;
@@ -182,7 +182,7 @@ const cashScreens: {
   {
     name: "Pagos con efectivo",
     url: ADMIN,
-    stub: stubAdminCashApi,
+    stub: stubAdminStoreApi,
     open: async (page) => {
       await page.getByRole("button", { name: /Mario Pérez Castañeda/ }).click();
     },
@@ -221,7 +221,7 @@ const cashScreens: {
 
 for (const theme of ["light", "dark"] as const) {
   test.describe(`cash-at-stores: real contrast in ${theme}`, () => {
-    for (const screen of cashScreens) {
+    for (const screen of storeScreens) {
       test(`${screen.name} has no contrast violations`, async ({ page }) => {
         await page.emulateMedia({ colorScheme: theme });
         await screen.stub(page);

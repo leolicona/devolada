@@ -7,7 +7,7 @@ import { recordCollection } from "../src/store-ledger";
 import { cashboxResponse, storeLedgerResponse } from "../src/routes/store/schema";
 import { cashPointsResponse, handoverHistoryResponse } from "../src/routes/cash-points/schema";
 import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
-import { seedActiveStore, seedCashPayment, seedStoreChannel } from "./store-helpers";
+import { seedActiveStore, seedStorePayment, seedStoreChannel } from "./store-helpers";
 
 /* cash-at-stores US5 (T052) — the cash book in both directions: the store
    declares, the business confirms or disputes, and both sides read the same
@@ -32,7 +32,7 @@ async function world(amounts: number[] = [49900, 30000], email = "demo@devolada.
   await seedStoreChannel(business);
   const shop = await seedActiveStore();
   for (const cents of amounts) {
-    const payment = await seedCashPayment(business, shop.store, {
+    const payment = await seedStorePayment(business, shop.store, {
       amountCents: cents,
       receivedCents: cents,
       customerUsuario: `c${cents}@wifiplus`,
@@ -173,7 +173,7 @@ describe("cash-at-stores US5 — isolation and the channel switched off (FR-042,
     await db().update(businesses).set({ storeChannelOn: false }).where(eq(businesses.id, first.id));
     const second = await seedBusiness({ email: "otro@isp.mx", name: "Cable Norte", wisphubApiKey: "wh-key-2" });
     await seedStoreChannel(second);
-    const payment = await seedCashPayment(second, shop.store, { amountCents: 25000, receivedCents: 25000, customerUsuario: "x@cable" });
+    const payment = await seedStorePayment(second, shop.store, { amountCents: 25000, receivedCents: 25000, customerUsuario: "x@cable" });
     await recordCollection(db(), payment);
 
     const mine = cashPointsResponse.parse((await (await as(owner, "/cash-points")).json()).data);

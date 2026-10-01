@@ -27,7 +27,7 @@ import {
   mockCustomerSearch,
   mockCustomerSearchFails,
   seedActiveStore,
-  seedCashPayment,
+  seedStorePayment,
   seedStoreChannel,
 } from "./store-helpers";
 
@@ -409,12 +409,12 @@ describe("cash-at-stores US1 — status and receipt", () => {
   it("the status maps all six outcomes, and another store's payment is 404", async () => {
     const { business, shop, call } = await counter();
     const rows = {
-      reconnected: await seedCashPayment(business, shop.store, { actionOutcome: "done", decidedAction: "register_and_reconnect:reconnect" }),
-      registered: await seedCashPayment(business, shop.store, { actionOutcome: "done", decidedAction: "register_only" }),
-      queued: await seedCashPayment(business, shop.store, { actionOutcome: "queued" }),
-      not_reconnected_short: await seedCashPayment(business, shop.store, { actionOutcome: "withheld", status: "partial", reconciliationClass: "short" }),
-      observation: await seedCashPayment(business, shop.store, { actionOutcome: "observation" }),
-      failed: await seedCashPayment(business, shop.store, { actionOutcome: "failed" }),
+      reconnected: await seedStorePayment(business, shop.store, { actionOutcome: "done", decidedAction: "register_and_reconnect:reconnect" }),
+      registered: await seedStorePayment(business, shop.store, { actionOutcome: "done", decidedAction: "register_only" }),
+      queued: await seedStorePayment(business, shop.store, { actionOutcome: "queued" }),
+      not_reconnected_short: await seedStorePayment(business, shop.store, { actionOutcome: "withheld", status: "partial", reconciliationClass: "short" }),
+      observation: await seedStorePayment(business, shop.store, { actionOutcome: "observation" }),
+      failed: await seedStorePayment(business, shop.store, { actionOutcome: "failed" }),
     };
     for (const [outcome, row] of Object.entries(rows)) {
       const data = collectionStatusResponse.parse((await (await call(`/store/collections/${row.id}`)).json()).data);
@@ -430,7 +430,7 @@ describe("cash-at-stores US1 — status and receipt", () => {
 
   it("the receipt is the template filled for this payment, and the next one uses the operator's new template", async () => {
     const { business, shop, call } = await counter();
-    const payment = await seedCashPayment(business, shop.store, {
+    const payment = await seedStorePayment(business, shop.store, {
       receivedCents: 50000,
       amountCents: 50000,
       invoiceCents: 49900,
@@ -486,7 +486,7 @@ describe("cash-at-stores US1 — status and receipt", () => {
 
   it("no phone on file, a number that is not ten digits, a failing system, or no capability: the contact picker (FR-027, L3)", async () => {
     const { business, shop, call } = await counter();
-    const payment = await seedCashPayment(business, shop.store);
+    const payment = await seedStorePayment(business, shop.store);
     const receipt = async () => collectionReceiptResponse.parse((await (await call(`/store/collections/${payment.id}/receipt`)).json()).data);
 
     for (const telefono of [null, "1234 5678", "33-ABCD-5678"]) {

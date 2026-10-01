@@ -10,7 +10,7 @@ import { isRevoked } from "../src/direct-payments/provisional";
 import type { Bindings } from "../src/env";
 import { app, seedBusiness, seedConfirmedPayment } from "./helpers";
 import { WISPHUB } from "./payer-helpers";
-import { mockCustomerDebt, mockCustomerSearch, mockCustomerSearchFails, seedActiveStore, seedCashPayment } from "./store-helpers";
+import { mockCustomerDebt, mockCustomerSearch, mockCustomerSearchFails, seedActiveStore, seedStorePayment } from "./store-helpers";
 
 /* cash-at-stores US1 (T018, T021) — the counter's three questions asked
    by capability, never by provider (D8, D9), and the link's SPEI rules
@@ -159,7 +159,7 @@ describe("cash-at-stores US1 — a cash row cannot disturb its link's SPEI rules
        which rule spoke */
     const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
     const { store } = await seedActiveStore();
-    for (let i = 0; i < 6; i++) await seedCashPayment(business, store);
+    for (let i = 0; i < 6; i++) await seedStorePayment(business, store);
     const [link] = await db().select().from(paymentLinks);
     const pay = async () =>
       (await app()).request(
@@ -196,7 +196,7 @@ describe("cash-at-stores US1 — a cash row cannot disturb its link's SPEI rules
     const { store } = await seedActiveStore();
     const contradicted = await seedConfirmedPayment(business, { status: "invalid", folio: null });
     await debitValidationFee(env as unknown as Bindings, db(), contradicted);
-    const cash = await seedCashPayment(business, store);
+    const cash = await seedStorePayment(business, store);
     expect(cash.paymentLinkId).toBe(contradicted.paymentLinkId);
 
     expect(await debitValidationFee(env as unknown as Bindings, db(), cash)).toBe(true);
@@ -220,7 +220,7 @@ describe("cash-at-stores US1 — a cash row cannot disturb its link's SPEI rules
     const ride = await seedConfirmedPayment(business, { status: "validating", folio: null });
     /* an incident word on a cash row — no real cash row carries one; the
        filter is what keeps it out either way */
-    await seedCashPayment(business, store, { lastError: "TRANSFER_CONTRADICTED" });
+    await seedStorePayment(business, store, { lastError: "TRANSFER_CONTRADICTED" });
     expect(await isRevoked(db(), ride, new Date())).toBe(false);
 
     await seedConfirmedPayment(business, { status: "invalid", lastError: "TRANSFER_CONTRADICTED", folio: null });

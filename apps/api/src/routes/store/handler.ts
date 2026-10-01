@@ -61,11 +61,9 @@ import {
 
 /* cash-at-stores — the shopkeeper's counter (contracts/store-api.md). The
    core asks the business's integration by capability and imports nothing
-   from an adapter (constitution IX):
-
-       grep -rn "wisphub/" apps/api/src/routes/store
-
-   prints nothing, and that is the audit. */
+   from an adapter (constitution IX). The audit is T061's grep for the
+   adapter's directory over this folder: it prints nothing — so this
+   comment does not spell the path out either. */
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 type DB = DrizzleD1Database;
@@ -572,7 +570,7 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
    whether or not its channel is still on — that is what lets a store hand
    over cash after the switch goes off — plus the one it collects for now.
    Never CHANNEL_OFF here. */
-async function cashBusinessesOf(db: DB, storeId: string) {
+async function bookBusinessesOf(db: DB, storeId: string) {
   const [moved, channel] = await Promise.all([
     db.selectDistinct({ businessId: storeLedger.businessId }).from(storeLedger).where(eq(storeLedger.storeId, storeId)),
     channelBusiness(db),
@@ -591,7 +589,7 @@ async function cashBusinessesOf(db: DB, storeId: string) {
 export async function getCashbox(c: Ctx) {
   const db = drizzle(c.env.DB);
   const { storeId } = c.get("store");
-  const list = await cashBusinessesOf(db, storeId);
+  const list = await bookBusinessesOf(db, storeId);
   const data: CashboxResponse = {
     businesses: await Promise.all(
       list.map(async (b) => {
@@ -637,7 +635,7 @@ export async function getStoreLedger(c: Ctx, q: StoreLedgerQuery) {
   const { storeId } = c.get("store");
   const cursor = decodeLedgerCursor(q.cursor);
   if (cursor === "bad") return refuse(c, "VALIDATION_ERROR", 400);
-  const list = await cashBusinessesOf(db, storeId);
+  const list = await bookBusinessesOf(db, storeId);
   const ids = list.map((b) => b.id);
   if (q.businessId && !ids.includes(q.businessId)) return refuse(c, "NOT_FOUND", 404);
   const page = await movementsOf(db, { storeId, businessIds: q.businessId ? [q.businessId] : ids, kind: q.kind }, cursor, STORE_LEDGER_PAGE);
@@ -657,7 +655,7 @@ export async function getStoreLedger(c: Ctx, q: StoreLedgerQuery) {
 export async function declareHandover(c: Ctx, body: DeclareHandoverRequest) {
   const db = drizzle(c.env.DB);
   const store = c.get("store");
-  const list = await cashBusinessesOf(db, store.storeId);
+  const list = await bookBusinessesOf(db, store.storeId);
   if (!list.some((b) => b.id === body.businessId)) return refuse(c, "NOT_FOUND", 404);
   const held = await heldCents(db, store.storeId, body.businessId);
   if (body.cents > held) return refuse(c, "AMOUNT_EXCEEDS_HELD", 400);

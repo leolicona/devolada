@@ -418,6 +418,11 @@ shows for that customer afterwards.
   the first use of either button and MUST NOT be created merely because the
   customer was shown, listed or read. No background work MAY create a link:
   an operator's act is the only thing that brings one into existence.
+  *Note, 2026-10-01 (`cash-at-stores` D11):* a link is also born **when a
+  store records a cash payment for that customer**. A recorded payment is
+  an act on that customer, and every payment hangs off the customer's own
+  link, so the record ensures the panel link exists. Being shown, listed
+  or read still creates nothing.
 - **FR-009**: The link created on first use MUST be the customer's
   permanent link, identified by usuario, so that a later search, a Cobros
   row or a payment finds the same link.

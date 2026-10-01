@@ -1,16 +1,19 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { fetchMock } from "cloudflare:test";
+import { env, fetchMock } from "cloudflare:test";
 import { eq, inArray } from "drizzle-orm";
 import { businesses, payerReferenceCustomers, payerReferences, paymentLinks, payments } from "../src/db/schema";
 import { directPaymentStatusResponse, payResponse } from "../src/routes/direct-payments/schema";
 import { accountsOfOthers, customerKeyOf, referenceOfLink } from "../src/direct-payments/payer-reference";
 import { SENDER_4417, SENDER_8301, type SyntheticTransfer } from "./consta/bundle-fixtures";
+import { app, sessionCookieHeader } from "./helpers";
 import {
   BUSINESS_CLABE,
   businessToday,
   db,
   linkRead,
+  mockCustomer,
   mockNotFound,
+  mockPhoneSearch,
   mockSeveral,
   mockTieBreakSearch,
   pay,
@@ -623,5 +626,42 @@ describe("confirmation-hierarchy US3: the answer reads one business (T023, D4)",
     expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "learned_account" });
     const rows = await db().select().from(payments).where(inArray(payments.businessId, [elsewhere.id]));
     expect(rows.every((r) => r.status === "confirmed")).toBe(true);
+  });
+});
+
+describe("confirmation-hierarchy US4: the message a panel link is shared with assumes no business type (T051, D14)", () => {
+  const ANA = { usuario: "ana@isp", telefono: "55 1826 4039", nombre: "Ana", apellido: "López" };
+
+  /* The panel's act: what WhatsApp opens with, as the payer reads it */
+  async function shared(business: Business) {
+    const res = await (await app()).request(
+      "/direct-payments/links",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: await sessionCookieHeader(business.email) },
+        body: JSON.stringify({ usuario: ANA.usuario }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { data } = (await res.json()) as { data: { url: string; waLink: string } };
+    return { url: data.url, text: new URL(data.waLink).searchParams.get("text")! };
+  }
+
+  it("with the payer's reference, it carries the digits and names neither internet nor Banxico", async () => {
+    const business = await seedReferenceBusiness();
+    mockCustomer(ANA);
+    mockPhoneSearch("8264039", [ANA]);
+    const { url, text } = await shared(business);
+    expect(text).toBe(`Hola, aquí está tu link de pago. Guárdalo: sirve cada mes.\n\nTu referencia para transferir: 826 4039\n\n${url}`);
+    expect(text).not.toMatch(/internet|banxico/i);
+  });
+
+  it("with the switch off, today's message without a reference names neither either", async () => {
+    const business = await seedReferenceBusiness({ payByReference: false });
+    mockCustomer(ANA);
+    const { url, text } = await shared(business);
+    expect(text).toBe(`Hola, aquí está tu link de pago. Guárdalo: sirve cada mes.\n\n${url}`);
+    expect(text).not.toMatch(/internet|banxico/i);
   });
 });

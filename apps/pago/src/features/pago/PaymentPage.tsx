@@ -1829,7 +1829,14 @@ export function PaymentPage({ token }: { token: string }) {
 
         {status.status === "confirmed" && !status.inReview && (
           <Reveal className="space-y-4">
-            <StatusBadge status="paymentConfirmed" size="standard" />
+            {/* confirmation-hierarchy D17, D20 (contracts/payment-page.md
+                "Motion"): on a link with a reference the check draws itself
+                once; a link without one keeps today's badge (FR-034) */}
+            <StatusBadge
+              status="paymentConfirmed"
+              size="standard"
+              className={data.payerReference ? "check-draw" : ""}
+            />
             <p className="text-sm text-ink-soft">
               {/* automated-collections-api D6: an API payment carries no
                   action outcome — the business's own system acts on the

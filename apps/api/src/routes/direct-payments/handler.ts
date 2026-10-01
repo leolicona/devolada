@@ -1732,8 +1732,13 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
 const referenceLine = (digits: string | null | undefined) =>
   digits ? `Tu referencia para transferir: ${groupReferenceDigits(digits)}\n\n` : "";
 
+/* confirmation-hierarchy D14 (FR-021; constitution IX): the payer reads
+   this message too, so it assumes no business type — the words of the API
+   link's message, plus the line a reusable link earns. It said "link de
+   pago de internet" until 2026-10-01: true of every panel business then,
+   all of them ISPs, but the core never assumes one. */
 const shareText = (url: string, digits?: string | null) =>
-  `Hola, aquí está tu link de pago de internet. Guárdalo: sirve cada mes.\n\n${referenceLine(digits)}${url}`;
+  `Hola, aquí está tu link de pago. Guárdalo: sirve cada mes.\n\n${referenceLine(digits)}${url}`;
 
 /* The share text for an API link names no service: the business may be
    a gym or a school, and the link may be one-time (FR-028) */

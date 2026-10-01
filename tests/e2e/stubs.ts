@@ -6,6 +6,7 @@ import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps
 import {
   customerDebtResponse,
   customersResponse,
+  directPaymentStatusResponse,
   linkStatusResponse,
   proofReadingResponse,
 } from "../../apps/api/src/routes/direct-payments/schema";
@@ -579,6 +580,37 @@ export async function stubPagoReference(page: Page, kind: "clabe" | "card" | "ph
         ? { kind, value: "5512345678", bank: "NU MEXICO" }
         : referenceLink.collectAccount;
   await apiRoute(page, "**/direct-payments/links/*", linkStatusResponse.parse({ ...referenceLink, collectAccount }));
+}
+
+/* confirmation-hierarchy US5 (T052): a payer back on a link with a
+   reference whose attempt, confirmed by their own reference, is the one
+   the link names — the page opens on the confirmed view */
+export const confirmedOwn = directPaymentStatusResponse.parse({
+  status: "confirmed",
+  validationAttempts: 1,
+  nextValidationAt: null,
+  error: null,
+  trackingKey: "MBAN01002609290012345678",
+  senderBank: "AZTECA",
+  transferDate: "2026-09-29",
+  claimedAmountCents: 51400,
+  referenceNumber: "2345678",
+  referenceSource: "own",
+  senderTail: null,
+  searchedDays: ["2026-09-29"],
+  ask: null,
+  tieBreak: null,
+  usedBy: null,
+  folio: "DV-OWN",
+});
+
+export async function stubPagoConfirmedOwn(page: Page): Promise<void> {
+  await apiRoute(
+    page,
+    "**/direct-payments/links/*",
+    linkStatusResponse.parse({ ...referenceLink, inReview: { directPaymentId: "dp-1", status: "validating" } }),
+  );
+  await apiRoute(page, "**/direct-payments/*/status", confirmedOwn);
 }
 
 /* automated-collections-api D6 / FR-031 (US1 scenarios 3 and 4): the one

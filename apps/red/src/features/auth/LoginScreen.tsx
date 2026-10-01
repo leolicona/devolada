@@ -107,6 +107,9 @@ export function LoginScreen() {
             const code = err instanceof ApiError ? err.code : "";
             if (code === "EMAIL_NOT_VERIFIED") setUnverified(true);
             else if (err instanceof ApiError && err.status === 429) setError("Demasiados intentos. Espera un momento.");
+            /* T074: a lost signal is never "wrong password" */
+            else if (code === "NETWORK_ERROR") setError("Sin conexión. Revisa tu internet e intenta de nuevo.");
+            else if (err instanceof ApiError && err.status >= 500) setError("No pudimos entrar ahora. Intenta en unos minutos.");
             /* never which half was wrong */
             else setError("Teléfono o contraseña incorrectos.");
           } finally {
@@ -151,7 +154,8 @@ export function LoginScreen() {
         </div>
       )}
 
-      <Link to="/recuperar" className="block text-center text-sm font-medium text-link">
+      {/* T083 (constitution VI): a 48px target, like every control here */}
+      <Link to="/recuperar" className="flex min-h-12 items-center justify-center text-sm font-medium text-link">
         Olvidé mi contraseña
       </Link>
     </AccessLayout>

@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import {
@@ -24,15 +24,16 @@ import { classifyPayment } from "../../direct-payments/classes";
 import { settle } from "../../direct-payments/partial";
 import { getNumberSetting, getSetting } from "../../platform/settings";
 import { ensureLink } from "../../direct-payments/links";
-import { announcingWriter, isUniqueViolation, settleConfirmed } from "../../direct-payments/validation";
+import { isUniqueViolation } from "../../direct-payments/validation";
+import { finishCollection, settleLeaseFrom, settleStoreRow } from "../../store-collections";
 import {
   decodeLedgerCursor,
   encodeLedgerCursor,
   feesSinceHandoverCents,
   heldCents,
+  lastHandoverAt,
   ledgerRowsOf,
   movementsOf,
-  recordCollection,
 } from "../../store-ledger";
 import { storeHandovers, storeLedger } from "../../db/schema";
 import { makeFolio } from "../../folio";
@@ -43,12 +44,15 @@ import {
   STORE_SEARCH_LIMIT,
   STORE_SEARCH_MIN,
   STORE_LEDGER_PAGE,
+  STORE_HANDOVERS_PAGE,
   type AcceptStoreInvitationRequest,
   type CashboxResponse,
   type DeclareHandoverRequest,
   type DeclareHandoverResponse,
   type StoreLedgerQuery,
   type StoreLedgerResponse,
+  type StoreHandoversQuery,
+  type StoreHandoversResponse,
   type CollectionOutcome,
   type InvitationPreviewResponse,
   type CollectionReceiptResponse,
@@ -216,11 +220,13 @@ async function collectionByKey(db: DB, storeId: string, key: string): Promise<Pa
    background (D25). In this order:
      0. the same key twice answers the first row, 200 (D15) — before any
         read, so a retry after a lost signal never meets a debt its own
-        first try already paid (scenario 1.13);
+        first try already paid (scenario 1.13). A first try that died
+        between its writes is finished here (T072);
      1. a fresh debt and the current fee, checked against what the payer
         was shown (D14, FR-021) — nothing is written when either moved;
      2. the customer's panel link, ensured (D11);
-     3. the payment row, with its key (the unique index is the race guard);
+     3. the payment row, with its key (the unique index is the race guard),
+        born leased and carrying what its settlement needs (T072);
      4. `settleConfirmed`, with no SPEI fee in the arithmetic (D13);
      5. the `collection` movement (D19);
      6. the first action attempt, past the response (D25).
@@ -231,7 +237,9 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
 
   const replay = await collectionByKey(db, store.storeId, body.collectionKey);
   if (replay) {
-    const data: RecordCollectionResponse = { id: replay.id, folio: replay.folio ?? "" };
+    /* T072: the first try may have died between its writes — finish it */
+    const finished = await finishCollection(c.env, db, replay, deferOf(c));
+    const data: RecordCollectionResponse = { id: finished.id, folio: finished.folio ?? "" };
     return c.json({ success: true, data }, 200);
   }
 
@@ -256,7 +264,9 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
      one (links-on-demand-search FR-008, amended by this decision) */
   const { token } = await ensureLink(db, business.id, {
     usuario: body.usuario,
-    wisphubId: Number(debt.customer.providerCustomerId),
+    /* T070, constitution IX: the integration's id, untouched — never
+       read as a number, which holds for one provider only */
+    providerCustomerId: debt.customer.providerCustomerId,
   });
   const [link] = await db.select().from(paymentLinks).where(eq(paymentLinks.token, token));
 
@@ -284,6 +294,18 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
         serviceFeeCents: 0,
         /* D17: the house folio, at once — the shopkeeper's answer */
         folio: makeFolio(),
+        /* T072: everything the settlement needs rides the row, so a retry
+           or the sweep can finish it if this request dies */
+        customerUsuario: body.usuario,
+        wisphubCustomerId: debt.customer.providerCustomerId,
+        customerName: debt.customer.name,
+        customerZone: debt.customer.zone,
+        /* debt-truth D15: the oldest open invoice carries the payment, or
+           none (the adapter then makes the empty vehicle). Read live,
+           seconds ago. */
+        wisphubInvoiceId: debt.invoices.length ? Math.min(...debt.invoices.map((f) => f.invoiceId)) : null,
+        /* T072: born leased — this request settles it, nobody else */
+        nextAttemptAt: settleLeaseFrom(now),
         createdAt: now,
       })
       .returning();
@@ -292,40 +314,13 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
     if (!isUniqueViolation(e)) throw e;
     const raced = await collectionByKey(db, store.storeId, body.collectionKey);
     if (!raced) throw e;
-    return c.json({ success: true, data: { id: raced.id, folio: raced.folio ?? "" } satisfies RecordCollectionResponse }, 200);
+    const finished = await finishCollection(c.env, db, raced, deferOf(c));
+    return c.json({ success: true, data: { id: finished.id, folio: finished.folio ?? "" } satisfies RecordCollectionResponse }, 200);
   }
 
-  const defer = deferOf(c);
-  const settled = await settleConfirmed(c.env, db, {
-    payment: inserted,
-    business,
-    integration,
-    customer: {
-      usuario: body.usuario,
-      providerCustomerId: debt.customer.providerCustomerId,
-      name: debt.customer.name,
-      zone: debt.customer.zone,
-      /* D18: never kept — the receipt reads it live */
-      phone: null,
-    },
-    receivedCents: body.amountCents,
-    debtCents: debt.totalCents,
-    /* D13: the store's fee stays outside settle() and classifyPayment() —
-       fed in, a $15 fee would quietly turn a $490 payment of a $500 debt
-       into a registered $500 */
-    serviceFeeCents: 0,
-    /* debt-truth D15: the oldest open invoice carries the payment, or none
-       (the adapter then makes the empty vehicle). Read live, seconds ago. */
-    invoiceId: debt.invoices.length ? Math.min(...debt.invoices.map((f) => f.invoiceId)) : null,
-    now,
-    update: announcingWriter(c.env, db, inserted, link, now, defer),
-    verdictFields: {},
-    hold: null,
-    firstAttempt: { mode: "deferred", defer },
-  });
-
-  /* D19: + the amount applied, once per payment */
-  await recordCollection(db, settled, now);
+  /* steps 4 and 5, and 6 past the response — shared with the retry and
+     the sweep that finish a row this request may not (T072) */
+  const settled = await settleStoreRow(c.env, db, inserted, { business, integration, defer: deferOf(c), now });
 
   const data: RecordCollectionResponse = { id: settled.id, folio: settled.folio ?? "" };
   return c.json({ success: true, data }, 201);
@@ -366,6 +361,15 @@ function outcomeOfRow(row: Payment): CollectionOutcome {
 const remainingOf = (row: Payment) =>
   Math.max(0, row.invoiceCents + row.carriedBalanceCents - (row.receivedCents ?? row.amountCents));
 
+/* T071: what the verdict decided, read back from the row (D10's
+   `decided_action`) — a reconnection only under register_and_reconnect at
+   or above the threshold. Every cash row is born with it; a row without
+   one (none today) says nothing it cannot prove. */
+const reconnectsOf = (row: Payment) => {
+  const decided = row.decidedAction ?? row.observedAction;
+  return decided ? parseHypothesis(decided).reconnect : false;
+};
+
 /* GET /store/collections/:id — polled every 3 s while queued (D25) */
 export async function collectionStatus(c: Ctx, id: string) {
   const db = drizzle(c.env.DB);
@@ -383,6 +387,7 @@ export async function collectionStatus(c: Ctx, id: string) {
     class: payment.reconciliationClass === "short" ? "short" : "exact",
     remainingCents: remainingOf(payment),
     outcome: outcomeOfRow(payment),
+    reconnects: reconnectsOf(payment),
   };
   return c.json({ success: true, data });
 }
@@ -390,14 +395,19 @@ export async function collectionStatus(c: Ctx, id: string) {
 /* D18 rule 5: the status line tells the truth about the action, in the
    payer's words (*pago*, never *cobro*, D27). Product copy, in code — not
    settings in this feature (D31). */
-function outcomeSentence(outcome: CollectionOutcome, business: string): string {
+function outcomeSentence(outcome: CollectionOutcome, business: string, reconnects: boolean, short: boolean): string {
   switch (outcome) {
     case "reconnected":
       return "Tu servicio ya está activo.";
     case "registered":
       return `Tu pago quedó registrado con ${business}.`;
     case "queued":
-      return "Tu servicio se reactivará en unos minutos.";
+      /* T071: a queued row promises only what its verdict decided — a
+         receipt sent before the action lands keeps that sentence for good */
+      if (reconnects) return "Tu servicio se reactivará en unos minutos.";
+      return short
+        ? "Tu pago quedó registrado. Como no cubre todo tu adeudo, tu servicio sigue sin reactivarse."
+        : `Tu pago quedó registrado. ${business} lo aplicará en su sistema.`;
     case "not_reconnected_short":
       return "Tu pago quedó registrado. Como no cubre todo tu adeudo, tu servicio sigue sin reactivarse.";
     case "observation":
@@ -435,7 +445,7 @@ export async function collectionReceipt(c: Ctx, id: string) {
     at: (payment.confirmedAt ?? payment.createdAt).getTime(),
     timezone: found.timezone,
     timeFormat: found.timeFormat,
-    estado: outcomeSentence(outcome, found.businessName),
+    estado: outcomeSentence(outcome, found.businessName, reconnectsOf(payment), payment.reconciliationClass === "short"),
   });
 
   let phone: string | null = null;
@@ -533,18 +543,26 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
     returnHeaders: true,
   });
   const userId = response.user.id;
+  /* T089 (D5's rollback): the store is linked FIRST, and the phone and the
+     invitation are written only if that link is this user's — so a
+     request that lost the race writes nothing, never meets the phone's
+     unique index, and leaves the invitation as the winner left it */
+  const linkedHere = sql`exists (select 1 from ${stores} where ${stores.id} = ${store.id} and ${stores.userId} = ${userId})`;
   try {
-    const [, linked] = await db.batch([
-      db.update(userTable).set({ username: store.phone, displayUsername: store.phone }).where(eq(userTable.id, userId)),
+    const [linked] = await db.batch([
       db
         .update(stores)
         .set({ userId, status: "active", updatedAt: now })
-        .where(and(eq(stores.id, store.id), eq(stores.status, "invited")))
+        .where(and(eq(stores.id, store.id), eq(stores.status, "invited"), isNull(stores.userId)))
         .returning({ id: stores.id }),
+      db
+        .update(userTable)
+        .set({ username: store.phone, displayUsername: store.phone })
+        .where(and(eq(userTable.id, userId), linkedHere)),
       db
         .update(storeInvitations)
         .set({ status: "accepted" })
-        .where(and(eq(storeInvitations.id, invitation.id), eq(storeInvitations.status, "sent"))),
+        .where(and(eq(storeInvitations.id, invitation.id), eq(storeInvitations.status, "sent"), linkedHere)),
     ]);
     if (linked.length === 0) {
       await removeUser(db, userId);
@@ -552,6 +570,9 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
     }
   } catch (e) {
     await removeUser(db, userId);
+    /* the phone taken in between, by a path D3 does not foresee: the
+       same answer as the race, never a 500 */
+    if (isUniqueViolation(e)) return refuse(c, "INVALID_INVITATION", 400);
     throw e;
   }
 
@@ -593,9 +614,10 @@ export async function getCashbox(c: Ctx) {
   const data: CashboxResponse = {
     businesses: await Promise.all(
       list.map(async (b) => {
-        const [held, fees, [last], [pending]] = await Promise.all([
+        const [held, fees, since, [last], [pending]] = await Promise.all([
           heldCents(db, storeId, b.id),
           feesSinceHandoverCents(db, storeId, b.id),
+          lastHandoverAt(db, storeId, b.id),
           db
             .select()
             .from(storeHandovers)
@@ -612,6 +634,7 @@ export async function getCashbox(c: Ctx) {
           businessName: b.name,
           heldCents: held,
           feesSinceHandoverCents: fees,
+          feesSince: since ? since.getTime() : null,
           lastHandover: last
             ? {
                 cents: last.cents,
@@ -638,13 +661,65 @@ export async function getStoreLedger(c: Ctx, q: StoreLedgerQuery) {
   const list = await bookBusinessesOf(db, storeId);
   const ids = list.map((b) => b.id);
   if (q.businessId && !ids.includes(q.businessId)) return refuse(c, "NOT_FOUND", 404);
-  const page = await movementsOf(db, { storeId, businessIds: q.businessId ? [q.businessId] : ids, kind: q.kind }, cursor, STORE_LEDGER_PAGE);
+  const page = await movementsOf(
+    db,
+    { storeId, businessIds: q.businessId ? [q.businessId] : ids, kind: q.kind, since: q.since !== undefined ? new Date(q.since) : undefined },
+    cursor,
+    STORE_LEDGER_PAGE,
+  );
   const rows = await ledgerRowsOf(db, page.rows);
   const data: StoreLedgerResponse = {
     /* the store's view: no payment ids, no authors (D21's detail is the
        operator's and the business's) */
     rows: rows.map(({ paymentId: _p, authorEmail: _a, ...row }) => row),
     nextCursor: page.next ? encodeLedgerCursor(page.next) : null,
+  };
+  return c.json({ success: true, data });
+}
+
+/* GET /store/handovers — T080 (US5/AC6, "both sides see the same
+   history"): this store's hand-overs to one business it holds or held
+   cash for, newest first, a dispute's note included. Served whether or
+   not the channel is still on, like the rest of the cash book (H1). */
+export async function getStoreHandovers(c: Ctx, q: StoreHandoversQuery) {
+  const db = drizzle(c.env.DB);
+  const { storeId } = c.get("store");
+  const cursor = decodeLedgerCursor(q.cursor);
+  if (cursor === "bad") return refuse(c, "VALIDATION_ERROR", 400);
+  const business = (await bookBusinessesOf(db, storeId)).find((b) => b.id === q.businessId);
+  if (!business) return refuse(c, "NOT_FOUND", 404);
+  const rows = await db
+    .select()
+    .from(storeHandovers)
+    .where(
+      and(
+        eq(storeHandovers.storeId, storeId),
+        eq(storeHandovers.businessId, business.id),
+        ...(cursor
+          ? [
+              or(
+                lt(storeHandovers.declaredAt, new Date(cursor.at)),
+                and(eq(storeHandovers.declaredAt, new Date(cursor.at)), lt(storeHandovers.id, cursor.id)),
+              ),
+            ]
+          : []),
+      ),
+    )
+    .orderBy(desc(storeHandovers.declaredAt), desc(storeHandovers.id))
+    .limit(STORE_HANDOVERS_PAGE + 1);
+  const page = rows.slice(0, STORE_HANDOVERS_PAGE);
+  const last = page.at(-1);
+  const data: StoreHandoversResponse = {
+    businessName: business.name,
+    handovers: page.map((h) => ({
+      id: h.id,
+      cents: h.cents,
+      status: h.status,
+      declaredAt: h.declaredAt.getTime(),
+      resolvedAt: h.resolvedAt ? h.resolvedAt.getTime() : null,
+      note: h.note,
+    })),
+    nextCursor: rows.length > STORE_HANDOVERS_PAGE && last ? encodeLedgerCursor({ at: last.declaredAt.getTime(), id: last.id }) : null,
   };
   return c.json({ success: true, data });
 }

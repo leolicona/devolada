@@ -1,4 +1,21 @@
 <!--
+Sync Impact Report (v1.9.2, 2026-10-01)
+- Version change: 1.9.1 → 1.9.2 — PATCH. No principle, section or table
+  changes. The report's follow-up list is corrected: one TODO it carried
+  is already done.
+- Source: /speckit-converge on specs/018-cash-at-stores, task T104.
+- Closed: TODO(CLAUDE-MD-WORKERS), opened by v1.8.0. 018's T062 did the
+  work: CLAUDE.md now says "all five Workers", names the store app among
+  them, lists `apps/red` in the architecture and gives
+  `pnpm --filter @devolada/red dev`. v1.9.0 and v1.9.1 carried the TODO
+  as still open.
+- Modified sections: none. Added sections: none. Removed sections: none.
+- Templates: none touched.
+- Follow-up TODOs, still open and carried unchanged: TODO(TD-005),
+  TODO(BREATH-AMPLITUDE), and who may be admitted as a business.
+-->
+
+<!--
 Sync Impact Report (v1.9.1, 2026-10-01)
 - Version change: 1.9.0 → 1.9.1 — PATCH. One sentence of Principle V's
   store bullet is reworded. It adds no reach the spec had not already
@@ -852,4 +869,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.9.1 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01
+**Version**: 1.9.2 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01

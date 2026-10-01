@@ -117,13 +117,19 @@ export function realOnly(table: typeof paymentLinks | typeof payments): SQL {
 
    `created` is what the door echoes to the operator's screen; it also
    makes "a second press creates no second link" a fact the caller can
-   assert rather than infer. */
+   assert rather than infer.
+
+   The customer's id is the integration's, opaque and kept as text
+   (cash-at-stores T070, constitution IX): the store counter hands over
+   the capability's `providerCustomerId` untouched, so no core caller
+   assumes one provider's numeric ids. The column keeps its registered
+   name (`core-reads-provider-directly`). */
 export async function ensureLink(
   db: DrizzleD1Database,
   businessId: string,
-  customer: { usuario: string; wisphubId: number },
+  customer: { usuario: string; providerCustomerId: string },
 ): Promise<{ token: string; created: boolean }> {
-  const wisphubCustomerId = String(customer.wisphubId);
+  const wisphubCustomerId = customer.providerCustomerId;
   const [existing] = await db
     .select({ token: paymentLinks.token, wisphubCustomerId: paymentLinks.wisphubCustomerId })
     .from(paymentLinks)

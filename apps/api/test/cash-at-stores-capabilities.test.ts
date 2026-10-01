@@ -227,3 +227,16 @@ describe("cash-at-stores US1 — a cash row cannot disturb its link's SPEI rules
     expect(await isRevoked(db(), ride, new Date())).toBe(true);
   });
 });
+
+describe("cash-at-stores US1 — the link keeps the integration's customer id as given (T070, constitution IX)", () => {
+  it("an id that is not a number is stored untouched, and a second call returns the same link", async () => {
+    const business = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    const { ensureLink } = await import("../src/direct-payments/links");
+    const first = await ensureLink(db(), business.id, { usuario: "greyes@wifiplus", providerCustomerId: "cus_A7x9" });
+    expect(first.created).toBe(true);
+    const again = await ensureLink(db(), business.id, { usuario: "greyes@wifiplus", providerCustomerId: "cus_A7x9" });
+    expect(again).toEqual({ token: first.token, created: false });
+    const [link] = await db().select().from(paymentLinks).where(eq(paymentLinks.token, first.token));
+    expect(link.wisphubCustomerId).toBe("cus_A7x9");
+  });
+});

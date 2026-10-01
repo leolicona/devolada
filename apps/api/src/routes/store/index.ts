@@ -9,6 +9,7 @@ import {
   declareHandoverRequest,
   recordCollectionRequest,
   storeLedgerQuery,
+  storeHandoversQuery,
   storeQuoteQuery,
   storeSearchQuery,
 } from "./schema";
@@ -17,6 +18,7 @@ import {
   declareHandover,
   getCashbox,
   getStoreLedger,
+  getStoreHandovers,
   previewInvitation,
   collectionReceipt,
   collectionStatus,
@@ -69,6 +71,11 @@ storeRoute.get("/ledger", requireStore, zValidator("query", storeLedgerQuery, in
 
 storeRoute.post("/handovers", requireStore, zValidator("json", declareHandoverRequest, invalid), (c) =>
   declareHandover(c, c.req.valid("json")),
+);
+
+/* T080: the store's own hand-over history, disputes and notes included */
+storeRoute.get("/handovers", requireStore, zValidator("query", storeHandoversQuery, invalid), (c) =>
+  getStoreHandovers(c, c.req.valid("query")),
 );
 
 /* ---- The invitation, session-less (D4, D5): the token is the credential,

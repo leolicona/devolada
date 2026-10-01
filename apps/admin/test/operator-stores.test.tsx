@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http } from "msw";
 import {
   businessRow,
   businessesListResponse,
@@ -60,13 +61,14 @@ const stores = storesListResponse.parse({
 });
 
 function arrange(extra: Parameters<typeof server.use> = []) {
+  /* a test's own handlers first: MSW takes the first match of one use() */
   server.use(
+    ...extra,
     handlers.session(() => ok(operator)),
     handlers.feed(() => ok(emptyFeed)),
     handlers.support(() => ok({ whatsapp: "5215512345678", email: "hola@devoladapago.com" })),
     handlers.platformSettings(() => ok(settings)),
     handlers.platformStores(() => ok(stores)),
-    ...extra,
   );
   renderApp("/operador");
 }
@@ -173,6 +175,47 @@ describe("cash-at-stores US2: the operator's Tiendas tab", () => {
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Otra tienda ya usa ese celular.");
   });
 
+  it("edits a store's details, and says when the new phone belongs to another store (T092, FR-003, US2/AC3)", async () => {
+    const patched: [string, unknown][] = [];
+    let taken = true;
+    arrange([
+      handlers.patchStore((id, body) => {
+        patched.push([id, body]);
+        return taken ? fail("PHONE_TAKEN", 409) : ok({ ...lupita, phone: "5599990000" });
+      }),
+    ]);
+    await openStores();
+    await userEvent.click(within(item("Abarrotes Lupita")).getByRole("button", { name: "Editar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Editar Abarrotes Lupita" });
+    const phone = within(dialog).getByLabelText("Celular del tendero");
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "55 8765 4321");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Otra tienda ya usa ese celular.");
+    expect(patched.at(-1)?.[0]).toBe(lupita.id);
+
+    taken = false;
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "5599990000");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(patched).toHaveLength(2);
+  });
+
+  it("a refused re-send or suspension says why, at the control (T086, FR-004, FR-005)", async () => {
+    arrange([
+      handlers.resendStoreInvitation(() => fail("ALREADY_ACCEPTED", 409)),
+      handlers.patchStore(() => fail("INTERNAL_ERROR", 500)),
+    ]);
+    await openStores();
+    await userEvent.click(within(item("Papelería El Sol")).getByRole("button", { name: "Reenviar invitación" }));
+    expect(await within(item("Papelería El Sol")).findByRole("alert")).toHaveTextContent("ya aceptó su invitación");
+
+    await userEvent.click(within(item("Abarrotes Lupita")).getByRole("button", { name: "Suspender" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Suspender" }));
+    expect(await within(item("Abarrotes Lupita")).findByRole("alert")).toHaveTextContent("No se pudo suspender la tienda.");
+  });
+
   it("suspends and reactivates, each behind a confirmation", async () => {
     const patched: [string, unknown][] = [];
     arrange([
@@ -217,7 +260,8 @@ describe("cash-at-stores US2: the operator's Tiendas tab", () => {
     await userEvent.click(within(item("Abarrotes Lupita")).getByRole("button", { name: /WifiPlus · tiene/ }));
     expect(await screen.findByRole("list", { name: "Movimientos de la caja" })).toHaveTextContent("DV-CASH01");
 
-    await userEvent.selectOptions(screen.getByLabelText("Pago al que se refiere"), "p1");
+    await userEvent.click(screen.getByRole("combobox", { name: "Pago al que se refiere" }));
+    await userEvent.click(await screen.findByRole("option", { name: /DV-CASH01/ }));
     await userEvent.type(screen.getByLabelText("Monto de la corrección"), "50");
     const submit = screen.getByRole("button", { name: "Registrar corrección" });
     await userEvent.type(screen.getByLabelText(/Motivo \(de 3 a 280 letras\)/), "ok");
@@ -228,6 +272,37 @@ describe("cash-at-stores US2: the operator's Tiendas tab", () => {
     await expectNoViolations(screen.getByRole("tabpanel"));
     await userEvent.click(submit);
     await waitFor(() => expect(corrections).toEqual([{ paymentId: "p1", cents: -5000, reason: "ok — se capturó $50 de más" }]));
+  });
+});
+
+describe("cash-at-stores US2: the whole cash book, with days (T075, T085)", () => {
+  it("pages the book with *Cargar más*, and the picker reaches a payment past the first twenty movements", async () => {
+    const row = (i: number, paymentId: string | null) => ({
+      id: `l${i}`, kind: "collection", cents: 10000, at: at - i * 86_400_000, businessId: "b1", businessName: "WifiPlus",
+      folio: `DV-OLD${String(i).padStart(3, "0")}`, customerName: `Cliente ${i}`, feeCents: 1500, reason: null, paymentId, authorEmail: null,
+    });
+    const first = platformLedgerResponse.parse({ heldCents: 500000, nextCursor: "c1", rows: Array.from({ length: 20 }, (_, i) => row(i, `p${i}`)) });
+    const second = platformLedgerResponse.parse({ heldCents: 500000, nextCursor: null, rows: [row(30, "p-old")] });
+    const cursors: (string | null)[] = [];
+    arrange([
+      http.get("/platform/stores/:id/ledger/:businessId", ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get("cursor");
+        cursors.push(cursor);
+        return ok(cursor ? second : first);
+      }),
+    ]);
+    await openStores();
+    await userEvent.click(within(item("Abarrotes Lupita")).getByRole("button", { name: /WifiPlus · tiene/ }));
+    const list = await screen.findByRole("list", { name: "Movimientos de la caja" });
+    expect(list).not.toHaveTextContent("DV-OLD030");
+    /* the day is said, not only the hour */
+    expect(list).toHaveTextContent(/de [a-z]+/);
+    await userEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+    expect(await within(list).findByText("DV-OLD030")).toBeInTheDocument();
+    expect(cursors).toEqual([null, "c1"]);
+    expect(screen.queryByRole("button", { name: "Cargar más" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("combobox", { name: "Pago al que se refiere" }));
+    expect(await screen.findByRole("option", { name: /DV-OLD030/ })).toBeInTheDocument();
   });
 });
 
@@ -289,6 +364,18 @@ describe("cash-at-stores US2: the switch and the rules", () => {
     arrange();
     expect(await screen.findByLabelText("Cargo por servicio en tiendas")).toBeInTheDocument();
     expect(screen.getByLabelText("Mensaje del comprobante (WhatsApp)")).toBeInTheDocument();
+  });
+
+  it("each rule's last change says its day and its author (T085, FR-008, FR-043)", async () => {
+    const changed = settingsListResponse.parse({
+      settings: [
+        { key: "store_fee_cents", type: "cents", birth: "1500", current: "2000", history: [{ value: "2000", authorUserId: "u1", authorEmail: "ops@devolada.app", createdAt: at }] },
+        { key: "store_receipt_template", type: "template", birth: DEFAULT_RECEIPT_TEMPLATE, current: DEFAULT_RECEIPT_TEMPLATE, history: [{ value: DEFAULT_RECEIPT_TEMPLATE, authorUserId: "u1", authorEmail: "ops@devolada.app", createdAt: at }] },
+      ],
+    });
+    arrange([handlers.platformSettings(() => ok(changed))]);
+    expect(await screen.findByText(/Última: \$20\.00 · 1 de octubre.* por ops@devolada\.app/)).toBeInTheDocument();
+    expect(screen.getByText(/Último cambio: 1 de octubre.* por ops@devolada\.app/)).toBeInTheDocument();
   });
 
   it("the receipt's message: a text area, the placeholders, a live preview, and the API's three checks before it saves (D31)", async () => {

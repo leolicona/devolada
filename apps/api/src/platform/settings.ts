@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-import { platformSettings } from "../db/schema";
+import { platformSettings, user } from "../db/schema";
 import { BANKS } from "../direct-payments/banks";
 import { DEFAULT_RECEIPT_TEMPLATE, RECEIPT_TEMPLATE_MAX, RECEIPT_TEMPLATE_MIN, receiptTemplateProblem } from "../receipt/template";
 
@@ -143,9 +143,19 @@ export async function setSetting(db: DB, key: SettingKey, value: string, authorU
 /* The panel's read: every key with its current value, its birth value
    and its last five rows (operator-panel D4). */
 export async function listSettings(db: DB) {
+  /* cash-at-stores T085 (FR-008, FR-043): who changed a rule, by name —
+     as the reader model's history already says it (readerHistory) */
   const rows = await db
-    .select()
+    .select({
+      id: platformSettings.id,
+      key: platformSettings.key,
+      value: platformSettings.value,
+      authorUserId: platformSettings.authorUserId,
+      authorEmail: user.email,
+      createdAt: platformSettings.createdAt,
+    })
     .from(platformSettings)
+    .leftJoin(user, eq(user.id, platformSettings.authorUserId))
     .where(inArray(platformSettings.key, SETTING_KEYS))
     .orderBy(desc(platformSettings.createdAt), desc(platformSettings.id));
   return SETTING_KEYS.map((key) => {
@@ -159,6 +169,7 @@ export async function listSettings(db: DB) {
       history: history.map((r) => ({
         value: r.value,
         authorUserId: r.authorUserId,
+        authorEmail: r.authorEmail ?? null,
         createdAt: r.createdAt.getTime(),
       })),
     };

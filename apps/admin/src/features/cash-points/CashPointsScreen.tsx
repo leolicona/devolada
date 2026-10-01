@@ -1,6 +1,6 @@
 import { Alert, Amount, Button, Card, ListError, Pending, Skeleton, StatusBadge, formatMoney, type Status } from "@devolada/ui";
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CashPointStore, CashPointsResponse, HandoverHistoryResponse, HandoverRow } from "@devolada/api/cash-points-schema";
 import { roleCan } from "@devolada/api/role-matrix";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { api, ApiError } from "@/lib/api";
-import { formatTime } from "@/lib/datetime";
+import { formatDateTime } from "@/lib/datetime";
 import { useDisplaySettings, useSession } from "../auth/session";
 
 /* cash-at-stores D20, D23 — *Puntos de pago*: each store holding this
@@ -132,32 +132,48 @@ function Dispute({ store }: { store: CashPointStore }) {
 
 function History({ store }: { store: CashPointStore }) {
   const { timezone, timeFormat } = useDisplaySettings();
-  const history = useQuery<HandoverHistoryResponse, ApiError>({
+  /* T075: every hand-over, page by page */
+  const history = useInfiniteQuery<HandoverHistoryResponse, ApiError>({
     queryKey: ["cash-points-history", store.storeId],
-    queryFn: () => api(`/cash-points/stores/${store.storeId}/history`),
+    queryFn: ({ pageParam }) =>
+      api(`/cash-points/stores/${store.storeId}/history${pageParam ? `?cursor=${encodeURIComponent(String(pageParam))}` : ""}`),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
   });
+  const handovers = history.data?.pages.flatMap((p) => p.handovers) ?? [];
   return (
     <Pending active={history.isPending} label="Cargando las entregas" shape={<Skeleton className="h-16 w-full" />}>
-      {history.error ? (
+      {history.error && handovers.length === 0 ? (
         <ListError what="las entregas" onRetry={() => history.refetch()} />
-      ) : history.data?.handovers.length === 0 ? (
+      ) : history.data && handovers.length === 0 ? (
         <p className="text-sm text-ink-soft">Todavía no hay entregas.</p>
       ) : (
-        <ul className="divide-y divide-line-soft text-sm" aria-label={`Entregas de ${store.storeName}`}>
-          {history.data?.handovers.map((h) => (
-            <li key={h.id} className="flex flex-wrap items-center gap-3 py-2">
-              <StatusBadge status={HANDOVER_STATUS[h.status]} />
-              <Amount cents={h.cents} className="font-medium" />
-              <span className="text-ink-soft">declarada {formatTime(h.declaredAt, timeFormat, timezone)}</span>
-              {h.resolvedBy && (
-                <span className="text-ink-soft">
-                  · {h.status === "confirmed" ? "confirmó" : "disputó"} {h.resolvedBy}
-                </span>
-              )}
-              {h.note && <span className="basis-full text-ink-soft">«{h.note}»</span>}
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-2">
+          <ul className="divide-y divide-line-soft text-sm" aria-label={`Entregas de ${store.storeName}`}>
+            {handovers.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-center gap-3 py-2">
+                <StatusBadge status={HANDOVER_STATUS[h.status]} />
+                <Amount cents={h.cents} className="font-medium" />
+                {/* T076 (US5/AC5): the day, and when it was resolved */}
+                <span className="text-ink-soft">declarada {formatDateTime(h.declaredAt, timeFormat, timezone)}</span>
+                {h.resolvedBy && (
+                  <span className="text-ink-soft">
+                    · {h.status === "confirmed" ? "confirmó" : "disputó"} {h.resolvedBy}
+                    {h.resolvedAt ? ` el ${formatDateTime(h.resolvedAt, timeFormat, timezone)}` : ""}
+                  </span>
+                )}
+                {h.note && <span className="basis-full text-ink-soft">«{h.note}»</span>}
+              </li>
+            ))}
+          </ul>
+          {history.hasNextPage && (
+            <Pending active={history.isFetchingNextPage} label="Cargando más entregas">
+              <Button size="compact" variant="secondary" disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
+                Cargar más
+              </Button>
+            </Pending>
+          )}
+        </div>
       )}
     </Pending>
   );
@@ -181,7 +197,7 @@ function StoreCard({ store, canOperate }: { store: CashPointStore; canOperate: b
       </div>
       {store.lastConfirmed && (
         <p className="text-sm text-ink-soft">
-          Última entrega confirmada: {formatMoney(store.lastConfirmed.cents)} · {formatTime(store.lastConfirmed.at, timeFormat, timezone)}
+          Última entrega confirmada: {formatMoney(store.lastConfirmed.cents)} · {formatDateTime(store.lastConfirmed.at, timeFormat, timezone)}
         </p>
       )}
       {store.pending && (
@@ -190,7 +206,7 @@ function StoreCard({ store, canOperate }: { store: CashPointStore; canOperate: b
             <StatusBadge status="pending" />
             <span className="text-sm">
               La tienda declaró <span className="font-semibold">{formatMoney(store.pending.cents)}</span> ·{" "}
-              {formatTime(store.pending.declaredAt, timeFormat, timezone)}
+              {formatDateTime(store.pending.declaredAt, timeFormat, timezone)}
             </span>
           </div>
           {canOperate && (

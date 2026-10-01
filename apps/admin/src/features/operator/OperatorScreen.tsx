@@ -23,7 +23,7 @@ import { BANK_OPTIONS } from "@/lib/banks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { formatAgo, formatTime } from "@/lib/datetime";
+import { formatAgo, formatDateTime, formatTime } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { useDisplaySettings, useSession } from "../auth/session";
 import { ENTRY_LABELS } from "../credit/CreditCard";
@@ -147,7 +147,9 @@ function TemplateField({ setting }: { setting: Setting }) {
       </div>
       {setting.history.length > 0 && (
         <p className="text-xs text-ink-soft">
-          Último cambio: {formatTime(setting.history[0].createdAt, timeFormat, timezone)} · {setting.history.length} cambio
+          {/* T085 (FR-043): the day and the author, not only the hour */}
+          Último cambio: {formatDateTime(setting.history[0].createdAt, timeFormat, timezone)}
+          {setting.history[0].authorEmail ? ` por ${setting.history[0].authorEmail}` : ""} · {setting.history.length} cambio
           {setting.history.length === 1 ? "" : "s"}
         </p>
       )}
@@ -227,8 +229,10 @@ function PlainSettingField({ setting }: { setting: Setting }) {
         )}
         {setting.history.length > 0 && (
           <p className="mt-1 text-xs text-ink-soft">
+            {/* cash-at-stores T085 (FR-008): every rule's change keeps its day and author on screen */}
             Última: {isCents ? `$${(Number(setting.history[0].value) / 100).toFixed(2)}` : setting.history[0].value} ·{" "}
-            {formatTime(setting.history[0].createdAt, timeFormat, timezone)} · {setting.history.length} cambio
+            {formatDateTime(setting.history[0].createdAt, timeFormat, timezone)}
+            {setting.history[0].authorEmail ? ` por ${setting.history[0].authorEmail}` : ""} · {setting.history.length} cambio
             {setting.history.length === 1 ? "" : "s"}
           </p>
         )}

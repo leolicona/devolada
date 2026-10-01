@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { HandCoins, ListOrdered, WifiOff, Wallet } from "lucide-react";
-import { Pending, Skeleton } from "@devolada/ui";
+import { ListError, Pending, Skeleton } from "@devolada/ui";
 import { STORE_SUSPENDED_EVENT } from "@/lib/api";
 import { useSession } from "@/features/auth/session";
 import { SuspendedScreen, WrongAccountScreen } from "@/features/auth/Gate";
@@ -49,8 +49,11 @@ export function TabLayout() {
 
   if (suspended || session.error?.code === "STORE_SUSPENDED") return <SuspendedScreen />;
   if (session.error?.code === "WRONG_ACTOR") return <WrongAccountScreen />;
-  if (session.error) {
-    /* no session, or an unverified one: the sign-in, which offers the código */
+  /* no session, or an unverified one: the sign-in, which offers the código.
+     T074 (FR-010, D26): only an answer that SAYS so signs the shopkeeper
+     out of view — a lost signal or a server error keeps the layout, its
+     banner and whatever the session already knew */
+  if (session.error && (session.error.status === 401 || session.error.code === "EMAIL_NOT_VERIFIED")) {
     return <Navigate to="/entrar" />;
   }
 
@@ -64,7 +67,7 @@ export function TabLayout() {
       )}
       <main className="flex-1 px-4 pb-6 pt-4">
         <Pending active={session.isPending} label="Cargando tu tienda" shape={<Skeleton className="h-24 w-full" />}>
-          {session.data && <Outlet />}
+          {session.data ? <Outlet /> : session.error ? <ListError what="tu tienda" onRetry={() => session.refetch()} /> : null}
         </Pending>
       </main>
       <nav aria-label="Secciones" className="sticky bottom-0 z-sticky grid grid-cols-3 border-t border-line bg-card">

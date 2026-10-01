@@ -1,6 +1,6 @@
-import { Alert, Amount, Button, Card, Input, Pending, Skeleton, StatusBadge, formatMoney, parseMoney, type Status } from "@devolada/ui";
+import { Alert, Amount, Button, Card, Input, Pending, Skeleton, StatusBadge, buttonVariants, formatMoney, parseMoney, type Status } from "@devolada/ui";
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, MessageCircle, Plus, TriangleAlert } from "lucide-react";
 import type {
   CorrectionRequest,
@@ -15,6 +15,7 @@ import type {
 import { nationalPhone } from "@devolada/api/phone";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -27,7 +28,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { api, ApiError } from "@/lib/api";
-import { formatTime } from "@/lib/datetime";
+import { formatDateTime } from "@/lib/datetime";
 import { useDisplaySettings } from "../auth/session";
 
 /* cash-at-stores US2 — the Tiendas tab of /operador (FR-001–FR-005, D4,
@@ -157,12 +158,8 @@ export function InvitationPanel({ invitation }: { invitation: StoreInvitation })
           <Copy className="size-4" aria-hidden />
           {copied ? "Copiado" : "Copiar"}
         </Button>
-        <a
-          href={invitation.waLink}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-sm font-medium text-ink-inverse"
-        >
+        {/* T087 (constitution VI): the shared button recipe, on a link */}
+        <a href={invitation.waLink} target="_blank" rel="noreferrer" className={buttonVariants({ size: "compact" })}>
           <MessageCircle className="size-4" aria-hidden />
           Enviar por WhatsApp
         </a>
@@ -286,9 +283,21 @@ function StatusAction({ store }: { store: StoreRow }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* T086 (FR-005): a refusal is said at the control that met it */}
+      {change.error && (
+        <p role="alert" className="text-sm font-medium text-error">
+          {suspending ? "No se pudo suspender la tienda." : "No se pudo reactivar la tienda."} Actualiza la lista e intenta de nuevo.
+        </p>
+      )}
     </Pending>
   );
 }
+
+/* T086 (FR-004): why a re-send was refused, in the operator's words */
+const RESEND_ERRORS: Record<string, string> = {
+  ALREADY_ACCEPTED: "El tendero ya aceptó su invitación; no hay que reenviarla.",
+  NOT_FOUND: "La tienda ya no existe en la lista. Actualízala.",
+};
 
 function Resend({ store }: { store: StoreRow }) {
   const [invitation, setInvitation] = useState<StoreInvitation | null>(null);
@@ -303,6 +312,11 @@ function Resend({ store }: { store: StoreRow }) {
           Reenviar invitación
         </Button>
       </Pending>
+      {resend.error && (
+        <p role="alert" className="text-sm font-medium text-error">
+          {RESEND_ERRORS[resend.error.code] ?? "No se pudo reenviar la invitación. Intenta de nuevo."}
+        </p>
+      )}
       <DialogContent>
         <DialogTitle>Invitación nueva</DialogTitle>
         <DialogDescription>La invitación anterior dejó de funcionar.</DialogDescription>
@@ -317,11 +331,19 @@ function Resend({ store }: { store: StoreRow }) {
 function CashBook({ store, businessId, businessName }: { store: StoreRow; businessId: string; businessName: string }) {
   const queryClient = useQueryClient();
   const { timezone, timeFormat } = useDisplaySettings();
-  const ledger = useQuery<PlatformLedgerResponse, ApiError>({
+  /* T075 (FR-030, US2/AC11): the whole book, page by page — a payment
+     older than the newest twenty movements is still one an operator can
+     see and correct */
+  const ledger = useInfiniteQuery<PlatformLedgerResponse, ApiError>({
     queryKey: ["platform-store-ledger", store.id, businessId],
-    queryFn: () => api(`/platform/stores/${store.id}/ledger/${businessId}`),
+    queryFn: ({ pageParam }) =>
+      api(`/platform/stores/${store.id}/ledger/${businessId}${pageParam ? `?cursor=${encodeURIComponent(String(pageParam))}` : ""}`),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
   });
-  const payments = (ledger.data?.rows ?? []).filter((r) => r.kind === "collection" && r.paymentId);
+  const rows = ledger.data?.pages.flatMap((p) => p.rows) ?? [];
+  const heldNow = ledger.data?.pages[0]?.heldCents;
+  const payments = rows.filter((r) => r.kind === "collection" && r.paymentId);
   const [paymentId, setPaymentId] = useState("");
   const [sign, setSign] = useState<"-" | "+">("-");
   const [amount, setAmount] = useState("");
@@ -345,9 +367,9 @@ function CashBook({ store, businessId, businessName }: { store: StoreRow; busine
     <div className="space-y-3 rounded-md border border-line p-4">
       <p className="text-sm font-medium">
         Caja de {store.name} con {businessName}
-        {ledger.data && (
+        {heldNow !== undefined && (
           <span className="ml-2 font-semibold">
-            · tiene <Amount cents={ledger.data.heldCents} />
+            · tiene <Amount cents={heldNow} />
           </span>
         )}
       </p>
@@ -356,8 +378,8 @@ function CashBook({ store, businessId, businessName }: { store: StoreRow; busine
           <Alert variant="destructive">No pudimos cargar la caja.</Alert>
         ) : (
           <ul className="divide-y divide-line-soft text-sm" aria-label="Movimientos de la caja">
-            {ledger.data?.rows.length === 0 && <li className="py-2 text-ink-soft">Sin movimientos.</li>}
-            {ledger.data?.rows.map((r) => (
+            {ledger.data && rows.length === 0 && <li className="py-2 text-ink-soft">Sin movimientos.</li>}
+            {rows.map((r) => (
               <li key={r.id} className="flex items-baseline gap-3 py-2">
                 <span className="min-w-0 flex-1">
                   {r.kind === "collection" ? "Cobro" : r.kind === "handover" ? "Entrega" : "Corrección"}
@@ -365,7 +387,8 @@ function CashBook({ store, businessId, businessName }: { store: StoreRow; busine
                   {r.customerName && <span className="ml-2 text-ink-soft">· {r.customerName}</span>}
                   {r.reason && <span className="block text-ink-soft">{r.reason}{r.authorEmail ? ` — ${r.authorEmail}` : ""}</span>}
                 </span>
-                <span className="shrink-0 text-ink-soft">{formatTime(r.at, timeFormat, timezone)}</span>
+                {/* T085: the day too — a movement may be weeks old */}
+                <span className="shrink-0 text-ink-soft">{formatDateTime(r.at, timeFormat, timezone)}</span>
                 <span className="shrink-0 font-medium tabular-nums">
                   {r.cents > 0 ? "+" : "−"}
                   {formatMoney(Math.abs(r.cents))}
@@ -375,36 +398,47 @@ function CashBook({ store, businessId, businessName }: { store: StoreRow; busine
           </ul>
         )}
       </Pending>
+      {ledger.hasNextPage && (
+        <Pending active={ledger.isFetchingNextPage} label="Cargando más movimientos">
+          <Button size="compact" variant="secondary" disabled={ledger.isFetchingNextPage} onClick={() => void ledger.fetchNextPage()}>
+            Cargar más
+          </Button>
+        </Pending>
+      )}
 
       {payments.length > 0 && (
         <div className="space-y-2 border-t border-line-soft pt-3">
           <p className="text-sm font-medium">Registrar corrección</p>
+          {/* T087 (constitution VI): the panel's themed Select, as the
+              credit adjustment beside it uses — never a native one */}
           <div>
             <Label htmlFor={selectId}>Pago al que se refiere</Label>
-            <select
-              id={selectId}
-              className="mt-1 block h-10 w-full rounded-md border border-line-input bg-card px-3 text-sm"
-              value={paymentId}
-              onChange={(e) => setPaymentId(e.target.value)}
-            >
-              <option value="">Elige el pago</option>
-              {payments.map((p) => (
-                <option key={p.paymentId} value={p.paymentId!}>
-                  {p.folio} · {p.customerName} · {formatMoney(p.cents)}
-                </option>
-              ))}
-            </select>
+            <Select value={paymentId || undefined} onValueChange={setPaymentId}>
+              <SelectTrigger id={selectId} className="mt-1">
+                <SelectValue placeholder="Elige el pago" />
+              </SelectTrigger>
+              <SelectContent>
+                {payments.map((p) => (
+                  <SelectItem key={p.paymentId} value={p.paymentId!}>
+                    {p.folio} · {p.customerName} · {formatMoney(p.cents)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {ledger.hasNextPage && (
+              <p className="mt-1 text-xs text-ink-soft">¿No está el pago? Carga más movimientos arriba.</p>
+            )}
           </div>
           <div className="flex gap-2">
-            <select
-              aria-label="Signo de la corrección"
-              className="h-10 w-20 rounded-md border border-line-input bg-card px-3 text-sm"
-              value={sign}
-              onChange={(e) => setSign(e.target.value as "-" | "+")}
-            >
-              <option value="-">−</option>
-              <option value="+">+</option>
-            </select>
+            <Select value={sign} onValueChange={(v) => setSign(v as "-" | "+")}>
+              <SelectTrigger className="w-20" aria-label="Signo de la corrección">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="-">−</SelectItem>
+                <SelectItem value="+">+</SelectItem>
+              </SelectContent>
+            </Select>
             <Input size="compact" aria-label="Monto de la corrección" prefix="$" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
           <Label htmlFor={`${selectId}-reason`}>Motivo (de 3 a 280 letras)</Label>

@@ -128,6 +128,11 @@ export const collectionStatusResponse = z.object({
   /* What remains owed after a short payment; 0 on a whole one */
   remainingCents: z.number().int().nonnegative(),
   outcome: collectionOutcome,
+  /* T071 (FR-025, the spec's edge case on a short payment below the
+     threshold): whether the action the class decided brings the service
+     back. Known from the record on, so a `queued` row never promises a
+     reconnection the verdict did not decide */
+  reconnects: z.boolean(),
 });
 
 /* GET /store/collections/:id/receipt (D18, D31) — asked for only when the
@@ -163,6 +168,10 @@ export const cashboxResponse = z.object({
       businessName: z.string(),
       heldCents: z.number().int(),
       feesSinceHandoverCents: z.number().int().nonnegative(),
+      /* T079 (FR-037): when the last confirmed hand-over landed — where the
+         fees above start counting, and the movements they open into
+         start. Null before the first one */
+      feesSince: z.number().int().nullable(),
       lastHandover: handoverSummary.nullable(),
       pendingHandover: pendingHandover.nullable(),
     }),
@@ -178,6 +187,33 @@ export const storeLedgerQuery = z.object({
   cursor: z.string().optional(),
   businessId: z.string().optional(),
   kind: z.enum(["collection", "handover", "correction"]).optional(),
+  /* T079: only movements from this time on (ms) — *Mi caja*'s fees open
+     into the collections since the last confirmed hand-over */
+  since: z.coerce.number().int().nonnegative().optional(),
+});
+
+/* GET /store/handovers?businessId=&cursor= — T080 (US5/AC6): the store's
+   own hand-overs to one business, newest first, 20 a page, with the
+   business's note on a dispute. A dispute writes no movement (D20), so
+   *Movimientos* never shows it; this is where both sides read the same
+   history. */
+export const STORE_HANDOVERS_PAGE = 20;
+export const storeHandoversQuery = z.object({
+  businessId: z.string(),
+  cursor: z.string().optional(),
+});
+export const storeHandoverRow = z.object({
+  id: z.string(),
+  cents: z.number().int().positive(),
+  status: z.enum(["pending", "confirmed", "disputed"]),
+  declaredAt: z.number().int(),
+  resolvedAt: z.number().int().nullable(),
+  note: z.string().nullable(),
+});
+export const storeHandoversResponse = z.object({
+  businessName: z.string(),
+  handovers: z.array(storeHandoverRow),
+  nextCursor: z.string().nullable(),
 });
 
 export const storeLedgerRow = z.object({
@@ -261,6 +297,9 @@ export type CollectionStatusResponse = z.infer<typeof collectionStatusResponse>;
 export type CollectionReceiptResponse = z.infer<typeof collectionReceiptResponse>;
 export type CashboxResponse = z.infer<typeof cashboxResponse>;
 export type StoreLedgerQuery = z.infer<typeof storeLedgerQuery>;
+export type StoreHandoversQuery = z.infer<typeof storeHandoversQuery>;
+export type StoreHandoverRow = z.infer<typeof storeHandoverRow>;
+export type StoreHandoversResponse = z.infer<typeof storeHandoversResponse>;
 export type StoreLedgerRow = z.infer<typeof storeLedgerRow>;
 export type StoreLedgerResponse = z.infer<typeof storeLedgerResponse>;
 export type DeclareHandoverRequest = z.infer<typeof declareHandoverRequest>;

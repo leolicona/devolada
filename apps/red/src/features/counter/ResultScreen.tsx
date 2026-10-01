@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Copy, MessageCircle, Plus, TriangleAlert } from "lucide-react";
-import { Alert, Amount, Button, Card, Field, Input, Pending, Skeleton, StatusBadge, formatMoney, type Status } from "@devolada/ui";
-import type { CollectionOutcome } from "@devolada/api/store-schema";
+import { Alert, Amount, Button, Card, Field, Input, Pending, Reveal, Skeleton, StatusBadge, formatMoney, type Status } from "@devolada/ui";
+import type { CollectionOutcome, CollectionStatusResponse } from "@devolada/api/store-schema";
 import { nationalPhone } from "@/lib/phone";
 import { openExternal } from "@/lib/open";
 import { getCollection, getReceipt } from "./api";
@@ -33,6 +33,35 @@ const SAY: Record<CollectionOutcome, string> = {
   observation: "El pago quedó registrado. El negocio reactivará el servicio a mano.",
   failed: "No pudimos avisar al negocio. El pago sí quedó registrado y el negocio lo revisará.",
 };
+
+/* T071 (FR-025, the spec's edge case on a short payment below the
+   threshold): a queued payment says what its verdict decided. Only a
+   decided reconnection is "Reconexión en cola"; anything else is told as
+   it will end, while the registration is still on its way. */
+function outcomeShown(data: CollectionStatusResponse): { badge: Status; say: string; registering: boolean } {
+  if (data.outcome !== "queued" || data.reconnects) {
+    return { badge: BADGE[data.outcome], say: SAY[data.outcome], registering: false };
+  }
+  return {
+    badge: "withheld",
+    say:
+      data.class === "short"
+        ? `Con este monto el servicio no se reactiva. Dile al cliente que queda a deber ${formatMoney(data.remainingCents)}.`
+        : "El negocio registrará el pago. Su regla no reactiva el servicio desde aquí.",
+    registering: true,
+  };
+}
+
+function Outcome({ data }: { data: CollectionStatusResponse }) {
+  const shown = outcomeShown(data);
+  return (
+    <>
+      <StatusBadge status={shown.badge} size="standard" />
+      <p className="text-base">{shown.say}</p>
+      {shown.registering && <p className="text-sm text-ink-soft">Registrando el pago en {data.businessName}.</p>}
+    </>
+  );
+}
 
 /* FR-027: a number typed here builds the link in the app and never
    reaches the server */
@@ -109,7 +138,8 @@ function Receipt({ id }: { id: string }) {
               <MessageCircle className="size-5" aria-hidden />
               Enviar comprobante
             </Button>
-            <div className="grid grid-cols-2 gap-3">
+            {/* T094: the full label needs the width — stacked on a phone */}
+            <div className="grid gap-3 sm:grid-cols-2">
               {/* the spec's edge case: a wrong phone on file */}
               <Button
                 variant="secondary"
@@ -136,7 +166,7 @@ function Receipt({ id }: { id: string }) {
                 }}
               >
                 <Copy className="size-5" aria-hidden />
-                Copiar
+                Copiar comprobante
               </Button>
             </div>
           </div>
@@ -172,7 +202,9 @@ export function ResultScreen() {
   return (
     <section className="space-y-4" aria-labelledby="resultado-title">
       <Pending active={collection.isPending} label="Cargando el pago" shape={<Skeleton className="h-48 w-full" />}>
-        {collection.isError ? (
+        {/* T082 (US1/AC10): one failed poll keeps the folio on screen — the
+            query still holds the last answer; only no answer at all is an error */}
+        {collection.isError && !data ? (
           <Alert variant="destructive" layout="icon">
             <TriangleAlert aria-hidden />
             No pudimos cargar este pago. Revisa tu conexión.
@@ -215,11 +247,19 @@ export function ResultScreen() {
               {/* waiting breathes (constitution VI): the queued outcome is a
                   region still working, never a frozen one */}
               <Pending active={data.outcome === "queued"} label="Esperando al negocio" announce={false}>
-                <div aria-live="polite" className="space-y-2">
-                  <StatusBadge status={BADGE[data.outcome]} size="standard" />
-                  <p className="text-base">{SAY[data.outcome]}</p>
+                <div aria-live="polite">
+                  {/* T084 (constitution VI): the outcome cross-fades when it changes */}
+                  <Reveal key={`${data.outcome}-${data.reconnects}`} className="space-y-2">
+                    <Outcome data={data} />
+                  </Reveal>
                 </div>
               </Pending>
+              {collection.isError && (
+                <Alert variant="warning" layout="icon">
+                  <TriangleAlert aria-hidden />
+                  No pudimos actualizar el estado. Revisa tu conexión; seguimos intentando.
+                </Alert>
+              )}
             </Card>
             <Receipt id={data.id} />
             <Button variant="ghost" className="w-full" onClick={() => navigate({ to: "/" })}>

@@ -372,8 +372,16 @@ The payer's page does not change (FR-041).
 - `getLinkStatus` shows the debt, read live, and never a list of the
   link's payments. A cash payment shows up there only as a smaller or
   settled debt.
-- A link born this way has no payer reference until the payer's own flow
-  asks for one.
+- A link born this way is a panel link like any other. Where the business
+  has *pago con referencia* on, the every-minute backfill
+  (`backfillPayerReferences`) gives it a payer reference, as it does every
+  panel link without one. *(Amended 2026-10-01, `/speckit-converge` T099:
+  this said the link "has no payer reference until the payer's own flow
+  asks for one". The backfill never worked that way, and keeping the link
+  out would need a mark on it; a link row stays identity-only
+  (`payment-without-receipt` D1). The reference is the business's own
+  rule for its customers, and the page it shows is the one every customer
+  of that business sees, so FR-041 holds.)*
 
 **Alternatives considered**:
 - **Making `payment_link_id` nullable.** Rejected for three reasons:

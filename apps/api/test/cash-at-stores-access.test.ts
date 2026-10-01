@@ -243,6 +243,22 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     expect(signIn.status).toBe(200);
   });
 
+  it("a business signup with an unverified shopkeeper's email is EMAIL_TAKEN, and the shopkeeper keeps their account (T078)", async () => {
+    const { store, token } = await invite();
+    await call(`/store/invitations/${token}/accept`, json({ email: "lupita@correo.mx", password: "secreta123" }));
+    const res = await call("/auth/business/signup", json({ name: "Otro Negocio", email: "lupita@correo.mx", password: "otra-clave-1" }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
+    const [user] = await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"));
+    const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
+    expect(row.userId).toBe(user.id);
+    /* the password still opens the door once the código is typed */
+    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: await lastCodeFor("lupita@correo.mx") }));
+    expect(verified.status).toBe(200);
+    const signIn = await call("/auth/sign-in/username", json({ username: "5512345678", password: "secreta123" }));
+    expect(signIn.status).toBe(200);
+  });
+
   it("EMAIL_TAKEN for an existing user and for an operator's address; the invitation stays open", async () => {
     const { token } = await invite();
     await seedBusiness({ email: "tomado@correo.mx" });
@@ -256,6 +272,26 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     expect((await operator.json()).error.code).toBe("EMAIL_TAKEN");
     expect(await db().select().from(userTable).where(eq(userTable.email, "jefa@devolada.app"))).toHaveLength(0);
     expect((await (await call(`/store/invitations/${token}`)).json()).data.state).toBe("open");
+  });
+
+  it("two acceptances at once: one wins, the other is INVALID_INVITATION — never a 500 — and writes nothing (T089, D5)", async () => {
+    const { store, token } = await invite();
+    const [a, b] = await Promise.all([
+      call(`/store/invitations/${token}/accept`, json({ email: "uno@correo.mx", password: "secreta123" })),
+      call(`/store/invitations/${token}/accept`, json({ email: "dos@correo.mx", password: "secreta123" })),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 400]);
+    const loser = a.status === 400 ? a : b;
+    expect((await loser.json()).error.code).toBe("INVALID_INVITATION");
+    const winnerEmail = a.status === 201 ? "uno@correo.mx" : "dos@correo.mx";
+    const loserEmail = a.status === 201 ? "dos@correo.mx" : "uno@correo.mx";
+    expect(await db().select().from(userTable).where(eq(userTable.email, loserEmail))).toHaveLength(0);
+    const [winner] = await db().select().from(userTable).where(eq(userTable.email, winnerEmail));
+    const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
+    expect(row).toMatchObject({ userId: winner.id, status: "active" });
+    expect(winner.username).toBe("5512345678");
+    const [inv] = await db().select().from(storeInvitations);
+    expect(inv.status).toBe("accepted");
   });
 
   it("a store another request accepted meanwhile: the late user is removed, and the answer is INVALID_INVITATION", async () => {

@@ -172,6 +172,19 @@ its default `'spei'` are unchanged.
 | `confirmed_at` | the record's time |
 | every proof, CEP, reading and provisional column | null |
 
+*(Added 2026-10-01, `/speckit-converge` T072.)* A cash row is born
+carrying what its settlement needs: `customer_*`, `wisphub_customer_id`
+and `wisphub_invoice_id` are written at the insert, not only by
+`settleConfirmed`. While the row is unsettled (`status = 'validating'`,
+`action_outcome` null), `next_attempt_at` is its **settle lease**: the
+request that inserted it holds it for two minutes. No sweep reads
+`next_attempt_at` on a row with no `action_outcome` (the queue takes
+`queued` rows only), so the lease cannot start an action. A retry with
+the same key, or the every-minute `sweepUnsettledCollections`
+(`src/store-collections/`), settles a row whose lease ran out and books
+the `collection` movement a settled row lacks. `settleConfirmed`
+overwrites the lease with the first attempt's own.
+
 **`proof_mode` on a cash row.** The column says how a proof arrived, and
 a cash row has none. Enums here are TypeScript-only, so `none` joins the
 enum with no migration. That is more honest than writing `transfer`. Two

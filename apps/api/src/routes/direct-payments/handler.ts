@@ -2265,7 +2265,10 @@ export async function createLink(c: Ctx, body: CreateLinkRequest) {
     return c.json({ success: false, error: { code: "CUSTOMER_NOT_FOUND" } }, 404);
   }
 
-  const { token, created } = await ensureLink(db, actor.id, customer);
+  const { token, created } = await ensureLink(db, actor.id, {
+    usuario: customer.usuario,
+    providerCustomerId: String(customer.wisphubId),
+  });
   const url = `${c.env.PAGO_BASE_URL}/p/${token}`;
   /* payment-without-receipt D5: a reference is born with the link, from
      the phone this act just read, so the first message already carries

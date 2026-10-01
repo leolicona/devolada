@@ -293,7 +293,8 @@ describe("cash-at-stores US1 — the record: one payment, confirmed at once, act
     const { id } = (await (await call("/store/collections", collect({ amountCents: 50000 }))).json()).data;
     const [queued] = await db().select().from(payments).where(eq(payments.id, id));
     expect(queued).toMatchObject({ actionOutcome: "queued", actionError: "INTEGRATION_UNAVAILABLE", decidedAction: "register_and_reconnect:withhold" });
-    expect((await (await call(`/store/collections/${id}`)).json()).data.outcome).toBe("queued");
+    /* T071: queued, and it says the service will not come back */
+    expect((await (await call(`/store/collections/${id}`)).json()).data).toMatchObject({ outcome: "queued", reconnects: false });
 
     const captured = mockAction({ verify: false, formas: false });
     /* the first backoff is one minute; the cash method stays cached ten
@@ -405,6 +406,70 @@ describe("cash-at-stores US1 — the record: one payment, confirmed at once, act
   });
 });
 
+describe("cash-at-stores US1 — a record cut mid-way always ends settled and in the cash book (T072, SC-003, SC-005)", () => {
+  /* The row a request leaves when it dies right after its insert: leased,
+     unsettled, carrying what its settlement needs */
+  const stranded = (leaseMs: number) => ({
+    status: "validating" as const,
+    reconciliationClass: null,
+    registeredCents: null,
+    confirmedAt: null,
+    actionOutcome: null,
+    amountCents: DEBT,
+    receivedCents: null,
+    invoiceCents: 49900,
+    carriedBalanceCents: 29900,
+    wisphubInvoiceId: 42,
+    customerUsuario: LUPE.usuario,
+    nextAttemptAt: new Date(Date.now() + leaseMs),
+  });
+  const movementsOf = async (paymentId: string) =>
+    db().select().from(storeLedger).where(eq(storeLedger.paymentId, paymentId));
+
+  it("the retry with the same key finishes it: settled, one fee, one movement, the action run — and its folio", async () => {
+    const { business, shop, call } = await counter();
+    const row = await seedStorePayment(business, shop.store, stranded(-MINUTE));
+    const captured = mockAction({ verify: "Activo" });
+    const res = await call("/store/collections", collect({ collectionKey: row.collectionKey }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ id: row.id, folio: row.folio });
+    const [after] = await db().select().from(payments).where(eq(payments.id, row.id));
+    expect(after).toMatchObject({ status: "confirmed", reconciliationClass: "exact", actionOutcome: "done" });
+    expect(captured.accion).toBe(1);
+    expect(await movementsOf(row.id)).toHaveLength(1);
+    const fees = await db().select().from(creditEntries).where(eq(creditEntries.paymentId, row.id));
+    expect(fees).toHaveLength(1);
+  });
+
+  it("a row its first try still holds is answered with its folio and never settled twice", async () => {
+    const { business, shop, call } = await counter();
+    const row = await seedStorePayment(business, shop.store, stranded(MINUTE));
+    const res = await call("/store/collections", collect({ collectionKey: row.collectionKey }));
+    expect(res.status).toBe(200);
+    const [after] = await db().select().from(payments).where(eq(payments.id, row.id));
+    expect(after.status).toBe("validating");
+    expect(await movementsOf(row.id)).toHaveLength(0);
+  });
+
+  it("the sweep settles a stranded row past its lease, and books a settled row that lacks its movement", async () => {
+    const { business, shop } = await counter();
+    const lost = await seedStorePayment(business, shop.store, stranded(-MINUTE));
+    const unbooked = await seedStorePayment(business, shop.store, {
+      customerUsuario: "otro@wifiplus",
+      createdAt: new Date(Date.now() - 10 * MINUTE),
+    });
+    const { sweepUnsettledCollections } = await import("../src/store-collections");
+    const report = await sweepUnsettledCollections(env as unknown as Bindings);
+    expect(report).toMatchObject({ settled: 1, movements: 1, failed: 0 });
+    const [after] = await db().select().from(payments).where(eq(payments.id, lost.id));
+    expect(after).toMatchObject({ status: "confirmed", actionOutcome: "queued" });
+    expect(await movementsOf(lost.id)).toHaveLength(1);
+    expect(await movementsOf(unbooked.id)).toHaveLength(1);
+    /* and the queue takes the action from here, the same minute */
+    expect(after.nextAttemptAt!.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+});
+
 describe("cash-at-stores US1 — status and receipt", () => {
   it("the status maps all six outcomes, and another store's payment is 404", async () => {
     const { business, shop, call } = await counter();
@@ -426,6 +491,30 @@ describe("cash-at-stores US1 — status and receipt", () => {
     expect(res.status).toBe(404);
     const receipt = await (await app()).request(`/store/collections/${rows.reconnected.id}/receipt`, { headers: other.headers }, env);
     expect(receipt.status).toBe(404);
+  });
+
+  it("a queued payment promises only what its verdict decided — on the status and in the receipt (T071)", async () => {
+    const { business, shop, call } = await counter();
+    const cases = [
+      { decidedAction: "register_and_reconnect:reconnect", reconnects: true, sentence: "Tu servicio se reactivará en unos minutos." },
+      {
+        decidedAction: "register_and_reconnect:withhold",
+        status: "partial" as const,
+        reconciliationClass: "short" as const,
+        reconnects: false,
+        sentence: "Como no cubre todo tu adeudo, tu servicio sigue sin reactivarse.",
+      },
+      { decidedAction: "register_only", reconnects: false, sentence: "WiFi Plus lo aplicará en su sistema." },
+    ];
+    for (const { reconnects, sentence, ...over } of cases) {
+      const row = await seedStorePayment(business, shop.store, { actionOutcome: "queued", ...over });
+      const status = collectionStatusResponse.parse((await (await call(`/store/collections/${row.id}`)).json()).data);
+      expect(status).toMatchObject({ outcome: "queued", reconnects });
+      mockCustomer({ usuario: LUPE.usuario, telefono: null });
+      const receipt = collectionReceiptResponse.parse((await (await call(`/store/collections/${row.id}/receipt`)).json()).data);
+      expect(receipt.text).toContain(sentence);
+      if (!reconnects) expect(receipt.text).not.toContain("se reactivará");
+    }
   });
 
   it("the receipt is the template filled for this payment, and the next one uses the operator's new template", async () => {

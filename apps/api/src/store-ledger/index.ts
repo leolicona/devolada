@@ -124,14 +124,21 @@ export async function heldByPair(
    earned since its last confirmed hand-over to this business — the
    `store_fee_cents` of its confirmed or partial cash payments since that
    movement's time, or from the start when there is none. */
-export async function feesSinceHandoverCents(db: DB, storeId: string, businessId: string): Promise<number> {
+/* The time of the last confirmed hand-over's movement — where "since the
+   last hand-over" starts, for the fees and for the movements they open
+   into (cash-at-stores T079, FR-037) */
+export async function lastHandoverAt(db: DB, storeId: string, businessId: string): Promise<Date | null> {
   const [last] = await db
     .select({ at: max(storeLedger.createdAt) })
     .from(storeLedger)
     .where(
       and(eq(storeLedger.storeId, storeId), eq(storeLedger.businessId, businessId), eq(storeLedger.kind, "handover")),
     );
-  const since = last?.at ?? null;
+  return last?.at ?? null;
+}
+
+export async function feesSinceHandoverCents(db: DB, storeId: string, businessId: string): Promise<number> {
+  const since = await lastHandoverAt(db, storeId, businessId);
   const [row] = await db
     .select({ total: sum(payments.storeFeeCents) })
     .from(payments)
@@ -172,7 +179,7 @@ export function decodeLedgerCursor(raw: string | undefined): LedgerCursor | null
 
 export async function movementsOf(
   db: DB,
-  filter: { storeId: string; businessIds: string[]; kind?: Movement["kind"] },
+  filter: { storeId: string; businessIds: string[]; kind?: Movement["kind"]; since?: Date },
   cursor: LedgerCursor | null,
   limit: number,
 ): Promise<{ rows: Movement[]; next: LedgerCursor | null }> {
@@ -185,6 +192,8 @@ export async function movementsOf(
         eq(storeLedger.storeId, filter.storeId),
         inArray(storeLedger.businessId, filter.businessIds),
         ...(filter.kind ? [eq(storeLedger.kind, filter.kind)] : []),
+        /* T079: what a number since the last hand-over stands for */
+        ...(filter.since ? [gte(storeLedger.createdAt, filter.since)] : []),
         ...(cursor
           ? [
               or(
@@ -215,7 +224,10 @@ export async function ledgerRowsOf(db: DB, movements: (typeof storeLedger.$infer
       ? db
           .select({ id: payments.id, folio: payments.folio, customerName: payments.customerName, storeFeeCents: payments.storeFeeCents })
           .from(payments)
-          .where(inArray(payments.id, paymentIds))
+          /* T102 (constitution V): the ids come from movements already
+             scoped to one store and its businesses, and the query still
+             carries the rule itself */
+          .where(and(inArray(payments.id, paymentIds), inArray(payments.businessId, businessIds)))
       : [],
     authorIds.length ? db.select({ id: userTable.id, email: userTable.email }).from(userTable).where(inArray(userTable.id, authorIds)) : [],
     businessIds.length ? db.select({ id: businesses.id, name: businesses.name }).from(businesses).where(inArray(businesses.id, businessIds)) : [],

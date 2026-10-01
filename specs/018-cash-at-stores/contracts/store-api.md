@@ -172,11 +172,21 @@ it every 3 s while `outcome` is `queued`.
 ```json
 { "success": true, "data": {
   "id": "…", "folio": "DV-7K2Q9M", "createdAt": 1790000000000,
+  "businessName": "WiFi Plus",
   "customerName": "Guadalupe Reyes", "amountCents": 79800, "feeCents": 1500,
   "class": "exact", "remainingCents": 0,
-  "outcome": "reconnected"
+  "outcome": "reconnected", "reconnects": true
 } }
 ```
+
+*(Added 2026-10-01, `/speckit-converge` T071 and T101.)*
+- `businessName` names the business the payment belongs to (the result
+  screen and the receipt read it).
+- `reconnects` says whether the action the class decided brings the
+  service back (`decided_action`, D10): `false` under `register_only` or
+  below the business's threshold. Every row carries it from the record on,
+  so a `queued` answer never promises a reconnection the verdict did not
+  decide. The receipt's `{estado}` follows the same rule.
 
 `outcome` is one of six values. It is mapped from the row's
 `actionOutcome` and the action decided for its class (FR-025,
@@ -232,9 +242,17 @@ The app calls it only when the shopkeeper taps *Enviar comprobante*.
 There is one entry per business the store holds cash for, or collects
 for.
 
-### `GET /store/ledger?cursor=<opaque>`
+*(Added 2026-10-01, `/speckit-converge` T079.)* Each entry also carries
+`feesSince`: the time (ms) of the last confirmed hand-over's movement,
+where `feesSinceHandoverCents` starts counting, or `null` before the first
+one. *Mi caja*'s fees open `/store/ledger?businessId=…&kind=collection&since=<feesSince>`.
 
-Newest first, 20 per page.
+### `GET /store/ledger?cursor=<opaque>&businessId=&kind=&since=`
+
+Newest first, 20 per page. `businessId` and `kind` narrow it to what a
+number in *Mi caja* stands for (FR-037); `since` (ms, added by T079) keeps
+only movements from that time on. A `businessId` outside the store's
+book → 404.
 
 ```json
 { "success": true, "data": {
@@ -253,3 +271,22 @@ Newest first, 20 per page.
 - **201** `{ id, status: "pending" }`.
 - **409 `HANDOVER_PENDING`.**
 - **400 `AMOUNT_EXCEEDS_HELD`.**
+
+### `GET /store/handovers?businessId=<id>&cursor=<opaque>`
+
+*(Added 2026-10-01, `/speckit-converge` T080; US5/AC6.)* The store's own
+hand-overs to one business in its book, newest first, 20 per page. A
+dispute writes no movement (D20), so this is where the store keeps reading
+the business's note after the next hand-over is resolved — the history
+the business reads at `GET /cash-points/stores/:storeId/history`.
+
+```json
+{ "success": true, "data": {
+  "businessName": "WiFi Plus",
+  "handovers": [ { "id": "…", "cents": 200000, "status": "disputed", "declaredAt": 1790000000000, "resolvedAt": 1790020000000, "note": "Faltaron $200 en el sobre" } ],
+  "nextCursor": null
+} }
+```
+
+A `businessId` outside the store's book → 404 `NOT_FOUND`. Served whether
+or not the business's channel is still on, like the rest of the cash book.

@@ -1,4 +1,144 @@
 <!--
+Sync Impact Report (v1.9.1, 2026-10-01)
+- Version change: 1.9.0 → 1.9.1 — PATCH. One sentence of Principle V's
+  store bullet is reworded. It adds no reach the spec had not already
+  given the store; it only says it plainly.
+- Source: /speckit-analyze on specs/018-cash-at-stores, finding M2.
+  "It reaches only the businesses the platform operator switched the cash
+  channel on for" could be read as "only while the channel is on". That
+  reading would forbid the hand-over of cash still held after the channel
+  is switched off, which 018's spec requires. The creator approved the
+  correction on 2026-10-01.
+- Modified sections:
+  · V, the store bullet — "It reaches only the businesses the platform
+    operator switched the cash channel on for." → "It reaches only the
+    businesses the platform operator has switched the cash channel on for.
+    After the channel is switched off, it reaches such a business only to
+    account for and hand over the cash it still holds for it."
+- What it does not change: what the store sees of customers; no counter
+  work for a business whose channel is off.
+- Templates: none touched.
+- Follow-up TODOs: carried unchanged from v1.9.0.
+-->
+
+<!--
+Sync Impact Report (v1.9.0, 2026-10-01)
+- Version change: 1.8.0 → 1.9.0 — MINOR. One sub-bullet of Principle V is
+  materially expanded: what a store may see of a business's customers
+  grows from two things to three. Nothing is removed, redefined or
+  renumbered. Precedent: v1.6.0, also MINOR, which admitted a third
+  cross-business statistic in the same principle.
+- Source: specs/018-cash-at-stores. /speckit-analyze (2026-10-01) found
+  C1 (CRITICAL): the receipt's WhatsApp link would carry the customer's
+  phone from the business's system, which v1.8.0's store bullet did not
+  admit. The analysis offered two ways out:
+  (a) never use the system's phone;
+  (b) amend V.
+  The creator chose (b) the same day, "no necesitamos guardar el
+  teléfono", and asked for the message to be a default the operator can
+  change in /operador.
+- What this decides:
+  · A store may receive one customer's phone, only for a payment that
+    store recorded.
+  · The phone is read from the business's system at the moment the
+    receipt is sent, through the integration's existing live phone read,
+    and only addresses that receipt.
+  · It is never stored: not on the payment row, not per customer, not as
+    a hash. `payment-without-receipt` D1/D4 stand unchanged.
+- What it does not change: the search still never returns a phone; a
+  phone the shopkeeper types still never reaches the server; the three
+  cross-business statistics; tenant filtering; authorization by area.
+- Modified sections:
+  · V. Tenant Isolation and Authorization by Area, the store bullet — "it
+    sees only two things: what a typed search returns (name, usuario,
+    zone), and one customer's debt" → "it sees only three things: what a
+    typed search returns (name, usuario, zone); one customer's debt; and,
+    for a payment it recorded, that customer's phone. The phone is read
+    from the business's system when the receipt is sent, used only to
+    address that receipt, and never stored."
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅; spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(018-ARTIFACTS): specs/018-cash-at-stores must stop copying the phone
+  onto the cash payment row and read it live for the receipt. Its plan's
+  Constitution Check row V must cite v1.9.0. Done in the same commit as
+  this amendment.
+  Carried unchanged from v1.8.0: TODO(CLAUDE-MD-WORKERS), TODO(TD-005),
+  TODO(BREATH-AMPLITUDE), and who may be admitted as a business.
+-->
+
+<!--
+Sync Impact Report (v1.8.0, 2026-10-01)
+- Version change: 1.7.1 → 1.8.0 — MINOR. Three sections are materially
+  expanded: the Purpose paragraph, Principle V (one bullet added, one word
+  in the first bullet) and the stack table (two rows). No principle is
+  added, removed, redefined or renumbered. Precedents: v1.3.0, v1.5.0 and
+  v1.6.0, also MINOR, for a table or a bullet that stopped describing the
+  product as it will be built.
+- Source: specs/018-cash-at-stores. The plan's Constitution Check blocked
+  on the Purpose, Principle V and the stack table, and its Complexity
+  Tracking proposed these three amendments. The creator ran this command
+  on 2026-10-01, after the plan. The amendment leads the implementation on
+  purpose, as v1.1.0, v1.3.0, v1.5.0 and v1.6.0 did: the code catches up
+  under specs/018-cash-at-stores/tasks.md.
+- What this decides:
+  · A second way to collect exists: cash at a store of a network Devolada
+    runs. Its truth is the store's word, not Banxico's, and the business
+    confirms each hand-over. The money still never touches Devolada.
+  · A store is a second kind of actor, never a member of a business. It
+    is resolved from its own record, refused by business routes, and
+    reaches only the businesses the operator switched the channel on for.
+    Of their customers, it sees what a typed search returns and one
+    customer's debt.
+  · `stores` and `store_invitations` are platform rows without
+    `business_id`. Every movement of a business's money carries it.
+  · A fifth surface and Worker, `apps/red`, and Better Auth's `username`
+    plugin for the shopkeeper's phone sign-in.
+- What it does not change: tenant filtering on every business query;
+  authorization by area for members; the three cross-business statistics;
+  the operator named by deploy; the additive migration rule (018 adds no
+  rebuild, by its research D11); Principles I–IV and VI–IX's rules.
+- Modified sections:
+  · Purpose — one sentence added after "validates every transfer": "A
+    business may also collect in cash at a store of the network Devolada
+    runs: there the store's word confirms the payment, and the business
+    confirms each hand-over of the cash. The money never touches Devolada
+    either way."
+  · III. One Contract, Pure Routers, first bullet — "imported by the admin
+    and the payment page" → "imported by the admin, the payment page and
+    the store app". A count word that follows from the new surface.
+  · V. Tenant Isolation and Authorization by Area — first bullet: "The
+    actor is resolved" → "The business actor is resolved". One bullet
+    added after it: the store actor, its reach, and the platform rows
+    that carry no `business_id`.
+  · IX. The Core Speaks Generic; Adapters Translate, first bullet — the
+    core's list gains "the store channel". The store channel asks the
+    integration by capability, like the rest of the core.
+  · Technology Stack & Constraints — Auth row gains the `username` plugin;
+    Frontend row gains `apps/red`.
+  · Development Workflow & Quality Gates, second bullet — "the four
+    Workers" → "the five Workers".
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅ (Constitution Check is filled at plan time
+  from this file); spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(018-PLAN-CHECK): specs/018-cash-at-stores/plan.md's Constitution
+  Check marks the Purpose, V, the Frontend and Auth rows and the gates as
+  ⛔, pending this amendment. They must cite v1.8.0 and turn ✅. That is
+  a spec artifact edit, outside this command.
+  TODO(CLAUDE-MD-WORKERS): CLAUDE.md still says "all four Workers" and
+  lists no `apps/red` dev command. It is updated by 018's tasks, with the
+  Worker it describes.
+  TODO(TD-005): still open from v1.0.0 — spec-lint runs warning-only until
+  the debt it names is registered with /speckit-debt-log.
+  TODO(BREATH-AMPLITUDE): carried unchanged from v1.1.0.
+  Carried from v1.2.0, still open: who may be admitted as a business, and
+  whether identity is checked before one can collect.
+-->
+
+<!--
 Sync Impact Report (v1.7.1, 2026-09-27)
 - Version change: 1.7.0 → 1.7.1 — PATCH. One sentence of Principle IX is
   reworded; no rule is added or removed.
@@ -370,7 +510,10 @@ Sync Impact Report (v1.1.0)
 # Devolada Constitution
 
 Devolada lets Mexican businesses of any kind collect payments by SPEI and
-validates every transfer. What a business's own system does with a payment
+validates every transfer. A business may also collect in cash at a store of
+the network Devolada runs: there the store's word confirms the payment, and
+the business confirms each hand-over of the cash. The money never touches
+Devolada either way. What a business's own system does with a payment
 goes through an adapter for that system: today there is one, WispHub, for
 ISPs (Principle IX). It is built by one developer working with AI agents;
 that developer decides. Ask for decisions, not approvals.
@@ -415,7 +558,8 @@ law removes the class of error rather than testing for it.
 - Every API resource has `routes/<area>/{index,handler,schema}.ts`. The router
   is pure: middleware, `zValidator`, wiring, nothing else. Logic lives in the
   handler. Schemas are zod and are THE contract: exported from `@devolada/api`
-  (`./<area>-schema`), imported by the admin and the payment page for types,
+  (`./<area>-schema`), imported by the admin, the payment page and the store
+  app for types,
   and used by MSW handlers and Playwright stubs to validate every fixture.
 - Responses wear one envelope: `{ success: true, data }` or
   `{ success: false, error: { code } }` with `UPPER_SNAKE` codes. Better Auth's
@@ -469,9 +613,24 @@ worth less than no verdict. Each layer answers only the questions it can.
 ### V. Tenant Isolation and Authorization by Area
 
 - Every business table carries `business_id`; every business query filters by
-  the actor's business. The actor is resolved from Better Auth's membership
-  and active organization on every request (`requireSession`), with the
-  membership's role riding along.
+  the actor's business. The business actor is resolved from Better Auth's
+  membership and active organization on every request (`requireSession`),
+  with the membership's role riding along.
+- A store is the one actor that is not a member of a business:
+  - It is resolved from its own record on every request (`requireStore`),
+    never from a membership, and a business route refuses it.
+  - It reaches only the businesses the platform operator has switched the
+    cash channel on for. After the channel is switched off, it reaches
+    such a business only to account for and hand over the cash it still
+    holds for it.
+  - Of their customers, it sees only three things: what a typed search
+    returns (name, usuario, zone); one customer's debt; and, for a payment
+    it recorded, that customer's phone. The phone is read from the
+    business's system when the receipt is sent, used only to address that
+    receipt, and never stored.
+  - `stores` and `store_invitations` are platform rows without
+    `business_id`. Every movement of a business's money carries it: the
+    payment, the store's cash book and the hand-over.
 - Authorization names an area and an action (`requireArea("payments",
   "operate")`), never a button. `auth/role-matrix.ts` is the single source of
   truth: pure data, imported by the admin as `@devolada/api/role-matrix`, so it
@@ -586,7 +745,7 @@ loudly, in the UI and in the deploy log.
 ### IX. The Core Speaks Generic; Adapters Translate
 
 - Devolada is the **core**: payment links, SPEI validation, payments, the
-  panel, the payer's page, the collections API. An **adapter** connects the
+  panel, the payer's page, the collections API, the store channel. An **adapter** connects the
   core to one provider's system (today `apps/api/src/wisphub/`, for ISPs).
   The core never assumes the business is an ISP.
 - What belongs to one provider lives inside its adapter: its endpoints and
@@ -635,8 +794,8 @@ Complexity Tracking.
 | Runtime | Cloudflare Workers, `compatibility_date` 2025-05-01, `nodejs_compat` where Better Auth needs it |
 | API | Hono 4 + `@hono/zod-validator`; `apps/api` — the product API, the SPEI validation engine (Consta, at `src/consta/`, attributed by `business_id` and reachable only in-process), and the every-minute cron sweeps |
 | Data | D1 via Drizzle ORM (`sqlite`), one database, migrations generated by `drizzle-kit`, additive — the per-PR preview applies them to the live dev database while the deployed Worker keeps serving; R2 for transfer proofs behind signed URLs; Workers AI for receipt reading (the models are a var; the platform operator picks one of them in `/operador`) |
-| Auth | Better Auth 1.6: email + password with OTP verification, passkeys (`@better-auth/passkey`), organization plugin as the tenant twin; sessions in our D1 |
-| Frontend | React 19, Vite 6, Tailwind CSS 4, shadcn/ui (new-york, lucide) over Radix, TanStack Router + Query; `apps/admin` (panel) and `apps/pago` (public payment page) served as assets-only Workers with SPA fallback |
+| Auth | Better Auth 1.6: email + password with OTP verification, passkeys (`@better-auth/passkey`), organization plugin as the tenant twin, `username` plugin for the shopkeeper's phone sign-in; sessions in our D1 |
+| Frontend | React 19, Vite 6, Tailwind CSS 4, shadcn/ui (new-york, lucide) over Radix, TanStack Router + Query; `apps/admin` (panel), `apps/pago` (public payment page) and `apps/red` (the shopkeeper's app, phone-first) served as assets-only Workers with SPA fallback |
 | Shared UI | `@devolada/ui`: tokens, base stylesheet and atoms consumed by every surface |
 | Landing | `apps/landing`: Astro (static output, no adapter) on an assets Worker with a script in front for the host redirect, the channel tag and the headers; consumes `@devolada/ui` tokens, stylesheet, atoms and recipes at build; ships no client framework |
 | Language | TypeScript 5.7 strict, ESM, `verbatimModuleSyntax`; Node 22; pnpm 10 workspace |
@@ -659,7 +818,7 @@ Additional constraints:
   typecheck, unit/component/API tests, build. All MUST pass; none may be
   skipped, disabled or quarantined to get green.
 - With `PREVIEW_ENABLED`, every PR uploads no-traffic preview versions of the
-  four Workers against the dev database; migrations are applied early
+  five Workers against the dev database; migrations are applied early
   because they are additive.
 - Merge to `main` deploys `dev`: the browser layer (`pnpm e2e`) and the
   passkey ceremony (`pnpm e2e:passkey`) gate the deploy, then migrations,
@@ -693,4 +852,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.7.1 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-09-27
+**Version**: 1.9.1 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01

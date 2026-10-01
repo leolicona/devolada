@@ -1901,6 +1901,8 @@ async function settlePanelPayment(
     paymentRegisteredAt: attempt.paymentRegistered ? now : null,
     nextAttemptAt: schedule.nextAttemptAt,
     actionError: attempt.error,
+    /* bug: queue-retry-forgets-action — what every retry runs again */
+    decidedAction: hypothesisOf(action, settlement.reconnect),
     ...(outcome === "done" ? { actionDoneAt: now } : {}),
   });
 }

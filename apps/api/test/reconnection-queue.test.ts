@@ -258,7 +258,7 @@ describe("US-C03: the sweep only touches what is due", () => {
     });
 
     const quiet = await sweepReconnections(env);
-    expect(quiet).toEqual({ claimed: 0, reconnected: 0, stillQueued: 0, failed: 0 });
+    expect(quiet).toEqual({ claimed: 0, reconnected: 0, registered: 0, stillQueued: 0, failed: 0 });
 
     /* Due now: the sweep claims it and leases it two minutes ahead (D4) */
     await db

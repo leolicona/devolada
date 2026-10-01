@@ -574,6 +574,15 @@ export const payments = sqliteTable(
        "register_and_reconnect:withhold" / "register_only"). Null on
        every row that really dispatched. */
     observedAction: text("observed_action"),
+    /* bug: queue-retry-forgets-action — the action a dispatch decided, in
+       the same words as `observed_action` (`hypothesisOf`), written at
+       every dispatch decision (the verdict's first attempt, "Ejecutar
+       ahora", the accept of a held payment) and read back by every retry.
+       The adapter's default is to reconnect, so a retry that forgot the
+       decision gave the service back to a customer the business's rule
+       left cut. Null on rows queued before the fix: the sweep falls back
+       to `observed_action`, then to reconnect, as it always did. */
+    decidedAction: text("decided_action"),
     /* Born nullable with no semantics (D6): phase 4's child spec defines
        exacto / corto / excedente; reserved now so the busiest table
        migrates once. */

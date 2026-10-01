@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { businesses, payments } from "../db/schema";
 import { integrationsFor } from "../integrations/store";
-import { settleDispatch } from "../integrations/dispatch";
+import { outcomeOf, parseHypothesis, settleDispatch } from "../integrations/dispatch";
 /* provider-address-per-isp D4: the sweep already loads each business's
    integration row, so it passes that row — never a platform value. */
 import { wisphubFor } from "../wisphub/factory";
@@ -33,9 +33,20 @@ const minutes = (n: number) => n * 60 * 1000;
 export type SweepReport = {
   claimed: number;
   reconnected: number;
+  /* bug: queue-retry-forgets-action — registered without reconnecting,
+     because the row's decision said so */
+  registered: number;
   stillQueued: number;
   failed: number;
 };
+
+/* bug: queue-retry-forgets-action — the decision a retry runs. The row's
+   own, written when the dispatch was decided; a row queued before the
+   fix has none, and keeps the reconnect it was always retried with
+   (the fallback `dispatchObserved` already used). */
+export function decidedActionOf(row: { decidedAction: string | null; observedAction: string | null }) {
+  return parseHypothesis(row.decidedAction ?? row.observedAction ?? "register_and_reconnect:reconnect");
+}
 
 /* The first attempt, made inline when the store records the charge
    (charge-record D2). Shares the scheduling rules with the sweep. */
@@ -55,7 +66,7 @@ export function firstAttemptSchedule(
 
 export async function sweepReconnections(env: Bindings, now: Date = new Date()): Promise<SweepReport> {
   const db = drizzle(env.DB);
-  const report: SweepReport = { claimed: 0, reconnected: 0, stillQueued: 0, failed: 0 };
+  const report: SweepReport = { claimed: 0, reconnected: 0, registered: 0, stillQueued: 0, failed: 0 };
 
   const due = await db
     .select()
@@ -116,6 +127,9 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     const business = ispById.get(charge.businessId);
     if (!business) continue; /* unreachable: the FK guarantees it */
 
+    /* bug: queue-retry-forgets-action — the verdict's decision, never
+       the adapter's default */
+    const { action, reconnect } = decidedActionOf(charge);
     const result = await attemptReconnection(
       wisphubFor(integration, env),
       business,
@@ -135,12 +149,36 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
         invoiceId: charge.wisphubInvoiceId,
         paymentRegistered: charge.paymentRegisteredAt !== null,
       },
+      reconnect,
     );
     /* The payment landing is progress worth keeping even when the
        attempt as a whole did not convert (D8) */
     const paymentRegisteredAt = result.paymentRegistered
       ? (charge.paymentRegisteredAt ?? now)
       : null;
+
+    /* bug: queue-retry-forgets-action — a register-only retry ends when
+       the money lands: `done` under register_only, `withheld` under a
+       threshold's withhold (integrations-hub D7). Both terminal, like a
+       reconnection. */
+    if (result.status === "withheld") {
+      const outcome = outcomeOf(result.status, action);
+      await db
+        .update(payments)
+        .set({
+          actionOutcome: outcome,
+          ...(outcome === "done" ? { actionDoneAt: now } : {}),
+          actionAttempts: charge.actionAttempts + 1,
+          wisphubInvoiceId: result.invoiceId,
+          paymentRegisteredAt,
+          nextAttemptAt: null,
+          actionError: null,
+        })
+        .where(eq(payments.id, charge.id));
+      await settleDispatch(db, charge.id, "acked", null, now);
+      report.registered++;
+      continue;
+    }
 
     if (result.status === "reconnected") {
       await db

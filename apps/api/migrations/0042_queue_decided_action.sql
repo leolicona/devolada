@@ -1,0 +1,1 @@
+ALTER TABLE `payments` ADD `decided_action` text;

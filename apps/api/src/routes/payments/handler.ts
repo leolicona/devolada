@@ -17,7 +17,7 @@ import {
 import { wisphubFor } from "../../wisphub/factory";
 import { attemptReconnection } from "../../wisphub/reconnection";
 import { pendingVersion } from "../../wisphub/cache";
-import { firstAttemptSchedule } from "../../reconnection/queue";
+import { decidedActionOf, firstAttemptSchedule } from "../../reconnection/queue";
 import { webhookDeliveries } from "../../db/schema";
 import { attemptDelivery, requeueDelivery } from "../../webhooks/queue";
 import { isVerdictEvent } from "../../webhooks/events";
@@ -439,9 +439,8 @@ async function dispatchObserved(
   extra: Partial<typeof payments.$inferInsert> = {},
 ) {
   const actorId = business.id;
-  const { action, reconnect } = parseHypothesis(
-    row.observedAction ?? "register_and_reconnect:reconnect",
-  );
+  const decided = row.observedAction ?? "register_and_reconnect:reconnect";
+  const { action, reconnect } = parseHypothesis(decided);
   await recordDispatch(db, {
     businessId: actorId,
     integrationId: integration.id,
@@ -472,6 +471,9 @@ async function dispatchObserved(
       paymentRegisteredAt: attempt.paymentRegistered ? (row.paymentRegisteredAt ?? now) : null,
       nextAttemptAt: schedule.nextAttemptAt,
       actionError: attempt.error,
+      /* bug: queue-retry-forgets-action — the sweep retries this, not
+         the adapter's default */
+      decidedAction: decided,
       ...(outcome === "done" ? { actionDoneAt: now } : {}),
       ...extra,
     })
@@ -616,7 +618,10 @@ export async function retryAction(c: Ctx, id: string) {
   }
 
   /* integrations-hub D6: the operator's retry is a NEW dispatch
-     decision — its own ledger row, acked by the sweep's terminal. */
+     decision — its own ledger row, acked by the sweep's terminal.
+     bug: queue-retry-forgets-action — it runs the decision the row
+     already carries, which is also what the sweep will run; it used to
+     record `register_and_reconnect` whatever the row decided. */
   const integration = await integrationOf(db, actor.id);
   if (integration) {
     await recordDispatch(db, {
@@ -624,7 +629,7 @@ export async function retryAction(c: Ctx, id: string) {
       integrationId: integration.id,
       paymentId: row.id,
       class: row.reconciliationClass ?? "exact",
-      action: "register_and_reconnect",
+      action: decidedActionOf(row).action,
     });
   }
   const [updated] = await db

@@ -18,7 +18,7 @@ operator's retry records the row's own decision in the ledger.
 | File | Change | Notes |
 |------|--------|-------|
 | `apps/api/src/db/schema.ts` | modified | `payments.decided_action`, nullable text, the `hypothesisOf` vocabulary |
-| `apps/api/migrations/0042_queue_decided_action.sql` | added | one `ALTER TABLE … ADD` — additive |
+| `apps/api/migrations/0043_queue_decided_action.sql` | added | one `ALTER TABLE … ADD` — additive (renumbered from 0042 on 2026-10-01: spec 017 took 0042 on `main` first) |
 | `apps/api/src/reconnection/queue.ts` | modified | `decidedActionOf(row)`; the sweep passes `reconnect`; a `withheld` answer is terminal (`done` / `withheld`) and acked; the report gains `registered` |
 | `apps/api/src/direct-payments/validation.ts` | modified | `settlePanelPayment`'s dispatch writes `decidedAction` |
 | `apps/api/src/routes/payments/handler.ts` | modified | `dispatchObserved` writes `decidedAction`; `retryAction` records the row's decided action in the ledger |

@@ -9,12 +9,19 @@ import {
   proofUploadResponse,
 } from "@devolada/api/direct-payments-schema";
 import { BANKS } from "@devolada/api/direct-payments-schema";
+
+/* confirmation-hierarchy D15: the payer's list is the vocabulary without
+   Banxico, which holds no retail payer's account */
+const PAYER_BANKS = BANKS.filter((b) => !/banxico/i.test(b));
 import { App } from "../src/App";
 import { fail, handlers, ok, server } from "./msw";
 import { expectNoViolations } from "./a11y";
 
 /* docs/legacy/direct-payment/direct-payment.spec.md scenario 15 (US-D01,
-   US-D03, D9, D10): the page's four main flows, in es-MX "pago" copy. */
+   US-D03, D9, D10): the page's four main flows, in es-MX "pago" copy.
+   confirmation-hierarchy US4 (T027, T028): the assertions that named the
+   old words now name the payer's vocabulary — no Banxico, no internet,
+   the business by its name — and the bank list has no Banxico. */
 
 /* D19 put the remembered step in localStorage, so a test that walks to
    step 2 would otherwise start the next one there. */
@@ -173,8 +180,8 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     const offered = [...field.querySelectorAll("option")]
       .map((o) => (o as HTMLOptionElement).value)
       .filter(Boolean);
-    expect(offered).toHaveLength(BANKS.length);
-    expect(new Set(offered)).toEqual(new Set(BANKS));
+    expect(offered).toHaveLength(PAYER_BANKS.length);
+    expect(new Set(offered)).toEqual(new Set(PAYER_BANKS));
     for (const wrong of ["Nu", "BBVA", "Banorte"]) expect(offered).not.toContain(wrong);
 
     /* Nothing can be submitted until one is chosen */
@@ -625,7 +632,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
        "Banxico has not published yet" — an open form at minute two reads
        as an accusation. The doors are present; nothing is open. */
     expect(
-      await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 }),
+      await screen.findByText(/seguimos buscando tu transferencia/i, {}, { timeout: 8000 }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no válido/i)).not.toBeInTheDocument();
@@ -645,7 +652,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     server.use(...silentThen({ receiptStatus: "Aceptada" }, paid));
     await uploadReceipt();
 
-    await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
+    await screen.findByText(/seguimos buscando tu transferencia/i, {}, { timeout: 8000 });
     await userEvent.click(screen.getByRole("button", { name: /ver los datos enviados/i }));
     await userEvent.click(screen.getByRole("button", { name: /corregir estos datos/i }));
 
@@ -670,7 +677,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     server.use(...silentThen({ receiptStatus: "Aceptada", claimedAmountCents: 40000 }, paid));
     await uploadReceipt();
 
-    await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
+    await screen.findByText(/seguimos buscando tu transferencia/i, {}, { timeout: 8000 });
     await userEvent.click(screen.getByRole("button", { name: /ver los datos enviados/i }));
     await userEvent.click(screen.getByRole("button", { name: /corregir estos datos/i }));
 
@@ -737,12 +744,12 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     await uploadReceipt();
 
     expect(
-      await screen.findByText(/banxico no publicó la transferencia/i, {}, { timeout: 8000 }),
+      await screen.findByText(/no pudimos confirmar la transferencia a tiempo/i, {}, { timeout: 8000 }),
     ).toBeInTheDocument();
     expect(screen.getByText(/puede registrar tu pago a mano/i)).toBeInTheDocument();
   });
 
-  it("US-D15 D9: a release retires the clock and says the internet is back", async () => {
+  it("US-D15 D9: a release retires the clock and says the service is back (confirmation-hierarchy US4)", async () => {
     const paid: unknown[] = [];
     /* Attempt 5 opens the form for everyone else; a released ride shows
        its one fused sentence instead — evidence and consequence together */
@@ -759,7 +766,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     await uploadReceipt();
 
     expect(
-      await screen.findByText(/tu internet ya volvió/i, {}, { timeout: 8000 }),
+      await screen.findByText(/tu servicio ya volvió/i, {}, { timeout: 8000 }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
   });
@@ -896,7 +903,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
       minute: "2-digit",
     });
     expect(copy.textContent).toContain(`alrededor de las ${hour}`);
-    expect(copy.textContent).toMatch(/contactar a tu proveedor/i);
+    expect(copy.textContent).toMatch(/contactar a WifiPlus con tu comprobante/i);
     /* no form in the foreground — the doors stay */
     expect(screen.queryByLabelText(/clave de rastreo/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /corregir el comprobante en revisión/i })).toBeInTheDocument();
@@ -936,7 +943,7 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
     server.use(...silentThen({}, paid));
     await uploadReceipt();
 
-    await screen.findByText(/validación en proceso/i, {}, { timeout: 8000 });
+    await screen.findByText(/seguimos buscando tu transferencia/i, {}, { timeout: 8000 });
     /* D7: the payer who knows the receipt is wrong does not wait out a
        validation they already know is lost */
     await userEvent.click(screen.getByRole("button", { name: /corregir el comprobante en revisión/i }));
@@ -1109,9 +1116,10 @@ describe("US-D03: submitting transfer data, verifying, and the green moment", ()
       await screen.findByText("Verificación expirada", {}, { timeout: 8000 }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/no encontramos tu transferencia en banxico/i),
+      screen.getByText(/no pudimos confirmar tu transferencia a tiempo/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/contacta a tu proveedor/i)).toBeInTheDocument();
+    /* confirmation-hierarchy D14: the business by its own name */
+    expect(screen.getByText(/contacta a WifiPlus con tu comprobante/i)).toBeInTheDocument();
   });
 });
 

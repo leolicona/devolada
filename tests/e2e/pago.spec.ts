@@ -319,8 +319,8 @@ test.describe("payment-without-receipt US2: step 1 and 'Confirma tu pago' in a r
         await page.emulateMedia({ colorScheme: theme });
         await openReference(page, width);
 
-        /* Step 1: the reference beside the amount and the account */
-        await expect(page.getByText("234 5678")).toBeVisible();
+        /* Step 1: the reference in its own box (confirmation-hierarchy US5) */
+        await expect(page.getByRole("region", { name: "Tu referencia" }).getByText("234 5678")).toBeVisible();
         await expectNoHorizontalScroll(page);
         await expectAxeClean(page, `step 1 at ${width}px, ${theme}`);
 
@@ -348,8 +348,9 @@ test.describe("payment-without-receipt US2: step 1 and 'Confirma tu pago' in a r
         /* the decisive action, declared at 64px (constitution VI) */
         const confirm = page.getByRole("button", { name: "Confirmar pago" });
         expect((await confirm.boundingBox())!.height).toBe(64);
-        /* the small exits keep the touch size */
-        for (const name of ["Pagué otra cantidad", "No puse la referencia", "Sube tu comprobante"]) {
+        /* the other ways keep the touch size (confirmation-hierarchy US1,
+           T037: 012's two small exits became option 2 and the receipt link) */
+        for (const name of ["Pagué otra cantidad", "Usé otra referencia", "Subir foto del comprobante"]) {
           const exit = (await page.getByRole("button", { name }).boundingBox())!;
           expect(exit.height, name).toBeGreaterThanOrEqual(48);
         }
@@ -381,9 +382,167 @@ test.describe("payment-without-receipt US2: step 1 and 'Confirma tu pago' in a r
     await page.keyboard.press("ArrowDown");
     await expect(page.getByRole("radio", { name: "Nu" })).toBeChecked();
     await expect(page.getByRole("radio", { name: "Nu" })).toBeFocused();
-    /* the chosen one says so in words as well as with its icon */
-    await expect(page.locator("fieldset label", { hasText: /^Nu/ })).toContainText("Elegido");
-    await expect(azteca).not.toContainText("Elegido");
+    /* confirmation-hierarchy D18: a chip says it is chosen with its check
+       icon and its outline, never colour alone */
+    const nu = page.locator("fieldset label", { hasText: /^Nu$/ });
+    await expect(nu.locator("svg")).toHaveCount(1);
+    await expect(azteca.locator("svg")).toHaveCount(0);
+    expect(await nu.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
     await expect(page.getByText(/desde Nu, hoy/)).toBeVisible();
+  });
+});
+
+/* specs/017-confirmation-hierarchy (tasks T009, T041; constitution VI) —
+   the step's three options and proposal E in a real browser: what
+   happy-dom cannot measure. Sizes (64px for the one decisive action, 48px
+   for every other target), a focus ring the eye can see on each, Tab order
+   equal to the visual order, no sideways scroll from the 360px floor up,
+   and axe with contrast and target size ON, in both themes. */
+test.describe("confirmation-hierarchy US1, US5: the three options and proposal E in a real browser", () => {
+  async function settled(page: Page) {
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+    );
+  }
+
+  async function expectAxeClean(page: Page, what: string) {
+    await settled(page);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(
+      results.violations.map(
+        (v) =>
+          `${v.id}: ${v.nodes.map((n) => `${n.html.slice(0, 90)} → ${n.failureSummary?.split("\n").slice(-1)[0]}`).join(" | ")}`,
+      ),
+      what,
+    ).toEqual([]);
+  }
+
+  async function openReference(page: Page, width: number, kind: "clabe" | "card" | "phone" = "clabe") {
+    await stubPagoApi(page);
+    await stubPagoReference(page, kind);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${PAGO}/p/tok123`);
+    await page.getByRole("heading", { name: /haz tu transferencia/i }).waitFor();
+  }
+
+  /* The ring is measured, not assumed: focused, the control draws a box
+     shadow (or an outline) it did not draw at rest. It is reached by the
+     keyboard — Shift+Tab away and Tab back — because a ring is drawn for
+     `:focus-visible`, which a programmatic focus after a tap never is. */
+  async function expectFocusRing(page: Page, name: string | RegExp, role: "button" | "radio" = "button") {
+    const control = page.getByRole(role, { name }).first();
+    const target = role === "radio" ? control.locator("xpath=ancestor::label") : control;
+    const rest = await target.evaluate((el) => `${getComputedStyle(el).boxShadow}|${getComputedStyle(el).outlineStyle}`);
+    await control.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(control).toBeFocused();
+    await page.waitForTimeout(250);
+    const focused = await target.evaluate((el) => `${getComputedStyle(el).boxShadow}|${getComputedStyle(el).outlineStyle}`);
+    expect(focused, `${name} shows no focus ring`).not.toBe(rest);
+  }
+
+  async function height(page: Page, name: string | RegExp) {
+    return (await page.getByRole("button", { name }).first().boundingBox())!.height;
+  }
+
+  for (const width of [360, 768, 1280]) {
+    for (const theme of ["light", "dark"] as const) {
+      test(`the confirmation, option 2 and the receipt view hold at ${width}px in ${theme} (T009)`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: theme });
+        await openReference(page, width);
+        await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+        await page.getByRole("heading", { name: "Confirma tu pago" }).waitFor();
+
+        /* D2: one decisive 64px action; option 2 and the receipt link 48px */
+        expect(await height(page, "Confirmar pago")).toBe(64);
+        expect(await height(page, "Usé otra referencia")).toBeGreaterThanOrEqual(48);
+        expect(await height(page, "Subir foto del comprobante")).toBeGreaterThanOrEqual(48);
+        for (const name of ["Confirmar pago", "Usé otra referencia", "Subir foto del comprobante"]) await expectFocusRing(page, name);
+
+        /* FR-008: Tab reaches option 1, then option 2, then the receipt */
+        await page.getByRole("button", { name: "Confirmar pago" }).focus();
+        await page.keyboard.press("Tab");
+        await expect(page.getByRole("button", { name: "Usé otra referencia" })).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(page.getByRole("button", { name: "Subir foto del comprobante" })).toBeFocused();
+        await expectNoHorizontalScroll(page);
+        await expectAxeClean(page, `the confirmation at ${width}px, ${theme}`);
+
+        /* option 2 */
+        await page.getByRole("button", { name: "Usé otra referencia" }).click();
+        await page.getByRole("heading", { name: "Usé otra referencia" }).waitFor();
+        expect(await height(page, /^Volver$/)).toBeGreaterThanOrEqual(48);
+        expect(await height(page, "Subir foto del comprobante")).toBeGreaterThanOrEqual(48);
+        await expectFocusRing(page, /^Volver$/);
+        await page.getByRole("button", { name: /^Volver$/ }).focus();
+        await page.keyboard.press("Tab");
+        await expect(page.getByRole("button", { name: "Subir foto del comprobante" })).toBeFocused();
+        await expectNoHorizontalScroll(page);
+        await expectAxeClean(page, `option 2 at ${width}px, ${theme}`);
+
+        /* option 3 */
+        await page.getByRole("button", { name: "Subir foto del comprobante" }).click();
+        await page.getByRole("heading", { name: /envía tu comprobante/i }).waitFor();
+        expect(await height(page, /^Volver$/)).toBeGreaterThanOrEqual(48);
+        await expectNoHorizontalScroll(page);
+        await expectAxeClean(page, `the receipt view at ${width}px, ${theme}`);
+      });
+
+      test(`proposal E's targets, contrast and width hold at ${width}px in ${theme} (T041)`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: theme });
+        await openReference(page, width);
+        /* step 1: the copy buttons and "Ver otra vez" are touch targets */
+        expect(await height(page, "Copiar Tu referencia")).toBeGreaterThanOrEqual(48);
+        expect(await height(page, "Copiar CLABE")).toBeGreaterThanOrEqual(48);
+        expect(await height(page, "Ver otra vez")).toBeGreaterThanOrEqual(48);
+        for (const name of ["Copiar Tu referencia", "Ver otra vez"]) await expectFocusRing(page, name);
+        /* the reference's box and the tags pass contrast, axe's rule on */
+        await expectAxeClean(page, `step 1 at ${width}px, ${theme}`);
+
+        await page.getByRole("button", { name: /ya hice mi transferencia/i }).click();
+        await page.getByRole("heading", { name: "Confirma tu pago" }).waitFor();
+        const chips = page.locator("fieldset label");
+        for (let i = 0; i < (await chips.count()); i++) {
+          expect((await chips.nth(i).boundingBox())!.height).toBeGreaterThanOrEqual(48);
+        }
+        await expectFocusRing(page, "Banco Azteca", "radio");
+        expect(await height(page, "¿Por qué te preguntamos esto?")).toBeGreaterThanOrEqual(48);
+        await expectFocusRing(page, "¿Por qué te preguntamos esto?");
+        await page.getByRole("button", { name: "¿Por qué te preguntamos esto?" }).click();
+        await page.getByRole("button", { name: "Usé otra referencia" }).click();
+        await page.getByRole("heading", { name: "Usé otra referencia" }).waitFor();
+        await expectAxeClean(page, `option 2's tags at ${width}px, ${theme}`);
+      });
+    }
+  }
+
+  for (const kind of ["clabe", "card", "phone"] as const) {
+    test(`no sideways scroll at 360px with a ${kind} (T041)`, async ({ page }) => {
+      await openReference(page, 360, kind);
+      await expect(page.getByRole("region", { name: "Transfiere a" })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+    });
+  }
+
+  test("with reduced motion the example shows all four values at once, and nothing in step 1 moves (T041, D20)", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openReference(page, 360);
+    const example = page.getByRole("region", { name: "Así se llena en tu app" });
+    for (const text of ["646180157000000004", "$514.00", "234 5678", "Opcional: lo que quieras"]) {
+      const value = example.getByText(text, { exact: true });
+      await expect(value).toBeVisible();
+      expect(await value.evaluate((el) => getComputedStyle(el).clipPath)).toMatch(/^(none|inset\(0(px)?( 0(px)?)*\))$/);
+    }
+    const moving = await page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter((a) => a.playState === "running")
+        .map((a) => (a as CSSAnimation).animationName ?? "")
+        .filter((name) => /step-rise|example-|reference-glow/.test(name)),
+    );
+    expect(moving).toEqual([]);
   });
 });

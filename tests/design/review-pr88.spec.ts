@@ -112,7 +112,7 @@ const shots: Shot[] = [
        both doors visible */
     slug: "pago-verificando-calma",
     status: notFoundStatus(),
-    ready: "Validación en proceso",
+    ready: "Seguimos buscando tu transferencia",
     widths: [375, 768],
     act: async (page) => {
       await page.getByRole("button", { name: "Ver los datos enviados" }).click();
@@ -123,7 +123,7 @@ const shots: Shot[] = [
     /* D2: the correction door opened from inside the calm phase */
     slug: "pago-verificando-corregir",
     status: notFoundStatus(),
-    ready: "Validación en proceso",
+    ready: "Seguimos buscando tu transferencia",
     widths: [375],
     act: async (page) => {
       await page.getByRole("button", { name: "Ver los datos enviados" }).click();

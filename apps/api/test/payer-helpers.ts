@@ -1,13 +1,16 @@
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, sql } from "drizzle-orm";
-import { paymentLinks, payments, validations } from "../src/db/schema";
+import { cepRecords, paymentLinks, payments, validations } from "../src/db/schema";
 import { sweepDirectPayments } from "../src/direct-payments/validation";
 import type { Bindings } from "../src/env";
 import { app, fakeProofs, seedBusiness } from "./helpers";
+import { wallClockMs } from "../src/time/business-day";
 import {
   bundleOf,
   noneAnswer,
+  SENDER_4417,
+  SENDER_8301,
   severalAnswer,
   validAnswer,
   type SyntheticTransfer,
@@ -316,4 +319,94 @@ export function mockPanelSettle(customer: FakeCustomer, total = 3.5, opts: { aga
     .intercept({ method: "POST", path: `/api/facturas/${invoiceId}/registrar-pago/` })
     .reply(...json({ messages: ["Se agrego correctamente el pago"], task_id: "t-1" }));
   mockCustomer({ ...customer, estado: "Activo" });
+}
+
+/* ---- confirmation-hierarchy (tasks T004) ---- */
+
+let paidSeq = 0;
+/* A confirmed payment on `link` that adopted `clave`, whose `cep_records`
+   row sends from `account` — what makes the account learned for that
+   customer (012 D12). Seeded on two people's links, it is an account that
+   has paid for several people (confirmation-hierarchy D4). The money and
+   the day are a past month's; nothing here is searched. */
+export async function seedPaidBy(
+  database: ReturnType<typeof db>,
+  opts: {
+    businessId: string;
+    link: { id: string };
+    account: string;
+    accountType?: string;
+    clave?: string;
+    day?: string;
+  },
+) {
+  paidSeq += 1;
+  const clave = opts.clave ?? `PAIDBY${String(paidSeq).padStart(6, "0")}${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+  const day = opts.day ?? "2026-08-15";
+  await database.insert(cepRecords).values({
+    businessId: opts.businessId,
+    clave,
+    bundleId: null,
+    operationDate: day,
+    creditDate: day,
+    creditTime: "09:30:00",
+    creditedAt: new Date(wallClockMs("America/Mexico_City", day, "09:30:00")),
+    senderBank: "AZTECA",
+    senderAccountType: opts.accountType ?? "40",
+    senderAccount: opts.account,
+    receiverSpeiCode: "40012",
+    receiverAccountType: "40",
+    receiverAccount: BUSINESS_CLABE,
+    amountCents: 35150,
+    certificateNumber: "00001000000999999999",
+    seal: "c2VhbA==",
+  });
+  const [payment] = await database
+    .insert(payments)
+    .values({
+      paymentLinkId: opts.link.id,
+      businessId: opts.businessId,
+      amountCents: 35150,
+      invoiceCents: 35000,
+      serviceFeeCents: 150,
+      proofMode: "transfer",
+      status: "confirmed",
+      trackingKey: clave,
+      senderBank: "AZTECA",
+      transferDate: day,
+      receivedCents: 35150,
+      confirmedAt: new Date(`${day}T16:00:00Z`),
+      customerName: "Cliente",
+    })
+    .returning();
+  return { clave, payment };
+}
+
+/* The sandbox's three tie-break scenarios (quickstart "Sandbox additions"),
+   as apiCEP answers them at the pinned origin: `…44` — two transfers from
+   8301 and 4417, claves ending …977I and …0412; `…55` — the same two
+   accounts, claves sharing their last four (…5510); `…66` — one transfer
+   from 8301, clave ending …3O10. `day` is the day searched. */
+export function tieBreakTransfers(scenario: "44" | "55" | "66", day: string, amount = "351.50"): SyntheticTransfer[] {
+  const base = (creditTime: string, senderAccount: string, end: string): SyntheticTransfer => ({
+    clave: `MOCKREF${scenario}${day.replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase()}${end}`,
+    operationDay: day,
+    creditDay: day,
+    creditTime,
+    senderAccount,
+    beneficiaryAccount: BUSINESS_CLABE,
+    amount,
+  });
+  if (scenario === "44") return [base("07:11:20", SENDER_8301, "977I"), base("11:40:47", SENDER_4417, "0412")];
+  if (scenario === "55") return [base("07:11:20", SENDER_8301, "A5510"), base("11:40:47", SENDER_4417, "B5510")];
+  return [base("09:02:31", SENDER_8301, "3O10")];
+}
+
+/* apiCEP's answer for a scenario: a bundle for several, a single `valid`
+   (with its cadena, so the record reads) for `…66` */
+export function mockTieBreakSearch(scenario: "44" | "55" | "66", day: string, opts: Parameters<typeof mockApiCep>[1] = {}) {
+  const transfers = tieBreakTransfers(scenario, day);
+  if (scenario === "66") mockFound(transfers[0], opts);
+  else mockSeveral(transfers, opts);
+  return transfers;
 }

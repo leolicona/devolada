@@ -176,15 +176,16 @@ export const payRequest = z
            buy a cheaper payment (same posture as receiptAmountCents). */
         amountCents: z.number().int().positive().optional(),
         /* payment-without-receipt D8: "own" — the server writes the link's
-           reference and ignores any sent; "typed" — "No puse la
-           referencia" (D11); absent — today's typed door */
+           reference and ignores any sent; "typed" — "Usé otra referencia"
+           (D11); absent — today's typed door */
         referenceSource: z.enum(["own", "typed"]).optional(),
-        /* D11: the last four digits of the sending account, typed; never
-           offered */
+        /* confirmation-hierarchy D6 (amending 012 D11, D17): an answer to
+           the tie-break — the sending account's last four digits, the
+           clave's last four characters, or both — on a row that supersedes
+           the one waiting on it. Typed by the payer, never offered; read
+           against the transfers already found and never searched. A typed
+           confirmation carries neither: it searches at once (D5). */
         senderTail: z.string().trim().regex(/^\d{4}$/).optional(),
-        /* D17: the clave's last four characters, only on a row that
-           supersedes an undecided one; chooses among kept candidates,
-           never searched */
         claveTail: z.string().trim().regex(/^[A-Za-z0-9]{4}$/).optional(),
         /* D23: what the page preselected, for SC-005 */
         preselected: z.object({ bank: bank.nullable(), day: isoDate }).optional(),
@@ -203,8 +204,9 @@ export const payRequest = z
          page meets the same rule as a VALIDATION_ERROR.
          payment-without-receipt D11 (analysis I8): a typed reference no
          person holds — a default-looking one included — goes on as a
-         shared reference, tied by a learned account or the four digits
-         the payer types; the server asks for those instead. */
+         shared reference, tied by an exclusive learned account or by the
+         tie-break the server asks after the search (confirmation-hierarchy
+         D5, D6), never by a clave demanded first. */
       .refine((t) => t.trackingKey || t.referenceSource != null || !isGenericReference(t.referenceNumber), {
         message: "a generic referenceNumber needs a trackingKey",
       })
@@ -251,12 +253,13 @@ export const payRequest = z
         message: "supersedes only applies to a confirmed transfer",
       });
     }
-    /* payment-without-receipt D17: the clave's four characters only ever
-       choose among what an earlier attempt kept */
-    if (body.transfer?.claveTail && !body.supersedes) {
+    /* payment-without-receipt D17, confirmation-hierarchy D6: either way
+       of answering only ever chooses among what an earlier attempt kept —
+       the refinement 012 gave the characters now covers the digits too */
+    if ((body.transfer?.claveTail || body.transfer?.senderTail) && !body.supersedes) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "claveTail only applies to a correction (supersedes)",
+        message: "senderTail and claveTail only answer a tie-break (supersedes)",
       });
     }
   });
@@ -275,12 +278,19 @@ export const PAY_REFUSALS_WITHOUT_RECEIPT = [
   "TRANSFER_DATE_OUT_OF_RANGE",
   /* D11 (FR-034): the typed reference is another person's */
   "REFERENCE_OF_ANOTHER",
-  /* D11 (FR-032): typed, no four digits, and no account learned for this
-     service at that bank */
-  "SENDER_TAIL_NEEDED",
   /* D16 (FR-024): a fourth search-spending correction without a clave or
      a receipt */
   "CORRECTIONS_EXHAUSTED",
+  /* confirmation-hierarchy D8 (FR-016): an answer to the tie-break, and
+     the link already holds three answers that fitted nothing in the last
+     24 hours — the whole clave and the receipt are what is left */
+  "TIE_BREAK_EXHAUSTED",
+  /* confirmation-hierarchy D11: an answer to the tie-break on a row that
+     is not waiting on one — another tab answered first, or nothing was
+     asked. Nothing is written or searched; the page re-reads the status.
+     (012's SENDER_TAIL_NEEDED is gone: a typed confirmation searches at
+     once and the tie-break is asked after it, D5.) */
+  "TIE_BREAK_NOT_ASKED",
 ] as const;
 
 /* Validation errors the page may show the customer. Internal codes
@@ -499,9 +509,25 @@ export const directPaymentStatusResponse = z.object({
   /* provisional-release D7: on `expired` only — whether the one manual
      retry per clave is still unclaimed */
   retryAvailable: z.boolean().optional(),
-  /* payment-without-receipt D15: what the page asks now, on a validating
-     row with a `referenceSource`; null when it asks nothing */
-  ask: z.enum(["check_data", "clave", "sender_tail", "clave_tail"]).nullable().optional(),
+  /* payment-without-receipt D15, as confirmation-hierarchy D9 amends it:
+     what the page asks now, on a validating row with a `referenceSource`;
+     null when it asks nothing. `tie_break` is one screen with two ways to
+     answer (FR-011), where 012 asked the digits and the characters in a
+     row. */
+  ask: z.enum(["check_data", "clave", "tie_break"]).nullable().optional(),
+  /* confirmation-hierarchy D9: with `tie_break` only — which fields the
+     screen shows, whether the last answer fitted nothing, and whether one
+     transfer or several were found (the sentence it opens with, D12).
+     Field names and booleans: nothing of a transfer found ever travels
+     (FR-018). */
+  tieBreak: z
+    .object({
+      ways: z.array(z.enum(["sender_tail", "clave_tail"])).min(1),
+      missed: z.boolean(),
+      several: z.boolean(),
+    })
+    .nullable()
+    .optional(),
   /* D23: which path this row is — null on a clave, a receipt, and today's
      typed door */
   referenceSource: z.enum(["own", "typed"]).nullable().optional(),

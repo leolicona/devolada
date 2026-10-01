@@ -129,7 +129,7 @@ const shots: Shot[] = [
       error: null,
       provisionalRelease: { evidence: "pending", kind: "reconnect" },
     },
-    ready: "Tu transferencia está en camino y tu internet ya volvió",
+    ready: "Tu transferencia está en camino y tu servicio ya volvió",
     widths: [375, 768],
   },
   {
@@ -142,7 +142,7 @@ const shots: Shot[] = [
       readingCheck: "agreed",
       provisionalRelease: { evidence: "agreed", kind: "reconnect" },
     },
-    ready: /los datos coinciden\. Tu internet ya volvió/,
+    ready: /los datos coinciden\. Tu servicio ya volvió/,
     widths: [375],
   },
   {

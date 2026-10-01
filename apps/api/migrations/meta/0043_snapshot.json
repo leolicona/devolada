@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d513ddd7-8625-476a-a818-b98a5e91308c",
-  "prevId": "7a8f69ce-1bf2-484d-b77a-1e175e3693da",
+  "id": "0b0a2250-cb9f-4cd0-9d40-01e4f949901e",
+  "prevId": "d513ddd7-8625-476a-a818-b98a5e91308c",
   "tables": {
     "access_requests": {
       "name": "access_requests",
@@ -2837,6 +2837,13 @@
         },
         "observed_action": {
           "name": "observed_action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decided_action": {
+          "name": "decided_action",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

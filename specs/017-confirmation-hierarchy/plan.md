@@ -135,6 +135,16 @@ D<n>` (constitution I).
 | D21 | The confirmation's bank, day and amount live in `PaymentPage` beside `proofView` (T036), so the confirmation and option 2 read one choice; option 2 renders only `TransferForm`'s key fields (`keys = "either"`) and the three tags, and sends the choice unchanged. Amends D3, whose typed form carried its own amount, bank and day | creator 2026-10-01 |
 | D22 | The wait's three steps are derived from the row — a sourced row `validating` marks "Verificamos tu transferencia" current; `confirmed` marks all three done — never from a timer, with `aria-current="step"` on the current one. The tie-break's illustration is static markup with placeholder marks, not values. The confirmed line about next month shows on rows with `referenceSource = "own"` only | research R14 |
 
+**D1, amended 2026-10-01 (tasks T038).** Spec 012 was built on its own
+(#261, `70fe732`, 2026-09-30) before any task of this feature ran, with
+its own tie-break: `SENDER_TAIL_NEEDED` before the search, the
+`sender_tail` and `clave_tail` asks, a tail fitted one way at a time, and
+the account's digits inside the hourly budget. "One build" therefore
+became "a change of what 012 built": this feature's Phase 9 (T031–T037)
+names each piece and changes it in place, and 012's `tasks.md` says on
+each amended line which 017 task changed it. The decisions D2–D22 stand
+as written; only the order of the work moved.
+
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*

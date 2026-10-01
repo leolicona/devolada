@@ -1,7 +1,17 @@
 import { tieCepAccount } from "../extraction/destination";
 import { wallClockMs } from "../../time/business-day";
 import { CEP_TIMEZONE } from "./cadena";
-import type { CepRecord, MatchMode, MatchPolicy, MatchResult, ReceiptSide, TrailCandidate, TrailWhy } from "./types";
+import type {
+  CepRecord,
+  MatchMode,
+  MatchPolicy,
+  MatchResult,
+  ReceiptSide,
+  TieBreakAnswer,
+  TieBreakFit,
+  TrailCandidate,
+  TrailWhy,
+} from "./types";
 
 /* cep-bundle-match D6, D7, D8, D11 — which transfer a receipt is, among
    the ones a search without a clave found.
@@ -224,68 +234,102 @@ function trailOfModes(candidates: CepRecord[], fate: Map<string, TrailWhy>, chos
   });
 }
 
-const typedTail = (receipt: ReceiptSide) => {
-  const t = receipt.tail?.replace(/\D/g, "") ?? "";
-  return t.length >= 3 ? t : null;
-};
-
 /* D10 — the payer's own reference: every transfer it found is theirs.
    Integrity → used → (a D26 transition) the previous holder's accounts
-   dropped → the typed four digits, when a correction brought them → an
-   account learned for this service first → the earliest credited. Nothing
-   is undecided but `all_used`; during a transition, a transfer from an
-   account not known for this person is held until they type its four
-   digits (FR-041). */
+   dropped → an account learned for this service first → the earliest
+   credited. Nothing is undecided but `all_used`; during a transition, a
+   transfer from an account not known for this person is held until the
+   tie-break ties it (FR-041).
+   confirmation-hierarchy D10 (amending 012 D10, D26): `knownAccounts`
+   holds the accounts exclusive to this person only, so a shared one no
+   longer puts its transfer first — the earliest does — and no longer
+   releases a held one. The four digits a correction once brought left
+   this mode with the typed one's: an answer is read by `fitTieBreak`,
+   which knows whose account the digits name (D6). */
 function matchOwn(receipt: ReceiptSide, candidates: CepRecord[], used: ReadonlySet<string>): MatchResult {
   const fate = new Map<string, TrailWhy>();
   const { whole, free } = wholeAndFree(receipt, candidates, used, fate);
-  const allowed = receipt.excludedAccounts
+  const left = receipt.excludedAccounts
     ? free.filter((c) => (inAccounts(c, receipt.excludedAccounts) ? (fate.set(c.id, "excluded"), false) : true))
     : free;
-  const tail = typedTail(receipt);
-  const left = tail ? allowed.filter((c) => (tailFits(tail, c) ? true : (fate.set(c.id, "tail"), false))) : allowed;
   if (!left.length) {
     const reason = whole.length > 0 && free.length === 0 ? "all_used" : "none_fit";
-    return { decided: "undecided", reason, trail: trailOfModes(candidates, fate, null, tail) };
+    return { decided: "undecided", reason, trail: trailOfModes(candidates, fate, null, null) };
   }
   const known = left.filter((c) => inAccounts(c, receipt.knownAccounts));
-  const chosen = earliest(known.length ? known : left);
-  if (receipt.excludedAccounts && !known.length && !tail) {
-    return { decided: "undecided", reason: "no_signal", trail: trailOfModes(candidates, fate, null, tail) };
+  if (receipt.excludedAccounts && !known.length) {
+    return { decided: "undecided", reason: "no_signal", trail: trailOfModes(candidates, fate, null, null) };
   }
+  const chosen = earliest(known.length ? known : left);
   return {
     decided: "chosen",
     chosen,
-    by: known.length ? "learned_account" : tail ? "sender_tail" : "earliest",
+    by: known.length ? "learned_account" : "earliest",
     distanceS: null,
-    trail: trailOfModes(candidates, fate, chosen, tail),
+    trail: trailOfModes(candidates, fate, chosen, null),
   };
 }
 
 /* D11 — a reference the payer typed, which others may share: only a
    second fact ties a transfer to this customer (FR-032). Integrity → used
-   → an account learned for this service, compared whole → the four digits
-   the payer typed. Never the window: a typed row carries no time. One left
-   confirms; none or several is undecided, and the lifecycle asks. */
+   → an account learned for this service and exclusive to this person,
+   compared whole → undecided. Never the window: a typed row carries no
+   time. confirmation-hierarchy D5, D10: exactly one transfer from such an
+   account confirms; otherwise — none of them, or several — every free
+   transfer is kept and the payer is asked the tie-break, a single match
+   included (FR-009). The typed four digits left this mode: they arrive
+   after the search, as an answer `fitTieBreak` reads. */
 function matchTyped(receipt: ReceiptSide, candidates: CepRecord[], used: ReadonlySet<string>): MatchResult {
   const fate = new Map<string, TrailWhy>();
   const { whole, free } = wholeAndFree(receipt, candidates, used, fate);
-  const tail = typedTail(receipt);
+  if (!free.length) {
+    const reason = whole.length > 0 ? "all_used" : "none_fit";
+    return { decided: "undecided", reason, trail: trailOfModes(candidates, fate, null, null) };
+  }
   const known = free.filter((c) => inAccounts(c, receipt.knownAccounts));
   if (known.length === 1) {
-    return { decided: "chosen", chosen: known[0], by: "learned_account", distanceS: null, trail: trailOfModes(candidates, fate, known[0], tail) };
+    return { decided: "chosen", chosen: known[0], by: "learned_account", distanceS: null, trail: trailOfModes(candidates, fate, known[0], null) };
   }
-  const pool = known.length > 1 ? known : free;
-  if (!pool.length) {
-    const reason = whole.length > 0 && free.length === 0 ? "all_used" : "none_fit";
-    return { decided: "undecided", reason, trail: trailOfModes(candidates, fate, null, tail) };
-  }
-  if (!tail) return { decided: "undecided", reason: "no_signal", trail: trailOfModes(candidates, fate, null, tail) };
-  const fits = pool.filter((c) => (tailFits(tail, c) ? true : (fate.set(c.id, "tail"), false)));
+  return { decided: "undecided", reason: "no_signal", trail: trailOfModes(candidates, fate, null, null) };
+}
+
+/* confirmation-hierarchy D6 (FR-011–FR-014) — an answer to the tie-break,
+   read against the transfers the waiting payment kept (the ones another
+   payment took since are dropped by the caller). Pure, and never a call:
+   the answer only ever chooses among transfers already found.
+
+     1. each way given picks its fits — the digits by `tailFits` (the
+        account type Banxico names, 012 D7), the characters on each
+        clave's last four with O read as 0 and I as 1;
+     2. one way given: its fits are the answer's; both: only the transfers
+        both picked — a way that picked none, or two ways that picked
+        different transfers, leave none, so sending both never tests two
+        guesses at once;
+     3. none → `none`;
+     4. one → confirmed, unless the digits alone chose it and its account
+        has paid another person (`othersAccounts`): then the characters
+        are asked (FR-013);
+     5. several → the way not given yet; both given → the whole clave.
+
+   `by` is `clave_tail` whenever the characters were given and fit. */
+export function fitTieBreak(answer: TieBreakAnswer, candidates: CepRecord[], othersAccounts: string[] = []): TieBreakFit {
+  const read = (s: string) => s.trim().toUpperCase().replace(/O/g, "0").replace(/I/g, "1");
+  const digits = answer.senderTail?.replace(/\D/g, "") ?? "";
+  const chars = answer.claveTail ? read(answer.claveTail) : "";
+  const byDigits = digits.length === 4 ? candidates.filter((c) => tailFits(digits, c)) : null;
+  const byChars = chars.length === 4 ? candidates.filter((c) => read(c.clave).slice(-4) === chars) : null;
+  if (!byDigits && !byChars) return { fit: "none" };
+  const fits = byDigits && byChars ? byDigits.filter((c) => byChars.includes(c)) : (byDigits ?? byChars)!;
+  if (!fits.length) return { fit: "none" };
   if (fits.length === 1) {
-    return { decided: "chosen", chosen: fits[0], by: "sender_tail", distanceS: null, trail: trailOfModes(candidates, fate, fits[0], tail) };
+    const chosen = fits[0];
+    if (!byChars && othersAccounts.some((a) => digitsOf(a) === digitsOf(chosen.senderAccount))) {
+      return { fit: "needs", ways: ["clave_tail"] };
+    }
+    return { fit: "one", chosen, by: byChars ? "clave_tail" : "sender_tail" };
   }
-  return { decided: "undecided", reason: fits.length ? "no_signal" : "none_fit", trail: trailOfModes(candidates, fate, null, tail) };
+  if (byDigits && byChars) return { fit: "clave" };
+  return { fit: "needs", ways: [byDigits ? "clave_tail" : "sender_tail"] };
 }
 
 /* payment-without-receipt D17 (research R15): the clave's last four

@@ -4,6 +4,7 @@ import { PAGO } from "../../playwright.config";
 import {
   longTrackingKey,
   stubPagoApi,
+  stubPagoConfirmedOwn,
   stubPagoKeylessReading,
   stubPagoReference,
   stubPagoSurplusReading,
@@ -545,4 +546,24 @@ test.describe("confirmation-hierarchy US1, US5: the three options and proposal E
     );
     expect(moving).toEqual([]);
   });
+
+  /* T052 (D17, D20; contracts/payment-page.md "Motion"): the confirmed
+     check draws once on the slow duration — and with reduced motion it is
+     there, drawn, with no keyframe at all */
+  for (const motion of ["no-preference", "reduce"] as const) {
+    test(`the confirmed check ${motion === "reduce" ? "shows drawn with reduced motion" : "draws itself once"} (T052)`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: motion });
+      await stubPagoApi(page);
+      await stubPagoConfirmedOwn(page);
+      await page.setViewportSize({ width: 360, height: 900 });
+      await page.goto(`${PAGO}/p/tok123`);
+      const check = page.locator(".check-draw svg path");
+      await expect(page.getByText("Folio DV-OWN")).toBeVisible();
+      await expect(check).toHaveCount(1);
+      expect(await check.evaluate((el) => getComputedStyle(el).animationName)).toBe(motion === "reduce" ? "none" : "check-draw");
+      await settled(page);
+      /* at rest the stroke is whole: nothing of the check is left undrawn */
+      expect(Number.parseFloat(await check.evaluate((el) => getComputedStyle(el).strokeDashoffset))).toBe(0);
+    });
+  }
 });

@@ -61,15 +61,32 @@
   animation-delay: calc(var(--duration-slow) * 1.5 * 4);
 }
 
+/* contracts/payment-page.md "Motion": the confirmed check draws itself
+   once, on the slow duration, while the outcome cross-fades in.
+   The dash is the check's stroke length in the icon's 24-unit box (√8 +
+   √32 ≈ 8.5, rounded up), a geometry of the glyph, not a size. */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 9;
+  }
+}
+
+.check-draw svg path {
+  stroke-dasharray: 9;
+  animation: check-draw var(--duration-slow) var(--easing-default) both;
+}
+
 /* Reduced motion (constitution VI): no keyframe at all — every value
-   shows at once and nothing rises or glows. The design system's blanket
-   rule shortens durations but keeps delays, which with `both` would hold
-   a value hidden for its delay; naming no animation is what shows it. */
+   shows at once and nothing rises, glows or draws. The design system's
+   blanket rule shortens durations but keeps delays, which with `both`
+   would hold a value hidden for its delay; naming no animation is what
+   shows it. */
 @media (prefers-reduced-motion: reduce) {
   .step-enter,
   .reference-glow,
   .example-value,
-  .example-reference {
+  .example-reference,
+  .check-draw svg path {
     animation: none;
   }
 }

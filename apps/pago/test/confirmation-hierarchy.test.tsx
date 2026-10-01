@@ -793,4 +793,23 @@ describe("confirmation-hierarchy US5: step 2 and after (T040, D18, D21, D22)", (
     expect(await screen.findByText("Folio DV-TYPED", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(screen.queryByText(/así de fácil cada mes/i)).not.toBeInTheDocument();
   });
+
+  it("the confirmed check draws itself on a link with a reference; a link without one keeps today's badge (T052, D17, D20)", async () => {
+    stubInReview(sourced({ status: "confirmed", referenceSource: "own", referenceNumber: "2345678", folio: "DV-DRAW" }));
+    renderPage();
+    const drawn = (await screen.findByText("Pago confirmado", {}, { timeout: 8000 })).closest("span")!;
+    expect(drawn).toHaveClass("check-draw");
+    /* the stroke it draws is the check's, inside the badge's own icon */
+    expect(drawn.querySelector("svg path")).not.toBeNull();
+    fresh();
+
+    stubInReview(
+      sourced({ status: "confirmed", referenceSource: null, referenceNumber: null, trackingKey: "MBAN01002609290012345678", folio: "DV-TODAY" }),
+      [],
+      { payerReference: null },
+    );
+    renderPage();
+    const today = (await screen.findByText("Pago confirmado", {}, { timeout: 8000 })).closest("span")!;
+    expect(today).not.toHaveClass("check-draw");
+  });
 });

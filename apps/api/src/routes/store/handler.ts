@@ -7,7 +7,10 @@ import { channelBusiness } from "../../store-channel";
 import { integrationOf } from "../../integrations/store";
 import { capabilitiesOf } from "../../integrations/registry";
 import { IntegrationError, type IntegrationCapabilities } from "../../integrations/capabilities";
-import { parseHypothesis } from "../../integrations/dispatch";
+import { actionForClass, parseHypothesis } from "../../integrations/dispatch";
+import type { Integration } from "../../integrations/store";
+import { classifyPayment } from "../../direct-payments/classes";
+import { settle } from "../../direct-payments/partial";
 import { getNumberSetting, getSetting } from "../../platform/settings";
 import { ensureLink } from "../../direct-payments/links";
 import { announcingWriter, isUniqueViolation, settleConfirmed } from "../../direct-payments/validation";
@@ -106,6 +109,41 @@ async function freshDebt(counter: { debt: NonNullable<IntegrationCapabilities["c
   }
 }
 
+/* The spec's edge case "a short payment below the business's threshold":
+   the smallest amount that gives the service back, asked of the same three
+   rules `settleConfirmed` applies — the class picks the mapped action, and
+   under register_and_reconnect the threshold and the floor vote (D13: with
+   no fee in the arithmetic). Null when not even the whole debt does. The
+   rules only loosen as the amount grows, so a binary search over cents
+   finds the edge in ~24 pure steps. */
+function reconnectsFromCents(
+  debtCents: number,
+  business: { toleranceCents: number },
+  integration: Integration,
+): number | null {
+  if (!integration.actionsEnabled) return null;
+  const reconnects = (cents: number) => {
+    const klass = classifyPayment({ receivedCents: cents, askedCents: debtCents, toleranceCents: business.toleranceCents });
+    const settlement = settle({
+      receivedCents: cents,
+      ispDebtCents: debtCents,
+      serviceFeeCents: 0,
+      thresholdPercent: integration.thresholdPercent,
+      floorCents: integration.floorCents,
+    });
+    return actionForClass(integration, klass) === "register_and_reconnect" && settlement.reconnect;
+  };
+  if (!reconnects(debtCents)) return null;
+  let low = 1;
+  let high = debtCents;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (reconnects(mid)) high = mid;
+    else low = mid + 1;
+  }
+  return low;
+}
+
 /* D14, D22 (FR-018, FR-020): the quote — the debt, the network fee and
    the total, all read now */
 export async function quoteCustomer(c: Ctx, usuario: string) {
@@ -128,7 +166,12 @@ export async function quoteCustomer(c: Ctx, usuario: string) {
     };
     data =
       debt.state === "owes"
-        ? { state: "owes", ...amounts, debtCents: debt.totalCents }
+        ? {
+            state: "owes",
+            ...amounts,
+            debtCents: debt.totalCents,
+            reconnectsFromCents: reconnectsFromCents(debt.totalCents, counter.business, counter.integration),
+          }
         : { state: "none", ...amounts, debtCents: 0 };
   }
   return c.json({ success: true, data });

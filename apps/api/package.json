@@ -46,6 +46,7 @@
     "./v1-schema": "./src/routes/v1/schema.ts",
     "./landing-schema": "./src/routes/landing/schema.ts",
     "./store-schema": "./src/routes/store/schema.ts",
+    "./phone": "./src/phone.ts",
     "./cash-points-schema": "./src/routes/cash-points/schema.ts"
   }
 }

@@ -126,9 +126,17 @@ There is no phone, address or provider id in the answer (FR-017).
 
 | `state` | Carries |
 | --- | --- |
-| `owes` | every field |
+| `owes` | every field, and `reconnectsFromCents` (below) |
 | `none` | every field; `debtCents` = 0. The app shows *Sin adeudo* (FR-018) |
 | `unavailable` | `usuario` and `state` only. The integration failed, or zero is not proven (D14) |
+
+*(Added at implementation, 2026-10-01.)* `reconnectsFromCents` on `owes`:
+the smallest amount that brings the service back under the business's own
+rule (class → mapped action, threshold, floor; D13 with no fee), or `null`
+when no amount does at the counter (the whole debt maps to register-only,
+or the business keeps its actions in observation). It is how the app "says
+so before confirming" in the spec's edge case on a short payment below the
+threshold; the contract had no other way to know it before the record.
 
 ### `POST /store/collections` (D11, D13–D16, D25)
 

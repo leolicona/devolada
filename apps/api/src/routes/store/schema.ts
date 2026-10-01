@@ -66,7 +66,22 @@ const quoteAmounts = {
 /* Three answers, never a guess (D14): `unavailable` carries no amount, so
    nothing downstream can render it as zero */
 export const storeQuoteResponse = z.discriminatedUnion("state", [
-  z.object({ state: z.literal("owes"), ...quoteAmounts, debtCents: z.number().int().positive() }).strict(),
+  z
+    .object({
+      state: z.literal("owes"),
+      ...quoteAmounts,
+      debtCents: z.number().int().positive(),
+      /* The spec's edge case "a short payment below the business's
+         threshold": the app says before confirming whether the service
+         comes back. The smallest amount that brings it back under the
+         business's own rule (class → mapped action, threshold, floor), or
+         null when no amount does at the counter (the whole debt maps to
+         register-only, or the business keeps its actions in observation).
+         Added at implementation, 2026-10-01: the contract had no way to
+         say it before the record. */
+      reconnectsFromCents: z.number().int().positive().nullable(),
+    })
+    .strict(),
   z.object({ state: z.literal("none"), ...quoteAmounts, debtCents: z.literal(0) }).strict(),
   z.object({ state: z.literal("unavailable"), usuario: z.string() }).strict(),
 ]);

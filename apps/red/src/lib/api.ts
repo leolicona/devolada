@@ -29,9 +29,19 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError("UNKNOWN_ERROR", res.status);
   }
-  if (!res.ok || !json.success) throw new ApiError(json.error?.code ?? "UNKNOWN_ERROR", res.status);
+  if (!res.ok || !json.success) {
+    const code = json.error?.code ?? "UNKNOWN_ERROR";
+    /* FR-014: a suspension ends the session on the next action, wherever
+       it lands — the layout listens and shows the suspended screen */
+    if (code === "STORE_SUSPENDED" && typeof window !== "undefined") {
+      window.dispatchEvent(new Event(STORE_SUSPENDED_EVENT));
+    }
+    throw new ApiError(code, res.status);
+  }
   return json.data;
 }
+
+export const STORE_SUSPENDED_EVENT = "devolada:store-suspended";
 
 /* Better Auth endpoints (constitution III's one exemption): no envelope.
    Non-2xx throws with Better Auth's error code. */

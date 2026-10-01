@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN } from "../../playwright.config";
-import { stubAdminApi } from "./stubs";
+import { ADMIN, RED } from "../../playwright.config";
+import { stubAdminApi, stubCashPointsApi, stubOperatorStoresApi, stubRedApi } from "./stubs";
 
 /* docs/legacy/polish/accessibility.spec.md — US-P04, paying TD-010.
 
@@ -121,5 +121,152 @@ test.describe("US-P04: the admin's links flow is walkable by keyboard (TD-010)",
       /Copiar/ /* automated-collections-api FR-011 (T076): the API link joins the same block, with the same two actions */,
       /WhatsApp/,
     ]);
+  });
+});
+
+/* One Tab press, then the stop must be the expected control, ringed */
+async function tabTo(page: Page, target: ReturnType<Page["getByRole"]>, what: string): Promise<void> {
+  await page.keyboard.press("Tab");
+  await expect(target, `${what} should hold the focus`).toBeFocused();
+  expectRinged(await readStop(page), what);
+}
+
+/* cash-at-stores T033 (constitution IV, VI): the counter is walkable by
+   keyboard — a shopkeeper with a hardware keyboard, or a screen reader's
+   user, reaches the search, a result, the amount and *Cobrar* in reading
+   order, each with a visible ring. */
+test.describe("cash-at-stores US1: the counter by keyboard", () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test("search, then each result, then the tabs", async ({ page }) => {
+    await stubRedApi(page);
+    await page.goto(`${RED}/`);
+    const search = page.getByLabel("Buscar cliente");
+    /* the counter opens ready to type */
+    await expect(search).toBeFocused();
+    await page.keyboard.type("guadalupe");
+    await expect(page.getByText("Guadalupe Reyes Hernández")).toBeVisible();
+    await snapshotRestingStyles(page);
+    await expectTabOrder(page, [/Guadalupe Reyes Hernández/, /Gabriel Ruiz/, /^Cobrar$/, /^Caja$/, /^Movimientos$/]);
+  });
+
+  test("the debt: back, the amount, Cobrar, then the tabs", async ({ page }) => {
+    await stubRedApi(page);
+    await page.goto(`${RED}/cobro/greyes@wifiplus`);
+    await expect(page.getByText("Total a cobrar")).toBeVisible();
+    await snapshotRestingStyles(page);
+    await tabTo(page, page.getByRole("link", { name: "Buscar otro cliente" }), "the way back");
+    await tabTo(page, page.getByRole("textbox", { name: "Monto a cobrar del adeudo" }), "the amount");
+    await tabTo(page, page.getByRole("button", { name: /^Cobrar \$/ }), "Cobrar");
+    await tabTo(page, page.getByRole("navigation", { name: "Secciones" }).getByRole("link", { name: "Cobrar" }), "the Cobrar tab");
+  });
+});
+
+/* cash-at-stores T040 (/speckit-analyze M3): the operator creates a store
+   and reaches the invitation without a mouse; every stop is ringed, the
+   focus stays inside the dialog, and closing it returns the focus to the
+   button that opened it. */
+test.describe("cash-at-stores US2: the create dialog and the invitation by keyboard", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("walks the form, reaches the invitation, and returns to Nueva tienda", async ({ page }) => {
+    await stubOperatorStoresApi(page);
+    await page.route("**/platform/stores", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            store: { id: "s9", name: "Tienda Nueva", address: "Calle Hidalgo 3", shopkeeperName: "Rosa Díaz", phone: "5512340000", status: "invited", createdAt: 1, collectsFor: [] },
+            invitation: { url: "https://red.devoladapago.com/invitacion/tok123", expiresAt: 2, waLink: "https://wa.me/525512340000?text=hola" },
+          },
+        }),
+      });
+    });
+    await page.goto(`${ADMIN}/operador`);
+    await page.getByRole("tab", { name: "Tiendas" }).click();
+    const trigger = page.getByRole("button", { name: "Nueva tienda" });
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+
+    const dialog = page.getByRole("dialog");
+    const first = dialog.getByRole("textbox", { name: "Nombre de la tienda" });
+    /* Radix opens on the first field */
+    await expect(first).toBeFocused();
+    /* The resting styles are read with nothing focused — read with the
+       first field focused, its ring would count as its resting look and
+       the return to it below could never show a change */
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await snapshotRestingStyles(page);
+    await first.focus();
+    await page.keyboard.type("Tienda Nueva");
+    await tabTo(page, dialog.getByRole("textbox", { name: "Dirección" }), "Dirección");
+    await page.keyboard.type("Calle Hidalgo 3");
+    await tabTo(page, dialog.getByRole("textbox", { name: "Nombre del tendero" }), "Nombre del tendero");
+    await page.keyboard.type("Rosa Díaz");
+    await tabTo(page, dialog.getByRole("textbox", { name: "Celular del tendero" }), "Celular del tendero");
+    await page.keyboard.type("5512340000");
+    await tabTo(page, dialog.getByRole("button", { name: "Crear e invitar" }), "Crear e invitar");
+    await tabTo(page, dialog.getByRole("button", { name: "Cerrar" }), "Cerrar");
+    /* the trap: Tab past the last stop comes back to the first */
+    await tabTo(page, first, "back to the first field");
+
+    await dialog.getByRole("button", { name: "Crear e invitar" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByText("Tienda creada")).toBeVisible();
+    await snapshotRestingStyles(page);
+    const link = dialog.getByRole("textbox", { name: "Enlace de la invitación" });
+    await link.focus();
+    await tabTo(page, dialog.getByRole("button", { name: "Copiar" }), "Copiar");
+    await tabTo(page, dialog.getByRole("link", { name: "Enviar por WhatsApp" }), "Enviar por WhatsApp");
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger, "closing returns the focus to Nueva tienda").toBeFocused();
+    expectRinged(await readStop(page), "Nueva tienda after closing");
+  });
+});
+
+/* cash-at-stores T060 (/speckit-analyze M3): on Puntos de pago the owner
+   confirms or disputes a hand-over by keyboard — the confirmation names
+   the store and the amount, Cancelar is where the focus lands first (the
+   write cannot be undone), and the dispute's note is reachable. */
+test.describe("cash-at-stores US5: Puntos de pago by keyboard", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("the confirm dialog opens on Cancelar and returns the focus to Confirmar", async ({ page }) => {
+    await stubCashPointsApi(page);
+    await page.goto(`${ADMIN}/puntos-de-pago`);
+    const confirm = page.getByRole("button", { name: "Confirmar" });
+    await confirm.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("¿Recibiste $2,000.00 de Abarrotes Lupita?");
+    await snapshotRestingStyles(page);
+    /* Radix's alert dialog focuses the cancel: an Enter by habit undoes nothing */
+    await expect(dialog.getByRole("button", { name: "Cancelar" })).toBeFocused();
+    await tabTo(page, dialog.getByRole("button", { name: "Sí, lo recibí" }), "Sí, lo recibí");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(confirm).toBeFocused();
+    expectRinged(await readStop(page), "Confirmar after closing");
+  });
+
+  test("the dispute: the note, then Disputar entrega, ringed", async ({ page }) => {
+    await stubCashPointsApi(page);
+    await page.goto(`${ADMIN}/puntos-de-pago`);
+    const open = page.getByRole("button", { name: "Disputar" });
+    await open.focus();
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("textbox", { name: /Nota/ })).toBeFocused();
+    await snapshotRestingStyles(page);
+    await page.keyboard.type("Faltaron $200 en el sobre");
+    await tabTo(page, dialog.getByRole("button", { name: "Disputar entrega" }), "Disputar entrega");
+    await tabTo(page, dialog.getByRole("button", { name: "Cerrar" }), "Cerrar");
+    await page.keyboard.press("Escape");
+    await expect(open).toBeFocused();
   });
 });

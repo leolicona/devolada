@@ -111,6 +111,15 @@ export const businesses = sqliteTable("businesses", {
      column this feature adds is read on any path. Turning it off keeps
      every reference for when it is turned on again. */
   payByReference: integer("pay_by_reference", { mode: "boolean" }).notNull().default(false),
+  /* cash-at-stores D7: the store channel, switched by the platform operator
+     only (FR-007, FR-036). FR-006 keeps it on for at most one business at
+     a time; the operator's handler enforces that, not an index, because
+     lifting it is a product decision, not a migration. */
+  storeChannelOn: integer("store_channel_on", { mode: "boolean" }).notNull().default(false),
+  /* cash-at-stores D7: the first time the channel was switched on, never
+     cleared. It shows Puntos de pago from then on (FR-034), with no extra
+     query per request (D23). */
+  storeChannelSince: integer("store_channel_since", { mode: "timestamp_ms" }),
   createdAt: createdAt(),
 });
 
@@ -436,7 +445,11 @@ export const payments = sqliteTable(
        It does *not* decide the door of the next attempt any more: that is
        read from the accepted fields below. The admin feed and the `human`
        evidence rule keep reading it with its original meaning. */
-    proofMode: text("proof_mode", { enum: ["receipt", "transfer"] }).notNull(),
+    /* cash-at-stores D11: `none` on a cash row, which carries no proof.
+       TypeScript-only, as every enum here: the column has no CHECK, so no
+       migration touches it. A reader tells a cash row by `channel`, never
+       by this. */
+    proofMode: text("proof_mode", { enum: ["receipt", "transfer", "none"] }).notNull(),
     /* From customer input (transfer door), from the CEP (receipt door),
        or — since two-eyes-receipt D17 — from what the two readings agreed
        on. All four present (with `claimedAmountCents`) is what makes the
@@ -515,8 +528,19 @@ export const payments = sqliteTable(
        confirmation; null while the payment is still validating. ---- */
     /* DV- folio, assigned when the money is confirmed (receipt spec heritage) */
     folio: text("folio").unique(),
-    /* 'spei' today; future channels ride the same row */
-    channel: text("channel", { enum: ["spei"] }).notNull().default("spei"),
+    /* cash-at-stores D11: `store` is a cash payment a store recorded; it
+       rides the same row, the same list and the same action queue as a
+       SPEI payment (FR-022, FR-031). The column and its default are
+       unchanged. */
+    channel: text("channel", { enum: ["spei", "store"] }).notNull().default("spei"),
+    /* cash-at-stores D11, D15: the store that recorded a cash payment, its
+       shopkeeper, the network fee the payer paid at the counter (the
+       store's money, outside `settle()` — D13) and the client's key for
+       this confirmation. Null on every SPEI row. */
+    storeId: text("store_id").references(() => stores.id),
+    storeUserId: text("store_user_id").references(() => user.id),
+    storeFeeCents: integer("store_fee_cents"),
+    collectionKey: text("collection_key"),
     /* Denormalized at confirmation, same reason as receipt D4: the feed
        and the queue must not depend on WispHub being up */
     wisphubCustomerId: text("wisphub_customer_id"),
@@ -574,6 +598,15 @@ export const payments = sqliteTable(
        "register_and_reconnect:withhold" / "register_only"). Null on
        every row that really dispatched. */
     observedAction: text("observed_action"),
+    /* bug: queue-retry-forgets-action — the action a dispatch decided, in
+       the same words as `observed_action` (`hypothesisOf`), written at
+       every dispatch decision (the verdict's first attempt, "Ejecutar
+       ahora", the accept of a held payment) and read back by every retry.
+       The adapter's default is to reconnect, so a retry that forgot the
+       decision gave the service back to a customer the business's rule
+       left cut. Null on rows queued before the fix: the sweep falls back
+       to `observed_action`, then to reconnect, as it always did. */
+    decidedAction: text("decided_action"),
     /* Born nullable with no semantics (D6): phase 4's child spec defines
        exacto / corto / excedente; reserved now so the busiest table
        migrates once. */
@@ -655,6 +688,12 @@ export const payments = sqliteTable(
            block the customer it really belongs to for six hours. */
         sql`tracking_key IS NOT NULL AND status NOT IN ('invalid', 'expired', 'superseded')`,
       ),
+    /* cash-at-stores D15 (FR-023): a confirmation records once. The insert
+       goes first; a second one with the same key meets this index and the
+       handler answers the row the first one made — racing taps included. */
+    uniqueIndex("payments_store_collection_key_idx")
+      .on(t.storeId, t.collectionKey)
+      .where(sql`collection_key IS NOT NULL`),
   ],
 );
 
@@ -1610,5 +1649,145 @@ export const benchReadings = sqliteTable(
     /* One reading per combination; "Leer de nuevo" fills only what is missing */
     uniqueIndex("bench_readings_receipt_model_version_idx").on(t.benchReceiptId, t.model, t.questionVersion),
     index("bench_readings_created_idx").on(t.createdAt),
+  ],
+);
+
+/* ---- cash-at-stores: the store channel (constitution v1.8.0/v1.9.1,
+   Principle V's store bullet). A store is a platform row with no
+   `business_id`; every movement of a business's money it touches — the
+   payment, the cash book, the hand-over — carries one (D6). ---- */
+
+/* cash-at-stores D6: a place that collects cash. Never deleted: removing
+   a store is a suspension (FR-005). `phone` is ten national digits and
+   also the shopkeeper's sign-in name (`user.username`, D3). `status`:
+   invited → active at acceptance; active ⇄ suspended by the operator; a
+   store suspended before acceptance returns to `invited` when reactivated
+   (data-model, /speckit-analyze M6). */
+export const stores = sqliteTable(
+  "stores",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    address: text("address").notNull(),
+    shopkeeperName: text("shopkeeper_name").notNull(),
+    phone: text("phone").notNull().unique(),
+    /* Set at acceptance (D5); one store per user */
+    userId: text("user_id")
+      .unique()
+      .references(() => user.id),
+    status: text("status", { enum: ["invited", "active", "suspended"] })
+      .notNull()
+      .default("invited"),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+);
+
+/* cash-at-stores D4: the shopkeeper's way in. The token is compared only,
+   so it is kept as its SHA-256 (constitution V) and shown once, in the
+   operator's answer. A store has at most one `sent` invitation: issuing a
+   new one marks the open one `replaced` in the same batch (FR-004). */
+export const storeInvitations = sqliteTable(
+  "store_invitations",
+  {
+    id: id(),
+    storeId: text("store_id")
+      .notNull()
+      .references(() => stores.id),
+    tokenHash: text("token_hash").notNull().unique(),
+    status: text("status", { enum: ["sent", "accepted", "replaced"] })
+      .notNull()
+      .default("sent"),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("store_invitations_store_status_idx").on(t.storeId, t.status)],
+);
+
+/* cash-at-stores D20: cash a store says it handed to a business. Declared
+   by the store, confirmed or disputed by the business — once. Declaring
+   writes no movement; confirming writes the `handover` movement in the
+   same batch as the status change; a dispute is terminal and writes
+   nothing. */
+export const storeHandovers = sqliteTable(
+  "store_handovers",
+  {
+    id: id(),
+    storeId: text("store_id")
+      .notNull()
+      .references(() => stores.id),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    cents: integer("cents").notNull(),
+    status: text("status", { enum: ["pending", "confirmed", "disputed"] })
+      .notNull()
+      .default("pending"),
+    /* Required for `disputed`, 3–280 characters (FR-035) */
+    note: text("note"),
+    declaredByUserId: text("declared_by_user_id")
+      .notNull()
+      .references(() => user.id),
+    declaredAt: integer("declared_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    resolvedByUserId: text("resolved_by_user_id").references(() => user.id),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("store_handovers_business_status_idx").on(t.businessId, t.status, t.declaredAt),
+    /* D20 rule 1 (FR-038): one pending hand-over per store and business */
+    uniqueIndex("store_handovers_pending_idx")
+      .on(t.storeId, t.businessId)
+      .where(sql`status = 'pending'`),
+  ],
+);
+
+/* cash-at-stores D19: the cash book, append-only, one store and one
+   business per row. What a store holds for a business is SUM(cents) over
+   that pair, never stored — the same SUM feeds *Mi caja* and *Puntos de
+   pago*, so they agree to the cent (FR-039, SC-005). Never UPDATE or
+   DELETE; only `store-ledger/index.ts` writes it. Signs: `collection` > 0,
+   `handover` < 0, `correction` ≠ 0. */
+export const storeLedger = sqliteTable(
+  "store_ledger",
+  {
+    id: id(),
+    storeId: text("store_id")
+      .notNull()
+      .references(() => stores.id),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id),
+    kind: text("kind", { enum: ["collection", "handover", "correction"] }).notNull(),
+    cents: integer("cents").notNull(),
+    /* Required for `collection` and `correction` */
+    paymentId: text("payment_id").references(() => payments.id),
+    /* Required for `handover` */
+    handoverId: text("handover_id").references(() => storeHandovers.id),
+    /* `correction` only, 3–280 characters (D21, FR-030) */
+    reason: text("reason"),
+    /* `correction`: the operator who wrote it */
+    authorUserId: text("author_user_id").references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("store_ledger_store_business_created_idx").on(t.storeId, t.businessId, t.createdAt),
+    /* One movement per payment collected, and per hand-over confirmed:
+       a second write is a no-op, so every path may call the writer */
+    uniqueIndex("store_ledger_collection_payment_idx")
+      .on(t.paymentId)
+      .where(sql`kind = 'collection'`),
+    uniqueIndex("store_ledger_handover_idx")
+      .on(t.handoverId)
+      .where(sql`kind = 'handover'`),
   ],
 );

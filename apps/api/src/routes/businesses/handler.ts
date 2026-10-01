@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { businesses, invitation, member, organization, user as userTable } from "../../db/schema";
-import { makeAuth } from "../../auth/better";
+import { isStoreUser, makeAuth } from "../../auth/better";
 import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, roleCan, ROLE_RANK, type Role } from "../../auth/roles";
 import { grantWelcomeBonus } from "../../credit";
@@ -29,6 +29,12 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
   const session = await auth.api.getSession({ headers });
   if (!session) {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+  }
+  /* cash-at-stores D2 (FR-013): a shopkeeper never creates a business —
+     refused here, before the organization plugin's own refusal would
+     surface as an error this route does not speak */
+  if (await isStoreUser(drizzle(c.env.DB), session.user.id)) {
+    return c.json({ success: false, error: { code: "WRONG_ACTOR" } }, 403);
   }
 
   const org = await auth.api.createOrganization({

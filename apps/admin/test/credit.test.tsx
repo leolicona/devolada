@@ -243,10 +243,10 @@ describe("US-L02 scenario 9: the operator panel is the operator's alone", () => 
         return ok({ key, value: "300", createdAt: 1 }, 201);
       }),
       handlers.platformBusinesses(() =>
-        ok({ businesses: [{ id: "b1", name: "WifiPlus", email: "owner@wifiplus.mx", status: "active", balanceCents: 1500, step: "low", feeCents: 500, feeOverrideCents: null, createdAt: 1 }] }),
+        ok({ businesses: [{ id: "b1", name: "WifiPlus", email: "owner@wifiplus.mx", status: "active", balanceCents: 1500, step: "low", feeCents: 500, feeOverrideCents: null, createdAt: 1, storeChannel: { on: false, since: null }, capabilities: [], storeHeldCents: 0 }] }),
       ),
       handlers.platformBusiness(() =>
-        ok({ id: "b1", name: "WifiPlus", email: "owner@wifiplus.mx", status: "active", balanceCents: 1500, step: "low", feeCents: 500, feeOverrideCents: null, createdAt: 1, entries: [], nextCursor: null }),
+        ok({ id: "b1", name: "WifiPlus", email: "owner@wifiplus.mx", status: "active", balanceCents: 1500, step: "low", feeCents: 500, feeOverrideCents: null, createdAt: 1, storeChannel: { on: false, since: null }, capabilities: [], storeHeldCents: 0, entries: [], nextCursor: null }),
       ),
       handlers.adjustment((id, body) => {
         adjusted.push([id, body]);

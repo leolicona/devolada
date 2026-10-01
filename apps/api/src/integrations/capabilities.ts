@@ -55,6 +55,20 @@ export type DebtInvoice = {
   totalCents: number;
 };
 
+/* cash-at-stores D8: who the debt belongs to, read in the same operation
+   as the debt (the adapter already reads the customer record there, so it
+   costs no call). The payment row needs it — the denormalised identity
+   that keeps the queue independent of the provider — and the action needs
+   `providerCustomerId`. No phone: the store's receipt reads that live,
+   when it is sent (D18). */
+export type DebtCustomer = {
+  /* The customer's id in the business's system, as text */
+  providerCustomerId: string;
+  name: string;
+  /* Null when the integration has no zone for the customer */
+  zone: string | null;
+};
+
 /* What one customer owes (D9, FR-018): an amount above zero, a proven
    zero, or "could not confirm" — never a guess. `unconfirmed` carries no
    amount, so nothing downstream can render it as zero. */
@@ -68,8 +82,59 @@ export type CustomerDebtAnswer =
       carriedBalanceCents: number;
       /* Every open invoice, with no date window (FR-017) */
       invoices: DebtInvoice[];
+      /* cash-at-stores D8 */
+      customer: DebtCustomer;
     }
   | { state: "unconfirmed" };
+
+/* cash-at-stores D8, D24: one customer a typed search found. What a store
+   may see of it is name, usuario and zone (FR-017); `providerCustomerId`
+   stays on the server. The phone is a search key and never a field. */
+export type CustomerSearchRow = {
+  usuario: string;
+  name: string;
+  zone: string | null;
+  providerCustomerId: string;
+};
+
+/* cash-at-stores D24: at most `limit` rows, and whether more matched — the
+   app then asks for a more specific search instead of paging (FR-016) */
+export type CustomerSearchAnswer = { rows: CustomerSearchRow[]; more: boolean };
+
+/* cash-at-stores D9: what a confirmed payment asks the business's system
+   to do — register the money and, when the decision says so, give the
+   service back. Every number is the verdict's own, stored on the row, so
+   a retry days later sends the same ones (partial-payment D9, TD-009). */
+export type ActionAttemptInput = {
+  /* The business, for the clock its system writes dates on and the key
+     its caches use (bug: wisphub-payment-utc-time, provider-latency D5) */
+  business: { id: string; timezone: string };
+  usuario: string;
+  providerCustomerId: string;
+  /* What this payment registers against the debt */
+  registeredCents: number;
+  /* The invoice it pays, once known, so a retry never creates another */
+  invoiceId: number | null;
+  /* True once the money landed: later attempts only verify */
+  paymentRegistered: boolean;
+  /* The decision's vote (bug: queue-retry-forgets-action): false records
+     the money and leaves the service as it is */
+  reconnect: boolean;
+  now: Date;
+};
+
+/* cash-at-stores D9: one attempt's answer, in the core's words. `status`
+   keeps the vocabulary the queue already speaks (`integrations-hub` D7:
+   the row maps it with `outcomeOf`): `reconnected` once the service is
+   verified back, `withheld` when the money landed and no reconnection
+   was asked, `queued` for anything still open. `error` is the core's
+   word for why it is still open. */
+export type ActionAttempt = {
+  status: "reconnected" | "queued" | "withheld";
+  paymentRegistered: boolean;
+  invoiceId: number | null;
+  error: "INTEGRATION_UNAVAILABLE" | "INTEGRATION_AUTH_FAILED" | "NOT_ACTIVE_YET" | null;
+};
 
 /* payment-without-receipt D4: one customer whose phone is the phone
    asked, with its name. The key is the customer's identity in the
@@ -107,6 +172,19 @@ export type IntegrationCapabilities = {
   customersWithPhone?: {
     of(phone: string): Promise<CustomerWithPhone[]>;
     phoneOf(usuario: string): Promise<string | null>;
+  };
+  /* cash-at-stores D8: customers matching a typed text (name, surname,
+     phone or usuario), live, at most `limit`. Throws `IntegrationError`
+     when it cannot answer: for a store an outage is "no disponible",
+     never a partial list (FR-028). */
+  customerSearch?: {
+    find(text: string, limit: number): Promise<CustomerSearchAnswer>;
+  };
+  /* cash-at-stores D9: run the action a confirmed payment decided. Never
+     throws for the provider's weather: a failure is an answer (`queued`
+     with its error), so the queue keeps the schedule. */
+  paymentActions?: {
+    attempt(input: ActionAttemptInput): Promise<ActionAttempt>;
   };
 };
 

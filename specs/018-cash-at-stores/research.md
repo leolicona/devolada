@@ -901,3 +901,42 @@ version to keep.
 If M1 shows the plugin cannot be held to the acceptance route, **stop and
 take it to the creator**. Signing in by email is the fallback, and it
 changes a decision the creator made.
+
+### Results (T001)
+
+- **M1 — measured 2026-10-01, holds (D3, D5 stand).** On the workerd local
+  D1 of the API suite (`apps/api/test/cash-at-stores-access.test.ts`, the
+  "M1" block), against Better Auth 1.6.29:
+  - the plugin's columns are `user.username` (text, unique) and
+    `user.display_username` (text) — migration `0044_cash_at_stores.sql` (0043 at first; renumbered 2026-10-01 when spec 017 took 0042 on `main` and the retry fix moved to 0043);
+  - a user whose `username` was written in the DB signs in with
+    `POST /auth/sign-in/username {username, password}` (200, session cookie),
+    and `/auth/me` answers the store branch;
+  - the same user unverified gets 403 `EMAIL_NOT_VERIFIED`: the plugin
+    honours `requireEmailVerification` because no `sendVerificationEmail`
+    is configured (the house uses the email-OTP plugin);
+  - the `hooks.before` refusal holds on `/sign-up/email` and `/update-user`
+    (400 `USERNAME_NOT_ALLOWED`).
+
+  **Two doors the plan did not name, found reading 1.6.29's dist:**
+  `/sign-in/email-otp` creates a user from any extra body field (so it
+  would take a `username`), and the plugin's own sign-up hook copies a
+  `displayUsername` into `username`. The refusal therefore covers every
+  path except `/sign-in/username`, and both fields; the user hook runs
+  before every plugin hook (`getHooks`). `/is-username-available` is
+  turned off (`disabledPaths`): whether a phone is a store's is nobody's
+  to probe. The username stays the acceptance route's alone — no stop.
+- **M2 — not run here.** It needs an Android phone with Chrome and an
+  iPhone with Safari against `red.dev`. The app ships a manifest
+  (standalone, 192/512 PNG icons, an SVG, `apple-touch-icon`) and no
+  service worker (D26). To measure on the first dev deploy, before the
+  pilot (T065); if one platform fails, the app still works in its browser.
+- **M3 — not run on the pilot.** It needs the pilot tenant's key, which
+  this session does not have. What the code already shows: both reads use
+  the `/clientes/` list rows (`searchCustomers` through `listPage`,
+  `getCustomer` by `usuario=`), and one mapping (`mapCustomer`) reads
+  `zona.nombre` and `telefono` from them — measured on the demo tenant by
+  `links-on-demand-search` (2026-09-20). If the pilot's rows carry no
+  `zona`, a result shows name and usuario and the zone is null (FR-017:
+  "when the integration has one"); nothing breaks. To confirm read-only on
+  the pilot before its first collection.

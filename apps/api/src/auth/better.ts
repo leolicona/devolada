@@ -1,12 +1,15 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { organization } from "better-auth/plugins/organization";
+import { username } from "better-auth/plugins/username";
 import { eq } from "drizzle-orm";
 import { passkey } from "@better-auth/passkey";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import * as authSchema from "../db/auth-schema";
+import { stores } from "../db/schema";
 import { sendAuthCode, sendMemberInvitation } from "../email/sender";
 import { ac, pluginRoles } from "./roles";
 
@@ -16,6 +19,24 @@ const ONE_DAY = 60 * 60 * 24;
    the plugin's default happens to be the same number, and a guarantee
    that lives in a default is not ours (D11's lesson). */
 const INVITATION_TTL = 60 * 60 * 48;
+
+/* cash-at-stores D2: a shopkeeper is the user a store row names. Read
+   per request, never cached: the store's own status is checked on every
+   action (FR-014), and this answers the cheaper question beside it. */
+export async function isStoreUser(db: ReturnType<typeof drizzle>, userId: string): Promise<boolean> {
+  const [row] = await db.select({ id: stores.id }).from(stores).where(eq(stores.userId, userId)).limit(1);
+  return Boolean(row);
+}
+
+/* cash-at-stores D3: the one door that takes a username from a request —
+   the shopkeeper's phone, as a sign-in name. Every other door refuses
+   one, so only the store acceptance route (which writes the column
+   directly) can give a user a phone. Measured M1, 2026-10-01, against
+   1.6.29's dist: besides `/sign-up/email` and `/update-user`, which the
+   plan named, `/sign-in/email-otp` creates a user from any extra body
+   field, and the plugin's own sign-up hook copies a `displayUsername`
+   into `username` — so the refusal covers every path and both fields. */
+const USERNAME_INPUT_PATHS = new Set(["/sign-in/username"]);
 
 /* Better Auth instance (better-auth.spec.md). Per-request construction is
    the Workers pattern: the D1 binding only exists inside a request. */
@@ -55,6 +76,19 @@ export function makeAuth(env: Bindings) {
       revokeSessionsOnPasswordReset: true,
     },
     emailVerification: { autoSignInAfterVerification: true },
+    /* cash-at-stores D3: whether a phone is a store's is nobody's to probe */
+    disabledPaths: ["/is-username-available"],
+    hooks: {
+      /* cash-at-stores D3: see USERNAME_INPUT_PATHS. Runs before every
+         plugin's hooks (1.6.29 `getHooks`: the user hook first). */
+      before: createAuthMiddleware(async (ctx) => {
+        if (USERNAME_INPUT_PATHS.has(ctx.path)) return;
+        const body = ctx.body as Record<string, unknown> | undefined;
+        if (body && typeof body === "object" && ("username" in body || "displayUsername" in body)) {
+          throw new APIError("BAD_REQUEST", { code: "USERNAME_NOT_ALLOWED", message: "USERNAME_NOT_ALLOWED" });
+        }
+      }),
+    },
     /* D11: the limiter is explicit, never inherited. Better Auth turns it
        on only under NODE_ENV=production and keeps counters in memory — on
        Workers that is an isolate that forgets every few minutes, and a
@@ -114,6 +148,9 @@ export function makeAuth(env: Bindings) {
         ac,
         roles: pluginRoles,
         creatorRole: "owner",
+        /* cash-at-stores D2: a shopkeeper never creates a business — this
+           door and `POST /businesses` both refuse (FR-013) */
+        allowUserToCreateOrganization: async (user) => !(await isStoreUser(db, user.id)),
         invitationExpiresIn: INVITATION_TTL,
         async sendInvitationEmail(data) {
           try {
@@ -143,6 +180,12 @@ export function makeAuth(env: Bindings) {
           }
         },
       }),
+      /* cash-at-stores D3: the shopkeeper signs in with their phone
+         (`POST /auth/sign-in/username`). It honours
+         requireEmailVerification: an unverified shopkeeper gets 403
+         EMAIL_NOT_VERIFIED (measured M1). The default validator
+         (`[a-zA-Z0-9_.]`, 3–30) takes ten digits as they are. */
+      username(),
       passkey({
         rpID: env.PASSKEY_RP_ID ?? "localhost",
         rpName: "Devolada",

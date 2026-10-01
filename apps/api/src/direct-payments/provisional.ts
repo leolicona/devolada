@@ -101,6 +101,9 @@ export async function isRevoked(db: DB, payment: DirectPayment, now: Date): Prom
         eq(payments.paymentLinkId, payment.paymentLinkId),
         ne(payments.id, payment.id),
         ne(payments.status, "superseded"),
+        /* cash-at-stores D12: the link's own SPEI attempts — a store's
+           cash record is no incident of the payer's transfers */
+        eq(payments.channel, "spei"),
         gte(payments.createdAt, incidentSince),
       ),
     );

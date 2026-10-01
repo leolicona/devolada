@@ -2,6 +2,7 @@ import {
   IntegrationError,
   type CapabilityName,
   type CustomerDebtAnswer,
+  type CustomerSearchAnswer,
   type IntegrationCapabilities,
   type OpenInvoice,
   type ReceivablesPage,
@@ -17,6 +18,7 @@ import {
 } from "./client";
 import { debtFor, nothingOwedIsProven } from "./debt";
 import { wisphubFor, type WispHubAddress } from "./factory";
+import { paymentActions } from "./actions";
 
 /* The WispHub adapter's side of two core capabilities
    (constitution IX, cobros-in-links D18): `receivables`, a block of the
@@ -34,6 +36,10 @@ export const WISPHUB_CAPABILITY_NAMES = [
   "customerDebt",
   /* payment-without-receipt D4 */
   "customersWithPhone",
+  /* cash-at-stores D8, D9: the counter's search, and the actions a
+     confirmed payment runs */
+  "customerSearch",
+  "paymentActions",
 ] as const satisfies readonly CapabilityName[];
 
 type AdapterEnv = { WISPHUB_BASE_URL?: string };
@@ -272,6 +278,9 @@ async function customerDebt(
   const pending = { invoices, complete: true, source: "live" as const };
   const debt = debtFor(record, pending);
   const answer = {
+    /* cash-at-stores D8: from the record this operation already read —
+       never its phone */
+    customer: { providerCustomerId: String(record.wisphubId), name: record.name, zone: record.zone },
     totalCents: debt.totalCents,
     invoiceCents: debt.invoiceCents,
     carriedBalanceCents: debt.carriedBalanceCents,
@@ -288,6 +297,31 @@ async function customerDebt(
   if (debt.totalCents > 0) return { state: "owes", ...answer };
   if (nothingOwedIsProven(record, pending)) return { state: "none", ...answer };
   return { state: "unconfirmed" };
+}
+
+/* cash-at-stores D8, D24: the counter's search — the Links search's own
+   provider question (`searchCustomers`: the four `__contains` filters on
+   nombre, apellido, usuario and telefono, measured case- and
+   accent-insensitive 2026-09-20), read live with no fallback to
+   Devolada's links. The merge of four filters can exceed `limit`; the
+   first `limit` are kept and `more` says the rest exist. The phone is a
+   search key and never leaves this function (FR-017). */
+async function customerSearch(
+  integration: WispHubAddress,
+  env: AdapterEnv,
+  text: string,
+  limit: number,
+): Promise<CustomerSearchAnswer> {
+  const found = await translated(() => wisphubFor(integration, env).searchCustomers(text, limit), "customer search");
+  return {
+    rows: found.customers.slice(0, limit).map((c) => ({
+      usuario: c.usuario,
+      name: c.name,
+      zone: c.zone,
+      providerCustomerId: String(c.wisphubId),
+    })),
+    more: found.customers.length > limit || found.more.length > 0,
+  };
 }
 
 /* Both capabilities, for one business's integration. Each call builds a
@@ -307,5 +341,9 @@ export function wisphubCapabilities(integration: WispHubAddress, env: AdapterEnv
       phoneOf: (usuario) =>
         translated(async () => (await wisphubFor(integration, env).getCustomer(usuario))?.phone ?? null, "customer phone"),
     },
+    customerSearch: {
+      find: (text, limit) => customerSearch(integration, env, text, limit),
+    },
+    paymentActions: paymentActions(integration, env),
   };
 }

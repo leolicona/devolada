@@ -17,7 +17,7 @@ export type BusinessActor = {
   /* cobros-in-links D13: what the integration can do. The Por cobrar
      chip needs `receivables`, a search result's debt `customerDebt`
      (FR-013). Empty with no integration. */
-  integrationCapabilities: ("receivables" | "customerDebt" | "customersWithPhone")[];
+  integrationCapabilities: ("receivables" | "customerDebt" | "customersWithPhone" | "customerSearch" | "paymentActions")[];
   /* business-and-memberships D5 (2026-09-02): born without a CLABE */
   speiConfigured: boolean;
   /* integrations-hub D4: connected with actions off — the shell chip */
@@ -33,6 +33,9 @@ export type BusinessActor = {
   platformOperator: boolean;
   /* prepaid-credit D7: the chip's step, computed by /auth/me alone */
   credit: { balanceCents: number; step: "ok" | "low" | "empty" | "paused" };
+  /* cash-at-stores D7, D23: Puntos de pago shows from the first switch
+     on (`since`), and stays (FR-034) */
+  storeChannel: { on: boolean; since: number | null };
 };
 
 /* Shell spec D3: the guard accepts only business actors — the only kind
@@ -41,6 +44,8 @@ export function useSession() {
   const query = useQuery<BusinessActor, ApiError>({
     queryKey: ["session"],
     queryFn: async () => {
+      /* cash-at-stores D2: a shopkeeper's session answers `type: "store"`;
+         the shell gives it a screen of its own (FR-013) */
       const actor = await api<BusinessActor>("/auth/me");
       if (actor.type !== "business") throw new ApiError("WRONG_ACTOR", 403);
       return actor;

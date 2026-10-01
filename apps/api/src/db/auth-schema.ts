@@ -13,6 +13,14 @@ export const user = sqliteTable("user", {
   image: text("image"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  /* cash-at-stores D3: the `username` plugin's two columns (measured M1,
+     2026-10-01: `username` unique, `display_username` plain). The username
+     is a shopkeeper's phone, ten national digits, written only by the
+     store acceptance route; every Better Auth door that would take one
+     from a request body refuses it (auth/better.ts). Null on every other
+     user. */
+  username: text("username").unique(),
+  displayUsername: text("display_username"),
 });
 
 export const session = sqliteTable("session", {

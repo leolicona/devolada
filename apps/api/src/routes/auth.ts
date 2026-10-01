@@ -12,7 +12,8 @@ import {
   verification,
 } from "../db/schema";
 import { makeAuth } from "../auth/better";
-import { requireSession } from "../auth/middleware";
+import { requireAnyActor } from "../auth/middleware";
+import { channelBusiness } from "../store-channel";
 import { rateLimitRoute } from "../auth/rate-limit";
 import { creditSummary } from "../credit";
 
@@ -87,9 +88,20 @@ auth.post("/business/signup", rateLimitRoute("business-signup", { window: 60, ma
 /* prepaid-credit D7: the chip reads its step from the session query —
    computed here, once per /auth/me, never in the middleware (a SUM and
    three settings reads on every request was the wrong price). */
-auth.get("/me", requireSession, async (c) => {
-  const actor = c.get("actor");
+auth.get("/me", requireAnyActor, async (c) => {
   const db = drizzle(c.env.DB);
+  /* cash-at-stores D2: a shopkeeper's session answers the store branch —
+     the store, and the one business its counter serves (null while no
+     business has the channel on, FR-015) */
+  const store = c.get("store");
+  if (store) {
+    const business = await channelBusiness(db);
+    return c.json({
+      success: true,
+      data: { type: "store" as const, storeId: store.storeId, name: store.name, businessName: business?.name ?? null },
+    });
+  }
+  const actor = c.get("actor");
   const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
   const credit = await creditSummary(db, business);
   return c.json({

@@ -24,6 +24,8 @@ import { sweepApiCounters } from "./routes/v1/middleware";
 import { prunePanelLinks } from "./links/prune";
 import { internalError } from "./routes/v1/envelope";
 import { landingPublicRoute } from "./routes/landing";
+import { storeRoute } from "./routes/store";
+import { cashPointsRoute } from "./routes/cash-points";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -60,6 +62,11 @@ app.route("/credit", creditRoute);
 app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
 app.route("/support", supportRoute);
+/* cash-at-stores: the shopkeeper's area (D2) — its own actor, its own
+   guard, inside CORS like every browser door */
+app.route("/store", storeRoute);
+/* cash-at-stores D23: *Puntos de pago*, the business's side of the cash */
+app.route("/cash-points", cashPointsRoute);
 /* landing-page D5/D6: the landing page's two public doors — the request
    and the beacon. Inside CORS, unlike /v1: the page's script calls the
    request door from the landing's origin (ALLOWED_ORIGINS, D14). */

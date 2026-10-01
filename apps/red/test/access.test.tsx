@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse } from "msw";
 import { baFail, baOk, fail, handlers, invitation, ok, searchRows, server, storeMe } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
@@ -64,6 +65,17 @@ describe("cash-at-stores US3 — signing in", () => {
     await userEvent.type(screen.getByLabelText("Contraseña"), "otra-cosa");
     await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("Teléfono o contraseña incorrectos.")).toBeInTheDocument();
+  });
+
+  it("a lost signal at sign-in says so, never 'wrong password' (T074)", async () => {
+    signedOutUntil();
+    server.use(handlers.signIn(() => HttpResponse.error()));
+    renderApp("/entrar");
+    await userEvent.type(await screen.findByLabelText("Teléfono"), "5512345678");
+    await userEvent.type(screen.getByLabelText("Contraseña"), "secreta-123");
+    await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText("Sin conexión. Revisa tu internet e intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.queryByText("Teléfono o contraseña incorrectos.")).toBeNull();
   });
 
   it("asks for ten digits before sending anything", async () => {
@@ -227,6 +239,30 @@ describe("cash-at-stores US3 — recovery", () => {
     await userEvent.type(screen.getByLabelText("Contraseña nueva"), "nueva-clave-1");
     await userEvent.click(screen.getByRole("button", { name: "Cambiar contraseña" }));
     expect(await screen.findByText("El código no es válido o ya venció. Pide uno nuevo.")).toBeInTheDocument();
+  });
+});
+
+describe("cash-at-stores US3 — staying in through a weak signal (T074, FR-010, D26)", () => {
+  it("a session read that cannot reach the API keeps the app, offers a retry, and never shows the sign-in", async () => {
+    let reachable = false;
+    server.use(
+      handlers.session(() => (reachable ? ok(storeMe) : HttpResponse.error())),
+      handlers.search(() => ok(searchRows)),
+    );
+    const { container } = renderApp("/");
+    expect(await screen.findByText(/No pudimos cargar tu tienda/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Entrar" })).toBeNull();
+    await expectNoViolations(container);
+    reachable = true;
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("heading", { name: "Cobrar" })).toBeInTheDocument();
+  });
+
+  it("a server error on the session read does not sign the shopkeeper out of view either", async () => {
+    server.use(handlers.session(() => fail("INTERNAL_ERROR", 503)));
+    renderApp("/");
+    expect(await screen.findByText(/No pudimos cargar tu tienda/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Entrar" })).toBeNull();
   });
 });
 

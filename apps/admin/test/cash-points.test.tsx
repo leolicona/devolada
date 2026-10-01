@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http } from "msw";
 import { cashPointsResponse, handoverHistoryResponse } from "@devolada/api/cash-points-schema";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { businessActor, fail, handlers, ok, server } from "./msw";
@@ -146,6 +147,27 @@ describe("cash-at-stores US5: Puntos de pago", () => {
     expect(within(list).getByText("En disputa")).toBeInTheDocument();
     expect(within(list).getByText("«Faltaron $200 en el sobre»")).toBeInTheDocument();
     expect(within(list).getByText(/disputó owner@isp\.mx/)).toBeInTheDocument();
+    /* T076: the day it was declared and the day it was resolved, not only the hour */
+    expect(within(list).getByText(/declarada \d+ de [a-z]+/)).toBeInTheDocument();
+    expect(within(list).getByText(/disputó owner@isp\.mx el \d+ de [a-z]+/)).toBeInTheDocument();
+  });
+
+  it("pages the hand-over history with *Cargar más* (T075)", async () => {
+    arrange();
+    const older = handoverHistoryResponse.parse({
+      handovers: [{ id: "h-old", storeId: "s1", cents: 15000, status: "confirmed", note: null, declaredAt: at - 40 * 86_400_000, resolvedAt: at - 39 * 86_400_000, resolvedBy: "owner@isp.mx" }],
+      nextCursor: null,
+    });
+    server.use(
+      http.get("/cash-points/stores/:storeId/history", ({ request }) =>
+        ok(new URL(request.url).searchParams.get("cursor") ? older : { ...history, nextCursor: "c1" }),
+      ),
+    );
+    await screen.findByRole("heading", { name: "Abarrotes Lupita" });
+    await userEvent.click(within(card("Abarrotes Lupita")).getByRole("button", { name: "Ver entregas" }));
+    const list = await screen.findByRole("list", { name: "Entregas de Abarrotes Lupita" });
+    await userEvent.click(within(card("Abarrotes Lupita")).getByRole("button", { name: "Cargar más" }));
+    expect(await within(list).findByText("$150.00")).toBeInTheDocument();
   });
 
   it("a viewer reads everything and sees no buttons to act (FR-035)", async () => {

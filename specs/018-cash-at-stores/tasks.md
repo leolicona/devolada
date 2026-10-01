@@ -778,16 +778,16 @@ before any code (T073, T088, T097, T098), and each of those says so.
     - refuse the collection with a code of its own;
     - warn the shopkeeper and let them choose;
   - then build the choice at the quote and the record, with API and component tests.
-- [ ] T074 [US3] Keep a signed-in shopkeeper in the app through a lost signal, per FR-010, US3/AC3 and D26's offline banner (contradicts):
+- [X] T074 [US3] Keep a signed-in shopkeeper in the app through a lost signal, per FR-010, US3/AC3 and D26's offline banner (contradicts):
   - `apps/red/src/layout/TabLayout.tsx:52-54` sends the shopkeeper to `/entrar` on any session error, `NETWORK_ERROR` and 5xx included. The session goes stale after 60 s (`apps/red/src/features/auth/session.ts`), so a short loss of signal at that moment signs them out of view;
   - on `/entrar`, a network failure reads *"Teléfono o contraseña incorrectos."* (`apps/red/src/features/auth/LoginScreen.tsx:111`);
   - go to `/entrar` only on 401 `AUTHENTICATION_ERROR`. On a network or server error, keep the layout and its banner. Give the sign-in screen its own line for a lost signal. Add the cases to `apps/red/test/access.test.tsx`.
-- [ ] T075 [US2] Page the operator's cash book and *Puntos de pago*'s hand-over history, per FR-030, US2/AC11 and D21 (partial):
+- [X] T075 [US2] Page the operator's cash book and *Puntos de pago*'s hand-over history, per FR-030, US2/AC11 and D21 (partial):
   - `apps/admin/src/features/operator/StoresTab.tsx:320-324` reads one page of `/platform/stores/:id/ledger/:businessId` (20 rows) and never follows `nextCursor`;
   - the correction's payment picker is built from that one page, so a payment older than the latest 20 movements can be neither seen nor corrected;
   - *Puntos de pago*'s history (`apps/admin/src/features/cash-points/CashPointsScreen.tsx:135-138`) ignores its `nextCursor` too;
   - add *Cargar más* to both, and let the picker reach any payment of that store and business. Extend `apps/admin/test/operator-stores.test.tsx` and `apps/admin/test/cash-points.test.tsx`.
-- [ ] T076 [US5] Show the day, not only the hour, on *Puntos de pago*, and when a hand-over was resolved, per US5/AC5 and FR-034 (partial):
+- [X] T076 [US5] Show the day, not only the hour, on *Puntos de pago*, and when a hand-over was resolved, per US5/AC5 and FR-034 (partial):
   - `apps/admin/src/features/cash-points/CashPointsScreen.tsx:151, 184, 193` render `formatTime`, which is hour and minute only (`apps/admin/src/lib/datetime.ts:19-28`), for hand-overs that may be days old;
   - `resolvedAt` is in the schema (`apps/api/src/routes/cash-points/schema.ts:31`), and is never shown beside `resolvedBy`;
   - use `formatDateTime`, show `resolvedAt`, and assert both in `apps/admin/test/cash-points.test.tsx`.
@@ -823,7 +823,7 @@ before any code (T073, T088, T097, T098), and each of those says so.
   - four links are under 48px and nothing measures them: *Olvidé mi contraseña* (`apps/red/src/features/auth/LoginScreen.tsx:154`), *Volver a entrar* (`apps/red/src/features/auth/RecoverScreen.tsx:88`), *Reenviar código* (`apps/red/src/features/auth/InvitationScreen.tsx:88`) and *Ver todos* (`apps/red/src/features/cashbox/LedgerScreen.tsx:67`);
   - add the screens to `tests/e2e/responsive.spec.ts` and `tests/e2e/contrast.spec.ts`, and bring the links to 48px.
 - [ ] T084 [US1] Cross-fade the outcome when it changes, per Constitution VI ("the outcome cross-fades") (missing): `apps/red/src/features/counter/ResultScreen.tsx:217-222` swaps the badge from `queued` to its final state with no `Reveal` (`packages/ui/src/components/reveal.tsx`). Wrap it, and add the change to red's case in `tests/e2e/motion.spec.ts`.
-- [ ] T085 [US2] Show the day and the author on the operator's records, per FR-030 (who corrected what, and when) and FR-008, FR-043 (changes keep their author and date) (partial):
+- [X] T085 [US2] Show the day and the author on the operator's records, per FR-030 (who corrected what, and when) and FR-008, FR-043 (changes keep their author and date) (partial):
   - the operator's cash book shows movements and corrections with the hour only (`apps/admin/src/features/operator/StoresTab.tsx:368`);
   - Reglas' *Último cambio* shows the hour only and no author (`apps/admin/src/features/operator/OperatorScreen.tsx:150`). The setting's history carries only `authorUserId`;
   - render `formatDateTime` on both, and the author's email on the setting.

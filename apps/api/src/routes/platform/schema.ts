@@ -27,7 +27,7 @@ export const settingItem = z.object({
   type: z.enum(["cents", "int", "clabe", "bank", "text", "enum", "template"]),
   birth: z.string().nullable(),
   current: z.string().nullable(),
-  history: z.array(z.object({ value: z.string(), authorUserId: z.string(), createdAt: z.number().int() })),
+  history: z.array(z.object({ value: z.string(), authorUserId: z.string(), authorEmail: z.string().nullable(), createdAt: z.number().int() })),
 });
 export const settingsListResponse = z.object({ settings: z.array(settingItem) });
 

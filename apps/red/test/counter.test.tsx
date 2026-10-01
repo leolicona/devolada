@@ -196,6 +196,50 @@ describe("cash-at-stores US1 — the result", () => {
     });
   }
 
+  it("queued below the threshold: no promise of reconnection, while the registration is on its way (T071)", async () => {
+    server.use(
+      handlers.collection(() =>
+        ok(collection({ class: "short", amountCents: 50000, remainingCents: 29800, outcome: "queued", reconnects: false })),
+      ),
+    );
+    const { container } = renderApp("/cobros/pay-1");
+    const badge = await screen.findByText("Sin reactivar");
+    expect(badge.querySelector("svg")).not.toBeNull();
+    expect(screen.getByText(/el servicio no se reactiva\. Dile al cliente que queda a deber \$298\.00/)).toBeInTheDocument();
+    expect(screen.getByText("Registrando el pago en WiFi Plus.")).toBeInTheDocument();
+    expect(screen.queryByText("Reconexión en cola")).toBeNull();
+    expect(screen.queryByText(/se reactivará/)).toBeNull();
+    await expectNoViolations(container);
+  });
+
+  it("queued under a register-only rule: the business registers it, and nothing promises the service (T071)", async () => {
+    server.use(handlers.collection(() => ok(collection({ outcome: "queued", reconnects: false }))));
+    renderApp("/cobros/pay-1");
+    expect(await screen.findByText(/El negocio registrará el pago/)).toBeInTheDocument();
+    expect(screen.queryByText(/se reactivará/)).toBeNull();
+  });
+
+  it("one failed status read keeps the folio on screen and says the update failed (T082, US1/AC10)", async () => {
+    let calls = 0;
+    server.use(
+      handlers.collection(() => {
+        calls += 1;
+        return calls === 1 ? ok(collection({ outcome: "queued" })) : fail("INTEGRATION_UNAVAILABLE", 503);
+      }),
+    );
+    renderApp("/cobros/pay-1");
+    expect(await screen.findByText("DV-7K2Q9M")).toBeInTheDocument();
+    expect(await screen.findByText(/No pudimos actualizar el estado/, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("DV-7K2Q9M")).toBeInTheDocument();
+    expect(screen.queryByText(/No pudimos cargar este pago/)).toBeNull();
+  });
+
+  it("the copy button says what it copies (T094)", async () => {
+    server.use(handlers.collection(() => ok(collection())));
+    renderApp("/cobros/pay-1");
+    expect(await screen.findByRole("button", { name: "Copiar comprobante" })).toBeInTheDocument();
+  });
+
   it("a short payment says what remains owed", async () => {
     server.use(handlers.collection(() => ok(collection({ class: "short", amountCents: 50000, remainingCents: 29800, outcome: "not_reconnected_short" }))));
     renderApp("/cobros/pay-1");

@@ -132,3 +132,12 @@ call `wisphubFor` again.
   `routes/payments/handler.ts` imports `pendingVersion` from
   `wisphub/cache`. Cash at stores adds no new leak: its routes and the cash
   book import nothing from the adapter (T061's grep).
+- *2026-10-01, `specs/018-cash-at-stores` T070 (`/speckit-converge`):* the
+  sentence above was not true when written — the store counter turned the
+  capability's `providerCustomerId` into a number to fit `ensureLink`'s
+  `wisphubId: number`. Paid the same day: `ensureLink` now takes the
+  integration's id as text (`providerCustomerId`), the store route hands
+  it over untouched, and the one numeric conversion left sits in the
+  panel's link door (`routes/direct-payments/handler.ts`), which already
+  reads WispHub directly and is an anchor of this debt. The column keeps
+  its name, `wisphub_customer_id`.

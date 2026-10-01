@@ -756,16 +756,16 @@ one was checked in the code. They are ordered by severity: CRITICAL, then
 HIGH, MEDIUM and LOW. Four of them wait on a decision from the creator
 before any code (T073, T088, T097, T098), and each of those says so.
 
-- [ ] T070 [US1] **CRITICAL** Remove the new provider leak from the counter's record per Constitution IX (contradicts):
+- [X] T070 [US1] **CRITICAL** Remove the new provider leak from the counter's record per Constitution IX (contradicts):
   - `apps/api/src/routes/store/handler.ts:259` passes `wisphubId: Number(debt.customer.providerCustomerId)` to `ensureLink`. A core handler now assumes the provider's customer id is a number, which holds only for WispHub; another adapter's id would be stored as `"NaN"`.
   - Give `ensureLink` (`apps/api/src/direct-payments/links.ts:124`) a string `providerCustomerId` in the core's words, so the store route passes the capability's id untouched. Its one other caller is `apps/api/src/routes/direct-payments/handler.ts:2268`.
   - If anything of it stays, correct the 2026-10-01 note in `.specify/debt/core-reads-provider-directly/debt.md` ("Cash at stores adds no new leak").
-- [ ] T071 [US1] Make the `queued` outcome say whether the service will come back, per FR-025, FR-026, US1/AC7 and the spec's edge case on a short payment below the threshold (contradicts):
+- [X] T071 [US1] Make the `queued` outcome say whether the service will come back, per FR-025, FR-026, US1/AC7 and the spec's edge case on a short payment below the threshold (contradicts):
   - every cash row is written `queued` before its first attempt (`settleConfirmed`'s deferred branch). `outcomeOfRow` (`apps/api/src/routes/store/handler.ts:348-364`) maps it to `queued` without reading `decidedAction`;
   - the receipt's sentence for that state is fixed: *"Tu servicio se reactivará en unos minutos."* (`outcomeSentence` in the same file). The app says the same (`apps/red/src/features/counter/ResultScreen.tsx:31`);
   - so a short payment below the threshold, or a business whose class maps to `register_only`, is promised a reconnection on screen, and in the WhatsApp receipt when it is sent early;
   - carry the decided action in the status answer (`contracts/store-api.md` § status). Word the queued line, the badge and the receipt sentence by it: reconnect, register only, or not reconnected because short. Add the cases to `apps/api/test/cash-at-stores-counter.test.ts` and `apps/red/test/counter.test.tsx`.
-- [ ] T072 [US1] Make every recorded cash payment end settled and in the cash book, per SC-003, SC-005, FR-039, US1/AC13 and D15, D19, D25 (partial):
+- [X] T072 [US1] Make every recorded cash payment end settled and in the cash book, per SC-003, SC-005, FR-039, US1/AC13 and D15, D19, D25 (partial):
   - the record is three separate writes (`apps/api/src/routes/store/handler.ts:265-328`): the insert, born `validating` by the column default; `settleConfirmed`; then `recordCollection`;
   - the replay (`:232-236`) and the race (`:290-295`) answer 200 with the folio straight from the row, and never finish it;
   - so if the first request dies after the insert, the payment stays `validating` for good: no fee, no `collection` movement and no action, while the app polls `queued` forever. No sweep finds it, because `nextValidationAt` and `nextAttemptAt` are null. *Mi caja* and *Puntos de pago* then both show too little cash held, and they agree, so nothing reveals it;
@@ -814,7 +814,7 @@ before any code (T073, T088, T097, T098), and each of those says so.
   - nothing clears `store-quote` after a record. *Nuevo cobro* on the same customer shows the debt from before the payment, and the amount field is set once from it (`:64`);
   - the server's `AMOUNT_CHANGED` stops a wrong record, but the shopkeeper has already read a wrong amount to the payer;
   - drop the quote from the cache after a record, and hold the screen until the fresh read lands. Test it in `apps/red/test/counter.test.tsx`.
-- [ ] T082 [US1] Keep the folio and the outcome on screen when one status poll fails, per US1/AC10 (partial):
+- [X] T082 [US1] Keep the folio and the outcome on screen when one status poll fails, per US1/AC10 (partial):
   - `apps/red/src/features/counter/ResultScreen.tsx:175` swaps the folio card for *"No pudimos cargar este pago"* whenever `isError` is set;
   - TanStack Query sets it on a single failed poll while it still holds the data;
   - show the data when there is some, and the poll's failure inline. Test it in `apps/red/test/counter.test.tsx`.
@@ -858,7 +858,7 @@ before any code (T073, T088, T097, T098), and each of those says so.
   - the offline banner;
   - the tabs' `aria-current`;
   - *Copiar comprobante* and *Nuevo cobro*.
-- [ ] T094 [US1] Label the copy button *Copiar comprobante*, per T032 (partial): `apps/red/src/features/counter/ResultScreen.tsx:139` reads *Copiar*.
+- [X] T094 [US1] Label the copy button *Copiar comprobante*, per T032 (partial): `apps/red/src/features/counter/ResultScreen.tsx:139` reads *Copiar*.
 - [ ] T095 [US1] Give the real reason when a quote is refused, per FR-028 (partial):
   - every quote error reads *"Revisa tu conexión"* (`apps/red/src/features/counter/QuoteScreen.tsx:157-162`), including `CHANNEL_OFF`, `NOT_CAPABLE` and `STORE_*`;
   - map each code to its own es-MX line.
@@ -879,7 +879,7 @@ before any code (T073, T088, T097, T098), and each of those says so.
 - [ ] T100 [US4] Drop `proofMode` from the feed row in `contracts/business-cash-api.md`, per that contract's "Row changes in `feedCharge`" (contradicts):
   - `feedCharge` (`apps/api/src/routes/payments/schema.ts:52-142`) has no such field;
   - rows are told apart by `channel`, and `none` lives only in the database enum, as `data-model.md` asks.
-- [ ] T101 [US1] Record `businessName` in the status answer of `contracts/store-api.md` § `GET /store/collections/:id`, per that contract (unrequested): `collectionStatusResponse` returns it (`apps/api/src/routes/store/schema.ts:121`), and the contract does not list it.
+- [X] T101 [US1] Record `businessName` in the status answer of `contracts/store-api.md` § `GET /store/collections/:id`, per that contract (unrequested): `collectionStatusResponse` returns it (`apps/api/src/routes/store/schema.ts:121`), and the contract does not list it.
 - [ ] T102 Filter `ledgerRowsOf`'s payment read by business, per Constitution V (partial):
   - `apps/api/src/store-ledger/index.ts:213-218` reads `payments` by id alone;
   - the ids come from movements already scoped to the store and the business, so nothing leaks today;

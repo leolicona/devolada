@@ -72,6 +72,7 @@ export const collection = (over: Record<string, unknown> = {}) =>
     class: "exact",
     remainingCents: 0,
     outcome: "reconnected",
+    reconnects: true,
     ...over,
   });
 

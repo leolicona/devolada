@@ -128,6 +128,11 @@ export const collectionStatusResponse = z.object({
   /* What remains owed after a short payment; 0 on a whole one */
   remainingCents: z.number().int().nonnegative(),
   outcome: collectionOutcome,
+  /* T071 (FR-025, the spec's edge case on a short payment below the
+     threshold): whether the action the class decided brings the service
+     back. Known from the record on, so a `queued` row never promises a
+     reconnection the verdict did not decide */
+  reconnects: z.boolean(),
 });
 
 /* GET /store/collections/:id/receipt (D18, D31) — asked for only when the

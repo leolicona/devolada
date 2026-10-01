@@ -853,6 +853,8 @@ export const storeCollection = (outcome: "reconnected" | "queued" = "reconnected
     class: "short",
     remainingCents: 29800,
     outcome,
+    /* T071: the verdict decided a reconnection (the threshold is lenient here) */
+    reconnects: true,
   });
 
 export const storeReceipt = collectionReceiptResponse.parse({

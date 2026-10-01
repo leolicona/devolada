@@ -7,6 +7,7 @@ import { businessesRoute } from "./routes/businesses";
 import { creditRoute } from "./routes/credit";
 import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
+import { sweepUnsettledCollections } from "./store-collections";
 import { sweepDirectPayments } from "./direct-payments/validation";
 import { backfillPayerReferences } from "./direct-payments/payer-reference";
 import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
@@ -108,9 +109,18 @@ export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
-      sweepReconnections(env).then((report) => {
-        if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
-      }),
+      /* cash-at-stores T072: a cash payment a dead request left unsettled,
+         or settled without its cash-book movement, is finished first, so
+         its action joins the queue this same minute. Speaks only when it
+         did something. */
+      sweepUnsettledCollections(env)
+        .then((report) => {
+          if (report.settled || report.movements || report.failed) console.log("store collection sweep:", JSON.stringify(report));
+        })
+        .then(() => sweepReconnections(env))
+        .then((report) => {
+          if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
+        }),
     );
     /* prepaid-credit D8: the release runs before the direct sweep, so a
        business that just topped up sees its queue move this same minute */

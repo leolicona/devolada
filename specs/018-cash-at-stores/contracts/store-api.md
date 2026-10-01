@@ -172,11 +172,21 @@ it every 3 s while `outcome` is `queued`.
 ```json
 { "success": true, "data": {
   "id": "…", "folio": "DV-7K2Q9M", "createdAt": 1790000000000,
+  "businessName": "WiFi Plus",
   "customerName": "Guadalupe Reyes", "amountCents": 79800, "feeCents": 1500,
   "class": "exact", "remainingCents": 0,
-  "outcome": "reconnected"
+  "outcome": "reconnected", "reconnects": true
 } }
 ```
+
+*(Added 2026-10-01, `/speckit-converge` T071 and T101.)*
+- `businessName` names the business the payment belongs to (the result
+  screen and the receipt read it).
+- `reconnects` says whether the action the class decided brings the
+  service back (`decided_action`, D10): `false` under `register_only` or
+  below the business's threshold. Every row carries it from the record on,
+  so a `queued` answer never promises a reconnection the verdict did not
+  decide. The receipt's `{estado}` follows the same rule.
 
 `outcome` is one of six values. It is mapped from the row's
 `actionOutcome` and the action decided for its class (FR-025,

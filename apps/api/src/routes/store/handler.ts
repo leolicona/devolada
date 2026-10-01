@@ -24,7 +24,8 @@ import { classifyPayment } from "../../direct-payments/classes";
 import { settle } from "../../direct-payments/partial";
 import { getNumberSetting, getSetting } from "../../platform/settings";
 import { ensureLink } from "../../direct-payments/links";
-import { announcingWriter, isUniqueViolation, settleConfirmed } from "../../direct-payments/validation";
+import { isUniqueViolation } from "../../direct-payments/validation";
+import { finishCollection, settleLeaseFrom, settleStoreRow } from "../../store-collections";
 import {
   decodeLedgerCursor,
   encodeLedgerCursor,
@@ -32,7 +33,6 @@ import {
   heldCents,
   ledgerRowsOf,
   movementsOf,
-  recordCollection,
 } from "../../store-ledger";
 import { storeHandovers, storeLedger } from "../../db/schema";
 import { makeFolio } from "../../folio";
@@ -216,11 +216,13 @@ async function collectionByKey(db: DB, storeId: string, key: string): Promise<Pa
    background (D25). In this order:
      0. the same key twice answers the first row, 200 (D15) — before any
         read, so a retry after a lost signal never meets a debt its own
-        first try already paid (scenario 1.13);
+        first try already paid (scenario 1.13). A first try that died
+        between its writes is finished here (T072);
      1. a fresh debt and the current fee, checked against what the payer
         was shown (D14, FR-021) — nothing is written when either moved;
      2. the customer's panel link, ensured (D11);
-     3. the payment row, with its key (the unique index is the race guard);
+     3. the payment row, with its key (the unique index is the race guard),
+        born leased and carrying what its settlement needs (T072);
      4. `settleConfirmed`, with no SPEI fee in the arithmetic (D13);
      5. the `collection` movement (D19);
      6. the first action attempt, past the response (D25).
@@ -231,7 +233,9 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
 
   const replay = await collectionByKey(db, store.storeId, body.collectionKey);
   if (replay) {
-    const data: RecordCollectionResponse = { id: replay.id, folio: replay.folio ?? "" };
+    /* T072: the first try may have died between its writes — finish it */
+    const finished = await finishCollection(c.env, db, replay, deferOf(c));
+    const data: RecordCollectionResponse = { id: finished.id, folio: finished.folio ?? "" };
     return c.json({ success: true, data }, 200);
   }
 
@@ -256,7 +260,9 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
      one (links-on-demand-search FR-008, amended by this decision) */
   const { token } = await ensureLink(db, business.id, {
     usuario: body.usuario,
-    wisphubId: Number(debt.customer.providerCustomerId),
+    /* T070, constitution IX: the integration's id, untouched — never
+       read as a number, which holds for one provider only */
+    providerCustomerId: debt.customer.providerCustomerId,
   });
   const [link] = await db.select().from(paymentLinks).where(eq(paymentLinks.token, token));
 
@@ -284,6 +290,18 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
         serviceFeeCents: 0,
         /* D17: the house folio, at once — the shopkeeper's answer */
         folio: makeFolio(),
+        /* T072: everything the settlement needs rides the row, so a retry
+           or the sweep can finish it if this request dies */
+        customerUsuario: body.usuario,
+        wisphubCustomerId: debt.customer.providerCustomerId,
+        customerName: debt.customer.name,
+        customerZone: debt.customer.zone,
+        /* debt-truth D15: the oldest open invoice carries the payment, or
+           none (the adapter then makes the empty vehicle). Read live,
+           seconds ago. */
+        wisphubInvoiceId: debt.invoices.length ? Math.min(...debt.invoices.map((f) => f.invoiceId)) : null,
+        /* T072: born leased — this request settles it, nobody else */
+        nextAttemptAt: settleLeaseFrom(now),
         createdAt: now,
       })
       .returning();
@@ -292,40 +310,13 @@ export async function recordStoreCollection(c: Ctx, body: RecordCollectionReques
     if (!isUniqueViolation(e)) throw e;
     const raced = await collectionByKey(db, store.storeId, body.collectionKey);
     if (!raced) throw e;
-    return c.json({ success: true, data: { id: raced.id, folio: raced.folio ?? "" } satisfies RecordCollectionResponse }, 200);
+    const finished = await finishCollection(c.env, db, raced, deferOf(c));
+    return c.json({ success: true, data: { id: finished.id, folio: finished.folio ?? "" } satisfies RecordCollectionResponse }, 200);
   }
 
-  const defer = deferOf(c);
-  const settled = await settleConfirmed(c.env, db, {
-    payment: inserted,
-    business,
-    integration,
-    customer: {
-      usuario: body.usuario,
-      providerCustomerId: debt.customer.providerCustomerId,
-      name: debt.customer.name,
-      zone: debt.customer.zone,
-      /* D18: never kept — the receipt reads it live */
-      phone: null,
-    },
-    receivedCents: body.amountCents,
-    debtCents: debt.totalCents,
-    /* D13: the store's fee stays outside settle() and classifyPayment() —
-       fed in, a $15 fee would quietly turn a $490 payment of a $500 debt
-       into a registered $500 */
-    serviceFeeCents: 0,
-    /* debt-truth D15: the oldest open invoice carries the payment, or none
-       (the adapter then makes the empty vehicle). Read live, seconds ago. */
-    invoiceId: debt.invoices.length ? Math.min(...debt.invoices.map((f) => f.invoiceId)) : null,
-    now,
-    update: announcingWriter(c.env, db, inserted, link, now, defer),
-    verdictFields: {},
-    hold: null,
-    firstAttempt: { mode: "deferred", defer },
-  });
-
-  /* D19: + the amount applied, once per payment */
-  await recordCollection(db, settled, now);
+  /* steps 4 and 5, and 6 past the response — shared with the retry and
+     the sweep that finish a row this request may not (T072) */
+  const settled = await settleStoreRow(c.env, db, inserted, { business, integration, defer: deferOf(c), now });
 
   const data: RecordCollectionResponse = { id: settled.id, folio: settled.folio ?? "" };
   return c.json({ success: true, data }, 201);
@@ -366,6 +357,15 @@ function outcomeOfRow(row: Payment): CollectionOutcome {
 const remainingOf = (row: Payment) =>
   Math.max(0, row.invoiceCents + row.carriedBalanceCents - (row.receivedCents ?? row.amountCents));
 
+/* T071: what the verdict decided, read back from the row (D10's
+   `decided_action`) — a reconnection only under register_and_reconnect at
+   or above the threshold. Every cash row is born with it; a row without
+   one (none today) says nothing it cannot prove. */
+const reconnectsOf = (row: Payment) => {
+  const decided = row.decidedAction ?? row.observedAction;
+  return decided ? parseHypothesis(decided).reconnect : false;
+};
+
 /* GET /store/collections/:id — polled every 3 s while queued (D25) */
 export async function collectionStatus(c: Ctx, id: string) {
   const db = drizzle(c.env.DB);
@@ -383,6 +383,7 @@ export async function collectionStatus(c: Ctx, id: string) {
     class: payment.reconciliationClass === "short" ? "short" : "exact",
     remainingCents: remainingOf(payment),
     outcome: outcomeOfRow(payment),
+    reconnects: reconnectsOf(payment),
   };
   return c.json({ success: true, data });
 }
@@ -390,14 +391,19 @@ export async function collectionStatus(c: Ctx, id: string) {
 /* D18 rule 5: the status line tells the truth about the action, in the
    payer's words (*pago*, never *cobro*, D27). Product copy, in code — not
    settings in this feature (D31). */
-function outcomeSentence(outcome: CollectionOutcome, business: string): string {
+function outcomeSentence(outcome: CollectionOutcome, business: string, reconnects: boolean, short: boolean): string {
   switch (outcome) {
     case "reconnected":
       return "Tu servicio ya está activo.";
     case "registered":
       return `Tu pago quedó registrado con ${business}.`;
     case "queued":
-      return "Tu servicio se reactivará en unos minutos.";
+      /* T071: a queued row promises only what its verdict decided — a
+         receipt sent before the action lands keeps that sentence for good */
+      if (reconnects) return "Tu servicio se reactivará en unos minutos.";
+      return short
+        ? "Tu pago quedó registrado. Como no cubre todo tu adeudo, tu servicio sigue sin reactivarse."
+        : `Tu pago quedó registrado. ${business} lo aplicará en su sistema.`;
     case "not_reconnected_short":
       return "Tu pago quedó registrado. Como no cubre todo tu adeudo, tu servicio sigue sin reactivarse.";
     case "observation":
@@ -435,7 +441,7 @@ export async function collectionReceipt(c: Ctx, id: string) {
     at: (payment.confirmedAt ?? payment.createdAt).getTime(),
     timezone: found.timezone,
     timeFormat: found.timeFormat,
-    estado: outcomeSentence(outcome, found.businessName),
+    estado: outcomeSentence(outcome, found.businessName, reconnectsOf(payment), payment.reconciliationClass === "short"),
   });
 
   let phone: string | null = null;

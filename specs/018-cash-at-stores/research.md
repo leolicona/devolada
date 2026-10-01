@@ -732,7 +732,8 @@ The routes, in es-MX:
 
 - **Navigation.** Three tabs: *Cobrar*, *Caja*, *Movimientos*, taken from
   the old `TabLayout`. Signing out and enabling a passkey live in *Caja*
-  (`cashbox` D3).
+  (`cashbox` D3). *(Amended 2026-10-01, D32: from 1024 px the tabs become
+  a side menu, and the routes above stay the same.)*
 - **Installing.** A web manifest, so the app can be added to the home
   screen (FR-012). There is no service worker: offline work is out of
   scope, because a collection needs the debt live. The "sin conexión"
@@ -897,6 +898,51 @@ version to keep.
   `/operador`, and the network's fee is one value too (D22).
 - Each outcome sentence as its own setting. Deferred: five more fields
   before anyone asked to change them.
+
+## D32 — The store app on a computer
+
+*(Added 2026-10-01. After `/design`, the creator chose to build the
+canvas's desktop artboards now; FR-012 is amended to match.)*
+
+A store may keep a computer at the counter. It is the same app at the
+same address. From 1024 px it uses the width:
+
+| Screen | Phone (D26) | From 1024 px |
+| --- | --- | --- |
+| The frame | three tabs at the bottom, 64px | a side menu (15rem): *Devolada*, the store's name, the three sections at 48px; no bar at the bottom |
+| *Cobrar* (`/`, `/cobro/$usuario`, `/cobros/$id`) | one screen at a time | the search stays on the left; the debt, then the payment, show on the right. The chosen customer is marked in the results, and the search empties once a payment is recorded |
+| *Mi caja* | the cards, then the passkey | the cards and the passkey on the left; the hand-overs to each business on the right (T080's history, disputes and notes included) |
+| *Registrar entrega* | the form | the business's card on the left, the form on the right |
+| *Movimientos* | a list per day | a table per day: *Hora*, *Movimiento*, *Folio*, *Tu cargo*, *Monto* |
+| The ways in (`/entrar`, `/recuperar`, `/invitacion`), the suspended and wrong-account screens | a centred card | the same card |
+
+**Rules:**
+- **One breakpoint**: Tailwind's `lg`, 64rem (1024 px). Below it the
+  phone layout holds at any width, so a tablet keeps the tabs.
+- **Sizes do not shrink.** A counter computer may have a touch screen,
+  so the store app keeps 48px targets and the 64px decisive action at
+  every width. The 40px compact size stays the panel's (constitution VI).
+- **The frame is CSS; the screens are composed in code.** Both menus are
+  in the page and CSS shows one, as the panel's shell does, with two
+  landmark names: *Secciones* and *Secciones, barra inferior*. Where a
+  screen itself differs (a heading level, a table instead of a list, a
+  half beside another), one hook, `useWide()` (`apps/red/src/lib/wide.ts`),
+  reads the same media query. So no hidden copy of a screen sits in the
+  page, with its own focus and its own live region.
+- **Headings.** On a phone each screen's own title is the `h1` (*Pago
+  registrado*, the customer's name). On a computer the section is the
+  `h1` (*Cobrar*, *Mi caja*), and each half is an `h2`.
+- **Nothing new in the API.** Both widths read the same routes.
+
+**Alternatives considered**:
+- **A separate desktop app.** Rejected: two apps drift, and FR-012 gives
+  the store one address.
+- **CSS only, both versions of every screen in the page.** Rejected: two
+  search boxes and two quotes in the DOM, two `h1`s, and focus and live
+  regions inside the hidden copy.
+- **Two halves from 768 px.** Rejected: beside the menu, each half would
+  be about 220px, narrower than the 360px phone floor. At 1024 px each
+  half is about 350px, a phone's width.
 
 ## Measurements to take before code (quickstart §0)
 

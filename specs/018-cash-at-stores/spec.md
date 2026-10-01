@@ -587,7 +587,13 @@ see the dispute and its note.
 - **FR-012**: The store app MUST live at its own address,
   `red.devoladapago.com`, apart from the business panel and the payer's
   page. It MUST be usable on a 360 px phone and installable on the home
-  screen.
+  screen. It MUST also be usable on a computer at the counter: from
+  1024 px wide, the three sections move to a side menu, and *Cobrar* and
+  *Mi caja* show their two halves side by side (the search beside the
+  debt or the payment; the cash beside the hand-overs). Both widths do
+  the same things: no action, rule or number exists on only one of them.
+  *(Amended 2026-10-01: the creator chose to build the design canvas's
+  desktop layout now, research D32. This said only the phone.)*
 - **FR-013**: A store's account MUST NOT open the business panel or the
   operator panel. A business member's account MUST NOT open the store app.
 - **FR-014**: The store's status MUST be checked on every action, so a

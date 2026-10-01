@@ -890,3 +890,25 @@ before any code (T073, T088, T097, T098), and each of those says so.
 - [X] T104 Close TODO(CLAUDE-MD-WORKERS) in the constitution's Sync Impact Report, through `/speckit-constitution` as a patch note, per the constitution's Governance (partial):
   - T062 did the work: CLAUDE.md now says five Workers, names red's dev command and lists `apps/red`;
   - v1.9.1's report still carries the TODO "unchanged from v1.9.0".
+
+## Phase 10: The store app on a computer
+
+**Purpose**: the creator chose on 2026-10-01, after `/design`, to build
+the design canvas's desktop artboards now. FR-012 is amended and research
+D32 records the layout. Nothing changes in the API.
+
+- [X] T105 Amend FR-012 in `spec.md`, D26 and the new D32 in `research.md`, the plan's platform and structure, and CLAUDE.md's `apps/red` line.
+- [X] T106 [US1] Add `useWide()` in `apps/red/src/lib/wide.ts` (Tailwind's `lg`, 64rem), per D32. Make red's component tests start at a phone's width (375×812) in `apps/red/test/setup.ts`, with `atWidth()` in `apps/red/test/render.tsx` for the desktop cases.
+- [X] T107 [US1] Give the frame its side menu from 1024px in `apps/red/src/layout/TabLayout.tsx`, per D32:
+  - *Devolada*, the store's name, and the three sections at 48px with `aria-current`;
+  - the tab bar hides from 1024px and is named *Secciones, barra inferior*;
+  - the content grows to 72rem.
+- [X] T108 [US1] Show *Cobrar* in two halves from 1024px, per D32, through a counter layout (`apps/red/src/features/counter/CounterLayout.tsx`) over `/`, `/cobro/$usuario` and `/cobros/$id`:
+  - the search stays on the left, marks the chosen customer, and empties once a payment is recorded;
+  - on the right, a hint, the quote or the payment, titled `h2` under the section's `h1` *Cobrar*;
+  - no *Buscar otro cliente* link where the search is in view.
+- [X] T109 [US5] Show *Mi caja* in two halves from 1024px, per D32: the cards and the passkey on the left, the hand-overs to each business on the right (T080's list, extracted as `HandoversList`).
+- [X] T110 [US5] Show *Registrar entrega* beside the business's card from 1024px, per D32.
+- [X] T111 [US5] Show *Movimientos* as a table per day from 1024px (*Hora*, *Movimiento*, *Folio*, *Tu cargo*, *Monto*), per D32.
+- [X] T112 [US1] [US5] Prove the desktop composition in `apps/red/test/desktop.test.tsx` at 1280px: the side menu, the two halves of *Cobrar* (the mark, the headings, the emptied search), *Mi caja* with the hand-overs, *Registrar entrega* and the table.
+- [X] T113 [US1] [US5] Measure it in the browser layer: the side menu at 1024 and 1280 and the tabs at 768 (`tests/e2e/responsive.spec.ts`), the two halves side by side, and the desktop screens' contrast in both themes (`tests/e2e/contrast.spec.ts`), with one phone screen kept so the tab bar stays measured.

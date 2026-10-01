@@ -146,7 +146,8 @@ apps/landing  the product's front door at the root domain: an Astro static
               no framework. Requests and counts live in the API
               (`routes/landing/`); the operator reads them in the panel
 apps/red      the shopkeeper's app, phone-first, no offline work (assets
-              Worker): Cobrar (search → debt → record → folio and the
+              Worker); from 1024 px a side menu and two halves
+              (cash-at-stores D32): Cobrar (search → debt → record → folio and the
               WhatsApp receipt), Caja and Movimientos (the store's cash
               book, the hand-over). Its own session kind, the store actor
               (`requireStore`); the cash book is `store_ledger`, written

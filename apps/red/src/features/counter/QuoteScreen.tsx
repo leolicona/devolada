@@ -5,6 +5,7 @@ import { ArrowLeft, Info, RefreshCw, TriangleAlert } from "lucide-react";
 import { Alert, AmountBreakdown, Button, Card, Field, Input, Pending, Skeleton, StatusBadge, formatMoney, parseMoney } from "@devolada/ui";
 import type { StoreQuoteResponse } from "@devolada/api/store-schema";
 import { ApiError } from "@/lib/api";
+import { useWide } from "@/lib/wide";
 import { getQuote, recordCollection } from "./api";
 
 /* cash-at-stores D14, FR-018–FR-021: the quote and the confirmation. The
@@ -163,19 +164,25 @@ export function QuoteScreen() {
      just read"): a quote still in the cache waits for the fresh read —
      *Cobrar* is never offered on an amount from before */
   const reading = quote.isPending || (quote.isFetching && !quote.isFetchedAfterMount);
+  /* D32: on a computer this is the right half of *Cobrar* — the search is
+     beside it, and the section's h1 is above it */
+  const wide = useWide();
+  const Title = wide ? "h2" : "h1";
 
   return (
     <section className="space-y-4" aria-labelledby="cobro-title">
-      <Link to="/" className="inline-flex min-h-12 items-center gap-2 text-base font-medium text-link">
-        <ArrowLeft className="size-5" aria-hidden />
-        Buscar otro cliente
-      </Link>
+      {!wide && (
+        <Link to="/" className="inline-flex min-h-12 items-center gap-2 text-base font-medium text-link">
+          <ArrowLeft className="size-5" aria-hidden />
+          Buscar otro cliente
+        </Link>
+      )}
       <Pending active={reading} label="Leyendo el adeudo" shape={<Skeleton className="h-40 w-full" />}>
         {reading ? null : quote.isError ? (
           <Card className="space-y-3 p-6">
-            <h1 id="cobro-title" className="text-lg font-semibold">
+            <Title id="cobro-title" className="text-lg font-semibold">
               No pudimos leer el adeudo
-            </h1>
+            </Title>
             <p className="text-base text-ink-soft">{quoteErrorSay(quote.error)}</p>
             <Button variant="secondary" onClick={() => quote.refetch()}>
               <RefreshCw className="size-5" aria-hidden />
@@ -185,9 +192,9 @@ export function QuoteScreen() {
         ) : quote.data?.state === "unavailable" ? (
           /* D14: an unproven amount is never shown — and never collected */
           <Card className="space-y-3 p-6">
-            <h1 id="cobro-title" className="text-lg font-semibold">
+            <Title id="cobro-title" className="text-lg font-semibold">
               No pudimos leer el adeudo
-            </h1>
+            </Title>
             <Alert variant="warning" layout="icon">
               <TriangleAlert aria-hidden />
               El sistema del negocio no responde ahora. No cobres un monto que no veas aquí; intenta en unos minutos.
@@ -200,9 +207,9 @@ export function QuoteScreen() {
         ) : quote.data ? (
           <Card className="space-y-4 p-6">
             <header>
-              <h1 id="cobro-title" className="text-lg font-semibold">
+              <Title id="cobro-title" className="text-lg font-semibold">
                 {quote.data.name || quote.data.usuario}
-              </h1>
+              </Title>
               <p className="text-sm text-ink-soft">
                 {quote.data.usuario}
                 {quote.data.zone ? ` · ${quote.data.zone}` : ""}

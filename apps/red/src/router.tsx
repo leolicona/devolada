@@ -3,7 +3,7 @@ import { TabLayout } from "./layout/TabLayout";
 import { LoginScreen } from "./features/auth/LoginScreen";
 import { RecoverScreen } from "./features/auth/RecoverScreen";
 import { InvitationScreen } from "./features/auth/InvitationScreen";
-import { SearchScreen } from "./features/counter/SearchScreen";
+import { CounterIndex, CounterLayout } from "./features/counter/CounterLayout";
 import { QuoteScreen } from "./features/counter/QuoteScreen";
 import { ResultScreen } from "./features/counter/ResultScreen";
 import { CashboxScreen } from "./features/cashbox/CashboxScreen";
@@ -22,9 +22,12 @@ const invitationRoute = createRoute({ getParentRoute: () => rootRoute, path: "/i
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "app", component: TabLayout });
 
-const searchRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: SearchScreen });
-const quoteRoute = createRoute({ getParentRoute: () => appRoute, path: "/cobro/$usuario", component: QuoteScreen });
-const resultRoute = createRoute({ getParentRoute: () => appRoute, path: "/cobros/$id", component: ResultScreen });
+/* D32: the counter's three routes share a layout — on a computer the
+   search stays beside the debt and the payment */
+const counterRoute = createRoute({ getParentRoute: () => appRoute, id: "counter", component: CounterLayout });
+const searchRoute = createRoute({ getParentRoute: () => counterRoute, path: "/", component: CounterIndex });
+const quoteRoute = createRoute({ getParentRoute: () => counterRoute, path: "/cobro/$usuario", component: QuoteScreen });
+const resultRoute = createRoute({ getParentRoute: () => counterRoute, path: "/cobros/$id", component: ResultScreen });
 const cashboxRoute = createRoute({ getParentRoute: () => appRoute, path: "/caja", component: CashboxScreen });
 
 /* *Mi caja*'s numbers open these with the business (and the kind) they
@@ -65,7 +68,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   recoverRoute,
   invitationRoute,
-  appRoute.addChildren([searchRoute, quoteRoute, resultRoute, cashboxRoute, handoverRoute, handoversRoute, ledgerRoute]),
+  appRoute.addChildren([counterRoute.addChildren([searchRoute, quoteRoute, resultRoute]), cashboxRoute, handoverRoute, handoversRoute, ledgerRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

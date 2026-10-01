@@ -98,7 +98,9 @@ describe("cash-at-stores US1 — the search", () => {
     expect(await screen.findByText("Por ahora no hay negocios para cobrar en esta tienda.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Buscar cliente")).not.toBeInTheDocument();
     await expectNoViolations(container);
-    await userEvent.click(screen.getByRole("link", { name: "Caja" }));
+    /* both menus are in the page (D32); a phone shows the bar */
+    const bar = screen.getByRole("navigation", { name: "Secciones, barra inferior" });
+    await userEvent.click(within(bar).getByRole("link", { name: "Caja" }));
     expect(await screen.findByText("Efectivo que tienes")).toBeInTheDocument();
   });
 });

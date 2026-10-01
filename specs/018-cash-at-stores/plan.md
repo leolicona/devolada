@@ -16,7 +16,9 @@ The plan builds it in seven pieces, each traced to its decisions:
 
 1. **A fifth surface, `apps/red`** (D1, D26). A phone-first app at
    `red.devoladapago.com`, inside this monorepo. It renders the shared
-   atoms and imports the API's contracts.
+   atoms and imports the API's contracts. From 1024 px it moves its
+   sections to a side menu and shows *Cobrar* and *Mi caja* in two halves
+   (D32, added 2026-10-01).
 2. **A second kind of actor** (D2–D5). The shopkeeper is a Better Auth
    user who belongs to no business.
    - They are resolved by `requireStore`, from their own `stores` row.
@@ -99,7 +101,8 @@ R2 and Workers AI are untouched.
 **Target Platform**:
 - Cloudflare Workers for the API, and assets Workers for `apps/red` (new)
   and `apps/admin`;
-- the store app on Android Chrome and iOS Safari at 360px and up;
+- the store app on Android Chrome and iOS Safari at 360px and up, and on
+  a computer's browser from 1024px (D32);
 - the panel desktop-first.
 
 **Project Type**: web. `apps/api`, `apps/admin`, `packages/ui`, and a new
@@ -242,10 +245,11 @@ apps/red/                                      # new (D1, D26)
 ├── public/manifest.webmanifest, icons
 ├── src/{main.tsx,router.tsx,styles.css}
 ├── src/lib/{api.ts,auth-client.ts}            # credentials: include; passkeyClient
+├── src/lib/wide.ts                            # useWide(): the 1024px layout (D32)
 ├── src/features/auth/                         # Entrar, Recuperar, Invitación, session, WRONG_ACTOR and suspended screens
-├── src/features/counter/                      # Cobrar (search), Cobro (quote + amount), Cobros/:id (outcome + receipt)
-├── src/features/cashbox/                      # Mi caja, Entrega, Movimientos
-├── src/layout/TabLayout.tsx                   # three tabs, offline banner
+├── src/features/counter/                      # Cobrar (search), Cobro (quote + amount), Cobros/:id (outcome + receipt); CounterLayout (D32)
+├── src/features/cashbox/                      # Mi caja, Entrega, Entregas, Movimientos
+├── src/layout/TabLayout.tsx                   # three tabs, or the side menu from 1024px (D32); offline banner
 └── test/                                      # setup, msw, a11y, one file per feature citing US<n>
 
 apps/admin/

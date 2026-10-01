@@ -150,7 +150,7 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-/* cash-at-stores US1–US5 (T033, T040, T051, T060, T083): every new screen, measured where
+/* cash-at-stores US1–US5 (T033, T040, T051, T060, T083, T113): every new screen, measured where
    its inks land — the store app's counter and cash book on the phone, and
    the panel's Tiendas tab, cash rows in Pagos and Puntos de pago. The
    statuses there (Entrega pendiente, En disputa, Tienda suspendida, the
@@ -207,18 +207,18 @@ const storeScreens: {
   },
   { name: "Entregas", url: `${RED}/caja/entregas?businessId=business-1`, stub: (page) => stubRedApi(page), ready: "«Faltaron $200 en el sobre»" },
   { name: "Movimientos de un negocio", url: `${RED}/movimientos?businessId=business-1&kind=collection`, stub: (page) => stubRedApi(page), ready: "Ver todos" },
+  /* At this suite's 1280px the store app is its desktop layout (D32): the
+     side menu, and the hand-overs beside the cash */
+  { name: "Mi caja", url: `${RED}/caja`, stub: (page) => stubRedApi(page), ready: "WiFi Plus dice:" },
   {
-    name: "Mi caja",
-    url: `${RED}/caja`,
+    /* T113: one screen on a phone, so the tab bar's inks stay measured */
+    name: "Cobrar en el teléfono",
+    url: `${RED}/`,
     stub: (page) => stubRedApi(page),
-    /* T080 made the card one 48px link taller; at 720px the passkey button
-       then sits under the sticky tab bar, which axe's target-size reads as
-       "obscured" — a scroll position, not a layout. The full card is
-       measured here; responsive.spec measures every target at 48px. */
     open: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 });
+      await page.setViewportSize({ width: 375, height: 812 });
     },
-    ready: "WiFi Plus dice:",
+    ready: "Cobras para",
   },
   { name: "Registrar entrega", url: `${RED}/caja/entrega?businessId=business-1`, stub: (page) => stubRedApi(page), ready: "La entrega quedará pendiente" },
   { name: "Movimientos", url: `${RED}/movimientos`, stub: (page) => stubRedApi(page), ready: "Corrección de Devolada" },

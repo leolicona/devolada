@@ -260,10 +260,12 @@ test.describe("cep-bundle-match US1/US4: the decision and the unmatched list hol
   }
 });
 
-/* cash-at-stores US1, US3, US5 (T033, T060, T083; constitution VI; research D26): the store app
-   is a counter on a shopkeeper's phone. At every width the floor sets it
-   never scrolls sideways, never cuts a customer's name, every control
-   clears 48px, and the decisive *Cobrar* clears 64px. */
+/* cash-at-stores US1, US3, US5 (T033, T060, T083, T113; constitution VI; research D26, D32): the
+   store app is a counter on a shopkeeper's phone, and from 1024px on a
+   computer at the counter. At every width it never scrolls sideways,
+   never cuts a customer's name, every control clears 48px, and the
+   decisive *Cobrar* clears 64px. At 1280 the screens below are the
+   desktop layout (D32), so the same measures hold there too. */
 const redScreens: { name: string; url: string; stub?: (page: Page) => Promise<void>; open?: (page: Page) => Promise<void>; ready: string }[] = [
   {
     name: "the search",
@@ -339,8 +341,56 @@ test.describe("cash-at-stores US1/US5: the store app at 360/768/1280", () => {
     const box = await collect.boundingBox();
     expect(box!.height, "Cobrar's height").toBeGreaterThanOrEqual(64);
     /* the tabs a thumb reaches carry the same weight */
-    const tab = await page.getByRole("navigation", { name: "Secciones" }).getByRole("link", { name: "Caja" }).boundingBox();
+    const tab = await page.getByRole("navigation", { name: "Secciones, barra inferior" }).getByRole("link", { name: "Caja" }).boundingBox();
     expect(tab!.height, "a tab's height").toBeGreaterThanOrEqual(64);
+  });
+});
+
+/* cash-at-stores US1, US5 (T113; research D32): on a computer the sections
+   are a side menu and *Cobrar* and *Mi caja* are two halves side by side,
+   each at least a phone's width. Below 1024px the tabs stay. */
+test.describe("cash-at-stores US1/US5: the store app on a computer (D32)", () => {
+  for (const size of [{ width: 1024, height: 800 }, DESKTOP]) {
+    test(`the side menu replaces the tabs, and Mi caja shows the hand-overs beside the cash, at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubRedApi(page);
+      await page.goto(`${RED}/caja`);
+      const history = page.getByRole("list", { name: "Entregas a WiFi Plus" });
+      await expect(history).toBeVisible();
+      const side = page.getByRole("navigation", { name: "Secciones", exact: true });
+      await expect(side).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Secciones, barra inferior" })).toBeHidden();
+      await expect(side.getByRole("link", { name: "Caja" })).toHaveAttribute("aria-current", "page");
+      const cash = await page.getByRole("link", { name: /Efectivo que tienes/ }).boundingBox();
+      const list = await history.boundingBox();
+      expect(list!.x, "the hand-overs sit to the right of the cash").toBeGreaterThanOrEqual(cash!.x + cash!.width);
+    });
+
+    test(`Cobrar: the search beside the debt, each half a phone's width, at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubRedApi(page);
+      await page.goto(`${RED}/cobro/greyes@wifiplus`);
+      const collect = page.getByRole("button", { name: /^Cobrar \$/ });
+      await expect(collect).toBeVisible();
+      const search = await page.getByLabel("Buscar cliente").boundingBox();
+      /* the right half is the quote's own region, named by the customer */
+      const debt = await page.getByRole("region", { name: "Guadalupe Reyes Hernández" }).boundingBox();
+      const button = await collect.boundingBox();
+      expect(debt!.x, "the debt sits to the right of the search").toBeGreaterThanOrEqual(search!.x + search!.width);
+      /* D32: at 1024 each half is about 350px, a phone's width */
+      expect(search!.width, "the search half").toBeGreaterThanOrEqual(340);
+      expect(debt!.width, "the debt half").toBeGreaterThanOrEqual(340);
+      expect(button!.height, "Cobrar stays the decisive 64px").toBeGreaterThanOrEqual(64);
+    });
+  }
+
+  test("below 1024px the tabs stay and there is no side menu", async ({ page }) => {
+    await page.setViewportSize({ width: 1023, height: 800 });
+    await stubRedApi(page);
+    await page.goto(`${RED}/caja`);
+    await expect(page.getByText("Efectivo que tienes").first()).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Secciones, barra inferior" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Secciones", exact: true })).toBeHidden();
   });
 });
 

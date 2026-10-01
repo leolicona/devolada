@@ -622,6 +622,12 @@ export const payments = sqliteTable(
        read-back). D24 adds `usedClave` on a row refused as already used,
        so the status can say which payment used it. */
     confirmation: text("confirmation"),
+    /* confirmation-hierarchy D7, D8: the outcome of the tie-break answer
+       this row carried — `none` (it fitted no transfer found), `one` (it
+       picked one), `several` (it left more than one). NULL on every row
+       that carried no answer. Three `none` rows on a link within 24 hours
+       close the tie-break there (D8), counted over `payments_link_idx`. */
+    tieBreak: text("tie_break", { enum: ["none", "one", "several"] }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -1303,6 +1309,10 @@ export const cepRecords = sqliteTable(
     /* The second sighting of a transfer, in another bundle, adds nothing */
     uniqueIndex("cep_records_business_clave_idx").on(t.businessId, t.clave),
     index("cep_records_business_day_amount_idx").on(t.businessId, t.creditDate, t.amountCents),
+    /* confirmation-hierarchy D4: which payments an account has paid, read
+       at the moment of a tie over the candidates' accounts — a seek per
+       account, never a scan of the business's records */
+    index("cep_records_business_account_idx").on(t.businessId, t.senderAccount),
   ],
 );
 

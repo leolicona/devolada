@@ -16,10 +16,15 @@ This feature fixes the claves of its several-matches scenarios and adds one:
 | --- | --- |
 | `…44` | several: two CEPs from two accounts, tails 8301 and 4417; claves ending `…0412` and `…977I` |
 | `…55` | several: two CEPs from two accounts, tails 8301 and 4417; claves that share their last four, `…5510` |
-| `…66` | one CEP, account tail 8301, clave ending `…3O1K` |
+| `…66` | one CEP, account tail 8301, clave ending `…3O10` |
 
-`…977I` and `…3O1K` carry the letters a payer mistypes: `9771` and `3010`
+`…977I` and `…3O10` carry the letters a payer mistypes: `9771` and `3010`
 must fit them.
+
+*Corrected 2026-10-01 at `/speckit-implement`:* the third scenario read
+`…3O1K`, which `3010` cannot fit — O read as 0 gives `301K`. The sandbox,
+the helpers and the tables use `…3O10`, which keeps the point (a letter O
+typed as a zero) and lets the sentence above hold.
 
 ## The gates, in CI order
 

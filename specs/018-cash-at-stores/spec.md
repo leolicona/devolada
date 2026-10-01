@@ -6,8 +6,9 @@
 
 **Status**: Draft — clarified 2026-09-30 in three rounds with the creator
 (where the channel is switched on, the money, the counter) and on
-2026-10-01 (a paused credit, a mistaken payment). One decision is deferred
-on purpose: which businesses each store collects for (FR-006).
+2026-10-01 (a paused credit, a mistaken payment). Revised at planning,
+2026-10-01: FR-027 (research D18). One decision is deferred on purpose:
+which businesses each store collects for (FR-006).
 
 **Input**: User description: "Si quisiera asumir el puente con api.devoladapago.com para este scope: 1. Las tiendas las administra (alta, edición, baja) devolada desde el perfil /operator. 2. El ISP lo activa desdes integraciones. 3. Los pagos en efectivo se lista con los pagos SPEI. 4. El frontend red.devoladapago.com es el mismo" — then, after three rounds of questions: "Si, un ISP quiere probarlo."
 
@@ -161,7 +162,9 @@ I):
   only.
 - Q: How does the payer get a receipt? → A: By WhatsApp, from the store's
   phone, with the folio. If the business's system has no phone for the
-  customer, the shopkeeper types it once. Rejected: the folio on screen
+  customer, the shopkeeper types it once. *(Amended at planning,
+  2026-10-01: the typed number serves that receipt only and is not kept;
+  see FR-027 and research D18.)* Rejected: the folio on screen
   only; automatic SMS (a cost per message and a new provider).
 
 ### Session 2026-10-01
@@ -256,8 +259,8 @@ in WhatsApp. A second search shows the customer owes nothing.
     amount paid, the service fee, the date and time, and what remains owed
     if any.
 12. **Given** the business's system has no phone for the customer, **When**
-    the shopkeeper taps WhatsApp, **Then** they are asked for the number
-    once. Their next cash payment uses it without asking.
+    the shopkeeper taps WhatsApp, **Then** they are asked for the number.
+    It is used for this receipt only. Next time, the app asks again.
 13. **Given** a lost signal after the shopkeeper confirmed, **When** they
     confirm again, **Then** no second payment is recorded, and the app shows
     the first one.
@@ -482,9 +485,8 @@ see the dispute and its note.
   transfer made after the debt was paid in cash takes the SPEI path's
   existing course for a payment with nothing to apply to.
 - **The customer has a phone in the business's system that is wrong.** The
-  shopkeeper can type another number for this receipt. It is remembered as
-  this channel's number for that customer. The business's system is never
-  written.
+  shopkeeper can type another number for this receipt. It is used once and
+  never kept, and the business's system is never written (FR-027).
 - **The service fee changes while a shopkeeper is at the confirm screen.** The
   fee recorded is the one the payer was shown. If it changed, the app shows
   the new total and asks again, as for a changed debt.
@@ -617,9 +619,11 @@ see the dispute and its note.
   the business's timezone, and what remains owed if any. Money MUST be
   formatted as es-MX pesos.
 - **FR-027**: When the business's system has no phone for the customer, the
-  app MUST ask for one when the shopkeeper taps WhatsApp. It MUST remember
-  that number for this channel's next receipts to that customer. The
-  business's system MUST never be written.
+  app MUST ask for one when the shopkeeper taps WhatsApp, and use it for
+  that receipt only. Devolada MUST NOT store it, and the business's system
+  MUST never be written. *(Amended at planning, 2026-10-01, research D18:
+  keeping a phone per customer is what `payment-without-receipt` D1/D4
+  and `links-on-demand-search` FR-010 rule out.)*
 - **FR-028**: When the business's system cannot be reached during a search
   or a debt read, the app MUST say so and offer no collection. It MUST NOT
   offer to collect when the store is suspended, the business's channel is
@@ -717,8 +721,6 @@ see the dispute and its note.
 - **Network service fee**: one platform rule, in cents, charged to the payer
   on each cash collection and kept by the store. Its changes keep author and
   date.
-- **Receipt phone**: the phone a shopkeeper typed for a customer who had
-  none. It is kept for this channel's receipts only.
 
 ## Success Criteria *(mandatory)*
 

@@ -7,7 +7,10 @@
 **Status**: Draft — written from the creator's decisions of 2026-09-30.
 Builds on spec 012 (`payment-without-receipt`) as it stands on `main` at
 `e2ec70c`, and replaces the parts of it listed under "What this spec
-replaces in spec 012". No clarification is open.
+replaces in spec 012". No clarification is open. Extended the same day
+with User Story 4: the payer's copy never names Banxico and never assumes
+the business sells internet. Extended on 2026-10-01 with User Story 5 and
+the page's design: the creator chose proposal E of the design canvas.
 
 **Input**: User description, in the creator's words (2026-09-30):
 "Evaluemos factorizar la UI para el flujo de confirmación de pago en
@@ -64,6 +67,33 @@ gaps showed up:
   and leaves those answers outside every attempt limit (012 D25). Offered
   as a first answer, four characters need a limit of their own.
 
+Reviewing the prototypes of this step, the creator added one rule for the
+whole payer page: *"el usuario que paga no tiene por qué ver copy que
+mencione a Banxico"*. Who checks a transfer behind the scenes is not the
+payer's concern; what happens to their transfer is. A sweep of the page as
+built on `main` (`77bc503`) found fourteen payer sentences that name
+Banxico; nine that send the payer to "tu proveedor de internet", six that
+say "tu internet ya volvió", and a page titled "Pago de internet" — words
+that hold only when the business is an ISP, which the core never assumes
+(constitution IX). The
+payer's bank list also offers Banxico, where no payer holds an account.
+User Story 4 fixes all of it, on every business and every state of the
+page, not only on the views this spec adds.
+
+On 2026-10-01 the creator reviewed five designs of the page, A to E, on
+the design canvas "Confirma tu pago — propuesta", and chose E. About the
+first four: *"Los diseños no muestran la CLABE, teléfono o numero de
+tarjeta, el método que eligió el negocio para que le paguen ni destaca el
+numero de referencia personal. El diseño debe ser a su vez ligeramente
+educativo."* Design E covers both steps. It shows where to pay, by the
+method the business chose. After the amount, the payer's reference is
+the most visible thing on the page. A short example shows how a bank's
+form is filled. The bank and the day are chips, and one tap says why
+they are asked. The search shows as three steps, the tie-break shows
+where its answer is found, and a closing line says how next month goes.
+It stays inside today's look: the page's card, buttons, badges, colours
+and sizes. User Story 5 carries it.
+
 ## What this spec replaces in spec 012
 
 Spec 012 is planned and tasked, not built (2026-09-30). Where this spec and
@@ -83,6 +113,9 @@ built.
 | User Story 2 scenario 3; User Story 5 scenarios 1, 3, 4, 5, 7 and 8 | Read with the rows above |
 | Page contract, step 2: the small exits (item 6), the "No puse la referencia" paragraph, the asks `sender_tail` and `clave_tail`, and every placement of "Sube tu comprobante" | Replaced by FR-001–FR-008 and FR-011 |
 | Plan decisions D11 (the refusal before the search), D15 (the digits before the characters), D17 (the characters only after an undecided payment) and D25 (the characters outside every limit, the digits inside the hourly one) | Revisited by this spec's plan; D25 by FR-016 |
+| Page contract, the asks table: `null` → "Seguimos buscando tu transferencia en Banxico." | "Seguimos buscando tu transferencia." (FR-020, FR-022) |
+| FR-004 and its page contract, step 1: "Tu referencia" as one copy row beside the account, with where to type it in a well below | The account under a tag naming the method the business chose, then the reference in a box of its own, then an example that fills itself (FR-024–FR-026) |
+| Page contract, step 2: the bank and the day as rows of radio choices (D21) | The same native radio choices, shown as chips (FR-027) |
 
 Everything else in spec 012 stands: the reference and how it is born, the
 confirmation by bank and day, the read-back and "Corregir", the ladder's
@@ -142,6 +175,35 @@ rounds, what Devolada learns, and the switch per business.
   *The creator at `/speckit-clarify`, option A of three. Rejected: an
   underlined hyperlink, which needs a new look in the shared package; an
   outlined button like option 2, which is no longer quiet.*
+- Q: Does the payer ever read who verifies their transfer? → A: **No.**
+  *"El usuario que paga no tiene por qué ver copy que mencione a Banxico"*
+  — the creator, reviewing the prototypes. The page speaks of the payer's
+  transfer, their bank and their receipt, and of what "we" do with them.
+- Q: Where does that rule live, and does it cover the ISP words too? → A:
+  **In this spec, as User Story 4, built with the rest; and yes** — the
+  payer's copy never assumes the business sells internet either. *The
+  creator chose this option ("solo con la opción 1"). Rejected here: fixing
+  the page now through the bug path, which the creator did not choose.*
+
+### Session 2026-10-01
+
+- Q: Which design does the payer page follow? → A: **Proposal E** of the
+  design canvas: both steps, inside today's look, with chips, motion and a
+  little teaching (User Story 5). *The creator: "Continuamos con E".
+  Rejected: A, a new look; B, the read-back sentence as the form; C,
+  today's page with only the new order; D, option 2 inside the
+  confirmation's card. A to D showed only step 2, so they showed neither
+  where to pay nor the payer's reference.*
+- Q: Does option 2's form ask again for the amount, the bank and the day?
+  → A: **No.** It takes the ones chosen on the confirmation, shown as
+  tags, and asks only for the reference or the clave; "Volver" is the way
+  to change them (FR-029, amending FR-003). *Design E shows it so; the
+  creator was told it changes FR-003 when choosing E.*
+- Q: The example of a bank's form: whose field names? → A: **Generic
+  ones**, «Referencia numérica» and «Concepto», with a line saying the
+  names change a little by bank. A bank's own words appear only in the
+  sentence of FR-025, and only when verified (012 D21). *Design E's
+  default, shown to the creator when choosing E.*
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -181,9 +243,9 @@ without a reference and see today's page.
    last thing on the step.
 2. **Given** the step, **When** the payer opens option 2, **Then** one form
    asks for the reference they used or their clave de rastreo — either one
-   is enough — with the amount (the link's, editable), the bank and the day;
-   the form offers a way back to option 1; and the receipt link is still the
-   last thing.
+   is enough — with the amount, the bank and the day already chosen on
+   option 1 (FR-029); the form offers a way back to option 1; and the
+   receipt link is still the last thing.
 3. **Given** a payer whose reference has never confirmed a payment, asked
    "¿Pusiste la referencia 234 5678 en tu transferencia?" (012 FR-010),
    **When** they answer "No", **Then** option 2 opens and nothing is
@@ -318,6 +380,138 @@ one person's account.
 
 ---
 
+### User Story 4 - The payer reads about their transfer, never about who checks it (Priority: P2)
+
+Everything the payer reads speaks of their own transfer and of what we do
+with it: we verify it, we keep looking for it, we confirm it, or we could
+not confirm it in time. It never names Banxico, the provider that searches
+for us, or any other institution. It never assumes the business sells
+internet: the payer is sent back to the business by its own name, and a
+service that came back is "tu servicio". The same moment always reads the
+same way, whichever path led to it. The bank list the payer picks from
+has no Banxico in it.
+
+**Why this priority**: an institution's name in a waiting message reads as
+a delay the payer might chase, and "tu proveedor de internet" is simply
+wrong for every business that is not an ISP. It is copy, not flow, so it is
+P2 — but it touches every state of the page, the ones built before this
+spec included.
+
+**Independent Test**: on any business — with the feature on or off, ISP or
+not — walk the page through waiting, not-yet-seen, provisionally released,
+confirmed, expired and not-found states and read every sentence: none names
+Banxico, none says "internet", and each moment reads as the vocabulary of
+FR-022 says. Open the bank list: no Banxico.
+
+**Acceptance Scenarios**:
+
+1. **Given** any state of the payer page, on any business, **When** it is
+   shown, **Then** no sentence, label or title names Banxico or any other
+   institution or provider.
+2. **Given** a payment still being searched, **When** the page waits,
+   **Then** it reads "Verificando tu transferencia…" while a search runs,
+   and "Seguimos buscando tu transferencia" with "Todavía no la vemos" when
+   nothing was found yet.
+3. **Given** a payment whose evidence is already good (both readings
+   agree, or the service came back), **When** it waits for the last word,
+   **Then** it reads "Solo falta confirmar tu transferencia".
+4. **Given** a payment that ran out of time, **When** the expired view is
+   shown, **Then** it reads "No pudimos confirmar tu transferencia a
+   tiempo" and sends the payer to the business by its name.
+5. **Given** a business that is not an ISP, **When** any view sends the
+   payer back to the business or says the service returned, **Then** it
+   uses the business's name and "tu servicio", never "tu proveedor de
+   internet" or "tu internet".
+6. **Given** a link that does not exist, or a device with no saved link,
+   **When** the page says so, **Then** it sends the payer to whoever sent
+   them the link, with no business named and no ISP assumed; the browser
+   tab reads "Tu pago".
+7. **Given** the list of banks the payer picks from, **When** it opens,
+   **Then** Banxico is not in it.
+
+---
+
+### User Story 5 - The page shows where to pay and the payer's reference first, and teaches as it goes (Priority: P2)
+
+The payer opens the link. Under the amount, the page says where to send
+the money, in the way the business chose to be paid. A tag names the
+method (CLABE, Tarjeta de débito or Celular) above the number and its
+copy button. A card or a phone number has its bank beside it. One line
+says the money goes straight to the business's account. Then comes the
+payer's own reference, in a box of its own: the seven digits large, "Solo
+tuya", a copy button, "Son los últimos 7 números de tu celular", where to
+type it and why it matters. Below it, a small example of a bank's
+transfer form fills itself in, field by field, with the reference field
+marked.
+
+Back from their bank, the payer answers the bank and the day with chips,
+and one tap on "¿Por qué te preguntamos esto?" says why those are enough.
+While the page searches, it shows the three steps of the search. When a
+tie-break is needed, it shows where in the transfer's detail each answer
+is. A payment confirmed with the payer's reference ends by saying that
+next month takes two taps.
+
+**Why this priority**: the reference only works when the payer types it
+in the right field. A page that shows where to pay and what to type, and
+says why, is how a payer learns it once. It is P2 because the order and
+the tie-break (US1, US2) make a payment safe; this makes it likely to work
+the first time.
+
+**Independent Test**: on a business with the feature on, open links of
+businesses paid by CLABE, by debit card and by phone. Step 1 shows the
+amount, the method's tag, the number and, for a card or a phone, its bank;
+then the reference's box; then the example filling in, which shows filled
+with reduced motion. At step 2, the bank and the day are chips that the
+arrow keys move; "¿Por qué te preguntamos esto?" opens one sentence.
+Confirm and see three steps; reach a tie-break and see where to look;
+confirm and read the line about next month. Open a link without a
+reference: today's page.
+
+**Acceptance Scenarios**:
+
+1. **Given** a link with a reference, of a business paid by CLABE,
+   **When** step 1 opens, **Then** under the amount a tag reads "CLABE",
+   the CLABE shows with a copy action, and one line says the money goes
+   straight to the account of the business, by its name.
+2. **Given** a business paid by debit card or by phone, **When** step 1
+   opens, **Then** the tag reads "Tarjeta de débito" or "Celular", the
+   number shows with a copy action, and the bank stands beside it.
+3. **Given** step 1, **When** it opens, **Then** the payer's reference is
+   the most visible thing after the amount: a box of its own, the digits
+   grouped and large, "Solo tuya", a copy action that copies the seven
+   digits, the phone's note when the reference is the phone's, where to
+   type it and why.
+4. **Given** step 1, **When** it opens, **Then** an example of a bank's
+   transfer form fills itself once — the account, the amount, «Referencia
+   numérica» with the payer's reference marked, «Concepto» as optional —
+   and "Ver otra vez" plays it again. **With reduced motion** it shows
+   filled and nothing moves.
+5. **Given** step 2, **When** the payer chooses the bank and the day,
+   **Then** both are chips, 48 pixels high, the chosen one marked by a
+   check and its outline; each group is one tab stop and the arrow keys
+   move the choice; under the banks, a line says the preselected bank is
+   the one of the payer's last payment.
+6. **Given** step 2, **When** the payer taps "¿Por qué te preguntamos
+   esto?", **Then** one sentence opens in place and nothing is sent.
+7. **Given** option 2's form, **When** it opens, **Then** it asks only for
+   the reference or the clave and shows the amount, the bank and the day
+   already chosen as tags; "Volver" goes back to change them.
+8. **Given** a confirmation sent, **When** the page waits, **Then** it
+   shows "Recibimos tus datos", "Verificamos tu transferencia" and
+   "Confirmamos tu pago" as steps, the current one breathing, and no
+   receipt link (FR-005).
+9. **Given** the tie-break screen, **When** it is shown, **Then** a small
+   illustration shows where the sending account's last four digits and the
+   clave's last four characters are in a transfer's detail, with no value
+   of any transfer found.
+10. **Given** a payment confirmed with the payer's own reference, **When**
+    the result shows, **Then** it ends with "Así de fácil cada mes. Usa la
+    misma referencia, 234 5678, y confirmas tu pago en dos toques."
+11. **Given** a link without a reference, **When** it opens, **Then** both
+    steps are today's (FR-006).
+
+---
+
 ### Edge Cases
 
 - **The payer has neither the account's digits nor the clave** at hand.
@@ -349,6 +543,23 @@ one person's account.
   calls. The link comes back with the first ask (FR-005).
 - **Dark mode, reduced motion, a 360-pixel screen.** The order and the
   sizes hold; there is no horizontal scroll.
+- **A saved draft names Banxico as the sender bank.** The option is gone
+  from the list; the draft's bank is dropped and the payer picks again. A
+  retail payer holds no account at Banxico, so this is near-impossible.
+- **The business's name is long, or odd.** It is shown as the business's
+  records hold it, like everywhere else on the page; the sentence wraps.
+- **The business is paid by CLABE.** There is no bank row: the CLABE
+  carries its bank, which stays under "Ver los demás datos" as today.
+- **The reference is an assigned number, not the phone's** (012 D3). The
+  box drops the phone's note; "Solo tuya" stays, because the number still
+  belongs to one person.
+- **The payer copies the reference.** The button says "Copiada" for a
+  moment; what is copied is the seven digits, without the space.
+- **The payer's bank has verified words for the field** (012 D21). The
+  sentence in the box uses them; the example keeps its generic names.
+- **The payer opens option 2 with "Otro banco" and no bank picked.** The
+  bank's tag reads "Elige tu banco" and "Buscar mi pago" waits; "Volver"
+  is the way to pick it.
 
 ## Requirements *(mandatory)*
 
@@ -366,8 +577,9 @@ one person's account.
   belongs to option 1.
 - **FR-003**: Option 2 MUST be a standard-size control visible on the
   step's first screen, never behind another link. Opening it MUST show one
-  form where either the reference or the clave is enough, with the amount
-  (the link's, editable), the bank and the day, and a way back to option 1.
+  form where either the reference or the clave is enough, with the amount,
+  the bank and the day chosen on option 1 (FR-029), and a way back to
+  option 1.
   The "No" of 012 FR-010's question opens it.
 - **FR-004**: Option 3 MUST be a quiet action — no fill and no border at
   rest, small text, a light background when touched — placed after every
@@ -452,6 +664,84 @@ one person's account.
   clave's characters, or the whole clave — and how many wrong answers came
   before it (extending 012 FR-035).
 
+**The payer's copy**
+
+- **FR-020**: Text the payer reads — on any business, with the feature
+  on or off, in any state of the page, in titles and accessible names too
+  — MUST NOT name Banxico or any other institution or provider that verifies a
+  transfer. It speaks of the payer's transfer, bank and receipt, and of
+  what "we" do with them. The business's panel, its emails and the landing
+  page are not the payer's and may keep the word.
+- **FR-021**: Text the payer reads MUST NOT assume the business sells
+  internet. Where the page sends the payer back to the business it uses
+  the business's name; where no business is known (a link that does not
+  exist, a device with no saved link) it says "a quien te envió el link";
+  a service that came back is "tu servicio". The browser tab reads "Tu
+  pago".
+- **FR-022**: Each moment MUST read the same way wherever it appears: a
+  search running — "Verificando tu transferencia…" (in a list of steps,
+  "Verificamos tu transferencia"); nothing seen yet — "Seguimos buscando tu
+  transferencia" with "Todavía no la vemos"; the evidence already good —
+  "Solo falta confirmar tu transferencia"; confirmed — "Confirmamos tu
+  transferencia"; out of time — "No pudimos confirmar tu transferencia a
+  tiempo".
+- **FR-023**: The banks the payer picks from MUST NOT include Banxico.
+
+**The page's design (User Story 5)**
+
+- **FR-024**: On a link with a reference, step 1 MUST show, under the
+  amount, the account the business chose to be paid in: a tag naming its
+  kind (CLABE, Tarjeta de débito or Celular), the number with a copy
+  action, the bank beside a card or a phone number, and one line saying
+  the money goes straight to the business's account, by its name.
+- **FR-025**: After the amount, the payer's reference MUST be the most
+  visible element of step 1: a box of its own, the digits grouped and
+  large, "Solo tuya", a copy action that copies the seven digits, the
+  phone's note when it is the phone's (012 FR-004), where to type it (012
+  D21's sentence, in a bank's own words only when verified) and why
+  ("Con ella reconocemos tu transferencia: no tendrás que mandar
+  comprobante.").
+- **FR-026**: Step 1 MUST show a short example of a bank's transfer form
+  — the account by its kind, the amount, «Referencia numérica» with the
+  payer's reference marked, «Concepto» as optional — that fills itself
+  field by field once when the step opens, and again on "Ver otra vez".
+  Its field names are generic, and it says so. With reduced motion it
+  shows filled, without movement.
+- **FR-027**: Step 2's bank and day choices MUST look like chips —
+  rounded, 48 pixels high, the chosen one marked by a check icon and its
+  outline, never by colour alone — and MUST keep the native radio
+  behaviour of 012 D21: one tab stop per group, the arrow keys, the screen
+  reader's own "seleccionado". When a bank is preselected, a line under
+  the banks says it is the one of the payer's last payment.
+- **FR-028**: Step 2 MUST offer "¿Por qué te preguntamos esto?", which
+  opens one sentence in place and sends nothing: the reference, the bank
+  and the day are enough to find the transfer, which is why no receipt is
+  asked.
+- **FR-029**: Option 2's form MUST take the amount, the bank and the day
+  chosen on option 1, show them as tags, and ask only for the reference
+  or the clave. "Volver" is the way to change them; "Buscar mi pago" waits
+  until a bank is chosen.
+- **FR-030**: The plain wait MUST show the search as three steps —
+  "Recibimos tus datos", "Verificamos tu transferencia", "Confirmamos tu
+  pago" — with the current one breathing. The steps follow the payment's
+  state, never a timer, and FR-005 still holds: no receipt link.
+- **FR-031**: The tie-break screen MUST show where each answer is found in
+  a transfer's detail — the sending account's last four digits, the
+  clave's last four characters — as an illustration that shows no value
+  of any transfer found (FR-018).
+- **FR-032**: A payment confirmed with the payer's own reference MUST end
+  with one line on next month: "Así de fácil cada mes. Usa la misma
+  referencia, 234 5678, y confirmas tu pago en dos toques.", with the
+  payer's digits.
+- **FR-033**: Motion MUST follow the page's vocabulary: entries cross-fade
+  with at most a small rise, the reference's box glows once, the example
+  types itself, a wait breathes; nothing spins or bounces. With reduced
+  motion only opacity remains, and a working screen still breathes.
+- **FR-034**: User Story 5 MUST use only the page's existing look — its
+  tokens, card, buttons, badges, alerts and fields — with no new colour,
+  size or duration. It applies to links with a reference; a link without
+  one keeps today's page (FR-006).
+
 ### Key Entities
 
 - **Tie-break answer**: what a payer gives to tie a typed reference to one
@@ -465,6 +755,12 @@ one person's account.
   confirms a payment of another person.
 - **Confirmation** (spec 012): also records what decided it among this
   spec's facts, and the wrong answers before it.
+- **The payer's vocabulary**: one wording per moment of a payment (FR-022),
+  shared by every view that shows that moment. Copy, not data: nothing is
+  stored.
+- **The account the business chose** (receipt-triage D29): the one account
+  the payer sends money to — a CLABE, a debit card or a phone — read from
+  the link and shown by its kind. The payer never chooses it.
 
 ## Success Criteria *(mandatory)*
 
@@ -484,11 +780,19 @@ one person's account.
 - **SC-005**: Within two months of launch at the pilot business, at most
   20% of the confirmed payments of links with a reference come through a
   receipt.
+- **SC-006**: Zero payer-facing texts name Banxico or say "internet": the
+  check reads every string the payer page can render, and fails on the
+  first one.
+- **SC-007**: Within two months of launch at the pilot business, at least
+  80% of the payments of links with a reference are confirmed with the
+  payer's own reference (option 1) — the reference was typed where step 1
+  shows it goes.
 
 ## Assumptions
 
 - Spec 012 is the base, and this spec is built with it, not after it. Spec
-  012 is planned and tasked but not built (2026-09-30). This spec's plan
+  012 is planned and tasked but not built (2026-09-30). *Since then 012
+  was built on its own (#261, 2026-09-30); tasks Phase 9 changes it.* This spec's plan
   reconciles 012's plan, page contract and tasks, so the two never disagree
   silently.
 - The transfers one search finds differ in their clave's last characters
@@ -516,6 +820,13 @@ one person's account.
   decide and the payer is asked (plan D4).
 - The copy quoted here is es-MX and final in meaning. Its exact wording is
   settled with the page's other copy at the plan.
-- Out of scope: the payment instructions (step 1), the search by the
-  payer's own reference, the ladder's rounds, the receipt reader, the pages
-  of businesses without the feature, and the WhatsApp channel.
+- User Story 4 covers the payer page as it is built on `main`, including
+  the views specs 012 and earlier built, and the pages of businesses
+  without the feature. Its copy is the payer's only; the business's panel
+  (for example "Proteger el servicio mientras Banxico confirma"), the
+  emails to businesses and the landing page keep their words.
+- Out of scope: the payment instructions (step 1) beyond what User Story
+  5 changes on links with a reference, the search by the payer's own
+  reference, the ladder's rounds, the receipt reader, and the
+  WhatsApp channel. The pages of businesses without the feature are out of
+  scope for User Stories 1–3 only; User Story 4 covers them.

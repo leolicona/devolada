@@ -349,3 +349,10 @@ built.
 - [X] T050 [US5] The confirmed line (`confirmation-hierarchy D22`; spec FR-032): in `PaymentPage.tsx`'s confirmed view, after the folio, the next-month line on rows with `referenceSource = "own"`, with the payer's grouped digits; the step 1 sections' entrance and the reference's glow (FR-033) land with T043 and T044.
 
 **Checkpoint**: US5 is complete — both steps read as proposal E, in the page's own look, and a link without a reference is today's page.
+
+---
+
+## Phase 11: Convergence
+
+- [ ] T051 Make the WhatsApp message of a panel link assume no business type: `shareText` in `apps/api/src/routes/direct-payments/handler.ts:1736` sends the payer "Hola, aquí está tu link de pago de internet." — the one payer text R13's sweep of the API missed (it looked for Banxico only). Use `apiShareText`'s words (receipt spec D3) and keep the reusable line: "Hola, aquí está tu link de pago. Guárdalo: sirve cada mes."; its comment cites `confirmation-hierarchy D14` and constitution IX; add an API test (cite `confirmation-hierarchy US4`) that the `waLink` text of a panel customer row, with and without a reference, names neither "internet" nor "Banxico", per FR-021 (partial)
+- [ ] T052 Draw the confirmed check on a link with a reference: on the confirmed view of `apps/pago/src/features/pago/PaymentPage.tsx`, the check of the "Pago confirmado" badge draws once in `--duration-slow` (a stroke reveal in `apps/pago/src/styles.css`, beside step 1's motion, no raw duration); under reduced motion it shows drawn, with no keyframe; a link without a reference keeps today's confirmed view (FR-034); a page test (cite `confirmation-hierarchy US5`) and the e2e reduced-motion check cover it, per plan: D17, D20 (contracts/payment-page.md "Motion", FR-033) (partial)

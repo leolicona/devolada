@@ -887,6 +887,6 @@ before any code (T073, T088, T097, T098), and each of those says so.
 - [X] T103 Cite stories, not only tasks, in the browser layer's new blocks, per Constitution VII (partial):
   - `tests/e2e/contrast.spec.ts:153` cites *cash-at-stores T033, T040, T051, T060*, and `tests/e2e/motion.spec.ts:756` cites *T033, T060*;
   - add `cash-at-stores US1`, `US2`, `US4` and `US5` beside them.
-- [ ] T104 Close TODO(CLAUDE-MD-WORKERS) in the constitution's Sync Impact Report, through `/speckit-constitution` as a patch note, per the constitution's Governance (partial):
+- [X] T104 Close TODO(CLAUDE-MD-WORKERS) in the constitution's Sync Impact Report, through `/speckit-constitution` as a patch note, per the constitution's Governance (partial):
   - T062 did the work: CLAUDE.md now says five Workers, names red's dev command and lists `apps/red`;
   - v1.9.1's report still carries the TODO "unchanged from v1.9.0".

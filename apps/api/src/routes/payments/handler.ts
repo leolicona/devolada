@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, notExists, notInArray, or, sql, sum } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, cepRecords, integrationEvents, paymentLinks, payments } from "../../db/schema";
+import { businesses, cepRecords, integrationEvents, paymentLinks, payments, storeLedger, stores, user as userTable } from "../../db/schema";
 import { businessWallClock, nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { realOnly, type ApiLink } from "../../direct-payments/links";
@@ -65,6 +65,7 @@ export async function listPaymentFeed(
     q?: string;
     from?: string;
     to?: string;
+    channel?: "spei" | "store";
   },
 ) {
   const ctx = businessGuard(c);
@@ -92,6 +93,8 @@ export async function listPaymentFeed(
     ...(q.cursor ? [lt(payments.createdAt, new Date(q.cursor))] : []),
     ...(q.action ? [eq(payments.actionOutcome, q.action)] : []),
     ...(q.class ? [eq(payments.reconciliationClass, q.class)] : []),
+    /* cash-at-stores D23 (FR-031): the channel chip */
+    ...(q.channel ? [eq(payments.channel, q.channel)] : []),
     /* D4: calendar dates on the BUSINESS's wall clock (settings D5) */
     ...(q.from
       ? [gte(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, q.from)))]
@@ -112,13 +115,19 @@ export async function listPaymentFeed(
       : []),
   ];
 
-  /* `storeName` stays in the response shape until the payments merge
-     revises charge-feed.spec.md (business-and-memberships D6); with the
-     store network gone it is always null. */
+  /* cash-at-stores D23: `storeName` is filled again — a left join, null on
+     every SPEI row — now that the store network is a channel of the
+     product (it was always null while the network lived elsewhere) */
   const rows = await db
-    .select({ charge: payments, linkUsuario: paymentLinks.customerUsuario, linkSource: paymentLinks.source })
+    .select({
+      charge: payments,
+      linkUsuario: paymentLinks.customerUsuario,
+      linkSource: paymentLinks.source,
+      storeName: stores.name,
+    })
     .from(payments)
     .innerJoin(paymentLinks, eq(paymentLinks.id, payments.paymentLinkId))
+    .leftJoin(stores, eq(stores.id, payments.storeId))
     .where(and(...filters))
     .orderBy(desc(payments.createdAt))
     .limit(PAGE + 1);
@@ -137,6 +146,23 @@ export async function listPaymentFeed(
         })
         .from(integrationEvents)
         .where(inArray(integrationEvents.paymentId, pageIds))
+    : [];
+  /* cash-at-stores D21 (FR-030): the operator's corrections, with their
+     author, for the cash rows on this page */
+  const cashIds = page.filter((r) => r.charge.channel === "store").map((r) => r.charge.id);
+  const correctionRows = cashIds.length
+    ? await db
+        .select({
+          paymentId: storeLedger.paymentId,
+          cents: storeLedger.cents,
+          reason: storeLedger.reason,
+          author: userTable.email,
+          at: storeLedger.createdAt,
+        })
+        .from(storeLedger)
+        .leftJoin(userTable, eq(userTable.id, storeLedger.authorUserId))
+        .where(and(eq(storeLedger.kind, "correction"), eq(storeLedger.businessId, actor.id), inArray(storeLedger.paymentId, cashIds)))
+        .orderBy(storeLedger.createdAt)
     : [];
   const lastAction = new Map<string, "register_and_reconnect" | "register_only">();
   for (const e of eventRows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
@@ -171,7 +197,7 @@ export async function listPaymentFeed(
     success: true,
     data: {
       /* payments-and-classes D6: the feed answers `payments` */
-      payments: page.map(({ charge, linkUsuario, linkSource }) => {
+      payments: page.map(({ charge, linkUsuario, linkSource, storeName }) => {
         const receivedCents = charge.receivedCents ?? charge.amountCents;
         const askedCents =
           charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
@@ -216,7 +242,11 @@ export async function listPaymentFeed(
              API link, whose payment carries the caller's reference
              instead; the feed's own API rows arrive with US1 (T076). */
           customerName: charge.customerName ?? linkUsuario ?? charge.customerRef ?? "",
-          storeName: null,
+          storeName: storeName ?? null,
+          storeFeeCents: charge.storeFeeCents,
+          corrections: correctionRows
+            .filter((r) => r.paymentId === charge.id)
+            .map((r) => ({ cents: r.cents, reason: r.reason ?? "", author: r.author ?? null, at: r.at.getTime() })),
           createdAt: charge.createdAt.getTime(),
           actionDoneAt: charge.actionDoneAt?.getTime() ?? null,
           actionAttempts: charge.actionAttempts,

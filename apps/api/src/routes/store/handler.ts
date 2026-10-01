@@ -1,8 +1,19 @@
 import type { Context } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, paymentLinks, payments, stores } from "../../db/schema";
+import {
+  account as accountTable,
+  businesses,
+  paymentLinks,
+  payments,
+  session as sessionTable,
+  storeInvitations,
+  stores,
+  user as userTable,
+} from "../../db/schema";
+import { makeAuth } from "../../auth/better";
+import { isPlatformOperator } from "../../platform/settings";
 import { channelBusiness } from "../../store-channel";
 import { integrationOf } from "../../integrations/store";
 import { capabilitiesOf } from "../../integrations/registry";
@@ -14,7 +25,16 @@ import { settle } from "../../direct-payments/partial";
 import { getNumberSetting, getSetting } from "../../platform/settings";
 import { ensureLink } from "../../direct-payments/links";
 import { announcingWriter, isUniqueViolation, settleConfirmed } from "../../direct-payments/validation";
-import { recordCollection } from "../../store-ledger";
+import {
+  decodeLedgerCursor,
+  encodeLedgerCursor,
+  feesSinceHandoverCents,
+  heldCents,
+  ledgerRowsOf,
+  movementsOf,
+  recordCollection,
+} from "../../store-ledger";
+import { storeHandovers, storeLedger } from "../../db/schema";
 import { makeFolio } from "../../folio";
 import { renderReceipt, toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { DEFAULT_RECEIPT_TEMPLATE } from "../../receipt/template";
@@ -22,7 +42,15 @@ import { deferOf } from "../defer";
 import {
   STORE_SEARCH_LIMIT,
   STORE_SEARCH_MIN,
+  STORE_LEDGER_PAGE,
+  type AcceptStoreInvitationRequest,
+  type CashboxResponse,
+  type DeclareHandoverRequest,
+  type DeclareHandoverResponse,
+  type StoreLedgerQuery,
+  type StoreLedgerResponse,
   type CollectionOutcome,
+  type InvitationPreviewResponse,
   type CollectionReceiptResponse,
   type CollectionStatusResponse,
   type RecordCollectionRequest,
@@ -426,4 +454,223 @@ export async function collectionReceipt(c: Ctx, id: string) {
   }
   const data: CollectionReceiptResponse = { text, waLink: whatsAppLink(text, phone), hasPhone: phone !== null };
   return c.json({ success: true, data });
+}
+
+/* ---- The invitation, session-less (D4, D5) ---- */
+
+const sha256Hex = async (text: string) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+/* D4: the store and its invitation, when the token opens one. Every bad
+   token gets the same answer; the log records which it was. A suspended
+   store's invitation is not accepted (data-model). */
+async function openInvitation(db: DB, token: string, now: Date) {
+  const [found] = await db
+    .select({ invitation: storeInvitations, store: stores })
+    .from(storeInvitations)
+    .innerJoin(stores, eq(stores.id, storeInvitations.storeId))
+    .where(eq(storeInvitations.tokenHash, await sha256Hex(token)));
+  const why = !found
+    ? "unknown"
+    : found.invitation.status !== "sent"
+      ? found.invitation.status
+      : found.invitation.expiresAt.getTime() <= now.getTime()
+        ? "expired"
+        : found.store.status !== "invited" || found.store.userId
+          ? `store ${found.store.status}`
+          : null;
+  if (why) {
+    console.log(`store invitation refused: ${why}`);
+    return null;
+  }
+  return found!;
+}
+
+/* GET /store/invitations/:token */
+export async function previewInvitation(c: Ctx, token: string) {
+  const db = drizzle(c.env.DB);
+  const open = await openInvitation(db, token, new Date());
+  const data: InvitationPreviewResponse = open
+    ? { state: "open", storeName: open.store.name, phoneTail: open.store.phone.slice(-4) }
+    : { state: "invalid" };
+  return c.json({ success: true, data });
+}
+
+/* D5's rollback: the user the acceptance made, and nothing else of it */
+async function removeUser(db: DB, userId: string) {
+  await db.batch([
+    db.delete(sessionTable).where(eq(sessionTable.userId, userId)),
+    db.delete(accountTable).where(eq(accountTable.userId, userId)),
+    db.delete(userTable).where(eq(userTable.id, userId)),
+  ]);
+}
+
+/* POST /store/invitations/:token/accept (D5, FR-009), in this order:
+     1. the token opens an invitation (D4);
+     2. an email with a user, or an operator's, is EMAIL_TAKEN — the same
+        word, so an operator's address is not revealed (D2);
+     3. the user is born through Better Auth, with no username;
+     4. in one batch: the username (the store's phone, as `nationalPhone`
+        reads it — L5), the store's user and `active`, the invitation
+        `accepted`. A store another request took meanwhile writes no row,
+        and is the same refusal;
+     5. the código goes out (best-effort: the app's "Reenviar" retries).
+   Steps 3–4 failing remove the user, and the invitation stays `sent`. */
+export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreInvitationRequest) {
+  const db = drizzle(c.env.DB);
+  const now = new Date();
+  const open = await openInvitation(db, token, now);
+  if (!open) return refuse(c, "INVALID_INVITATION", 400);
+  const { store, invitation } = open;
+
+  const email = body.email;
+  const [existing] = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, email));
+  if (existing || isPlatformOperator(c.env, email)) return refuse(c, "EMAIL_TAKEN", 409);
+
+  const auth = makeAuth(c.env);
+  const { response } = await auth.api.signUpEmail({
+    body: { name: store.shopkeeperName, email, password: body.password },
+    returnHeaders: true,
+  });
+  const userId = response.user.id;
+  try {
+    const [, linked] = await db.batch([
+      db.update(userTable).set({ username: store.phone, displayUsername: store.phone }).where(eq(userTable.id, userId)),
+      db
+        .update(stores)
+        .set({ userId, status: "active", updatedAt: now })
+        .where(and(eq(stores.id, store.id), eq(stores.status, "invited")))
+        .returning({ id: stores.id }),
+      db
+        .update(storeInvitations)
+        .set({ status: "accepted" })
+        .where(and(eq(storeInvitations.id, invitation.id), eq(storeInvitations.status, "sent"))),
+    ]);
+    if (linked.length === 0) {
+      await removeUser(db, userId);
+      return refuse(c, "INVALID_INVITATION", 400);
+    }
+  } catch (e) {
+    await removeUser(db, userId);
+    throw e;
+  }
+
+  try {
+    await auth.api.sendVerificationOTP({ body: { email, type: "email-verification" } });
+  } catch (e) {
+    console.error("store acceptance code failed", e);
+  }
+  return c.json({ success: true, data: { email } }, 201);
+}
+
+/* ---- The cash book (D19, D20) ---- */
+
+/* Contract, "The business, in the cash book" (/speckit-analyze H1;
+   constitution V v1.9.1): every business this store has movements with,
+   whether or not its channel is still on — that is what lets a store hand
+   over cash after the switch goes off — plus the one it collects for now.
+   Never CHANNEL_OFF here. */
+async function cashBusinessesOf(db: DB, storeId: string) {
+  const [moved, channel] = await Promise.all([
+    db.selectDistinct({ businessId: storeLedger.businessId }).from(storeLedger).where(eq(storeLedger.storeId, storeId)),
+    channelBusiness(db),
+  ]);
+  const ids = new Set(moved.map((m) => m.businessId));
+  if (channel) ids.add(channel.id);
+  if (!ids.size) return [];
+  return db
+    .select({ id: businesses.id, name: businesses.name })
+    .from(businesses)
+    .where(inArray(businesses.id, [...ids]));
+}
+
+/* GET /store/cashbox — FR-037: held and fees per business, the last
+   resolved hand-over (with a dispute's note) and the pending one */
+export async function getCashbox(c: Ctx) {
+  const db = drizzle(c.env.DB);
+  const { storeId } = c.get("store");
+  const list = await cashBusinessesOf(db, storeId);
+  const data: CashboxResponse = {
+    businesses: await Promise.all(
+      list.map(async (b) => {
+        const [held, fees, [last], [pending]] = await Promise.all([
+          heldCents(db, storeId, b.id),
+          feesSinceHandoverCents(db, storeId, b.id),
+          db
+            .select()
+            .from(storeHandovers)
+            .where(and(eq(storeHandovers.storeId, storeId), eq(storeHandovers.businessId, b.id), ne(storeHandovers.status, "pending")))
+            .orderBy(desc(storeHandovers.resolvedAt))
+            .limit(1),
+          db
+            .select()
+            .from(storeHandovers)
+            .where(and(eq(storeHandovers.storeId, storeId), eq(storeHandovers.businessId, b.id), eq(storeHandovers.status, "pending"))),
+        ]);
+        return {
+          businessId: b.id,
+          businessName: b.name,
+          heldCents: held,
+          feesSinceHandoverCents: fees,
+          lastHandover: last
+            ? {
+                cents: last.cents,
+                status: last.status as "confirmed" | "disputed",
+                at: (last.resolvedAt ?? last.declaredAt).getTime(),
+                note: last.note,
+              }
+            : null,
+          pendingHandover: pending ? { id: pending.id, cents: pending.cents, declaredAt: pending.declaredAt.getTime() } : null,
+        };
+      }),
+    ),
+  };
+  return c.json({ success: true, data });
+}
+
+/* GET /store/ledger — newest first, twenty a page; `businessId` and
+   `kind` narrow it to what a number in *Mi caja* stands for (FR-037) */
+export async function getStoreLedger(c: Ctx, q: StoreLedgerQuery) {
+  const db = drizzle(c.env.DB);
+  const { storeId } = c.get("store");
+  const cursor = decodeLedgerCursor(q.cursor);
+  if (cursor === "bad") return refuse(c, "VALIDATION_ERROR", 400);
+  const list = await cashBusinessesOf(db, storeId);
+  const ids = list.map((b) => b.id);
+  if (q.businessId && !ids.includes(q.businessId)) return refuse(c, "NOT_FOUND", 404);
+  const page = await movementsOf(db, { storeId, businessIds: q.businessId ? [q.businessId] : ids, kind: q.kind }, cursor, STORE_LEDGER_PAGE);
+  const rows = await ledgerRowsOf(db, page.rows);
+  const data: StoreLedgerResponse = {
+    /* the store's view: no payment ids, no authors (D21's detail is the
+       operator's and the business's) */
+    rows: rows.map(({ paymentId: _p, authorEmail: _a, ...row }) => row),
+    nextCursor: page.next ? encodeLedgerCursor(page.next) : null,
+  };
+  return c.json({ success: true, data });
+}
+
+/* POST /store/handovers — D20: above zero and at most what is held; one
+   pending per store and business (the partial unique index is the guard,
+   races included). Declaring writes no movement. */
+export async function declareHandover(c: Ctx, body: DeclareHandoverRequest) {
+  const db = drizzle(c.env.DB);
+  const store = c.get("store");
+  const list = await cashBusinessesOf(db, store.storeId);
+  if (!list.some((b) => b.id === body.businessId)) return refuse(c, "NOT_FOUND", 404);
+  const held = await heldCents(db, store.storeId, body.businessId);
+  if (body.cents > held) return refuse(c, "AMOUNT_EXCEEDS_HELD", 400);
+  let row: typeof storeHandovers.$inferSelect;
+  try {
+    [row] = await db
+      .insert(storeHandovers)
+      .values({ storeId: store.storeId, businessId: body.businessId, cents: body.cents, declaredByUserId: store.userId })
+      .returning();
+  } catch (e) {
+    if (isUniqueViolation(e)) return refuse(c, "HANDOVER_PENDING", 409);
+    throw e;
+  }
+  const data: DeclareHandoverResponse = { id: row.id, status: "pending" };
+  return c.json({ success: true, data }, 201);
 }

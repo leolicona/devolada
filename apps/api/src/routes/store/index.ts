@@ -3,8 +3,21 @@ import { zValidator } from "@hono/zod-validator";
 import type { Context } from "hono";
 import type { Bindings, Variables } from "../../env";
 import { requireStore } from "../../auth/middleware";
-import { recordCollectionRequest, storeQuoteQuery, storeSearchQuery } from "./schema";
+import { rateLimitRoute } from "../../auth/rate-limit";
 import {
+  acceptStoreInvitationRequest,
+  declareHandoverRequest,
+  recordCollectionRequest,
+  storeLedgerQuery,
+  storeQuoteQuery,
+  storeSearchQuery,
+} from "./schema";
+import {
+  acceptInvitation,
+  declareHandover,
+  getCashbox,
+  getStoreLedger,
+  previewInvitation,
   collectionReceipt,
   collectionStatus,
   quoteCustomer,
@@ -44,3 +57,32 @@ storeRoute.post("/collections", requireStore, zValidator("json", recordCollectio
 storeRoute.get("/collections/:id", requireStore, (c) => collectionStatus(c, c.req.param("id")));
 
 storeRoute.get("/collections/:id/receipt", requireStore, (c) => collectionReceipt(c, c.req.param("id")));
+
+/* ---- The cash book (D19, D20): served for every business the store has
+   movements with, channel on or off (contract, H1) ---- */
+
+storeRoute.get("/cashbox", requireStore, (c) => getCashbox(c));
+
+storeRoute.get("/ledger", requireStore, zValidator("query", storeLedgerQuery, invalid), (c) =>
+  getStoreLedger(c, c.req.valid("query")),
+);
+
+storeRoute.post("/handovers", requireStore, zValidator("json", declareHandoverRequest, invalid), (c) =>
+  declareHandover(c, c.req.valid("json")),
+);
+
+/* ---- The invitation, session-less (D4, D5): the token is the credential,
+   and both doors carry the Hono limiter Better Auth's never sees ---- */
+
+storeRoute.get("/invitations/:token", rateLimitRoute("store-invitation", { window: 60, max: 30 }), (c) =>
+  previewInvitation(c, c.req.param("token")),
+);
+
+storeRoute.post(
+  "/invitations/:token/accept",
+  rateLimitRoute("store-invitation-accept", { window: 60, max: 5 }),
+  zValidator("json", acceptStoreInvitationRequest, (result, c) => {
+    if (!result.success) return c.json({ success: false, error: { code: "VALIDATION_ERROR" } }, 400);
+  }),
+  (c) => acceptInvitation(c, c.req.param("token"), c.req.valid("json")),
+);

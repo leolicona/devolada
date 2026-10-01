@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, lt, max, or, sql, sum } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-import { payments, storeHandovers, storeLedger } from "../db/schema";
+import { businesses, payments, storeHandovers, storeLedger, user as userTable } from "../db/schema";
 
 /* cash-at-stores D19: the store's cash book — the ONLY writer of
    `store_ledger`. Append-only: nothing here updates or deletes a
@@ -10,7 +10,7 @@ import { payments, storeHandovers, storeLedger } from "../db/schema";
    agree to the cent (FR-039, SC-005). The store's fee is never a
    movement: it is the store's money, derived from the payments. */
 
-type DB = DrizzleD1Database;
+type DB = DrizzleD1Database<Record<string, unknown>>;
 type Movement = typeof storeLedger.$inferSelect;
 
 /* D19: `+` the amount applied to the debt, once per payment — the unique
@@ -48,10 +48,14 @@ export async function recordHandover(
   now: Date = new Date(),
 ): Promise<typeof storeHandovers.$inferSelect | null> {
   const [, confirmed] = await db.batch([
-    db.run(sql`INSERT INTO store_ledger (id, store_id, business_id, kind, cents, handover_id, created_at)
-      SELECT ${crypto.randomUUID()}, store_id, business_id, 'handover', -cents, id, ${now.getTime()}
-      FROM store_handovers
-      WHERE id = ${handover.id} AND business_id = ${handover.businessId} AND status = 'pending'`),
+    /* INSERT … SELECT, in the table's column order (drizzle lists every
+       column): id, store_id, business_id, kind, cents, payment_id,
+       handover_id, reason, author_user_id, created_at */
+    db.insert(storeLedger).select(
+      sql`SELECT ${crypto.randomUUID()}, store_id, business_id, 'handover', -cents, NULL, id, NULL, NULL, ${now.getTime()}
+        FROM store_handovers
+        WHERE id = ${handover.id} AND business_id = ${handover.businessId} AND status = 'pending'`,
+    ),
     db
       .update(storeHandovers)
       .set({ status: "confirmed", resolvedByUserId: handover.resolvedByUserId, resolvedAt: now })
@@ -168,7 +172,7 @@ export function decodeLedgerCursor(raw: string | undefined): LedgerCursor | null
 
 export async function movementsOf(
   db: DB,
-  filter: { storeId: string; businessIds: string[] },
+  filter: { storeId: string; businessIds: string[]; kind?: Movement["kind"] },
   cursor: LedgerCursor | null,
   limit: number,
 ): Promise<{ rows: Movement[]; next: LedgerCursor | null }> {
@@ -180,6 +184,7 @@ export async function movementsOf(
       and(
         eq(storeLedger.storeId, filter.storeId),
         inArray(storeLedger.businessId, filter.businessIds),
+        ...(filter.kind ? [eq(storeLedger.kind, filter.kind)] : []),
         ...(cursor
           ? [
               or(
@@ -199,3 +204,42 @@ export async function movementsOf(
     next: rows.length > limit && last ? { at: last.createdAt.getTime(), id: last.id } : null,
   };
 }
+
+/* The rows of one cash book, as both the store and the operator read them */
+export async function ledgerRowsOf(db: DB, movements: (typeof storeLedger.$inferSelect)[]) {
+  const paymentIds = movements.map((m) => m.paymentId).filter((x): x is string => x !== null);
+  const authorIds = movements.map((m) => m.authorUserId).filter((x): x is string => x !== null);
+  const businessIds = [...new Set(movements.map((m) => m.businessId))];
+  const [paid, authors, names] = await Promise.all([
+    paymentIds.length
+      ? db
+          .select({ id: payments.id, folio: payments.folio, customerName: payments.customerName, storeFeeCents: payments.storeFeeCents })
+          .from(payments)
+          .where(inArray(payments.id, paymentIds))
+      : [],
+    authorIds.length ? db.select({ id: userTable.id, email: userTable.email }).from(userTable).where(inArray(userTable.id, authorIds)) : [],
+    businessIds.length ? db.select({ id: businesses.id, name: businesses.name }).from(businesses).where(inArray(businesses.id, businessIds)) : [],
+  ]);
+  const payment = new Map(paid.map((p) => [p.id, p]));
+  const author = new Map(authors.map((a) => [a.id, a.email]));
+  const name = new Map(names.map((n) => [n.id, n.name]));
+  return movements.map((m) => {
+    const p = m.paymentId ? payment.get(m.paymentId) : undefined;
+    return {
+      id: m.id,
+      kind: m.kind,
+      cents: m.cents,
+      at: m.createdAt.getTime(),
+      businessId: m.businessId,
+      businessName: name.get(m.businessId) ?? "",
+      folio: p?.folio ?? null,
+      customerName: p?.customerName ?? null,
+      /* D19: the store's fee, beside its collection — never a movement */
+      feeCents: m.kind === "collection" ? (p?.storeFeeCents ?? null) : null,
+      reason: m.reason,
+      paymentId: m.paymentId,
+      authorEmail: m.authorUserId ? (author.get(m.authorUserId) ?? null) : null,
+    };
+  });
+}
+

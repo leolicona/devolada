@@ -2,7 +2,8 @@ import { z } from "zod";
 
 /* Shareable contract (ARCHITECTURE.md): the admin derives types from
    these schemas and MSW handlers validate against them. Store-channel
-   shapes retired to devolada-red. */
+   shapes retired to devolada-red with the pivot, and cash returned as a
+   channel of this feed with cash-at-stores (D23). */
 
 /* payments-and-classes D4: every lifecycle status is a filter — the feed
    is where a payment shows itself, whatever became of it. */
@@ -41,6 +42,8 @@ export const feedQuery = z.object({
      inclusive on both ends; the server owns the midnight boundary. */
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /* cash-at-stores D23 (FR-031): cash, SPEI, or both when absent */
+  channel: z.enum(["spei", "store"]).optional(),
 });
 
 /* cep-bundle-match D10: why a search without a clave did not decide */
@@ -49,8 +52,10 @@ export const MATCH_REASONS = ["all_used", "no_signal", "too_close", "none_fit", 
 export const feedCharge = z.object({
   id: z.string(),
   folio: z.string(),
-  /* 'spei' = direct payment (direct-payment D6); one channel today */
-  channel: z.enum(["spei"]),
+  /* 'spei' = direct payment (direct-payment D6); 'store' = cash a store
+     recorded (cash-at-stores D11, D23). A reader tells them apart by this
+     field, never by `proofMode` (data-model). */
+  channel: z.enum(["spei", "store"]),
   /* automated-collections-api D8/FR-026: which door the link came
      through. An API payment's `actionOutcome` is its verdict webhook's
      delivery, so the badge must speak the webhook's words, never
@@ -100,6 +105,16 @@ export const feedCharge = z.object({
   customerName: z.string(),
   /* null for channel = 'spei': no store handled this money */
   storeName: z.string().nullable(),
+  /* cash-at-stores D23: the network fee the payer paid at the counter —
+     the store's money, never the business's. Null on a SPEI row.
+     Defaulted so fixtures born before it still parse. */
+  storeFeeCents: z.number().int().nullable().default(null),
+  /* cash-at-stores D21 (FR-030): the operator's corrections in the store's
+     cash book for this payment — amount, reason, author and date. Empty
+     on every SPEI row. */
+  corrections: z
+    .array(z.object({ cents: z.number().int(), reason: z.string(), author: z.string().nullable(), at: z.number().int() }))
+    .default([]),
   createdAt: z.number().int(),
   actionDoneAt: z.number().int().nullable(),
   actionAttempts: z.number().int(),

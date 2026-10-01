@@ -125,6 +125,14 @@ export type Bindings = {
   READER_TIMEOUT_MS?: string;
   /* Base URL of the public payment page, used to build link URLs */
   PAGO_BASE_URL: string;
+  /* cash-at-stores D4, D29: the store app's address, where a store's
+     invitation link lands (`${RED_BASE_URL}/invitacion/<token>`). Set per
+     environment in wrangler.jsonc, beside PAGO_BASE_URL. Unset → the
+     local dev server (http://localhost:5177) with a warning: the operator
+     panel shows the link it got, and says when it points at a local
+     machine rather than the store app, so a wrong deploy is never sent to
+     a shopkeeper silently (constitution VIII). */
+  RED_BASE_URL?: string;
   /* automated-collections-api D10: the platform's webhook signing keys —
      a JSON array of private JWKs (EC P-256), each with a `kid` and an
      optional `retiredAt` (ISO 8601 or ms). The one without `retiredAt`
@@ -197,6 +205,10 @@ export type Actor = {
   /* operator-panel D2: derived from the secret, per request (a string
      compare — no query) */
   platformOperator: boolean;
+  /* cash-at-stores D7, D23: the store channel, from the business row
+     already loaded. `since` shows Puntos de pago from the first switch
+     on, and keeps it after (FR-034). */
+  storeChannel: { on: boolean; since: number | null };
 };
 
 /* automated-collections-api D11 (plan, Complexity Tracking): the second
@@ -218,7 +230,24 @@ export type ApiClient = {
   business: typeof businesses.$inferSelect;
 };
 
+/* cash-at-stores D2: the store actor — a shopkeeper, a Better Auth user
+   who belongs to no business. Resolved by `requireStore` from its own
+   `stores` row on every request, never from a membership; a business
+   route refuses it (`requireSession` answers WRONG_ACTOR). Only an
+   `active` store becomes an actor: a suspended one is refused with
+   STORE_SUSPENDED and an invited one with WRONG_ACTOR. It carries no
+   role and no `platformOperator` (constitution V's store bullet). */
+export type StoreActor = {
+  type: "store";
+  storeId: string;
+  userId: string;
+  /* The store's name, for the app's header */
+  name: string;
+  status: "active";
+};
+
 export type Variables = {
   actor: Actor;
   apiClient: ApiClient;
+  store: StoreActor;
 };

@@ -17,7 +17,7 @@ export type BusinessActor = {
   /* cobros-in-links D13: what the integration can do. The Por cobrar
      chip needs `receivables`, a search result's debt `customerDebt`
      (FR-013). Empty with no integration. */
-  integrationCapabilities: ("receivables" | "customerDebt" | "customersWithPhone")[];
+  integrationCapabilities: ("receivables" | "customerDebt" | "customersWithPhone" | "customerSearch" | "paymentActions")[];
   /* business-and-memberships D5 (2026-09-02): born without a CLABE */
   speiConfigured: boolean;
   /* integrations-hub D4: connected with actions off — the shell chip */

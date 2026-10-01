@@ -249,6 +249,15 @@ jobs:
       - name: Deploy dev landing
         working-directory: apps/landing
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../landing/wrangler.jsonc --env dev
+      # cash-at-stores D29: the fifth Worker, the store app at
+      # red.dev.devoladapago.com. `custom_domain: true` creates the record
+      # on its first deploy; the smoke below waits out the certificate race.
+      - name: Build store app (dev API baked in)
+        working-directory: apps/red
+        run: VITE_API_URL="${{ vars.DEV_API_URL }}" pnpm build
+      - name: Deploy dev store app
+        working-directory: apps/red
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../red/wrangler.jsonc --env dev
       - name: Smoke test
         run: |
           failed=0
@@ -277,5 +286,8 @@ jobs:
           # landing-page FR-032: the page rides the same smoke as the API
           LANDING="${{ vars.DEV_LANDING_URL }}"
           probe landing "${LANDING:+$LANDING/}" || failed=1
+          # cash-at-stores D29: the store app rides it too
+          RED="${{ vars.DEV_RED_URL }}"
+          probe red "${RED:+$RED/}" || failed=1
           exit $failed
       # TODO: Playwright + axe E2E against dev (TESTING.md layer 4)

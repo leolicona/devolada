@@ -5,6 +5,24 @@ description: "Task list for Cash at Stores"
 
 # Tasks: Cash at Stores
 
+> **Drift found by T004 (2026-10-01, against `88007c0` + the T002 fix).**
+> Nothing the tasks name is missing; four readers they do not name:
+> - `proof_mode` has three more readers than T004 lists, none of which meets
+>   a cash row: `direct-payments/provisional.ts::releaseEvidenceFor` (a SPEI
+>   payment's evidence), `webhooks/events.ts` (`proofDoor`, API links only)
+>   and `routes/credit/handler.ts` (the top-ups table's own `proof_mode`,
+>   `schema.ts` `top_ups`, which this feature does not touch).
+> - The attempt budget is `attemptsInLastHour` in
+>   `routes/direct-payments/handler.ts`, read in two places (the pay door and
+>   the confirmation door); D12's filter goes in the function, once.
+> - The incident history is `provisional.ts::isRevoked`'s sibling query.
+> - `/auth/me` has two more readers in the browser layer:
+>   `tests/e2e/dropdown.spec.ts` and `tests/e2e/links.spec.ts` stub it
+>   directly. Both serve a business actor and keep doing so.
+> - T002 landed as `decided_action` (a sibling column, migration 0042):
+>   `observed_action` was taken (its contract is "null on every row that
+>   really dispatched"). T017's call sites carry `decidedActionOf`.
+
 **Input**: Design documents from `specs/018-cash-at-stores/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md),

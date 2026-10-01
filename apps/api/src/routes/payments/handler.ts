@@ -13,9 +13,8 @@ import {
   recordDispatch,
   settleDispatch,
 } from "../../integrations/dispatch";
-/* provider-address-per-isp D4 */
-import { wisphubFor } from "../../wisphub/factory";
-import { attemptReconnection } from "../../wisphub/reconnection";
+/* cash-at-stores D9: the business's system by capability, never by name */
+import { capabilitiesOf } from "../../integrations/registry";
 import { pendingVersion } from "../../wisphub/cache";
 import { decidedActionOf, firstAttemptSchedule } from "../../reconnection/queue";
 import { webhookDeliveries } from "../../db/schema";
@@ -43,16 +42,6 @@ import { RELEASED, undecidedOf } from "../../direct-payments/cep-match";
 import type { MatchTrail } from "../../consta/bundle/types";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
-
-/* Shared with the direct SPEI channel: one folio format, one guard */
-export function makeFolio(): string {
-  /* DV- + 6 uppercase base36 chars; the unique index is the real guard */
-  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  let out = "";
-  for (const b of bytes) out += chars[b % 36];
-  return `DV-${out}`;
-}
 
 function businessGuard(c: Ctx) {
   const actor = c.get("actor");
@@ -265,7 +254,10 @@ export async function getPaymentProof(c: Ctx, id: string) {
     .select()
     .from(payments)
     .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
-  if (!row) {
+  /* cash-at-stores D11: a cash row has no proof (`proof_mode = 'none'`),
+     so its door answers as a row with no file does — and the proof
+     schema keeps its two doors */
+  if (!row || row.proofMode === "none") {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
   const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
@@ -441,6 +433,18 @@ async function dispatchObserved(
   const actorId = business.id;
   const decided = row.observedAction ?? "register_and_reconnect:reconnect";
   const { action, reconnect } = parseHypothesis(decided);
+  const actions = capabilitiesOf(integration, c.env).paymentActions;
+  /* Every caller checked the key; an integration without the capability
+     waits in the queue as a row with no key does, and no decision is
+     dispatched (integrations-hub D6) */
+  if (!actions) {
+    const [waiting] = await db
+      .update(payments)
+      .set({ actionOutcome: "queued", nextAttemptAt: now, decidedAction: decided, ...extra })
+      .where(eq(payments.id, row.id))
+      .returning();
+    return waiting;
+  }
   await recordDispatch(db, {
     businessId: actorId,
     integrationId: integration.id,
@@ -448,15 +452,16 @@ async function dispatchObserved(
     class: row.reconciliationClass ?? "exact",
     action,
   });
-  const attempt = await attemptReconnection(
-    wisphubFor(integration, c.env),
+  const attempt = await actions.attempt({
     business,
-    { usuario: row.customerUsuario ?? "", wisphubId: row.wisphubCustomerId ?? "" },
-    row.registeredCents ?? 0,
-    now,
-    { invoiceId: row.wisphubInvoiceId, paymentRegistered: row.paymentRegisteredAt !== null },
+    usuario: row.customerUsuario ?? "",
+    providerCustomerId: row.wisphubCustomerId ?? "",
+    registeredCents: row.registeredCents ?? 0,
+    invoiceId: row.wisphubInvoiceId,
+    paymentRegistered: row.paymentRegisteredAt !== null,
     reconnect,
-  );
+    now,
+  });
   const schedule = firstAttemptSchedule(attempt, now);
   const outcome = outcomeOf(attempt.status, action);
   if (outcome !== "queued") {

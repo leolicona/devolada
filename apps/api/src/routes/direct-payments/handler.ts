@@ -132,6 +132,9 @@ async function attemptsInLastHour(
     .where(
       and(
         eq(payments.paymentLinkId, linkId),
+        /* cash-at-stores D12: a store's cash record is not a payer's
+           attempt, and never spends the payer's SPEI budget */
+        eq(payments.channel, "spei"),
         gte(payments.createdAt, new Date(now.getTime() - 3600 * 1000)),
         ...(safeExitsFree
           ? [
@@ -2235,9 +2238,14 @@ export async function customerDebt(c: Ctx, query: CustomerDebtQuery) {
   const data: CustomerDebtResponse =
     answer.state === "unconfirmed"
       ? { usuario: query.usuario, state: "unconfirmed" }
-      : answer.state === "owes"
-        ? { usuario: query.usuario, ...answer, state: "owes" }
-        : { usuario: query.usuario, ...answer, state: "none", totalCents: 0 };
+      : (() => {
+          /* cash-at-stores D8: the debt now names its customer for the
+             store's record; this door's contract does not carry it */
+          const { customer: _customer, ...owed } = answer;
+          return owed.state === "owes"
+            ? { usuario: query.usuario, ...owed, state: "owes" as const }
+            : { usuario: query.usuario, ...owed, state: "none" as const, totalCents: 0 };
+        })();
   return c.json({ success: true, data });
 }
 

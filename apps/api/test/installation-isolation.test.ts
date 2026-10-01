@@ -206,7 +206,8 @@ describe("provider-address-per-isp US3: several ISPs on different installations 
        with a visible reason and a next attempt (FR-012). */
     const stalled = await reload(io.charge.id);
     expect(stalled.actionOutcome).toBe("queued");
-    expect(stalled.actionError).toBe("WISPHUB_UNAVAILABLE");
+    /* cash-at-stores D9: the core's word, translated at the adapter */
+    expect(stalled.actionError).toBe("INTEGRATION_UNAVAILABLE");
     expect(stalled.nextAttemptAt).not.toBeNull();
     expect(stalled.status).toBe("confirmed");
     expect(stalled.receivedCents).toBe(51400);

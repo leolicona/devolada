@@ -164,7 +164,8 @@ describe("bug: queue-retry-forgets-action — the sweep retries what the verdict
     expect(queued).toMatchObject({
       status: "partial",
       actionOutcome: "queued",
-      actionError: "WISPHUB_UNAVAILABLE",
+      /* cash-at-stores D9: the core's word for the outage */
+      actionError: "INTEGRATION_UNAVAILABLE",
       decidedAction: "register_and_reconnect:withhold",
     });
 

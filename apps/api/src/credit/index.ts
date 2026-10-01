@@ -87,7 +87,7 @@ async function notifyCrossings(
 export async function debitValidationFee(
   env: Bindings,
   db: DB,
-  payment: { id: string; businessId: string; status: string; paymentLinkId: string; isTest: boolean },
+  payment: { id: string; businessId: string; status: string; paymentLinkId: string; isTest: boolean; channel: string },
 ): Promise<boolean> {
   /* automated-collections-api D12 (FR-035): a test payment is never
      debited — one gate, here, in the one place a payment costs money.
@@ -110,7 +110,10 @@ export async function debitValidationFee(
     throw e;
   }
   await notifyCrossings(env, db, business, before, before - feeCents);
-  if (payment.status !== "invalid") await reverseContradictedFees(db, payment);
+  /* cash-at-stores D12: the reversal assumes a fresh valid CEP of the same
+     link contradicted the earlier `invalid` one. A store's cash record
+     contradicts no CEP, so it never refunds a SPEI row's fee. */
+  if (payment.status !== "invalid" && payment.channel !== "store") await reverseContradictedFees(db, payment);
   return true;
 }
 

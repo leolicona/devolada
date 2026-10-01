@@ -36,13 +36,14 @@ import { wisphubFor } from "../wisphub/factory";
 import { NO_DEBT, debtFor, nothingOwedIsProven } from "../wisphub/debt";
 import { readPendingInvoices } from "../wisphub/snapshot";
 import { settle } from "./partial";
-import { attemptReconnection } from "../wisphub/reconnection";
 import { firstAttemptSchedule } from "../reconnection/queue";
-import { makeFolio } from "../routes/payments/handler";
+import { makeFolio } from "../folio";
 import { ladderSlot, nextValidationSlot, suggestedSlot } from "./schedule";
 import { businessWallClock } from "../time/business-day";
 import { classifyPayment, type ReconciliationClass } from "./classes";
 import { integrationsFor, type Integration } from "../integrations/store";
+import { capabilitiesOf } from "../integrations/registry";
+import type { ActionAttempt } from "../integrations/capabilities";
 import {
   actionForClass,
   hypothesisOf,
@@ -298,7 +299,7 @@ async function tracesToOwnAttempt(
    announces nothing. A panel payment's outcome is WispHub's and never
    reaches here. Shared by the validation and by test mode's advance
    (D12): a test verdict is written by the same hand as a real one. */
-function announcingWriter(
+export function announcingWriter(
   env: Bindings,
   db: DB,
   payment: DirectPayment,
@@ -1755,28 +1756,118 @@ async function settlePanelPayment(
   }
 
   /* D5: what the CEP says arrived is what settles the debt, and the
-     ISP's threshold decides whether it earns the service back. Both
-     branches register the money — the ISP's books are right either way;
-     only the router is left alone. */
-  const receivedCents = cep?.amountCents ?? payment.amountCents;
+     ISP's threshold decides whether it earns the service back.
+     cash-at-stores D13: from here on, the settlement every confirmed
+     payment shares — this SPEI verdict and a store's cash record. */
+  return settleConfirmed(env, db, {
+    payment,
+    business,
+    integration,
+    customer: {
+      usuario: link.customerUsuario,
+      providerCustomerId: link.wisphubCustomerId,
+      name: customer?.name ?? link.customerUsuario,
+      zone: customer?.zone ?? null,
+      phone: customer?.phone ?? null,
+    },
+    receivedCents: cep?.amountCents ?? payment.amountCents,
+    debtCents: ispDebtCents,
+    /* the SPEI fee travels inside the transfer, so it may cover a
+       shortfall's remainder (partial-payment D3) */
+    serviceFeeCents: payment.serviceFeeCents,
+    invoiceId,
+    now,
+    update,
+    /* D18: who Banxico says sent the money. Recorded and acted on by
+       nothing — a name unrelated to the subscriber is the only signal
+       available that a misread clave matched somebody else's real
+       transfer, but people pay for relatives, so it can never be a
+       rule. And the validation's slot and error close with the verdict. */
+    verdictFields: { ...base, cepSenderName: cep?.senderName ?? null, nextValidationAt: null, lastError: null },
+    hold,
+    firstAttempt: { mode: "inline" },
+  });
+}
+
+/* cash-at-stores D13: what a confirmed payment needs from its channel —
+   the money, the debt it was measured against, and who it belongs to. */
+export type ConfirmedPayment = {
+  payment: DirectPayment;
+  business: Isp;
+  /* Connected: the caller checked the key (`settlePanelPayment`'s hard
+     return, the store channel's capability check) */
+  integration: Integration;
+  customer: {
+    usuario: string;
+    providerCustomerId: string;
+    name: string;
+    zone: string | null;
+    /* SPEI's copy (receipt D4). Always null on a cash row: the store's
+       receipt reads the phone live and never keeps it (D18) */
+    phone: string | null;
+  };
+  /* What arrived and what is applied: the CEP's amount, or the cash the
+     store collected */
+  receivedCents: number;
+  /* The debt, read fresh by the channel (debt-truth D7, D14) */
+  debtCents: number;
+  /* The SPEI fee; 0 on a cash row, whose network fee is the store's money
+     and stays outside the arithmetic (D13) */
+  serviceFeeCents: number;
+  /* The invoice the payment will pay, when the channel knows it */
+  invoiceId: number | null;
+  now: Date;
+  /* The one writer every terminal write passes through
+     (`announcingWriter`): it debits the fee once (prepaid-credit D2) */
+  update: (values: Partial<typeof payments.$inferInsert>) => Promise<DirectPayment>;
+  /* Fields the channel adds to the verdict's write */
+  verdictFields: Partial<typeof payments.$inferInsert>;
+  /* receipt-triage D31: why the verdict waits for the business. A SPEI
+     proof's alone — a retired account or a missing clave belong to
+     proofs, and a cash row never has one (D13, /speckit-analyze H2) */
+  hold: "retired_account" | "no_clave" | null;
+  /* Where the first attempt runs. `inline` is the SPEI verdict's (the
+     queue's first attempt, on the same row). `deferred` answers first and
+     attempts past the response (D25): the folio is in the shopkeeper's
+     hand at once, and an outage never holds the counter. With no `defer`
+     (a test without an execution context) the sweep makes it, due now. */
+  firstAttempt: { mode: "inline" } | { mode: "deferred"; defer: Defer | undefined };
+};
+
+/* D4 of the reconnection queue: the lease a deferred first attempt holds,
+   so the sweep does not race it */
+const FIRST_ATTEMPT_LEASE_MINUTES = 2;
+
+/* cash-at-stores D13: one settlement for every confirmed payment — folio
+   and customer identity, `settle()` and `classifyPayment()`, the review
+   hold the channel may pass, the observation gate, the mapped action,
+   the dispatch and its first attempt, and the final write. Every existing
+   derivation (the feed's asked, missing and surplus; the class; the
+   payer's page) then reads any channel's row with no special case. */
+export async function settleConfirmed(env: Bindings, db: DB, input: ConfirmedPayment): Promise<DirectPayment> {
+  const { payment, business, integration, customer, receivedCents, debtCents, serviceFeeCents, invoiceId, now, update } = input;
+
+  /* D5: both branches register the money — the ISP's books are right
+     either way; only the router is left alone. */
   const settlement = settle({
     receivedCents,
-    ispDebtCents,
-    serviceFeeCents: payment.serviceFeeCents,
+    ispDebtCents: debtCents,
+    serviceFeeCents,
     thresholdPercent: integration.thresholdPercent,
     floorCents: integration.floorCents,
   });
 
   /* business-and-memberships D6: the payment row IS the confirmed record
      — folio, customer and the registered amount land on it, and the
-     reconnection queue rides it. No twin row. */
+     reconnection queue rides it. No twin row. A row that already has its
+     folio (a store's record, D17) keeps it. */
   await update({
-    folio: makeFolio(),
-    wisphubCustomerId: link.wisphubCustomerId,
-    customerUsuario: link.customerUsuario,
-    customerName: customer?.name ?? link.customerUsuario,
-    customerZone: customer?.zone ?? null,
-    customerPhone: customer?.phone ?? null,
+    folio: payment.folio ?? makeFolio(),
+    wisphubCustomerId: customer.providerCustomerId,
+    customerUsuario: customer.usuario,
+    customerName: customer.name,
+    customerZone: customer.zone,
+    customerPhone: customer.phone,
     /* partial-payment D9: what actually arrived is what gets registered
        against the debt — the number every retry registers again */
     registeredCents: settlement.ispRegisteredCents,
@@ -1788,59 +1879,54 @@ async function settlePanelPayment(
      never rewrites it (scenario 1). */
   const klass = classifyPayment({
     receivedCents,
-    askedCents: ispDebtCents + payment.serviceFeeCents,
+    askedCents: debtCents + serviceFeeCents,
     toleranceCents: business.toleranceCents,
   });
   /* integrations-hub D3: the class picks its mapped action; the
      threshold only votes under register_and_reconnect. */
   const action = actionForClass(integration, klass);
+  const decided = hypothesisOf(action, settlement.reconnect);
+  const verdict = {
+    ...input.verdictFields,
+    receivedCents,
+    status: settlement.status,
+    reconciliationClass: klass,
+    confirmedAt: now,
+  };
 
-  /* integrations-hub D4/D5: the observation gate, BEFORE any dispatch —
-     zero writes to WispHub. The verdict still lands whole (folio,
-     customer, class, the settled amount above), the credit is still
-     debited by `update()`, and the row records what the mapping WOULD
-     have executed — the ramp's instrument, and exactly what "Ejecutar
-     ahora" later dispatches. The invoice id rides along so that
-     dispatch reuses it (TD-009's guard). No ledger row: the gate sits
-     before dispatch, and the observation outcome IS the record (D6). */
   /* receipt-triage D31: the hold, BEFORE any dispatch — the observation
      gate's own place and shape (integrations-hub D4/D5). The verdict
      lands whole — folio, customer, class, the settled amount, what the
-     mapping would execute — and nothing reaches WispHub, the queue or a
-     webhook until the ISP decides (`POST /payments/:id/review`). The
-     status is the settlement's (`confirmed`, or `partial` when short):
-     Banxico's verdict is not rewritten by holding it. */
-  if (hold) {
+     mapping would execute — and nothing reaches the business's system,
+     the queue or a webhook until it decides (`POST /payments/:id/review`).
+     The status is the settlement's (`confirmed`, or `partial` when
+     short): Banxico's verdict is not rewritten by holding it. */
+  if (input.hold) {
     return update({
-      ...base,
-      receivedCents,
-      status: settlement.status,
-      reconciliationClass: klass,
-      confirmedAt: now,
-      cepSenderName: cep?.senderName ?? null,
-      nextValidationAt: null,
-      lastError: null,
+      ...verdict,
       actionOutcome: "review",
-      reviewReason: hold,
-      observedAction: hypothesisOf(action, settlement.reconnect),
+      reviewReason: input.hold,
+      observedAction: decided,
       wisphubInvoiceId: invoiceId,
       actionAttempts: 0,
       nextAttemptAt: null,
     });
   }
 
-  if (!integration.actionsEnabled) {
+  /* integrations-hub D4/D5: the observation gate, BEFORE any dispatch —
+     zero writes to the business's system. The verdict still lands whole
+     (folio, customer, class, the settled amount above), the credit is
+     still debited by `update()`, and the row records what the mapping
+     WOULD have executed — the ramp's instrument, and exactly what
+     "Ejecutar ahora" later dispatches. The invoice id rides along so that
+     dispatch reuses it (TD-009's guard). No ledger row: the gate sits
+     before dispatch, and the observation outcome IS the record (D6). */
+  const actions = capabilitiesOf(integration, env).paymentActions;
+  if (!integration.actionsEnabled || !actions) {
     return update({
-      ...base,
-      receivedCents,
-      status: settlement.status,
-      reconciliationClass: klass,
-      confirmedAt: now,
-      cepSenderName: cep?.senderName ?? null,
-      nextValidationAt: null,
-      lastError: null,
+      ...verdict,
       actionOutcome: "observation",
-      observedAction: hypothesisOf(action, settlement.reconnect),
+      observedAction: decided,
       wisphubInvoiceId: invoiceId,
       actionAttempts: 0,
       nextAttemptAt: null,
@@ -1861,49 +1947,77 @@ async function settlePanelPayment(
     class: klass,
     action,
   });
-  const attempt = await attemptReconnection(
-    wisphub,
-    business,
-    { usuario: link.customerUsuario, wisphubId: link.wisphubCustomerId },
-    settlement.ispRegisteredCents,
-    now,
-    { invoiceId, paymentRegistered: false },
-    /* D3: register_only never asks the router, whatever the threshold */
-    action === "register_and_reconnect" && settlement.reconnect,
-  );
-  const schedule = firstAttemptSchedule(attempt, now);
-  const outcome = outcomeOf(attempt.status, action);
-  if (outcome !== "queued") {
-    await settleDispatch(db, payment.id, "acked", null, now);
+  const attemptOf = (at: Date) =>
+    actions.attempt({
+      business,
+      usuario: customer.usuario,
+      providerCustomerId: customer.providerCustomerId,
+      registeredCents: settlement.ispRegisteredCents,
+      invoiceId,
+      paymentRegistered: false,
+      /* D3: register_only never asks the router, whatever the threshold */
+      reconnect: action === "register_and_reconnect" && settlement.reconnect,
+      now: at,
+    });
+  /* The queue's first attempt, on the same row (reconnection-queue D2).
+     The adapter's answer in the row's generic words: register_only's
+     completed registration is `done` (D7). */
+  const firstOutcome = async (attempt: ActionAttempt, at: Date) => {
+    const schedule = firstAttemptSchedule(attempt, at);
+    const outcome = outcomeOf(attempt.status, action);
+    if (outcome !== "queued") {
+      await settleDispatch(db, payment.id, "acked", null, at);
+    }
+    return {
+      actionOutcome: outcome,
+      actionAttempts: schedule.attempts,
+      wisphubInvoiceId: attempt.invoiceId,
+      paymentRegisteredAt: attempt.paymentRegistered ? at : null,
+      nextAttemptAt: schedule.nextAttemptAt,
+      actionError: attempt.error,
+      ...(outcome === "done" ? { actionDoneAt: at } : {}),
+    };
+  };
+
+  if (input.firstAttempt.mode === "deferred") {
+    /* cash-at-stores D25: the verdict lands now, queued, and the first
+       attempt runs after the answer. Leased while it runs (the sweep's own
+       D4), or due now when nothing can run it past the response. */
+    const { defer } = input.firstAttempt;
+    const row = await update({
+      ...verdict,
+      actionOutcome: "queued",
+      actionAttempts: 0,
+      wisphubInvoiceId: invoiceId,
+      nextAttemptAt: defer ? new Date(now.getTime() + FIRST_ATTEMPT_LEASE_MINUTES * 60_000) : now,
+      /* bug: queue-retry-forgets-action — what every retry runs again */
+      decidedAction: decided,
+    });
+    if (defer) {
+      defer(
+        (async () => {
+          const at = new Date();
+          const attempt = await attemptOf(at);
+          /* Only while the row is still this attempt's: a sweep that took
+             it over after the lease keeps its own progress */
+          await db
+            .update(payments)
+            .set(await firstOutcome(attempt, at))
+            .where(and(eq(payments.id, payment.id), eq(payments.actionOutcome, "queued"), eq(payments.actionAttempts, 0)));
+        })().catch((e) => {
+          console.error(`first action attempt for ${payment.id} failed:`, e);
+        }),
+      );
+    }
+    return row;
   }
 
+  const attempt = await attemptOf(now);
   return update({
-    ...base,
-    receivedCents,
-    status: settlement.status,
-    reconciliationClass: klass,
-    confirmedAt: now,
-    /* D18: who Banxico says sent the money. Recorded and acted on by
-       nothing — a name unrelated to the subscriber is the only signal
-       available that a misread clave matched somebody else's real
-       transfer, but people pay for relatives, so it can never be a
-       rule. Nothing displays it yet; `apps/admin` has no direct-payment
-       view at all. */
-    cepSenderName: cep?.senderName ?? null,
-    nextValidationAt: null,
-    lastError: null,
-    /* The queue's first attempt, on the same row (reconnection-queue D2).
-       The adapter speaks its own vocabulary; the row speaks the generic
-       one, and register_only's completed registration is `done` (D7). */
-    actionOutcome: outcome,
-    actionAttempts: schedule.attempts,
-    wisphubInvoiceId: attempt.invoiceId,
-    paymentRegisteredAt: attempt.paymentRegistered ? now : null,
-    nextAttemptAt: schedule.nextAttemptAt,
-    actionError: attempt.error,
+    ...verdict,
+    ...(await firstOutcome(attempt, now)),
     /* bug: queue-retry-forgets-action — what every retry runs again */
-    decidedAction: hypothesisOf(action, settlement.reconnect),
-    ...(outcome === "done" ? { actionDoneAt: now } : {}),
+    decidedAction: decided,
   });
 }
 

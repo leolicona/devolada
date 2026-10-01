@@ -184,11 +184,14 @@ describe("cobros-in-links US1 (T045): the session says what the integration can 
     await seedBusiness({ email: "sin@isp.mx" });
 
     const connected = await (await app()).request("/auth/me", await asBusiness(), env);
-    /* payment-without-receipt D4 adds a third: the customers who share a phone */
+    /* payment-without-receipt D4 adds a third: the customers who share a phone.
+       cash-at-stores D8, D9 add the counter's search and the payment actions */
     expect((await connected.json()).data.integrationCapabilities).toEqual([
       "receivables",
       "customerDebt",
       "customersWithPhone",
+      "customerSearch",
+      "paymentActions",
     ]);
 
     const bare = await (await app()).request("/auth/me", await asBusiness("sin@isp.mx"), env);

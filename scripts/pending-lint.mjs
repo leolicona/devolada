@@ -25,7 +25,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOTS = ["apps/admin/src", "apps/pago/src", "packages/ui/src"];
+/* cash-at-stores D29: the store app is a surface too */
+const ROOTS = ["apps/admin/src", "apps/pago/src", "apps/red/src", "packages/ui/src"];
 
 /* A quoted string whose last word before the ellipsis is a present participle.
    "ana@wifiplus…" and "STP, BBVA, Banorte…" are ellipses too, and neither is a

@@ -193,7 +193,8 @@ function sources(dir, acc = []) {
   return acc;
 }
 
-for (const dir of ["apps/admin/src", "apps/pago/src", "packages/ui/src"]) {
+/* cash-at-stores D29: the store app is a surface too */
+for (const dir of ["apps/admin/src", "apps/pago/src", "apps/red/src", "packages/ui/src"]) {
   for (const file of sources(join(root, dir))) {
     const text = readFileSync(file, "utf8");
     text.split("\n").forEach((line, i) => {

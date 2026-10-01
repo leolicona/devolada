@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <!-- cash-at-stores D26: installable from the browser's menu, with no
+         service worker — a collection needs the debt live, so there is
+         nothing to do offline (FR-012) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Devolada Tienda" />
+    <title>Devolada · Tienda</title>
+    <script>
+      const t = localStorage.getItem("devolada-theme");
+      if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

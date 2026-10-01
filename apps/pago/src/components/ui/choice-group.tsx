@@ -22,12 +22,25 @@ import { cn } from "@devolada/ui";
 
 export type Choice = { value: string; label: string };
 
+/* confirmation-hierarchy D18 (spec FR-027, proposal E): `chips` draws the
+   same native radios as pills — 48px on `--border-radius-full`, the chosen
+   one with the check icon and a focus-colour outline. Only how each label
+   is drawn changes: one Tab stop per group, the arrow keys and the
+   reader's own "seleccionado" are the platform's, exactly as above (012
+   D21's reasons stand). No "Elegido" word on a chip: the icon and the
+   outline carry the choice, never colour alone, and a pill has no room
+   for a word beside its label. Rejected: toggle buttons with
+   `aria-pressed`, as the prototype drew them — one Tab stop each, and
+   nothing says they are one question. */
+export type ChoiceLayout = "rows" | "chips";
+
 export function ChoiceGroup({
   legend,
   options,
   value,
   onChange,
   name,
+  layout = "rows",
 }: {
   /* The question, read as the group's name */
   legend: string;
@@ -37,9 +50,46 @@ export function ChoiceGroup({
   value: string | null;
   onChange: (value: string) => void;
   name?: string;
+  layout?: ChoiceLayout;
 }) {
   const generated = useId();
   const group = name ?? generated;
+  if (layout === "chips") {
+    return (
+      <fieldset>
+        <legend className="mb-2 text-base font-medium text-ink">{legend}</legend>
+        <div className="flex flex-wrap gap-2">
+          {options.map((option) => {
+            const checked = option.value === value;
+            return (
+              <label
+                key={option.value}
+                className={cn(
+                  "inline-flex min-h-12 cursor-pointer items-center gap-2 rounded-full border px-4 py-2 text-base text-ink transition-colors",
+                  checked ? "border-focus bg-accent-soft outline outline-2 outline-focus" : "border-line-input bg-well hover:bg-card",
+                  "has-[:focus-visible]:[box-shadow:var(--shadow-focus)]",
+                )}
+              >
+                <input
+                  type="radio"
+                  name={group}
+                  value={option.value}
+                  checked={checked}
+                  onChange={() => onChange(option.value)}
+                  className="sr-only"
+                />
+                {checked && (
+                  /* the check fades in (FR-033), on the fast duration */
+                  <CircleCheck className="size-5 shrink-0 animate-[enter_var(--duration-fast)_var(--easing-default)_both] text-accent" aria-hidden />
+                )}
+                <span className="min-w-0">{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  }
   return (
     <fieldset>
       <legend className="mb-2 text-base font-medium text-ink">{legend}</legend>

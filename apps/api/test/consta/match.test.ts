@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitClave, fitClaveTail, matchCandidates, MATCH_POLICY, shownTail, tailFits } from "../../src/consta/bundle/match";
+import { fitClave, fitClaveTail, fitTieBreak, matchCandidates, MATCH_POLICY, shownTail, tailFits } from "../../src/consta/bundle/match";
 import type { CepRecord, ReceiptSide } from "../../src/consta/bundle/types";
 import type { RegisteredAccount } from "../../src/consta";
 import { wallClockMs } from "../../src/time/business-day";
@@ -284,40 +284,110 @@ describe("payment-without-receipt US3: `own` mode prefers an account learned for
   });
 });
 
-describe("payment-without-receipt US5: `typed` mode — a second fact ties the transfer (T044, D11)", () => {
+describe("payment-without-receipt US5, confirmation-hierarchy US2: `typed` mode — only an exclusive learned account ties the transfer (T044 as amended by 017 T013, D10)", () => {
   const a = () => cep("07:11:20", { senderAccount: SENDER_8301 });
   const b = () => cep("11:40:47", { senderAccount: SENDER_4417 });
 
-  it("a known account ties exactly one → learned_account; it is compared whole, before the tail", () => {
+  it("a known account picking exactly one → chosen, learned_account; compared whole", () => {
     const [x, y] = [a(), b()];
-    expect(typed(receipt({ knownAccounts: [SENDER_4417], tail: "8301" }), [x, y])).toMatchObject({
+    expect(typed(receipt({ knownAccounts: [SENDER_4417] }), [x, y])).toMatchObject({
       decided: "chosen",
       chosen: { id: y.id },
       by: "learned_account",
     });
   });
 
-  it("then the typed four digits → sender_tail; they fitting none is none_fit; several, no_signal", () => {
+  it("two known, or none, is undecided — every free transfer kept for the tie-break", () => {
     const [x, y] = [a(), b()];
-    expect(typed(receipt({ tail: "4417" }), [x, y])).toMatchObject({ decided: "chosen", chosen: { id: y.id }, by: "sender_tail" });
-    expect(typed(receipt({ tail: "9999" }), [x, y])).toMatchObject({ decided: "undecided", reason: "none_fit" });
-    const z = cep("08:00:00", { senderAccount: SENDER_8301 });
-    const twice = typed(receipt({ tail: "8301" }), [x, y, z]);
-    expect(twice).toMatchObject({ decided: "undecided", reason: "no_signal" });
-    expect(fateOf(twice, y)).toMatchObject({ fate: "dropped", why: "tail" });
-    expect(fateOf(twice, x)).toMatchObject({ fate: "kept" });
+    const both = typed(receipt({ knownAccounts: [SENDER_8301, SENDER_4417] }), [x, y]);
+    expect(both).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(fateOf(both, x)).toMatchObject({ fate: "kept", why: null });
+    expect(fateOf(both, y)).toMatchObject({ fate: "kept", why: null });
+    expect(typed(receipt(), [x, y])).toMatchObject({ decided: "undecided", reason: "no_signal" });
   });
 
-  it("with neither, even one transfer is undecided — a typed reference alone never confirms (FR-032)", () => {
+  it("even one transfer is undecided without an exclusive account — a typed reference alone never confirms (FR-009)", () => {
     const x = a();
     const r = typed(receipt(), [x]);
     expect(r).toMatchObject({ decided: "undecided", reason: "no_signal" });
     expect(fateOf(r, x)).toMatchObject({ fate: "kept" });
   });
 
-  it("never reads the window: a typed row carries no time", () => {
-    const x = a();
-    expect(typed(receipt({ time: "23:59", tail: "8301" }), [x])).toMatchObject({ decided: "chosen", by: "sender_tail" });
+  it("a tail or a time on the receipt side changes nothing in this mode: the answer comes later, through fitTieBreak (D6)", () => {
+    const [x, y] = [a(), b()];
+    expect(typed(receipt({ tail: "4417" }), [x, y])).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(typed(receipt({ time: "11:40", tail: "4417" }), [y])).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(typed(receipt({ tail: "4417" }), [x, y])).toEqual(typed(receipt(), [x, y]));
+  });
+
+  it("used transfers drop first: all used is all_used, nothing of the business is none_fit", () => {
+    const [x, y] = [a(), b()];
+    expect(typed(receipt(), [x, y], new Set([x.clave, y.clave]))).toMatchObject({ decided: "undecided", reason: "all_used" });
+    expect(typed(receipt(), [cep("07:00:00", { amountCents: 999 })])).toMatchObject({ decided: "undecided", reason: "none_fit" });
+  });
+});
+
+describe("confirmation-hierarchy US2: fitTieBreak — an answer read against the transfers found (T013, D6)", () => {
+  /* The sandbox's …44: 8301's clave ends 977I, 4417's ends 0412 */
+  const x = () => cep("07:11:20", { senderAccount: SENDER_8301, clave: "MOCKREF4420261001A1B2977I" });
+  const y = () => cep("11:40:47", { senderAccount: SENDER_4417, clave: "MOCKREF4420261001C3D40412" });
+
+  it("digits alone: one fit confirms by sender_tail — a CLABE's end or the account inside it (tailFits)", () => {
+    const [p, q] = [x(), y()];
+    expect(fitTieBreak({ senderTail: "4417" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: q.id }, by: "sender_tail" });
+    /* 8301 is the account number inside a CLABE ending 3010; 3010 is its end */
+    expect(fitTieBreak({ senderTail: "8301" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: p.id } });
+    expect(fitTieBreak({ senderTail: "3010" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: p.id } });
+    expect(fitTieBreak({ senderTail: "9999" }, [p, q])).toEqual({ fit: "none" });
+  });
+
+  it("characters alone, with O read as 0 and I as 1: 9771 fits …977I, 3010 fits …3O10", () => {
+    const [p, q] = [x(), y()];
+    expect(fitTieBreak({ claveTail: "977I" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: p.id }, by: "clave_tail" });
+    expect(fitTieBreak({ claveTail: "9771" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: p.id }, by: "clave_tail" });
+    expect(fitTieBreak({ claveTail: "o412" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: q.id } });
+    const single = cep("09:02:31", { clave: "MOCKREF6620261001ABCD3O10" });
+    expect(fitTieBreak({ claveTail: "3010" }, [single])).toMatchObject({ fit: "one", chosen: { id: single.id }, by: "clave_tail" });
+  });
+
+  it("both agreeing → one, by clave_tail; both disagreeing → none; one way fitting nothing while the other fits → none", () => {
+    const [p, q] = [x(), y()];
+    expect(fitTieBreak({ senderTail: "4417", claveTail: "0412" }, [p, q])).toMatchObject({ fit: "one", chosen: { id: q.id }, by: "clave_tail" });
+    expect(fitTieBreak({ senderTail: "8301", claveTail: "0412" }, [p, q])).toEqual({ fit: "none" });
+    expect(fitTieBreak({ senderTail: "9999", claveTail: "0412" }, [p, q])).toEqual({ fit: "none" });
+    expect(fitTieBreak({ senderTail: "4417", claveTail: "ZZZZ" }, [p, q])).toEqual({ fit: "none" });
+  });
+
+  it("digits alone choosing an account that paid another person ask the characters; the characters then fitting it confirm", () => {
+    const [p, q] = [x(), y()];
+    expect(fitTieBreak({ senderTail: "8301" }, [p, q], [SENDER_8301])).toEqual({ fit: "needs", ways: ["clave_tail"] });
+    expect(fitTieBreak({ senderTail: "8301", claveTail: "977I" }, [p, q], [SENDER_8301])).toMatchObject({
+      fit: "one",
+      chosen: { id: p.id },
+      by: "clave_tail",
+    });
+    /* the characters alone need no account at all */
+    expect(fitTieBreak({ claveTail: "977I" }, [p, q], [SENDER_8301])).toMatchObject({ fit: "one", chosen: { id: p.id } });
+  });
+
+  it("several: digits alone ask the characters, characters alone ask the digits, both ask the whole clave", () => {
+    /* the sandbox's …55: two accounts, claves sharing their last four */
+    const p = cep("07:11:20", { senderAccount: SENDER_8301, clave: "MOCKREF5520261001A5510" });
+    const q = cep("11:40:47", { senderAccount: SENDER_4417, clave: "MOCKREF5520261001B5510" });
+    const r = cep("12:00:00", { senderAccount: SENDER_8301, clave: "MOCKREF5520261001C7777" });
+    expect(fitTieBreak({ senderTail: "8301" }, [p, q, r])).toEqual({ fit: "needs", ways: ["clave_tail"] });
+    expect(fitTieBreak({ claveTail: "5510" }, [p, q, r])).toEqual({ fit: "needs", ways: ["sender_tail"] });
+    expect(fitTieBreak({ claveTail: "5510", senderTail: "4417" }, [p, q, r])).toMatchObject({ fit: "one", chosen: { id: q.id } });
+    const s = cep("12:30:00", { senderAccount: SENDER_8301, clave: "MOCKREF5520261001D5510" });
+    expect(fitTieBreak({ claveTail: "5510", senderTail: "8301" }, [p, q, s])).toEqual({ fit: "clave" });
+  });
+
+  it("never a candidate outside the list; nothing given, or a short value, fits nothing", () => {
+    const [p] = [x()];
+    expect(fitTieBreak({ senderTail: "4417" }, [p])).toEqual({ fit: "none" });
+    expect(fitTieBreak({}, [p])).toEqual({ fit: "none" });
+    expect(fitTieBreak({ claveTail: "77I" }, [p])).toEqual({ fit: "none" });
+    expect(fitTieBreak({ senderTail: "8301" }, [])).toEqual({ fit: "none" });
   });
 });
 
@@ -338,23 +408,52 @@ describe("payment-without-receipt US5: fitClaveTail (T044, D17)", () => {
   });
 });
 
-describe("payment-without-receipt US5: `own` mode during a transition (T055, D26, FR-041)", () => {
-  it("drops the previous holder's accounts, and holds a transfer from an account not known for the new owner", () => {
+describe("payment-without-receipt US5, confirmation-hierarchy US3: `own` mode during a transition (T055 as amended by 017 T022, D26, D10)", () => {
+  it("drops the previous holder's accounts, and holds a transfer from an account not known for the new owner — a tail changes nothing", () => {
     const juans = cep("07:11:20", { senderAccount: SENDER_8301 });
     const strangers = cep("11:40:47", { senderAccount: SENDER_4417 });
     const held = own(receipt({ excludedAccounts: [SENDER_8301], knownAccounts: [] }), [juans, strangers]);
     expect(held).toMatchObject({ decided: "undecided", reason: "no_signal" });
     expect(fateOf(held, juans)).toMatchObject({ fate: "dropped", why: "excluded" });
     expect(fateOf(held, strangers)).toMatchObject({ fate: "kept" });
-    /* her four digits, or an account already hers, confirm it */
+    /* the four digits are an answer now, read by fitTieBreak (D6) */
     expect(own(receipt({ excludedAccounts: [SENDER_8301], tail: "4417" }), [juans, strangers])).toMatchObject({
-      decided: "chosen",
-      chosen: { id: strangers.id },
-      by: "sender_tail",
+      decided: "undecided",
+      reason: "no_signal",
     });
+    /* an account exclusive to her confirms it */
     expect(own(receipt({ excludedAccounts: [SENDER_8301], knownAccounts: [SENDER_4417] }), [juans, strangers])).toMatchObject({
       decided: "chosen",
+      chosen: { id: strangers.id },
       by: "learned_account",
     });
+  });
+});
+
+describe("confirmation-hierarchy US3: `own` mode reads exclusive accounts only (T022, D10, FR-015)", () => {
+  it("a learned account that paid another person is not in knownAccounts: the earliest not-used transfer wins", () => {
+    const early = cep("07:11:20", { senderAccount: SENDER_8301 });
+    const shared = cep("11:40:47", { senderAccount: SENDER_4417 });
+    /* the lifecycle passes learned − others: 4417 is learned but shared */
+    const r = own(receipt({ knownAccounts: [], othersAccounts: [SENDER_4417] }), [shared, early]);
+    expect(r).toMatchObject({ decided: "chosen", chosen: { id: early.id }, by: "earliest" });
+  });
+
+  it("an exclusive one goes first, even when not the earliest", () => {
+    const early = cep("07:11:20", { senderAccount: SENDER_8301 });
+    const mine = cep("11:40:47", { senderAccount: SENDER_4417 });
+    expect(own(receipt({ knownAccounts: [SENDER_4417], othersAccounts: [SENDER_8301] }), [early, mine])).toMatchObject({
+      decided: "chosen",
+      chosen: { id: mine.id },
+      by: "learned_account",
+    });
+  });
+
+  it("during a transition, a candidate from an account not in knownAccounts is held", () => {
+    const previous = cep("07:11:20", { senderAccount: "127180555555512344" });
+    const shared = cep("11:40:47", { senderAccount: SENDER_4417 });
+    const held = own(receipt({ excludedAccounts: ["127180555555512344"], knownAccounts: [], othersAccounts: [SENDER_4417] }), [previous, shared]);
+    expect(held).toMatchObject({ decided: "undecided", reason: "no_signal" });
+    expect(fateOf(held, shared)).toMatchObject({ fate: "kept" });
   });
 });

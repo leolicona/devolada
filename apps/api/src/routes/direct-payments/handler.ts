@@ -68,7 +68,7 @@ import { consta, ConstaError } from "../../consta";
 import { enqueueAndDeliver } from "../../webhooks/queue";
 import { deferOf } from "../defer";
 import type { DirectPayment } from "../../direct-payments/validation";
-import { undecidedOf } from "../../direct-payments/cep-match";
+import { undecidedOf, waitingOnTieBreak } from "../../direct-payments/cep-match";
 import {
   publicPaymentError,
   type CreateLinkRequest,
@@ -85,10 +85,8 @@ import {
 import { decodeCursor, encodeCursor, FIRST_CURSOR, type BrowseCursor } from "./cursor";
 import {
   bankOrder,
-  customerKeyOf,
   ensurePayerReference,
   isProven,
-  learnedAccounts,
   learnedBanks,
   referenceOfLink,
   referencesFor,
@@ -123,7 +121,11 @@ async function attemptsInLastHour(
   /* payment-without-receipt D25: with the feature on, a row that carries a
      clave, a clave tail or a receipt is not an attempt this budget counts
      — the safe exits stay open (the creator, 2026-09-30). Rows by the
-     payer's reference, confirmations and corrections, still count. */
+     payer's reference, confirmations and corrections, still count.
+     confirmation-hierarchy D8 (amending 012 D25, clarified 2026-09-30):
+     an answer to the tie-break is not counted either, whichever way it
+     answers — the account's digits included. Three misses a day per link
+     is what bounds the answers (`tieBreakMissesInDay`). */
   safeExitsFree = false,
 ): Promise<number> {
   const [row] = await db
@@ -138,9 +140,34 @@ async function attemptsInLastHour(
         gte(payments.createdAt, new Date(now.getTime() - 3600 * 1000)),
         ...(safeExitsFree
           ? [
-              sql`NOT (${payments.proofKey} IS NOT NULL OR ${payments.claveTail} IS NOT NULL OR (${payments.referenceSource} IS NULL AND ${payments.trackingKey} IS NOT NULL))`,
+              sql`NOT (${payments.proofKey} IS NOT NULL OR (${payments.referenceSource} IS NOT NULL AND (${payments.claveTail} IS NOT NULL OR ${payments.senderTail} IS NOT NULL)) OR (${payments.referenceSource} IS NULL AND ${payments.trackingKey} IS NOT NULL))`,
             ]
           : []),
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/* confirmation-hierarchy D8 (FR-016, clarified 2026-09-30): at most three
+   answers per link that fitted no transfer, in any 24 hours in a row —
+   a moving window, each miss counting for the 24 hours after it was
+   given. Both ways count together. While three count, a tail is refused
+   TIE_BREAK_EXHAUSTED and the status asks the whole clave. The whole
+   clave and the receipt are never limited by it. Measured as a starting
+   value: three blind guesses among k transfers tie one about 3k in 10,000
+   a day (research R4); the pilot measures what it costs (SC-004). */
+export const TIE_BREAK_MISSES = 3;
+const DAY_MS = 24 * 3600 * 1000;
+
+export async function tieBreakMissesInDay(db: ReturnType<typeof drizzle>, linkId: string, now: Date): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.paymentLinkId, linkId),
+        eq(payments.tieBreak, "none"),
+        gt(payments.createdAt, new Date(now.getTime() - DAY_MS)),
       ),
     );
   return Number(row?.n ?? 0);
@@ -576,8 +603,11 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
 
   /* payment-without-receipt D25: a clave, a clave tail or a receipt is
      never refused by the hourly budget, and never counts toward it —
-     with the feature on; off, the budget is today's */
-  const safeExit = Boolean(body.transfer?.trackingKey || body.transfer?.claveTail || body.proofId);
+     with the feature on; off, the budget is today's.
+     confirmation-hierarchy D8 (012 D25 amended): nor is an answer to the
+     tie-break of either way — the digits too; D8's own limit bounds them */
+  const answering = Boolean(body.transfer?.senderTail || body.transfer?.claveTail);
+  const safeExit = Boolean(body.transfer?.trackingKey || answering || body.proofId);
   if (
     !(business.payByReference && safeExit) &&
     (await attemptsInLastHour(db, link.id, now, business.payByReference)) >= HOURLY_ATTEMPT_BUDGET
@@ -597,10 +627,50 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
     return c.json({ success: false, error: { code: "LINK_CLOSED" } }, 409);
   }
 
+  /* ---- confirmation-hierarchy D6, D8, D11: an answer to the tie-break.
+     Only on the row waiting on it, while the link has misses left, and
+     with that row's search: the reference, bank, day and amount are the
+     waiting row's whatever the body says, so an answer is never a
+     correction and never a search. A way the waiting row's own answer
+     gave, and that fitted, rides forward: the payer's two data are read
+     together and must agree — the second narrows the first, never
+     replaces it. Each refusal comes before anything is written. ---- */
+  if (answering && body.transfer) {
+    const refuse = (code: string) => c.json({ success: false, error: { code } }, 409);
+    const [waiting] = body.supersedes
+      ? await db
+          .select()
+          .from(payments)
+          .where(and(eq(payments.id, body.supersedes), eq(payments.paymentLinkId, link.id)))
+      : [];
+    if (!waiting) return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+    /* D11: two answers racing from two tabs meet one-open-attempt's rule —
+       the first supersedes the waiting row, so the second finds it no
+       longer waiting, exactly like a row nothing was ever asked on */
+    if (waiting.status !== "validating" || !waitingOnTieBreak(waiting)) return refuse("TIE_BREAK_NOT_ASKED");
+    if ((await tieBreakMissesInDay(db, link.id, now)) >= TIE_BREAK_MISSES) return refuse("TIE_BREAK_EXHAUSTED");
+    const carry = waiting.tieBreak === "one" || waiting.tieBreak === "several";
+    const senderTail = body.transfer.senderTail ?? (carry ? (waiting.senderTail ?? undefined) : undefined);
+    const claveTail = body.transfer.claveTail ?? (carry ? (waiting.claveTail ?? undefined) : undefined);
+    body = {
+      ...body,
+      transfer: {
+        referenceSource: waiting.referenceSource!,
+        ...(waiting.referenceNumber ? { referenceNumber: waiting.referenceNumber } : {}),
+        senderBank: waiting.senderBank as NonNullable<PayRequest["transfer"]>["senderBank"],
+        date: waiting.transferDate!,
+        ...(waiting.claimedAmountCents != null ? { amountCents: waiting.claimedAmountCents } : {}),
+        ...(senderTail ? { senderTail } : {}),
+        ...(claveTail ? { claveTail } : {}),
+      },
+    };
+  }
+
   /* ---- payment-without-receipt D8, D11, D26: a confirmation with bank
      and day. Every refusal here comes before anything is created or
-     billed (contracts/payment-page.md). ---- */
-  if (body.transfer?.referenceSource) {
+     billed (contracts/payment-page.md). An answer passed its own checks
+     above, on the search its waiting row already made. ---- */
+  if (body.transfer?.referenceSource && !answering) {
     const refuse = (code: string) => c.json({ success: false, error: { code } }, 409);
     /* D20: the business has the feature off — the page is today's page */
     if (!business.payByReference) return refuse("REFERENCE_NOT_READY");
@@ -631,14 +701,12 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           .where(and(eq(payerReferences.businessId, business.id), eq(payerReferences.digits, t.referenceNumber ?? "")));
         if (held && held.id !== mine?.id) return refuse("REFERENCE_OF_ANOTHER");
       }
-      /* FR-032: the four digits are asked only when no account learned for
-         this service at that bank can tie the transfer; a clave tail
-         answers an undecided row and needs neither */
-      const key = customerKeyOf(link);
-      if (!t.senderTail && !t.claveTail) {
-        const known = key ? await learnedAccounts(db, business.id, [key], { bank: t.senderBank }) : [];
-        if (!known.length) return refuse("SENDER_TAIL_NEEDED");
-      }
+      /* confirmation-hierarchy D5 (012 D11 amended): no refusal before the
+         search. The clave's characters can only be compared with transfers
+         already found, so a typed reference searches at once and the
+         tie-break is asked after it — 012's SENDER_TAIL_NEEDED, which
+         asked the four digits first, is gone. Cost: one call for a payer
+         who then leaves, the call 012 spent after the digits anyway. */
     }
     body = { ...body, transfer: t };
   }
@@ -919,22 +987,16 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
 
   /* payment-without-receipt D14, D16: a confirmation that replaces one of
      its own chain is a correction — it carries the chain's rounds and
-     corrections. One that only answers an undecided row with a tail of the
-     same search spends no call, so it is no correction that counts. */
+     corrections. confirmation-hierarchy D6, D11: an answer to the
+     tie-break is never one — it only reads the transfers its waiting row
+     kept, with no call, and a tail on any other row was refused above
+     (TIE_BREAK_NOT_ASKED; 012's `fitsWithoutCall`, under which such a
+     tail spent a search as a correction, is gone). */
   const sourcedT = body.transfer?.referenceSource ?? null;
   const chain = sourcedT && superseded?.referenceSource ? superseded : null;
-  const fitsWithoutCall = Boolean(
-    chain &&
-      chain.lastError === "CEP_UNDECIDED" &&
-      (body.transfer?.senderTail || body.transfer?.claveTail) &&
-      chain.referenceNumber === (body.transfer?.referenceNumber ?? null) &&
-      chain.senderBank === body.transfer?.senderBank &&
-      chain.transferDate === body.transfer?.date &&
-      (claimedCents == null || claimedCents === (chain.claimedAmountCents ?? chain.amountCents)),
-  );
   /* A queued row was never searched: replacing it spends no search the
      chain would not have spent anyway (T057) */
-  const spendsSearch = Boolean(chain && !fitsWithoutCall && chain.status !== "queued_for_credit");
+  const spendsSearch = Boolean(chain && !answering && chain.status !== "queued_for_credit");
   const correctionCount = (chain?.correctionCount ?? 0) + (spendsSearch ? 1 : 0);
   if (spendsSearch && correctionCount > CORRECTIONS_BUDGET && !safeExit) {
     return c.json({ success: false, error: { code: "CORRECTIONS_EXHAUSTED" } }, 409);
@@ -990,14 +1052,24 @@ export async function submitPayment(c: Ctx, token: string, body: PayRequest) {
           referenceSource: sourcedT,
           ladderRound: chain?.ladderRound ?? 0,
           correctionCount,
-          senderTail: body.transfer?.senderTail ?? (fitsWithoutCall ? chain!.senderTail : null),
+          /* confirmation-hierarchy D6: the answer, the carried way with it */
+          senderTail: body.transfer?.senderTail ?? null,
           claveTail: body.transfer?.claveTail?.toUpperCase() ?? null,
-          confirmation: JSON.stringify({
-            preselectedBank: body.transfer?.preselected?.bank ?? null,
-            preselectedDay: body.transfer?.preselected?.day ?? null,
-            /* the chain's read-back keeps every day its rounds searched */
-            days: chain ? confirmationOf(chain).days : [],
-          }),
+          confirmation: JSON.stringify(
+            answering && chain
+              ? /* an answer keeps what its chain offered and searched */
+                {
+                  preselectedBank: confirmationOf(chain).preselectedBank,
+                  preselectedDay: confirmationOf(chain).preselectedDay,
+                  days: confirmationOf(chain).days,
+                }
+              : {
+                  preselectedBank: body.transfer?.preselected?.bank ?? null,
+                  preselectedDay: body.transfer?.preselected?.day ?? null,
+                  /* the chain's read-back keeps every day its rounds searched */
+                  days: chain ? confirmationOf(chain).days : [],
+                },
+          ),
         }
       : {}),
     ...ask.customer,
@@ -1419,42 +1491,61 @@ export async function serveProof(c: Ctx, linkId: string, file: string) {
   });
 }
 
-/* payment-without-receipt D15 — what the page asks now, on a validating
-   row searched by a payer's reference (data-model.md "The ask", read top
-   to bottom): the account's four digits before the clave's four
-   characters; after round 3 found nothing, the data checked; after round
-   4, the whole clave. Never stored: derived from the row on every read. */
+/* payment-without-receipt D15, as confirmation-hierarchy D9 replaces its
+   table (data-model.md "The ask", read top to bottom) — what the page
+   asks now, on a validating row searched by a payer's reference. Never
+   stored: derived from the row on every read.
+
+   A row waiting on a tie-break (typed, or own during a 012 D26
+   transition, with transfers kept) asks `tie_break` — one screen, two
+   ways to answer, either one enough (FR-011) — unless:
+     - the link holds three misses in 24 hours: the whole clave (D8);
+     - the last answer's digits alone chose a transfer from an account
+       that paid another person (`tie_break = 'one'`, still undecided):
+       the characters only (FR-013);
+     - the last answer gave one way and left several: the other way; both
+       ways given and several left: the whole clave (FR-013).
+   `missed` says the row's own answer fitted nothing (FR-014). A row the
+   012 path wrote — a tail set, `tie_break` NULL — reads as the last case:
+   both ways. An undecided row with nothing kept asks the whole clave, or
+   nothing when every transfer found was already used on the payer's own
+   reference (CEP_ALL_USED says so, 012 D10).
+
+   After the ladder found nothing: round 3 asks the data checked, round 4
+   the whole clave (012 D15, unchanged). */
 export function askOf(
-  row: Pick<DirectPayment, "status" | "referenceSource" | "lastError" | "matchTrail" | "senderTail" | "claveTail" | "ladderRound">,
-): "check_data" | "clave" | "sender_tail" | "clave_tail" | null {
-  if (row.status !== "validating" || !row.referenceSource) return null;
+  row: Pick<
+    DirectPayment,
+    "status" | "referenceSource" | "lastError" | "matchTrail" | "senderTail" | "claveTail" | "ladderRound" | "tieBreak"
+  >,
+  /* the link's answers that fitted nothing in the last 24 hours (D8) */
+  missesInDay = 0,
+): {
+  ask: "check_data" | "clave" | "tie_break" | null;
+  tieBreak: { ways: ("sender_tail" | "clave_tail")[]; missed: boolean; several: boolean } | null;
+} {
+  const none = { ask: null, tieBreak: null };
+  if (row.status !== "validating" || !row.referenceSource) return none;
   if (row.lastError === "CEP_UNDECIDED") {
-    let trail: MatchTrail | null = null;
-    try {
-      trail = row.matchTrail ? (JSON.parse(row.matchTrail) as MatchTrail) : null;
-    } catch {
-      trail = null;
+    const waiting = waitingOnTieBreak(row);
+    if (!waiting) {
+      if (row.referenceSource === "own" && undecidedOf(row)?.reason === "all_used") return none;
+      return { ask: "clave", tieBreak: null };
     }
-    const kept = trail?.candidates.filter((c) => c.fate === "kept").length ?? 0;
-    if (row.referenceSource === "own") {
-      /* D10: every transfer found already paid something — CEP_ALL_USED
-         says so, with nothing to ask for */
-      if (trail?.reason === "all_used") return null;
-      /* D26 (FR-041): a transfer held during a transition */
-      return row.senderTail ? "clave" : "sender_tail";
+    if (missesInDay >= TIE_BREAK_MISSES) return { ask: "clave", tieBreak: null };
+    let ways: ("sender_tail" | "clave_tail")[] = ["sender_tail", "clave_tail"];
+    if (row.tieBreak === "one") ways = ["clave_tail"];
+    else if (row.tieBreak === "several") {
+      if (row.senderTail && row.claveTail) return { ask: "clave", tieBreak: null };
+      ways = [row.senderTail ? "clave_tail" : "sender_tail"];
     }
-    /* D11: no learned account tied one of those kept */
-    if (!row.senderTail) return kept > 0 ? "sender_tail" : "clave";
-    /* D17: the four characters did not choose one */
-    if (row.claveTail) return "clave";
-    /* several still fit the four digits; none fitting is FR-033 */
-    return kept >= 2 ? "clave_tail" : "clave";
+    return { ask: "tie_break", tieBreak: { ways, missed: row.tieBreak === "none", several: waiting.kept > 1 } };
   }
   if (row.lastError === "TRANSFER_NOT_FOUND") {
-    if (row.ladderRound >= 4) return "clave";
-    if (row.ladderRound === 3) return "check_data";
+    if (row.ladderRound >= 4) return { ask: "clave", tieBreak: null };
+    if (row.ladderRound === 3) return { ask: "check_data", tieBreak: null };
   }
-  return null;
+  return none;
 }
 
 /* payment-without-receipt D24 (FR-013): on a transfer already used, the
@@ -1616,7 +1707,12 @@ export async function getDirectPaymentStatus(c: Ctx, id: string) {
             referenceSource: payment.referenceSource,
             senderTail: payment.senderTail,
             searchedDays: confirmationOf(payment).days,
-            ask: askOf(payment),
+            /* confirmation-hierarchy D8, D9: the link's misses are read only
+               for a row waiting on a tie-break */
+            ...askOf(
+              payment,
+              waitingOnTieBreak(payment) ? await tieBreakMissesInDay(db, payment.paymentLinkId, new Date()) : 0,
+            ),
             usedBy: await usedByOf(db, payment),
           }
         : {}),

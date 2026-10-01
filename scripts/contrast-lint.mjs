@@ -108,6 +108,17 @@ const PAIRS = [
   { fg: "--color-border-input", bg: "--color-bg-secondary", min: AA_LARGE, what: "input border on cards" },
   { fg: "--color-border-input", bg: "--color-bg-tertiary", min: AA_LARGE, what: "input border against its own fill" },
   { fg: "--color-border-focus", bg: "--color-bg-primary", min: AA_LARGE, what: "focus ring" },
+
+  /* confirmation-hierarchy D17 (proposal E): the payer's reference box and
+     the tags beside it — option 2's choices, the account's kind, "Solo
+     tuya" — set the link ink and the body ink on the accent-subtle
+     surface, inside the card. That surface is translucent in dark, so it
+     is composed over the card it sits on, not over the page. Measured by
+     this script on 2026-10-01: link ink 4.76:1 light, 6.21:1 dark; body
+     ink 15.2:1 light, 11.1:1 dark (the hand estimate of research R14 was
+     4.8:1 and 6.2:1). */
+  { fg: "--color-text-link", bg: "--color-accent-primary-subtle", over: "--color-bg-secondary", min: AA_NORMAL, what: "link ink on the accent-subtle surface (reference box, tags)" },
+  { fg: "--color-text-primary", bg: "--color-accent-primary-subtle", over: "--color-bg-secondary", min: AA_NORMAL, what: "body ink on the accent-subtle surface (reference box, tags)" },
 ];
 
 /* Translucent status backgrounds sit on the page, not in a vacuum */
@@ -119,14 +130,16 @@ const SURFACE_OF = {
   "--color-accent-primary-subtle": "--color-bg-primary",
 };
 
-function resolve(vars, name) {
+/* `surface` — the token a pair declares its translucent background sits
+   on, when that is not the default of SURFACE_OF (D17's card) */
+function resolve(vars, name, surface) {
   const raw = vars[name];
   if (!raw) throw new Error(`token ${name} is not defined`);
   const color = parse(raw);
   if (!color) throw new Error(`token ${name} is not a color this script reads: ${raw}`);
   if (color.a === 1) return color;
-  const surface = parse(vars[SURFACE_OF[name] ?? "--color-bg-primary"]);
-  return over(color, surface);
+  const under = parse(vars[surface ?? SURFACE_OF[name] ?? "--color-bg-primary"]);
+  return over(color, under);
 }
 
 let failures = 0;
@@ -137,7 +150,7 @@ for (const [theme, vars] of [
   ["dark", dark],
 ]) {
   for (const pair of PAIRS) {
-    const ratio = contrast(resolve(vars, pair.fg), resolve(vars, pair.bg));
+    const ratio = contrast(resolve(vars, pair.fg), resolve(vars, pair.bg, pair.over));
     const rounded = Math.round(ratio * 100) / 100;
     if (ratio < pair.min) {
       failures++;

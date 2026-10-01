@@ -763,9 +763,16 @@ describe("payment-without-receipt US4: the read-back, the ladder and the correct
   });
 });
 
-/* "No puse la referencia": a reference the payer typed */
+/* "Usé otra referencia" (012's "No puse la referencia"): a reference the
+   payer typed. confirmation-hierarchy D5: it searches at once, and the
+   tie-break is asked after the search — never the four digits before it */
 const typed = (link: Link, referenceNumber: string, over: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
   pay(link.token, { transfer: { referenceSource: "typed", referenceNumber, senderBank: "AZTECA", date: TODAY, ...over }, ...extra });
+
+/* confirmation-hierarchy D6: an answer to the tie-break supersedes the row
+   waiting on it */
+const answerTie = (link: Link, waitingId: string, referenceNumber: string, tails: Record<string, string>) =>
+  typed(link, referenceNumber, tails, { supersedes: waitingId });
 
 /* A payment this service confirmed before, from `account` — what makes
    the account learned for it (D12, D13) */
@@ -780,12 +787,12 @@ async function learnedFrom(link: Link, account: string, daysAgo = 10) {
    person may hold (D3) — the shared reference strangers type */
 const SHARED = BUSINESS_CLABE.slice(-7);
 
-describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)", () => {
+describe("payment-without-receipt US5, confirmation-hierarchy US2: 'Usé otra referencia' (T043 as changed by 017 T031–T033, D11; 017 D5, D6, D9)", () => {
   it("another person's reference is refused before anything is created; the payer's own, typed, is handled as their own", async () => {
     const business = await seedReferenceBusiness();
     const { digits: theirs } = await apiPayer(business, "otro");
     const { link, digits: mine } = await apiPayer(business, "yo");
-    const refused = await typed(link, theirs, { senderTail: "8301" });
+    const refused = await typed(link, theirs);
     expect(refused.status).toBe(409);
     expect(refused.body.error?.code).toBe("REFERENCE_OF_ANOTHER");
     expect(await db().select().from(payments)).toHaveLength(0);
@@ -799,19 +806,16 @@ describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)"
     ["the business's own account tail", SHARED],
     ["a default-looking run", "1234567"],
     ["a leading zero", "0123999"],
-  ])("digits no person holds (%s) go on as a shared reference — the four digits asked first, before any call", async (_label, reference) => {
+  ])("digits no person holds (%s) go on as a shared reference — searched at once, the tie-break asked after it", async (_label, reference) => {
     const business = await seedReferenceBusiness();
     const { link } = await apiPayer(business);
-    const asked = await typed(link, reference);
-    expect(asked.status).toBe(409);
-    expect(asked.body.error?.code).toBe("SENDER_TAIL_NEEDED");
-    expect(await db().select().from(payments)).toHaveLength(0);
-    expect(await providerCalls()).toBe(0);
-
-    mockNotFound();
-    const searched = await typed(link, reference, { senderTail: "8301" });
+    mockSeveral([transfer(TODAY, "07:11:20"), transfer(TODAY, "11:40:47", "351.50", SENDER_4417)]);
+    const searched = await typed(link, reference);
     expect(searched.status).toBe(201);
-    expect(await rowById(searched.body.data!.directPaymentId)).toMatchObject({ referenceSource: "typed", referenceNumber: reference, senderTail: "8301" });
+    const id = searched.body.data!.directPaymentId;
+    expect(await providerCalls()).toBe(1);
+    expect(await rowById(id)).toMatchObject({ referenceSource: "typed", referenceNumber: reference, senderTail: null, lastError: "CEP_UNDECIDED" });
+    expect((await status(id)).data).toMatchObject({ ask: "tie_break", tieBreak: { ways: ["sender_tail", "clave_tail"], several: true } });
   });
 
   it("a learned account ties one transfer: confirmed, nothing asked", async () => {
@@ -826,24 +830,26 @@ describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)"
     expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "learned_account" });
   });
 
-  it("four digits that fit one confirm; four that fit none confirm nothing and ask the clave (FR-033)", async () => {
+  it("four digits that fit one confirm; four that fit none confirm nothing and the tie-break is asked again (017 FR-014, replacing 012 FR-033)", async () => {
     const business = await seedReferenceBusiness();
     const { link } = await apiPayer(business);
     const mine = transfer(TODAY, "11:40:47", "351.50", SENDER_4417);
     mockSeveral([transfer(TODAY, "07:11:20"), mine]);
-    const fits = await typed(link, SHARED, { senderTail: "4417" });
+    const waiting = (await typed(link, SHARED)).body.data!.directPaymentId;
+    const fits = await answerTie(link, waiting, SHARED, { senderTail: "4417" });
     const row = await rowById(fits.body.data!.directPaymentId);
     expect(row).toMatchObject({ status: "confirmed", trackingKey: mine.clave });
     expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "sender_tail" });
 
     const { link: other } = await apiPayer(business, "otro");
     mockSeveral([transfer(TODAY, "08:00:00"), transfer(TODAY, "12:00:00", "351.50", SENDER_4417)]);
-    const none = await typed(other, SHARED, { senderTail: "9999" });
+    const theirs = (await typed(other, SHARED)).body.data!.directPaymentId;
+    const none = await answerTie(other, theirs, SHARED, { senderTail: "9999" });
     const read = directPaymentStatusResponse.parse((await status(none.body.data!.directPaymentId)).data);
-    expect(read).toMatchObject({ status: "validating", ask: "clave", referenceSource: "typed", senderTail: "9999" });
+    expect(read).toMatchObject({ status: "validating", ask: "tie_break", tieBreak: { missed: true }, referenceSource: "typed", senderTail: "9999" });
   });
 
-  it("a learned account that ties nothing, and no digits: candidates kept, the four digits asked — and fitted with no call", async () => {
+  it("a learned account that ties nothing: candidates kept, the tie-break asked — and the digits fitted with no call", async () => {
     const business = await seedReferenceBusiness();
     const { link } = await apiPayer(business);
     await learnedFrom(link, "127180555555512344");
@@ -852,29 +858,29 @@ describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)"
     const res = await typed(link, SHARED);
     const id = res.body.data!.directPaymentId;
     expect(await rowById(id)).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED", nextValidationAt: null });
-    expect((await status(id)).data.ask).toBe("sender_tail");
+    expect((await status(id)).data.ask).toBe("tie_break");
 
     const calls = await providerCalls();
-    const answered = await typed(link, SHARED, { senderTail: "4417" }, { supersedes: id });
+    const answered = await answerTie(link, id, SHARED, { senderTail: "4417" });
     expect(await rowById(answered.body.data!.directPaymentId)).toMatchObject({ status: "confirmed", trackingKey: mine.clave });
     expect(await providerCalls()).toBe(calls);
   });
 
-  it("several that the four digits leave: the clave's last four characters are asked, and one fit confirms from the record with no call", async () => {
+  it("several that the four digits leave: the characters are asked alone, and one fit confirms from the record with no call", async () => {
     const business = await seedReferenceBusiness();
     const { link } = await apiPayer(business);
     const a = transfer(TODAY, "07:11:20", "351.50", SENDER_8301, { clave: "MBAN0100260930000000A7K" });
     const b = transfer(TODAY, "07:13:02", "351.50", SENDER_8301, { clave: "MBAN0100260930000000B9Q" });
     mockSeveral([a, b]);
-    const res = await typed(link, SHARED, { senderTail: "8301" });
-    const id = res.body.data!.directPaymentId;
-    expect(await rowById(id)).toMatchObject({ lastError: "CEP_UNDECIDED" });
-    expect((await status(id)).data.ask).toBe("clave_tail");
+    const waiting = (await typed(link, SHARED)).body.data!.directPaymentId;
+    const id = (await answerTie(link, waiting, SHARED, { senderTail: "8301" })).body.data!.directPaymentId;
+    expect(await rowById(id)).toMatchObject({ lastError: "CEP_UNDECIDED", tieBreak: "several" });
+    expect((await status(id)).data).toMatchObject({ ask: "tie_break", tieBreak: { ways: ["clave_tail"] } });
 
     const calls = await providerCalls();
-    const answered = await typed(link, SHARED, { senderTail: "8301", claveTail: "0b9q" }, { supersedes: id });
+    const answered = await answerTie(link, id, SHARED, { claveTail: "0b9q" });
     const row = await rowById(answered.body.data!.directPaymentId);
-    expect(row).toMatchObject({ status: "confirmed", trackingKey: b.clave, claveTail: "0B9Q" });
+    expect(row).toMatchObject({ status: "confirmed", trackingKey: b.clave, claveTail: "0B9Q", senderTail: "8301" });
     expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "clave_tail" });
     expect(await providerCalls()).toBe(calls);
   });
@@ -882,11 +888,12 @@ describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)"
   it("two candidates sharing the four characters ask the whole clave", async () => {
     const business = await seedReferenceBusiness();
     const { link } = await apiPayer(business);
-    const a = transfer(TODAY, "07:11:20", "351.50", SENDER_8301, { clave: "MBAN0100260930000000A7K1" });
-    const b = transfer(TODAY, "07:13:02", "351.50", SENDER_8301, { clave: "MBAN0100260930000000B7K1" });
+    const a = transfer(TODAY, "07:11:20", "351.50", SENDER_8301, { clave: "MBAN0100260930000000A07K1" });
+    const b = transfer(TODAY, "07:13:02", "351.50", SENDER_8301, { clave: "MBAN0100260930000000B07K1" });
     mockSeveral([a, b]);
-    const id = (await typed(link, SHARED, { senderTail: "8301" })).body.data!.directPaymentId;
-    const again = await typed(link, SHARED, { senderTail: "8301", claveTail: "07K1" }, { supersedes: id });
+    const waiting = (await typed(link, SHARED)).body.data!.directPaymentId;
+    const id = (await answerTie(link, waiting, SHARED, { senderTail: "8301" })).body.data!.directPaymentId;
+    const again = await answerTie(link, id, SHARED, { claveTail: "07K1" });
     const read = (await status(again.body.data!.directPaymentId)).data;
     expect(read).toMatchObject({ status: "validating", ask: "clave" });
   });
@@ -895,7 +902,7 @@ describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)"
     const business = await seedReferenceBusiness();
     const { link } = await apiPayer(business);
     mockNotFound();
-    const id = (await typed(link, SHARED, { senderTail: "8301" })).body.data!.directPaymentId;
+    const id = (await typed(link, SHARED)).body.data!.directPaymentId;
     mockNotFound();
     await stepTo(id, 2);
     mockNotFound();
@@ -904,7 +911,7 @@ describe("payment-without-receipt US5: 'No puse la referencia' (T043, D11, D17)"
   });
 });
 
-describe("payment-without-receipt US5: while a reference changes hands (T055, D26, FR-041)", () => {
+describe("payment-without-receipt US5, confirmation-hierarchy US3: while a reference changes hands (T055 as changed by 017 T024, D26, FR-041; 017 D10)", () => {
   /* Juan held 7815678 as an assigned number; a phone ending in it came,
      and the row passed to Ana: the state `ensurePayerReference` leaves
      (payer-reference.test.ts proves the pass itself) */
@@ -928,7 +935,7 @@ describe("payment-without-receipt US5: while a reference changes hands (T055, D2
     return { juan, ana, passed, juanDigits: juans!.digits };
   }
 
-  it("Juan typing his previous digits is accepted and confirms only with an account learned for him", async () => {
+  it("Juan typing his previous digits is accepted and confirms with an account learned for him alone", async () => {
     const business = await seedReferenceBusiness();
     const { juan } = await handedOver(business);
     expect((await linkRead(juan.token)).body.data!.payerReference.previousDigits).toBe("7815678");
@@ -940,7 +947,7 @@ describe("payment-without-receipt US5: while a reference changes hands (T055, D2
     expect(row).toMatchObject({ status: "confirmed", trackingKey: his.clave, referenceSource: "typed" });
   });
 
-  it("Ana's own search drops Juan's account, and holds one not yet known for her until she types its four digits", async () => {
+  it("Ana's own search drops Juan's account, and holds one not yet known for her until she answers the tie-break", async () => {
     const business = await seedReferenceBusiness();
     const { ana } = await handedOver(business);
     const hers = transfer(TODAY, "11:40:47", "351.50", SENDER_4417);
@@ -948,23 +955,23 @@ describe("payment-without-receipt US5: while a reference changes hands (T055, D2
     const id = (await confirm(ana)).body.data!.directPaymentId;
     const trail = JSON.parse((await rowById(id)).matchTrail!);
     expect(trail.candidates.find((c: { why: string }) => c.why === "excluded")).toBeTruthy();
-    expect((await status(id)).data).toMatchObject({ status: "validating", ask: "sender_tail" });
+    expect((await status(id)).data).toMatchObject({ status: "validating", ask: "tie_break", tieBreak: { ways: ["sender_tail", "clave_tail"] } });
 
     const answered = await confirm(ana, { senderTail: "4417" }, { supersedes: id });
     expect(await rowById(answered.body.data!.directPaymentId)).toMatchObject({ status: "confirmed", trackingKey: hers.clave });
   });
 
-  it("Juan's previous digits from an account not learned for him are held and ask his four digits — which confirm with no call (T058)", async () => {
+  it("Juan's previous digits from an account not learned for him are held and ask the tie-break — his digits confirm with no call (T058)", async () => {
     const business = await seedReferenceBusiness();
     const { juan } = await handedOver(business);
     const his = transfer(TODAY, "11:40:47", "351.50", SENDER_4417);
     mockSeveral([transfer(TODAY, "07:11:20", "351.50", "127180555555512344"), his]);
     const id = (await typed(juan, "7815678")).body.data!.directPaymentId;
     expect(await rowById(id)).toMatchObject({ status: "validating", lastError: "CEP_UNDECIDED" });
-    expect((await status(id)).data.ask).toBe("sender_tail");
+    expect((await status(id)).data.ask).toBe("tie_break");
 
     const calls = await providerCalls();
-    const answered = await typed(juan, "7815678", { senderTail: "4417" }, { supersedes: id });
+    const answered = await answerTie(juan, id, "7815678", { senderTail: "4417" });
     const row = await rowById(answered.body.data!.directPaymentId);
     expect(row).toMatchObject({ status: "confirmed", trackingKey: his.clave, referenceSource: "typed" });
     expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "sender_tail" });
@@ -977,11 +984,12 @@ describe("payment-without-receipt US5: while a reference changes hands (T055, D2
     const a = transfer(TODAY, "07:11:20", "351.50", SENDER_4417, { clave: "MBAN0100260930000000C3P" });
     const b = transfer(TODAY, "07:13:02", "351.50", SENDER_4417, { clave: "MBAN0100260930000000D5R" });
     mockSeveral([a, b]);
-    const id = (await typed(juan, "7815678", { senderTail: "4417" })).body.data!.directPaymentId;
-    expect((await status(id)).data.ask).toBe("clave_tail");
+    const waiting = (await typed(juan, "7815678")).body.data!.directPaymentId;
+    const id = (await answerTie(juan, waiting, "7815678", { senderTail: "4417" })).body.data!.directPaymentId;
+    expect((await status(id)).data).toMatchObject({ ask: "tie_break", tieBreak: { ways: ["clave_tail"] } });
 
     const calls = await providerCalls();
-    const answered = await typed(juan, "7815678", { senderTail: "4417", claveTail: "0D5R" }, { supersedes: id });
+    const answered = await answerTie(juan, id, "7815678", { claveTail: "0D5R" });
     const row = await rowById(answered.body.data!.directPaymentId);
     expect(row).toMatchObject({ status: "confirmed", trackingKey: b.clave });
     expect(JSON.parse(row.matchTrail!)).toMatchObject({ by: "clave_tail" });

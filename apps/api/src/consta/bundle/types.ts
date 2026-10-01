@@ -59,23 +59,45 @@ export type ReceiptSide = {
      destination ties to none of them is not this business's transfer */
   accounts: RegisteredAccount[];
   /* payment-without-receipt D10/D11: whole sending accounts learned for
-     the service being confirmed — compared before the tail, in the `own`
-     and `typed` modes only */
+     the service being confirmed, in the `own` and `typed` modes only.
+     confirmation-hierarchy D4, D10 (amending 012 D10, D11): only the ones
+     exclusive to this person — an account that also paid another person
+     never decides alone, in any mode */
   knownAccounts?: string[];
+  /* confirmation-hierarchy D4: the candidates' accounts that have paid
+     another person of the business. Read by `fitTieBreak`: the account's
+     digits alone never confirm a transfer from one of these (FR-013) */
+  othersAccounts?: string[];
   /* payment-without-receipt D26 (FR-041): during a transition, the
      previous holder's learned accounts — never chosen for the new owner.
      Present (even empty) means a transition is running: a candidate from
-     an account not in `knownAccounts` is then held, and the four digits
-     are asked before it confirms. */
+     an account not in `knownAccounts` is then held, and the tie-break is
+     asked before it confirms (confirmation-hierarchy D10: both ways, where
+     012 asked the four digits). */
   excludedAccounts?: string[];
 };
 
 /* payment-without-receipt D10, D11: how the candidates are judged.
    `receipt` — what a receipt said (cep-bundle-match D8), exactly as it
    was; `own` — the payer's own reference: every transfer found is theirs;
-   `typed` — a reference the payer typed ("No puse la referencia"): only
-   a learned account or the typed four digits may tie a transfer to them. */
+   `typed` — a reference the payer typed ("Usé otra referencia"): only an
+   exclusive learned account ties a transfer to them here, and otherwise
+   the payer answers the tie-break afterwards (confirmation-hierarchy D5,
+   D10: the typed four digits left this mode for `fitTieBreak`). */
 export type MatchMode = "receipt" | "own" | "typed";
+
+/* confirmation-hierarchy D6: an answer to the tie-break — the sending
+   account's last four digits, the clave's last four characters, or both
+   (a way an earlier answer gave and that fitted rides forward) */
+export type TieBreakAnswer = { senderTail?: string | null; claveTail?: string | null };
+
+/* D6: what an answer did among the transfers found. `needs` asks the way
+   not given yet; `clave` asks the whole clave; `none` fitted nothing. */
+export type TieBreakFit =
+  | { fit: "one"; chosen: CepRecord; by: "sender_tail" | "clave_tail" }
+  | { fit: "needs"; ways: ("sender_tail" | "clave_tail")[] }
+  | { fit: "clave" }
+  | { fit: "none" };
 
 /* D6: the window around the receipt's time and the margin under which
    the two nearest candidates are too close to tell apart */
@@ -128,8 +150,11 @@ export type MatchResult =
       /* Which of tail and time dropped something; `none` when neither was
          needed. `clave` is the lifecycle's word for a D11 fit, never the
          matcher's. payment-without-receipt D10/D11 add what decided the
-         `own` and `typed` modes: an account learned for the service, the
-         earliest of the payer's own transfers, the four digits typed. */
+         `own` and `typed` modes: an account learned for the service (only
+         an exclusive one since confirmation-hierarchy D10), the earliest
+         of the payer's own transfers. `sender_tail` stays in the type for
+         the trails 012's path wrote; the modes no longer return it — an
+         answer is `fitTieBreak`'s (D6). */
       by: "tail" | "time" | "both" | "none" | "learned_account" | "earliest" | "sender_tail";
       /* D6: whenever the receipt showed a time — even when the tail alone
          decided */
@@ -147,7 +172,9 @@ export type MatchTrail = {
   bundleId: string | null;
   decided: "chosen" | "undecided";
   /* payment-without-receipt D17: `clave_tail` — the clave's last four
-     characters chose among the kept candidates */
+     characters chose among the kept candidates. confirmation-hierarchy D7
+     (FR-019): with `sender_tail`, `learned_account` and `clave`, what
+     decided a typed reference — the success criteria read it here */
   by: "tail" | "time" | "both" | "none" | "clave" | "learned_account" | "earliest" | "sender_tail" | "clave_tail" | null;
   reason: UndecidedReason | null;
   receipt: { time: string | null; tail: string | null };

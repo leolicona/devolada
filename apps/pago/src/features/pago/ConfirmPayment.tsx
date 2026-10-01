@@ -1,27 +1,36 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Field, formatMoney, Input, parseMoney, Pending } from "@devolada/ui";
-import { BANKS, groupReferenceDigits } from "@devolada/api/direct-payments-schema";
+import { groupReferenceDigits } from "@devolada/api/direct-payments-schema";
 import type { Bank, LinkStatusResponse } from "@devolada/api/direct-payments-schema";
 import { ChevronLeft, Info, ShieldCheck, TriangleAlert } from "lucide-react";
 import { ChoiceGroup } from "@/components/ui/choice-group";
 import { NativeSelect } from "@/components/ui/native-select";
 import { bankLabel } from "./bank-hints";
 import { inlineReference } from "./reference-hints";
-import { shiftDay, todayIn, weekdayAndDay, weekdayDayOfMonth } from "./days";
+import { shiftDay, shortWeekdayAndDay, todayIn, weekdayAndDay, weekdayDayOfMonth } from "./days";
+import { payerBanks } from "./payer-banks";
+import { ReceiptLink } from "./ReceiptLink";
 
 /* Step 2 with the payer's own reference — "Confirma tu pago"
    (payment-without-receipt D8, D21; contracts/payment-page.md).
 
    It replaces "Envía tu comprobante" as the first thing step 2 shows, and
    only when the link carries a `payerReference`: with the feature off the
-   page is today's page, byte for byte (D20). The receipt stays one tap
-   away as "Sube tu comprobante" (FR-039).
+   page is today's page, byte for byte (D20).
 
    Two questions, each already answered with the likely option — the bank
    and the day — then a sentence that reads back exactly what will be
    searched (FR-008), and one decisive action. The reference itself is
    never sent: the server writes the link's own (D8), so a page cannot
-   confirm with somebody else's digits. */
+   confirm with somebody else's digits.
+
+   confirmation-hierarchy D2 (spec FR-001–FR-004): the step offers exactly
+   three ways to confirm, in this order — option 1, this confirmation, with
+   the only decisive button; option 2, **Usé otra referencia**, a standard
+   secondary control right below it; option 3, the receipt, as the quiet
+   `ReceiptLink`, last. Keyboard and screen reader follow the same order
+   (FR-008). Proposal E (D17, D18): the bank and the day are chips, and
+   one tap says why they are enough. */
 
 type PayerReference = NonNullable<LinkStatusResponse["payerReference"]>;
 
@@ -32,7 +41,6 @@ export type ConfirmTransfer = {
   senderBank: string;
   date: string;
   amountCents?: number;
-  senderTail?: string;
   preselected: { bank: Bank | null; day: string };
 };
 
@@ -42,14 +50,92 @@ const OTHER = "__other__";
 /* D8: the day travels within today − 30 … today, business time */
 const DAYS_BACK = 30;
 
+/* confirmation-hierarchy D21: what the payer chose on the confirmation —
+   kept by `PaymentPage` beside its `proofView`, so option 2 reads the same
+   bank, day and amount instead of asking them again (FR-029), and "Volver"
+   finds them as they were. Page state, never the device's: a reload starts
+   from the likely answers again. */
+export type ConfirmChoice = {
+  /* D26 (FR-040): which reference was put, while it changed */
+  which: "new" | "previous" | null;
+  /* FR-010: "Sí" answered, or nothing to ask */
+  putIt: boolean;
+  bankChoice: string;
+  otherBank: string;
+  dayChoice: "today" | "yesterday" | "other";
+  otherDay: string;
+  /* FR-009: "Pagué otra cantidad" */
+  otherAmount: boolean;
+  amount: string;
+};
+
+export function initialChoice(data: LinkStatusResponse, reference: PayerReference): ConfirmChoice {
+  const previous = reference.previousDigits;
+  return {
+    /* D26: nothing preselected while the reference changed — either answer
+       is likely in the first weeks */
+    which: previous ? null : "new",
+    /* FR-010: until this person's reference confirmed a payment, "Sí" or
+       "No" comes first. A payer who answers the question above already
+       said which reference they put. */
+    putIt: reference.proven || Boolean(previous),
+    /* D12 (FR-017): the most recent learned bank is preselected; with none,
+       the full list opens directly — a group of one "Otro banco" asks
+       nothing */
+    bankChoice: data.learnedBanks?.[0] ?? OTHER,
+    otherBank: "",
+    /* FR-007: "Hoy" preselected, in the business's timezone */
+    dayChoice: "today",
+    otherDay: "",
+    otherAmount: false,
+    amount: data.totalCents != null ? (data.totalCents / 100).toFixed(2) : "",
+  };
+}
+
+/* The choice read as what would travel, and as words */
+export function readChoice(choice: ConfirmChoice, data: LinkStatusResponse) {
+  const today = todayIn(data.timezone);
+  const yesterday = shiftDay(today, -1);
+  const earliest = shiftDay(today, -DAYS_BACK);
+  const senderBank = choice.bankChoice === OTHER ? choice.otherBank : choice.bankChoice;
+  const date = choice.dayChoice === "today" ? today : choice.dayChoice === "yesterday" ? yesterday : choice.otherDay;
+  /* ISO days compare as strings */
+  const dayOk = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= earliest && date <= today;
+  /* FR-009: parsed to integer cents like every typed amount (constitution
+     II), never through a float */
+  const amountCents = choice.otherAmount ? parseMoney(choice.amount) : (data.totalCents ?? null);
+  const amountOk = amountCents != null && amountCents > 0;
+  /* FR-008: a part not chosen yet is left out, never guessed */
+  const dayWords =
+    choice.dayChoice === "today"
+      ? `hoy ${weekdayAndDay(today)}`
+      : choice.dayChoice === "yesterday"
+        ? `ayer ${weekdayAndDay(yesterday)}`
+        : dayOk
+          ? `el ${weekdayDayOfMonth(date)}`
+          : null;
+  /* D21: the day as option 2's tag reads it */
+  const dayTag =
+    choice.dayChoice === "today"
+      ? `Hoy · ${shortWeekdayAndDay(today)}`
+      : choice.dayChoice === "yesterday"
+        ? `Ayer · ${shortWeekdayAndDay(yesterday)}`
+        : dayOk
+          ? weekdayAndDay(date)
+          : "Elige el día";
+  return { today, yesterday, earliest, senderBank, date, dayOk, amountCents, amountOk, dayWords, dayTag };
+}
+
 export function ConfirmPayment({
   data,
   reference,
   header,
   busy,
   error,
+  choice,
+  onChoice,
   onConfirm,
-  onNoReference,
+  onOtherReference,
   onReceipt,
   onBack,
 }: {
@@ -60,27 +146,21 @@ export function ConfirmPayment({
   busy: boolean;
   /* The refusal of the last "Confirmar pago", with the page's copy for it */
   error: { code: string; copy: string } | null;
+  choice: ConfirmChoice;
+  onChoice: (patch: Partial<ConfirmChoice>) => void;
   onConfirm: (transfer: ConfirmTransfer) => void;
-  onNoReference: () => void;
+  /* confirmation-hierarchy D3: option 2's view — also 012's *No* */
+  onOtherReference: () => void;
+  /* D3: option 3's view — PaymentPage's receipt block */
   onReceipt: () => void;
   onBack: () => void;
 }) {
   const learned = data.learnedBanks ?? [];
-  const today = todayIn(data.timezone);
-  const yesterday = shiftDay(today, -1);
-  const earliest = shiftDay(today, -DAYS_BACK);
   const previous = reference.previousDigits;
+  const { which, putIt, bankChoice, otherBank, dayChoice, otherDay, otherAmount, amount } = choice;
+  const { today, yesterday, earliest, senderBank, date, dayOk, amountCents, amountOk, dayWords } = readChoice(choice, data);
+  const amountWords = amountOk ? formatMoney(amountCents!) : null;
 
-  /* D26 (FR-040): a payer whose reference changed is asked which one they
-     put, before anything else — nothing is preselected, because either
-     answer is likely in the first weeks. The new one continues as their
-     own; the previous one travels as typed, which the server accepts as
-     theirs and guards by FR-041. */
-  const [which, setWhich] = useState<"new" | "previous" | null>(previous ? null : "new");
-  /* FR-010: until this person's reference has confirmed a payment, "Sí" or
-     "No" comes first. "No" spends nothing. A payer who just answered the
-     question above already said which reference they put. */
-  const [putIt, setPutIt] = useState(reference.proven || Boolean(previous));
   const restRef = useRef<HTMLDivElement>(null);
   const [answered, setAnswered] = useState(false);
   /* The question's buttons leave the screen when answered, so focus moves
@@ -89,46 +169,14 @@ export function ConfirmPayment({
     if (answered) restRef.current?.focus();
   }, [answered]);
 
-  /* D12 (FR-017): the most recent learned bank is preselected; with none,
-     the full list opens directly — a group of one "Otro banco" asks nothing */
-  const [bankChoice, setBankChoice] = useState<string>(learned[0] ?? OTHER);
-  const [otherBank, setOtherBank] = useState("");
-  const senderBank = bankChoice === OTHER ? otherBank : bankChoice;
-
-  /* FR-007: "Hoy" preselected, in the business's timezone */
-  const [dayChoice, setDayChoice] = useState<"today" | "yesterday" | "other">("today");
-  const [otherDay, setOtherDay] = useState("");
-  const date = dayChoice === "today" ? today : dayChoice === "yesterday" ? yesterday : otherDay;
-  /* ISO days compare as strings */
-  const dayOk = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= earliest && date <= today;
-
-  /* FR-009: "Pagué otra cantidad" — parsed to integer cents like every
-     typed amount (constitution II), never through a float */
-  const [otherAmount, setOtherAmount] = useState(false);
-  const [amount, setAmount] = useState(data.totalCents != null ? (data.totalCents / 100).toFixed(2) : "");
-  const typedCents = parseMoney(amount);
-  const amountCents = otherAmount ? typedCents : (data.totalCents ?? null);
-  const amountWords = amountCents != null && amountCents > 0 ? formatMoney(amountCents) : null;
-
-  /* D11 (FR-032, FR-041): the previous reference is typed, and the server
-     asks the four digits when no learned account ties the transfer */
-  const askTail = error?.code === "SENDER_TAIL_NEEDED";
-  const [tail, setTail] = useState("");
-  const tailOk = !askTail || /^\d{4}$/.test(tail);
+  /* FR-028: one sentence, opened in place; nothing is sent */
+  const [why, setWhy] = useState(false);
+  const whyId = useId();
 
   const digits = which === "previous" && previous ? previous : reference.digits;
-  const ready = which !== null && putIt && senderBank !== "" && dayOk && amountWords !== null && tailOk;
+  const ready = which !== null && putIt && senderBank !== "" && dayOk && amountWords !== null;
 
-  /* FR-008: the read-back follows every choice, and says only what was
-     chosen — a part not chosen yet is left out, never guessed */
-  const dayWords =
-    dayChoice === "today"
-      ? `hoy ${weekdayAndDay(today)}`
-      : dayChoice === "yesterday"
-        ? `ayer ${weekdayAndDay(yesterday)}`
-        : dayOk
-          ? `el ${weekdayDayOfMonth(date)}`
-          : null;
+  /* FR-008: the read-back follows every choice */
   const readBack =
     `Buscaremos ${amountWords ? `${amountWords} ` : ""}con la referencia ${inlineReference(digits)}` +
     (senderBank ? `, desde ${bankLabel(senderBank)}` : "") +
@@ -138,12 +186,13 @@ export function ConfirmPayment({
   const selectId = useId();
   const bankSelect = (id?: string) => (
     /* D16's native select; D7 (FR-018): the business's own most used
-       banks first, then the rest in the order the manual form uses */
+       banks first, then the rest in the order the manual form uses.
+       confirmation-hierarchy D15: never Banxico (`payerBanks`). */
     <NativeSelect
       id={id}
       required
       value={otherBank}
-      onChange={(e) => setOtherBank(e.target.value)}
+      onChange={(e) => onChoice({ otherBank: e.target.value })}
       /* Constitution VI, measured by the browser layer (T051): the
          unchosen "Elige tu banco" in the faint ink is 2.19:1 on the
          field, below AA. The secondary ink still reads as "not chosen
@@ -155,8 +204,8 @@ export function ConfirmPayment({
         Elige tu banco
       </option>
       {(() => {
-        const first = data.bankOrder ?? [];
-        const rest = [...BANKS]
+        const first = (data.bankOrder ?? []).filter((b) => payerBanks.includes(b));
+        const rest = [...payerBanks]
           .filter((b) => !first.includes(b))
           .sort((a, b) => a.localeCompare(b, "es-MX"))
           .map((b) => (
@@ -192,6 +241,13 @@ export function ConfirmPayment({
 
       {header}
 
+      {/* Proposal E (D17): what will be searched with, under the header —
+          the accent-subtle surface, the body ink */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm bg-accent-soft px-4 py-3">
+        <p className="text-sm font-medium text-ink">Buscaremos con tu referencia</p>
+        <p className="font-mono text-base font-semibold tabular-nums text-ink">{groupReferenceDigits(digits)}</p>
+      </div>
+
       {previous && (
         <Alert layout="icon">
           <Info aria-hidden />
@@ -208,7 +264,7 @@ export function ConfirmPayment({
             { value: "previous", label: `${groupReferenceDigits(previous)}, la anterior` },
           ]}
           value={which}
-          onChange={(v) => setWhich(v as "new" | "previous")}
+          onChange={(v) => onChoice({ which: v as "new" | "previous" })}
         />
       )}
 
@@ -222,14 +278,15 @@ export function ConfirmPayment({
               variant="secondary"
               className="h-12 w-full"
               onClick={() => {
-                setPutIt(true);
+                onChoice({ putIt: true });
                 setAnswered(true);
               }}
             >
               Sí
             </Button>
-            {/* FR-010: nothing is sent, nothing is spent */}
-            <Button variant="secondary" className="h-12 w-full" onClick={onNoReference}>
+            {/* FR-010: nothing is sent, nothing is spent; confirmation-
+                hierarchy D3: it opens option 2 */}
+            <Button variant="secondary" className="h-12 w-full" onClick={onOtherReference}>
               No
             </Button>
           </div>
@@ -237,16 +294,17 @@ export function ConfirmPayment({
       ) : (
         which !== null && (
           <div ref={restRef} tabIndex={-1} className="space-y-5 rounded-md">
-            <div className="space-y-3">
+            <div className="space-y-2">
               {learned.length ? (
                 <ChoiceGroup
+                  layout="chips"
                   legend="¿Desde qué banco pagaste?"
                   options={[
                     ...learned.map((b) => ({ value: b, label: bankLabel(b) })),
                     { value: OTHER, label: "Otro banco" },
                   ]}
                   value={bankChoice}
-                  onChange={setBankChoice}
+                  onChange={(v) => onChoice({ bankChoice: v })}
                 />
               ) : (
                 <div>
@@ -256,6 +314,10 @@ export function ConfirmPayment({
                   {bankSelect(selectId)}
                 </div>
               )}
+              {learned.length > 0 && (
+                /* FR-027: the preselected bank is the last payment's */
+                <p className="text-sm text-ink-soft">Elegimos el banco de tu último pago. Cámbialo si pagaste desde otro.</p>
+              )}
               {learned.length > 0 && bankChoice === OTHER && (
                 <Field label="Elige tu banco">{bankSelect()}</Field>
               )}
@@ -263,14 +325,15 @@ export function ConfirmPayment({
 
             <div className="space-y-3">
               <ChoiceGroup
+                layout="chips"
                 legend="¿Qué día?"
                 options={[
-                  { value: "today", label: `Hoy, ${weekdayAndDay(today)}` },
-                  { value: "yesterday", label: `Ayer, ${weekdayAndDay(yesterday)}` },
+                  { value: "today", label: `Hoy · ${shortWeekdayAndDay(today)}` },
+                  { value: "yesterday", label: `Ayer · ${shortWeekdayAndDay(yesterday)}` },
                   { value: "other", label: "Otro día" },
                 ]}
                 value={dayChoice}
-                onChange={(v) => setDayChoice(v as "today" | "yesterday" | "other")}
+                onChange={(v) => onChoice({ dayChoice: v as ConfirmChoice["dayChoice"] })}
               />
               {dayChoice === "other" && (
                 <div>
@@ -280,7 +343,7 @@ export function ConfirmPayment({
                       min={earliest}
                       max={today}
                       value={otherDay}
-                      onChange={(e) => setOtherDay(e.target.value)}
+                      onChange={(e) => onChoice({ otherDay: e.target.value })}
                     />
                   </Field>
                   <p className="mt-1 text-sm text-ink-soft">Puede ser de los últimos 30 días.</p>
@@ -294,13 +357,33 @@ export function ConfirmPayment({
               )}
             </div>
 
+            {/* FR-028 (D17): why the bank and the day are enough — a
+                link-styled control at the touch size, opening in place */}
+            <div>
+              <Button
+                variant="link"
+                className="h-12 justify-start"
+                aria-expanded={why}
+                aria-controls={whyId}
+                onClick={() => setWhy((open) => !open)}
+              >
+                ¿Por qué te preguntamos esto?
+              </Button>
+              {why && (
+                <p id={whyId} className="animate-enter rounded-sm bg-well px-4 py-3 text-sm text-ink">
+                  Tu referencia, el banco y el día nos bastan para encontrar tu transferencia entre todas las de ese día.
+                  Por eso no te pedimos comprobante.
+                </p>
+              )}
+            </div>
+
             {otherAmount && (
               <Field label="Monto que transferiste">
                 <Input
                   prefix="$"
                   inputMode="decimal"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => onChoice({ amount: e.target.value })}
                   placeholder="0.00"
                   autoComplete="off"
                   autoFocus
@@ -308,26 +391,18 @@ export function ConfirmPayment({
               </Field>
             )}
 
-            {askTail && (
-              <div className="space-y-2">
-                <p className="text-sm text-ink-soft">{error?.copy}</p>
-                <Field label="Últimos 4 dígitos de tu cuenta o tarjeta">
-                  <Input
-                    inputMode="numeric"
-                    value={tail}
-                    onChange={(e) => setTail(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    className="font-mono text-sm"
-                    autoComplete="off"
-                    autoFocus
-                  />
-                </Field>
-              </div>
-            )}
-
             {/* FR-008: what will be searched, before it is */}
             <p className="rounded-sm bg-well px-4 py-3 text-base text-ink" aria-live="polite">
               {readBack}
             </p>
+
+            {/* FR-002: "Pagué otra cantidad" belongs to option 1, above its
+                button */}
+            {!otherAmount && (
+              <Button variant="ghost" className="h-12 w-full text-sm" onClick={() => onChoice({ otherAmount: true })}>
+                Pagué otra cantidad
+              </Button>
+            )}
 
             <Pending active={busy} label="Estamos enviando tu confirmación.">
               <Button
@@ -340,7 +415,6 @@ export function ConfirmPayment({
                     senderBank,
                     date,
                     ...(otherAmount && amountCents != null ? { amountCents } : {}),
-                    ...(askTail ? { senderTail: tail } : {}),
                     /* D23 (SC-005): what the page offered, not what was sent */
                     preselected: { bank: learned[0] ?? null, day: today },
                   })
@@ -351,7 +425,7 @@ export function ConfirmPayment({
               </Button>
             </Pending>
 
-            {error && error.code !== "TRANSFER_DATE_OUT_OF_RANGE" && !askTail && (
+            {error && error.code !== "TRANSFER_DATE_OUT_OF_RANGE" && (
               <Alert variant="destructive" layout="icon">
                 <TriangleAlert aria-hidden />
                 {error.copy}
@@ -361,22 +435,17 @@ export function ConfirmPayment({
         )
       )}
 
-      {/* The small exits (contracts/payment-page.md step 6): at 48px,
-          quieter than the decisive action, never hidden behind it */}
-      <div className="grid gap-1">
-        {putIt && which !== null && !otherAmount && (
-          <Button variant="ghost" className="h-12 w-full text-sm" onClick={() => setOtherAmount(true)}>
-            Pagué otra cantidad
-          </Button>
-        )}
+      {/* confirmation-hierarchy D2 (FR-001, FR-003): option 2 visible on
+          the step's first screen, a standard control, never behind a link —
+          on the first-time question its *No* is option 2 already — then
+          option 3, quiet and last (FR-004) */}
+      <div className="grid gap-2">
         {putIt && (
-          <Button variant="ghost" className="h-12 w-full text-sm" onClick={onNoReference}>
-            No puse la referencia
+          <Button variant="secondary" className="w-full" onClick={onOtherReference}>
+            Usé otra referencia
           </Button>
         )}
-        <Button variant="ghost" className="h-12 w-full text-sm" onClick={onReceipt}>
-          Sube tu comprobante
-        </Button>
+        <ReceiptLink onClick={onReceipt} />
       </div>
     </>
   );

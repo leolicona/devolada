@@ -908,7 +908,7 @@ changes a decision the creator made.
   D1 of the API suite (`apps/api/test/cash-at-stores-access.test.ts`, the
   "M1" block), against Better Auth 1.6.29:
   - the plugin's columns are `user.username` (text, unique) and
-    `user.display_username` (text) — migration `0043_cash_at_stores.sql`;
+    `user.display_username` (text) — migration `0044_cash_at_stores.sql` (0043 at first; renumbered 2026-10-01 when spec 017 took 0042 on `main` and the retry fix moved to 0043);
   - a user whose `username` was written in the DB signs in with
     `POST /auth/sign-in/username {username, password}` (200, session cookie),
     and `/auth/me` answers the store branch;

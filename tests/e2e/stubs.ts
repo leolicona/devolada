@@ -588,9 +588,17 @@ export const referenceLink = linkStatusResponse.parse({
   bankOrder: ["BBVA MEXICO", "AZTECA", "NUBANK"],
 });
 
-/* Registered after stubPagoApi: Playwright tries the newest route first */
-export async function stubPagoReference(page: Page): Promise<void> {
-  await apiRoute(page, "**/direct-payments/links/*", referenceLink);
+/* Registered after stubPagoApi: Playwright tries the newest route first.
+   confirmation-hierarchy US5 (T041): the same link paid by a debit card or
+   by a phone, the two kinds that show their bank beside the number */
+export async function stubPagoReference(page: Page, kind: "clabe" | "card" | "phone" = "clabe"): Promise<void> {
+  const collectAccount =
+    kind === "card"
+      ? { kind, value: "4152313412345678", bank: "BBVA MEXICO" }
+      : kind === "phone"
+        ? { kind, value: "5512345678", bank: "NU MEXICO" }
+        : referenceLink.collectAccount;
+  await apiRoute(page, "**/direct-payments/links/*", linkStatusResponse.parse({ ...referenceLink, collectAccount }));
 }
 
 /* automated-collections-api D6 / FR-031 (US1 scenarios 3 and 4): the one

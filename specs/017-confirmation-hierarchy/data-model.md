@@ -8,6 +8,10 @@ This feature adds one column and one index to what spec 012 adds
 features are built together (D1); if 012's migration has landed first,
 they take the next free number. Nothing is dropped, renamed or rebuilt.
 
+*Amended 2026-10-01 (tasks T002):* 012's migration had landed on `main`
+(#261), so both live in their own additive migration,
+`apps/api/migrations/0042_confirmation_hierarchy.sql`.
+
 ## `payments` — one column (D6, D7, D8)
 
 | Column | Type | Null | Rule |

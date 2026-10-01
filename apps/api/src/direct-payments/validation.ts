@@ -5,11 +5,13 @@ import { cepRecords, payments, businesses, paymentLinks, validations } from "../
 import { debitValidationFee } from "../credit";
 import { BANKS } from "./banks";
 import { consta, ConstaError, type ConstaRequest, type ConstaVerdict, type RegisteredAccount } from "../consta";
-import { fitClave, fitClaveTail, matchCandidates, shownTail, tailFits } from "../consta/bundle/match";
+import { fitClave, fitTieBreak, matchCandidates, shownTail, tailFits } from "../consta/bundle/match";
 import { readPendingBundle, recordsFor } from "../consta/bundle/store";
 import type { CepRecord, MatchMode, MatchResult, MatchTrail, ReceiptSide, UndecidedReason } from "../consta/bundle/types";
 import {
   heldBefore,
+  keptClavesOf,
+  usedClavesOf,
   nudgeHolders,
   pendingBundleOf,
   type PendingBundle,
@@ -60,6 +62,7 @@ import {
 import { isApiLink, isPanelLink, realOnly, type ApiLink, type PanelLink } from "./links";
 import { enqueueAndDeliver, type Defer } from "../webhooks/queue";
 import {
+  accountsOfOthers,
   customerKeyOf,
   endTransitionOnConfirm,
   holdersOf,
@@ -363,6 +366,9 @@ export type Confirmation = {
   days: string[];
   /* D24: the clave a row refused as already used was refused for */
   usedClave?: string | null;
+  /* confirmation-hierarchy D7 (FR-019): on a payment the tie-break or the
+     whole clave confirmed, the answers of its chain that fitted nothing */
+  tieBreakMisses?: number;
 };
 export function confirmationOf(row: Pick<DirectPayment, "confirmation">): Confirmation {
   try {
@@ -372,6 +378,7 @@ export function confirmationOf(row: Pick<DirectPayment, "confirmation">): Confir
       preselectedDay: parsed.preselectedDay ?? null,
       days: Array.isArray(parsed.days) ? parsed.days : [],
       ...(parsed.usedClave ? { usedClave: parsed.usedClave } : {}),
+      ...(typeof parsed.tieBreakMisses === "number" ? { tieBreakMisses: parsed.tieBreakMisses } : {}),
     };
   } catch {
     return { preselectedBank: null, preselectedDay: null, days: [] };
@@ -379,33 +386,74 @@ export function confirmationOf(row: Pick<DirectPayment, "confirmation">): Confir
 }
 
 /* The searched data two rows of one chain share — what makes a tail
-   typed on the newer one an answer to the older one's candidates */
+   typed on the newer one an answer to the older one's candidates
+   (confirmation-hierarchy D6: `submitPayment` writes an answer with the
+   waiting row's data, so this holds for every answer it lets through) */
 const sameSearch = (a: DirectPayment, b: DirectPayment) =>
   a.referenceNumber === b.referenceNumber &&
   a.senderBank === b.senderBank &&
   a.transferDate === b.transferDate &&
   (a.claimedAmountCents ?? a.amountCents) === (b.claimedAmountCents ?? b.amountCents);
 
+/* confirmation-hierarchy D7 (FR-019): the answers of this row's chain
+   that fitted nothing, counted when the chain confirms — along
+   `supersedes_id`, as far as the chain goes (twenty rows at most, like
+   `tracesToOwnAttempt`) */
+async function chainMisses(db: DB, payment: DirectPayment): Promise<number> {
+  let misses = 0;
+  let cursor = payment.supersedesId;
+  for (let hops = 0; cursor && hops < 20; hops++) {
+    const [prior] = await db
+      .select({ supersedesId: payments.supersedesId, tieBreak: payments.tieBreak })
+      .from(payments)
+      .where(and(eq(payments.id, cursor), eq(payments.businessId, payment.businessId)));
+    if (!prior) break;
+    if (prior.tieBreak === "none") misses += 1;
+    cursor = prior.supersedesId;
+  }
+  return misses;
+}
+
 /* payment-without-receipt D10, D11, D26: what the matcher knows of the
    payer, for a row searched by a reference. `own` — the accounts learned
    for this service, and during a D26 transition the new owner's across
    their services, with the previous holder's to drop; `typed` — the
-   accounts learned for this service at the bank the payer named. */
+   accounts learned for this service at the bank the payer named.
+   confirmation-hierarchy D4, D10 (amending 012 D10, D11, D26): read at
+   the tie, over the candidates' accounts — `knownAccounts` keeps only the
+   learned accounts exclusive to this person, and `othersAccounts` names
+   the candidates' accounts that have paid another person, in every mode. */
 async function payerSide(
   db: DB,
   payment: DirectPayment,
   link: PaymentLink,
   now: Date,
-): Promise<{ mode: MatchMode; side: Pick<ReceiptSide, "knownAccounts" | "excludedAccounts"> }> {
+  candidates: Pick<CepRecord, "senderAccount">[],
+): Promise<{ mode: MatchMode; side: Pick<ReceiptSide, "knownAccounts" | "excludedAccounts" | "othersAccounts"> }> {
   const key = customerKeyOf(link);
   if (!payment.referenceSource || !key) return { mode: "receipt", side: {} };
-  if (payment.referenceSource === "typed") {
-    return { mode: "typed", side: { knownAccounts: await learnedAccounts(db, payment.businessId, [key], { bank: payment.senderBank }) } };
-  }
   const reference = await referenceOfLink(db, link, now);
+  const others = await accountsOfOthers(
+    db,
+    payment.businessId,
+    reference?.id ?? null,
+    key,
+    candidates.map((c) => c.senderAccount),
+  );
+  const exclusive = (accounts: string[]) => accounts.filter((a) => !others.has(a));
+  const othersAccounts = [...others];
+  if (payment.referenceSource === "typed") {
+    return {
+      mode: "typed",
+      side: {
+        knownAccounts: exclusive(await learnedAccounts(db, payment.businessId, [key], { bank: payment.senderBank })),
+        othersAccounts,
+      },
+    };
+  }
   const transition = reference ? await transitionOf(db, payment.businessId, reference, now) : null;
   if (!reference || !transition) {
-    return { mode: "own", side: { knownAccounts: await learnedAccounts(db, payment.businessId, [key]) } };
+    return { mode: "own", side: { knownAccounts: exclusive(await learnedAccounts(db, payment.businessId, [key])), othersAccounts } };
   }
   const [mine, previous] = await Promise.all([
     holdersOf(db, payment.businessId, reference.id),
@@ -414,8 +462,9 @@ async function payerSide(
   return {
     mode: "own",
     side: {
-      knownAccounts: await learnedAccounts(db, payment.businessId, mine),
+      knownAccounts: exclusive(await learnedAccounts(db, payment.businessId, mine)),
       excludedAccounts: await learnedAccounts(db, payment.businessId, previous),
+      othersAccounts,
     },
   };
 }
@@ -671,6 +720,9 @@ export async function runValidation(
      `valid` branch below, or — the bundle — in the matcher. */
   let local: ConstaVerdict | null = null;
   let localTrail: MatchTrail | null = null;
+  /* confirmation-hierarchy D7: what a decision taken with no call writes
+     beside its trail — the answer's outcome and the chain's misses */
+  let localExtra: Partial<typeof payments.$inferInsert> = {};
   /* D16: what a retried download's search asked with (converge T054) */
   let asked: PendingBundle["asked"] | null = null;
 
@@ -710,76 +762,134 @@ export async function runValidation(
             c.clave === record.clave ? { ...c, fate: "chosen" as const, why: null } : c,
           ),
         };
+        /* confirmation-hierarchy D7 (FR-019): the whole clave settled a
+           chain searched by a reference — how many answers missed first */
+        if (prior!.referenceSource) {
+          localExtra = {
+            confirmation: JSON.stringify({ ...confirmationOf(payment), tieBreakMisses: await chainMisses(db, payment) }),
+          };
+        }
       }
     }
   }
 
-  /* payment-without-receipt D11, D17 (FR-033, FR-015): a tail the payer
-     typed to answer an undecided row of their own chain — the sending
-     account's four digits, or the clave's last four characters — is
-     fitted against that row's kept transfers, with no call, exactly as
-     cep-bundle-match D11 fits a whole clave. A tail is never searched at
-     Banxico. One fit confirms from the record; none or several stays
-     undecided, and the page asks the next thing (D15). Only when the
-     searched data are the ones the older row searched: a correction of
-     the bank, the day, the amount or the reference searches again. */
+  /* confirmation-hierarchy D6 (FR-011–FR-014; amending 012 D11, D17) —
+     an answer to the tie-break: the sending account's four digits, the
+     clave's last four characters, or both, on a row that supersedes the
+     one waiting on it. `submitPayment` let it through only on such a row
+     (D11) and gave it the waiting row's reference, bank, day and amount,
+     with a way the waiting row's own answer gave and that fitted ridden
+     forward. It is read by `fitTieBreak` against the transfers that row
+     kept, with the claves another payment took since dropped, and it is
+     NEVER searched at the provider — not even when nothing is left to
+     read it against.
+
+       one     → the ordinary `valid` below, `by` from the fit
+                 (`sender_tail` | `clave_tail`), `tie_break = 'one'`, the
+                 chain's misses on the confirmation (D7, FR-019) — or,
+                 when another payment took that transfer since the search,
+                 TRANSFER_ALREADY_USED, as a whole clave would hear;
+       needs / clave → `several` (or `one`, when the digits alone chose an
+                 account that paid another person) — the trail carried,
+                 undecided, and the status asks what is left (D9);
+       none    → `none` — the trail carried unchanged, undecided, asked
+                 again; three on the link in 24 hours close the tie-break
+                 there (D8). */
   if (!local && sourced && payment.supersedesId && !payment.trackingKey && (payment.claveTail || payment.senderTail) && !crossCheck && !receiptDoor) {
     const [prior] = await db
       .select()
       .from(payments)
       .where(and(eq(payments.id, payment.supersedesId), eq(payments.businessId, business.id)));
     const priorTrail = prior?.lastError === "CEP_UNDECIDED" && prior.matchTrail ? (JSON.parse(prior.matchTrail) as MatchTrail) : null;
-    if (prior && priorTrail && sameSearch(prior, payment)) {
-      const keptClaves = priorTrail.candidates
-        .filter((c) => c.cepId && !["amount", "account", "used", "excluded", "unreadable"].includes(c.why ?? ""))
-        .map((c) => c.clave);
-      const usedNow = await usedAmong(db, business.id, payment.id, keptClaves);
-      const free = (await recordsFor(db, business.id, keptClaves)).filter((r) => !usedNow.has(r.clave.toUpperCase()));
-      let fits: CepRecord[];
-      let by: "clave_tail" | "sender_tail";
-      if (payment.claveTail) {
-        const fit = fitClaveTail(payment.claveTail, free.map((r) => r.clave));
-        fits = fit ? free.filter((r) => r.clave === fit) : [];
-        by = "clave_tail";
-      } else {
-        fits = free.filter((r) => tailFits(payment.senderTail!, r));
-        by = "sender_tail";
-      }
-      const claimed = fits.length === 1 ? await chooseAndClaimOne(db, payment.id, fits[0].clave) : false;
-      if (claimed) {
-        local = promote(fits[0], { validationId: prior.constaValidationId ?? "" }, payment.senderBank);
-        localTrail = {
+    const keptClaves = priorTrail && sameSearch(prior!, payment) ? keptClavesOf(priorTrail) : [];
+    const answerOf = { time: null, tail: payment.senderTail };
+    if (!prior || !priorTrail || !keptClaves.length) {
+      /* Nothing kept to read it against: the row waits undecided, and the
+         status asks the whole clave (data-model "The ask") */
+      return update({
+        lastError: "CEP_UNDECIDED",
+        disputedFields: JSON.stringify(["trackingKey"]),
+        nextValidationAt: null,
+        ...(prior?.matchTrail ? { matchTrail: prior.matchTrail } : {}),
+      });
+    }
+    /* D6: the `used` check re-read now — over the transfers the waiting
+       row kept and the ones its search found already used: a transfer
+       another payment claimed since the search is no longer one the
+       answer may choose, and one released since is again */
+    const searched = [...new Set([...keptClaves, ...usedClavesOf(priorTrail)])];
+    const usedNow = await usedAmong(db, business.id, payment.id, searched);
+    const records = await recordsFor(db, business.id, searched);
+    const free = records.filter((r) => !usedNow.has(r.clave.toUpperCase()));
+    const reference = await referenceOfLink(db, link, now);
+    const others = await accountsOfOthers(db, business.id, reference?.id ?? null, customerKeyOf(link), records.map((r) => r.senderAccount));
+    const answer = { senderTail: payment.senderTail, claveTail: payment.claveTail };
+    const fit = fitTieBreak(answer, free, [...others]);
+    /* An answer that fits none of the transfers still free, but names one
+       another payment holds — before the search or since — is no miss:
+       the payer told us which transfer is theirs, and it is already used.
+       That is what a whole clave hears (cep-bundle-match D18), and how the
+       owner of a transfer taken by a guess finds out (spec Assumptions,
+       012 FR-013). A claim the unique index refuses at this instant is the
+       same fact. (Found on the sandbox, 2026-10-01: a transfer one link
+       confirmed came back to another link's search as `used`, and the
+       payer naming it was told their data matched nothing.) */
+    const taken = fit.fit === "none" ? fitTieBreak(answer, records.filter((r) => usedNow.has(r.clave.toUpperCase())), []) : null;
+    const claimed = fit.fit === "one" ? await chooseAndClaimOne(db, payment.id, fit.chosen.clave) : false;
+    if ((taken && taken.fit !== "none") || (fit.fit === "one" && !claimed)) {
+      const clave = fit.fit === "one" ? fit.chosen.clave : taken?.fit === "one" ? taken.chosen.clave : null;
+      return update({
+        status: "invalid",
+        nextValidationAt: null,
+        lastError: "TRANSFER_ALREADY_USED",
+        /* 012 D24: which clave, so the status can say whose payment used it */
+        ...(clave ? { confirmation: JSON.stringify({ ...confirmationOf(payment), usedClave: clave }) } : {}),
+      });
+    }
+    if (fit.fit === "one" && claimed) {
+      local = promote(fit.chosen, { validationId: prior.constaValidationId ?? "" }, payment.senderBank);
+      localTrail = {
+        ...priorTrail,
+        decided: "chosen",
+        by: fit.by,
+        reason: null,
+        receipt: answerOf,
+        candidates: priorTrail.candidates.map((c) =>
+          c.clave === fit.chosen.clave ? { ...c, fate: "chosen" as const, why: null } : c,
+        ),
+      };
+      localExtra = {
+        tieBreak: "one",
+        confirmation: JSON.stringify({ ...confirmationOf(payment), tieBreakMisses: await chainMisses(db, payment) }),
+      };
+    } else {
+      /* The digits alone chose one transfer, from an account that paid
+         another person: one fitted, and the characters are asked */
+      const digitsChoseOne =
+        fit.fit === "needs" &&
+        !payment.claveTail &&
+        free.filter((r) => tailFits(payment.senderTail!.replace(/\D/g, ""), r)).length === 1;
+      const outcome: "none" | "one" | "several" = fit.fit === "none" ? "none" : digitsChoseOne ? "one" : "several";
+      /* The waiting row's trail, carried; what another payment took since
+         reads `used` */
+      const candidates = priorTrail.candidates.map((c) =>
+        c.fate === "kept" && usedNow.has(c.clave.toUpperCase()) ? { ...c, fate: "dropped" as const, why: "used" as const } : c,
+      );
+      const stillKept = candidates.some((c) => c.fate === "kept");
+      return update({
+        lastError: "CEP_UNDECIDED",
+        disputedFields: JSON.stringify(["trackingKey"]),
+        nextValidationAt: null,
+        tieBreak: outcome,
+        matchTrail: JSON.stringify({
           ...priorTrail,
-          decided: "chosen",
-          by,
-          reason: null,
-          receipt: { time: null, tail: payment.senderTail },
-          candidates: priorTrail.candidates.map((c) =>
-            c.clave === fits[0].clave ? { ...c, fate: "chosen" as const, why: null } : c,
-          ),
-        };
-      } else {
-        const left = new Set((fits.length > 1 ? fits : []).map((r) => r.clave));
-        return update({
-          lastError: "CEP_UNDECIDED",
-          disputedFields: JSON.stringify(["trackingKey"]),
-          nextValidationAt: null,
-          matchTrail: JSON.stringify({
-            ...priorTrail,
-            decided: "undecided",
-            by: null,
-            reason: left.size ? "no_signal" : fits.length === 1 ? "all_used" : "none_fit",
-            receipt: { time: null, tail: payment.senderTail },
-            candidates: priorTrail.candidates.map((c) =>
-              left.has(c.clave)
-                ? { ...c, fate: "kept" as const, why: null }
-                : c.fate === "kept"
-                  ? { ...c, fate: "dropped" as const, why: "tail" as const }
-                  : c,
-            ),
-          } satisfies MatchTrail),
-        });
-      }
+          decided: "undecided",
+          by: null,
+          reason: stillKept ? priorTrail.reason : "all_used",
+          receipt: answerOf,
+          candidates,
+        } satisfies MatchTrail),
+      });
     }
   }
 
@@ -1040,6 +1150,8 @@ export async function runValidation(
     ...(read?.senderTail && payment.senderTail == null ? { senderTail: read.senderTail } : {}),
     /* D11/D14: a clave fitted to a kept candidate, or pulled from a record */
     ...(localTrail ? { matchTrail: JSON.stringify(localTrail), matchDistanceS: null } : {}),
+    /* confirmation-hierarchy D7: an answer's outcome and the chain's misses */
+    ...localExtra,
     /* payment-without-receipt D14: an attempt that got an answer is a round,
        and every day it searched joins the read-back */
     ...(sourced && !local
@@ -1087,8 +1199,11 @@ export async function runValidation(
       ? (verdict.reading?.senderBank ?? read?.senderBank ?? asked?.senderBank ?? null)
       : payment.senderBank;
     /* payment-without-receipt D10, D11, D26: a row searched by a payer's
-       reference is judged in its own mode, with what was learned of them */
-    const payer = await payerSide(db, payment, link, now);
+       reference is judged in its own mode, with what was learned of them —
+       and, since confirmation-hierarchy D4, with whose accounts the
+       transfers found came from */
+    const found: CepRecord[] = several ? (bundle?.status === "read" ? bundle.candidates : []) : verdict.record ? [verdict.record] : [];
+    const payer = await payerSide(db, payment, link, now, found);
     const receipt = { ...receiptSideOf(payment, read, searchedCents, accounts, asked?.day ?? null), ...payer.side };
     /* bug: single-cep-unreadable (D19): a single whose cadena did not read
        is still the one transfer Banxico named — it rides the trail,
@@ -1137,7 +1252,7 @@ export async function runValidation(
     if (several && bundle!.status !== "read") return undecided(bundle!.status as "unreadable" | "too_large");
     if (several) await nudgeHolders(db, business.id, payment.id, bundle!.candidates.map((c) => c.clave), now);
 
-    const candidates: CepRecord[] = several ? bundle!.candidates : verdict.record ? [verdict.record] : [];
+    const candidates: CepRecord[] = found;
     if (!several && !verdict.record) {
       /* D9: a single `valid` whose cadena could not be read (D4, D19).
          With a time or a tail on the receipt there is nothing to hold them
@@ -1145,7 +1260,10 @@ export async function runValidation(
          it and it confirms as it always did. */
       /* payment-without-receipt D11: a typed reference never confirms
          without a second fact, and an unread cadena holds no account to
-         tie — so it is asked, like a receipt that shows a time */
+         tie — so it is asked, like a receipt that shows a time.
+         confirmation-hierarchy D9: it keeps no transfer a four-character
+         answer could be read against (the record did not read), so it
+         asks the whole clave rather than the tie-break (tasks T032) */
       if (receipt.time || receipt.tail || payment.referenceSource === "typed") return undecided("unreadable");
     } else if (!candidates.length) {
       return undecided(unreadable.length ? "unreadable" : "none_fit");
@@ -1642,7 +1760,8 @@ export async function chooseAndClaim(
 
 /* payment-without-receipt D11, D17: the one clave a typed tail chose, taken
    onto the row before anything confirms — the unique index refuses it
-   when another live payment already holds it */
+   when another live payment already holds it (confirmation-hierarchy D6:
+   the clave a tie-break answer chose) */
 async function chooseAndClaimOne(db: DB, paymentId: string, clave: string): Promise<boolean> {
   try {
     await db.update(payments).set({ trackingKey: clave }).where(eq(payments.id, paymentId));

@@ -215,14 +215,17 @@ describe("cash-at-stores US2 — the operator's stores (D4, D6, FR-001–FR-005)
     expect((await late.json()).error.code).toBe("ALREADY_ACCEPTED");
   });
 
-  it("suspending deletes the shopkeeper's sessions and the next store request is refused; reactivating restores access", async () => {
+  it("suspending refuses the shopkeeper's next action with STORE_SUSPENDED — the screen that says so — and ends that session; reactivating restores access (T077)", async () => {
     await seedBusiness();
     const store = await seedStore();
     const { userId, cookie } = await storeSession(store);
     const res = await asOperator(`/platform/stores/${store.id}`, patch({ status: "suspended" }));
     expect((await res.json()).data.status).toBe("suspended");
+    const next = await callStore("/store/cashbox", { headers: { Cookie: cookie } });
+    expect(next.status).toBe(403);
+    expect((await next.json()).error.code).toBe("STORE_SUSPENDED");
+    /* the refusal ended the session it answered */
     expect(await db().select().from(sessionTable).where(eq(sessionTable.userId, userId))).toHaveLength(0);
-    expect((await callStore("/store/cashbox", { headers: { Cookie: cookie } })).status).toBe(401);
 
     const back = await asOperator(`/platform/stores/${store.id}`, patch({ status: "active" }));
     expect((await back.json()).data.status).toBe("active");
@@ -291,6 +294,20 @@ describe("cash-at-stores US2 — the switch, one capable business at a time (D7,
     expect((await again.json()).data.storeChannel).toEqual({ on: true, since });
   });
 
+  it("two switch-ons at the same moment: one business gets the channel, the other ONE_BUSINESS_AT_A_TIME (T090)", async () => {
+    const a = await seedBusiness({ wisphubApiKey: "wh-key-1" });
+    const b = await seedBusiness({ email: "otro@isp.mx", wisphubApiKey: "wh-key-2" });
+    const [ra, rb] = await Promise.all([
+      asOperator(`/platform/businesses/${a.id}`, patch({ storeChannel: true })),
+      asOperator(`/platform/businesses/${b.id}`, patch({ storeChannel: true })),
+    ]);
+    expect([ra.status, rb.status].sort()).toEqual([200, 409]);
+    const loser = ra.status === 409 ? ra : rb;
+    expect((await loser.json()).error.code).toBe("ONE_BUSINESS_AT_A_TIME");
+    const on = await db().select({ id: businesses.id }).from(businesses).where(eq(businesses.storeChannelOn, true));
+    expect(on).toHaveLength(1);
+  });
+
   it("the fee override still patches alone", async () => {
     const business = await seedBusiness();
     const res = await asOperator(`/platform/businesses/${business.id}`, patch({ feeOverrideCents: 300 }));
@@ -341,6 +358,21 @@ describe("cash-at-stores US2 — corrections in a store's cash book (D21, FR-030
     expect(res.status).toBe(404);
     const short = await asOperator(`/platform/stores/${other.id}/ledger/${business.id}/corrections`, post({ paymentId: payment.id, cents: 100, reason: "x" }));
     expect(short.status).toBe(400);
+    /* T091: the rest of FR-030's refusals — another business's book, a
+       zero amount, a reason past 280 characters */
+    const elsewhere = await seedBusiness({ email: "otro@isp.mx" });
+    const foreign = await asOperator(
+      `/platform/stores/${other.id}/ledger/${elsewhere.id}/corrections`,
+      post({ paymentId: payment.id, cents: 100, reason: "por error" }),
+    );
+    expect(foreign.status).toBe(404);
+    const zero = await asOperator(`/platform/stores/${other.id}/ledger/${business.id}/corrections`, post({ paymentId: payment.id, cents: 0, reason: "por error" }));
+    expect(zero.status).toBe(400);
+    const long = await asOperator(
+      `/platform/stores/${other.id}/ledger/${business.id}/corrections`,
+      post({ paymentId: payment.id, cents: 100, reason: "x".repeat(281) }),
+    );
+    expect(long.status).toBe(400);
     expect(await db().select().from(storeLedger)).toHaveLength(0);
     expect(integrations).toBeTruthy();
   });

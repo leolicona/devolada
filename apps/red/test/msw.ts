@@ -6,6 +6,7 @@ import {
   collectionStatusResponse,
   invitationPreviewResponse,
   storeLedgerResponse,
+  storeHandoversResponse,
   storeMeResponse,
   storeQuoteResponse,
   storeSearchResponse,
@@ -92,6 +93,7 @@ export const cashbox = (over: Record<string, unknown> = {}) =>
         businessName: "WiFi Plus",
         heldCents: 435000,
         feesSinceHandoverCents: 4500,
+        feesSince: null,
         lastHandover: null,
         pendingHandover: null,
         ...over,
@@ -100,6 +102,9 @@ export const cashbox = (over: Record<string, unknown> = {}) =>
   });
 
 export const ledger = (rows: unknown[], nextCursor: string | null = null) => storeLedgerResponse.parse({ rows, nextCursor });
+
+export const handoverList = (handovers: unknown[], nextCursor: string | null = null) =>
+  storeHandoversResponse.parse({ businessName: "WiFi Plus", handovers, nextCursor });
 
 export const invitation = (state: "open" | "invalid") =>
   invitationPreviewResponse.parse(state === "open" ? { state, storeName: "Abarrotes Lupita", phoneTail: "5678" } : { state });
@@ -123,6 +128,8 @@ export const handlers = {
   cashbox: (r: () => Reply) => http.get("/store/cashbox", () => r()),
   ledger: (r: (url: URL) => Reply) => http.get("/store/ledger", ({ request }) => r(new URL(request.url))),
   handover: (r: (body: unknown) => Reply) => http.post("/store/handovers", async ({ request }) => r(await request.json())),
+  /* T080 */
+  handovers: (r: (url: URL) => Reply) => http.get("/store/handovers", ({ request }) => r(new URL(request.url))),
   invitation: (r: (token: string) => Reply) => http.get("/store/invitations/:token", ({ params }) => r(String(params.token))),
   accept: (r: (body: unknown) => Reply) =>
     http.post("/store/invitations/:token/accept", async ({ request }) => r(await request.json())),

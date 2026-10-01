@@ -154,7 +154,8 @@ export function LoginScreen() {
         </div>
       )}
 
-      <Link to="/recuperar" className="block text-center text-sm font-medium text-link">
+      {/* T083 (constitution VI): a 48px target, like every control here */}
+      <Link to="/recuperar" className="flex min-h-12 items-center justify-center text-sm font-medium text-link">
         Olvidé mi contraseña
       </Link>
     </AccessLayout>

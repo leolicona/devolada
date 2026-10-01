@@ -150,7 +150,7 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-/* cash-at-stores T033, T040, T051, T060: every new screen, measured where
+/* cash-at-stores US1–US5 (T033, T040, T051, T060, T083): every new screen, measured where
    its inks land — the store app's counter and cash book on the phone, and
    the panel's Tiendas tab, cash rows in Pagos and Puntos de pago. The
    statuses there (Entrega pendiente, En disputa, Tienda suspendida, the
@@ -176,7 +176,50 @@ const storeScreens: {
   { name: "Cobrar: pago registrado", url: `${RED}/cobros/pay-1`, stub: (page) => stubRedApi(page), ready: "DV-7K2Q9M" },
   { name: "Cobrar: avisando al negocio", url: `${RED}/cobros/pay-1`, stub: (page) => stubRedApi(page, { collection: "queued" }), ready: "Estamos avisando al negocio" },
   { name: "Entrar", url: `${RED}/entrar`, stub: async () => {}, ready: "Olvidé mi contraseña" },
-  { name: "Mi caja", url: `${RED}/caja`, stub: (page) => stubRedApi(page), ready: "WiFi Plus dice:" },
+  { name: "Recuperar", url: `${RED}/recuperar`, stub: async () => {}, ready: "Volver a entrar" },
+  { name: "Invitación", url: `${RED}/invitacion/tok-1`, stub: (page) => stubRedApi(page), ready: "Abarrotes Lupita" },
+  {
+    name: "Tienda suspendida",
+    url: `${RED}/`,
+    stub: async (page) => {
+      /* T096: the screen as the app reaches it — the session answers that
+         the store is suspended (FR-014) */
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ success: false, error: { code: "STORE_SUSPENDED" } }) }),
+      );
+    },
+    ready: "Tu tienda está suspendida",
+  },
+  {
+    name: "Cuenta de otro tipo",
+    url: `${RED}/`,
+    stub: async (page) => {
+      /* T083: a business member signed in on the store app (FR-013) */
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true, data: { type: "business" } }) }),
+      );
+    },
+    ready: "Esta cuenta no es de una tienda",
+  },
+  { name: "Entregas", url: `${RED}/caja/entregas?businessId=business-1`, stub: (page) => stubRedApi(page), ready: "«Faltaron $200 en el sobre»" },
+  { name: "Movimientos de un negocio", url: `${RED}/movimientos?businessId=business-1&kind=collection`, stub: (page) => stubRedApi(page), ready: "Ver todos" },
+  {
+    name: "Mi caja",
+    url: `${RED}/caja`,
+    stub: (page) => stubRedApi(page),
+    /* T080 made the card one 48px link taller; at 720px the passkey button
+       then sits under the sticky tab bar, which axe's target-size reads as
+       "obscured" — a scroll position, not a layout. The full card is
+       measured here; responsive.spec measures every target at 48px. */
+    open: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1000 });
+    },
+    ready: "WiFi Plus dice:",
+  },
   { name: "Registrar entrega", url: `${RED}/caja/entrega?businessId=business-1`, stub: (page) => stubRedApi(page), ready: "La entrega quedará pendiente" },
   { name: "Movimientos", url: `${RED}/movimientos`, stub: (page) => stubRedApi(page), ready: "Corrección de Devolada" },
   {
@@ -228,6 +271,20 @@ for (const theme of ["light", "dark"] as const) {
         await page.goto(screen.url);
         await screen.open?.(page);
         await expect(page.getByText(screen.ready).first()).toBeVisible();
+        /* T084: an outcome fades in (`reveal`, opacity only); its inks are
+           measured once it has landed, not halfway. A waiting region's
+           breath dips to `--opacity-breath` and back for as long as it
+           waits (design-foundations D16); axe would read whichever instant
+           it landed on, so the breath is held at its first frame, full ink,
+           as every breathing screen is measured before its breath starts. */
+        await page.evaluate(() => {
+          for (const a of document.getAnimations()) {
+            if (a.effect?.getComputedTiming().iterations === Infinity) {
+              a.pause();
+              a.currentTime = 0;
+            } else a.finish();
+          }
+        });
 
         const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
         const readable = results.violations.map(

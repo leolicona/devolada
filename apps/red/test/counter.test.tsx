@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse } from "msw";
 import {
   cashbox,
   collection,
@@ -157,6 +158,57 @@ describe("cash-at-stores US1 — the quote and the confirmation", () => {
     expect(await screen.findByRole("button", { name: "Cobrar $514.00" })).toBeEnabled();
   });
 
+  it("after a payment, the same customer's quote is read again — never the debt from before (T081, FR-018)", async () => {
+    let quotes = 0;
+    let release: () => void = () => {};
+    server.use(
+      handlers.quote(async () => {
+        quotes += 1;
+        if (quotes === 1) return ok(owes);
+        /* the second read is slow; the old amount must not show meanwhile */
+        await new Promise<void>((r) => (release = r));
+        return ok(noDebt);
+      }),
+      handlers.record(() => ok({ id: "pay-1", folio: "DV-7K2Q9M" }, 201)),
+      handlers.collection(() => ok(collection())),
+    );
+    const { router } = renderApp("/cobro/greyes%40wifiplus");
+    await userEvent.click(await screen.findByRole("button", { name: "Cobrar $813.00" }));
+    expect(await screen.findByText("DV-7K2Q9M")).toBeInTheDocument();
+    void router.navigate({ to: "/cobro/$usuario", params: { usuario: "greyes@wifiplus" } });
+    await waitFor(() => expect(quotes).toBe(2));
+    expect(screen.queryByRole("button", { name: /Cobrar \$813\.00/ })).toBeNull();
+    expect(screen.queryByText("$798.00")).toBeNull();
+    release();
+    expect(await screen.findByText(/no tiene adeudo/)).toBeInTheDocument();
+  });
+
+  it("a refused quote says its real reason (T095, FR-028)", async () => {
+    server.use(handlers.quote(() => fail("NOT_CAPABLE", 409)));
+    renderApp("/cobro/greyes%40wifiplus");
+    expect(await screen.findByText("Por ahora no se puede cobrar a clientes de este negocio.")).toBeInTheDocument();
+    expect(screen.queryByText(/Revisa tu conexión/)).toBeNull();
+  });
+
+  it("a retry after a lost signal sends the same key, so the payment is never made twice (T093, FR-023, US1/AC13)", async () => {
+    const keys: unknown[] = [];
+    server.use(
+      handlers.quote(() => ok(owes)),
+      handlers.record((b) => {
+        keys.push((b as { collectionKey: unknown }).collectionKey);
+        return keys.length === 1 ? HttpResponse.error() : ok({ id: "pay-1", folio: "DV-7K2Q9M" }, 200);
+      }),
+      handlers.collection(() => ok(collection())),
+    );
+    renderApp("/cobro/greyes%40wifiplus");
+    await userEvent.click(await screen.findByRole("button", { name: "Cobrar $813.00" }));
+    expect(await screen.findByText(/Sin conexión\. Si ya tocaste Cobrar, vuelve a tocarlo/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Cobrar $813.00" }));
+    expect(await screen.findByText("DV-7K2Q9M")).toBeInTheDocument();
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
   it("the record carries the amounts shown and one key, and lands on the result", async () => {
     let body: Record<string, unknown> = {};
     server.use(
@@ -234,10 +286,55 @@ describe("cash-at-stores US1 — the result", () => {
     expect(screen.queryByText(/No pudimos cargar este pago/)).toBeNull();
   });
 
+  it("asks again every 3 s while queued, and stops once the business answers (T093, D25)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let calls = 0;
+      server.use(
+        handlers.collection(() => {
+          calls += 1;
+          return ok(collection({ outcome: calls < 3 ? "queued" : "reconnected" }));
+        }),
+      );
+      renderApp("/cobros/pay-1");
+      expect(await screen.findByText("Reconexión en cola")).toBeInTheDocument();
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(1200);
+      await waitFor(() => expect(calls).toBe(2));
+      await vi.advanceTimersByTimeAsync(3200);
+      expect(await screen.findByText("Reconectado")).toBeInTheDocument();
+      expect(calls).toBe(3);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(calls).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("the copy button says what it copies (T094)", async () => {
     server.use(handlers.collection(() => ok(collection())));
     renderApp("/cobros/pay-1");
     expect(await screen.findByRole("button", { name: "Copiar comprobante" })).toBeInTheDocument();
+  });
+
+  it("*Copiar comprobante* copies the receipt's text and says so (T093)", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    server.use(handlers.collection(() => ok(collection())), handlers.receipt(() => ok(receipt())));
+    renderApp("/cobros/pay-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Copiar comprobante" }));
+    expect(await screen.findByText(/Comprobante copiado/)).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith(receipt().text);
+  });
+
+  it("*Nuevo cobro* goes back to an empty search (T093)", async () => {
+    server.use(handlers.collection(() => ok(collection())));
+    renderApp("/cobros/pay-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Nuevo cobro" }));
+    const box = await screen.findByLabelText("Buscar cliente");
+    expect(box).toHaveValue("");
   });
 
   it("a short payment says what remains owed", async () => {
@@ -277,5 +374,29 @@ describe("cash-at-stores US1 — the result", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Usar otro número" }));
     expect(await screen.findByLabelText("WhatsApp del cliente (10 dígitos)")).toBeInTheDocument();
     expect(opened.urls).toEqual([]);
+  });
+});
+
+describe("cash-at-stores US1 — the frame around the counter (T093)", () => {
+  it("a lost signal is said in a banner, and the banner leaves when it returns (D26)", async () => {
+    renderApp("/");
+    expect(await screen.findByLabelText("Buscar cliente")).toBeInTheDocument();
+    expect(screen.queryByText("Sin conexión. Revisa tu internet.")).toBeNull();
+    fireEvent(window, new Event("offline"));
+    expect(await screen.findByRole("status")).toHaveTextContent("Sin conexión. Revisa tu internet.");
+    fireEvent(window, new Event("online"));
+    await waitFor(() => expect(screen.queryByText("Sin conexión. Revisa tu internet.")).toBeNull());
+  });
+
+  it("the tab of the screen in view is the current page, and only that one", async () => {
+    server.use(handlers.cashbox(() => ok(cashbox())));
+    renderApp("/");
+    const tabs = await screen.findByRole("navigation", { name: "Secciones" });
+    expect(within(tabs).getByRole("link", { name: "Cobrar" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Caja" })).not.toHaveAttribute("aria-current");
+    await userEvent.click(within(tabs).getByRole("link", { name: "Caja" }));
+    await waitFor(() => expect(within(tabs).getByRole("link", { name: "Caja" })).toHaveAttribute("aria-current", "page"));
+    expect(within(tabs).getByRole("link", { name: "Cobrar" })).not.toHaveAttribute("aria-current");
+    expect(within(tabs).getByRole("link", { name: "Movimientos" })).not.toHaveAttribute("aria-current");
   });
 });

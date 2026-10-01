@@ -84,7 +84,8 @@ export function RecoverScreen() {
           </Button>
         </Pending>
       </form>
-      <Link to="/entrar" className="block text-center text-sm font-medium text-link">
+      {/* T083 (constitution VI): a 48px target */}
+      <Link to="/entrar" className="flex min-h-12 items-center justify-center text-sm font-medium text-link">
         Volver a entrar
       </Link>
     </AccessLayout>

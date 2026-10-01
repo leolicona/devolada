@@ -55,6 +55,16 @@ const RECORD_ERRORS: Record<string, string> = {
   NETWORK_ERROR: "Sin conexión. Si ya tocaste Cobrar, vuelve a tocarlo cuando regrese la señal: no se cobra dos veces.",
 };
 
+/* T095 (FR-028): a refused quote says its real reason — a lost signal is
+   one reason among several, never the word for all of them */
+function quoteErrorSay(error: unknown): string {
+  const code = error instanceof ApiError ? error.code : "";
+  if (code === "CHANNEL_OFF") return "Por ahora no hay negocios para cobrar en esta tienda.";
+  if (code === "NOT_CAPABLE") return "Por ahora no se puede cobrar a clientes de este negocio.";
+  if (code === "NETWORK_ERROR") return "Revisa tu conexión e intenta de nuevo.";
+  return "El sistema del negocio no respondió. Intenta de nuevo en unos minutos.";
+}
+
 function Collect({ quote, usuario }: { quote: Owes; usuario: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -87,6 +97,9 @@ function Collect({ quote, usuario }: { quote: Owes; usuario: string }) {
         expectedFeeCents: quote.feeCents,
         collectionKey,
       });
+      /* T081: the debt this quote read is spent — the next quote for this
+         customer reads it again, never from the cache */
+      queryClient.removeQueries({ queryKey: ["store-quote", usuario] });
       void navigate({ to: "/cobros/$id", params: { id } });
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "UNKNOWN_ERROR";
@@ -146,6 +159,10 @@ function Collect({ quote, usuario }: { quote: Owes; usuario: string }) {
 export function QuoteScreen() {
   const { usuario } = useParams({ strict: false }) as { usuario: string };
   const quote = useQuery({ queryKey: ["store-quote", usuario], queryFn: () => getQuote(usuario), staleTime: 0 });
+  /* T081 (FR-018, the spec's edge case "never shows an amount it did not
+     just read"): a quote still in the cache waits for the fresh read —
+     *Cobrar* is never offered on an amount from before */
+  const reading = quote.isPending || (quote.isFetching && !quote.isFetchedAfterMount);
 
   return (
     <section className="space-y-4" aria-labelledby="cobro-title">
@@ -153,13 +170,13 @@ export function QuoteScreen() {
         <ArrowLeft className="size-5" aria-hidden />
         Buscar otro cliente
       </Link>
-      <Pending active={quote.isPending} label="Leyendo el adeudo" shape={<Skeleton className="h-40 w-full" />}>
-        {quote.isError ? (
+      <Pending active={reading} label="Leyendo el adeudo" shape={<Skeleton className="h-40 w-full" />}>
+        {reading ? null : quote.isError ? (
           <Card className="space-y-3 p-6">
             <h1 id="cobro-title" className="text-lg font-semibold">
               No pudimos leer el adeudo
             </h1>
-            <p className="text-base text-ink-soft">Revisa tu conexión e intenta de nuevo.</p>
+            <p className="text-base text-ink-soft">{quoteErrorSay(quote.error)}</p>
             <Button variant="secondary" onClick={() => quote.refetch()}>
               <RefreshCw className="size-5" aria-hidden />
               Intentar de nuevo

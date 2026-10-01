@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import {
@@ -31,6 +31,7 @@ import {
   encodeLedgerCursor,
   feesSinceHandoverCents,
   heldCents,
+  lastHandoverAt,
   ledgerRowsOf,
   movementsOf,
 } from "../../store-ledger";
@@ -43,12 +44,15 @@ import {
   STORE_SEARCH_LIMIT,
   STORE_SEARCH_MIN,
   STORE_LEDGER_PAGE,
+  STORE_HANDOVERS_PAGE,
   type AcceptStoreInvitationRequest,
   type CashboxResponse,
   type DeclareHandoverRequest,
   type DeclareHandoverResponse,
   type StoreLedgerQuery,
   type StoreLedgerResponse,
+  type StoreHandoversQuery,
+  type StoreHandoversResponse,
   type CollectionOutcome,
   type InvitationPreviewResponse,
   type CollectionReceiptResponse,
@@ -539,18 +543,26 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
     returnHeaders: true,
   });
   const userId = response.user.id;
+  /* T089 (D5's rollback): the store is linked FIRST, and the phone and the
+     invitation are written only if that link is this user's — so a
+     request that lost the race writes nothing, never meets the phone's
+     unique index, and leaves the invitation as the winner left it */
+  const linkedHere = sql`exists (select 1 from ${stores} where ${stores.id} = ${store.id} and ${stores.userId} = ${userId})`;
   try {
-    const [, linked] = await db.batch([
-      db.update(userTable).set({ username: store.phone, displayUsername: store.phone }).where(eq(userTable.id, userId)),
+    const [linked] = await db.batch([
       db
         .update(stores)
         .set({ userId, status: "active", updatedAt: now })
-        .where(and(eq(stores.id, store.id), eq(stores.status, "invited")))
+        .where(and(eq(stores.id, store.id), eq(stores.status, "invited"), isNull(stores.userId)))
         .returning({ id: stores.id }),
+      db
+        .update(userTable)
+        .set({ username: store.phone, displayUsername: store.phone })
+        .where(and(eq(userTable.id, userId), linkedHere)),
       db
         .update(storeInvitations)
         .set({ status: "accepted" })
-        .where(and(eq(storeInvitations.id, invitation.id), eq(storeInvitations.status, "sent"))),
+        .where(and(eq(storeInvitations.id, invitation.id), eq(storeInvitations.status, "sent"), linkedHere)),
     ]);
     if (linked.length === 0) {
       await removeUser(db, userId);
@@ -558,6 +570,9 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
     }
   } catch (e) {
     await removeUser(db, userId);
+    /* the phone taken in between, by a path D3 does not foresee: the
+       same answer as the race, never a 500 */
+    if (isUniqueViolation(e)) return refuse(c, "INVALID_INVITATION", 400);
     throw e;
   }
 
@@ -599,9 +614,10 @@ export async function getCashbox(c: Ctx) {
   const data: CashboxResponse = {
     businesses: await Promise.all(
       list.map(async (b) => {
-        const [held, fees, [last], [pending]] = await Promise.all([
+        const [held, fees, since, [last], [pending]] = await Promise.all([
           heldCents(db, storeId, b.id),
           feesSinceHandoverCents(db, storeId, b.id),
+          lastHandoverAt(db, storeId, b.id),
           db
             .select()
             .from(storeHandovers)
@@ -618,6 +634,7 @@ export async function getCashbox(c: Ctx) {
           businessName: b.name,
           heldCents: held,
           feesSinceHandoverCents: fees,
+          feesSince: since ? since.getTime() : null,
           lastHandover: last
             ? {
                 cents: last.cents,
@@ -644,13 +661,65 @@ export async function getStoreLedger(c: Ctx, q: StoreLedgerQuery) {
   const list = await bookBusinessesOf(db, storeId);
   const ids = list.map((b) => b.id);
   if (q.businessId && !ids.includes(q.businessId)) return refuse(c, "NOT_FOUND", 404);
-  const page = await movementsOf(db, { storeId, businessIds: q.businessId ? [q.businessId] : ids, kind: q.kind }, cursor, STORE_LEDGER_PAGE);
+  const page = await movementsOf(
+    db,
+    { storeId, businessIds: q.businessId ? [q.businessId] : ids, kind: q.kind, since: q.since !== undefined ? new Date(q.since) : undefined },
+    cursor,
+    STORE_LEDGER_PAGE,
+  );
   const rows = await ledgerRowsOf(db, page.rows);
   const data: StoreLedgerResponse = {
     /* the store's view: no payment ids, no authors (D21's detail is the
        operator's and the business's) */
     rows: rows.map(({ paymentId: _p, authorEmail: _a, ...row }) => row),
     nextCursor: page.next ? encodeLedgerCursor(page.next) : null,
+  };
+  return c.json({ success: true, data });
+}
+
+/* GET /store/handovers — T080 (US5/AC6, "both sides see the same
+   history"): this store's hand-overs to one business it holds or held
+   cash for, newest first, a dispute's note included. Served whether or
+   not the channel is still on, like the rest of the cash book (H1). */
+export async function getStoreHandovers(c: Ctx, q: StoreHandoversQuery) {
+  const db = drizzle(c.env.DB);
+  const { storeId } = c.get("store");
+  const cursor = decodeLedgerCursor(q.cursor);
+  if (cursor === "bad") return refuse(c, "VALIDATION_ERROR", 400);
+  const business = (await bookBusinessesOf(db, storeId)).find((b) => b.id === q.businessId);
+  if (!business) return refuse(c, "NOT_FOUND", 404);
+  const rows = await db
+    .select()
+    .from(storeHandovers)
+    .where(
+      and(
+        eq(storeHandovers.storeId, storeId),
+        eq(storeHandovers.businessId, business.id),
+        ...(cursor
+          ? [
+              or(
+                lt(storeHandovers.declaredAt, new Date(cursor.at)),
+                and(eq(storeHandovers.declaredAt, new Date(cursor.at)), lt(storeHandovers.id, cursor.id)),
+              ),
+            ]
+          : []),
+      ),
+    )
+    .orderBy(desc(storeHandovers.declaredAt), desc(storeHandovers.id))
+    .limit(STORE_HANDOVERS_PAGE + 1);
+  const page = rows.slice(0, STORE_HANDOVERS_PAGE);
+  const last = page.at(-1);
+  const data: StoreHandoversResponse = {
+    businessName: business.name,
+    handovers: page.map((h) => ({
+      id: h.id,
+      cents: h.cents,
+      status: h.status,
+      declaredAt: h.declaredAt.getTime(),
+      resolvedAt: h.resolvedAt ? h.resolvedAt.getTime() : null,
+      note: h.note,
+    })),
+    nextCursor: rows.length > STORE_HANDOVERS_PAGE && last ? encodeLedgerCursor({ at: last.declaredAt.getTime(), id: last.id }) : null,
   };
   return c.json({ success: true, data });
 }

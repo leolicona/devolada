@@ -38,10 +38,11 @@ function Row({ row }: { row: StoreLedgerRow }) {
 }
 
 export function LedgerScreen() {
-  const search = useSearch({ strict: false }) as { businessId?: string; kind?: "collection" | "handover" | "correction" };
+  const search = useSearch({ strict: false }) as { businessId?: string; kind?: "collection" | "handover" | "correction"; since?: number };
   const ledger = useInfiniteQuery({
-    queryKey: ["store-ledger", search.businessId ?? null, search.kind ?? null],
-    queryFn: ({ pageParam }) => getLedger({ cursor: pageParam ?? undefined, businessId: search.businessId, kind: search.kind }),
+    queryKey: ["store-ledger", search.businessId ?? null, search.kind ?? null, search.since ?? null],
+    queryFn: ({ pageParam }) =>
+      getLedger({ cursor: pageParam ?? undefined, businessId: search.businessId, kind: search.kind, since: search.since }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });
@@ -61,9 +62,13 @@ export function LedgerScreen() {
         </h1>
         {narrowed && (
           <p className="text-sm text-ink-soft">
-            {search.kind === "collection" ? "Solo tus cobros" : "Solo un negocio"}
+            {search.kind === "collection"
+              ? search.since !== undefined
+                ? "Tus cobros desde la última entrega"
+                : "Solo tus cobros"
+              : "Solo un negocio"}
             {rows[0] ? ` de ${rows[0].businessName}` : ""} ·{" "}
-            <Link to="/movimientos" className="font-medium text-link">
+            <Link to="/movimientos" className="inline-flex min-h-12 items-center font-medium text-link">
               Ver todos
             </Link>
           </p>

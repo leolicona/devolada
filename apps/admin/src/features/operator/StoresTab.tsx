@@ -283,9 +283,21 @@ function StatusAction({ store }: { store: StoreRow }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* T086 (FR-005): a refusal is said at the control that met it */}
+      {change.error && (
+        <p role="alert" className="text-sm font-medium text-error">
+          {suspending ? "No se pudo suspender la tienda." : "No se pudo reactivar la tienda."} Actualiza la lista e intenta de nuevo.
+        </p>
+      )}
     </Pending>
   );
 }
+
+/* T086 (FR-004): why a re-send was refused, in the operator's words */
+const RESEND_ERRORS: Record<string, string> = {
+  ALREADY_ACCEPTED: "El tendero ya aceptó su invitación; no hay que reenviarla.",
+  NOT_FOUND: "La tienda ya no existe en la lista. Actualízala.",
+};
 
 function Resend({ store }: { store: StoreRow }) {
   const [invitation, setInvitation] = useState<StoreInvitation | null>(null);
@@ -300,6 +312,11 @@ function Resend({ store }: { store: StoreRow }) {
           Reenviar invitación
         </Button>
       </Pending>
+      {resend.error && (
+        <p role="alert" className="text-sm font-medium text-error">
+          {RESEND_ERRORS[resend.error.code] ?? "No se pudo reenviar la invitación. Intenta de nuevo."}
+        </p>
+      )}
       <DialogContent>
         <DialogTitle>Invitación nueva</DialogTitle>
         <DialogDescription>La invitación anterior dejó de funcionar.</DialogDescription>

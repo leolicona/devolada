@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { cashbox, fail, handlers, ledger, ok, server, storeMe } from "./msw";
+import { cashbox, fail, handoverList, handlers, ledger, ok, server, storeMe } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
@@ -66,6 +66,46 @@ describe("cash-at-stores US5 — Mi caja", () => {
     expect(await screen.findByText("Entrega pendiente")).toBeInTheDocument();
     expect(screen.getByText(/Entregaste \$2,000\.00 el 28 sep/)).toHaveTextContent("Esperamos a que WiFi Plus la confirme.");
     expect(screen.getByRole("link", { name: "Registrar entrega" })).toHaveAttribute("aria-disabled", "true");
+    await expectNoViolations(container);
+  });
+
+  it("after a hand-over, the fees open only the collections since it (T079, FR-037)", async () => {
+    const asked: URL[] = [];
+    server.use(
+      handlers.cashbox(() => ok(cashbox({ feesSince: day(24), lastHandover: { cents: 390000, status: "confirmed", at: day(24), note: null } }))),
+      handlers.ledger((url) => {
+        asked.push(url);
+        return ok(ledger([]));
+      }),
+    );
+    renderApp("/caja");
+    await userEvent.click(await screen.findByRole("link", { name: /Tus cargos desde la última entrega/ }));
+    await waitFor(() => expect(asked.at(-1)!.searchParams.get("since")).toBe(String(day(24))));
+    expect(asked.at(-1)!.searchParams.get("kind")).toBe("collection");
+    expect(await screen.findByText(/Tus cobros desde la última entrega/)).toBeInTheDocument();
+  });
+
+  it("the last hand-over opens every hand-over to that business — a dispute's note stays readable after the next one (T080, US5/AC6)", async () => {
+    const asked: URL[] = [];
+    server.use(
+      handlers.cashbox(() => ok(cashbox({ lastHandover: { cents: 390000, status: "confirmed", at: day(24), note: null } }))),
+      handlers.handovers((url) => {
+        asked.push(url);
+        return ok(
+          handoverList([
+            { id: "h3", cents: 390000, status: "confirmed", declaredAt: day(24, 12), resolvedAt: day(24), note: null },
+            { id: "h1", cents: 200000, status: "disputed", declaredAt: day(17, 12), resolvedAt: day(17, 19), note: "Faltaron $200 en el sobre" },
+          ]),
+        );
+      }),
+    );
+    const { container } = renderApp("/caja");
+    await userEvent.click(await screen.findByRole("link", { name: /Última entrega: \$3,900\.00/ }));
+    const list = await screen.findByRole("list", { name: "Entregas a WiFi Plus" });
+    expect(asked.at(-1)!.searchParams.get("businessId")).toBe("business-1");
+    expect(within(list).getByText("En disputa")).toBeInTheDocument();
+    expect(within(list).getByText("WiFi Plus dice: «Faltaron $200 en el sobre»")).toBeInTheDocument();
+    expect(within(list).getAllByText(/WiFi Plus la (confirmó|disputó) el/)).toHaveLength(2);
     await expectNoViolations(container);
   });
 

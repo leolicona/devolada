@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, LogOut, MessageSquareWarning } from "lucide-react";
-import { Alert, Button, Card, ListError, Pending, Skeleton, StatusBadge, formatMoney } from "@devolada/ui";
+import { Alert, Button, Card, ListError, Pending, Skeleton, StatusBadge, buttonVariants, cn, formatMoney } from "@devolada/ui";
 import type { CashboxResponse } from "@devolada/api/store-schema";
 import { dateOf } from "@/lib/datetime";
 import { PasskeyCard } from "@/features/auth/PasskeyCard";
@@ -35,9 +35,11 @@ function BusinessCash({ b }: { b: Business }) {
             <ChevronRight className="size-5 text-ink-soft" aria-hidden />
           </span>
         </Link>
+        {/* T079 (FR-037): the fees open into the collections they count —
+            from the last confirmed hand-over on */}
         <Link
           to="/movimientos"
-          search={{ businessId: b.businessId, kind: "collection" }}
+          search={{ businessId: b.businessId, kind: "collection", since: b.feesSince ?? undefined }}
           className="flex min-h-12 items-center justify-between gap-3 rounded-md px-4 py-2"
         >
           <span className="text-base">Tus cargos desde la última entrega</span>
@@ -60,9 +62,18 @@ function BusinessCash({ b }: { b: Business }) {
       {b.lastHandover && (
         <div className="space-y-1">
           <StatusBadge status={b.lastHandover.status === "confirmed" ? "confirmed" : "disputed"} size="standard" />
-          <p className="text-base text-ink-soft">
-            Última entrega: {formatMoney(b.lastHandover.cents)} el {dateOf(b.lastHandover.at)}.
-          </p>
+          {/* T079, T080: the last hand-over opens into every hand-over to
+              this business, disputes and their notes included */}
+          <Link
+            to="/caja/entregas"
+            search={{ businessId: b.businessId }}
+            className="flex min-h-12 items-center justify-between gap-3 text-base text-ink-soft"
+          >
+            <span>
+              Última entrega: {formatMoney(b.lastHandover.cents)} el {dateOf(b.lastHandover.at)}.
+            </span>
+            <ChevronRight className="size-5 shrink-0" aria-hidden />
+          </Link>
           {b.lastHandover.status === "disputed" && b.lastHandover.note && (
             /* confirm-cash-drop D7: the store sees the business's note */
             <Alert variant="warning" layout="icon">
@@ -73,17 +84,28 @@ function BusinessCash({ b }: { b: Business }) {
         </div>
       )}
 
+      {/* T087 (constitution VI): the shared button recipe on a link; a
+          link cannot be :disabled, so the recipe's own disabled fill is
+          spelled from its variant (design-review D6: a different fill,
+          never an opacity) */}
       <Link
         to="/caja/entrega"
         search={{ businessId: b.businessId }}
         disabled={!canDeclare}
         aria-disabled={!canDeclare}
-        className={`flex h-12 items-center justify-center rounded-md px-6 text-base font-medium ${
-          canDeclare ? "bg-accent text-ink-inverse" : "pointer-events-none border border-line bg-well text-ink-faint"
-        }`}
+        className={cn(
+          buttonVariants({ size: "standard" }),
+          "w-full",
+          !canDeclare && "pointer-events-none border border-line bg-well text-ink-faint",
+        )}
       >
         Registrar entrega
       </Link>
+      {!b.lastHandover && b.pendingHandover && (
+        <Link to="/caja/entregas" search={{ businessId: b.businessId }} className="inline-flex min-h-12 items-center text-base font-medium text-link">
+          Ver entregas
+        </Link>
+      )}
     </Card>
   );
 }

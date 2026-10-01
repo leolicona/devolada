@@ -791,25 +791,25 @@ before any code (T073, T088, T097, T098), and each of those says so.
   - `apps/admin/src/features/cash-points/CashPointsScreen.tsx:151, 184, 193` render `formatTime`, which is hour and minute only (`apps/admin/src/lib/datetime.ts:19-28`), for hand-overs that may be days old;
   - `resolvedAt` is in the schema (`apps/api/src/routes/cash-points/schema.ts:31`), and is never shown beside `resolvedBy`;
   - use `formatDateTime`, show `resolvedAt`, and assert both in `apps/admin/test/cash-points.test.tsx`.
-- [ ] T077 [US2] Show the suspended screen on the shopkeeper's next action, per US2/AC5 and FR-014 (partial):
+- [X] T077 [US2] Show the suspended screen on the shopkeeper's next action, per US2/AC5 and FR-014 (partial):
   - suspending deletes the shopkeeper's session rows (`apps/api/src/routes/platform/handler.ts:356`). The next request therefore answers 401 `AUTHENTICATION_ERROR` (`apps/api/src/auth/middleware.ts:115-117`), never `STORE_SUSPENDED`;
   - so the app shows the sign-in, and shows the suspended screen only after the password is typed again. `apps/api/test/cash-at-stores-operator.test.ts:225` accepts that 401;
   - make the next action answer `STORE_SUSPENDED`. For example: leave the session rows to `requireStore`, which already deletes them as it refuses, and refuse a suspended store's sign-in with the same code;
   - align `contracts/platform-stores-api.md` ("Suspending deletes the shopkeeper's session rows") and the test.
-- [ ] T078 [US3] Keep the business signup from replacing a shopkeeper's unverified account, per D2, D5 and FR-009 (missing):
+- [X] T078 [US3] Keep the business signup from replacing a shopkeeper's unverified account, per D2, D5 and FR-009 (missing):
   - `POST /auth/business/signup` treats any unverified user with that email as a half-typed address, and removes it (`apps/api/src/routes/auth.ts:53-56`);
   - take a shopkeeper who accepted the invitation and has not typed the code yet. `removeUser` deletes their sessions and their password row, then fails on `stores.user_id`'s foreign key. The answer is a 500, and the password is already gone;
   - answer `EMAIL_TAKEN` when the unverified user is a store's user, and run `removeUser`'s three deletes as one batch. Add the case to `apps/api/test/cash-at-stores-access.test.ts`.
-- [ ] T079 [US5] Make *Mi caja*'s fees open the collections they count, per FR-037 and US5/AC1 (partial):
+- [X] T079 [US5] Make *Mi caja*'s fees open the collections they count, per FR-037 and US5/AC1 (partial):
   - the figure counts the fees since the last confirmed hand-over (`apps/api/src/store-ledger/index.ts:127-148`), but its link opens every collection ever (`apps/red/src/features/cashbox/CashboxScreen.tsx:38-40`);
   - `storeLedgerQuery` has no lower bound (`apps/api/src/routes/store/schema.ts:177-181`). `/store/cashbox` gives no time for the last *confirmed* hand-over, because its `lastHandover` can be a dispute;
   - the last hand-over's amount is not a link;
   - add a `since` bound to `GET /store/ledger` (and to `contracts/store-api.md`), return the last confirmed hand-over's time, and use both from *Mi caja*. Extend `apps/api/test/cash-at-stores-handover.test.ts` and `apps/red/test/cashbox.test.tsx`.
-- [ ] T080 [US5] Give the store its hand-over history, so a dispute and its note stay readable on both sides, per US5/AC6 and US5's "both sides see the same history" (partial):
+- [X] T080 [US5] Give the store its hand-over history, so a dispute and its note stay readable on both sides, per US5/AC6 and US5's "both sides see the same history" (partial):
   - the store sees a resolved hand-over only as `lastHandover`, which is one row (`apps/api/src/routes/store/handler.ts:596-606`);
   - a dispute writes no movement (D20), so it never reaches *Movimientos*. Once the next hand-over is resolved, the store loses the dispute and its note, while the business keeps the full list at `GET /cash-points/stores/:storeId/history`;
   - add a store-side history route (record it in `contracts/store-api.md`) and open it from *Mi caja*, with API and component tests.
-- [ ] T081 [US1] Never show a cached debt with *Cobrar* live, per FR-018 and the spec's edge case "never shows an amount it did not just read" (partial):
+- [X] T081 [US1] Never show a cached debt with *Cobrar* live, per FR-018 and the spec's edge case "never shows an amount it did not just read" (partial):
   - `apps/red/src/features/counter/QuoteScreen.tsx:148, 156` wait only on `isPending`. A quote still in the cache therefore renders, with *Cobrar* enabled, while the fresh read runs;
   - nothing clears `store-quote` after a record. *Nuevo cobro* on the same customer shows the debt from before the payment, and the amount field is set once from it (`:64`);
   - the server's `AMOUNT_CHANGED` stops a wrong record, but the shopkeeper has already read a wrong amount to the payer;
@@ -818,51 +818,51 @@ before any code (T073, T088, T097, T098), and each of those says so.
   - `apps/red/src/features/counter/ResultScreen.tsx:175` swaps the folio card for *"No pudimos cargar este pago"* whenever `isError` is set;
   - TanStack Query sets it on a single failed poll while it still holds the data;
   - show the data when there is some, and the poll's failure inline. Test it in `apps/red/test/counter.test.tsx`.
-- [ ] T083 [US3] Bring red's sign-in, recovery, invitation, suspended and wrong-account screens, and the narrowed *Movimientos*, into the browser layer, per FR-012, Constitution VI (48px touch targets) and D28 (partial):
+- [X] T083 [US3] Bring red's sign-in, recovery, invitation, suspended and wrong-account screens, and the narrowed *Movimientos*, into the browser layer, per FR-012, Constitution VI (48px touch targets) and D28 (partial):
   - `tests/e2e/responsive.spec.ts:266-281` measures none of them;
   - four links are under 48px and nothing measures them: *Olvidé mi contraseña* (`apps/red/src/features/auth/LoginScreen.tsx:154`), *Volver a entrar* (`apps/red/src/features/auth/RecoverScreen.tsx:88`), *Reenviar código* (`apps/red/src/features/auth/InvitationScreen.tsx:88`) and *Ver todos* (`apps/red/src/features/cashbox/LedgerScreen.tsx:67`);
   - add the screens to `tests/e2e/responsive.spec.ts` and `tests/e2e/contrast.spec.ts`, and bring the links to 48px.
-- [ ] T084 [US1] Cross-fade the outcome when it changes, per Constitution VI ("the outcome cross-fades") (missing): `apps/red/src/features/counter/ResultScreen.tsx:217-222` swaps the badge from `queued` to its final state with no `Reveal` (`packages/ui/src/components/reveal.tsx`). Wrap it, and add the change to red's case in `tests/e2e/motion.spec.ts`.
+- [X] T084 [US1] Cross-fade the outcome when it changes, per Constitution VI ("the outcome cross-fades") (missing): `apps/red/src/features/counter/ResultScreen.tsx:217-222` swaps the badge from `queued` to its final state with no `Reveal` (`packages/ui/src/components/reveal.tsx`). Wrap it, and add the change to red's case in `tests/e2e/motion.spec.ts`.
 - [X] T085 [US2] Show the day and the author on the operator's records, per FR-030 (who corrected what, and when) and FR-008, FR-043 (changes keep their author and date) (partial):
   - the operator's cash book shows movements and corrections with the hour only (`apps/admin/src/features/operator/StoresTab.tsx:368`);
   - Reglas' *Último cambio* shows the hour only and no author (`apps/admin/src/features/operator/OperatorScreen.tsx:150`). The setting's history carries only `authorUserId`;
   - render `formatDateTime` on both, and the author's email on the setting.
-- [ ] T086 [US2] Show why a resend, a suspension or a reactivation failed, per FR-004 and FR-005 (partial):
+- [X] T086 [US2] Show why a resend, a suspension or a reactivation failed, per FR-004 and FR-005 (partial):
   - `Resend` and `StatusAction` (`apps/admin/src/features/operator/StoresTab.tsx:257-313`) never render their mutation's error;
   - so, for example, `ALREADY_ACCEPTED` on a stale list does nothing visible;
   - add es-MX copy at each control, and a test in `apps/admin/test/operator-stores.test.tsx`.
-- [ ] T087 Use the shared atoms where the new screens rebuild them, per Constitution VI ("a duplicate recipe in an app is drift") (contradicts):
+- [X] T087 Use the shared atoms where the new screens rebuild them, per Constitution VI ("a duplicate recipe in an app is drift") (contradicts):
   - *Enviar por WhatsApp* (`apps/admin/src/features/operator/StoresTab.tsx:164`) and *Registrar entrega* (`apps/red/src/features/cashbox/CashboxScreen.tsx:76-86`) rebuild the button's classes instead of using `buttonVariants` from `@devolada/ui`. The second loses its hover and active states;
   - the correction form uses two native `<select>` elements (`StoresTab.tsx:384-407`), where the same panel uses the themed `Select` (`apps/admin/src/features/operator/OperatorScreen.tsx:364-372`).
 - [ ] T088 **Decision first.** Finish the lite path for the payer page's *"Paga en tu punto de cobro más cercano"*, per FR-041 and T069 ("lands before the pilot") (partial):
   - `.specify/bugs/payer-copy-store-points/` holds only `assessment.md`;
   - `apps/pago/src/features/pago/PaymentPage.tsx:2119-2121` still shows the store icon and the copy;
   - the creator picks the replacement sentence, which is the assessment's open question. Then run `/speckit-bug-fix` and `/speckit-bug-test`, with a case citing `bug: payer-copy-store-points`.
-- [ ] T089 [US3] Make acceptance's rollback match D5 (partial):
+- [X] T089 [US3] Make acceptance's rollback match D5 (partial):
   - the acceptance batch (`apps/api/src/routes/store/handler.ts:536-548`) marks the invitation `accepted` even when the store write matched no row. D5 says the invitation stays `sent`;
   - in a double-accept race, the second batch hits `user.username`'s unique index and answers 500 (`:553-555`), never `INVALID_INVITATION`;
   - make the username and invitation writes depend on the store write, and map the unique violation to `INVALID_INVITATION`;
   - write a test that reaches the batch. `apps/api/test/cash-at-stores-access.test.ts:261-273` stops before it.
-- [ ] T090 [US2] Make the one-business guard atomic, per FR-006 and D7 (partial):
+- [X] T090 [US2] Make the one-business guard atomic, per FR-006 and D7 (partial):
   - `apps/api/src/routes/platform/handler.ts:178-189` reads, then writes, so two switch-ons at the same moment can both pass;
   - no index backs the guard, because the data model chose none;
   - write the switch as one conditional `UPDATE … WHERE NOT EXISTS` (no other business has the channel on), and answer `ONE_BUSINESS_AT_A_TIME` when no row changes.
-- [ ] T091 [US2] Complete the correction's refusal tests, per FR-030 and US2/AC11 (partial):
+- [X] T091 [US2] Complete the correction's refusal tests, per FR-030 and US2/AC11 (partial):
   - the test named for "another store, or another business" (`apps/api/test/cash-at-stores-operator.test.ts:332-346`) exercises only another store;
   - no test sends `cents: 0`, or a reason over 280 characters;
   - add the three cases.
-- [ ] T092 [US2] Test editing a store, per FR-003, US2/AC3 and T035 (missing): no test at any layer opens the edit dialog, or meets `PHONE_TAKEN` on an edit. Add both to `apps/admin/test/operator-stores.test.tsx`.
-- [ ] T093 [US1] Prove the counter's retry and live behaviour in `apps/red/test/counter.test.tsx`, per FR-023, US1/AC13 and T025 (partial). Today only the key's format is checked (`:174`). Add:
+- [X] T092 [US2] Test editing a store, per FR-003, US2/AC3 and T035 (missing): no test at any layer opens the edit dialog, or meets `PHONE_TAKEN` on an edit. Add both to `apps/admin/test/operator-stores.test.tsx`.
+- [X] T093 [US1] Prove the counter's retry and live behaviour in `apps/red/test/counter.test.tsx`, per FR-023, US1/AC13 and T025 (partial). Today only the key's format is checked (`:174`). Add:
   - a retry after `NETWORK_ERROR` sends the same `collectionKey`;
   - the poll every 3 s while `queued`;
   - the offline banner;
   - the tabs' `aria-current`;
   - *Copiar comprobante* and *Nuevo cobro*.
 - [X] T094 [US1] Label the copy button *Copiar comprobante*, per T032 (partial): `apps/red/src/features/counter/ResultScreen.tsx:139` reads *Copiar*.
-- [ ] T095 [US1] Give the real reason when a quote is refused, per FR-028 (partial):
+- [X] T095 [US1] Give the real reason when a quote is refused, per FR-028 (partial):
   - every quote error reads *"Revisa tu conexión"* (`apps/red/src/features/counter/QuoteScreen.tsx:157-162`), including `CHANNEL_OFF`, `NOT_CAPABLE` and `STORE_*`;
   - map each code to its own es-MX line.
-- [ ] T096 Remove red's `/suspendida` route, or record it in D26's routes table, per research D26 (unrequested):
+- [X] T096 Remove red's `/suspendida` route, or record it in D26's routes table, per research D26 (unrequested):
   - `apps/red/src/router.tsx:22` declares it, and nothing links or navigates to it;
   - the suspended screen is shown in place by `apps/red/src/features/auth/Gate.tsx`.
 - [ ] T097 [US2] **Decision first.** Make the store's invited status read the same everywhere, per FR-001 and US2/AC1–AC2 (*Invitada*) (contradicts):
@@ -873,18 +873,18 @@ before any code (T073, T088, T097, T098), and each of those says so.
   - `apps/admin/src/features/feed/FeedScreen.tsx:794-797` shows the *Todos / SPEI / Efectivo* chip only when `storeChannel.since` is set, and cites D23 for it. D23 does not state that condition, and FR-031 has none;
   - `apps/admin/test/feed-cash.test.tsx:118` locks the behaviour in;
   - record the condition in D23, or show the chip always.
-- [ ] T099 [US1] Keep store-born links out of the payer-reference backfill, or amend D11, per research D11 ("no payer reference until the payer's own flow asks for one") (contradicts):
+- [X] T099 [US1] Keep store-born links out of the payer-reference backfill, or amend D11, per research D11 ("no payer reference until the payer's own flow asks for one") (contradicts):
   - `backfillPayerReferences` (`apps/api/src/direct-payments/payer-reference.ts:680-703`) takes every panel link with no holder;
   - so a link `ensureLink` creates at the counter gets a reference within a minute wherever `payByReference` is on.
-- [ ] T100 [US4] Drop `proofMode` from the feed row in `contracts/business-cash-api.md`, per that contract's "Row changes in `feedCharge`" (contradicts):
+- [X] T100 [US4] Drop `proofMode` from the feed row in `contracts/business-cash-api.md`, per that contract's "Row changes in `feedCharge`" (contradicts):
   - `feedCharge` (`apps/api/src/routes/payments/schema.ts:52-142`) has no such field;
   - rows are told apart by `channel`, and `none` lives only in the database enum, as `data-model.md` asks.
 - [X] T101 [US1] Record `businessName` in the status answer of `contracts/store-api.md` § `GET /store/collections/:id`, per that contract (unrequested): `collectionStatusResponse` returns it (`apps/api/src/routes/store/schema.ts:121`), and the contract does not list it.
-- [ ] T102 Filter `ledgerRowsOf`'s payment read by business, per Constitution V (partial):
+- [X] T102 Filter `ledgerRowsOf`'s payment read by business, per Constitution V (partial):
   - `apps/api/src/store-ledger/index.ts:213-218` reads `payments` by id alone;
   - the ids come from movements already scoped to the store and the business, so nothing leaks today;
   - add `inArray(payments.businessId, businessIds)`, so the query carries the rule itself.
-- [ ] T103 Cite stories, not only tasks, in the browser layer's new blocks, per Constitution VII (partial):
+- [X] T103 Cite stories, not only tasks, in the browser layer's new blocks, per Constitution VII (partial):
   - `tests/e2e/contrast.spec.ts:153` cites *cash-at-stores T033, T040, T051, T060*, and `tests/e2e/motion.spec.ts:756` cites *T033, T060*;
   - add `cash-at-stores US1`, `US2`, `US4` and `US5` beside them.
 - [ ] T104 Close TODO(CLAUDE-MD-WORKERS) in the constitution's Sync Impact Report, through `/speckit-constitution` as a patch note, per the constitution's Governance (partial):

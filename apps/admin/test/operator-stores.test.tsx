@@ -175,6 +175,47 @@ describe("cash-at-stores US2: the operator's Tiendas tab", () => {
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Otra tienda ya usa ese celular.");
   });
 
+  it("edits a store's details, and says when the new phone belongs to another store (T092, FR-003, US2/AC3)", async () => {
+    const patched: [string, unknown][] = [];
+    let taken = true;
+    arrange([
+      handlers.patchStore((id, body) => {
+        patched.push([id, body]);
+        return taken ? fail("PHONE_TAKEN", 409) : ok({ ...lupita, phone: "5599990000" });
+      }),
+    ]);
+    await openStores();
+    await userEvent.click(within(item("Abarrotes Lupita")).getByRole("button", { name: "Editar" }));
+    const dialog = await screen.findByRole("dialog", { name: "Editar Abarrotes Lupita" });
+    const phone = within(dialog).getByLabelText("Celular del tendero");
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "55 8765 4321");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Otra tienda ya usa ese celular.");
+    expect(patched.at(-1)?.[0]).toBe(lupita.id);
+
+    taken = false;
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "5599990000");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(patched).toHaveLength(2);
+  });
+
+  it("a refused re-send or suspension says why, at the control (T086, FR-004, FR-005)", async () => {
+    arrange([
+      handlers.resendStoreInvitation(() => fail("ALREADY_ACCEPTED", 409)),
+      handlers.patchStore(() => fail("INTERNAL_ERROR", 500)),
+    ]);
+    await openStores();
+    await userEvent.click(within(item("Papelería El Sol")).getByRole("button", { name: "Reenviar invitación" }));
+    expect(await within(item("Papelería El Sol")).findByRole("alert")).toHaveTextContent("ya aceptó su invitación");
+
+    await userEvent.click(within(item("Abarrotes Lupita")).getByRole("button", { name: "Suspender" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Suspender" }));
+    expect(await within(item("Abarrotes Lupita")).findByRole("alert")).toHaveTextContent("No se pudo suspender la tienda.");
+  });
+
   it("suspends and reactivates, each behind a confirmation", async () => {
     const patched: [string, unknown][] = [];
     arrange([

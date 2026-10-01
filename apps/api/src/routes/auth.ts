@@ -11,7 +11,7 @@ import {
   user as userTable,
   verification,
 } from "../db/schema";
-import { makeAuth } from "../auth/better";
+import { isStoreUser, makeAuth } from "../auth/better";
 import { requireAnyActor } from "../auth/middleware";
 import { channelBusiness } from "../store-channel";
 import { rateLimitRoute } from "../auth/rate-limit";
@@ -27,9 +27,14 @@ export const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
    when linking the actor row failed; now D16's replacement of an
    unverified account by a fresh signup. */
 async function removeUser(db: ReturnType<typeof drizzle>, userId: string) {
-  await db.delete(sessionTable).where(eq(sessionTable.userId, userId));
-  await db.delete(accountTable).where(eq(accountTable.userId, userId));
-  await db.delete(userTable).where(eq(userTable.id, userId));
+  /* cash-at-stores T078: one batch — a refused last delete (a row that
+     still points at the user) must not leave the user without the
+     password it had a moment ago */
+  await db.batch([
+    db.delete(sessionTable).where(eq(sessionTable.userId, userId)),
+    db.delete(accountTable).where(eq(accountTable.userId, userId)),
+    db.delete(userTable).where(eq(userTable.id, userId)),
+  ]);
 }
 
 const signupInput = z.object({
@@ -53,6 +58,10 @@ auth.post("/business/signup", rateLimitRoute("business-signup", { window: 60, ma
   const [existing] = await db.select().from(userTable).where(eq(userTable.email, email));
   if (existing) {
     if (existing.emailVerified) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
+    /* cash-at-stores T078 (D2, D5): a shopkeeper who accepted the
+       invitation and has not typed the code yet is not a half-typed
+       address — the store holds that user. Taken. */
+    if (await isStoreUser(db, existing.id)) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
     await removeUser(db, existing.id);
     /* The old código dies with the old account: the plugin reads the
        first live row for an identifier, so a second one would make the

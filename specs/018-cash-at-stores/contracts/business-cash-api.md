@@ -19,7 +19,11 @@ optional. When absent, both are listed (FR-031).
 | `storeName` | filled for `store` rows (a left join on `stores`); null for `spei` |
 | `storeFeeCents` | new, nullable: the fee the payer paid at the counter |
 | `corrections` | new, `{ cents, reason, author, at }[]`; empty for every SPEI row (D21) |
-| `proofMode` | the enum gains `none` (data-model) |
+
+*(Corrected 2026-10-01, `/speckit-converge` T100: this table listed
+`proofMode` gaining `none`. `feedCharge` has no such field; rows are told
+apart by `channel`, and `none` lives only in the database enum, as
+data-model asks.)*
 
 A cash row's money fields read with no special case:
 - `serviceFeeCents` is 0;

@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, desc, eq, inArray, like, ne, or, sum } from "drizzle-orm";
+import { and, desc, eq, inArray, like, ne, or, sql, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import {
@@ -8,7 +8,6 @@ import {
   member,
   payments,
   providerQuota,
-  session as sessionTable,
   storeInvitations,
   storeLedger,
   stores,
@@ -175,14 +174,23 @@ export async function patchPlatformBusiness(c: Ctx, id: string, body: PatchBusin
     if (!STORE_CHANNEL_CAPABILITIES.every((n) => names.includes(n))) {
       return c.json({ success: false, error: { code: "NOT_CAPABLE" } }, 409);
     }
-    const [other] = await db
-      .select({ id: businesses.id })
-      .from(businesses)
-      .where(and(eq(businesses.storeChannelOn, true), ne(businesses.id, id)))
-      .limit(1);
-    if (other) return c.json({ success: false, error: { code: "ONE_BUSINESS_AT_A_TIME" } }, 409);
-    patch.storeChannelOn = true;
-    patch.storeChannelSince = b.storeChannelSince ?? new Date();
+    /* T090 (FR-006, D7): the one-business guard and the switch are ONE
+       conditional write — two switch-ons at the same moment cannot both
+       pass a read that happened before either wrote. No index backs it
+       (data-model), so the statement is the guard. */
+    const [on] = await db
+      .update(businesses)
+      .set({ ...patch, storeChannelOn: true, storeChannelSince: b.storeChannelSince ?? new Date() })
+      .where(
+        and(
+          eq(businesses.id, id),
+          sql`not exists (select 1 from ${businesses} as other where other.store_channel_on = 1 and other.id <> ${id})`,
+        ),
+      )
+      .returning();
+    if (!on) return c.json({ success: false, error: { code: "ONE_BUSINESS_AT_A_TIME" } }, 409);
+    const capCents = await getNumberSetting(db, "negative_cap_cents");
+    return c.json({ success: true, data: await toRow(db, on, capCents) });
   }
   if (body.storeChannel === false) patch.storeChannelOn = false;
   const [updated] = Object.keys(patch).length
@@ -353,7 +361,11 @@ export async function patchStore(c: Ctx, id: string, body: PatchStoreRequest) {
     ...(phone !== undefined && store.userId
       ? [db.update(userTable).set({ username: phone, displayUsername: phone }).where(eq(userTable.id, store.userId))]
       : []),
-    ...(body.status === "suspended" && store.userId ? [db.delete(sessionTable).where(eq(sessionTable.userId, store.userId))] : []),
+    /* T077 (US2/AC5, FR-014): suspending deletes no session. The store's
+       status is read on every action, so the next one is refused with
+       STORE_SUSPENDED — the screen that says so — and `requireStore`
+       deletes that session as it answers. Deleting them here made the
+       next action a bare 401: the sign-in, not the reason. */
   ];
   let updated: typeof stores.$inferSelect;
   try {

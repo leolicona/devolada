@@ -753,7 +753,7 @@ test.describe("feedback-vocabulary-rollout US3: nothing spins, and nothing pulse
   });
 });
 
-/* cash-at-stores T033, T060 (constitution VI; /speckit-analyze M3): the
+/* cash-at-stores US1, US5 (T033, T060, T084; constitution VI; /speckit-analyze M3): the
    store app's waits. A payment whose action is still queued waits on the
    business's system for minutes, with the customer at the counter; the
    cash book loads, and a declared hand-over sends. Each wait must breathe
@@ -778,6 +778,17 @@ test.describe("cash-at-stores: the store app's waits breathe, and nothing moves"
     await page.goto(`${RED}/cobros/pay-1`);
     await expect(page.getByText("Estamos avisando al negocio")).toBeVisible();
     await expectBreathing(page);
+  });
+
+  test("the outcome cross-fades in when it lands — opacity only, under reduced motion too (T084)", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubRedApi(page);
+    await page.goto(`${RED}/cobros/pay-1`);
+    await expect(page.getByText("Reconectado")).toBeVisible();
+    const reveal = page.locator('[data-motion="reveal"]').first();
+    await expect(reveal).toBeVisible();
+    expect(await reveal.evaluate((el) => getComputedStyle(el).animationName)).toBe("reveal");
+    expect(await runningMovements(page)).toEqual([]);
   });
 
   test("Mi caja breathes while it loads", async ({ page }) => {

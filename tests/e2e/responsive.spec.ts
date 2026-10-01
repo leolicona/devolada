@@ -260,11 +260,11 @@ test.describe("cep-bundle-match US1/US4: the decision and the unmatched list hol
   }
 });
 
-/* cash-at-stores T033, T060 (constitution VI; research D26): the store app
+/* cash-at-stores US1, US3, US5 (T033, T060, T083; constitution VI; research D26): the store app
    is a counter on a shopkeeper's phone. At every width the floor sets it
    never scrolls sideways, never cuts a customer's name, every control
    clears 48px, and the decisive *Cobrar* clears 64px. */
-const redScreens: { name: string; url: string; open?: (page: Page) => Promise<void>; ready: string }[] = [
+const redScreens: { name: string; url: string; stub?: (page: Page) => Promise<void>; open?: (page: Page) => Promise<void>; ready: string }[] = [
   {
     name: "the search",
     url: `${RED}/`,
@@ -278,6 +278,39 @@ const redScreens: { name: string; url: string; open?: (page: Page) => Promise<vo
   { name: "Mi caja", url: `${RED}/caja`, ready: "WiFi Plus dice:" },
   { name: "the hand-over", url: `${RED}/caja/entrega?businessId=business-1`, ready: "La entrega quedará pendiente" },
   { name: "Movimientos", url: `${RED}/movimientos`, ready: "Corrección de Devolada" },
+  /* T083: the ways in, the screens a session ends on, and the narrowed
+     cash book — their links clear 48px too */
+  { name: "Movimientos of one business", url: `${RED}/movimientos?businessId=business-1&kind=collection`, ready: "Ver todos" },
+  { name: "the hand-overs", url: `${RED}/caja/entregas?businessId=business-1`, ready: "«Faltaron $200 en el sobre»" },
+  { name: "the sign-in", url: `${RED}/entrar`, ready: "Olvidé mi contraseña" },
+  { name: "the recovery", url: `${RED}/recuperar`, ready: "Volver a entrar" },
+  { name: "the invitation", url: `${RED}/invitacion/tok-1`, ready: "Abarrotes Lupita" },
+  {
+    name: "the suspended store",
+    url: `${RED}/`,
+    stub: async (page) => {
+      /* T096: the screen as the app reaches it — the session answers that
+         the store is suspended (FR-014) */
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ success: false, error: { code: "STORE_SUSPENDED" } }) }),
+      );
+    },
+    ready: "Tu tienda está suspendida",
+  },
+  {
+    name: "the wrong account",
+    url: `${RED}/`,
+    stub: async (page) => {
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true, data: { type: "business" } }) }),
+      );
+    },
+    ready: "Esta cuenta no es de una tienda",
+  },
 ];
 
 test.describe("cash-at-stores US1/US5: the store app at 360/768/1280", () => {
@@ -286,6 +319,7 @@ test.describe("cash-at-stores US1/US5: the store app at 360/768/1280", () => {
       test(`${screen.name} fits ${size.width}px with 48px targets`, async ({ page }) => {
         await page.setViewportSize(size);
         await stubRedApi(page);
+        await screen.stub?.(page);
         await page.goto(screen.url);
         await screen.open?.(page);
         await expect(page.getByText(screen.ready).first()).toBeVisible();

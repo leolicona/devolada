@@ -20,6 +20,8 @@ import {
   declareHandoverResponse,
   recordCollectionResponse,
   storeLedgerResponse,
+  storeHandoversResponse,
+  invitationPreviewResponse,
   storeMeResponse,
   storeQuoteResponse,
   storeSearchResponse,
@@ -870,6 +872,7 @@ export const storeCashbox = cashboxResponse.parse({
       businessName: "WiFi Plus",
       heldCents: 435000,
       feesSinceHandoverCents: 4500,
+      feesSince: storeAt - 7 * 86_400_000,
       lastHandover: { cents: 150000, status: "disputed", at: storeAt - 3 * 86_400_000, note: "Faltaron $200 en el sobre" },
       pendingHandover: null,
     },
@@ -888,6 +891,16 @@ export const storeLedger = storeLedgerResponse.parse({
 /* The store app, signed in, at every screen of the counter and the cash
    book. `collection` picks the result screen's outcome: `queued` keeps it
    waiting, which is what the motion layer measures. */
+/* cash-at-stores T080: the store's own hand-overs, a dispute among them */
+export const storeHandovers = storeHandoversResponse.parse({
+  businessName: "WiFi Plus",
+  handovers: [
+    { id: "h2", cents: 150000, status: "confirmed", declaredAt: storeAt - 2 * 86_400_000, resolvedAt: storeAt - 86_400_000, note: null },
+    { id: "h1", cents: 200000, status: "disputed", declaredAt: storeAt - 9 * 86_400_000, resolvedAt: storeAt - 8 * 86_400_000, note: "Faltaron $200 en el sobre" },
+  ],
+  nextCursor: null,
+});
+
 export async function stubRedApi(page: Page, opts: { collection?: "reconnected" | "queued" } = {}): Promise<void> {
   await apiRoute(page, "**/auth/me", storeMe);
   /* `*` never crosses a slash: this is the search, never the debt */
@@ -899,6 +912,12 @@ export async function stubRedApi(page: Page, opts: { collection?: "reconnected" 
   await apiRoute(page, "**/store/cashbox", storeCashbox);
   await apiRoute(page, "**/store/ledger*", storeLedger);
   await apiRoute(page, "**/store/handovers", declareHandoverResponse.parse({ id: "h9", status: "pending" }));
+  await apiRoute(page, "**/store/handovers?*", storeHandovers);
+  await apiRoute(
+    page,
+    "**/store/invitations/*",
+    invitationPreviewResponse.parse({ state: "open", storeName: "Abarrotes Lupita", phoneTail: "5678" }),
+  );
 }
 
 /* A business that has had cash at stores (D7): Pagos offers the channel

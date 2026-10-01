@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { businesses, storeHandovers, storeLedger } from "../src/db/schema";
 import { recordCollection } from "../src/store-ledger";
-import { cashboxResponse, storeLedgerResponse } from "../src/routes/store/schema";
+import { cashboxResponse, storeHandoversResponse, storeLedgerResponse } from "../src/routes/store/schema";
 import { cashPointsResponse, handoverHistoryResponse } from "../src/routes/cash-points/schema";
 import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
 import { seedActiveStore, seedStorePayment, seedStoreChannel } from "./store-helpers";
@@ -163,6 +163,48 @@ describe("cash-at-stores US5 — the business's side: *Puntos de pago* (D20, D23
       expect(res.status).toBe(403);
       expect((await res.json()).error.code).toBe("FORBIDDEN_FOR_ROLE");
     }
+  });
+});
+
+describe("cash-at-stores US5 — the numbers open what they count, and the store keeps its hand-overs (T079, T080)", () => {
+  it("after a confirmed hand-over, the fees start there, and `since` narrows the movements to them (T079, FR-037)", async () => {
+    const { business, shop, owner } = await world([49900]);
+    const { data: declared } = await (await as(shop.cookie, "/store/handovers", json({ businessId: business.id, cents: 49900 }))).json();
+    await as(owner, `/cash-points/handovers/${declared.id}/confirm`, { method: "POST" });
+    const after = await seedStorePayment(business, shop.store, { amountCents: 20000, receivedCents: 20000, customerUsuario: "nuevo@wifiplus" });
+    await recordCollection(db(), after);
+
+    const box = cashboxResponse.parse((await (await as(shop.cookie, "/store/cashbox")).json()).data).businesses[0];
+    expect(box.feesSinceHandoverCents).toBe(1500);
+    expect(box.feesSince).toEqual(expect.any(Number));
+
+    const all = storeLedgerResponse.parse((await (await as(shop.cookie, `/store/ledger?businessId=${business.id}&kind=collection`)).json()).data);
+    expect(all.rows).toHaveLength(2);
+    const since = storeLedgerResponse.parse(
+      (await (await as(shop.cookie, `/store/ledger?businessId=${business.id}&kind=collection&since=${box.feesSince}`)).json()).data,
+    );
+    expect(since.rows.map((r) => r.cents)).toEqual([20000]);
+    expect(since.rows.reduce((sum, r) => sum + (r.feeCents ?? 0), 0)).toBe(box.feesSinceHandoverCents);
+  });
+
+  it("the store reads its own hand-overs, a dispute's note included, after the next one is resolved (T080, US5/AC6)", async () => {
+    const { business, shop, owner } = await world([79900]);
+    const { data: first } = await (await as(shop.cookie, "/store/handovers", json({ businessId: business.id, cents: 79900 }))).json();
+    await as(owner, `/cash-points/handovers/${first.id}/dispute`, json({ note: "Faltaron $200 en el sobre" }));
+    const { data: second } = await (await as(shop.cookie, "/store/handovers", json({ businessId: business.id, cents: 59900 }))).json();
+    await as(owner, `/cash-points/handovers/${second.id}/confirm`, { method: "POST" });
+
+    const res = await as(shop.cookie, `/store/handovers?businessId=${business.id}`);
+    const data = storeHandoversResponse.parse((await res.json()).data);
+    expect(data.businessName).toBe("WiFi Plus");
+    expect(data.handovers.map((h) => [h.status, h.note])).toEqual([
+      ["confirmed", null],
+      ["disputed", "Faltaron $200 en el sobre"],
+    ]);
+    expect(data.handovers[1].resolvedAt).toEqual(expect.any(Number));
+
+    /* another business's id is not this store's book */
+    expect((await as(shop.cookie, "/store/handovers?businessId=nobody")).status).toBe(404);
   });
 });
 

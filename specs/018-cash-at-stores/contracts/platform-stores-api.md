@@ -52,7 +52,13 @@ The plaintext URL appears only in this answer and in a resend's (D4).
 Rules:
 - Changing `phone` on an accepted store also changes the user's
   `username`, in the same batch (FR-003).
-- Suspending deletes the shopkeeper's session rows (FR-005, FR-014).
+- Suspending takes effect on the shopkeeper's next action (FR-005,
+  FR-014): `requireStore` reads the store's status on every request and
+  answers 403 `STORE_SUSPENDED`, deleting that session as it does.
+  *(Amended 2026-10-01, `/speckit-converge` T077: this said "Suspending
+  deletes the shopkeeper's session rows", which turned the next action
+  into a bare 401 and showed the sign-in instead of the screen US2/AC5
+  asks for.)*
 - `status: "active"` on a store with no `user_id` (suspended before its
   shopkeeper accepted) returns it to `invited`. Its open invitation works
   again while it is within its seven days; otherwise the operator re-sends

@@ -84,8 +84,10 @@ export function InvitationScreen() {
             Entrar
           </Button>
         </Pending>
+        {/* T083 (constitution VI): the link button keeps a 48px target */}
         <Button
           variant="link"
+          className="min-h-12"
           onClick={async () => {
             setError(null);
             await sendCode(accepted, "email-verification").catch(() => setError("No pudimos reenviar el código."));

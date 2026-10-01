@@ -250,8 +250,9 @@ in WhatsApp. A second search shows the customer owes nothing.
    recorded, **Then** it is confirmed at once with a unique folio, and the
    business's actions for a complete payment run: register it, and
    reconnect the customer.
-7. **Given** the shopkeeper types a smaller amount than the debt, **When** they
-   confirm, **Then** the payment is recorded as short. The app shows what
+7. **Given** the shopkeeper types a smaller amount than the debt, beyond the
+   business's tolerance, **When** they confirm, **Then** the payment is
+   recorded as short. The app shows what
    remains owed. Reconnection follows the business's rule for short
    payments, and the app says whether it will happen.
 8. **Given** the shopkeeper types more than the debt, **When** they try to
@@ -452,8 +453,8 @@ see the dispute and its note.
 3. **Given** a pending hand-over for a business, **When** the shopkeeper tries
    to declare another for the same business, **Then** they are told to wait
    for the pending one.
-4. **Given** a business with the channel on, or with cash still held by any
-   store, **When** a member opens Puntos de pago, **Then** they see each store
+4. **Given** a business whose channel has been switched on at least once,
+   **When** a member opens Puntos de pago, **Then** they see each store
    holding its cash: the amount held, the last confirmed hand-over and any
    pending one.
 5. **Given** a pending hand-over, **When** a member who can operate payments
@@ -493,7 +494,7 @@ see the dispute and its note.
 - **The channel is switched off while stores hold the business's cash.** No
   new collections for that business. Hand-overs can still be declared,
   confirmed and disputed until nothing is held, and Puntos de pago stays
-  visible while any cash is held.
+  in the menu (FR-034).
 - **The store is suspended while holding cash.** It cannot collect, and its
   shopkeeper cannot sign in. Its balance stays on Puntos de pago. Recovering
   the cash is outside the software (see Assumptions).
@@ -539,7 +540,7 @@ see the dispute and its note.
 - **FR-004**: The operator MUST be able to re-send an invitation that has not
   been accepted. The new one replaces the old, which MUST stop working.
 - **FR-005**: Removing a store MUST be a suspension, never a deletion. A
-  suspended store MUST lose access on its next action. It keeps its
+  suspended store MUST lose access on its next action (FR-014). It keeps its
   payments, its cash book and its pending hand-overs, and can be
   reactivated.
 - **FR-006**: In this feature, every active store MUST collect for the
@@ -626,8 +627,9 @@ see the dispute and its note.
   - the amount applied to the debt;
   - the service fee;
   - a unique folio;
-  - its class under the business's own reconciliation policy (exact, or
-    short when less than the debt).
+  - its class under the business's own reconciliation policy, tolerance
+    included: `exact`, or `short` when it falls below the debt by more than
+    the tolerance.
 - **FR-023**: Confirming twice, retrying after a lost signal, or two taps
   MUST NOT record a second payment.
 - **FR-024**: A cash payment MUST follow the same action path as a confirmed
@@ -640,10 +642,17 @@ see the dispute and its note.
   - a failure of the business's system never undoes the payment: the action
     waits and retries with a visible status.
 - **FR-025**: The result screen MUST show the folio and the action's outcome
-  as it changes, each outcome as icon + text: reconnected, queued (and
-  retrying), not reconnected because the payment is short, held by
-  observation mode, or failed. It MUST say what remains owed after a short
-  payment.
+  as it changes, each outcome as icon + text:
+  - reconnected;
+  - registered without reconnecting, because the business's own rule says
+    so;
+  - queued (and retrying);
+  - not reconnected because the payment is short;
+  - held by observation mode;
+  - failed.
+
+  It MUST say what remains owed after a short payment. A cash payment is
+  never held for review: that hold belongs to SPEI proofs.
 - **FR-026**: The result screen MUST offer to send the receipt by WhatsApp
   from the shopkeeper's phone.
   - The message MUST be the network's receipt message (FR-043), filled in
@@ -691,7 +700,10 @@ see the dispute and its note.
   credit once, by the same fee a confirmed SPEI payment costs. It MUST
   never charge per attempt or per retry.
 - **FR-034**: The business panel MUST gain a **Puntos de pago** page, shown
-  while the channel is on or while any store holds the business's cash. For
+  from the first time the channel is switched on for the business, and
+  kept after that, so its hand-overs and disputes stay readable.
+  *(Amended 2026-10-01 after /speckit-analyze M1: it was "while the
+  channel is on or while any store holds the business's cash".)* For
   each store, it MUST show the cash held for this business, the last
   confirmed hand-over and any pending one.
 - **FR-035**: A member who can operate payments MUST be able to confirm a
@@ -798,8 +810,9 @@ see the dispute and its note.
   - the store paying by SPEI instead of in person;
   - several shopkeeper accounts per store.
 - **No cap is debt, not design.** The creator chose no cap for the pilot
-  (2026-09-30). It is registered with `/speckit-debt-log` the day this
-  feature is planned. Its exit condition: a cap per store, with a warning
+  (2026-09-30). It is registered with `/speckit-debt-log` by the tasks'
+  first phase (T003), before any of its code lands: the constitution's
+  "the same day" a shortcut is taken. Its exit condition: a cap per store, with a warning
   before it and collections blocked at it, before a second store or a
   second business joins.
 - **The cash is the business's risk.** With no cap, a store that keeps the

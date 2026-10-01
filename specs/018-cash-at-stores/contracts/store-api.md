@@ -16,10 +16,20 @@ invitation routes:
 - a suspended store → 403 `STORE_SUSPENDED`, and the session row is
   deleted.
 
-**The business.** In this feature it is always the one business with the
-channel on (D7). No route takes a `businessId` from the client.
-- No business with the channel on → 409 `CHANNEL_OFF`.
-- That business's integration lacks a capability → 409 `NOT_CAPABLE`.
+**The business, at the counter.** The counter routes (search, quote,
+record) always serve the one business with the channel on (D7), and take
+no `businessId` from the client:
+- no business with the channel on → 409 `CHANNEL_OFF`;
+- that business's integration lacks a capability → 409 `NOT_CAPABLE`.
+
+**The business, in the cash book.** The cash-book routes are
+`/store/cashbox`, `/store/ledger`, `/store/handovers`,
+`/store/collections/:id` and its receipt. They serve every business this
+store has movements with, **whether or not its channel is still on**. This
+is what lets a store hand over cash after the channel is switched off (the
+spec's edge case). A `businessId` they take must be one of those
+businesses; otherwise the route answers 404 `NOT_FOUND`. They never answer
+`CHANNEL_OFF`. *(Corrected 2026-10-01, /speckit-analyze H1.)*
 
 Neither should happen while the operator's guard holds. Both are answers,
 not crashes.
@@ -160,9 +170,20 @@ it every 3 s while `outcome` is `queued`.
 } }
 ```
 
-`outcome` is one of `reconnected | queued | not_reconnected_short |
-observation | failed`. It is mapped from the row's `actionOutcome` and its
-decided action, and each has a status shown as icon + text (FR-025).
+`outcome` is one of six values. It is mapped from the row's
+`actionOutcome` and the action decided for its class (FR-025,
+/speckit-analyze H2):
+
+| `outcome` | Row | Decided action |
+| --- | --- | --- |
+| `reconnected` | `done` | `register_and_reconnect` |
+| `registered` | `done` | `register_only` (the business's own rule) |
+| `queued` | `queued` | any |
+| `not_reconnected_short` | `withheld` | register, below the threshold |
+| `observation` | `observation` | any |
+| `failed` | `failed` | any |
+
+Each outcome is shown as icon + text. A cash row is never `review` (D13).
 
 ### `GET /store/collections/:id/receipt` (D18, D31)
 

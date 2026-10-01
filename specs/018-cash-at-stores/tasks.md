@@ -142,7 +142,7 @@ SPEI suite must pass unchanged at its end.
   - **`requireSession`** refuses a user with a store row with 403 `WRONG_ACTOR`, before `findActor`.
   - **`apps/api/src/routes/auth.ts`'s `/auth/me`** answers the store branch (contract `store-api.md`).
   - **`POST /businesses`** (`apps/api/src/routes/businesses/handler.ts`) refuses a store user with 403 `WRONG_ACTOR`.
-- [ ] T013 [P] Test helpers in `apps/api/test/store-helpers.ts`:
+- [ ] T013 Test helpers in `apps/api/test/store-helpers.ts`:
   - `seedStore({ status, phone, userId? })`;
   - `storeSession(store)`: a user with `username`, verified, plus a session cookie;
   - `seedStoreChannel(business)`: sets `store_channel_on` and `store_channel_since`;
@@ -174,7 +174,7 @@ SPEI suite must pass unchanged at its end.
   Then two follow-ups:
   - `apps/admin/src/features/feed/FeedScreen.tsx`'s reason map learns `INTEGRATION_UNAVAILABLE` and `INTEGRATION_AUTH_FAILED`;
   - `.specify/debt/core-reads-provider-directly/debt.md` gets a dated note that its action anchors are paid by `cash-at-stores` D9. The read anchors stay open.
-- [ ] T018 [P] Add API tests to `apps/api/test/cash-at-stores-capabilities.test.ts`, citing `cash-at-stores US1`, with WispHub through `fetchMock`. Cover:
+- [ ] T018 Add API tests to `apps/api/test/cash-at-stores-capabilities.test.ts`, citing `cash-at-stores US1`, with WispHub through `fetchMock`. Cover:
   - search rows carry name, usuario, zone and the provider id, and never a phone;
   - the debt's `customer` block;
   - `paymentActions` translates a 401 into `INTEGRATION_AUTH_FAILED` and a 503 into `INTEGRATION_UNAVAILABLE`.
@@ -183,7 +183,7 @@ SPEI suite must pass unchanged at its end.
 - [ ] T019 Extract `settleConfirmed` from `settlePanelPayment` in `apps/api/src/direct-payments/validation.ts` (D13). It takes over:
   - folio and customer identity;
   - `settle()` and `classifyPayment()`;
-  - the review and observation gates;
+  - the observation gate. The review hold stays in `settlePanelPayment`: it is SPEI-only, and a cash row is never held for review (D13, /speckit-analyze H2);
   - `actionForClass`;
   - dispatch, the first attempt, `outcomeOf` and `settleDispatch`;
   - the final write, through `announcingWriter`.
@@ -195,7 +195,7 @@ SPEI suite must pass unchanged at its end.
   - add `channel = 'spei'` to the attempt budget in `apps/api/src/routes/direct-payments/handler.ts` (the one-hour count);
   - add it to the incident history in `apps/api/src/direct-payments/provisional.ts`;
   - in `apps/api/src/credit/index.ts`, `debitValidationFee` skips `reverseContradictedFees` for a `store` row.
-- [ ] T021 [P] Add API tests to `apps/api/test/cash-at-stores-capabilities.test.ts`, citing `cash-at-stores US1`, for T020. Seed a `store` payment beside SPEI rows of the same link and check:
+- [ ] T021 Add API tests to `apps/api/test/cash-at-stores-capabilities.test.ts`, citing `cash-at-stores US1`, for T020. Seed a `store` payment beside SPEI rows of the same link and check:
   - the payer's SPEI attempt budget is untouched;
   - an earlier `invalid` SPEI row keeps its fee when the cash row is debited;
   - the incident history of a provisional release ignores the cash row.
@@ -264,10 +264,11 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
   - `NOTHING_DUE`, `AMOUNT_ABOVE_DEBT`, and an unproven zero → `INTEGRATION_UNAVAILABLE`;
   - the same `collectionKey` twice → one row and a 200;
   - a credit below the negative cap → recorded, debited, and the crossing email sent (FR-029);
-  - observation mode → `observation`.
+  - observation mode → `observation`;
+  - an integration whose `exact` class maps to `register_only` → `done` with no reconnection, shown as `registered` (H2).
 
   **Status and receipt**:
-  - `GET /store/collections/:id` maps every outcome, and another store's id → 404;
+  - `GET /store/collections/:id` maps all six outcomes of `contracts/store-api.md` (`registered` included), and another store's id → 404;
   - the receipt's `text` is the current `store_receipt_template` filled in for the payment. The default says *"Comprobante de pago"*, never *"cobro"*, and formats money and time in es-MX and the business's timezone. After the operator saves a new template, the next receipt uses it;
   - the receipt's `waLink` carries the phone `customersWithPhone.phoneOf` returns, read at that request. After the collection and after the receipt, `payments.customer_phone` is null, and no other table holds the phone;
   - with no phone, with the capability absent, or with the provider failing, the answer is `hasPhone: false` and `wa.me/?text=…`. Another store's payment → 404.
@@ -333,7 +334,9 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
 - [ ] T033 [US1] Browser layer:
   - `tests/e2e/stubs.ts` gains `stubRedApi`, with fixtures parsed by the store schemas;
   - `tests/e2e/contrast.spec.ts` gains the search, quote and result screens, in both themes;
-  - `tests/e2e/responsive.spec.ts` gains the same at 360, 768 and 1280: no horizontal scroll, touch targets of 48px, and 64px for *Cobrar*.
+  - `tests/e2e/responsive.spec.ts` gains the same at 360, 768 and 1280: no horizontal scroll, touch targets of 48px, and 64px for *Cobrar*;
+  - `tests/e2e/keyboard.spec.ts` walks the counter's tab order (search, result, quote, amount, *Cobrar*) with a measured focus indicator;
+  - `tests/e2e/motion.spec.ts` gains red: the result screen's wait breathes, and reduced motion keeps only the opacity breath (constitution IV, VI; /speckit-analyze M3).
 
 **Checkpoint**: a seeded shopkeeper can collect, and the business's
 system acts on it. US1 is proven at every layer.
@@ -363,7 +366,7 @@ system acts on it. US1 is proven at every layer.
   - **stores**: list, create, `PHONE_TAKEN`, edit;
   - **phone changes**: on an accepted store, `user.username` changes too;
   - **invitations**: the DB holds only `token_hash`, never the token; a resend replaces the open invitation and the old token answers `INVALID_INVITATION`; `ALREADY_ACCEPTED`;
-  - **suspension**: it deletes the shopkeeper's sessions and the next store request is refused. A store suspended before accepting returns to `invited`;
+  - **suspension**: it deletes the shopkeeper's sessions and the next store request is refused. Reactivating a store suspended before accepting returns it to `invited`, and its open invitation works again within its seven days (/speckit-analyze M6);
   - **the switch**: `storeChannel` refuses `NOT_CAPABLE` and `ONE_BUSINESS_AT_A_TIME`; `store_channel_since` is set once and survives switching off;
   - **the fee**: `store_fee_cents` keeps its history;
   - **corrections**: one writes a movement, and the payment's detail shows it; a payment of another store gives 404;
@@ -403,7 +406,9 @@ system acts on it. US1 is proven at every layer.
   - `BusinessDetail` gains the *Efectivo en tiendas* switch, with the refusal's reason in es-MX;
   - `KEY_LABELS` gains `store_fee_cents: "Cargo por servicio en tiendas"` and `store_receipt_template: "Mensaje del comprobante (WhatsApp)"`;
   - `SettingField` renders type `template` as a text area at the compact size, with the placeholder list, a live preview with sample data, and the same three checks as the API (D31).
-- [ ] T040 [US2] Browser layer: the Tiendas tab joins `tests/e2e/contrast.spec.ts` in both themes, and `tests/e2e/responsive.spec.ts` at 1280 and 768.
+- [ ] T040 [US2] Browser layer:
+  - the Tiendas tab joins `tests/e2e/contrast.spec.ts` in both themes, and `tests/e2e/responsive.spec.ts` at 1280 and 768;
+  - `tests/e2e/keyboard.spec.ts` walks the create dialog and the invitation panel, with a measured focus indicator and focus returning to the trigger on close (/speckit-analyze M3).
 
 **Checkpoint**: the operator can set the pilot up end to end, but the
 shopkeeper cannot get in yet.
@@ -533,7 +538,7 @@ businesses holding cash at one store never see each other's.
   - two businesses with cash at one store each see only their own (FR-042);
   - `/auth/me`'s business branch carries `storeChannel.since`.
 - [ ] T053 [P] [US5] Component tests in `apps/red/test/cashbox.test.tsx`, citing `cash-at-stores US5`, with MSW and axe. Cover:
-  - *Mi caja*: held, fees, last and pending hand-over, the dispute note;
+  - *Mi caja*: held, fees, last and pending hand-over, the dispute note. Tapping the amount held, or the fees, opens the movements behind it (FR-037);
   - *Registrar entrega*: the default amount and its errors;
   - *Movimientos*: grouped by day, *Cargar más*.
 - [ ] T054 [P] [US5] Component tests in `apps/admin/test/cash-points.test.tsx`, citing `cash-at-stores US5`, with MSW and axe. Cover:
@@ -546,6 +551,7 @@ businesses holding cash at one store never see each other's.
 ### Implementation for User Story 5
 
 - [ ] T055 [US5] The store's cash book on the API, in `apps/api/src/routes/store/{schema,handler,index}.ts`: `GET /store/cashbox`, `GET /store/ledger`, and `POST /store/handovers`, following D20's rules (one pending at a time, never above what is held). All reads go through `store-ledger/index.ts`.
+  These routes serve every business the store has movements with, whether or not its channel is still on. They never answer `CHANNEL_OFF`, and a `businessId` outside that set → 404 (contract § "The business, in the cash book"; /speckit-analyze H1). Add the case to T052: the channel switched off, then a hand-over declared and confirmed.
 - [ ] T056 [US5] Puntos de pago on the API:
   - `apps/api/src/routes/cash-points/{index,handler,schema}.ts`: `GET /cash-points`, `POST /cash-points/handovers/:id/confirm|dispute`, and `GET /cash-points/stores/:storeId/history`;
   - every query filters by the actor's business;
@@ -554,7 +560,7 @@ businesses holding cash at one store never see each other's.
   - export `./cash-points-schema` in `apps/api/package.json`, and mount `/cash-points` in `apps/api/src/index.ts`.
 - [ ] T057 [US5] Put `storeChannel: { on, since }` on the business actor: in `apps/api/src/auth/middleware.ts`, from the `businesses` row already loaded, and in `apps/admin/src/features/auth/session.ts` (D7, D23).
 - [ ] T058 [P] [US5] The red cash-book screens:
-  - `apps/red/src/features/cashbox/CashboxScreen.tsx`: held, fees, last and pending hand-over, the dispute note, *Registrar entrega*, the passkey card and *Cerrar sesión*;
+  - `apps/red/src/features/cashbox/CashboxScreen.tsx`: held, fees, last and pending hand-over, the dispute note, *Registrar entrega*, the passkey card and *Cerrar sesión*. The amount held and the fees are links to *Movimientos* for that business (FR-037, `cashbox` D2);
   - `HandoverScreen.tsx`: *"La entrega quedará pendiente hasta que el negocio confirme que recibió el efectivo."*;
   - `LedgerScreen.tsx`.
 - [ ] T059 [US5] The admin's *Puntos de pago* page:
@@ -562,7 +568,10 @@ businesses holding cash at one store never see each other's.
   - the route `/puntos-de-pago` in `apps/admin/src/router.tsx`;
   - the menu entry in `apps/admin/src/features/shell/Shell.tsx`, shown when `storeChannel.since` is set;
   - statuses through the existing `StatusBadge` entries `pending`, `confirmed` and `disputed`.
-- [ ] T060 [US5] Browser layer: *Mi caja*, *Entrega* and *Movimientos* (red), and *Puntos de pago* (admin), join `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts`.
+- [ ] T060 [US5] Browser layer:
+  - *Mi caja*, *Entrega* and *Movimientos* (red), and *Puntos de pago* (admin), join `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts`;
+  - `tests/e2e/keyboard.spec.ts` walks the confirm dialog and the dispute form on *Puntos de pago*;
+  - `tests/e2e/motion.spec.ts` covers red's cash-book waits (/speckit-analyze M3).
 
 **Checkpoint**: every story is done, and the pilot can run its whole
 cycle: collect, see, hand over, confirm.
@@ -585,7 +594,9 @@ cycle: collect, see, hand over, confirm.
   - nothing in code says "cash" where `store` is the word;
   - the receipt says *Cargo por servicio*, never "comisión".
 - [ ] T064 Run quickstart §2 in the CI order, locally: spec-lint, gen-banks, contrast-lint, pending-lint, typecheck, every test suite, `pnpm e2e` and `pnpm e2e:passkey`. Fix what fails, with no skip and no quarantine.
-- [ ] T065 After merge to `main` and the dev deploy, walk quickstart §3 on `red.dev.devoladapago.com` with the demo tenant. Record the walk's date and anything that differed in `specs/018-cash-at-stores/quickstart.md`.
+- [ ] T065 After merge to `main` and the dev deploy, walk quickstart §3 on `red.dev.devoladapago.com` with the demo tenant. Record the walk's date and anything that differed in `specs/018-cash-at-stores/quickstart.md`. Time two things, and record them beside SC-001 and SC-002 (/speckit-analyze L5):
+  - from typing the customer's name to the folio on screen (SC-001: under 60 s);
+  - from the folio to the customer active in WispHub (SC-002: under 2 minutes).
 - [ ] T066 Wire red into production:
   - **`.github/workflows/deploy-prod.yml`**: a build with `vars.PROD_API_URL`, a deploy logged with `tee`, `red` in the "what landed" loop, and a smoke probe on `PROD_RED_URL`;
   - **`.github/workflows/rollback-prod.yml`**: `red` in the options and in the `case` that maps a Worker to its config;
@@ -597,6 +608,8 @@ cycle: collect, see, hand over, confirm.
   - confirm the pilot's three agreements are signed (spec Assumptions).
 
   These belong to the creator; record the date here when done.
+- [ ] T068 [P] *(Added 2026-10-01, /speckit-analyze M4.)* In `specs/009-links-on-demand-search/spec.md`, add a dated note under FR-008. It records the clause `cash-at-stores` D11 adds: a link is also born *"when a store records a cash payment for that customer"*, and it cites `cash-at-stores` D11. The rest of FR-008 is not rewritten.
+- [ ] T069 [P] *(Added 2026-10-01, /speckit-analyze L6.)* Open the lite path for the payer page's copy *"Paga en tu punto de cobro más cercano"*, shown when SPEI is unavailable (`apps/pago/src/features/pago/PaymentPage.tsx`). Run `/speckit-bug-assess` under `.specify/bugs/payer-copy-store-points/`. The spec's FR-041 keeps the payer page silent about stores, so the copy must not promise points the business may not have. It is independent of this feature's code, and lands before the pilot.
 
 ---
 
@@ -620,7 +633,8 @@ cycle: collect, see, hand over, confirm.
   - T061–T064 follow every story;
   - T065 follows the dev deploy;
   - T066 follows T065;
-  - T067 is outside the code, and comes before the first real collection.
+  - T067 is outside the code, and comes before the first real collection;
+  - T068 and T069 can run at any time; T069 lands before the pilot.
 
 ### User Story Dependencies
 
@@ -645,8 +659,10 @@ cycle: collect, see, hand over, confirm.
 ### Parallel Opportunities
 
 - **Phase 1**: T003, T005, T006, T007 and T008 run together.
-- **Phase 2**: T013 and T023 run beside T011 and T012. T018 and T021 run
-  once their subjects land.
+- **Phase 2**: T023 runs beside T011 and T012. T013 follows T010 and
+  T012. T018 and T021 share a test file and run one after the other, once
+  their subjects land. *(The [P] marks were removed from T013, T018 and
+  T021 on 2026-10-01, /speckit-analyze L1.)*
 - **US1**: T024 and T025 together, then T030, T031 and T032 together,
   after T029.
 - **US2 and US3** can be staffed in parallel with US1, except for US3's

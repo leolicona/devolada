@@ -140,9 +140,10 @@ R2 and Workers AI are untouched.
 *GATE: Must pass before Phase 0 research. Re-checked after Phase 1
 design. First checked against v1.7.1, where four gates blocked. Re-checked
 2026-10-01 against v1.8.0, which carries amendments 1–3 below, and again
-against v1.9.0 (amendment 4, the receipt's phone). Every gate passes.*
+against v1.9.0 (amendment 4, the receipt's phone) and v1.9.1 (a wording
+patch to the same bullet, /speckit-analyze M2). Every gate passes.*
 
-**Result: every gate passes under v1.9.0.** Against v1.7.1, four gates
+**Result: every gate passes under v1.9.1.** Against v1.7.1, four gates
 blocked: the Purpose, Principle V, and the stack table's Frontend and Auth
 rows with the quality gates. Governance asks the plan to propose the
 amendment rather than route around it. Complexity Tracking proposed three,
@@ -227,6 +228,7 @@ apps/api/
 ├── wrangler.jsonc                             # RED_BASE_URL; ALLOWED_ORIGINS + red origins (D29)
 └── test/
     ├── cash-at-stores-access.test.ts          # US3 + D2 refusals
+    ├── cash-at-stores-capabilities.test.ts    # the three capabilities, D12's link rules (US1)
     ├── cash-at-stores-operator.test.ts        # US2
     ├── cash-at-stores-counter.test.ts         # US1
     ├── cash-at-stores-business.test.ts        # US4

@@ -415,7 +415,9 @@ The one-open-attempt rule (`openAttempts`) needs no change: it reads
 The rest becomes an exported core function, `settleConfirmed`:
 - folio and customer identity;
 - `settle()` and `classifyPayment()`;
-- the review and observation gates;
+- the observation gate. The review hold stays in the SPEI path: its
+  reasons (a retired account, no clave) belong to proofs, and a cash row
+  never has them (/speckit-analyze H2);
 - `actionForClass`;
 - `recordDispatch`, the first attempt, `outcomeOf` and `settleDispatch`;
 - the final write.
@@ -453,8 +455,11 @@ is `exact` or `short`, never `over`. Its status is `confirmed` or
 - **The record** (`POST /store/collections`) asks again. The request
   carries `expectedDebtCents` and `expectedFeeCents`. If the fresh debt or
   the current network fee differs, nothing is written: 409
-  `AMOUNT_CHANGED`, with the new quote in the body (FR-021, the spec's
-  edge case on a changed fee).
+  `AMOUNT_CHANGED`. The error carries only its code (constitution III: a
+  browser route's error is `{ code }`). The app then reads the quote again
+  and shows the new amounts (FR-021, the spec's edge case on a changed
+  fee). *(Corrected 2026-10-01, /speckit-analyze C2: this said "with the
+  new quote in the body".)*
 - **An unproven zero is not zero.** If `customerDebt` answers
   `unconfirmed`, the record is refused with 503 `INTEGRATION_UNAVAILABLE`.
   An unproven zero is never read as "nothing owed"
@@ -516,9 +521,16 @@ when the result screen opens. The phone is read only when it is needed.
   API.
 - **D3: no phone is not a dead end.** Without a phone, the link is
   `wa.me/?text=…`, and WhatsApp opens its contact picker.
-- **D5: the status line tells the truth** about the action: done, queued,
-  not done because the payment is short, held for the business, or
-  failed. It fills the template's `{estado}` placeholder.
+- **D5: the status line tells the truth** about the action. It covers
+  six outcomes:
+  - reconnected;
+  - registered without reconnecting, by the business's rule;
+  - queued;
+  - not done because the payment is short;
+  - held for the business;
+  - failed.
+
+  It fills the template's `{estado}` placeholder.
 
 **The phone (constitution V, v1.9.0):**
 - The handler checks that the payment belongs to this store (404
@@ -777,8 +789,9 @@ on `red.dev`.
 
 ## D30 — Two things outside this repository, and one debt
 
-- **The no-cap pilot** is registered with `/speckit-debt-log` the day
-  `tasks.md` is written. Slug: `store-cash-no-cap`. Exit condition: a cap
+- **The no-cap pilot** is registered with `/speckit-debt-log` by T003,
+  before any of its code lands. That is the constitution's "the same day"
+  the shortcut is taken. Slug: `store-cash-no-cap`. Exit condition: a cap
   per store, with a warning before it and collections blocked at it,
   before a second store or a second business joins.
 - **`devolada-red`'s deploy workflows are turned off** before this ships.

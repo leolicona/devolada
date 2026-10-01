@@ -1,4 +1,27 @@
 <!--
+Sync Impact Report (v1.9.1, 2026-10-01)
+- Version change: 1.9.0 → 1.9.1 — PATCH. One sentence of Principle V's
+  store bullet is reworded. It adds no reach the spec had not already
+  given the store; it only says it plainly.
+- Source: /speckit-analyze on specs/018-cash-at-stores, finding M2.
+  "It reaches only the businesses the platform operator switched the cash
+  channel on for" could be read as "only while the channel is on". That
+  reading would forbid the hand-over of cash still held after the channel
+  is switched off, which 018's spec requires. The creator approved the
+  correction on 2026-10-01.
+- Modified sections:
+  · V, the store bullet — "It reaches only the businesses the platform
+    operator switched the cash channel on for." → "It reaches only the
+    businesses the platform operator has switched the cash channel on for.
+    After the channel is switched off, it reaches such a business only to
+    account for and hand over the cash it still holds for it."
+- What it does not change: what the store sees of customers; no counter
+  work for a business whose channel is off.
+- Templates: none touched.
+- Follow-up TODOs: carried unchanged from v1.9.0.
+-->
+
+<!--
 Sync Impact Report (v1.9.0, 2026-10-01)
 - Version change: 1.8.0 → 1.9.0 — MINOR. One sub-bullet of Principle V is
   materially expanded: what a store may see of a business's customers
@@ -596,8 +619,10 @@ worth less than no verdict. Each layer answers only the questions it can.
 - A store is the one actor that is not a member of a business:
   - It is resolved from its own record on every request (`requireStore`),
     never from a membership, and a business route refuses it.
-  - It reaches only the businesses the platform operator switched the cash
-    channel on for.
+  - It reaches only the businesses the platform operator has switched the
+    cash channel on for. After the channel is switched off, it reaches
+    such a business only to account for and hand over the cash it still
+    holds for it.
   - Of their customers, it sees only three things: what a typed search
     returns (name, usuario, zone); one customer's debt; and, for a payment
     it recorded, that customer's phone. The phone is read from the
@@ -827,4 +852,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.9.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01
+**Version**: 1.9.1 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01

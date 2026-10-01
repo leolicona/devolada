@@ -53,8 +53,10 @@ Rules:
 - Changing `phone` on an accepted store also changes the user's
   `username`, in the same batch (FR-003).
 - Suspending deletes the shopkeeper's session rows (FR-005, FR-014).
-- `active` is accepted only for a store that has a `user_id`. A store
-  suspended before accepting returns to `invited`.
+- `status: "active"` on a store with no `user_id` (suspended before its
+  shopkeeper accepted) returns it to `invited`. Its open invitation works
+  again while it is within its seven days; otherwise the operator re-sends
+  it. *(Settled 2026-10-01, /speckit-analyze M6.)*
 
 Errors:
 - **409 `PHONE_TAKEN`.**

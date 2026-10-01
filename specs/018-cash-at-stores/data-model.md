@@ -32,9 +32,11 @@ A platform row: it has **no `business_id`**.
 **Status transitions**:
 - `invited → active`: when the invitation is accepted;
 - `active ⇄ suspended`: by the operator (FR-005);
-- `invited → suspended`, and back to `invited`: the same operator act. A
-  suspended store's open invitation is not accepted (400
-  `INVALID_INVITATION`).
+- `invited → suspended`, and back to `invited`: the same operator act.
+  Reactivating (`status: "active"`) a store that has no `user_id` returns
+  it to `invited`, and its open invitation works again while it is within
+  its seven days. A suspended store's open invitation is not accepted
+  (400 `INVALID_INVITATION`).
 
 No transition deletes anything.
 

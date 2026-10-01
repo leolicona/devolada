@@ -114,11 +114,44 @@ each adopting a clave whose `cep_records` row comes from the account ending
    Contacta a {the business's name} con tu comprobante…".
 3. With a provisional release standing (012 quickstart), **Expect**: "Tu
    servicio ya volvió…" — never "tu internet".
-4. Open `/l/does-not-exist` and the bare origin with no saved link.
+4. Open `/p/does-not-exist` and the bare origin with no saved link.
    **Expect**: "Pide el link correcto a quien te lo envió." and "Tu pago";
    the browser tab reads "Tu pago".
 5. Open the typed form's bank list and "Otro banco". **Expect**: no
    "BANXICO".
+
+## US5 — The page shows where to pay and teaches as it goes
+
+On a business with the feature on, with the dev seed's link and its
+reference ready:
+
+1. Open the link (CLABE). **Expect**: under the amount, "Transfiere a"
+   with the tag "CLABE", the CLABE and "Copiar", the line "{negocio} recibe
+   sus pagos en esta CLABE…"; then the box "Tu referencia" with "Solo
+   tuya", the digits, "Copiar" (it pastes seven digits), where to type it
+   and why; then "Así se llena en tu app" filling itself; "Ver otra vez"
+   plays it again.
+2. Set the business's collect account to a debit card, then to a phone,
+   and reload. **Expect**: the tag reads "Tarjeta de débito", then
+   "Celular", and a "Banco" row stands beside the number.
+3. Turn on reduced motion in the OS and reload. **Expect**: the example
+   shows filled at once; nothing slides.
+4. Tap **Ya hice mi transferencia**. **Expect**: the bank and the day as
+   chips; Tab reaches each group once and the arrow keys move the choice;
+   "Elegimos el banco de tu último pago…" under the banks when one was
+   preselected; "¿Por qué te preguntamos esto?" opens one sentence and
+   sends nothing.
+5. Tap **Usé otra referencia**. **Expect**: only the reference or the
+   clave is asked, with the amount, the bank and the day as tags; **Volver**
+   returns to change them.
+6. Confirm with the own reference on `…11`. **Expect**: three steps, the
+   second one breathing, no receipt link; then "Pago confirmado" and "Así
+   de fácil cada mes…" with the digits.
+7. Confirm a typed `…44`. **Expect**: the tie-break shows "Búscalos en el
+   detalle de tu transferencia:" with "4 dígitos" and "4 caracteres" marks
+   and no real value; once confirmed, no next-month line.
+8. Open a link of a business with the feature off. **Expect**: today's
+   step 1 and step 2.
 
 ## Reading the success criteria
 
@@ -127,4 +160,6 @@ With the business id `$B`, each is one query over that business
 answer rows (T030 records it on the sandbox), and SC-006 is the copy scan
 (step 1 of US4). SC-001 from `match_trail.by` on typed rows that found
 transfers; SC-004 from links with three `tie_break = 'none'` rows in a
-window; SC-005 from the receipt rows of links with a reference.
+window; SC-005 from the receipt rows of links with a reference; SC-007
+from the confirmed rows of links with a reference whose `reference_source`
+is `own` (research R14).

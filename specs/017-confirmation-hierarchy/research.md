@@ -348,3 +348,67 @@ that explains Banxico stays where it is.
 test in the app's own suite runs in the same CI step, with no new gate to
 name. Removing `BANXICO` from `banks.data.md` — rejected: the file mirrors
 the provider's vocabulary, and the admin and the API read it too.
+
+## R14 — The page's design (User Story 5)
+
+**What was asked.** The creator compared five designs on the design
+canvas "Confirma tu pago — propuesta" (A and B on 2026-09-30, C, D and E
+on 2026-10-01) and chose E. About A–D: they showed neither the account the
+business chose nor the payer's reference, and the page should teach a
+little.
+
+**What the page already has** (`main` at `77bc503`):
+
+- The account is one, by kind: `collectAccount { kind: "clabe" | "card" |
+  "phone", value, bank }` (receipt-triage D29), shown as a `CopyField`
+  labelled by `ACCOUNT_LABEL` (`PaymentPage.tsx:577-581`), with the bank
+  beside a card or a phone (`:2342`) and under "Ver los demás datos" for a
+  CLABE (`:2414`).
+- "Tu referencia" is a `CopyField` row beside the account (`:2347-2354`),
+  grouped `234 5678`, copying the seven digits, with the phone's note
+  when `fromPhone`; below it, in a well, `referenceHint` (012 D21: a bank's
+  own words only when verified, `reference-hints.ts`) and the contact tip.
+- Step 2's bank and day are `ChoiceGroup` rows: native radios, 48px,
+  icon and "Elegido" (`choice-group.tsx`, 012 D21).
+- The motion vocabulary and its tokens: `--duration-fast` 150ms,
+  `--duration-normal` 250ms, `--duration-slow` 400ms, `--duration-breath`
+  2400ms; `Reveal` and `Pending` carry the cross-fade and the breath.
+
+**Decision (D17).** E is built from these pieces and the tokens, nothing
+new in `packages/ui`: what E draws as chips, tags, the reference's box and
+the example uses the radius, size, colour and duration tokens that exist.
+Two text-on-surface pairs are new and join `contrast-lint.mjs`: the link
+ink and the body ink on the accent-subtle surface (the tags and the
+reference's box). Measured by hand on 2026-10-01: light `#0f766e` on
+`#e4f2f0` is 4.8:1; dark `#34c4b5` on the subtle surface over the dark
+card is 6.2:1. Both pass AA for body text.
+
+**Decision (D18).** Chips keep the radios. 012 D21 chose native radios for
+reasons that still hold: one tab stop per group, the arrow keys, the
+reader's own "seleccionado, 1 de 3", and no script weight on a public
+page. A `chips` layout of `ChoiceGroup` changes only how each label is
+drawn. *Rejected: toggle buttons with `aria-pressed`, as the prototype
+drew them. They need one tab stop each and say nothing about a group.*
+
+**Decision (D19, D20).** Step 1's order follows E. The example is CSS
+only: a stepped `clip-path` per value, so the text is in the DOM from the
+start and a reader hears the filled form. Replay remounts it by key, so no
+timer is kept. *Rejected: typing the text in with a timer. That needs
+state per character, and under reduced motion it would have to be turned
+off separately.*
+
+**Decision (D21).** Option 2 takes the confirmation's choices. 012 built
+the three views as `proofView` in `PaymentPage` (Phase 9, T036), so the
+choice moves up beside it and both views read it. The creator accepted
+the change to FR-003 by choosing E.
+
+**Decision (D22).** The wait's steps follow the row. A step list driven by
+a timer would claim progress the server never reported; the row's status
+is what the page knows. The tie-break's illustration uses placeholder
+marks, because any real digit or character of a transfer found would hand
+a guesser the answer (FR-018).
+
+**Measuring SC-007.** The share of confirmed payments, on links with a
+reference at the pilot business, whose confirming row has
+`referenceSource = 'own'` — one query over `payments` by business, in the
+two months after launch.

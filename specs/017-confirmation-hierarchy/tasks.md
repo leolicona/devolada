@@ -51,6 +51,7 @@ tasks at the points below of `specs/012-payment-without-receipt/tasks.md`:
 | T013–T021 (US2) | in place of 012's T043–T049 (012 US5), after 012 US4 | the typed path is built once, the new way |
 | T022–T024 (US3) | with 012's T030/T035 and T055/T056 | the `own` mode and the transition read exclusive accounts |
 | T025–T028 (US4) | any time: the copy it changes is on `main` already (012 is built, `70fe732`) | the payer page's copy, on every business |
+| T039–T050 (US5) | step 1's parts (T039, T042–T044) any time after US4's copy; step 2's parts after US1 (T036) and US2's screen (T021) | the design the creator chose, proposal E |
 | T029–T030 | with 012's T053–T054 | one sweep of comments, one quickstart run |
 
 What happens to each amended 012 task:
@@ -216,6 +217,7 @@ When one of those 012 tasks is checked off, its line says "built per spec
 - **US2 (T013–T021)**: after Exclusive accounts and 012's US4 (T037–T042: the ladder and the ask route); it takes the place of 012's US5 typed tasks.
 - **US3 (T022–T024)**: after Exclusive accounts; T024 after T018 and 012's T056.
 - **US4 (T025–T028)**: after Setup only; it needs no other phase of this feature, and 012 is already built.
+- **US5 (T039–T050)**: tests first (T039–T041). T042–T044 after Setup (step 1 needs nothing else); T045–T047 after US1 (T010–T012, T036); T048 after T033; T049 after T021; T050 any time after Setup.
 - **Polish (T029–T030)**: after the stories wanted, with 012's T053–T054.
 
 ### User story dependencies
@@ -233,12 +235,12 @@ When one of those 012 tasks is checked off, its line says "built per spec
 
 - `apps/api/test/confirmation-hierarchy.test.ts`: T005, T014, T023 — sequential.
 - `apps/api/test/consta/match.test.ts`: T013, T022 — sequential.
-- `apps/pago/test/confirmation-hierarchy.test.tsx`: T008, T015, T026 — sequential.
+- `apps/pago/test/confirmation-hierarchy.test.tsx`: T008, T015, T026, T039, T040 — sequential.
 - `apps/api/src/routes/direct-payments/handler.ts`: T019, T020, T024 — sequential.
 - `apps/api/src/direct-payments/validation.ts`: T018, T024 — sequential.
 - `apps/api/src/consta/bundle/match.ts`: T017, T024 — sequential.
-- `apps/pago/src/features/pago/PaymentPage.tsx`: T012, T021, T027, T028 — sequential.
-- `apps/pago/src/features/pago/ConfirmPayment.tsx`: T011, T028 — sequential.
+- `apps/pago/src/features/pago/PaymentPage.tsx`: T012, T021, T027, T028, T043, T047, T048, T050 — sequential.
+- `apps/pago/src/features/pago/ConfirmPayment.tsx`: T011, T028, T045, T046, T047 — sequential.
 
 ## Parallel Examples
 
@@ -277,11 +279,14 @@ built.
 4. US3 (T022–T024): exclusivity proven across the `own` mode and the
    transition.
 5. US4 (T025–T028): the payer's copy — it can also ship first, on its own.
+5b. US5 (T039–T050): the design. Step 1's account, `ReferenceBox` and
+   `TransferExample` can ship right after US4, since they change only step
+   1; step 2's parts follow US1 and US2.
 6. Polish (T029–T030).
 
 ## Notes
 
-- 30 tasks, all open; T001 records the baseline and T030 the result.
+- 50 tasks, all open: T001–T030, Phase 9's T031–T038 and US5's T039–T050; T001 records the baseline and T030 the result (it runs quickstart US5 too).
 - A task that turns out to need a decision not in plan.md stops and asks
   the creator; it does not make one silently.
 
@@ -299,3 +304,31 @@ built.
 - [ ] T036 Build US1's step on the page 012 built, as T010–T012 say, at these places (`confirmation-hierarchy D2`, `D3`): the view switch exists as `proofView` in `apps/pago/src/features/pago/PaymentPage.tsx:1018` — page state, `"confirm" | "typed" | "receipt"`, a reload lands on the confirmation — so it is D3's view state and T011 adds no second one in `ConfirmPayment`; `ConfirmPayment`'s exits (`ConfirmPayment.tsx:363-381`) become "Pagué otra cantidad" above **Confirmar pago**, then **Usé otra referencia** (`secondary`) and `ReceiptLink`; the typed view (`PaymentPage.tsx:2486-2555`: "Ver los datos otra vez", the heading "No puse la referencia", its intro, a `secondary` "Sube tu comprobante") takes the name "Usé otra referencia" (FR-007), T011's intro, **Volver** and `ReceiptLink`; the asks' receipt button (`:820-824, 901, 977`), today `secondary` after an ask form and quiet at the end of every waiting row, the plain wait included, becomes `ReceiptLink` last on the views T012 names and nothing on the plain wait; the expired view's `secondary` "Sube tu comprobante" (`:1971-1973`) becomes `ReceiptLink`, per US1, FR-005 (contradicts)
 - [ ] T037 Rewrite the 012 tests that prove the old tie-break so they prove this feature's, each with the task that changes its behavior — none skipped, none deleted to get green; each keeps its `payment-without-receipt US<n>` citation and adds `confirmation-hierarchy US<n>`: `apps/api/test/payment-without-receipt.test.ts:783-990` (`SENDER_TAIL_NEEDED` at 807; the `sender_tail` and `clave_tail` asks at 855, 872, 951, 964, 981; typed rows with a tail at 814, 843) → the typed door searching at once and the `tie_break` ask (T031–T033); `apps/api/test/consta/match.test.ts:229-353` (the `typed` mode's tail rows at 302, 320, 353) → T013's `typed` rows, the `fitClaveTail` table (324-337) kept while T017 reuses it; `apps/pago/test/payment-without-receipt.test.tsx` — the exits and the typed view by their old names (249, 273-287, 390-400, 697-773, 816, 833-922), `SENDER_TAIL_NEEDED` (478, 872-896, 1085-1104), the two tail asks (733, 935-1009) → T036's names and T021's screen; `tests/e2e/pago.spec.ts:352` → "Pagué otra cantidad", "Usé otra referencia", "Subir foto del comprobante", per Constitution IV, VII (missing)
 - [ ] T038 Records (`confirmation-hierarchy D1`): a dated amendment to D1 in `specs/017-confirmation-hierarchy/plan.md` — 012 was built on its own (#261, `70fe732`) with its own tie-break, and this feature changes that code through Phase 9; in `specs/012-payment-without-receipt/tasks.md`, the note "Amended by spec 017" (lines 28-40) says the listed tasks were built as 012 wrote them and are changed by spec 017 T031–T037, and T029's "built per spec 017 T0xx" reads "changed by spec 017 T0xx" on those lines, per plan: D1 (contradicts)
+
+---
+
+## Phase 10: User Story 5 — The page shows where to pay and the payer's reference first, and teaches as it goes (Priority: P2)
+
+**Goal**: proposal E on links with a reference — the account by the method the business chose, the reference's own box, the example that fills itself, chips, the why, the wait's steps, where to find a tie-break answer, and the line about next month — in the page's own look.
+
+**Independent Test**: quickstart US5 — links of businesses paid by CLABE, card and phone; step 1's order and the example with and without reduced motion; chips by keyboard; the why; option 2's tags; the wait's steps; the tie-break's illustration; the confirmed line. A link without a reference is today's.
+
+### Tests for User Story 5 (write first, see them fail)
+
+- [ ] T039 [P] [US5] Step 1 page tests in `apps/pago/test/confirmation-hierarchy.test.tsx` (cite `confirmation-hierarchy US5`), MSW with schema-validated fixtures for `collectAccount.kind` `clabe`, `card` and `phone`: the tag reads "CLABE", "Tarjeta de débito" or "Celular"; the number with its copy button; the "Banco" row for `card` and `phone` only; the "directo a su cuenta" line names the fixture's `ispName`; `ReferenceBox` is a region named "Tu referencia" after the account and before the example, with "Solo tuya", the grouped digits, a copy that writes the seven digits, the phone's note only when `fromPhone`, `referenceHint`'s sentence and the why; `TransferExample` holds its four rows with the reference row marked, and "Ver otra vez" remounts it; without `payerReference`, step 1 is today's; axe clean.
+- [ ] T040 [P] [US5] Step 2 and after, page tests in the same file (cite `confirmation-hierarchy US5`): the bank and the day are radio groups (`role="radio"`, one checked) drawn as chips, the arrow keys move the choice and the group is one tab stop; the preselected-bank line only when a learned bank is preselected; "¿Por qué te preguntamos esto?" toggles `aria-expanded` and its sentence with no request (MSW errors on any); option 2 shows the three tags and sends `referenceSource: "typed"` with the confirmation's bank, day and amount unchanged; the plain wait lists the three steps with `aria-current="step"` on "Verificamos tu transferencia" and no receipt link; the tie-break's illustration holds no digit or character of the fixture's candidates; a confirmed `own` row ends with the next-month line carrying the payer's digits, and a confirmed `typed` row does not; axe clean.
+- [ ] T041 [P] [US5] The browser layer in `tests/e2e/pago.spec.ts` with stubs in `tests/e2e/stubs.ts` (cite `confirmation-hierarchy US5`): at 360, 768 and 1280 in both themes — chips, copy buttons, "Ver otra vez" and the why at least 48px with a measured focus ring; the reference's box and the tags pass contrast with axe's rule on; no horizontal scroll with a CLABE, a card and a phone; with `reducedMotion: "reduce"` emulated, the example's four values are visible at once and no element of step 1 has a running transform animation.
+
+### Implementation for User Story 5
+
+- [ ] T042 [US5] Contrast pairs (`confirmation-hierarchy D17`): in `scripts/contrast-lint.mjs`, `--color-text-link` and `--color-text-primary` on `--color-accent-primary-subtle` (AA normal), the subtle surface composed over the card; run it in both themes and record the measured ratios in the pair's comment (`measured 2026-10-01: 4.8:1 light, 6.2:1 dark` for the link ink, to be confirmed by the script).
+- [ ] T043 [US5] Step 1's account and `ReferenceBox` (`confirmation-hierarchy D19`; spec FR-024, FR-025): in `apps/pago/src/features/pago/PaymentPage.tsx`'s step "transfer", on links with `payerReference` only — "Transfiere a" with the kind's tag (`ACCOUNT_LABEL`, an icon per kind), the number's copy row, the "Banco" row for `card` and `phone`, the "directo a su cuenta" line by kind and `ispName`; a new `apps/pago/src/features/pago/ReferenceBox.tsx` with the contract's parts and `CopyButton`; today's `CopyField` rows and well stay for links without a reference (FR-006).
+- [ ] T044 [US5] `TransferExample` (`confirmation-hierarchy D20`; spec FR-026): a new `apps/pago/src/features/pago/TransferExample.tsx` — the four rows by kind, the stepped `clip-path` reveal on the duration tokens, the reference row's outline last, replay by a `key` bumped from "Ver otra vez", no keyframe under `prefers-reduced-motion`; its keyframes in the app's stylesheet beside the existing motion, no raw duration literal in the component.
+- [ ] T045 [US5] Chips (`confirmation-hierarchy D18`; spec FR-027): `layout?: "rows" | "chips"` in `apps/pago/src/components/ui/choice-group.tsx` — the same native radios and label-as-target; chips are pills at 48px on `--border-radius-full`, the chosen one with the check icon and a focus-colour outline; the comment cites D18 and 012 D21. `ConfirmPayment.tsx` uses `chips` for the bank and the day, with the day labels of the contract and the preselected-bank line.
+- [ ] T046 [US5] The why (`confirmation-hierarchy D17`; spec FR-028): in `ConfirmPayment.tsx`, the link-styled button with `aria-expanded` and the sentence in a well, opening in place; nothing sent.
+- [ ] T047 [US5] Option 2 takes the confirmation's choice (`confirmation-hierarchy D21`; spec FR-029; amends T011 and T036): the bank, day and amount state moves from `ConfirmPayment` up to `PaymentPage` beside `proofView`; the typed view renders `TransferForm`'s key fields only, the three tags ("Elige tu banco" when none), and sends the choice unchanged; **Buscar mi pago** waits for a bank.
+- [ ] T048 [US5] The wait's steps (`confirmation-hierarchy D22`; spec FR-030): in `SourcedReview` (`PaymentPage.tsx`), the plain wait of a sourced row shows the three-step list derived from the row, the current step breathing through `Pending`, `aria-current="step"`, and the contract's line under it; no `ReceiptLink`.
+- [ ] T049 [US5] The tie-break's illustration (`confirmation-hierarchy D22`; spec FR-031): in `TieBreakForm.tsx` (T021), the figure of the contract above the fields, static markup with placeholders only, its comment citing FR-018.
+- [ ] T050 [US5] The confirmed line (`confirmation-hierarchy D22`; spec FR-032): in `PaymentPage.tsx`'s confirmed view, after the folio, the next-month line on rows with `referenceSource = "own"`, with the payer's grouped digits; the step 1 sections' entrance and the reference's glow (FR-033) land with T043 and T044.
+
+**Checkpoint**: US5 is complete — both steps read as proposal E, in the page's own look, and a link without a reference is today's page.

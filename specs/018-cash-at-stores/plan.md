@@ -136,36 +136,39 @@ R2 and Workers AI are untouched.
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-checked after Phase 1
-design. Checked against constitution v1.7.1.*
+design. First checked against v1.7.1, where four gates blocked; re-checked
+2026-10-01 against v1.8.0, which carries the three amendments below. Every
+gate passes.*
 
-**Result: four gates are blocked until the constitution is amended.** The
-feature cannot pass them without changing the law. Governance says that
-when a principle blocks a feature, the plan says so and proposes the
-amendment instead of routing around it. The proposals are in Complexity
-Tracking. They go through `/speckit-constitution` before `/speckit-tasks`
-(as v1.1.0, v1.3.0, v1.5.0 and v1.6.0 did, the amendment leads the code).
-Every other gate passes.
+**Result: every gate passes under v1.8.0.** Against v1.7.1, four gates
+blocked: the Purpose, Principle V, and the stack table's Frontend and Auth
+rows with the quality gates. Governance asks the plan to propose the
+amendment rather than route around it. Complexity Tracking proposed three,
+and the creator ran `/speckit-constitution` on 2026-10-01: constitution
+v1.8.0. The rows below say which amended text each gate now passes
+against.
 
 | Principle | Gate | Status |
 | --- | --- | --- |
-| **Purpose** | "collect payments by SPEI and validates every transfer". A cash payment is neither a transfer nor validated by Banxico: the store's word confirms it | ⛔ amendment 1 |
+| **Purpose** | "collect payments by SPEI and validates every transfer". A cash payment is neither a transfer nor validated by Banxico: the store's word confirms it | ✅ v1.8.0 Purpose |
 | I. Spec-driven, decisions cited | Spec → plan → tasks. Every non-obvious rule cites `cash-at-stores D<n>`. The old network's decisions are re-specified, never cited as law. The FR-027 change and the `links-on-demand-search` FR-008 clause are recorded (D11, D18) | ✅ |
 | II. Money law | Cents end to end, with two kinds of fee: `store_fee_cents` for the store and the prepaid credit's fee for Devolada. The store fee never enters `settle()` or `classifyPayment()` (D13). Times are in the business's timezone on the receipt (D18). Tolerance is the business's own, unchanged | ✅ |
 | III. One contract, pure routers | New `routes/store/`, `routes/cash-points/` and extended `routes/platform/`, each `{index,handler,schema}.ts` with a pure router. Schemas are exported (`./store-schema`, `./cash-points-schema`) and used by MSW and Playwright stubs. One envelope; no `message` or `retryable`. Better Auth's sign-in, OTP and passkey endpoints stay the one exemption (`baPost`) | ✅ |
 | IV. Tests on the real runtime | API on workerd with a real D1, WispHub at its origin, and the new capabilities exercised through the adapter. Component tests with MSW and axe. Contrast, touch targets and scroll in Playwright. The passkey ceremony on red's origin (D28) | ✅ |
-| **V. Tenant isolation, authorization by area** | (a) "The actor is resolved from Better Auth's membership" does not hold: a store is a non-member actor (D2). (b) "Every business table carries `business_id`": `stores` and `store_invitations` are platform rows without it (D6), while `store_ledger`, `store_handovers` and `payments` carry it. (c) A store reads a business's customers, though narrowly: a typed search returning name, usuario and zone, and one debt (D24). (d) Authorization by area for the business side: `payments:read` and `payments:operate` (D20, D23) ✅. (e) The invitation token is hashed (D4) ✅ | ⛔ amendment 2 |
+| **V. Tenant isolation, authorization by area** | (a) "The actor is resolved from Better Auth's membership" does not hold: a store is a non-member actor (D2). (b) "Every business table carries `business_id`": `stores` and `store_invitations` are platform rows without it (D6), while `store_ledger`, `store_handovers` and `payments` carry it. (c) A store reads a business's customers, though narrowly: a typed search returning name, usuario and zone, and one debt (D24). (d) Authorization by area for the business side: `payments:read` and `payments:operate` (D20, D23) ✅. (e) The invitation token is hashed (D4) ✅ | ✅ v1.8.0 V, new store-actor bullet |
 | VI. Visual foundations | Tokens only. `decisive` 64px for *Cobrar $X*, `standard` 48px touch. The statuses already exist in `StatusBadge` (D23). Waiting labels sit inside `<Pending>`. The floor is 360px with no horizontal scroll. es-MX copy, and the receipt says *pago*, never *cobro* (D18, D27). Light and dark are checked by contrast-lint and the browser layer, both of which now read `apps/red` (D29) | ✅ |
 | VII. Every test cites its story | `cash-at-stores US1`–`US5`; the bug's test cites `bug: queue-retry-forgets-action` | ✅ |
 | VIII. Absent configuration degrades | `RED_BASE_URL` is declared in `env.ts`. Unset, it has the same meaning as `PAGO_BASE_URL`: the invitation link is built against the local default, and the operator panel warns. Without a capable integration, the switch refuses with a reason (FR-007). A provider outage is an answer on every counter door (D8, D14) | ✅ |
 | IX. Core generic, adapters translate | The counter asks by capability (`customerSearch`, `customerDebt`, `paymentActions`), and no new core file imports `wisphub/`. The three existing action call sites move behind `paymentActions`: a debt anchor paid, none added (D9). Contracts say `integration` and `INTEGRATION_*`. The payment row's `wisphub_customer_id` column is an existing, registered leak, filled through the capability's `providerCustomerId` | ✅ |
-| **Stack table, Frontend row** | "`apps/admin` (panel) and `apps/pago` (public payment page)". A third React app is a new surface (D1) | ⛔ amendment 3 |
-| **Stack table, Auth row** | "email + password with OTP verification, passkeys, organization plugin". The `username` plugin is new (D3) | ⛔ amendment 3 |
-| **Quality gates** | "every PR uploads no-traffic preview versions of the four Workers". It becomes five (D29) | ⛔ amendment 3 |
+| **Stack table, Frontend row** | "`apps/admin` (panel) and `apps/pago` (public payment page)". A third React app is a new surface (D1) | ✅ v1.8.0 stack table and gates |
+| **Stack table, Auth row** | "email + password with OTP verification, passkeys, organization plugin". The `username` plugin is new (D3) | ✅ v1.8.0 stack table and gates |
+| **Quality gates** | "every PR uploads no-traffic preview versions of the four Workers". It becomes five (D29) | ✅ v1.8.0 stack table and gates |
 | Migrations additive | All new tables and nullable or defaulted columns; no rebuild. D11 rejects the rebuild on purpose | ✅ |
 | One Worker trigger | No new periodic work. Cash rows ride the existing reconnection sweep | ✅ |
 
 **Re-check after Phase 1 design**: unchanged. The data model, contracts and
-quickstart add no new departure. Every ⛔ above is amendment-bound, and
+quickstart add no new departure. Every row that blocked under v1.7.1 is
+covered by v1.8.0's text, and
 nothing is routed around.
 
 ## Project Structure
@@ -269,7 +272,8 @@ The ledger's single writer is a module of its own, `store-ledger/`, as
 
 ## Complexity Tracking
 
-Three amendments, proposed for `/speckit-constitution` as v1.8.0 (MINOR).
+Three amendments, proposed for `/speckit-constitution` as v1.8.0 (MINOR),
+and applied on 2026-10-01 in the texts below.
 They materially expand the Purpose, Principle V and the stack table. No
 principle is removed, redefined or renumbered.
 

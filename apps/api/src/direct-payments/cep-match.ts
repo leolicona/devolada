@@ -171,6 +171,38 @@ export function undecidedOf(
   }
 }
 
+/* confirmation-hierarchy D6: the transfers an undecided row kept, by
+   clave — what an answer to its tie-break is read against. Dropped for
+   integrity, use, a previous holder or an unreadable document, a
+   transfer is never this payer's to answer for; every other one stays
+   (012 D17's reading, so rows its tie-break wrote still answer). */
+const NEVER_KEPT: ReadonlyArray<TrailCandidate["why"]> = ["amount", "account", "used", "excluded", "unreadable"];
+export function keptClavesOf(trail: Pick<MatchTrail, "candidates">): string[] {
+  return trail.candidates.filter((c) => c.cepId && !NEVER_KEPT.includes(c.why)).map((c) => c.clave);
+}
+
+/* D6: the transfers the search found that another payment already held —
+   an answer that names one is told it was used, never that it missed */
+export function usedClavesOf(trail: Pick<MatchTrail, "candidates">): string[] {
+  return trail.candidates.filter((c) => c.cepId && c.why === "used").map((c) => c.clave);
+}
+
+/* confirmation-hierarchy D9, D11 (data-model "The ask"): a row waiting on
+   a tie-break — validating, undecided, searched by a reference (typed, or
+   own during a 012 D26 transition), with transfers kept and not yet
+   decided. Null for every other row; otherwise how many it kept, which
+   picks the sentence the screen opens with (D12). */
+export function waitingOnTieBreak(
+  row: Pick<Payment, "status" | "lastError" | "matchTrail" | "referenceSource">,
+): { kept: number } | null {
+  if (!row.referenceSource) return null;
+  const undecided = undecidedOf(row);
+  if (!undecided || undecided.reason === "all_used") return null;
+  const trail = JSON.parse(row.matchTrail!) as MatchTrail;
+  const kept = keptClavesOf(trail).length;
+  return kept > 0 ? { kept } : null;
+}
+
 /* The bundle a payment is still waiting to read (D16): the latest pending
    one its own search received, with the search it answered. A retried
    download carries no reading, and a receipt-door row holds neither the

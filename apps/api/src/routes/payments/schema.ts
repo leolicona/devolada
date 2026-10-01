@@ -121,7 +121,8 @@ export const feedCharge = z.object({
      `undecided`; defaulted so fixtures born before it still parse. */
   undecidedSource: z.enum(["several", "single"]).nullable().default(null),
   /* payment-without-receipt D8/D11/D23: the path that confirmed it — the
-     payer's own reference, or one typed under "No puse la referencia".
+     payer's own reference, or one typed under "Usé otra referencia" (012's
+     "No puse la referencia", renamed by confirmation-hierarchy FR-007).
      Null on a clave, a receipt, and every row of a business with the
      feature off. The panel says it in text beside the StatusBadge. */
   referenceSource: z.enum(["own", "typed"]).nullable().optional(),

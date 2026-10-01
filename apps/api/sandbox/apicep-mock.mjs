@@ -50,7 +50,16 @@
        "…33"          → several: two CEPs from one account (tail 8301),
                         credited 07:11 and 07:13 — the earliest confirms
        "…44"          → several: two CEPs from two accounts, tails 8301
-                        and 4417 — a learned account or the four digits pick
+                        and 4417, claves ending …0412 and …977I — a learned
+                        account, or one answer to the tie-break, picks
+                        (confirmation-hierarchy quickstart: `9771` must fit
+                        …977I, O read as 0 and I as 1)
+       "…55"          → several: two CEPs from two accounts, tails 8301 and
+                        4417, claves that share their last four (…5510) —
+                        the characters leave both, the digits decide
+       "…66"          → one CEP, tail 8301, clave ending …3O10 — a single
+                        match on a typed reference is asked too (FR-009);
+                        `3010` must fit it
        any other seven digits → not found (the ladder: check the data, then
                         the clave)
      anything else    → valid, LIQUIDADO, with Banxico's clave in
@@ -307,6 +316,8 @@ const firstAsked = new Map();
 /* the transfers of a several answer, kept for its download */
 const payerBundles = new Map();
 
+/* `n` ends the clave: a number for 012's scenarios, the four characters a
+   tie-break answer reads for confirmation-hierarchy's (quickstart) */
 const payerTransfer = (reference, day, creditTime, senderAccount, claim, beneficiary, n = 0) => ({
   clave: `MOCKREF${reference}${day.replace(/-/g, "")}${n}`.slice(0, 30),
   operationDay: day,
@@ -381,9 +392,16 @@ function payerScenario(claim, beneficiary) {
       ]);
     case "44":
       return severalFor([
-        payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary, 1),
-        payerTransfer(reference, day, "11:40:47", SENDER_4417, claim, beneficiary, 2),
+        payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary, "977I"),
+        payerTransfer(reference, day, "11:40:47", SENDER_4417, claim, beneficiary, "0412"),
       ]);
+    case "55":
+      return severalFor([
+        payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary, "A5510"),
+        payerTransfer(reference, day, "11:40:47", SENDER_4417, claim, beneficiary, "B5510"),
+      ]);
+    case "66":
+      return validFor(payerTransfer(reference, day, "09:02:31", SENDER_8301, claim, beneficiary, "3O10"), claim, beneficiary);
     default:
       return notFound();
   }

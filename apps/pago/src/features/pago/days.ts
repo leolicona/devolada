@@ -38,6 +38,15 @@ export function weekdayAndDay(day: string): string {
   return `${weekday} ${Number(day.slice(8, 10))}`;
 }
 
+/* "mar 29" — confirmation-hierarchy D18: a chip's day ("Hoy · mar 29").
+   The weekday's first three letters, accent kept ("mié", "sáb"), which is
+   how es-MX shortens it; Intl's own short form adds a period in some
+   engines and not in others. */
+export function shortWeekdayAndDay(day: string): string {
+  const weekday = at(day).toLocaleDateString("es-MX", { weekday: "long", timeZone: "UTC" });
+  return `${weekday.slice(0, 3)} ${Number(day.slice(8, 10))}`;
+}
+
 /* "12 de septiembre" */
 export function dayOfMonth(day: string): string {
   return at(day).toLocaleDateString("es-MX", { day: "numeric", month: "long", timeZone: "UTC" });

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -15,7 +15,7 @@ import {
   Skeleton,
   StatusBadge,
 } from "@devolada/ui";
-import { BANKS, groupReferenceDigits, isGenericReference } from "@devolada/api/direct-payments-schema";
+import { groupReferenceDigits, isGenericReference } from "@devolada/api/direct-payments-schema";
 import type {
   DirectPaymentStatusResponse,
   LinkStatusResponse,
@@ -29,11 +29,15 @@ import {
   ChevronDown,
   ChevronLeft,
   Camera,
-  Copy,
   CloudUpload,
+  CreditCard,
   Info,
+  Landmark,
+  Lock,
   ScanLine,
   ShieldCheck,
+  Smartphone,
+  Star,
   Store,
   TimerOff,
   TriangleAlert,
@@ -49,9 +53,15 @@ import { readAskAck, rememberAskAck } from "@/ask-ack";
 import { forgetLink, rememberLink } from "@/links";
 import { forgetStep, readStep, rememberStep, type Step } from "@/step";
 import { CaptureGuide, type GuideState } from "./CaptureGuide";
-import { ConfirmPayment } from "./ConfirmPayment";
+import { ConfirmPayment, initialChoice, readChoice, type ConfirmChoice } from "./ConfirmPayment";
+import { CopyButton } from "./CopyButton";
+import { ReceiptLink } from "./ReceiptLink";
+import { ReferenceBox } from "./ReferenceBox";
+import { TieBreakForm } from "./TieBreakForm";
+import { TransferExample } from "./TransferExample";
 import { bankHint, bankLabel, GENERAL_HINT } from "./bank-hints";
 import { dayOfMonth, shiftDay, spokenDays, todayIn } from "./days";
+import { payerBank, payerBanks } from "./payer-banks";
 import { inlineReference, referenceHint } from "./reference-hints";
 
 /* The customer's payment page (direct-payment spec D9, D10): es-MX,
@@ -63,42 +73,6 @@ import { inlineReference, referenceHint } from "./reference-hints";
    app. Step 1 is only what gets typed there; step 2 is only the proof. */
 
 const POLL_MS = 5000;
-
-/* Transfer apps want paste, so every SPEI value carries a copy button. */
-function CopyButton({
-  value,
-  text = "Copiar",
-  /* Read by assistive tech only. Several buttons on the card show the
-     same word, and the field name is what tells them apart — appended
-     rather than substituted, so the visible text stays the start of the
-     accessible name (WCAG 2.5.3). */
-  srSuffix,
-  variant = "secondary",
-  className,
-}: {
-  value: string;
-  text?: string;
-  srSuffix?: string;
-  variant?: "secondary" | "ghost";
-  className?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant={variant}
-      className={cn("h-10 shrink-0 px-3 text-sm", className)}
-      onClick={() => {
-        void navigator.clipboard?.writeText(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }}
-    >
-      {copied ? <CheckCircle2 className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
-      {copied ? "Copiado" : text}
-      {srSuffix && <span className="sr-only"> {srSuffix}</span>}
-    </Button>
-  );
-}
 
 /* One SPEI field with its copy button. */
 function CopyField({
@@ -130,7 +104,12 @@ function CopyField({
 }
 
 /* Error copy for a rejected submission — only the enumerated public
-   codes reach here (schema `publicPaymentError` + envelope codes). */
+   codes reach here (schema `publicPaymentError` + envelope codes).
+   confirmation-hierarchy D13, D14 (spec FR-020–FR-022): the payer reads
+   about their transfer and what we do with it — never who checks it
+   behind the scenes, and never an ISP the business may not be. Where a
+   sentence sends the payer back to the business it names it, as
+   `{negocio}`, filled from the link read by `payErrorCopy`. */
 const payErrors: Record<string, string> = {
   TOO_MANY_ATTEMPTS: "Demasiados intentos por ahora. Espera una hora e intenta de nuevo.",
   NOTHING_DUE: "Tu cuenta ya está al corriente. No hay nada que pagar.",
@@ -141,7 +120,7 @@ const payErrors: Record<string, string> = {
      One is what the bank says; the other is that nobody said anything. */
   TRANSFER_CONTRADICTED: "Tu banco reporta que esta transferencia no se completó. Revísala en tu app e intenta de nuevo.",
   TRANSFER_NOT_FOUND:
-    "No encontramos tu transferencia en Banxico. Si ya la hiciste, contacta a tu proveedor de internet con tu comprobante para que la registre.",
+    "No pudimos confirmar tu transferencia a tiempo. Si ya la hiciste, contacta a {negocio} con tu comprobante para que la registre.",
   /* receipt-triage D7, D17: both are answered with the clave */
   REFERENCE_SHARED:
     "Esta referencia la usan muchas transferencias. Escribe tu clave de rastreo para encontrar la tuya.",
@@ -160,29 +139,39 @@ const payErrors: Record<string, string> = {
   CEP_SINGLE_UNDECIDED:
     "Encontramos una transferencia con tus datos, pero no pudimos confirmar que sea tuya. Escribe tu clave de rastreo para confirmarla.",
   /* payment-without-receipt (contracts/payment-page.md "Refusals"): the
-     pay route's five new refusals, each before anything is created or
-     billed. REFERENCE_NOT_READY has no sentence of its own: the page falls
-     back to the receipt step and says so there (D8). */
+     pay route's refusals, each before anything is created or billed.
+     REFERENCE_NOT_READY has no sentence of its own: the page falls back to
+     the receipt step and says so there (D8). confirmation-hierarchy R9:
+     the two that name the receipt end the way its link reads. */
   TRANSFER_DATE_OUT_OF_RANGE: "Elige un día de los últimos 30 días.",
-  REFERENCE_OF_ANOTHER: "Esa referencia es de otra persona. Escribe tu clave de rastreo o sube tu comprobante.",
-  /* D11 (FR-032): asked, never offered — the page does not know the digits */
-  SENDER_TAIL_NEEDED: "Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste.",
+  REFERENCE_OF_ANOTHER:
+    "Esa referencia es de otra persona. Escribe tu clave de rastreo o sube la foto de tu comprobante.",
   CORRECTIONS_EXHAUSTED:
-    "Ya corregiste tus datos varias veces. Escribe tu clave de rastreo o sube tu comprobante.",
+    "Ya corregiste tus datos varias veces. Escribe tu clave de rastreo o sube la foto de tu comprobante.",
+  /* confirmation-hierarchy D8 (FR-016): the link's three misses — the
+     whole clave is what is left, asked in 012's own words */
+  TIE_BREAK_EXHAUSTED:
+    "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app.",
+  /* D11: another tab answered first — the page re-reads the status, and
+     this is only said if it is ever shown at all */
+  TIE_BREAK_NOT_ASKED: "Este pago ya se actualizó. Revisa cómo va aquí.",
 };
-const payErrorCopy = (code: string) =>
-  payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.";
+const payErrorCopy = (code: string, business?: string) =>
+  (payErrors[code] ?? "No pudimos recibir tu comprobante. Intenta de nuevo en unos minutos.").replace(
+    "{negocio}",
+    business ?? "quien te envió el link",
+  );
 
 /* payment-without-receipt D24 (FR-013): a used transfer names the payment
    that used it — only when that payment is the same person's, which is
    the only time the status carries `usedBy`. Otherwise today's sentence,
    and nothing of anybody else's payment. */
-function statusErrorCopy(status: Pick<DirectPaymentStatusResponse, "error" | "usedBy">): string | null {
+function statusErrorCopy(status: Pick<DirectPaymentStatusResponse, "error" | "usedBy">, business?: string): string | null {
   if (!status.error) return null;
   if ((status.error === "TRANSFER_ALREADY_USED" || status.error === "CEP_ALL_USED") && status.usedBy) {
     return `Ya se usó para tu pago del ${dayOfMonth(status.usedBy.day)} por ${formatMoney(status.usedBy.amountCents)}.`;
   }
-  return payErrorCopy(status.error);
+  return payErrorCopy(status.error, business);
 }
 
 type TransferDraft = {
@@ -199,8 +188,6 @@ type TypedTransfer = {
   senderBank: string;
   date: string;
   amountCents: number;
-  /* payment-without-receipt D11: only when the server asked for it */
-  senderTail?: string;
 };
 
 /* receipt-triage D2/D7: the one sentence for a reference that cannot find
@@ -227,8 +214,8 @@ function TransferForm({
   onUploadInstead,
   typed = false,
   referenceLabel = "Número de referencia",
-  askSenderTail = false,
   dateRange,
+  fixed,
 }: {
   onSubmit: (t: TypedTransfer) => void;
   busy: boolean;
@@ -275,16 +262,20 @@ function TransferForm({
   typed?: boolean;
   /* The reference field's label, for the door it serves */
   referenceLabel?: string;
-  /* D11 (FR-032): the server answered SENDER_TAIL_NEEDED — the four digits
-     of the sending account, typed by the payer and never suggested. A
-     clave typed instead is enough on its own. */
-  askSenderTail?: boolean;
   /* D8: the days a search by reference accepts, business time */
   dateRange?: { min: string; max: string };
+  /* confirmation-hierarchy D21 (spec FR-029): option 2 asks only for the
+     reference or the clave — the amount, the bank and the day are the ones
+     chosen on the confirmation, shown as tags above the form, and travel
+     unchanged. The button waits for a bank and a day (an "Otro banco"
+     with none picked yet). */
+  fixed?: { senderBank: string; date: string; dateOk: boolean; amountCents: number | null };
 }) {
   const [referenceNumber, setReferenceNumber] = useState(draft?.referenceNumber ?? "");
   const [trackingKey, setTrackingKey] = useState(draft?.trackingKey ?? "");
-  const [senderBank, setSenderBank] = useState(draft?.senderBank ?? "");
+  /* confirmation-hierarchy D15: a bank the payer's list does not offer
+     (Banxico) pre-selects nothing */
+  const [senderBank, setSenderBank] = useState(payerBank(draft?.senderBank));
   /* validation-status-ux D6: a draft with no date arrives empty — the
      machine did not read one, and pre-filling *today* invents a value
      that merely looks confirmed. Only the manual door, where the payer
@@ -295,10 +286,11 @@ function TransferForm({
   const [amount, setAmount] = useState(
     amountCents != null ? (amountCents / 100).toFixed(2) : "",
   );
-  const [senderTail, setSenderTail] = useState("");
   /* Pesos in, integer cents out — the only place the page parses money,
      and only because the payer is the source of truth here (D1). */
-  const amountOk = /^\d+(\.\d{1,2})?$/.test(amount.trim()) && Number.parseFloat(amount) > 0;
+  const amountOk = fixed
+    ? fixed.amountCents != null && fixed.amountCents > 0
+    : /^\d+(\.\d{1,2})?$/.test(amount.trim()) && Number.parseFloat(amount) > 0;
   /* D16/BUG-006: the same shape the API enforces, so the button is
      honest — a key that cannot validate never gets a paid call. */
   const claveOk = /^[A-Za-z0-9]{6,30}$/.test(trackingKey.trim());
@@ -309,12 +301,11 @@ function TransferForm({
   const generic = keys === "either" && !typed && isGenericReference(referenceNumber);
   const claveRequired = keys === "clave" || generic || requireClave;
   const keyOk = claveRequired ? claveOk : claveOk || referenceOk;
-  /* payment-without-receipt D11: the four digits tie a typed reference to
-     this payer; a clave needs no tie */
-  const tailOk = !askSenderTail || claveOk || /^\d{4}$/.test(senderTail);
-  const dateOk =
-    /^\d{4}-\d{2}-\d{2}$/.test(date) && (!dateRange || (date >= dateRange.min && date <= dateRange.max));
-  const valid = keyOk && tailOk && senderBank !== "" && dateOk && amountOk;
+  const dateOk = fixed
+    ? fixed.dateOk
+    : /^\d{4}-\d{2}-\d{2}$/.test(date) && (!dateRange || (date >= dateRange.min && date <= dateRange.max));
+  const bankOk = (fixed ? fixed.senderBank : senderBank) !== "";
+  const valid = keyOk && bankOk && dateOk && amountOk;
   const notInCapture = (field: "key" | "amount" | "date" | "senderBank") =>
     missing?.has(field) ? <p className="mt-1 text-sm text-ink-soft">No aparece en tu captura</p> : null;
   const claveField = (
@@ -374,21 +365,8 @@ function TransferForm({
           </p>
         </div>
       )}
-      {askSenderTail && (
-        <div>
-          <p className="mb-2 text-sm text-ink-soft">{payErrorCopy("SENDER_TAIL_NEEDED")}</p>
-          <Field label="Últimos 4 dígitos de tu cuenta o tarjeta">
-            <Input
-              inputMode="numeric"
-              value={senderTail}
-              onChange={(e) => setSenderTail(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              className="font-mono text-sm"
-              autoComplete="off"
-              autoFocus
-            />
-          </Field>
-        </div>
-      )}
+      {!fixed && (
+      <>
       <div>
         <Field label="Monto transferido">
           {/* claimed-amount D1/D3: what travels to Banxico is what the
@@ -417,7 +395,8 @@ function TransferForm({
             <option value="" disabled>
               Elige tu banco
             </option>
-            {[...BANKS]
+            {/* confirmation-hierarchy D15 (FR-023): never Banxico */}
+            {[...payerBanks]
               .sort((a, b) => a.localeCompare(b, "es-MX"))
               .map((b) => (
                 <option key={b} value={b}>
@@ -440,6 +419,8 @@ function TransferForm({
         </Field>
         {notInCapture("date")}
       </div>
+      </>
+      )}
       {/* design-foundations US1 (converge F2): the send is a wait like any
           other. Before this it was carried by a greyed-out button and a
           changed word — which is the one thing FR-008 refuses to rely on,
@@ -457,10 +438,9 @@ function TransferForm({
                  the server, which sends only the clave when both exist */
               ...(claveOk ? { trackingKey: trackingKey.trim() } : {}),
               ...(referenceOk ? { referenceNumber } : {}),
-              senderBank: senderBank.trim(),
-              date,
-              amountCents: Math.round(Number.parseFloat(amount) * 100),
-              ...(askSenderTail && !claveOk ? { senderTail } : {}),
+              senderBank: (fixed ? fixed.senderBank : senderBank).trim(),
+              date: fixed ? fixed.date : date,
+              amountCents: fixed ? fixed.amountCents! : Math.round(Number.parseFloat(amount) * 100),
             })
           }
         >
@@ -579,6 +559,10 @@ const ACCOUNT_LABEL: Record<CollectAccount["kind"], string> = {
   card: "Tarjeta de débito",
   phone: "Celular",
 };
+/* confirmation-hierarchy D19 (FR-033): step 1's sections enter in turn —
+   the stylesheet's `step-enter` reads which turn is theirs */
+const enterStep = (n: number) => ({ "--enter-step": n }) as CSSProperties;
+
 /* "…recibe pagos en {tipo} terminada en {últimos 4}" — the noun and its
    agreement */
 const ACCOUNT_ENDING: Record<CollectAccount["kind"], string> = {
@@ -621,7 +605,9 @@ type PayBody = {
 
 /* D8/D11: the row's own search as a pay body's `transfer` — what an ask
    re-sends beside the one fact it asked for. An own row sends no
-   reference: the server writes it. */
+   reference: the server writes it. confirmation-hierarchy D6: a tie-break
+   answer sends only what was typed now; a way an earlier answer gave rides
+   forward on the server, never from the page. */
 function rowTransfer(s: DirectPaymentStatusResponse) {
   const base = {
     senderBank: s.senderBank ?? "",
@@ -630,12 +616,7 @@ function rowTransfer(s: DirectPaymentStatusResponse) {
   };
   return s.referenceSource === "own"
     ? { referenceSource: "own" as const, ...base }
-    : {
-        referenceSource: "typed" as const,
-        referenceNumber: s.referenceNumber ?? "",
-        ...base,
-        ...(s.senderTail ? { senderTail: s.senderTail } : {}),
-      };
+    : { referenceSource: "typed" as const, referenceNumber: s.referenceNumber ?? "", ...base };
 }
 
 /* FR-024: a correction keeps the row's path. Own stays own, with no
@@ -654,13 +635,9 @@ function correctionTransfer(t: TypedTransfer, s: DirectPaymentStatusResponse) {
   if (s.referenceSource === "own" && t.referenceNumber === s.referenceNumber) {
     return { referenceSource: "own" as const, ...base };
   }
-  const tail = t.senderTail ?? s.senderTail ?? undefined;
-  return {
-    referenceSource: "typed" as const,
-    referenceNumber: t.referenceNumber,
-    ...base,
-    ...(tail ? { senderTail: tail } : {}),
-  };
+  /* confirmation-hierarchy D5: a typed correction searches at once, with
+     no tail — the tie-break is asked after the search if it is needed */
+  return { referenceSource: "typed" as const, referenceNumber: t.referenceNumber, ...base };
 }
 
 /* FR-023: what is searched, as the payer gave it — amount, reference,
@@ -697,56 +674,62 @@ function SearchedData({ status, fallbackCents }: { status: DirectPaymentStatusRe
   );
 }
 
-/* D11 (FR-032) and D17: four characters the payer types — the sending
-   account's last digits, or the clave's last characters. Never offered:
-   the page does not know them, and would not show them if it did. */
-function TailAsk({
-  label,
-  kind,
-  busy,
-  onSubmit,
-}: {
-  label: string;
-  kind: "digits" | "characters";
-  busy: boolean;
-  onSubmit: (value: string) => void;
-}) {
-  const [value, setValue] = useState("");
-  const ok = kind === "digits" ? /^\d{4}$/.test(value) : /^[A-Za-z0-9]{4}$/.test(value);
-  return (
-    <div className="space-y-4">
-      <Field label={label}>
-        <Input
-          inputMode={kind === "digits" ? "numeric" : "text"}
-          value={value}
-          onChange={(e) =>
-            setValue(
-              (kind === "digits" ? e.target.value.replace(/\D/g, "") : e.target.value.replace(/[^A-Za-z0-9]/g, "")).slice(
-                0,
-                4,
-              ),
-            )
-          }
-          className="font-mono text-sm"
-          autoComplete="off"
-          autoFocus
-        />
-      </Field>
-      {/* The Card around this is already aria-live="polite" */}
-      <Pending active={busy} announce={false} label="Estamos enviando tus datos.">
-        <Button size="decisive" disabled={!ok || busy} onClick={() => onSubmit(value)}>
-          <ShieldCheck className="size-5" aria-hidden />
-          {busy ? "Enviando…" : "Enviar"}
-        </Button>
-      </Pending>
-    </div>
-  );
-}
-
 /* D18: with a provisional release standing, an ask never reads as the
    service being withdrawn — it says what settles the payment in time */
 const RELEASE_DURING_ASK =
   "Tu servicio sigue activo. Tu clave o tu comprobante confirman el pago antes de que venza.";
+
+/* confirmation-hierarchy D22 (spec FR-030): the plain wait as the three
+   steps of the search — derived from the row, never from a timer, which
+   would claim progress the server never reported. A sourced row still
+   validating has its data received and its search running; the last step
+   is the confirmation. The current step breathes (`Pending`) and says so
+   with `aria-current`. */
+function WaitSteps({ business }: { business: string }) {
+  const steps = [
+    { title: "Recibimos tus datos", detail: "Referencia, banco, día y monto", state: "done" as const },
+    { title: "Verificamos tu transferencia", detail: "Buscamos la que coincide con tus datos", state: "current" as const },
+    { title: "Confirmamos tu pago", detail: `Y ${business} lo registra`, state: "next" as const },
+  ];
+  return (
+    <ol className="space-y-3" aria-label="Así va tu pago">
+      {steps.map((step) => {
+        const body = (
+          <div className="flex items-start gap-3">
+            {step.state === "done" ? (
+              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-accent" aria-hidden />
+            ) : (
+              <span
+                className={cn(
+                  "mt-0.5 size-5 shrink-0 rounded-full border-2",
+                  step.state === "current" ? "border-focus bg-accent-soft" : "border-line",
+                )}
+                aria-hidden
+              />
+            )}
+            <div className="min-w-0">
+              <p className={cn("text-sm font-medium", step.state === "next" ? "text-ink-soft" : "text-ink")}>{step.title}</p>
+              <p className="text-sm text-ink-soft">{step.detail}</p>
+            </div>
+          </div>
+        );
+        return (
+          <li key={step.title} aria-current={step.state === "current" ? "step" : undefined}>
+            {step.state === "current" ? (
+              /* announce={false}: the Card around this is already
+                 aria-live="polite" */
+              <Pending active announce={false} label="Verificando tu transferencia.">
+                {body}
+              </Pending>
+            ) : (
+              body
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 function SourcedReview({
   status,
@@ -774,9 +757,11 @@ function SourcedReview({
   const [acked, setAcked] = useState(() => readAskAck(directPaymentId));
   const [correcting, setCorrecting] = useState(false);
   const refused = payError?.code ?? null;
-  /* D16 (FR-024) and D11 (FR-034): after these two refusals the clave and
-     the receipt are what is left, and the page says so in the ask's place */
-  const clavesOnly = refused === "CORRECTIONS_EXHAUSTED" || refused === "REFERENCE_OF_ANOTHER";
+  /* D16 (FR-024) and D11 (FR-034): after these refusals the clave and the
+     receipt are what is left, and the page says so in the ask's place.
+     confirmation-hierarchy D8: so after the link's third miss */
+  const clavesOnly =
+    refused === "CORRECTIONS_EXHAUSTED" || refused === "REFERENCE_OF_ANOTHER" || refused === "TIE_BREAK_EXHAUSTED";
   const ask = paused
     ? null
     : clavesOnly
@@ -790,39 +775,32 @@ function SourcedReview({
   const today = todayIn(data.timezone);
   /* D8: the days a search by reference accepts */
   const dateRange = { min: shiftDay(today, -30), max: today };
-  const complete = Boolean(status.senderBank && status.transferDate);
   const supersede = (transfer: object) => onPay({ transfer, supersedes: directPaymentId });
   const used =
-    status.error === "TRANSFER_ALREADY_USED" || status.error === "CEP_ALL_USED" ? statusErrorCopy(status) : null;
+    status.error === "TRANSFER_ALREADY_USED" || status.error === "CEP_ALL_USED" ? statusErrorCopy(status, data.ispName) : null;
+  /* confirmation-hierarchy D9: the tie-break's own screen, when the status
+     says which fields it shows */
+  const tieBreak = ask === "tie_break" ? (status.tieBreak ?? null) : null;
 
   /* contracts/payment-page.md, the asks: each says what was searched and
-     what could differ, and never suggests the payer lied (FR-037) */
+     what could differ, and never suggests the payer lied (FR-037). The
+     tie-break opens with its own sentence, inside its screen (D12). */
   const askCopy =
     ask === "check_data"
       ? `Todavía no encontramos tu transferencia. Revisa que estos datos sean los de tu app, y que hayas puesto la referencia ${reference ? inlineReference(reference) : ""}.`
       : ask === "clave"
         ? clavesOnly
-          ? payErrorCopy(refused!)
+          ? payErrorCopy(refused!, data.ispName)
           : "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app."
-        : ask === "sender_tail"
-          ? /* D26 (FR-041): an own row asked during a reference's transition
-               is being told apart from the previous holder — the digits are
-               not "shared by others" from where this payer stands */
-            status.referenceSource === "own"
-            ? "Para confirmar que esta transferencia es tuya, escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste."
-            : "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste."
-          : ask === "clave_tail"
-            ? "Encontramos más de una transferencia con esos datos. Escribe los últimos 4 caracteres de tu clave de rastreo."
-            : null;
+        : null;
 
-  /* An ask with its own field puts the receipt right after it, second
-     (FR-029, FR-031); otherwise the receipt waits at the end, quieter */
-  const askForm = !editing && (ask === "clave" || ((ask === "sender_tail" || ask === "clave_tail") && complete));
-  const receiptButton = (quiet: boolean) => (
-    <Button variant={quiet ? "ghost" : "secondary"} className="h-12 w-full text-sm" onClick={onReceipt}>
-      Sube tu comprobante
-    </Button>
-  );
+  /* confirmation-hierarchy D2 (FR-005, contracts/payment-page.md, the
+     `ReceiptLink` table): the receipt is offered, quiet and last, wherever
+     the payer is asked something or the attempt stopped — an ask, "Ya se
+     usó para…", a refusal — and never during the plain wait, which asks
+     nothing (012 FR-027), nor while the business is paused */
+  const refusal = refused != null && ["TRANSFER_DATE_OUT_OF_RANGE", "REFERENCE_OF_ANOTHER", "CORRECTIONS_EXHAUSTED", "TIE_BREAK_EXHAUSTED"].includes(refused);
+  const offerReceipt = !paused && (ask != null || used != null || refusal);
 
   return (
     <div className="space-y-4">
@@ -840,13 +818,26 @@ function SourcedReview({
             {release && <p>{RELEASE_DURING_ASK}</p>}
           </div>
         </Alert>
+      ) : ask === "tie_break" ? (
+        release && (
+          <Alert layout="icon">
+            <Info aria-hidden />
+            {RELEASE_DURING_ASK}
+          </Alert>
+        )
       ) : (
         <>
-          {/* Waiting breathes (constitution VI). announce={false}: the Card
-              around this is already aria-live="polite". */}
-          <Pending active announce={false} label="Seguimos buscando tu transferencia.">
-            <p className="text-sm text-ink-soft">Seguimos buscando tu transferencia en Banxico.</p>
-          </Pending>
+          {/* confirmation-hierarchy D13 (FR-022): the moment, in the
+              payer's words — what we do with their transfer, never who
+              checks it. Waiting breathes (constitution VI) on the step
+              that is running, below. */}
+          <p className="text-sm text-ink">
+            Seguimos buscando tu transferencia.
+            {status.error === "TRANSFER_NOT_FOUND" &&
+              " Todavía no la vemos. Es normal al principio: volvemos a buscar solos, sin que hagas nada."}
+          </p>
+          <WaitSteps business={data.ispName} />
+          <p className="text-sm text-ink-soft">Suele tomar menos de un minuto. Puedes cerrar esta página y volver después.</p>
           {release && (
             /* provisional-release D9: one sentence, evidence fused with
                consequence; a confirmation is `human` evidence (D18) */
@@ -856,8 +847,8 @@ function SourcedReview({
                 {release.kind === "protect"
                   ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
                   : release.evidence === "human"
-                    ? "Gracias por confirmar tus datos. Tu internet ya volvió mientras Banxico responde."
-                    : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
+                    ? "Gracias por confirmar tus datos. Tu servicio ya volvió mientras terminamos de confirmar tu transferencia."
+                    : "Tu transferencia está en camino y tu servicio ya volvió. Solo falta confirmarla — no necesitas hacer nada."}
               </Alert>
             </Reveal>
           )}
@@ -866,7 +857,7 @@ function SourcedReview({
 
       {used && <p className="text-sm text-ink-soft">{used}</p>}
 
-      {askForm && ask === "clave" && (
+      {ask === "clave" && !editing && (
         /* FR-029: the whole clave, nothing having been found to compare a
            part of it with; the rest of the search is kept. It travels by
            today's door, with no path (contracts/payment-page.md). */
@@ -882,23 +873,11 @@ function SourcedReview({
           onSubmit={(t) => supersede(t)}
         />
       )}
-      {askForm && ask === "sender_tail" && (
-        <TailAsk
-          label="Últimos 4 dígitos de tu cuenta o tarjeta"
-          kind="digits"
-          busy={busy}
-          onSubmit={(senderTail) => supersede({ ...rowTransfer(status), senderTail })}
-        />
+      {tieBreak && !editing && (
+        /* confirmation-hierarchy D6, D9: the answer re-sends the row's own
+           search with what was typed, superseding it — never searched */
+        <TieBreakForm tieBreak={tieBreak} busy={busy} onSubmit={(tails) => supersede({ ...rowTransfer(status), ...tails })} />
       )}
-      {askForm && ask === "clave_tail" && (
-        <TailAsk
-          label="Últimos 4 caracteres de tu clave de rastreo"
-          kind="characters"
-          busy={busy}
-          onSubmit={(claveTail) => supersede({ ...rowTransfer(status), claveTail })}
-        />
-      )}
-      {askForm && receiptButton(false)}
 
       {ask === "check_data" ? (
         /* FR-028: the check is the read-back itself, open, with its two
@@ -961,20 +940,19 @@ function SourcedReview({
           }}
           amountCents={status.claimedAmountCents ?? data.totalCents ?? null}
           dateRange={dateRange}
-          askSenderTail={refused === "SENDER_TAIL_NEEDED"}
           submitLabel="Confirmar estos datos"
           onSubmit={(t) => supersede(correctionTransfer(t, status))}
         />
       )}
 
-      {payError && !clavesOnly && refused !== "SENDER_TAIL_NEEDED" && (
+      {payError && !clavesOnly && refused !== "TIE_BREAK_NOT_ASKED" && (
         <Alert variant="destructive" layout="icon">
           <TriangleAlert aria-hidden />
-          {payErrorCopy(payError.code)}
+          {payErrorCopy(payError.code, data.ispName)}
         </Alert>
       )}
 
-      {!askForm && receiptButton(true)}
+      {offerReceipt && <ReceiptLink onClick={onReceipt} />}
     </div>
   );
 }
@@ -1011,11 +989,19 @@ export function PaymentPage({ token }: { token: string }) {
   /* The fallback door, opened on purpose and never closed again (D19) */
   const [manualDoor, setManualDoor] = useState(false);
   /* payment-without-receipt D8/D21: with the payer's own reference, step 2
-     opens on "Confirma tu pago"; "No puse la referencia" (D11) and the
-     receipt are its two exits. Page state, not device state: the step
+     opens on "Confirma tu pago". Page state, not device state: the step
      memory stays as it was (step.ts), and a new visit to step 2 starts
-     from the confirmation, the path that costs the payer least. */
+     from the confirmation, the path that costs the payer least.
+     confirmation-hierarchy D3: the step's three views — the confirmation
+     (option 1, the default), "Usé otra referencia" (option 2) and the
+     receipt (option 3) — switched in place; a reload lands on the
+     confirmation, the order the spec wants. */
   const [proofView, setProofView] = useState<"confirm" | "typed" | "receipt">("confirm");
+  /* confirmation-hierarchy D21: what was chosen on the confirmation, so
+     option 2 reads the same bank, day and amount (FR-029) and "Volver"
+     finds them as they were. Null until the payer changes something: the
+     likely answers are read from the link (`initialChoice`). */
+  const [choice, setChoice] = useState<ConfirmChoice | null>(null);
   /* D8: the server answered REFERENCE_NOT_READY — the reference is not
      born yet, so the receipt step says why it is the one shown */
   const [referenceNotReady, setReferenceNotReady] = useState(false);
@@ -1125,6 +1111,17 @@ export function PaymentPage({ token }: { token: string }) {
     },
   });
 
+  /* confirmation-hierarchy D11: an attempt replaced from elsewhere — another
+     tab's answer superseded it — hands over to the attempt the link holds
+     in review, so this tab shows where the payment stands now */
+  const replacedElsewhere = poll.data?.status === "superseded";
+  const openElsewhere = inReview?.directPaymentId;
+  useEffect(() => {
+    if (replacedElsewhere && inReview && openElsewhere && openElsewhere !== payment?.directPaymentId) {
+      setOwnPayment({ directPaymentId: inReview.directPaymentId, status: inReview.status, error: null });
+    }
+  }, [replacedElsewhere, openElsewhere, inReview, payment?.directPaymentId]);
+
   /* D19: a confirmed payment gives the step back. `validating` does not
      — that payer has not finished, and a reload must not drop them back
      onto a CLABE they already used. */
@@ -1166,6 +1163,15 @@ export function PaymentPage({ token }: { token: string }) {
       if (error.code === "REFERENCE_NOT_READY") {
         setReferenceNotReady(true);
         setProofView("receipt");
+      }
+      /* confirmation-hierarchy D11: the row this answer meant is no longer
+         waiting on a tie-break — another tab answered first. Nothing was
+         written; the page re-reads where the payment stands (and, below,
+         follows the attempt the link holds in review once this one reads
+         superseded). */
+      if (error.code === "TIE_BREAK_NOT_ASKED") {
+        void queryClient.invalidateQueries({ queryKey: ["link", token] });
+        void queryClient.invalidateQueries({ queryKey: ["status"] });
       }
     },
   });
@@ -1346,7 +1352,7 @@ export function PaymentPage({ token }: { token: string }) {
         ) : link.error.status === 404 ? (
           <Alert layout="icon">
             <TriangleAlert aria-hidden />
-            Este link de pago no existe. Pide a tu proveedor de internet el link correcto.
+            Este link de pago no existe. Pide el link correcto a quien te lo envió.
           </Alert>
         ) : (
           <Alert variant="warning" layout="icon">
@@ -1471,8 +1477,8 @@ export function PaymentPage({ token }: { token: string }) {
               const enProceso = /proceso/i.test(status.receiptStatus ?? "");
               /* provisional-release D9: the service was actually given
                  back (or shielded) — evidence and consequence are ONE
-                 sentence, and "tu internet ya volvió" is never said to
-                 someone whose internet never left (`protect`). */
+                 sentence, and "tu servicio ya volvió" is never said to
+                 someone whose service never left (`protect`). */
               const release = status.provisionalRelease ?? null;
 
               if (!notFound) {
@@ -1512,7 +1518,7 @@ export function PaymentPage({ token }: { token: string }) {
                           )}
                           {release.kind === "protect"
                             ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
-                            : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
+                            : "Tu transferencia está en camino y tu servicio ya volvió. Solo falta confirmarla — no necesitas hacer nada."}
                         </Alert>
                       </Reveal>
                     ) : (
@@ -1577,7 +1583,7 @@ export function PaymentPage({ token }: { token: string }) {
                   ) : referenceAsk ? (
                     /* receipt-triage D17/D7: only the clave can find this
                        transfer now, so it is the one thing asked */
-                    <p className="text-sm text-ink-soft">{statusErrorCopy(status)}</p>
+                    <p className="text-sm text-ink-soft">{statusErrorCopy(status, data.ispName)}</p>
                   ) : eitherKey ? (
                     <p className="text-sm text-ink-soft">
                       No encontramos tu transferencia todavía. Confirma tu clave de rastreo o tu número
@@ -1631,10 +1637,10 @@ export function PaymentPage({ token }: { token: string }) {
                       {release.kind === "protect"
                         ? "Tu pago se está verificando. Tu servicio sigue activo — no necesitas hacer nada."
                         : release.evidence === "agreed"
-                          ? "Revisamos tu comprobante dos veces y los datos coinciden. Tu internet ya volvió mientras esperamos la respuesta de Banxico — no necesitas hacer nada."
+                          ? "Revisamos tu comprobante dos veces y los datos coinciden. Tu servicio ya volvió mientras terminamos de confirmar tu transferencia — no necesitas hacer nada."
                           : release.evidence === "human"
-                            ? "Gracias por confirmar tus datos. Tu internet ya volvió mientras Banxico responde."
-                            : "Tu transferencia está en camino y tu internet ya volvió. Solo esperamos la confirmación de Banxico — no necesitas hacer nada."}
+                            ? "Gracias por confirmar tus datos. Tu servicio ya volvió mientras terminamos de confirmar tu transferencia."
+                            : "Tu transferencia está en camino y tu servicio ya volvió. Solo falta confirmarla — no necesitas hacer nada."}
                     </Alert>
                   ) : farAway ? (
                     /* D5: promise only what the system will do — the
@@ -1650,8 +1656,8 @@ export function PaymentPage({ token }: { token: string }) {
                           {nextHour.endsWith(".") ? "" : "."}
                         </>
                       )}{" "}
-                      Puedes cerrar esta página y volver después, o contactar a tu proveedor de
-                      internet con tu comprobante.
+                      Puedes cerrar esta página y volver después, o contactar a {data.ispName} con tu
+                      comprobante.
                     </p>
                   ) : escalated && !agreed ? (
                     /* D3: the copy suspects the wait, never the payer */
@@ -1664,10 +1670,11 @@ export function PaymentPage({ token }: { token: string }) {
                        independent readers returned the same data, so the
                        wait is Banxico's, and the form never opens by
                        clock. Agreement never validates: the verdict is
-                       still Banxico's alone. */
+                       still Banxico's alone. confirmation-hierarchy D13:
+                       the payer reads the moment, not who answers it. */
                     <p className="text-sm text-ink-soft">
-                      Revisamos tu comprobante dos veces y los datos coinciden. Solo esperamos la
-                      respuesta de Banxico — no necesitas hacer nada.
+                      Revisamos tu comprobante dos veces y los datos coinciden. Solo falta confirmar tu
+                      transferencia — no necesitas hacer nada.
                     </p>
                   ) : correcting ? (
                     /* The payer opened the correction door themselves —
@@ -1678,9 +1685,11 @@ export function PaymentPage({ token }: { token: string }) {
                       corrígelos si hace falta.
                     </p>
                   ) : (
+                    /* confirmation-hierarchy D13 (FR-022): nothing seen
+                       yet, and we keep looking alone */
                     <p className="text-sm text-ink-soft">
-                      Validación en proceso: esperamos la respuesta de Banxico. No necesitas hacer
-                      nada.
+                      Seguimos buscando tu transferencia. Todavía no la vemos. Es normal al principio:
+                      volvemos a buscar solos, sin que hagas nada.
                     </p>
                   )}
 
@@ -1835,6 +1844,18 @@ export function PaymentPage({ token }: { token: string }) {
             {"folio" in status && status.folio && (
               <p className="font-mono text-sm text-ink-soft">Folio {status.folio}</p>
             )}
+            {status.referenceSource === "own" && data.payerReference && (
+              /* confirmation-hierarchy D22 (FR-032): a payment confirmed by
+                 the payer's own reference ends on how next month goes —
+                 never after a typed one, which is not the habit to keep */
+              <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
+                <Star className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
+                <p className="text-sm text-ink">
+                  <span className="font-semibold">Así de fácil cada mes.</span> Usa la misma referencia,{" "}
+                  {inlineReference(data.payerReference.digits)}, y confirmas tu pago en dos toques.
+                </p>
+              </div>
+            )}
           </Reveal>
         )}
 
@@ -1935,12 +1956,17 @@ export function PaymentPage({ token }: { token: string }) {
             <p className="text-sm text-ink-soft">
               {/* payment-without-receipt D24: a used transfer names the
                   payer's own payment that used it, when it is theirs */}
-              {statusErrorCopy(status) ??
+              {statusErrorCopy(status, data.ispName) ??
                 "No pudimos verificar tu transferencia. Revisa los datos e intenta de nuevo."}
             </p>
             <Button variant="secondary" onClick={retry}>
               Intentar de nuevo
             </Button>
+            {/* confirmation-hierarchy D2 (FR-005): "Ya se usó para…" and the
+                refusals of a row searched by the payer's reference end with
+                the receipt, quiet and last; an invalid row is final, so the
+                capture starts a new payment */}
+            {status.referenceSource && data.payerReference && <ReceiptLink onClick={receiptAfterExpiry} />}
           </Reveal>
         )}
 
@@ -1952,12 +1978,12 @@ export function PaymentPage({ token }: { token: string }) {
           <Reveal className="space-y-4">
             <StatusBadge status="paymentExpired" size="standard" />
             <p className="text-sm text-ink-soft">
-              {statusErrorCopy(status) && status.usedBy
-                ? statusErrorCopy(status)
+              {statusErrorCopy(status, data.ispName) && status.usedBy
+                ? statusErrorCopy(status, data.ispName)
                 : status.provisionalRelease
-                  ? "No encontramos tu transferencia a tiempo y tu servicio volvió a pausa."
-                  : "No encontramos tu transferencia con los datos que enviaste."}{" "}
-              Escribe tu clave de rastreo o sube tu comprobante para confirmar tu pago.
+                  ? "No pudimos confirmar tu transferencia a tiempo y tu servicio volvió a pausa."
+                  : "No pudimos confirmar tu transferencia a tiempo con los datos que enviaste."}{" "}
+              Escribe tu clave de rastreo o sube la foto de tu comprobante para confirmar tu pago.
             </p>
             <TransferForm
               keys="clave"
@@ -1968,13 +1994,10 @@ export function PaymentPage({ token }: { token: string }) {
               submitLabel="Buscar con mi clave"
               onSubmit={(transfer) => pay.mutate({ transfer })}
             />
-            <Button variant="secondary" className="h-12 w-full text-sm" onClick={receiptAfterExpiry}>
-              Sube tu comprobante
-            </Button>
             {pay.error && (
               <Alert variant="destructive" layout="icon">
                 <TriangleAlert aria-hidden />
-                {payErrorCopy(pay.error.code)}
+                {payErrorCopy(pay.error.code, data.ispName)}
               </Alert>
             )}
             <Collapsible>
@@ -1991,6 +2014,9 @@ export function PaymentPage({ token }: { token: string }) {
                 </div>
               </CollapsibleContent>
             </Collapsible>
+            {/* confirmation-hierarchy D2 (FR-005): the receipt, quiet and
+                last — the expired row is final, so it starts a new payment */}
+            <ReceiptLink onClick={receiptAfterExpiry} />
           </Reveal>
         )}
 
@@ -2010,21 +2036,21 @@ export function PaymentPage({ token }: { token: string }) {
             <p className="text-sm text-ink-soft">
               {status.provisionalRelease
                 ? status.retryAvailable
-                  ? "Banxico no publicó tu transferencia y tu servicio volvió a pausa. Si ya pagaste, reintenta ahora — o contacta a tu proveedor de internet con tu comprobante."
-                  : "Banxico no publicó tu transferencia y tu servicio volvió a pausa. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano."
+                  ? `No pudimos confirmar tu transferencia a tiempo y tu servicio volvió a pausa. Si ya pagaste, reintenta ahora — o contacta a ${data.ispName} con tu comprobante.`
+                  : `No pudimos confirmar tu transferencia a tiempo y tu servicio volvió a pausa. Contacta a ${data.ispName} con tu comprobante — puede registrar tu pago a mano.`
                 : status.readingCheck === "agreed"
                   ? status.retryAvailable
-                    ? "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Si ya pagaste, reintenta ahora — o contacta a tu proveedor de internet con tu comprobante."
-                    : "Tus datos coinciden con tu comprobante, pero Banxico no publicó la transferencia. Contacta a tu proveedor de internet con tu comprobante — puede registrar tu pago a mano."
+                    ? `Tus datos coinciden con tu comprobante, pero no pudimos confirmar la transferencia a tiempo. Si ya pagaste, reintenta ahora — o contacta a ${data.ispName} con tu comprobante.`
+                    : `Tus datos coinciden con tu comprobante, pero no pudimos confirmar la transferencia a tiempo. Contacta a ${data.ispName} con tu comprobante — puede registrar tu pago a mano.`
                   : status.error
-                    ? payErrorCopy(status.error)
-                    : "No pudimos confirmar tu pago a tiempo. Contacta a tu proveedor de internet con tu comprobante para resolverlo."}
+                    ? payErrorCopy(status.error, data.ispName)
+                    : `No pudimos confirmar tu pago a tiempo. Contacta a ${data.ispName} con tu comprobante para resolverlo.`}
             </p>
             {/* feedback-vocabulary-rollout D1/D4 — a gap `001-design-foundations`
                 left, found by scripts/pending-lint.mjs. This button said
                 "Enviando…" and showed nothing else: the payer, on a phone, on
-                the screen that just told them Banxico did not publish their
-                transfer, re-sending proof of money they already moved. The
+                the screen that just told them we could not confirm their
+                transfer in time, re-sending proof of money they already moved. The
                 worst place in the product to leave a wait silent.
 
                 announce={false} because the Card at line 608 is already
@@ -2134,7 +2160,19 @@ export function PaymentPage({ token }: { token: string }) {
      "subir otro comprobante" walks straight back into it (D19). */
   const stepHeader = (n: 1 | 2, title: string) => (
     <header className="space-y-1">
-      <p className="text-sm font-medium text-ink-soft">Paso {n} de 2</p>
+      {data.payerReference ? (
+        /* confirmation-hierarchy D19 (proposal E): a two-segment progress
+           mark beside the step's words — decorative, the words carry it */
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-medium text-ink-soft">Paso {n} de 2</p>
+          <span className="flex gap-1" aria-hidden>
+            <span className="h-1 w-6 rounded-full bg-accent" />
+            <span className={cn("h-1 w-6 rounded-full", n === 2 ? "bg-accent" : "bg-line")} />
+          </span>
+        </div>
+      ) : (
+        <p className="text-sm font-medium text-ink-soft">Paso {n} de 2</p>
+      )}
       <h1 className="text-lg font-semibold">{title}</h1>
       <p className="text-sm text-ink-soft">{data.ispName}</p>
       {data.customerName && <p className="text-sm text-ink-soft">{data.customerName}</p>}
@@ -2261,7 +2299,7 @@ export function PaymentPage({ token }: { token: string }) {
         {submitError && (
           <Alert variant="destructive" layout="icon">
             <TriangleAlert aria-hidden />
-            {payErrorCopy(submitError.code)}
+            {payErrorCopy(submitError.code, data.ispName)}
           </Alert>
         )}
 
@@ -2329,69 +2367,124 @@ export function PaymentPage({ token }: { token: string }) {
           )}
         </div>
 
-        {/* receipt-triage D29 (FR-017): one account — the cuenta de
-            cobro — labelled by its kind; no list, no choice. A CLABE
-            renders exactly as it always did (SC-008). */}
-        <div className="divide-y divide-line-soft border-y border-line-soft">
-          <CopyField label={ACCOUNT_LABEL[account!.kind]} value={account!.value} />
-          {/* receipt-triage FR-017 (converge T057): a card or a phone is
-              sent to through its bank — the payer's app asks for it — so
-              the bank stands beside the number, not behind "Ver los demás
-              datos". The CLABE carries its bank in its own digits and
-              keeps today's layout (SC-008). */}
-          {account!.kind !== "clabe" && account!.bank && <CopyField label="Banco" value={account!.bank} />}
-          {/* payment-without-receipt FR-004 (D21, D22): the payer's
-              reference beside the amount and the account, grouped to be
-              read and copied as the digits a bank takes. Called the
-              phone's only when it is (FR-004). */}
-          {payer && (
-            <CopyField
-              label="Tu referencia"
-              value={groupReferenceDigits(payer.digits)}
-              copy={payer.digits}
-              note={payer.fromPhone ? "Son los últimos 7 números de tu celular" : undefined}
-            />
-          )}
-        </div>
-
-        {payer?.previousDigits && (
-          /* D26 (FR-040): the contact saved in the bank still has the
-             previous digits */
-          <Alert layout="icon">
-            <Info aria-hidden />
-            Tu referencia cambió: ahora es {inlineReference(payer.digits)}. Actualiza el contacto en tu
-            banco.
-          </Alert>
-        )}
-
         {payer ? (
-          /* D21 (FR-004): where the reference goes — the payer's bank's own
-             words when a verified hint exists for their most recent bank,
-             the general sentence otherwise — and the tip that makes next
-             month one tap. It takes the capture tip's place: with a
-             reference, the capture is the second option, not the plan. */
-          <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
-            <Info className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
-            <div className="space-y-1 text-sm">
-              <p className="font-medium text-ink">{referenceHint(data.learnedBanks?.[0])}</p>
-              <p className="text-ink-soft">
-                Guarda a {data.ispName} como contacto en tu banco con esta referencia, y el próximo mes ya
-                estará ahí.
+          /* confirmation-hierarchy D19 (spec FR-024–FR-026, proposal E): on
+             a link with a reference, where to pay by the method the business
+             chose, then the payer's reference in a box of its own, then a
+             bank's form filling itself in — each section entering in turn
+             (`step-enter`, FR-033) */
+          <>
+            <section aria-labelledby="transfiere-a" className="step-enter space-y-2" style={enterStep(1)}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 id="transfiere-a" className="text-base font-semibold text-ink">
+                  Transfiere a
+                </h2>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-0.5 text-sm font-medium text-link">
+                  {account!.kind === "clabe" ? (
+                    <Landmark className="size-4" aria-hidden />
+                  ) : account!.kind === "card" ? (
+                    <CreditCard className="size-4" aria-hidden />
+                  ) : (
+                    <Smartphone className="size-4" aria-hidden />
+                  )}
+                  {ACCOUNT_LABEL[account!.kind]}
+                </span>
+              </div>
+              <div className="divide-y divide-line-soft border-y border-line-soft">
+                <div className="flex flex-wrap items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-ink-soft">{ACCOUNT_LABEL[account!.kind]}</p>
+                    <p className="break-all font-mono text-base text-ink">{account!.value}</p>
+                  </div>
+                  <CopyButton value={account!.value} srSuffix={ACCOUNT_LABEL[account!.kind]} className="h-12" />
+                </div>
+                {/* receipt-triage FR-017: a card or a phone is sent to through
+                    its bank — the payer's app asks for it beside the number.
+                    A CLABE carries its bank in its own digits, and keeps it
+                    under "Ver los demás datos" (spec Edge Cases). */}
+                {account!.kind !== "clabe" && account!.bank && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink-soft">Banco</p>
+                      <p className="text-base text-ink">{account!.bank}</p>
+                      <p className="text-sm text-ink-soft">Tu app te lo pide junto al número</p>
+                    </div>
+                    <CopyButton value={account!.bank} srSuffix="Banco" className="h-12" />
+                  </div>
+                )}
+              </div>
+              <p className="flex items-start gap-2 text-sm text-ink-soft">
+                <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+                {account!.kind === "clabe"
+                  ? `${data.ispName} recibe sus pagos en esta CLABE. El dinero llega directo a su cuenta.`
+                  : account!.kind === "card"
+                    ? `${data.ispName} recibe sus pagos en esta tarjeta. Elige «Tarjeta de débito» como destino en tu app; el dinero llega directo a su cuenta.`
+                    : `${data.ispName} recibe sus pagos en este celular. Elige «Celular» como destino en tu app; el dinero llega directo a su cuenta.`}
               </p>
+            </section>
+
+            <div className="step-enter" style={enterStep(2)}>
+              <ReferenceBox
+                digits={payer.digits}
+                fromPhone={payer.fromPhone}
+                hint={referenceHint(data.learnedBanks?.[0])}
+              />
             </div>
-          </div>
+
+            {payer.previousDigits && (
+              /* D26 (FR-040): the contact saved in the bank still has the
+                 previous digits */
+              <Alert layout="icon">
+                <Info aria-hidden />
+                Tu referencia cambió: ahora es {inlineReference(payer.digits)}. Actualiza el contacto en tu
+                banco.
+              </Alert>
+            )}
+
+            <div className="step-enter" style={enterStep(3)}>
+              <TransferExample account={account!} totalCents={data.totalCents!} digits={payer.digits} />
+            </div>
+
+            {/* 012 D21's contact tip, led by what it buys (proposal E) */}
+            <div className="step-enter flex items-start gap-3 rounded-sm bg-well px-4 py-3" style={enterStep(4)}>
+              <Info className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+              <div className="space-y-1 text-sm">
+                <p className="font-medium text-ink">El próximo mes, en dos toques.</p>
+                <p className="text-ink-soft">
+                  Guarda a {data.ispName} como contacto en tu banco con esta referencia, y el próximo mes ya
+                  estará ahí.
+                </p>
+              </div>
+            </div>
+          </>
         ) : (
-          /* receipt-triage D8/D20 (FR-022): the capture guide's first
-             moment — before the payer leaves for the bank */
-          <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
-            <Camera className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
-            <div className="text-sm">
-              <p className="font-medium text-ink">Al terminar, toma captura del detalle</p>
-              <p className="text-ink-soft">
-                Ahí aparecen la clave de rastreo o el número de referencia que necesitamos.
-              </p>
+          /* FR-006: a link without a reference keeps today's step 1 */
+          <>
+            {/* receipt-triage D29 (FR-017): one account — the cuenta de
+                cobro — labelled by its kind; no list, no choice. A CLABE
+                renders exactly as it always did (SC-008). */}
+            <div className="divide-y divide-line-soft border-y border-line-soft">
+              <CopyField label={ACCOUNT_LABEL[account!.kind]} value={account!.value} />
+              {/* receipt-triage FR-017 (converge T057): a card or a phone is
+                  sent to through its bank — the payer's app asks for it — so
+                  the bank stands beside the number, not behind "Ver los demás
+                  datos". The CLABE carries its bank in its own digits and
+                  keeps today's layout (SC-008). */}
+              {account!.kind !== "clabe" && account!.bank && <CopyField label="Banco" value={account!.bank} />}
             </div>
-          </div>
+
+            {/* receipt-triage D8/D20 (FR-022): the capture guide's first
+                moment — before the payer leaves for the bank */}
+            <div className="flex items-start gap-3 rounded-sm bg-well px-4 py-3">
+              <Camera className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+              <div className="text-sm">
+                <p className="font-medium text-ink">Al terminar, toma captura del detalle</p>
+                <p className="text-ink-soft">
+                  Ahí aparecen la clave de rastreo o el número de referencia que necesitamos.
+                </p>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Beneficiario, banco and concepto are checked once, if at all:
@@ -2425,8 +2518,10 @@ export function PaymentPage({ token }: { token: string }) {
             size="decisive"
             onClick={() => {
               /* payment-without-receipt D21: step 2 opens on the
-                 confirmation every time the payer arrives at it */
+                 confirmation every time the payer arrives at it, with the
+                 likely answers again (confirmation-hierarchy D21) */
               setProofView("confirm");
+              setChoice(null);
               goTo("proof");
             }}
           >
@@ -2444,7 +2539,10 @@ export function PaymentPage({ token }: { token: string }) {
 
   /* ——— 3b. Paso 2 — confirma tu pago (payment-without-receipt D8, D21) ———
      The page's new first view of step 2, in its own component so this
-     file does not grow further (plan.md, Structure Decision). */
+     file does not grow further (plan.md, Structure Decision).
+     confirmation-hierarchy D3: option 1 of the step's three views. */
+  const confirmChoice = payer ? (choice ?? initialChoice(data, payer)) : null;
+  const changeChoice = (patch: Partial<ConfirmChoice>) => setChoice({ ...confirmChoice!, ...patch });
   if (payer && proofView === "confirm") {
     return (
       <Card className="space-y-5 p-6">
@@ -2455,13 +2553,15 @@ export function PaymentPage({ token }: { token: string }) {
           busy={busy}
           error={
             pay.error && pay.error.code !== "REFERENCE_NOT_READY"
-              ? { code: pay.error.code, copy: payErrorCopy(pay.error.code) }
+              ? { code: pay.error.code, copy: payErrorCopy(pay.error.code, data.ispName) }
               : null
           }
+          choice={confirmChoice!}
+          onChoice={changeChoice}
           onConfirm={(transfer) =>
             pay.mutate({ transfer, ...(resubmitOf ? { supersedes: resubmitOf } : {}) })
           }
-          onNoReference={() => {
+          onOtherReference={() => {
             pay.reset();
             setProofView("typed");
           }}
@@ -2475,31 +2575,48 @@ export function PaymentPage({ token }: { token: string }) {
     );
   }
 
-  /* ——— 3b. Paso 2 — no puse la referencia (payment-without-receipt D11) ———
-     FR-031: the reference the payer did use, or their clave, with the
-     receipt second. A typed reference travels as `typed`, and the server
-     asks for the account's four digits only when nothing it learned ties
-     the transfer to this payer (FR-032); a clave is today's door. */
+  /* ——— 3b. Paso 2 — usé otra referencia (confirmation-hierarchy D3, D21;
+     012 D11) ———
+     Option 2 (spec FR-003, FR-007, FR-029): the reference the payer did
+     use, or their clave — either one is enough — with the amount, the bank
+     and the day chosen on the confirmation, shown as tags and sent as they
+     are; **Volver** is the way to change them, and the receipt is the
+     quiet last action. A typed reference travels as `typed` and searches
+     at once (D5): when it finds transfers nothing learned ties to this
+     payer, the tie-break is asked after it. A clave is today's door. */
   if (payer && proofView === "typed") {
     const refused = pay.error?.code ?? null;
-    const today = todayIn(data.timezone);
+    const chosen = readChoice(confirmChoice!, data);
+    const back = () => {
+      pay.reset();
+      setProofView("confirm");
+    };
     return (
       <Card className="space-y-5 p-6">
-        <Button variant="ghost" className="-ml-2 h-10 px-2 text-sm" onClick={() => goTo("transfer")}>
-          <ChevronLeft className="size-4" aria-hidden />
-          Ver los datos otra vez
-        </Button>
+        {stepHeader(2, "Usé otra referencia")}
 
-        {stepHeader(2, "No puse la referencia")}
+        <p className="text-base text-ink">Escribe la referencia que usaste o tu clave de rastreo. Con una basta.</p>
 
-        <p className="text-sm text-ink-soft">
-          Escribe la referencia que pusiste en tu transferencia, o su clave de rastreo.
-        </p>
+        {/* D21: what was chosen on the confirmation, as tags */}
+        <div className="space-y-2">
+          <p className="text-sm text-ink-soft">Con lo que ya elegiste:</p>
+          <ul className="flex flex-wrap gap-2" aria-label="Con lo que ya elegiste">
+            {[
+              chosen.amountOk ? formatMoney(chosen.amountCents!) : "Escribe el monto",
+              chosen.senderBank ? bankLabel(chosen.senderBank) : "Elige tu banco",
+              chosen.dayTag,
+            ].map((tag) => (
+              <li key={tag} className="rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-link">
+                {tag}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        {refused && refused !== "SENDER_TAIL_NEEDED" && refused !== "REFERENCE_NOT_READY" && (
+        {refused && refused !== "REFERENCE_NOT_READY" && (
           <Alert variant="destructive" layout="icon">
             <TriangleAlert aria-hidden />
-            {payErrorCopy(refused)}
+            {payErrorCopy(refused, data.ispName)}
           </Alert>
         )}
 
@@ -2509,12 +2626,14 @@ export function PaymentPage({ token }: { token: string }) {
              payer — what is left is the clave, then the receipt */
           keys={refused === "REFERENCE_OF_ANOTHER" ? "clave" : "either"}
           focusClave={refused === "REFERENCE_OF_ANOTHER"}
-          referenceLabel="Referencia que pusiste"
-          askSenderTail={refused === "SENDER_TAIL_NEEDED"}
+          referenceLabel="Referencia que usaste"
           busy={busy}
-          amountCents={data.totalCents ?? null}
-          timezone={data.timezone}
-          dateRange={{ min: shiftDay(today, -30), max: today }}
+          fixed={{
+            senderBank: chosen.senderBank,
+            date: chosen.date,
+            dateOk: chosen.dayOk,
+            amountCents: chosen.amountOk ? chosen.amountCents : null,
+          }}
           submitLabel="Buscar mi pago"
           onSubmit={(t) =>
             pay.mutate({
@@ -2532,23 +2651,24 @@ export function PaymentPage({ token }: { token: string }) {
                     senderBank: t.senderBank,
                     date: t.date,
                     amountCents: t.amountCents,
-                    ...(t.senderTail ? { senderTail: t.senderTail } : {}),
                   },
               ...(resubmitOf ? { supersedes: resubmitOf } : {}),
             })
           }
         />
 
-        <Button
-          variant="secondary"
-          className="h-12 w-full"
-          onClick={() => {
-            pay.reset();
-            setProofView("receipt");
-          }}
-        >
-          Sube tu comprobante
-        </Button>
+        <div className="grid gap-2">
+          <Button variant="ghost" className="h-12 w-full text-sm" onClick={back}>
+            <ChevronLeft className="size-4" aria-hidden />
+            Volver
+          </Button>
+          <ReceiptLink
+            onClick={() => {
+              pay.reset();
+              setProofView("receipt");
+            }}
+          />
+        </div>
       </Card>
     );
   }
@@ -2688,8 +2808,28 @@ export function PaymentPage({ token }: { token: string }) {
       {/* D18 earned the upload its primacy: the machine reads it and,
           when the reading holds, nobody is asked anything. Typing a
           28-character clave on a phone is the fallback, so it costs one
-          deliberate tap — and stays open once it has been paid for. */}
-      {manualDoor ? (
+          deliberate tap — and stays open once it has been paid for.
+          confirmation-hierarchy D2, D3: on a link with a reference this is
+          option 3's view, and typing data is option 2 — so the quiet door
+          gives its place to the way back to the confirmation, as the
+          receipt took the quiet recipe there. Not while the reference is
+          not ready: the confirmation could not work. */}
+      {payer && !referenceNotReady ? (
+        <Button
+          variant="ghost"
+          className="h-12 w-full text-sm"
+          onClick={() => {
+            pay.reset();
+            upload.reset();
+            setRefusal(null);
+            setAsk(null);
+            setProofView("confirm");
+          }}
+        >
+          <ChevronLeft className="size-4" aria-hidden />
+          Volver
+        </Button>
+      ) : manualDoor ? (
         <div className="space-y-4 border-t border-line-soft pt-5">
           <h2 className="text-base font-semibold">Datos de tu transferencia</h2>
           <TransferForm
@@ -2714,7 +2854,7 @@ export function PaymentPage({ token }: { token: string }) {
       {submitError && submitError.code !== "REFERENCE_NOT_READY" && (
         <Alert variant="destructive" layout="icon">
           <TriangleAlert aria-hidden />
-          {payErrorCopy(submitError.code)}
+          {payErrorCopy(submitError.code, data.ispName)}
         </Alert>
       )}
     </Card>

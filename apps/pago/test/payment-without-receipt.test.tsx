@@ -21,6 +21,13 @@ import { expectNoViolations } from "./a11y";
    US1), "Confirma tu pago" (US2), the banks it remembers (US3), the
    read-back and the ladder (US4), and "No puse la referencia" (US5).
 
+   specs/017-confirmation-hierarchy changed what several of these prove
+   (tasks T036, T037): the step's three options in their order, "Usé otra
+   referencia" and the quiet receipt link (confirmation-hierarchy US1), the
+   tie-break screen in place of 012's two tail asks (US2), the payer's
+   vocabulary (US4) and proposal E's chips and reference box (US5). The
+   tests it changed say so in their names; none was skipped or dropped.
+
    Every fixture is parsed by the contract the API exports, and every body
    the page sends is parsed by `payRequest` — a page that sends what the
    server would refuse fails here, not on a phone. */
@@ -159,8 +166,10 @@ describe("payment-without-receipt US1: the reference on step 1", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: /haz tu transferencia/i })).toBeInTheDocument();
-    expect(screen.getByText("234 5678").previousElementSibling).toHaveTextContent("Tu referencia");
-    expect(screen.getByText("Son los últimos 7 números de tu celular")).toBeInTheDocument();
+    /* confirmation-hierarchy US5 (D19): the reference has a box of its own */
+    const box = screen.getByRole("region", { name: "Tu referencia" });
+    expect(within(box).getByText("234 5678")).toBeInTheDocument();
+    expect(within(box).getByText("Son los últimos 7 números de tu celular.")).toBeInTheDocument();
     /* FR-004: the general sentence — REFERENCE_HINTS has no verified bank yet */
     expect(screen.getByText("Escríbela en «Referencia numérica», no en «Concepto».")).toBeInTheDocument();
     expect(screen.getByText(/guarda a wifiplus como contacto en tu banco con esta referencia/i)).toBeInTheDocument();
@@ -178,7 +187,8 @@ describe("payment-without-receipt US1: the reference on step 1", () => {
   it("an assigned number is never called the phone's (FR-004)", async () => {
     stub({ link: linkWith({ payerReference: reference({ digits: "7812044", fromPhone: false }) }) });
     renderPage();
-    expect(await screen.findByText("781 2044")).toBeInTheDocument();
+    const box = await screen.findByRole("region", { name: "Tu referencia" });
+    expect(within(box).getByText("781 2044")).toBeInTheDocument();
     expect(screen.queryByText(/últimos 7 números de tu celular/i)).not.toBeInTheDocument();
   });
 
@@ -246,7 +256,8 @@ describe("payment-without-receipt US1: the reference on step 1", () => {
     );
     renderPage();
     await openConfirmation();
-    await userEvent.click(screen.getByRole("button", { name: "Sube tu comprobante" }));
+    /* confirmation-hierarchy US1: option 3, quiet and last */
+    await userEvent.click(screen.getByRole("button", { name: "Subir foto del comprobante" }));
     expect(screen.getByRole("heading", { name: /envía tu comprobante/i })).toBeInTheDocument();
     await userEvent.upload(
       screen.getByLabelText(/captura o comprobante/i),
@@ -270,7 +281,7 @@ describe("payment-without-receipt US1: the reference on step 1", () => {
    ====================================================================== */
 
 describe("payment-without-receipt US2: Confirma tu pago", () => {
-  it("opens on the first-time question; 'No' spends nothing and opens 'No puse la referencia'", async () => {
+  it("opens on the first-time question; 'No' spends nothing and opens 'Usé otra referencia' (confirmation-hierarchy US1)", async () => {
     const paid = stub();
     renderPage();
     await goToStep2();
@@ -284,7 +295,7 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
     await expectNoViolations(document.body);
 
     await userEvent.click(screen.getByRole("button", { name: "No" }));
-    expect(screen.getByRole("heading", { name: "No puse la referencia" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Usé otra referencia" })).toBeInTheDocument();
     expect(paid).toHaveLength(0);
   });
 
@@ -299,12 +310,12 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
     expect(within(bank).getByRole("radio", { name: "Otro banco" })).not.toBeChecked();
 
     /* 21:00 on the 29th in Mexico City is the 30th in UTC: the business's
-       day decides */
+       day decides. confirmation-hierarchy US5 (D18): chips, "Hoy · mar 29" */
     const day = screen.getByRole("group", { name: "¿Qué día?" });
-    expect(within(day).getByRole("radio", { name: "Hoy, martes 29" })).toBeChecked();
-    expect(within(day).getByRole("radio", { name: "Ayer, lunes 28" })).toBeInTheDocument();
+    expect(within(day).getByRole("radio", { name: "Hoy · mar 29" })).toBeChecked();
+    expect(within(day).getByRole("radio", { name: "Ayer · lun 28" })).toBeInTheDocument();
     expect(within(day).getByRole("radio", { name: "Otro día" })).toBeInTheDocument();
-    expect(screen.queryByText(/miércoles 30/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/miércoles 30|mié 30/)).not.toBeInTheDocument();
 
     expect(
       screen.getByText("Buscaremos $514.00 con la referencia 234 5678, desde Banco Azteca, hoy martes 29."),
@@ -322,7 +333,7 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
         preselected: { bank: "AZTECA", day: "2026-09-29" },
       },
     });
-    expect(await screen.findByText("Seguimos buscando tu transferencia en Banxico.")).toBeInTheDocument();
+    expect(await screen.findByText("Seguimos buscando tu transferencia.")).toBeInTheDocument();
   });
 
   it("the read-back follows every choice, and 'Otro día' is bounded to the last 30 days", async () => {
@@ -330,7 +341,7 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
     renderPage();
     await openConfirmation();
 
-    await userEvent.click(screen.getByRole("radio", { name: "Ayer, lunes 28" }));
+    await userEvent.click(screen.getByRole("radio", { name: "Ayer · lun 28" }));
     expect(screen.getByText(/, ayer lunes 28\.$/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("radio", { name: "Otro día" }));
@@ -387,7 +398,7 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
     expect((paid[0] as { transfer: object }).transfer).not.toHaveProperty("referenceNumber");
   });
 
-  it("a proven reference asks no question, and the exits are there: 'No puse la referencia', 'Sube tu comprobante'", async () => {
+  it("a proven reference asks no question, and the other two options are there: 'Usé otra referencia', the receipt (confirmation-hierarchy US1)", async () => {
     const paid = stub({ link: linkWith({ payerReference: reference({ proven: true }) }) });
     renderPage();
     await openConfirmation();
@@ -395,9 +406,9 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
     expect(screen.queryByText(/¿pusiste la referencia/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /confirmar pago/i })).toBeEnabled();
 
-    await userEvent.click(screen.getByRole("button", { name: "No puse la referencia" }));
-    expect(screen.getByRole("heading", { name: "No puse la referencia" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Sube tu comprobante" }));
+    await userEvent.click(screen.getByRole("button", { name: "Usé otra referencia" }));
+    expect(screen.getByRole("heading", { name: "Usé otra referencia" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Subir foto del comprobante" }));
     expect(screen.getByRole("heading", { name: /envía tu comprobante/i })).toBeInTheDocument();
     expect(paid).toHaveLength(0);
   });
@@ -431,7 +442,7 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
 
     await tabTo(radio("Hoy"));
     await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("radio", { name: "Ayer, lunes 28" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Ayer · lun 28" })).toBeChecked();
 
     await tabTo(named("Confirmar pago"));
     await user.keyboard("{Enter}");
@@ -467,7 +478,7 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
     expect(screen.getByRole("heading", { name: "Confirma tu pago" })).toBeInTheDocument();
   });
 
-  it("the five new refusals each have their page copy or behaviour", () => {
+  it("the new refusals each have their page copy or behaviour — SENDER_TAIL_NEEDED gone, the tie-break's two in (confirmation-hierarchy US2)", () => {
     /* A code added to the contract without a sentence here would reach
        the payer as the generic upload failure */
     expect([...PAY_REFUSALS_WITHOUT_RECEIPT].sort()).toEqual(
@@ -475,7 +486,8 @@ describe("payment-without-receipt US2: Confirma tu pago", () => {
         "CORRECTIONS_EXHAUSTED",
         "REFERENCE_NOT_READY",
         "REFERENCE_OF_ANOTHER",
-        "SENDER_TAIL_NEEDED",
+        "TIE_BREAK_EXHAUSTED",
+        "TIE_BREAK_NOT_ASKED",
         "TRANSFER_DATE_OUT_OF_RANGE",
       ].sort(),
     );
@@ -495,13 +507,15 @@ describe("payment-without-receipt US3: the banks it remembers", () => {
     await openConfirmation();
 
     const bank = screen.getByRole("group", { name: "¿Desde qué banco pagaste?" });
+    /* confirmation-hierarchy US5 (D18): chips — the chosen one marked by
+       its check icon and outline, never colour alone, and no word */
     expect(within(bank).getAllByRole("radio").map((r) => r.closest("label")!.textContent)).toEqual([
-      "NuElegido",
+      "Nu",
       "Banco Azteca",
       "Otro banco",
     ]);
-    /* the chosen one is marked by icon and word, not colour alone */
     expect(within(bank).getByRole("radio", { name: "Nu" })).toBeChecked();
+    expect(within(bank).getByRole("radio", { name: "Nu" }).closest("label")!.querySelector("svg")).not.toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
     await waitFor(() => expect(paid).toHaveLength(1));
@@ -517,11 +531,12 @@ describe("payment-without-receipt US3: the banks it remembers", () => {
     const select = screen.getByLabelText("Elige tu banco");
     const offered = [...select.querySelectorAll("option")].map((o) => o.value).filter(Boolean);
     expect(offered.slice(0, 3)).toEqual(["BBVA MEXICO", "AZTECA", "NUBANK"]);
+    /* confirmation-hierarchy US4 (D15): never Banxico */
     const rest = [...BANKS]
-      .filter((b) => !["BBVA MEXICO", "AZTECA", "NUBANK"].includes(b))
+      .filter((b) => !["BBVA MEXICO", "AZTECA", "NUBANK"].includes(b) && !/banxico/i.test(b))
       .sort((a, b) => a.localeCompare(b, "es-MX"));
     expect(offered.slice(3)).toEqual(rest);
-    expect(offered).toHaveLength(BANKS.length);
+    expect(offered).toHaveLength(BANKS.length - 1);
     await expectNoViolations(document.body);
   });
 
@@ -554,14 +569,16 @@ describe("payment-without-receipt US4: while it validates", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Ver los datos que enviaste" }, { timeout: 8000 }));
   }
 
-  it("reads back what is searched under 'Ver los datos que enviaste', with Corregir, and the wait breathes", async () => {
+  it("reads back what is searched under 'Ver los datos que enviaste', with Corregir, and the wait breathes (its current step: confirmation-hierarchy US5)", async () => {
     /* validationAttempts 5 and not found: a receipt row would open the
        form now; a sourced row asks only by `ask` (D15) */
     stubInReview(sourced({ validationAttempts: 5, error: "TRANSFER_NOT_FOUND" }));
     renderPage();
 
-    const waiting = await screen.findByText("Seguimos buscando tu transferencia en Banxico.", {}, { timeout: 8000 });
-    await waitFor(() => expect(waiting.closest("[data-motion='breath']")).not.toBeNull());
+    await screen.findByText(/^Seguimos buscando tu transferencia\. Todavía no la vemos/, {}, { timeout: 8000 });
+    const current = document.querySelector("[aria-current='step']")!;
+    expect(current).toHaveTextContent("Verificamos tu transferencia");
+    await waitFor(() => expect(current.querySelector("[data-motion='breath']")).not.toBeNull());
     expect(screen.queryByLabelText("Clave de rastreo")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Monto transferido")).not.toBeInTheDocument();
 
@@ -677,13 +694,13 @@ describe("payment-without-receipt US4: while it validates", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Todo está bien" }));
     expect(screen.queryByText(/todavía no encontramos tu transferencia/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Seguimos buscando tu transferencia en Banxico.")).toBeInTheDocument();
+    expect(screen.getByText("Seguimos buscando tu transferencia.")).toBeInTheDocument();
     expect(paid).toHaveLength(0);
 
     /* the next morning, on the same phone */
     cleanup();
     renderPage();
-    expect(await screen.findByText("Seguimos buscando tu transferencia en Banxico.", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(await screen.findByText("Seguimos buscando tu transferencia.", {}, { timeout: 8000 })).toBeInTheDocument();
     expect(screen.queryByText(/todavía no encontramos tu transferencia/i)).not.toBeInTheDocument();
   });
 
@@ -694,7 +711,7 @@ describe("payment-without-receipt US4: while it validates", () => {
     expect(await screen.findByText(/todavía no encontramos tu transferencia/i, {}, { timeout: 8000 })).toBeInTheDocument();
   });
 
-  it("the clave ask focuses the clave, puts 'Sube tu comprobante' second, and sends today's door", async () => {
+  it("the clave ask focuses the clave, puts the receipt link last, and sends today's door (confirmation-hierarchy US1)", async () => {
     const paid: unknown[] = [];
     stubInReview(sourced({ ask: "clave", validationAttempts: 4 }), paid);
     renderPage();
@@ -709,8 +726,10 @@ describe("payment-without-receipt US4: while it validates", () => {
     const clave = screen.getByLabelText("Clave de rastreo");
     await waitFor(() => expect(clave).toHaveFocus());
     const send = screen.getByRole("button", { name: "Buscar con mi clave" });
-    const receipt = screen.getByRole("button", { name: "Sube tu comprobante" });
+    const receipt = screen.getByRole("button", { name: "Subir foto del comprobante" });
     expect(send.compareDocumentPosition(receipt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const buttons = screen.getAllByRole("button");
+    expect(buttons[buttons.length - 1]).toBe(receipt);
     await expectNoViolations(document.body);
 
     await userEvent.type(clave, "260929071144393084I");
@@ -722,18 +741,19 @@ describe("payment-without-receipt US4: while it validates", () => {
     });
   });
 
-  it("'Sube tu comprobante' from an ask is the receipt step, and the capture supersedes the row", async () => {
+  it("the receipt link from an ask is the receipt step, and the capture supersedes the row (confirmation-hierarchy US1)", async () => {
     stubInReview(sourced({ ask: "clave" }));
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: "Sube tu comprobante" }, { timeout: 8000 }));
+    await userEvent.click(await screen.findByRole("button", { name: "Subir foto del comprobante" }, { timeout: 8000 }));
     expect(screen.getByRole("heading", { name: /envía tu comprobante/i })).toBeInTheDocument();
   });
 
-  it("with a provisional release standing, every ask says the service stays and what settles it", async () => {
-    for (const ask of ["check_data", "clave", "sender_tail", "clave_tail"] as const) {
+  it("with a provisional release standing, every ask says the service stays and what settles it (the tie-break's too: confirmation-hierarchy US2)", async () => {
+    for (const ask of ["check_data", "clave", "tie_break"] as const) {
       stubInReview(
         sourced({
           ask,
+          ...(ask === "tie_break" ? { tieBreak: { ways: ["sender_tail", "clave_tail"], missed: false, several: true } } : {}),
           referenceSource: "typed",
           referenceNumber: "9784417",
           provisionalRelease: { evidence: "human", kind: "reconnect" },
@@ -765,12 +785,12 @@ describe("payment-without-receipt US4: while it validates", () => {
 
     expect(
       await screen.findByText(
-        "Ya corregiste tus datos varias veces. Escribe tu clave de rastreo o sube tu comprobante.",
+        "Ya corregiste tus datos varias veces. Escribe tu clave de rastreo o sube la foto de tu comprobante.",
       ),
     ).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Clave de rastreo")).toHaveFocus());
     expect(screen.queryByLabelText("Número de referencia")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sube tu comprobante" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Subir foto del comprobante" })).toBeInTheDocument();
   });
 
   it("a used transfer names the payer's own payment with `usedBy`, and says today's sentence without it (D24)", async () => {
@@ -795,7 +815,7 @@ describe("payment-without-receipt US4: while it validates", () => {
     expect(screen.queryByText(/ya se usó para tu pago/i)).not.toBeInTheDocument();
   });
 
-  it("an expired sourced row keeps the clave and the receipt, and offers no 'Reintentar ahora'", async () => {
+  it("an expired sourced row keeps the clave and the receipt link, and offers no 'Reintentar ahora' (confirmation-hierarchy US1, US4)", async () => {
     const paid: unknown[] = [];
     stubInReview(
       sourced({
@@ -810,10 +830,12 @@ describe("payment-without-receipt US4: while it validates", () => {
     renderPage();
 
     expect(await screen.findByText("Verificación expirada", {}, { timeout: 8000 })).toBeInTheDocument();
-    expect(screen.getByText(/escribe tu clave de rastreo o sube tu comprobante/i)).toBeInTheDocument();
+    expect(screen.getByText(/escribe tu clave de rastreo o sube la foto de tu comprobante/i)).toBeInTheDocument();
+    expect(screen.getByText(/no pudimos confirmar tu transferencia a tiempo/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reintentar ahora/i })).not.toBeInTheDocument();
     const clave = screen.getByLabelText("Clave de rastreo");
-    expect(screen.getByRole("button", { name: "Sube tu comprobante" })).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button");
+    expect(buttons[buttons.length - 1]).toHaveTextContent("Subir foto del comprobante");
     await expectNoViolations(document.body);
 
     await userEvent.type(clave, "260929071144393084I");
@@ -827,34 +849,37 @@ describe("payment-without-receipt US4: while it validates", () => {
 });
 
 /* ======================================================================
-   US5 — "No puse la referencia"
+   US5 — "No puse la referencia", now option 2: "Usé otra referencia"
+   (confirmation-hierarchy US1, US2)
    ====================================================================== */
 
-describe("payment-without-receipt US5: No puse la referencia", () => {
+const TIE_BOTH = { ways: ["sender_tail", "clave_tail"], missed: false, several: true };
+
+describe("payment-without-receipt US5, confirmation-hierarchy US1/US2: Usé otra referencia", () => {
   async function openTyped() {
     await openConfirmation();
-    await userEvent.click(screen.getByRole("button", { name: "No puse la referencia" }));
-    await screen.findByRole("heading", { name: "No puse la referencia" });
+    await userEvent.click(screen.getByRole("button", { name: "Usé otra referencia" }));
+    await screen.findByRole("heading", { name: "Usé otra referencia" });
   }
 
-  it("offers the reference used or the clave, with 'Sube tu comprobante' second; a typed reference travels as typed", async () => {
+  it("offers the reference used or the clave, with the confirmation's bank, day and amount, the receipt link last; a typed reference travels as typed", async () => {
     const paid = stub({ link: linkWith({ payerReference: reference({ proven: true }) }) });
     renderPage();
     await openTyped();
 
-    const typedRef = screen.getByLabelText("Referencia que pusiste");
+    const typedRef = screen.getByLabelText("Referencia que usaste");
     expect(screen.getByLabelText("Clave de rastreo")).toBeInTheDocument();
     const send = screen.getByRole("button", { name: "Buscar mi pago" });
-    const receipt = screen.getByRole("button", { name: "Sube tu comprobante" });
+    const receipt = screen.getByRole("button", { name: "Subir foto del comprobante" });
     expect(send.compareDocumentPosition(receipt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    /* D8: the day is bounded like the confirmation's */
-    expect(screen.getByLabelText("Fecha de la transferencia")).toHaveAttribute("min", "2026-08-30");
+    /* confirmation-hierarchy D21 (FR-029): nothing asked twice */
+    expect(screen.queryByLabelText("Banco desde el que pagaste")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Fecha de la transferencia")).not.toBeInTheDocument();
     await expectNoViolations(document.body);
 
     /* Azteca's default — digits no person holds go on (D11, analysis I8):
        the clave is not demanded */
     await userEvent.type(typedRef, "7654321");
-    await userEvent.selectOptions(screen.getByLabelText("Banco desde el que pagaste"), "AZTECA");
     expect(send).toBeEnabled();
     await userEvent.click(send);
     await waitFor(() => expect(paid).toHaveLength(1));
@@ -869,35 +894,27 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
     });
   });
 
-  it("SENDER_TAIL_NEEDED shows the four-digit field and re-sends with it", async () => {
+  it("a typed reference is sent once, with no four digits first: the tie-break comes back as the status's ask (replaces SENDER_TAIL_NEEDED, confirmation-hierarchy D5)", async () => {
     const paid = stub({
       link: linkWith({ payerReference: reference({ proven: true }) }),
-      payAnswer: (_, n) =>
-        n === 1
-          ? fail("SENDER_TAIL_NEEDED", 409)
-          : ok(payResponse.parse({ directPaymentId: "dp-2", status: "validating", error: null }), 201),
+      status: sourced({ ask: "tie_break", tieBreak: TIE_BOTH, referenceSource: "typed", referenceNumber: "9784417", error: "CEP_UNDECIDED" }),
     });
     renderPage();
     await openTyped();
-    await userEvent.type(screen.getByLabelText("Referencia que pusiste"), "9784417");
-    await userEvent.selectOptions(screen.getByLabelText("Banco desde el que pagaste"), "AZTECA");
+    await userEvent.type(screen.getByLabelText("Referencia que usaste"), "9784417");
     await userEvent.click(screen.getByRole("button", { name: "Buscar mi pago" }));
 
+    await waitFor(() => expect(paid).toHaveLength(1));
+    expect((paid[0] as { transfer: object }).transfer).not.toHaveProperty("senderTail");
     expect(
-      await screen.findByText("Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste."),
+      await screen.findByText(
+        "Encontramos más de una transferencia con esos datos. Para saber cuál es la tuya, escribe uno de estos datos. Con uno basta.",
+      ),
     ).toBeInTheDocument();
-    const tail = screen.getByLabelText("Últimos 4 dígitos de tu cuenta o tarjeta");
-    expect(screen.getByRole("button", { name: "Buscar mi pago" })).toBeDisabled();
-    await userEvent.type(tail, "8301");
-    await userEvent.click(screen.getByRole("button", { name: "Buscar mi pago" }));
-
-    await waitFor(() => expect(paid).toHaveLength(2));
-    expect(paid[1]).toMatchObject({
-      transfer: { referenceSource: "typed", referenceNumber: "9784417", senderTail: "8301" },
-    });
+    expect(screen.queryByText(/escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste\.$/i)).not.toBeInTheDocument();
   });
 
-  it("REFERENCE_OF_ANOTHER: said plainly, and only the clave is left beside the receipt; the clave is today's door", async () => {
+  it("REFERENCE_OF_ANOTHER: said plainly, and only the clave is left beside the receipt link; the clave is today's door", async () => {
     const paid = stub({
       link: linkWith({ payerReference: reference({ proven: true }) }),
       payAnswer: (_, n) =>
@@ -907,19 +924,18 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
     });
     renderPage();
     await openTyped();
-    await userEvent.type(screen.getByLabelText("Referencia que pusiste"), "4029185");
-    await userEvent.selectOptions(screen.getByLabelText("Banco desde el que pagaste"), "AZTECA");
+    await userEvent.type(screen.getByLabelText("Referencia que usaste"), "4029185");
     await userEvent.click(screen.getByRole("button", { name: "Buscar mi pago" }));
 
     expect(
       await screen.findByText(
-        "Esa referencia es de otra persona. Escribe tu clave de rastreo o sube tu comprobante.",
+        "Esa referencia es de otra persona. Escribe tu clave de rastreo o sube la foto de tu comprobante.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("Referencia que pusiste")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Referencia que usaste")).not.toBeInTheDocument();
     const clave = screen.getByLabelText("Clave de rastreo");
     await waitFor(() => expect(clave).toHaveFocus());
-    expect(screen.getByRole("button", { name: "Sube tu comprobante" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Subir foto del comprobante" })).toBeInTheDocument();
 
     await userEvent.type(clave, "260929071144393084I");
     await userEvent.click(screen.getByRole("button", { name: "Buscar mi pago" }));
@@ -929,24 +945,24 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
     });
   });
 
-  it("the sender_tail ask on a typed row re-sends the search with the digits", async () => {
+  it("the tie_break ask on a typed row re-sends the search with the digits (was 012's sender_tail ask)", async () => {
     const paid: unknown[] = [];
     stubInReview(
-      sourced({ ask: "sender_tail", referenceSource: "typed", referenceNumber: "7654321" }),
+      sourced({ ask: "tie_break", tieBreak: TIE_BOTH, referenceSource: "typed", referenceNumber: "7654321", error: "CEP_UNDECIDED" }),
       paid,
     );
     renderPage();
     expect(
       await screen.findByText(
-        "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste.",
+        "Encontramos más de una transferencia con esos datos. Para saber cuál es la tuya, escribe uno de estos datos. Con uno basta.",
         {},
         { timeout: 8000 },
       ),
     ).toBeInTheDocument();
     await expectNoViolations(document.body);
-    const send = screen.getByRole("button", { name: "Enviar" });
-    expect(send.compareDocumentPosition(screen.getByRole("button", { name: "Sube tu comprobante" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await userEvent.type(screen.getByLabelText("Últimos 4 dígitos de tu cuenta o tarjeta"), "8301");
+    const send = screen.getByRole("button", { name: "Confirmar" });
+    expect(send.compareDocumentPosition(screen.getByRole("button", { name: "Subir foto del comprobante" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.type(screen.getByLabelText("Últimos 4 dígitos de la cuenta o tarjeta con la que pagaste"), "8301");
     await userEvent.click(send);
     await waitFor(() => expect(paid).toHaveLength(1));
     expect(paid[0]).toEqual({
@@ -962,19 +978,19 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
     });
   });
 
-  it("the sender_tail ask on an own row, during a reference's transition, says it is to confirm the transfer is theirs (D26)", async () => {
+  it("the tie_break ask on an own row, during a reference's transition, opens on the one transfer found (D26; was 012's sender_tail ask)", async () => {
     const paid: unknown[] = [];
-    stubInReview(sourced({ ask: "sender_tail" }), paid);
+    stubInReview(sourced({ ask: "tie_break", tieBreak: { ...TIE_BOTH, several: false }, error: "CEP_UNDECIDED" }), paid);
     renderPage();
     expect(
       await screen.findByText(
-        "Para confirmar que esta transferencia es tuya, escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste.",
+        "Encontramos una transferencia con esos datos. Para confirmar que es tuya, escribe uno de estos datos. Con uno basta.",
         {},
         { timeout: 8000 },
       ),
     ).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Últimos 4 dígitos de tu cuenta o tarjeta"), "8301");
-    await userEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await userEvent.type(screen.getByLabelText("Últimos 4 dígitos de la cuenta o tarjeta con la que pagaste"), "8301");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(paid).toHaveLength(1));
     expect(paid[0]).toEqual({
       transfer: { referenceSource: "own", senderBank: "AZTECA", date: "2026-09-29", amountCents: 51400, senderTail: "8301" },
@@ -982,28 +998,39 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
     });
   });
 
-  it("the clave_tail ask takes four characters, with 'Sube tu comprobante' second", async () => {
+  it("the characters alone, after the digits chose another person's account: four characters, upper-cased, the receipt link last (was 012's clave_tail ask)", async () => {
     const paid: unknown[] = [];
     stubInReview(
-      sourced({ ask: "clave_tail", referenceSource: "typed", referenceNumber: "7654321", senderTail: "8301" }),
+      sourced({
+        ask: "tie_break",
+        tieBreak: { ways: ["clave_tail"], missed: false, several: true },
+        referenceSource: "typed",
+        referenceNumber: "7654321",
+        senderTail: "8301",
+        error: "CEP_UNDECIDED",
+      }),
       paid,
     );
     renderPage();
     expect(
       await screen.findByText(
-        "Encontramos más de una transferencia con esos datos. Escribe los últimos 4 caracteres de tu clave de rastreo.",
+        "Para confirmar que esta transferencia es tuya, escribe los últimos 4 caracteres de tu clave de rastreo.",
         {},
         { timeout: 8000 },
       ),
     ).toBeInTheDocument();
     const field = screen.getByLabelText("Últimos 4 caracteres de tu clave de rastreo");
     await waitFor(() => expect(field).toHaveFocus());
-    expect(screen.getByRole("button", { name: "Sube tu comprobante" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/últimos 4 dígitos/i)).not.toBeInTheDocument();
+    const buttons = screen.getAllByRole("button");
+    expect(buttons[buttons.length - 1]).toHaveTextContent("Subir foto del comprobante");
     await expectNoViolations(document.body);
 
-    await userEvent.type(field, "084I");
-    await userEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await userEvent.type(field, "084i");
+    expect(field).toHaveValue("084I");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(paid).toHaveLength(1));
+    /* the digits ride forward on the server; the page sends what was typed */
     expect(paid[0]).toEqual({
       transfer: {
         referenceSource: "typed",
@@ -1011,7 +1038,6 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
         senderBank: "AZTECA",
         date: "2026-09-29",
         amountCents: 51400,
-        senderTail: "8301",
         claveTail: "084I",
       },
       supersedes: "dp-1",
@@ -1082,27 +1108,20 @@ describe("payment-without-receipt US5: No puse la referencia", () => {
       });
     });
 
-    it("the previous one, answered SENDER_TAIL_NEEDED, asks the four digits on the same screen (FR-041)", async () => {
+    it("the previous one searches at once, with no four digits asked first; the transition's tie-break follows (FR-041, confirmation-hierarchy D5, D10)", async () => {
       const paid = stub({
         link: changed(),
-        payAnswer: (_, n) =>
-          n === 1
-            ? fail("SENDER_TAIL_NEEDED", 409)
-            : ok(payResponse.parse({ directPaymentId: "dp-2", status: "validating", error: null }), 201),
+        status: sourced({ ask: "tie_break", tieBreak: TIE_BOTH, referenceSource: "typed", referenceNumber: "7815678", error: "CEP_UNDECIDED" }),
       });
       renderPage();
       await goToStep2();
       await userEvent.click(screen.getByRole("radio", { name: "781 5678, la anterior" }));
       await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
 
-      const tail = await screen.findByLabelText("Últimos 4 dígitos de tu cuenta o tarjeta");
-      expect(screen.getByRole("button", { name: /confirmar pago/i })).toBeDisabled();
-      await userEvent.type(tail, "8301");
-      await userEvent.click(screen.getByRole("button", { name: /confirmar pago/i }));
-      await waitFor(() => expect(paid).toHaveLength(2));
-      expect(paid[1]).toMatchObject({
-        transfer: { referenceSource: "typed", referenceNumber: "7815678", senderTail: "8301" },
-      });
+      await waitFor(() => expect(paid).toHaveLength(1));
+      expect(paid[0]).toMatchObject({ transfer: { referenceSource: "typed", referenceNumber: "7815678" } });
+      expect((paid[0] as { transfer: object }).transfer).not.toHaveProperty("senderTail");
+      expect(await screen.findByLabelText("Últimos 4 dígitos de la cuenta o tarjeta con la que pagaste")).toBeInTheDocument();
     });
   });
 });

@@ -25,13 +25,14 @@ export function RootScreen({ onOpen }: { onOpen: (path: string) => void }) {
   if (links.length === 0) {
     return (
       <Card className="space-y-4 p-6">
-        <h1 className="text-lg font-semibold">Pago de internet</h1>
-        {/* D9: the way in is the ISP. Never hint at a self-service
-            lookup, because there is not one. */}
+        <h1 className="text-lg font-semibold">Tu pago</h1>
+        {/* D9: the way in is whoever sent the link. Never hint at a
+            self-service lookup, because there is not one.
+            confirmation-hierarchy D14 (spec FR-021): no business is known
+            here, and none is assumed to sell internet. */}
         <Alert layout="icon">
           <LinkIcon aria-hidden />
-          Aún no tienes un link de pago guardado en este dispositivo. Pídeselo a tu proveedor de
-          internet.
+          Aún no tienes un link de pago guardado en este dispositivo. Pídeselo a quien te envió el link.
         </Alert>
       </Card>
     );

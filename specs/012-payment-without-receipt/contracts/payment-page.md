@@ -143,7 +143,7 @@ always there (FR-023). Then, by `ask`:
 
 | `ask` | Copy (es-MX) | Form |
 | --- | --- | --- |
-| null | "Seguimos buscando tu transferencia en Banxico." | none |
+| null | "Seguimos buscando tu transferencia." *(amended 2026-10-01 by spec 017, `confirmation-hierarchy` D13: the payer never reads who checks their transfer)* | none |
 | `check_data` | "Todavía no encontramos tu transferencia. Revisa que estos datos sean los de tu app, y que hayas puesto la referencia 234 5678." | *Todo está bien* (remembered on the device, no call) · *Corregir* |
 | `clave` | "Para encontrarla con seguridad, escribe tu clave de rastreo. Puedes copiarla del detalle de la transferencia en tu app." | clave field, `focusClave` · "Sube tu comprobante" |
 | `sender_tail` | "Esa referencia la usan otras personas. Escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." — on an own row during a transition (D26): "Para confirmar que esta transferencia es tuya, escribe los últimos 4 dígitos de la cuenta o tarjeta con la que pagaste." | four digits (asked before `clave_tail`, D15) |

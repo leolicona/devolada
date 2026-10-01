@@ -581,6 +581,61 @@ export async function learnedAccounts(
   return rows.map((r) => r.account.replace(/\D/g, "")).filter(Boolean);
 }
 
+/* confirmation-hierarchy D4 (FR-015): of these sending accounts, the ones
+   that have paid a customer who is not this person — one who does not hold
+   `referenceId`. Read at the moment of a tie, over the candidates' accounts
+   only (a bundle holds a handful), never stored: an account stops being
+   one person's the day it pays for another, and a payment it decided
+   before stays as it is. One query from `cep_records` by `(business_id,
+   sender_account)` → the confirmed or partial payments that adopted those
+   claves → their links → the reference each link's customer holds. Every
+   join is the business's (constitution V). A paid customer with no
+   reference yet is another person, unless it is `customer` — when in
+   doubt, history does not decide and the payer is asked (spec
+   Assumptions). Accounts come back as digits, like `learnedAccounts`. */
+export async function accountsOfOthers(
+  db: DB,
+  businessId: string,
+  referenceId: string | null,
+  customer: CustomerKey | null,
+  accounts: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  const wanted = [...new Set(accounts.filter(Boolean))];
+  if (!wanted.length) return out;
+  const rows = await db
+    .selectDistinct({
+      account: cepRecords.senderAccount,
+      source: paymentLinks.source,
+      key: sql<string | null>`coalesce(${paymentLinks.customerUsuario}, ${paymentLinks.customerRef})`,
+      referenceId: payerReferenceCustomers.referenceId,
+    })
+    .from(cepRecords)
+    .innerJoin(payments, and(eq(payments.businessId, cepRecords.businessId), eq(payments.trackingKey, cepRecords.clave)))
+    .innerJoin(paymentLinks, and(eq(paymentLinks.id, payments.paymentLinkId), eq(paymentLinks.businessId, cepRecords.businessId)))
+    .leftJoin(
+      payerReferenceCustomers,
+      and(
+        eq(payerReferenceCustomers.businessId, cepRecords.businessId),
+        eq(payerReferenceCustomers.source, paymentLinks.source),
+        eq(payerReferenceCustomers.customerKey, sql`coalesce(${paymentLinks.customerUsuario}, ${paymentLinks.customerRef})`),
+      ),
+    )
+    .where(
+      and(
+        eq(cepRecords.businessId, businessId),
+        inArray(cepRecords.senderAccount, wanted),
+        inArray(payments.status, [...PAID]),
+      ),
+    );
+  for (const r of rows) {
+    const me = customer != null && r.source === customer.source && r.key === customer.key;
+    const another = r.referenceId != null ? r.referenceId !== referenceId : !me;
+    if (another) out.add(r.account.replace(/\D/g, ""));
+  }
+  return out;
+}
+
 /* D7 (FR-018): what "Otro banco" lists first — this business's confirmed
    payments of the last 90 days, most used banks first, five at most. One
    business's rows; it names no customer. */

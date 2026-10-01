@@ -19,7 +19,9 @@ function Row({ row }: { row: StoreLedgerRow }) {
   return (
     <li className="flex items-start justify-between gap-3 px-4 py-3">
       <span className="min-w-0">
-        <span className="block truncate text-base font-medium">{title(row)}</span>
+        {/* design-review D1: identity wraps, it never truncates — measured
+            2026-10-01 at 360px, a long name lost a third of itself */}
+        <span className="block break-words text-base font-medium">{title(row)}</span>
         <span className="block text-sm text-ink-soft">
           {timeOf(row.at)}
           {row.folio ? ` · ${row.folio}` : ""}

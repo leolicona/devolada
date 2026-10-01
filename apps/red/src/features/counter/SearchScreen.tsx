@@ -117,8 +117,9 @@ export function SearchScreen() {
                           className="flex min-h-12 items-center justify-between gap-3 px-4 py-3"
                         >
                           <span className="min-w-0">
-                            <span className="block truncate text-base font-medium">{row.name || row.usuario}</span>
-                            <span className="block truncate text-sm text-ink-soft">
+                            {/* design-review D1: identity wraps, it never truncates */}
+                            <span className="block break-words text-base font-medium">{row.name || row.usuario}</span>
+                            <span className="block break-words text-sm text-ink-soft">
                               {row.usuario}
                               {row.zone ? ` · ${row.zone}` : ""}
                             </span>

@@ -935,6 +935,9 @@ export function FeedScreen() {
                   <Button
                     key={c.value}
                     size="compact"
+                    /* the filter bar clears 44px on a phone, like the search
+                       and the dates beside it (pagos-filtros review) */
+                    className="h-11 sm:h-10"
                     variant={c.value === channel ? "primary" : "secondary"}
                     aria-pressed={c.value === channel}
                     onClick={() => setChannel(c.value)}

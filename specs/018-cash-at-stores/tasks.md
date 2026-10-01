@@ -156,7 +156,7 @@ SPEI suite must pass unchanged at its end.
   - a store user is never a platform operator, even with an email in `PLATFORM_OPERATOR_EMAILS`.
 - [ ] T015 The capabilities' core shapes, in `apps/api/src/integrations/capabilities.ts` (D8, D9):
   - `customerSearch.find(text, limit)`, which answers `{ rows: { usuario, name, zone, providerCustomerId }[], more }`;
-  - the `customer` block on `CustomerDebtAnswer`'s `owes` and `none`;
+  - the `customer` block on `CustomerDebtAnswer`'s `owes` and `none`: `{ providerCustomerId, name, zone }`, with **no phone** (D8, D18);
   - `paymentActions.attempt(input)`, which answers `ActionAttempt` with errors `INTEGRATION_UNAVAILABLE` and `INTEGRATION_AUTH_FAILED`.
 
   Wire them in `apps/api/src/integrations/registry.ts`, and add both names to `WISPHUB_CAPABILITY_NAMES`.
@@ -207,7 +207,13 @@ SPEI suite must pass unchanged at its end.
   - `feesSinceHandoverCents(db, storeId, businessId)` sums `payments.store_fee_cents` since the last `handover` movement.
 
   Nothing else in the tree may insert into `store_ledger`.
-- [ ] T023 [P] Add `store_fee_cents` to `SETTINGS` in `apps/api/src/platform/settings.ts`: type `cents`, born at 1500, range 0–5000 (D22).
+- [ ] T023 [P] Add two settings in `apps/api/src/platform/settings.ts` (data-model § Platform settings):
+  - `store_fee_cents`: type `cents`, born at 1500, range 0–5000 (D22);
+  - `store_receipt_template`: a new type, `template`, born at research D31's default. `validateSetting` refuses it with `INVALID_SETTING` when it is outside 20–1000 characters, has no `{folio}`, or uses a placeholder D31 does not list.
+
+  Put the renderer beside it, `renderReceipt(template, values)` in `apps/api/src/store-ledger/receipt.ts` or `src/receipt.ts`. It fills the placeholders, formats money as es-MX MXN, and drops lines left empty (D31).
+
+  Add API tests to `apps/api/test/cash-at-stores-operator.test.ts`, citing `cash-at-stores US2`: the three refusals, a save keeps its author, and the renderer drops an empty `{pendiente}` line.
 
 **Checkpoint**:
 - a store can be seeded and signed in, and every refusal holds;
@@ -262,7 +268,9 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
 
   **Status and receipt**:
   - `GET /store/collections/:id` maps every outcome, and another store's id → 404;
-  - the receipt says *"Comprobante de pago"*, never *"cobro"*, formats money and time in es-MX and the business's timezone, and carries `hasPhone`.
+  - the receipt's `text` is the current `store_receipt_template` filled in for the payment. The default says *"Comprobante de pago"*, never *"cobro"*, and formats money and time in es-MX and the business's timezone. After the operator saves a new template, the next receipt uses it;
+  - the receipt's `waLink` carries the phone `customersWithPhone.phoneOf` returns, read at that request. After the collection and after the receipt, `payments.customer_phone` is null, and no other table holds the phone;
+  - with no phone, with the capability absent, or with the provider failing, the answer is `hasPhone: false` and `wa.me/?text=…`. Another store's payment → 404.
 - [ ] T025 [P] [US1] Component tests in `apps/red/test/counter.test.tsx`, citing `cash-at-stores US1`, with MSW fixtures parsed by `@devolada/api/store-schema` and axe on each screen. Cover:
   - an empty search, and the three-character hint;
   - results without a phone;
@@ -286,7 +294,13 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
     4. `settleConfirmed` with `serviceFeeCents: 0` (D13);
     5. `recordCollection` (D19);
     6. the first attempt in `waitUntil` (D25);
-  - **status** and **receipt**: the API writes the text; `waLink` uses the integration's phone only (D18).
+  - **status**;
+  - **receipt**, asked for only when WhatsApp is tapped:
+    - the text is `renderReceipt(store_receipt_template, …)` (D31);
+    - the phone is read live through `customersWithPhone.phoneOf`, normalised to ten digits and put in `waLink`, **never written** (D18, constitution V v1.9.0);
+    - with no phone, `hasPhone: false` and `wa.me/?text=…`.
+
+  The record never writes `customer_phone`.
 
   Import nothing from `wisphub/`.
 - [ ] T028 [US1] Wire it up:
@@ -313,7 +327,8 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
   - the folio in mono, and the amount;
   - the outcome polled every 3 s while `queued`, each outcome as icon + text through `StatusBadge`;
   - what remains owed after a short payment;
-  - *Enviar comprobante* opens `waLink`. With `hasPhone: false`, it asks for ten digits and builds the link in the app (D18);
+  - *Enviar comprobante* asks the API for the receipt only at that tap, then opens `waLink`. With `hasPhone: false`, it asks for ten digits and builds the link in the app; that number is never sent (D18, FR-027);
+  - *Usar otro número* (the spec's edge case for a wrong phone on file) asks for ten digits and builds the link the same way;
   - *Copiar comprobante* and *Nuevo cobro*.
 - [ ] T033 [US1] Browser layer:
   - `tests/e2e/stubs.ts` gains `stubRedApi`, with fixtures parsed by the store schemas;
@@ -359,7 +374,8 @@ system acts on it. US1 is proven at every layer.
   - the invitation shown once, with *Copiar* and *WhatsApp*;
   - suspend and reactivate;
   - the Negocios switch with the refusal's reason;
-  - the Reglas label *Cargo por servicio en tiendas*;
+  - the Reglas labels *Cargo por servicio en tiendas* and *Mensaje del comprobante (WhatsApp)*;
+  - the template field: a text area, the placeholders listed, a preview with sample data, and the panel naming a missing `{folio}` or an unknown placeholder before it saves;
   - the correction form, with a reason of 3–280 characters.
 
 ### Implementation for User Story 2
@@ -368,7 +384,8 @@ system acts on it. US1 is proven at every layer.
   - store, invitation, ledger and correction shapes;
   - `patchBusinessRequest.storeChannel`;
   - `businessRow` gains `storeChannel`, `capabilities` and `storeHeldCents`;
-  - `settingItem.type` covers `cents` for the new key.
+  - `settingItem.type` gains `"template"`;
+  - `store_fee_cents` is typed `cents`, and `store_receipt_template` is typed `template`.
 - [ ] T037 [US2] `apps/api/src/routes/platform/handler.ts`:
   - **stores**: list (with `collectsFor` and held cents from `heldCents`), create, edit with the username change in the same batch, suspend and reactivate with session deletion;
   - **invitations**: issue and resend. The token is random; `token_hash` is SHA-256; the URL is `${RED_BASE_URL}/invitacion/<token>`, plus a `wa.me/52<phone>` link (D4);
@@ -384,7 +401,8 @@ system acts on it. US1 is proven at every layer.
   - a per-business cash book with *Registrar corrección*.
 - [ ] T039 [US2] In `apps/admin/src/features/operator/OperatorScreen.tsx`:
   - `BusinessDetail` gains the *Efectivo en tiendas* switch, with the refusal's reason in es-MX;
-  - `KEY_LABELS` gains `store_fee_cents: "Cargo por servicio en tiendas"`.
+  - `KEY_LABELS` gains `store_fee_cents: "Cargo por servicio en tiendas"` and `store_receipt_template: "Mensaje del comprobante (WhatsApp)"`;
+  - `SettingField` renders type `template` as a text area at the compact size, with the placeholder list, a live preview with sample data, and the same three checks as the API (D31).
 - [ ] T040 [US2] Browser layer: the Tiendas tab joins `tests/e2e/contrast.spec.ts` in both themes, and `tests/e2e/responsive.spec.ts` at 1280 and 768.
 
 **Checkpoint**: the operator can set the pilot up end to end, but the
@@ -680,9 +698,10 @@ shopkeeper can use:
 
 ## Notes
 
-- **The open question** (plan Summary). FR-027 now keeps no typed phone,
-  per research D18. If the creator amends `payment-without-receipt` D4
-  instead, T027, T032 and the spec change together, before US1 ships.
+- **The receipt's phone is settled** (2026-10-01, constitution v1.9.0,
+  research D18 and D31). The phone is read live for each receipt and
+  never stored. The message is the operator's template. Nothing about it
+  is open.
 - **The deferred decision** (FR-006). The one-business guard (T037) is
   the only place it lives. Lifting it is a spec of its own: which stores
   serve which business, and what a store may then search.

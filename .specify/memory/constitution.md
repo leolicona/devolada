@@ -1,4 +1,51 @@
 <!--
+Sync Impact Report (v1.9.0, 2026-10-01)
+- Version change: 1.8.0 → 1.9.0 — MINOR. One sub-bullet of Principle V is
+  materially expanded: what a store may see of a business's customers
+  grows from two things to three. Nothing is removed, redefined or
+  renumbered. Precedent: v1.6.0, also MINOR, which admitted a third
+  cross-business statistic in the same principle.
+- Source: specs/018-cash-at-stores. /speckit-analyze (2026-10-01) found
+  C1 (CRITICAL): the receipt's WhatsApp link would carry the customer's
+  phone from the business's system, which v1.8.0's store bullet did not
+  admit. The analysis offered two ways out:
+  (a) never use the system's phone;
+  (b) amend V.
+  The creator chose (b) the same day, "no necesitamos guardar el
+  teléfono", and asked for the message to be a default the operator can
+  change in /operador.
+- What this decides:
+  · A store may receive one customer's phone, only for a payment that
+    store recorded.
+  · The phone is read from the business's system at the moment the
+    receipt is sent, through the integration's existing live phone read,
+    and only addresses that receipt.
+  · It is never stored: not on the payment row, not per customer, not as
+    a hash. `payment-without-receipt` D1/D4 stand unchanged.
+- What it does not change: the search still never returns a phone; a
+  phone the shopkeeper types still never reaches the server; the three
+  cross-business statistics; tenant filtering; authorization by area.
+- Modified sections:
+  · V. Tenant Isolation and Authorization by Area, the store bullet — "it
+    sees only two things: what a typed search returns (name, usuario,
+    zone), and one customer's debt" → "it sees only three things: what a
+    typed search returns (name, usuario, zone); one customer's debt; and,
+    for a payment it recorded, that customer's phone. The phone is read
+    from the business's system when the receipt is sent, used only to
+    address that receipt, and never stored."
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅; spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(018-ARTIFACTS): specs/018-cash-at-stores must stop copying the phone
+  onto the cash payment row and read it live for the receipt. Its plan's
+  Constitution Check row V must cite v1.9.0. Done in the same commit as
+  this amendment.
+  Carried unchanged from v1.8.0: TODO(CLAUDE-MD-WORKERS), TODO(TD-005),
+  TODO(BREATH-AMPLITUDE), and who may be admitted as a business.
+-->
+
+<!--
 Sync Impact Report (v1.8.0, 2026-10-01)
 - Version change: 1.7.1 → 1.8.0 — MINOR. Three sections are materially
   expanded: the Purpose paragraph, Principle V (one bullet added, one word
@@ -551,8 +598,11 @@ worth less than no verdict. Each layer answers only the questions it can.
     never from a membership, and a business route refuses it.
   - It reaches only the businesses the platform operator switched the cash
     channel on for.
-  - Of their customers, it sees only two things: what a typed search
-    returns (name, usuario, zone), and one customer's debt.
+  - Of their customers, it sees only three things: what a typed search
+    returns (name, usuario, zone); one customer's debt; and, for a payment
+    it recorded, that customer's phone. The phone is read from the
+    business's system when the receipt is sent, used only to address that
+    receipt, and never stored.
   - `stores` and `store_invitations` are platform rows without
     `business_id`. Every movement of a business's money carries it: the
     payment, the store's cash book and the hand-over.
@@ -777,4 +827,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.8.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01
+**Version**: 1.9.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01

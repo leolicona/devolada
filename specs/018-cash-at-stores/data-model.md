@@ -163,7 +163,8 @@ its default `'spei'` are unchanged.
 | `status` | `confirmed` or `partial`, from `settle()` |
 | `reconciliation_class` | `exact` or `short` |
 | `folio` | `makeFolio()` (D17) |
-| `wisphub_customer_id`, `customer_usuario`, `customer_name`, `customer_zone`, `customer_phone` | from `customerDebt`'s `customer` block (D8); the phone is the integration's only; a typed phone never reaches the server (D18) |
+| `wisphub_customer_id`, `customer_usuario`, `customer_name`, `customer_zone` | from `customerDebt`'s `customer` block (D8) |
+| `customer_phone` | **null, always** on a cash row. The receipt reads the phone live and never writes it (D18, constitution V v1.9.0) |
 | `registered_cents` | `settle().ispRegisteredCents` |
 | `action_outcome` and its columns | as `settleConfirmed` writes them for any payment (D13) |
 | `confirmed_at` | the record's time |
@@ -178,6 +179,16 @@ readers learn the new value:
 - the proof schema's `proofMode` keeps `receipt | transfer`, because a
   cash row never reaches it.
 
+## Platform settings (no table change)
+
+Two keys join `platform_settings`, the existing append-only table, with
+author and date on every change:
+
+| Key | Type | Birth value | Rule |
+| --- | --- | --- | --- |
+| `store_fee_cents` | `cents` | 1500 | 0–5000 (D22) |
+| `store_receipt_template` | `template` (new type) | the default in research D31 | 20–1000 characters; must contain `{folio}`; only the placeholders D31 lists (D31, FR-043) |
+
 ## Derived and in-memory shapes
 
 ### Capability answers (D8, D9): core words, filled by the adapter
@@ -185,7 +196,7 @@ readers learn the new value:
 | Capability | Core call | Answer |
 | --- | --- | --- |
 | `customerSearch` (new) | `find(text, limit)` | `{ rows: { usuario, name, zone, providerCustomerId }[], more: boolean }` |
-| `customerDebt` (gains `customer`) | `of(usuario)` | `owes` / `none` gain `customer: { providerCustomerId, name, zone, phone }`; `unconfirmed` is unchanged |
+| `customerDebt` (gains `customer`) | `of(usuario)` | `owes` / `none` gain `customer: { providerCustomerId, name, zone }`, with no phone; `unconfirmed` is unchanged |
 | `paymentActions` (new) | `attempt(input)` | `ActionAttempt { registered: boolean; reconnected: boolean; invoiceId: number \| null; error: "INTEGRATION_UNAVAILABLE" \| "INTEGRATION_AUTH_FAILED" \| "NOT_ACTIVE_YET" \| null }` |
 
 All three live in `integrations/capabilities.ts`. The WispHub adapter fills

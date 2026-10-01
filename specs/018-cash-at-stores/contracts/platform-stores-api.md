@@ -101,9 +101,20 @@ The body gains `storeChannel: boolean`, optional beside today's
   network call;
 - `storeHeldCents`: the SUM over every store.
 
-## The network fee: a platform setting
+## The network fee and the receipt message: platform settings
 
-`SETTINGS` gains `store_fee_cents`: type `cents`, born at 1500, range
-0–5000 (D22). It goes through the existing `POST /platform/settings/:key`,
-with no new route. The Reglas tab labels it *"Cargo por servicio en
-tiendas"*.
+Both go through the existing `GET /platform/settings` and `POST
+/platform/settings/:key {value}`, with no new route.
+
+| Key | Type | Reglas label | Rule |
+| --- | --- | --- | --- |
+| `store_fee_cents` | `cents` | *"Cargo por servicio en tiendas"* | born at 1500, range 0–5000 (D22) |
+| `store_receipt_template` | `template` | *"Mensaje del comprobante (WhatsApp)"* | born at research D31's default; 20–1000 characters; `{folio}` required; only D31's placeholders |
+
+- `settingItem.type` gains `"template"`.
+- A refused template answers 400 `INVALID_SETTING`, as every invalid
+  setting does today. The panel checks the same rules before saving, so it
+  can name the problem: a missing `{folio}`, an unknown placeholder, or
+  the length (FR-043).
+- The Reglas tab renders `template` as a text area, with the placeholders
+  listed beside it and a preview filled with sample data.

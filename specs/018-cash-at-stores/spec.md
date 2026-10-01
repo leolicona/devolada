@@ -7,8 +7,10 @@
 **Status**: Draft — clarified 2026-09-30 in three rounds with the creator
 (where the channel is switched on, the money, the counter) and on
 2026-10-01 (a paused credit, a mistaken payment). Revised at planning,
-2026-10-01: FR-027 (research D18). One decision is deferred on purpose:
-which businesses each store collects for (FR-006).
+2026-10-01: FR-027 (research D18). Revised after /speckit-analyze,
+2026-10-01: the receipt's phone and message (FR-026, FR-043; constitution
+v1.9.0). One decision is deferred on purpose: which businesses each store
+collects for (FR-006).
 
 **Input**: User description: "Si quisiera asumir el puente con api.devoladapago.com para este scope: 1. Las tiendas las administra (alta, edición, baja) devolada desde el perfil /operator. 2. El ISP lo activa desdes integraciones. 3. Los pagos en efectivo se lista con los pagos SPEI. 4. El frontend red.devoladapago.com es el mismo" — then, after three rounds of questions: "Si, un ISP quiere probarlo."
 
@@ -196,6 +198,15 @@ I):
   Nothing is deleted, and who corrected what, and why, stays visible.
   Rejected: an undo by the shopkeeper for a few minutes. The actions run at
   once, so it would almost never apply, and it adds a state to the payment.
+- Q: (/speckit-analyze C1) The receipt's WhatsApp link would carry the
+  customer's phone from the business's system, which constitution v1.8.0
+  did not let a store see. Should the receipt use that phone? → A: Yes
+  (option B). The phone is not stored: it is read from the business's
+  system when the receipt is sent, addresses that receipt and is
+  forgotten. Constitution v1.9.0 admits it. The message is a default the
+  operator can change in `/operador` (FR-043). Rejected: never using the
+  system's phone, so the customer dictates it every time (option A); and
+  also keeping the number a shopkeeper types (option C).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -255,9 +266,11 @@ in WhatsApp. A second search shows the customer owes nothing.
     the payment failed.
 11. **Given** a recorded payment, **When** the shopkeeper taps WhatsApp,
     **Then** WhatsApp opens on the store's phone with a message addressed to
-    the customer. The message carries the folio, the business's name, the
-    amount paid, the service fee, the date and time, and what remains owed
-    if any.
+    the customer's phone in the business's system, read at that moment.
+    The message is the network's receipt message, filled in with this
+    payment: the folio, the business's name, the amount paid, the service
+    fee, the date and time, and what remains owed if any. The phone is not
+    kept anywhere.
 12. **Given** the business's system has no phone for the customer, **When**
     the shopkeeper taps WhatsApp, **Then** they are asked for the number.
     It is used for this receipt only. Next time, the app asks again.
@@ -326,6 +339,10 @@ shopkeeper's access on their next action.
     balance for that business changes by that amount on both screens. The
     payment's detail shows the correction, its reason, who made it and
     when. The payment itself stays in the record. Nothing is deleted.
+12. **Given** the Reglas tab, **When** the operator edits the receipt message
+    and saves it, **Then** the next receipt any store sends uses it, and the
+    change keeps its author and date. A message without the folio, or with
+    a placeholder the system does not know, is refused and says why.
 
 ---
 
@@ -460,6 +477,9 @@ see the dispute and its note.
   says it cannot reach the business's system right now and offers no
   collection. It never shows an amount it did not just read, and never
   reads "no results" as "nobody owes".
+- **The business's system is down when the shopkeeper taps WhatsApp.** The
+  phone cannot be read. The app asks for a number, as when the system has
+  none (FR-027), and the receipt still goes out.
 - **The integration goes down after the payment is recorded.** The payment
   stays confirmed. Its action waits and retries on the existing schedule,
   and the shopkeeper and the business see it as queued, then done or
@@ -539,6 +559,17 @@ see the dispute and its note.
   one amount in cents for every store and every business. It MUST follow
   the platform rules' existing record, keeping author and date. A change
   applies only to collections confirmed after it.
+- **FR-043** *(added 2026-10-01)*: The operator MUST be able to edit the
+  network's **receipt message** in Reglas. It is one message for every
+  store and every business, and it ships with a default.
+  - It is written with placeholders the system fills in for each payment:
+    business, store, folio, customer, amount paid, service fee, total,
+    date, time, what remains owed, and the outcome.
+  - A placeholder with nothing to say (no remainder) leaves its line out.
+  - A message without the folio, or with an unknown placeholder, MUST be
+    refused with the reason.
+  - Changes keep author and date, like every platform rule, and the next
+    receipt uses the new message.
 
 **The shopkeeper's access**
 
@@ -614,12 +645,18 @@ see the dispute and its note.
   observation mode, or failed. It MUST say what remains owed after a short
   payment.
 - **FR-026**: The result screen MUST offer to send the receipt by WhatsApp
-  from the shopkeeper's phone. The message MUST carry the folio, the
-  business's name, the amount paid, the service fee, the date and time in
-  the business's timezone, and what remains owed if any. Money MUST be
-  formatted as es-MX pesos.
-- **FR-027**: When the business's system has no phone for the customer, the
-  app MUST ask for one when the shopkeeper taps WhatsApp, and use it for
+  from the shopkeeper's phone.
+  - The message MUST be the network's receipt message (FR-043), filled in
+    with this payment. Dates and times are in the business's timezone,
+    and money is formatted as es-MX pesos.
+  - The link MUST be addressed to the customer's phone in the business's
+    system, read when the shopkeeper taps WhatsApp. Devolada MUST NOT
+    store that phone: not on the payment, not per customer
+    (constitution V, v1.9.0).
+  - When the system has no phone, or cannot be reached, FR-027 applies.
+- **FR-027**: When the business's system has no phone for the customer, or
+  cannot be reached at that moment, the app MUST ask for one when the
+  shopkeeper taps WhatsApp, and use it for
   that receipt only. Devolada MUST NOT store it, and the business's system
   MUST never be written. *(Amended at planning, 2026-10-01, research D18:
   keeping a phone per customer is what `payment-without-receipt` D1/D4
@@ -721,6 +758,9 @@ see the dispute and its note.
 - **Network service fee**: one platform rule, in cents, charged to the payer
   on each cash collection and kept by the store. Its changes keep author and
   date.
+- **Receipt message**: one platform rule, a text with placeholders, filled
+  in for each receipt. It ships with a default, and its changes keep
+  author and date (FR-043).
 
 ## Success Criteria *(mandatory)*
 

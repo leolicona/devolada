@@ -98,8 +98,13 @@ The prerequisites:
 - you are signed in to the panel as a platform operator;
 - a business has WispHub connected (the demo tenant).
 
-1. **Reglas.** Set *Cargo por servicio en tiendas* to $15.00. The change
-   shows your name and the time.
+1. **Reglas.**
+   - Set *Cargo por servicio en tiendas* to $15.00. The change shows your
+     name and the time.
+   - Open *Mensaje del comprobante (WhatsApp)*. The default is there, and
+     its preview shows sample data.
+   - Remove `{folio}` and try to save: it is refused, and the panel says
+     why. Put it back and save.
 2. **Negocios.** Open the demo business and switch on *Efectivo en
    tiendas*. Try a second business: the panel refuses, and says why.
 3. **Tiendas.** Create "Tienda de prueba" with your own phone. Open the
@@ -113,8 +118,13 @@ The prerequisites:
    match what WispHub shows. Collect the whole debt. A folio appears; the
    outcome moves from *En cola* to *Reconectado*, and the customer is
    active in WispHub.
-7. **Send the receipt.** WhatsApp opens with the folio, the business, the
-   amount and the fee.
+7. **Send the receipt.** WhatsApp opens addressed to the customer's phone
+   in WispHub, with the template's text filled in: the folio, the
+   business, the amount and the fee. Then:
+   - check the database: the payment's `customer_phone` is empty;
+   - pick a demo customer with no phone in WispHub and collect again. The
+     app asks for a number, and the request log shows no phone sent to the
+     API.
 8. **Search the same customer again**: *Sin adeudo*.
 9. **Pagos**, on the panel: the payment is there, marked *Efectivo ·
    Tienda de prueba*. The *Efectivo* filter shows only it. The credit

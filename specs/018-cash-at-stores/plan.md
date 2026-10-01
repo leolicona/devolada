@@ -55,17 +55,19 @@ The plan builds it in seven pieces, each traced to its decisions:
 "reconnect" whatever the payment decided, and a short cash payment
 depends on that queue. It takes the lite path before the capability work.
 
-**Research changed the spec in one place** (D18), amended in this commit.
-The spec's FR-027 said a typed phone is remembered for the customer's
-next receipt. That would store a phone per person, which
-`payment-without-receipt` D1/D4 and `links-on-demand-search` FR-010 rule
-out. Instead, the integration's phone is copied onto the payment row, as
-every SPEI payment's is today. A phone the shopkeeper types builds that
-one WhatsApp link in the app and never reaches the server. Next time, the
-app asks again.
+**The receipt was settled after /speckit-analyze** (D18 rewritten, D31
+added, constitution v1.9.0). The creator chose option B on 2026-10-01:
 
-**Open for the creator.** Keep FR-027 as amended, or amend
-`payment-without-receipt` D4 to let a store's typed phone be kept.
+- The WhatsApp link is addressed to the customer's phone in the
+  business's system, read live when the shopkeeper taps *Enviar
+  comprobante*, through the existing `customersWithPhone.phoneOf`.
+- The phone is never stored: not on the payment row (a cash row's
+  `customer_phone` stays null), not per customer.
+- When there is no phone, the shopkeeper types one. It builds that one
+  link in the app and never reaches the server (FR-027, amended at
+  planning).
+- The message is a platform template, `store_receipt_template`, with a
+  default the operator edits in Reglas (FR-043, D31).
 
 ## Technical Context
 
@@ -136,17 +138,18 @@ R2 and Workers AI are untouched.
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-checked after Phase 1
-design. First checked against v1.7.1, where four gates blocked; re-checked
-2026-10-01 against v1.8.0, which carries the three amendments below. Every
-gate passes.*
+design. First checked against v1.7.1, where four gates blocked. Re-checked
+2026-10-01 against v1.8.0, which carries amendments 1–3 below, and again
+against v1.9.0 (amendment 4, the receipt's phone). Every gate passes.*
 
-**Result: every gate passes under v1.8.0.** Against v1.7.1, four gates
+**Result: every gate passes under v1.9.0.** Against v1.7.1, four gates
 blocked: the Purpose, Principle V, and the stack table's Frontend and Auth
 rows with the quality gates. Governance asks the plan to propose the
 amendment rather than route around it. Complexity Tracking proposed three,
 and the creator ran `/speckit-constitution` on 2026-10-01: constitution
-v1.8.0. The rows below say which amended text each gate now passes
-against.
+v1.8.0. /speckit-analyze then found the receipt's phone outside V
+(finding C1), and the creator's choice became v1.9.0. The rows below say
+which amended text each gate now passes against.
 
 | Principle | Gate | Status |
 | --- | --- | --- |
@@ -155,7 +158,7 @@ against.
 | II. Money law | Cents end to end, with two kinds of fee: `store_fee_cents` for the store and the prepaid credit's fee for Devolada. The store fee never enters `settle()` or `classifyPayment()` (D13). Times are in the business's timezone on the receipt (D18). Tolerance is the business's own, unchanged | ✅ |
 | III. One contract, pure routers | New `routes/store/`, `routes/cash-points/` and extended `routes/platform/`, each `{index,handler,schema}.ts` with a pure router. Schemas are exported (`./store-schema`, `./cash-points-schema`) and used by MSW and Playwright stubs. One envelope; no `message` or `retryable`. Better Auth's sign-in, OTP and passkey endpoints stay the one exemption (`baPost`) | ✅ |
 | IV. Tests on the real runtime | API on workerd with a real D1, WispHub at its origin, and the new capabilities exercised through the adapter. Component tests with MSW and axe. Contrast, touch targets and scroll in Playwright. The passkey ceremony on red's origin (D28) | ✅ |
-| **V. Tenant isolation, authorization by area** | (a) "The actor is resolved from Better Auth's membership" does not hold: a store is a non-member actor (D2). (b) "Every business table carries `business_id`": `stores` and `store_invitations` are platform rows without it (D6), while `store_ledger`, `store_handovers` and `payments` carry it. (c) A store reads a business's customers, though narrowly: a typed search returning name, usuario and zone, and one debt (D24). (d) Authorization by area for the business side: `payments:read` and `payments:operate` (D20, D23) ✅. (e) The invitation token is hashed (D4) ✅ | ✅ v1.8.0 V, new store-actor bullet |
+| **V. Tenant isolation, authorization by area** | (a) "The actor is resolved from Better Auth's membership" does not hold: a store is a non-member actor (D2). (b) "Every business table carries `business_id`": `stores` and `store_invitations` are platform rows without it (D6), while `store_ledger`, `store_handovers` and `payments` carry it. (c) A store reads a business's customers, though narrowly: a typed search returning name, usuario and zone; one debt (D24); and, for a payment it recorded, the phone read live for that receipt, never stored (D18). (d) Authorization by area for the business side: `payments:read` and `payments:operate` (D20, D23) ✅. (e) The invitation token is hashed (D4) ✅ | ✅ v1.9.0 V, store-actor bullet (the receipt's live phone admitted in v1.9.0, D18) |
 | VI. Visual foundations | Tokens only. `decisive` 64px for *Cobrar $X*, `standard` 48px touch. The statuses already exist in `StatusBadge` (D23). Waiting labels sit inside `<Pending>`. The floor is 360px with no horizontal scroll. es-MX copy, and the receipt says *pago*, never *cobro* (D18, D27). Light and dark are checked by contrast-lint and the browser layer, both of which now read `apps/red` (D29) | ✅ |
 | VII. Every test cites its story | `cash-at-stores US1`–`US5`; the bug's test cites `bug: queue-retry-forgets-action` | ✅ |
 | VIII. Absent configuration degrades | `RED_BASE_URL` is declared in `env.ts`. Unset, it has the same meaning as `PAGO_BASE_URL`: the invitation link is built against the local default, and the operator panel warns. Without a capable integration, the switch refuses with a reason (FR-007). A provider outage is an answer on every counter door (D8, D14) | ✅ |
@@ -179,7 +182,7 @@ nothing is routed around.
 specs/018-cash-at-stores/
 ├── spec.md
 ├── plan.md              # this file
-├── research.md          # D1–D30, M1–M3
+├── research.md          # D1–D31, M1–M3
 ├── data-model.md
 ├── quickstart.md        # §0 measurements, §1 the bug first, §2 CI, §3 walk on dev
 ├── contracts/
@@ -282,3 +285,4 @@ principle is removed, redefined or renumbered.
 | **1. Purpose** | Cash at a store is a second way to collect, and its truth is the store's word, not Banxico's | **Proposed text**, after "validates every transfer": *"A business may also collect in cash at a store of the network Devolada runs. There the store's word confirms the payment and the business confirms each hand-over of the cash. The money never touches Devolada either way."* **Rejected**: running the network as a separate product (spec clarifications, 2026-09-30), and leaving the Purpose silent (Governance: no tolerated gap) |
 | **2. Principle V** | A store is the first actor that is not a member of a business, and it reads a narrow slice of a business's customers | **Proposed new bullet**: *"A store is the one actor that is not a member of a business. It is resolved from its own record, never from a membership. It reaches only the businesses the platform operator switched the cash channel on for, and of their customers only what a typed search returns (name, usuario, zone) and one customer's debt. `stores` and `store_invitations` are platform rows without `business_id`; every movement of a business's money (payment, cash book, hand-over) carries it."* The first bullet's "Every business table" stays true: a store is not a business table. **Rejected**: a store as an organization with a role (D2), which would blur the one boundary V protects |
 | **3. Stack table and gates** | A third React surface, a sign-in plugin, and a fifth Worker | **Proposed edits**: Frontend row adds *"and `apps/red` (the shopkeeper's app, phone-first)"*; Auth row adds *"`username` plugin for the shopkeeper's phone sign-in"*; the gates bullet says *"the five Workers"*. CLAUDE.md follows. **Rejected**: the store screens inside the panel (D1) |
+| **4. Principle V, the receipt's phone** (applied as v1.9.0, 2026-10-01) | /speckit-analyze C1: the receipt's WhatsApp link carries the customer's phone, which v1.8.0 did not let a store see. The creator chose to address the receipt to it | **Applied text**: the store sees *"three things: what a typed search returns (name, usuario, zone); one customer's debt; and, for a payment it recorded, that customer's phone. The phone is read from the business's system when the receipt is sent, used only to address that receipt, and never stored."* **Rejected**: never using the system's phone (option A); keeping typed numbers (option C) |

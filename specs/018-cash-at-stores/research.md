@@ -267,7 +267,8 @@ Context), by capability, never by provider (constitution IX).
 
 **`customerDebt.of(usuario)`** exists (`cobros-in-links` D9). Its `owes`
 and `none` answers gain a `customer` block: `{ providerCustomerId, name,
-zone, phone }`.
+zone }`. It carries no phone: the receipt reads that live, when it is sent
+(D18).
 - The adapter already reads the customer record in that operation
   (`getCustomer`), so this costs no extra call.
 - The payment row needs it: the denormalised identity that keeps the
@@ -498,48 +499,55 @@ path and the cash path both call it. The unique `folio` column stays the
 guard. Collisions are not retried today, and this feature does not
 change that.
 
-## D18 — The receipt: the API writes the text, WhatsApp sends it, and the phone is not kept
+## D18 — The receipt: the operator's message, the business's phone read live, nothing kept
 
-`GET /store/collections/:id/receipt` returns `{ text, waLink }`. This
-keeps three rules of the old receipt:
+*Rewritten 2026-10-01 after /speckit-analyze C1. The creator chose option B
+("no necesitamos guardar el teléfono"), and constitution v1.9.0 admits it.
+The first version of this decision copied the phone onto the payment row;
+that is gone.*
 
+`GET /store/collections/:id/receipt` returns `{ text, waLink, hasPhone }`.
+The app calls it only when the shopkeeper taps *Enviar comprobante*, never
+when the result screen opens. The phone is read only when it is needed.
+
+**Rules kept from the old receipt:**
 - **D2: the API owns the text.** It reads the same wherever it is sent
-  from, and becomes the template body if WhatsApp's own API ever arrives.
-- **D3: no phone is not a dead end.** The link becomes
+  from. The text is now the operator's template (D31), filled in by the
+  API.
+- **D3: no phone is not a dead end.** Without a phone, the link is
   `wa.me/?text=…`, and WhatsApp opens its contact picker.
-- **D5: the status line tells the truth** about the reconnection: done,
-  queued, not done because the payment is short, held for the business,
-  or failed.
+- **D5: the status line tells the truth** about the action: done, queued,
+  not done because the payment is short, held for the business, or
+  failed. It fills the template's `{estado}` placeholder.
 
-The text says *"Comprobante de pago"*, never *"cobro"*: the customer reads
-it (constitution VI). It names the business, the store, the folio, the
-amount paid, the store fee, the date and time in the business's timezone,
-and any remainder.
+**The phone (constitution V, v1.9.0):**
+- The handler checks that the payment belongs to this store (404
+  otherwise).
+- It asks `customersWithPhone.phoneOf(usuario)`. That is the live read
+  `payment-without-receipt` D4 already uses, and it stores nothing.
+- It normalises the answer to ten national digits and builds
+  `wa.me/52<digits>?text=<text>`. The phone exists only in that answer.
+- It is **never written**:
+  - `payments.customer_phone` stays null on a cash row;
+  - there is no per-customer table;
+  - there is no hash.
+- If the integration has no `customersWithPhone`, no phone for the
+  customer, or does not answer in time, the response says `hasPhone:
+  false` with the contact-picker link. The app then asks the shopkeeper
+  for a number and builds the link itself. That number never reaches the
+  server (FR-027).
 
-**Research changes FR-027 (amended in the spec in this commit).** The spec
-says a typed phone is "remembered for that customer's next cash payment".
-Two recorded decisions forbid exactly that:
+**Why not copy the phone at record time,** as SPEI payments do and the
+old receipt did (`receipt` D4)? The old reason was that a receipt should
+still work while WispHub is down. The contact-picker fallback covers that
+case, and the creator asked for the phone not to be kept. A copy on the
+row would be a phone kept per payment, which v1.9.0's "never stored"
+forbids.
 
-- `payment-without-receipt` D1 and D4: "the core stores no name and no
-  phone", and a phone keyed to a person is not kept, not even as a hash;
-- `links-on-demand-search` FR-010: the phone is always read fresh.
-
-The old network's `customer_contacts` table (`customer-phone` D3) is the
-thing those decisions rule out.
-
-**What this feature does instead:**
-- the integration's phone is read at record time and copied onto the
-  payment row, as every SPEI payment already does
-  (`payments.customer_phone`);
-- a phone the shopkeeper types never reaches the server. The app asks
-  for it when WhatsApp is tapped, and builds
-  `wa.me/52<digits>?text=<the API's text>` itself, for that receipt only;
-- the next time, if the business's system still has no phone, the app
-  asks again.
-
-The cost was named: the shopkeeper may retype a number each month. The
-creator can reverse this by amending `payment-without-receipt` D4 (see
-the plan's open question).
+**FR-027's history stays recorded.** At planning, the spec stopped
+remembering a typed phone per customer (`payment-without-receipt` D1/D4,
+`links-on-demand-search` FR-010). The creator's choice keeps that: option
+C, keeping typed numbers, was rejected.
 
 ## D19 — The cash book: `store_ledger`, append-only, one store and one business per row
 
@@ -780,6 +788,77 @@ on `red.dev`.
 - **The pilot's agreements** (spec Assumptions) are signed before the
   first real collection. Nothing in the code waits on them, and the
   quickstart's last step lists them.
+
+## D31 — The receipt message is a platform template the operator edits
+
+*Added 2026-10-01: the creator asked for the message to be a default that
+can be changed from `/operador`.*
+
+`platform/settings.ts` gains `store_receipt_template`, with a new setting
+type, `template`: multi-line text of 20–1000 characters.
+
+- It follows every setting's rules: append-only, author and date, the
+  current value is the latest row, and the birth value is the default
+  below (FR-043).
+- The Reglas tab edits it in a text area, with the placeholders listed
+  and a preview filled with sample data.
+
+**Placeholders** are in Spanish because the operator reads them, and are
+written between braces:
+
+| Placeholder | Filled with |
+| --- | --- |
+| `{negocio}` | the business's name |
+| `{tienda}` | the store's name |
+| `{folio}` | the payment's folio. **Required**: a template without it is refused |
+| `{cliente}` | the customer's name, from the payment row |
+| `{monto}` | the amount applied to the debt |
+| `{cargo}` | the store fee |
+| `{total}` | amount + fee |
+| `{fecha}`, `{hora}` | the payment's time, in the business's timezone |
+| `{pendiente}` | "Queda por pagar: $X" after a short payment; empty otherwise |
+| `{estado}` | the outcome's sentence (D18) |
+
+**Rules:**
+- Money goes through the money law's formatter: es-MX, MXN.
+- A line that is empty once filled in is dropped, so `{pendiente}` costs
+  nothing on a whole payment.
+- An unknown placeholder, or a missing `{folio}`, is refused at save with
+  400 `INVALID_SETTING`, as every other setting is refused today. The
+  panel names the problem.
+
+**The default** (es-MX: the customer reads *pago*, never *cobro*):
+
+```text
+Comprobante de pago · {negocio}
+
+Folio: {folio}
+Cliente: {cliente}
+Pagaste: {monto}
+Cargo por servicio: {cargo}
+Total: {total}
+{pendiente}
+Tienda: {tienda}
+Fecha: {fecha}, {hora}
+
+{estado}
+Guarda este folio como comprobante.
+```
+
+**The outcome sentences** live in code, in es-MX, like the rest of the
+product's copy. They are not settings in this feature. An operator who
+does not want them leaves `{estado}` out of the template.
+
+**The template applies when a receipt is asked for.** A receipt re-opened
+for an old payment uses the template current at that moment. Receipts are
+never stored (`receipt` D7: no "sent" record), so there is no older
+version to keep.
+
+**Alternatives considered**:
+- A template per business. Rejected: the creator placed the setting in
+  `/operador`, and the network's fee is one value too (D22).
+- Each outcome sentence as its own setting. Deferred: five more fields
+  before anyone asked to change them.
 
 ## Measurements to take before code (quickstart §0)
 

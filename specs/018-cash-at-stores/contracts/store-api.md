@@ -164,17 +164,25 @@ it every 3 s while `outcome` is `queued`.
 observation | failed`. It is mapped from the row's `actionOutcome` and its
 decided action, and each has a status shown as icon + text (FR-025).
 
-### `GET /store/collections/:id/receipt` (D18)
+### `GET /store/collections/:id/receipt` (D18, D31)
+
+The app calls it only when the shopkeeper taps *Enviar comprobante*.
 
 ```json
-{ "success": true, "data": { "text": "Comprobante de pago\n\nWiFi Plus\nFolio: DV-7K2Q9M\n…", "waLink": "https://wa.me/525512345678?text=…", "hasPhone": true } }
+{ "success": true, "data": { "text": "Comprobante de pago · WiFi Plus\n\nFolio: DV-7K2Q9M\n…", "waLink": "https://wa.me/525512345678?text=…", "hasPhone": true } }
 ```
 
-`waLink` uses the phone the integration had at record time. Without one,
-it is `https://wa.me/?text=…`, and the response carries `hasPhone:
-false`. In that case the app asks the shopkeeper for a number and builds
-`https://wa.me/52<digits>?text=<text>` itself. **That number is never sent
-to the API** (FR-027, D18).
+- **`text`** is the operator's `store_receipt_template`, filled in for
+  this payment (D31).
+- **`waLink`** carries the customer's phone, read at this moment through
+  the integration's `customersWithPhone.phoneOf`. **It is not written
+  anywhere** (constitution V, v1.9.0).
+- **With no phone** (no capability, none on file, or no answer in time),
+  `waLink` is `https://wa.me/?text=…` and `hasPhone` is `false`. The app
+  asks the shopkeeper for a number and builds
+  `https://wa.me/52<digits>?text=<text>` itself. **That number is never
+  sent to the API** (FR-027).
+- **Another store's payment** → 404 `NOT_FOUND`.
 
 ---
 

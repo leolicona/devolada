@@ -15,6 +15,7 @@ import {
   createBusiness,
   inviteMember,
   listMembers,
+  myInvitations,
   previewInvitation,
   removeMember,
   resendInvitation,
@@ -69,6 +70,11 @@ businessesRoute.delete(
   requireArea("members", "invite_below_admin"),
   (c) => cancelInvitation(c, c.req.param("invitationId")),
 );
+
+/* bug: invitee-lands-own-business — the invitations sent to me. No
+   requireSession: it demands a membership, and the wizard asks before
+   one exists; the handler resolves the session itself. */
+businessesRoute.get("/invitations/mine", (c) => myInvitations(c));
 
 /* D14 (better-auth.spec.md): the two session-less doors of the
    invitation page. The id is the key — random, sent by email only —

@@ -6,6 +6,7 @@ import type { ApiError } from "@/lib/api";
 import { AccessLayout } from "../auth/AccessLayout";
 import { SignOutLink } from "../auth/SignOutLink";
 import { listOrganizations, setActiveBusiness } from "../auth/session";
+import { PendingInvitations } from "../invitations/PendingInvitations";
 
 /* business-and-memberships D4 (US-B02): several memberships and no
    active one — the client offers the choice. `revoked` is the same
@@ -31,6 +32,10 @@ export function ChooseBusinessScreen({ reason }: { reason: "choose" | "revoked" 
       {reason === "revoked" && (
         <Alert variant="warning">Ya no formas parte del negocio en el que estabas. Elige otro.</Alert>
       )}
+      {/* bug: invitee-lands-own-business — a business that invited this
+          person is one more place to go: named here too, where someone with
+          several businesses lands right after signing in */}
+      <PendingInvitations stacked className="mb-4" />
       {orgs.error && (
         <ListError what="tus negocios" onRetry={() => orgs.refetch()} />
       )}

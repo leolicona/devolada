@@ -11,6 +11,7 @@ import {
   proofReadingResponse,
 } from "../../apps/api/src/routes/direct-payments/schema";
 import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
+import { myInvitationsResponse } from "../../apps/api/src/routes/businesses/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
 import { feedResponse, proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
 import {
@@ -436,6 +437,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
   /* links-on-demand-search D13: nothing to be told, which is what every
      business sees once the one-time cleanup has been dismissed */
   await apiRoute(page, "**/direct-payments/prune-notice", null);
+  /* bug: invitee-lands-own-business: the shell asks for the invitations
+     sent to the person signed in — none, which is what nearly everyone sees */
+  await apiRoute(page, "**/businesses/invitations/mine", myInvitationsResponse.parse({ invitations: [] }));
   await apiRoute(page, "**/direct-payments/links", createdLink);
   await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
 }

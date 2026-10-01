@@ -61,7 +61,16 @@ const signupRoute = createRoute({
   component: SignupPage,
   validateSearch: nextSearch,
 });
-const recoverRoute = createRoute({ getParentRoute: () => rootRoute, path: "/recover", component: RecoverPage });
+/* bug: invitee-lands-own-business — recovery carries `next` and the
+   address like the código screen does, so an invitee who forgot their
+   password comes back to the invitation instead of landing in their own
+   business. */
+const recoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recover",
+  component: RecoverPage,
+  validateSearch: verifySearch,
+});
 /* Outside the shell: both exist before (or without) an active business */
 const newBusinessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/nuevo-negocio", component: NewBusinessScreen });
 const invitationRoute = createRoute({

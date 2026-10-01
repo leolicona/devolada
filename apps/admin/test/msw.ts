@@ -126,6 +126,9 @@ export const handlers = {
   logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),
   invitationPreview: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/businesses/invitations/:id/preview", ({ params }) => r(String(params.id))),
+  /* bug: invitee-lands-own-business: the invitations sent to me */
+  myInvitations: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/businesses/invitations/mine", () => r()),
   acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => r(String(params.id), await request.json())),
   resendInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
@@ -225,8 +228,15 @@ export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.ap
    payment-without-receipt D19: the provider quota, likewise — every
    render of /operador's Reglas tab asks for it, and `null` is what the
    operator sees before any answer carried the header. The tests that
-   care override it with `handlers.providerQuota(...)`. */
+   care override it with `handlers.providerQuota(...)`.
+
+   bug: invitee-lands-own-business: every render of the shell, the
+   business wizard and the chooser asks for the invitations sent to the
+   person signed in.
+   None is what nearly everyone sees; the tests that care override it with
+   `handlers.myInvitations(...)`. */
 export const server = setupServer(
   http.get("/direct-payments/prune-notice", () => ok(null)),
   http.get("/platform/provider-quota", () => ok(null)),
+  http.get("/businesses/invitations/mine", () => ok({ invitations: [] })),
 );

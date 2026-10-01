@@ -211,7 +211,7 @@ SPEI suite must pass unchanged at its end.
   - `store_fee_cents`: type `cents`, born at 1500, range 0–5000 (D22);
   - `store_receipt_template`: a new type, `template`, born at research D31's default. `validateSetting` refuses it with `INVALID_SETTING` when it is outside 20–1000 characters, has no `{folio}`, or uses a placeholder D31 does not list.
 
-  Put the renderer beside it, `renderReceipt(template, values)` in `apps/api/src/store-ledger/receipt.ts` or `src/receipt.ts`. It fills the placeholders, formats money as es-MX MXN, and drops lines left empty (D31).
+  Put the renderer in `apps/api/src/receipt/index.ts`, beside `toWhatsAppPhone` and `whatsAppLink`: `renderReceipt(template, values)`. It fills the placeholders, formats money as es-MX MXN, and drops lines left empty (D31). Do not create `src/receipt.ts` (/speckit-analyze U1).
 
   Add API tests to `apps/api/test/cash-at-stores-operator.test.ts`, citing `cash-at-stores US2`: the three refusals, a save keeps its author, and the renderer drops an empty `{pendiente}` line.
 
@@ -271,11 +271,12 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
   - `GET /store/collections/:id` maps all six outcomes of `contracts/store-api.md` (`registered` included), and another store's id → 404;
   - the receipt's `text` is the current `store_receipt_template` filled in for the payment. The default says *"Comprobante de pago"*, never *"cobro"*, and formats money and time in es-MX and the business's timezone. After the operator saves a new template, the next receipt uses it;
   - the receipt's `waLink` carries the phone `customersWithPhone.phoneOf` returns, read at that request. After the collection and after the receipt, `payments.customer_phone` is null, and no other table holds the phone;
-  - with no phone, with the capability absent, or with the provider failing, the answer is `hasPhone: false` and `wa.me/?text=…`. Another store's payment → 404.
+  - with no phone, with the capability absent, with the provider failing, or with a phone on file that is not ten readable digits (letters, eight digits), the answer is `hasPhone: false` and `wa.me/?text=…` (L3). Another store's payment → 404.
 - [ ] T025 [P] [US1] Component tests in `apps/red/test/counter.test.tsx`, citing `cash-at-stores US1`, with MSW fixtures parsed by `@devolada/api/store-schema` and axe on each screen. Cover:
   - an empty search, and the three-character hint;
   - results without a phone;
   - an outage message, never "sin resultados";
+  - `CHANNEL_OFF`: *Cobrar* shows *"Por ahora no hay negocios para cobrar en esta tienda."* with no search box, and *Caja* still opens (L2);
   - the quote's breakdown and *Sin adeudo*;
   - an amount above the debt, refused;
   - `AMOUNT_CHANGED` shows the new amounts and asks again;
@@ -298,7 +299,7 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
   - **status**;
   - **receipt**, asked for only when WhatsApp is tapped:
     - the text is `renderReceipt(store_receipt_template, …)` (D31);
-    - the phone is read live through `customersWithPhone.phoneOf`, normalised to ten digits and put in `waLink`, **never written** (D18, constitution V v1.9.0);
+    - the phone is read live through `customersWithPhone.phoneOf`. The link is built with the existing `toWhatsAppPhone` and `whatsAppLink` from `apps/api/src/receipt/index.ts`, and the phone is **never written** (D18, constitution V v1.9.0);
     - with no phone, `hasPhone: false` and `wa.me/?text=…`.
 
   The record never writes `customer_phone`.
@@ -316,6 +317,7 @@ channel on and WispHub mocked, sign in as the shopkeeper. Then check:
   - a search box, autofocused, that searches from three characters after a short pause;
   - results as name, usuario and zone;
   - the outage message;
+  - on `CHANNEL_OFF`, *"Por ahora no hay negocios para cobrar en esta tienda."* in place of the search box. *Caja* and *Movimientos* still work (L2);
   - waiting labels inside `<Pending>`.
 - [ ] T031 [P] [US1] `apps/red/src/features/counter/QuoteScreen.tsx`:
   - `AmountBreakdown` (*Adeudo*, *Cargo por servicio*, *Total a cobrar*);
@@ -390,7 +392,7 @@ system acts on it. US1 is proven at every layer.
   - `settingItem.type` gains `"template"`;
   - `store_fee_cents` is typed `cents`, and `store_receipt_template` is typed `template`.
 - [ ] T037 [US2] `apps/api/src/routes/platform/handler.ts`:
-  - **stores**: list (with `collectsFor` and held cents from `heldCents`), create, edit with the username change in the same batch, suspend and reactivate with session deletion;
+  - **stores**: list (with `collectsFor` and held cents from `heldCents`), create, edit with the username change in the same batch, suspend and reactivate with session deletion. The phone is normalised with `nationalPhone` (`apps/api/src/phone.ts`), and a number that does not give ten digits is refused with `VALIDATION_ERROR` (D3, L5);
   - **invitations**: issue and resend. The token is random; `token_hash` is SHA-256; the URL is `${RED_BASE_URL}/invitacion/<token>`, plus a `wa.me/52<phone>` link (D4);
   - **the cash book**: read it, and record a correction through `recordCorrection` (D21);
   - **the switch**: check capabilities with `capabilityNames`, then the one-business guard, then set `since` the first time (D7).
@@ -450,7 +452,7 @@ Then check:
 
 - [ ] T044 [US3] The invitation endpoints, in `apps/api/src/routes/store/{schema,handler,index}.ts`. Both are session-less and use the Hono rate limiter (`auth/rate-limit.ts`):
   - `GET /store/invitations/:token`, 30/min;
-  - `POST /store/invitations/:token/accept`, 5/min, following D5's order and its rollback.
+  - `POST /store/invitations/:token/accept`, 5/min, following D5's order and its rollback. The `username` written is the store's phone as `nationalPhone` gives it (L5).
 - [ ] T045 [US3] `apps/red/src/features/auth/`:
   - **`LoginScreen.tsx`**: *Entrar*, with `baPost("/auth/sign-in/username")` and *Entrar con huella o rostro* through `authClient.signIn.passkey()`;
   - **`InvitationScreen.tsx`**: email and password, then the code through `baPost("/auth/email-otp/verify-email")`;
@@ -536,6 +538,7 @@ businesses holding cash at one store never see each other's.
 
   **Isolation and the menu**:
   - two businesses with cash at one store each see only their own (FR-042);
+  - with the channel switched off for a business that still has cash at a store: the cash-book routes answer, no `CHANNEL_OFF`, and a hand-over is declared and confirmed (H1, L4);
   - `/auth/me`'s business branch carries `storeChannel.since`.
 - [ ] T053 [P] [US5] Component tests in `apps/red/test/cashbox.test.tsx`, citing `cash-at-stores US5`, with MSW and axe. Cover:
   - *Mi caja*: held, fees, last and pending hand-over, the dispute note. Tapping the amount held, or the fees, opens the movements behind it (FR-037);
@@ -551,7 +554,7 @@ businesses holding cash at one store never see each other's.
 ### Implementation for User Story 5
 
 - [ ] T055 [US5] The store's cash book on the API, in `apps/api/src/routes/store/{schema,handler,index}.ts`: `GET /store/cashbox`, `GET /store/ledger`, and `POST /store/handovers`, following D20's rules (one pending at a time, never above what is held). All reads go through `store-ledger/index.ts`.
-  These routes serve every business the store has movements with, whether or not its channel is still on. They never answer `CHANNEL_OFF`, and a `businessId` outside that set → 404 (contract § "The business, in the cash book"; /speckit-analyze H1). Add the case to T052: the channel switched off, then a hand-over declared and confirmed.
+  These routes serve every business the store has movements with, whether or not its channel is still on. They never answer `CHANNEL_OFF`, and a `businessId` outside that set → 404 (contract § "The business, in the cash book"; /speckit-analyze H1). T052 tests it.
 - [ ] T056 [US5] Puntos de pago on the API:
   - `apps/api/src/routes/cash-points/{index,handler,schema}.ts`: `GET /cash-points`, `POST /cash-points/handovers/:id/confirm|dispute`, and `GET /cash-points/stores/:storeId/history`;
   - every query filters by the actor's business;

@@ -198,7 +198,8 @@ The app calls it only when the shopkeeper taps *Enviar comprobante*.
 - **`waLink`** carries the customer's phone, read at this moment through
   the integration's `customersWithPhone.phoneOf`. **It is not written
   anywhere** (constitution V, v1.9.0).
-- **With no phone** (no capability, none on file, or no answer in time),
+- **With no phone** (no capability, none on file, a number that is not
+  ten readable digits, or no answer in time),
   `waLink` is `https://wa.me/?text=…` and `hasPhone` is `false`. The app
   asks the shopkeeper for a number and builds
   `https://wa.me/52<digits>?text=<text>` itself. **That number is never

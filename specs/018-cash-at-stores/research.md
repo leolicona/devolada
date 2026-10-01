@@ -117,8 +117,11 @@ Auth 1.6.29, the version the lockfile pins, ships `better-auth/plugins/username`
 The old store network used the same plugin (devolada-red
 `auth/better.ts:63`).
 
-The phone is the username: ten national digits, normalised the way the
-old receipt normalised it (`toWhatsAppPhone`'s 10-digit form).
+The phone is the username: ten national digits, normalised by the core's
+`nationalPhone` (`apps/api/src/phone.ts`, `payment-without-receipt` D2).
+That is the same rule the payer's reference and WhatsApp links use. A
+store phone that does not normalise to ten digits is refused when the
+store is created or edited (/speckit-analyze L5).
 
 **Only the acceptance route writes a username.** Today `/auth/sign-up/email`
 is open. With the plugin installed, anyone could sign up with a stranger's
@@ -537,8 +540,16 @@ when the result screen opens. The phone is read only when it is needed.
   otherwise).
 - It asks `customersWithPhone.phoneOf(usuario)`. That is the live read
   `payment-without-receipt` D4 already uses, and it stores nothing.
-- It normalises the answer to ten national digits and builds
-  `wa.me/52<digits>?text=<text>`. The phone exists only in that answer.
+- It builds the link with the helpers the SPEI channel already uses, in
+  `apps/api/src/receipt/index.ts`:
+  - `toWhatsAppPhone(raw)`: `52` plus `nationalPhone`'s ten digits, or
+    null when the number cannot be read with confidence;
+  - `whatsAppLink(text, phone)`: `wa.me/<phone>?text=…`, or the contact
+    picker when the phone is null.
+
+  The phone exists only in that answer. A phone on file that is not ten
+  readable digits counts as no phone: `hasPhone: false`, and FR-027
+  applies (/speckit-analyze U1, L3).
 - It is **never written**:
   - `payments.customer_phone` stays null on a cash row;
   - there is no per-customer table;
@@ -833,6 +844,12 @@ written between braces:
 | `{estado}` | the outcome's sentence (D18) |
 
 **Rules:**
+- The renderer is `renderReceipt(template, values)` in
+  `apps/api/src/receipt/index.ts`, beside `toWhatsAppPhone` and
+  `whatsAppLink`. That module's own comment says the store receipt text
+  "retired to devolada-red", and this is where it returns. A
+  `src/receipt.ts` beside the `src/receipt/` folder would make
+  `./receipt` ambiguous, so it is not created (/speckit-analyze U1).
 - Money goes through the money law's formatter: es-MX, MXN.
 - A line that is empty once filled in is dropped, so `{pendiente}` costs
   nothing on a whole payment.

@@ -222,7 +222,8 @@ apps/api/
 ├── src/routes/payments/{handler,schema}.ts             # channel filter, storeName, storeFeeCents, corrections;
 │                                                       #   retry/execute through paymentActions (D9, D23)
 ├── src/routes/auth.ts                         # /auth/me answers the store branch
-├── src/platform/settings.ts                   # store_fee_cents (D22)
+├── src/platform/settings.ts                   # store_fee_cents, store_receipt_template (D22, D31)
+├── src/receipt/index.ts                       # renderReceipt; reuses toWhatsAppPhone, whatsAppLink (D18, D31)
 ├── src/index.ts                               # mounts /store and /cash-points
 ├── package.json                               # exports ./store-schema, ./cash-points-schema
 ├── wrangler.jsonc                             # RED_BASE_URL; ALLOWED_ORIGINS + red origins (D29)

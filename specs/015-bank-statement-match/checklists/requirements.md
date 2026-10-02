@@ -45,7 +45,25 @@
     Story 2, scenario 4). Without this rule, a statement uploaded late
     could pay this month's invoice with last month's transfer.
   - A statement never decides a payment in spec 013's undecided state.
-  - Movements that are not SPEI credits are skipped and not kept.
+  - Movements that are neither SPEI credits nor same-bank credits are
+    skipped and not kept.
+- Revised 2026-10-02 with same-bank payments (User Story 4, FR-016 –
+  FR-022, SC-004), from the creator's decisions of that day
+  (Clarifications). Added while specifying, as informed defaults for the
+  creator to confirm:
+  - A receipt showing the same bank on both sides asks the payer for their
+    bank before any search (FR-017): the candidate receipt-reader-tuning
+    left for this decision, since the reading may be a misread.
+  - An operator can mark a same-bank payment "no llegó" by hand, the
+    counterpart of confirming it by hand. Without it, a business whose
+    bank Devolada cannot read yet keeps a list that never shrinks.
+  - A same-bank credit with the payment's reference and amount on another
+    day keeps the payment waiting and is listed for the operator; it is
+    never confirmed on a day the payer did not give.
+  - "No llegó" counts against the payer's history only when the service
+    had been restored for it, which is today's rule for a release whose
+    money never came.
+  - Transfers to the business's card or phone stay out of scope.
 - BBVA Net Cash and Banxico appear as the measured facts the feature
   rests on, not as implementation choices.
 - Before `/speckit-plan`: a real BBVA Net Cash export from the pilot, to

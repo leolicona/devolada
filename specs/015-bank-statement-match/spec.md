@@ -6,12 +6,20 @@
 
 **Status**: Draft — carved on 2026-09-29 out of spec 012
 (`payment-without-receipt`), where it was User Story 3; written from the
-creator's decisions of 2026-09-26; no clarification open
+creator's decisions of 2026-09-26; revised on 2026-10-02 with same-bank
+payments (User Story 4); no clarification open
 
 **Input**: User description: "Hagamos la implementación la historia 1 y 2.
 La historia 3 y 4, cada una con su propio spec." The story this spec
 carries, as spec 012 put it on 2026-09-26: "(3) the ISP uploads its bank
 statement and Devolada does the match."
+
+Revised 2026-10-02, in the creator's words: "Está spec es también la
+solución a los pagos interbancarios, ejemplo: BBVA a BBVA, correcto?" —
+then: "Se reconoce el pago, se registra el pago, para el adaptador de
+wisphub se hace la reconexion al cliente si el negocio dejo activada esta
+opcion mientras se valida el pago (sin pagar dar por pagada la factura en
+wisphub), una vez validado se registra la factura como paga".
 
 ## Where this comes from
 
@@ -43,6 +51,17 @@ What it closes that the instant path cannot:
   reference, the payer gave the wrong day, the amount changed, or the
   provider's quota ran out. The payment expired, or is still retrying.
 - **A receipt payment still waiting** whose capture showed a clave.
+- **The same-bank payment** (added 2026-10-02). A transfer from a BBVA
+  account to a business that collects at BBVA never goes through SPEI: the
+  bank moves the money inside itself, so Banxico has no CEP and there is
+  no clave de rastreo. Neither the instant path nor Banxico (spec 016) can
+  ever confirm it. The engine already refuses to search such a pair before
+  spending a credit (validation spec D17), but nobody is told: the payment
+  rides its schedule to `expired` in about six hours, honest or not. Specs
+  010 and 011 left it out of scope "for its own spec" (receipt-triage Out
+  of Scope; receipt-reader-tuning D5 and Out of Scope). The money does
+  show in the business's statement, so the statement is the one place it
+  can be confirmed without a person.
 
 Spec 012 gives each registered payer a reference that is unique inside
 their business. That is what makes a credit's reference point to one
@@ -63,6 +82,28 @@ with no profile can only be matched by its clave.
 
 - Q: Is the statement part of spec 012? → A: **No.** It is its own spec,
   built after spec 012's User Stories 1 and 2.
+
+### Session 2026-10-02
+
+- Q: Does this spec also solve same-bank payments (BBVA to BBVA)? → A:
+  **Yes, in this spec** (User Story 4). As first written it skipped them
+  with every other non-SPEI movement.
+- Q: The flow? → A: **Recognize, record, then validate.** The payment is
+  recognized as same-bank when the payer confirms it, recorded with what
+  the statement will show, and validated later by the statement or by the
+  business. What the payer gives is their word, not proof.
+- Q: What happens to the service while the payment waits? → A: **The
+  provisional release, under today's rules and for the same time as a
+  payment searched at Banxico.** Where the business turned it on (for an
+  ISP on WispHub, the reconnection while the payment is validated), the
+  service is restored without the invoice being paid; the invoice is paid
+  only when the payment is confirmed. When the release lapses, the
+  business's normal cut applies, as today.
+- Q: Can the business confirm a same-bank payment by hand, before the
+  statement? → A: **Yes.**
+- Q: When does a same-bank payment stop waiting? → A: **Never by the
+  clock.** It ends when it is confirmed, or when a statement that covers
+  its day shows it did not arrive.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -194,11 +235,79 @@ operator recorded.
 
 ---
 
+### User Story 4 - A same-bank payment waits for the statement instead of expiring (Priority: P2)
+
+A payer of a business that collects at BBVA transfers from their own BBVA
+account and says "ya pagué", naming BBVA as their bank. Both banks are the
+same, so the money never left the bank and Banxico will never have it.
+Devolada does not search. It records the payment with the amount, reference and day the
+payer confirmed, and tells the payer that the business confirms it with
+its statement. If the business turned on the provisional release, the
+service comes back while the payment waits (for an ISP, the reconnection),
+for the same time as any payment being validated, and the invoice stays
+unpaid. The payment is confirmed when the business's statement shows the
+credit, or when an operator who checked the bank confirms it by hand.
+Only then does the business's action fire (for an ISP, the payment is
+registered and the invoice is paid).
+
+**Why this priority**: today every same-bank payment expires in silence,
+honest or not, and the payer who paid is never marked as paid. Nothing else can ever
+confirm it. It comes after User Story 1 because it needs the statement
+read.
+
+**Independent Test**: for a business whose collection CLABE is at BBVA,
+with the provisional release on, confirm a $350 payment from BBVA. See no
+search spent, the payer told the statement confirms it, the service
+restored and the invoice still unpaid; wait past the time a Banxico search
+would expire and see the payment still waiting. Upload a statement holding
+a same-bank credit with the payer's reference, $350 and that day, and see
+the payment confirmed with the source "estado de cuenta" and the invoice
+paid. Repeat with a second payment confirmed by hand from "Por confirmar
+en tu banco", and a third whose day the statement covers without the
+credit, marked "no llegó".
+
+**Acceptance Scenarios**:
+
+1. **Given** a business whose collection CLABE is at a bank, **When** a
+   payer confirms a payment naming that same bank as theirs, **Then** no
+   search is spent, the payment is recorded as a same-bank payment with
+   the amount, reference and day confirmed, and the page tells the payer
+   that the business confirms it with its statement.
+2. **Given** a same-bank payment of a business with the provisional
+   release on, and a payer whose history does not revoke it, **When** the
+   payment is recorded, **Then** the service is restored under today's
+   rules, for the same time as a payment searched at Banxico, and the
+   invoice is not paid; when that time lapses with the payment still
+   waiting, the business's normal cut applies and the payment keeps
+   waiting.
+3. **Given** a same-bank payment waiting, **When** the time a Banxico
+   search would take has passed, **Then** the payment does not expire; the
+   payer's page and the business's panel show it waiting for the
+   statement.
+4. **Given** a same-bank payment waiting, **When** a statement holds a
+   same-bank credit with its reference, amount and day, **Then** the
+   payment is confirmed with the source "estado de cuenta" and the
+   business's action fires.
+5. **Given** a same-bank payment waiting, **When** an operator opens "Por
+   confirmar en tu banco" and confirms it, **Then** the payment is
+   confirmed with the source "confirmado a mano por el negocio" and who
+   confirmed it, and the business's action fires.
+6. **Given** a same-bank payment waiting, **When** a statement covers its
+   day and holds no credit with its reference and amount on any day of the
+   file, **Then** the payment ends as "no llegó", visible to the business
+   and to the payer; when the service had been restored for it, it counts
+   against the payer's history like any release whose money never came.
+7. **Given** a same-bank payment waiting, **When** an operator who checked
+   the bank marks it "no llegó", **Then** it ends as in scenario 6, and
+   who marked it is recorded.
+
+---
+
 ### Edge Cases
 
-- **The file holds movements that are not SPEI credits** (cash deposits,
-  card payments, outgoing transfers, fees). They are skipped, counted as
-  skipped, and not kept.
+- **The file holds movements that are neither SPEI credits nor same-bank
+  transfer credits** (cash deposits, card payments, outgoing transfers,
+  fees). They are skipped, counted as skipped, and not kept.
 - **A credit carries no clave** (a bank that does not print it). It can
   still match a registered payer by reference + amount + date, and it is
   told apart from other credits by its date, amount, reference and
@@ -230,6 +339,43 @@ operator recorded.
   file names its account and it is not the business's collection CLABE,
   the file is refused with that reason and nothing is imported.
 
+**Same-bank payments** (User Story 4)
+
+- **A same-bank credit is a credit like any other**, except that it never
+  has a clave. It confirms a waiting payment, creates a payment for a
+  payer who never said "ya pagué" (User Story 2) or is listed "sin
+  cliente" (User Story 3) under the same rules, always by reference +
+  amount + date or by an operator's assignment.
+- **The payer names the wrong bank.** A payer who says BBVA but paid from
+  another bank waits for the statement instead of a search, and the
+  statement finds the SPEI credit by its reference, amount and day. A
+  payer who names another bank but paid from BBVA is searched at Banxico,
+  found nowhere, and the statement closes it as any search that found
+  nothing.
+- **The payer gave the wrong day.** The statement holds a same-bank credit
+  with the payment's reference and amount on another day. The payment is
+  not confirmed on a day the payer did not give, and does not end "no
+  llegó" either: it keeps waiting, and the credit is listed with the
+  customer named, beside the waiting payment, for the operator to assign.
+- **A receipt shows the same bank on both sides.** The reading may be a
+  misread (receipt-reader-tuning D5: the destination's bank taken for the
+  sender's), so the reading alone never makes a payment same-bank. Before
+  any search, the payer is asked which bank they paid from; naming the
+  business's bank makes it a same-bank payment, naming another sends the
+  search with that bank.
+- **The business's bank cannot be read yet.** A business whose collection
+  CLABE is at a bank whose export Devolada does not read still gets
+  same-bank payments recognized and waiting; only its operators confirm
+  them or mark them "no llegó", from "Por confirmar en tu banco".
+- **The business changes its collection CLABE** while a same-bank payment
+  waits. The payment stays what it was when the payer confirmed it.
+- **A same-bank payment never reaches spec 016's Banxico queue**: Banxico
+  has no record of it to give.
+- **The payer sent a different amount** ("Pagué otra cantidad", spec 012
+  FR-009). The payment waits for that amount; the statement matches it
+  exactly, and the partial and overpayment rules settle it on
+  confirmation.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -240,9 +386,10 @@ operator recorded.
   be able to upload a bank movement export in the panel. BBVA Net Cash's
   export is the first supported format; an unsupported bank or layout MUST
   be refused with the list of supported banks, and nothing imported.
-- **FR-002**: Devolada MUST read every SPEI credit from the file (date,
-  amount, sender, reference, and clave when present) and MUST skip every
-  other movement without keeping it.
+- **FR-002**: Devolada MUST read every SPEI credit and every same-bank
+  transfer credit from the file (date, amount, sender, reference, and
+  clave when present), and MUST skip every other movement without keeping
+  it.
 - **FR-003**: The import MUST report what it read, matched, left
   unmatched, skipped, and could not read.
 - **FR-004**: A credit MUST be imported once: the same file uploaded
@@ -294,16 +441,62 @@ operator recorded.
   MUST be kept only under the business it belongs to and shown only to
   that business's operators and to platform operators; never to a payer.
 
+**Same-bank payments**
+
+- **FR-016**: When a payer confirms a payment (spec 012 FR-007) naming as
+  their bank the bank of the business's collection CLABE, Devolada MUST
+  recognize it as a same-bank payment, MUST NOT spend a search on it, and
+  MUST tell the payer that the business confirms it with its own bank.
+  The payment is recorded with the amount, reference and day the payer
+  confirmed.
+- **FR-017**: A receipt whose reading shows the same bank on both sides
+  MUST NOT make a payment same-bank by itself: before any search, the
+  payer MUST be asked which bank they paid from, and naming the business's
+  bank makes it same-bank (FR-016).
+- **FR-018**: A same-bank payment MUST NOT expire by time. It waits,
+  visible to the payer and to the business, until it is confirmed (FR-020,
+  FR-021) or ends "no llegó" (FR-022).
+- **FR-019**: Where the business's integration can restore the service
+  while a payment is validated and the business has turned that on, a
+  same-bank payment MUST count as the payer's own evidence under today's
+  rules and history revocation (spec 012 FR-014), with the restore taken
+  at the confirmation, since no search will run, and for the same time as
+  a payment searched at Banxico. The restore MUST NOT pay the invoice or
+  fire the business's action. When it lapses with the payment still
+  waiting, the business's normal cut applies, as today, and the payment
+  keeps waiting.
+- **FR-020**: A same-bank credit matching a waiting same-bank payment by
+  reference + amount + day MUST confirm it with the source "estado de
+  cuenta" and fire the business's action (for an ISP, the payment is
+  registered and the invoice paid).
+- **FR-021**: An operator allowed to operate payments MUST see the
+  waiting same-bank payments in "Por confirmar en tu banco" (customer,
+  amount, reference, day, and whether the service was restored for it),
+  and MUST be able to confirm one by hand. The confirmation MUST record
+  the source "confirmado a mano por el negocio" and who confirmed, and
+  fire the business's action. A payment MUST NOT be confirmed twice, by
+  hand and by a statement.
+- **FR-022**: A same-bank payment MUST end "no llegó" when a statement
+  covering its day holds no credit with its reference and amount on any
+  day of the file, or when an operator marks it so (recording who). It is
+  shown to the business and to the payer, and, when the service had been
+  restored for it, it MUST count against the payer's history like any
+  release whose money never came.
+
 ### Key Entities
 
 - **Statement import**: one uploaded bank file — bank, format, when, by
   whom, and the counts of read / matched / unmatched / skipped /
   unreadable.
-- **Statement credit**: one SPEI credit read from an import — date,
-  amount, sender, reference, clave, and its fate: matched a payment,
-  already reconciled, or "sin cliente" (and, if assigned, by whom).
-- **Payment** (existing): gains the sources "estado de cuenta" and
-  "estado de cuenta, asignado a mano", and the credit that confirmed it.
+- **Statement credit**: one credit read from an import, SPEI or same-bank
+  — date, amount, sender, reference, clave (SPEI only), and its fate:
+  matched a payment, already reconciled, or "sin cliente" (and, if
+  assigned, by whom).
+- **Payment** (existing): gains the sources "estado de cuenta", "estado de
+  cuenta, asignado a mano" and "confirmado a mano por el negocio", and the
+  credit or the operator that confirmed it. A same-bank payment is one of
+  them, recognized at the payer's confirmation: it waits without a clock
+  and can end "no llegó", by a statement or by an operator.
 
 ## Success Criteria *(mandatory)*
 
@@ -318,6 +511,9 @@ operator recorded.
 - **SC-003**: No credit confirms a payment of a customer other than the
   one its reference or clave names: 0 wrong-customer confirmations over a
   month of pilot.
+- **SC-004**: No same-bank payment ends in silence: over a month of pilot,
+  every one is confirmed, ends "no llegó", or is shown waiting; 0 expire
+  by the clock.
 
 ## Assumptions
 
@@ -339,9 +535,23 @@ operator recorded.
 - The business uploads a file about its own money. A statement edited by
   hand could confirm a payment that never arrived, and that harms only the
   business that uploaded it; the import records who uploaded each file.
+- The pilot's export lists same-bank transfer credits with the reference
+  the payer set, as it does SPEI credits. Measured on the same real file;
+  if BBVA drops the reference on a same-bank credit, those credits can
+  only be confirmed by an operator (FR-021) or assigned by hand (FR-012).
+- A same-bank transfer is told apart by the two banks: the one the payer
+  names and the one the business's collection CLABE belongs to. A
+  transfer to the business's card or phone is not covered here; it stays
+  out of scope as receipt-triage left it.
+- An operator who confirms or marks a same-bank payment by hand speaks
+  for the business's own money, like an uploaded statement, and who did it
+  is recorded.
 - The existing payment life cycle, statuses, action queue, partial and
   overpayment rules, spec 013's undecided path, and the receipt path stay
   as they are; this feature adds a confirmation source in front of them.
+  The one addition is the same-bank payment's wait without a clock and its
+  "no llegó" end (User Story 4); the plan names it against the comment on
+  the payment's statuses before choosing a word.
 - Out of scope: bank APIs and automated feeds (per-company enterprise
   contracts); any query to Banxico (spec 016); matching by the sender's
-  name.
+  name; transfers to the business's card or phone.

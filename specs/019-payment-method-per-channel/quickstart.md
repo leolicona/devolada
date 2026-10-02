@@ -95,7 +95,8 @@ doubt; it writes only on the demo, behind its own guard.
    *Probar conexión* shows the same.
 5. The pilot's first paid link: the invoice in WispHub carries the SPEI
    method and the reference; *Lista de Facturas* filtered by the method
-   lists it and downloads it (Excel or PDF).
+   lists it and downloads it (the CSV carries the *Forma de Pago*
+   column, R13).
 
 Before step 2, the pilot must not create `CASH - RED.DEVOLADAPAGO`: the
 adapter in production today would record **every** payment with it (R11).

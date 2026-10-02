@@ -201,6 +201,13 @@ Referencia: …", R12); the customer's name (rejected: FR-007).
 - The block sits right after the connection card and before the mapping
   and *Ejecución* cards: the creator's order is the connection, then the
   payment methods, then execution (spec Clarifications 2026-10-02).
+- The setup read, the probe and the gate (D14) read the list fresh, never
+  from the cache: a business that just created a method and comes back to
+  check must see it. When the read is for the stored key and
+  installation, it also writes the fresh list into D3's cache, so the next
+  payment uses the method at once instead of up to ten minutes later. A
+  test of a candidate key or installation writes nothing (it may be the
+  door the business is walking away from).
 
 **Rationale**: FR-008 and FR-009. Constitution VIII: a typo must not send
 payments to cash in silence. Keeping it off `GET /integrations` keeps the

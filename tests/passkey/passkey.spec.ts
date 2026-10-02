@@ -73,8 +73,10 @@ test("passwordless-access US2: a código, the key on /welcome, sign out, sign in
   await page.getByRole("button", { name: "Entrar con huella o rostro" }).click();
   await expect(page.getByRole("heading", { name: "Pagos" })).toBeVisible();
 
-  /* A removed key stops at once (FR-023): every key of the demo goes */
+  /* A removed key stops at once (FR-023): every key of the demo goes —
+     counted once the list has loaded, never while it is still on its way */
   await toSecurity(page);
+  await expect(devices.getByRole("listitem").first()).toBeVisible();
   while ((await devices.getByRole("listitem").count()) > 0) {
     const before = await devices.getByRole("listitem").count();
     await devices.getByRole("button", { name: /quitar/i }).first().click();

@@ -16,6 +16,23 @@ description: "Task list for Passwordless Access"
 > - The measurements (T001) change no task. M4 changes the *reason* for
 >   T005's `hooks.before`: two códigos asked for in the same second tie on
 >   `created_at`, and the plugin may check the older one (research D2).
+>
+> **PR 1 gate (T055), 2026-10-02**, quickstart §1 in CI order: spec-lint,
+> gen-banks, contrast-lint and pending-lint pass; every workspace
+> typechecks; API 73 files / 1238 tests, admin 33 / 414, red 4 / 69,
+> `@devolada/ui` 10 / 105, pago 5 / 173, landing 2 / 10; `pnpm e2e` 334
+> passed; `pnpm e2e:passkey` 3 passed, twice in a row. Three decisions the
+> tasks did not spell out, each cited where it lives:
+> - the sweep leaves an account younger than ten minutes alone
+>   (`credentials-sweep.ts`, D5): until PR 2 the store acceptance births its
+>   shopkeeper unverified, with a password, a moment before it links the
+>   store;
+> - Seguridad's card shows on every device; only "Activar" needs one that
+>   can verify the person (`PasskeyCard.tsx`, D7, FR-021, FR-022);
+> - the passkey layer runs one journey at a time and with the limiter off
+>   (`playwright.passkey.config.ts`, D3, D14): the journeys share the demo,
+>   whose código `/dev/code` replaces, and ask several códigos a minute
+>   from one address.
 
 **Input**: Design documents from `specs/020-passwordless-access/`
 
@@ -564,7 +581,7 @@ merges.
 - [X] T052 [P] The design captures in `tests/design/review-identity.spec.ts` and `tests/design/review-identidad-2.spec.ts` follow the panel's new screens: the password screens and the `sign-in/email` 401 stub leave.
 - [X] T053 [P] Remove the password handlers from `apps/admin/test/msw.ts` (`login`, `signup`, `verifyEmail`, the email-verification `sendCode`, `requestReset`, `resetPassword`) once no test imports them (after T018, T032, T042, T043).
 - [X] T054 [P] `CLAUDE.md`: the "Local seed" line drops `devolada123`. The demo signs in with a código, which prints in the API's console without `RESEND_API_KEY` or comes from `POST /dev/code` (research D16).
-- [ ] T055 The gate before PR 1 merges, following `specs/020-passwordless-access/quickstart.md`:
+- [X] T055 The gate before PR 1 merges, following `specs/020-passwordless-access/quickstart.md`:
   1. amendment 1 is applied (T003);
   2. run quickstart §1 in order (`spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`, typecheck, the four test suites, `pnpm e2e`, `pnpm e2e:passkey`);
   3. walk quickstart §2 locally;

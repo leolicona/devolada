@@ -278,9 +278,17 @@ export function AcceptInvitationScreen() {
           <CodeStep
             purpose="enter"
             onSubmit={async (otp) => {
-              await signInWithCode(inv.email!, otp);
-              /* The session is open; the invitation is accepted here, not by
-                 the effect above, so it happens once */
+              /* The invitation is accepted here, not by the effect above, so
+                 it happens once: marked before the session opens, so a
+                 refetch of the user in between (a window refocus) cannot
+                 start a second acceptance */
+              setState("accepting");
+              try {
+                await signInWithCode(inv.email!, otp);
+              } catch (e) {
+                setState("idle");
+                throw e;
+              }
               try {
                 const { organizationId } = await acceptInvitation(invitationId);
                 await setActiveBusiness(organizationId).catch(() => {});

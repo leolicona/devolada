@@ -17,7 +17,10 @@ export type Bindings = {
   ENVIRONMENT?: "dev" | "prod";
   /* "off" disarms Better Auth's rate limiter (better-auth.spec.md D11).
      Set ONLY by the API test suite, whose hundreds of sign-ins share one
-     address; no wrangler environment defines it, so every deploy limits. */
+     address, and by the passkey layer's local API (playwright.passkey.config.ts,
+     passwordless-access D3: its journeys ask several códigos a minute from
+     one address); no wrangler environment defines it, so every deploy
+     limits. */
   AUTH_RATE_LIMIT?: "off";
   /* Comma-separated list of frontend origins allowed by CORS (TD-007).
      CORS stays (different origins) but cookies are same-site now: every

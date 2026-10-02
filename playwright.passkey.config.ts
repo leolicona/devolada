@@ -24,6 +24,11 @@ export const OPERATOR_EMAIL = "demo@devolada.app";
 export default defineConfig({
   testDir: "./tests/passkey",
   fullyParallel: false,
+  /* passwordless-access D14: one journey at a time. They share one API and
+     the demo account, and `POST /dev/code` mints the demo's código fresh,
+     replacing the live one — two journeys signing the demo in at once
+     would void each other's código. */
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: "list",
@@ -32,7 +37,11 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: `pnpm --filter @devolada/api db:migrate:local && pnpm --filter @devolada/api exec wrangler dev --port ${API_PORT} --local --var PLATFORM_OPERATOR_EMAILS:${OPERATOR_EMAIL}`,
+      /* passwordless-access D3: the limiter off — the journeys ask several
+         códigos a minute from one address, and three a minute is the
+         door's rule; the limiter's proof is the API suite's
+         (rate-limit.test.ts) */
+      command: `pnpm --filter @devolada/api db:migrate:local && pnpm --filter @devolada/api exec wrangler dev --port ${API_PORT} --local --var PLATFORM_OPERATOR_EMAILS:${OPERATOR_EMAIL} --var AUTH_RATE_LIMIT:off`,
       url: `${API}/health`,
       reuseExistingServer: false,
       timeout: 120_000,

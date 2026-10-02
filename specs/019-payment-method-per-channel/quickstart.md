@@ -39,6 +39,17 @@ Expected:
 | Two with one name | `duplicate` |
 | WispHub times out | `checked: false` — never `missing` |
 
+| Scenario (turning execution on, D14) | Answer |
+| --- | --- |
+| Observing; the channels' methods exist | `200`; execution on |
+| Observing; the SPEI method missing | `409 PAYMENT_METHODS_MISSING`; still observing |
+| Store channel on; only the SPEI method | `409 PAYMENT_METHODS_MISSING` |
+| Store channel off; only the SPEI method | `200` |
+| Two methods with the SPEI name | `200` |
+| WispHub times out | `503 PAYMENT_METHODS_UNCHECKED`; still observing |
+| Turning off, no method | `200`; no WispHub call |
+| `true` on a row already on, no method | `200`; no WispHub call |
+
 The existing suites keep `formas-de-pago` as `[{ id: 7, nombre:
 "efectivo" }]`: with no Devolada method they must pass untouched. A suite
 that needs a change to stay green is a regression of FR-003, not a test to
@@ -63,10 +74,12 @@ them with the pilot's key.
    pnpm --filter @devolada/admin dev
    ```
 
-3. Sign in as `demo@devolada.app`. Open *Integraciones → WispHub*. The
-   block *Formas de pago de Devolada* shows `SPEI - LINK.DEVOLADAPAGO`
-   *Creada* (the demo has had both since 2026-10-02, R8), and the
-   network's line only if the demo business has the store channel on.
+3. Sign in as `demo@devolada.app`. Open *Integraciones → WispHub*. Right
+   after the connection, the block *Formas de pago de Devolada* shows
+   `SPEI - LINK.DEVOLADAPAGO` *Creada* (the demo has had both since
+   2026-10-02, R8) with its description and a copy button for each, and
+   the network's line only if the demo business has the store channel
+   on.
 4. Create a link for a demo customer with a pending invoice, pay it
    against the sandbox, and wait for *Confirmado*.
 5. In the demo's WispHub panel, open that invoice. Expected (R12): *Forma
@@ -76,7 +89,9 @@ them with the pilot's key.
    (add an `X`). Within ten minutes the screen shows *Falta crearla*; the
    next payment records with "Cash" — **not** with
    `CASH - RED.DEVOLADAPAGO`, which today's adapter would pick (R11).
-   Restore the name afterwards.
+7. FR-013, with the name still renamed: turn *Ejecución* off. It turns
+   off. Try to turn it on: it stays off and points at the block. Restore
+   the name, reopen the screen: it turns on.
 
 The Postman collection *WispHub · Formas de pago de Devolada (ESCRIBE)*
 re-measures the provider's side (R8–R11) if WispHub's answers are ever in
@@ -90,9 +105,13 @@ doubt; it writes only on the demo, behind its own guard.
    run.
 3. **Only then** the pilot creates, in its WispHub, exactly
    `SPEI - LINK.DEVOLADAPAGO` and, if it uses the store network,
-   `CASH - RED.DEVOLADAPAGO`, and uses neither at its counter.
+   `CASH - RED.DEVOLADAPAGO`, copying the name and the description from
+   the screen, and uses neither at its counter.
 4. The pilot opens *Integraciones → WispHub*: both lines read *Creada*.
-   *Probar conexión* shows the same.
+   *Probar conexión* shows the same. If the pilot is still observing, it
+   turns *Ejecución* on now; if its execution was already on, nothing
+   changed for it at the release, and from now on its payments carry the
+   methods.
 5. The pilot's first paid link: the invoice in WispHub carries the SPEI
    method and the reference; *Lista de Facturas* filtered by the method
    lists it and downloads it (the CSV carries the *Forma de Pago*

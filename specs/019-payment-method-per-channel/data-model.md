@@ -11,7 +11,8 @@
 | `payments.folio` | The DV- folio, set when the money is confirmed | The reference's first part (FR-007) |
 | `payments.tracking_key` | The clave de rastreo, when known | The SPEI reference's second part |
 | `payments.store_id` → `stores.name` | The store's name, read at recording (D10) | The store reference's second part |
-| `businesses.store_channel_on` | Whether the business has the store channel | Whether the screen shows the network's line (FR-008) |
+| `businesses.store_channel_on` | Whether the business has the store channel | Whether the screen shows the network's line (FR-008), and whether turning on execution requires the network's method (FR-013) |
+| `integrations.actions_enabled` | The execution switch (`integrations-hub` D4) | Whether a patch turns execution on, the one moment the methods are checked (D14) |
 
 ## The widened type (core → adapter)
 
@@ -33,6 +34,7 @@ whose system has no payment methods ignores the new fields (FR-011).
 | Value | Shape | Rule |
 | --- | --- | --- |
 | Devolada's names | `{ spei: "SPEI - LINK.DEVOLADAPAGO", store: "CASH - RED.DEVOLADAPAGO" }` | Constants (D1) |
+| Devolada's descriptions | es-MX text, one per name | Constants beside the names, given to copy, never checked (D15) |
 | A payment method | `{ id: number, nombre: string }` | As the provider lists it; cached per business and address for ten minutes (D3) |
 | The chosen method | `{ id, kind: "devolada" \| "cash" }` | The channel's method by normalized name, lowest id; otherwise the cash method without Devolada's names (D4, D5) |
 | The reference | string, ≤ 200 characters | `folio · clave` or `folio · tienda`; only the store's name is shortened (D7) |
@@ -45,13 +47,18 @@ Returned by the setup read and by the connection test (D8). See
 | Field | Values |
 | --- | --- |
 | `checked` | `true` when the provider answered; `false` when it could not be reached |
-| `link` | `{ name, status }`, always present when checked |
-| `network` | `{ name, status }` when the store channel is on, otherwise `null` |
+| `link` | `{ name, description, status }`, always present when checked |
+| `network` | `{ name, description, status }` when the store channel is on, otherwise `null` |
 | `status` | `found`, `missing`, `duplicate` |
 
 ## State transitions
 
-None new. A payment's life (`validating → confirmed …`, the action queue
+One new guard, on an existing transition: `integrations.actions_enabled`
+false → true requires every required line of the setup block to be
+`found` or `duplicate` (D14). true → false is unguarded, and nothing
+moves true → false on its own.
+
+Nothing else is new. A payment's life (`validating → confirmed …`, the action queue
 `queued → done | withheld | failed …`) is unchanged. The method is decided
 inside the attempt that records the money (D9); once
 `payment_registered_at` is set, no later attempt records again, so no later

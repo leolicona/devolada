@@ -7,8 +7,10 @@ methods, the same day)
 **Created**: 2026-10-01 · **Rewritten**: 2026-10-01 · **Revised**: 2026-10-02
 
 **Status**: Planned — no clarification open, nothing left to measure
-(R1–R13). [plan.md](plan.md) passes the Constitution Check; next is
-`/speckit-tasks`.
+(R1–R13). Revised after the first plan (2026-10-02): the methods are a
+requirement for turning on automatic execution (FR-013), and the business
+copies a description with each name. [plan.md](plan.md) carries both;
+next is `/speckit-tasks`.
 
 **Input**: User description, in the creator's words (2026-10-01): "Para el
 piloto mi cliente quiere que registremos los pagos en wisphub a nombre de
@@ -156,6 +158,28 @@ cannot show the reference as a column, so its download does not carry it
   and writes the reference. The core only hands it what the payment
   already knows. There is no choice screen in the core, no new table and
   no mark in Pagos.
+- Q: Should the methods be a requirement before the business can collect?
+  What happens while not even one exists? → A: **A requirement for
+  turning on automatic execution, not for collecting** (the creator,
+  choosing the recommended option). The integration's screen reads in
+  order: the connection, then the payment methods, then execution. From
+  the connection on, the business collects in observation mode: payers
+  pay, Devolada validates, nothing is written in its system, and a payment
+  run by hand records with the method that exists at that moment.
+  Automatic execution turns on only when the method of each of the
+  business's channels exists (FR-013). Collecting never waits on a method,
+  and Devolada never turns execution off: a business already executing,
+  or a method that disappears later, falls back to cash (FR-004) with the
+  step shown as pending. Without the requirement, a business that turns
+  execution on first would record its first payments as cash, and FR-006
+  keeps them there.
+- Q: What does the business copy? → A: **The name and a description**,
+  both ready to copy. SPEI: «Pagos SPEI validados por link de Devolada.
+  Los registra Devolada; no usar en mostrador.» Network: «Pagos en
+  efectivo en tiendas de la red Devolada. Los registra Devolada; no usar
+  en mostrador.» (the creator: "sería prudente mencionar algo como Pagos
+  SPEI validados por link devolada"). Devolada checks the name only: the
+  system's API returns no description (R8).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -268,21 +292,28 @@ store's name.
 
 ---
 
-### User Story 4 - The business knows whether its methods are set up (Priority: P3)
+### User Story 4 - The business sets up its methods before Devolada writes in its system (Priority: P2)
 
-On the integration's own screen, the owner sees Devolada's two method
-names, whether each exists in their system, and what happens while one is
-missing: those payments are recorded as cash, as today. "Probar conexión"
-says the same. The owner copies the exact name, creates the method, and
-the next test shows it found.
+On the integration's own screen, after the connection and before
+execution, the owner sees Devolada's method names for their channels, each
+with its description, both ready to copy; whether each exists in their
+system; and what happens while one is missing. "Probar conexión" says the
+same. The owner creates the methods and the screen shows them found.
+Automatic execution turns on only then (FR-013); until then the business
+collects in observation mode.
 
 **Why this priority**: Without it, a typo in the name sends every payment
-back to the cash method in silence (constitution VIII). It is cheap: the
-screen and the test already read the business's methods.
+back to the cash method in silence (constitution VIII), and a business
+that turns execution on before creating the methods records its first
+payments as cash for good (FR-006). It makes US1 and US2 true from a
+business's first payment. Raised from P3 on 2026-10-02, when the methods
+became a requirement for execution.
 
-**Independent Test**: On the demo tenant, open the screen before creating
-the methods: both show as missing, with the exact names to create. Create
-one, run the test: it shows found, the other still missing.
+**Independent Test**: On the demo tenant, in observation mode, open the
+screen before creating the methods: both show as missing, with the names
+and descriptions to copy, and execution does not turn on. Create one, run
+the test: it shows found, the other still missing; with the store channel
+off, execution now turns on.
 
 **Acceptance Scenarios**:
 
@@ -296,14 +327,39 @@ one, run the test: it shows found, the other still missing.
    never shows them as missing.
 4. **Given** a method was created, **When** the owner runs "Probar
    conexión", **Then** it reports that method as found.
+5. **Given** a business in observation mode without the SPEI method,
+   **When** the owner turns on automatic execution, **Then** it stays off
+   and the screen points at the method to create.
+6. **Given** the SPEI method exists and the store channel is off, **When**
+   the owner turns on automatic execution, **Then** it turns on.
+7. **Given** the store channel is on and only the SPEI method exists,
+   **When** the owner turns on automatic execution, **Then** it stays off:
+   the network's method is missing.
+8. **Given** the business's system cannot be reached, **When** the owner
+   turns on automatic execution, **Then** it stays off and the screen says
+   the methods could not be checked, with a way to retry.
+9. **Given** a business whose execution was already on when this feature
+   shipped, without the methods, **When** a payment is recorded, **Then**
+   execution stays on, the payment is recorded as cash as today, and the
+   screen shows the step as pending.
+10. **Given** the owner is creating a method in their system, **When** they
+    use the screen, **Then** they can copy the exact name and the
+    description, each with one action.
 
 ---
 
 ### Edge Cases
 
-- **A business that never creates the methods** sees no change in how its
-  payments are recorded: the cash method, as today. The integration's
-  screen shows the setup steps (US4) and nothing else.
+- **A business that never creates the methods** collects in observation
+  mode and cannot turn on automatic execution (FR-013). If its execution
+  was already on when this feature shipped, it stays on, and its payments
+  are recorded with the cash method, as today. The integration's screen
+  shows the setup step (US4).
+- **The platform operator switches the store channel on** for a business
+  whose execution is already on. Execution stays on; the network's
+  payments fall back to cash until the business creates
+  `CASH - RED.DEVOLADAPAGO`, and the screen shows the step.
+- **Turning execution off** is always possible, whatever the methods.
 - **A business creates the methods before this feature ships.** Today's
   adapter does not know them: `SPEI - LINK.DEVOLADAPAGO` is ignored, but
   `CASH - RED.DEVOLADAPAGO` may be taken as the cash method for every
@@ -316,10 +372,11 @@ one, run the test: it shows found, the other still missing.
   (FR-008).
 - **Two methods with the same name** in the business's system. Devolada
   uses one of them, always the same one, and the screen says there are
-  two.
+  two. For FR-013 the method exists.
 - **The business renames or deletes a method.** From the next payment, that
   channel falls back to the cash method; the screen shows it as missing.
-  Payments already recorded keep their method (FR-006).
+  Execution stays on. Payments already recorded keep their method
+  (FR-006).
 - **The business connects another account of its system** (a new key or a
   new address). Nothing to redo in Devolada: the methods are found by name
   in the new account. If they do not exist there, payments fall back until
@@ -334,7 +391,8 @@ one, run the test: it shows found, the other still missing.
   the payment settled, without Devolada's fee. This feature does not
   change it.
 - **A business in observation mode** records nothing in its system.
-  Unchanged.
+  Unchanged. A payment it runs by hand ("Ejecutar ahora") is recorded
+  then, with the method that exists at that moment.
 - **A business with no integration, or whose integration has no payment
   methods,** gets nothing of this; its payments are recorded, if at all,
   as today (constitution IX).
@@ -374,13 +432,14 @@ one, run the test: it shows found, the other still missing.
   store's name. It MUST NOT carry the payer's name, phone or account. It
   MUST fit the system's limit, and only the store's name may be shortened
   to fit.
-- **FR-008**: The integration's own screen MUST show Devolada's method
-  names for the channels the business has (SPEI always; the network's only
-  when the store channel is on), whether each exists in the business's
-  system, and what happens while one is missing. It MUST tell the
-  business, in es-MX product copy, to create them with those exact names
-  and never use them for payments taken at the counter. A missing method
-  MUST read as a setup step, not as an error.
+- **FR-008**: The integration's own screen MUST show, after the connection
+  and before execution, Devolada's method names for the channels the
+  business has (SPEI always; the network's only when the store channel is
+  on), each with Devolada's description, each ready to copy; whether each
+  exists in the business's system; and what happens while one is missing.
+  It MUST tell the business, in es-MX product copy, to create them with
+  those exact names and never use them for payments taken at the counter.
+  A missing method MUST read as a setup step, not as an error.
 - **FR-009**: "Probar conexión" MUST report, for each of those names,
   whether the method exists. When the business's system cannot be reached,
   the screen and the test MUST say the methods could not be checked, never
@@ -403,6 +462,18 @@ one, run the test: it shows found, the other still missing.
   mentions Devolada is not. A business that has only Devolada's methods
   and no cash method of its own MUST keep the behaviour it has today for
   that case.
+- **FR-013**: Turning on the integration's automatic execution MUST
+  require that the method of each of the business's channels exists in
+  the business's system (SPEI always; the network's when the store channel
+  is on), read from that system at that moment. Two methods with one name
+  count as one that exists. When the system cannot be reached, execution
+  MUST stay off and the screen MUST say the methods could not be checked.
+  The requirement holds only when turning execution on: turning it off is
+  always allowed, and Devolada MUST NOT turn off an execution that is on —
+  not at the release, not when a method disappears, not when the store
+  channel is switched on later; those payments fall back (FR-004).
+  Collecting — links, validation, observation mode, running a payment by
+  hand — MUST NOT depend on the methods.
 
 ### Key Entities
 
@@ -426,15 +497,18 @@ No new entity. The feature reads what exists:
   business's system in that month: zero missing, zero extra.
 - **SC-003**: The owner gets that download in under 2 minutes with their
   system's own filter, without asking Devolada for anything.
-- **SC-004**: Setting up takes the business under 5 minutes: creating one
-  or two methods in its own system and seeing them found on the
-  integration's screen, with nothing from Devolada's team and nothing to
-  choose in Devolada.
+- **SC-004**: Setting up takes the business under 5 minutes: copying the
+  name and description of one or two methods, creating them in its own
+  system and seeing them found on the integration's screen, with nothing
+  from Devolada's team and nothing to choose in Devolada.
 - **SC-005**: No action waits because of a payment method: zero payments
   queued for a missing method.
 - **SC-006**: For any period, the cash recorded under `CASH - RED.DEVOLADAPAGO` in the business's system equals the store cash Devolada's
   Pagos shows for that business in the same period; per store, the
   references add up to each store's cash.
+- **SC-007**: Every business that turns on automatic execution after this
+  feature ships has the methods of its channels at that moment: zero
+  turned on without them.
 
 ## Assumptions
 
@@ -444,10 +518,11 @@ No new entity. The feature reads what exists:
 - **One method for the whole network** is the creator's decision of
   2026-10-02. One method per store is out of scope; the reference and
   Puntos de pago carry the per-store detail.
-- **"Descripción"**: the creator said Devolada determines the name and the
-  description of each method. The API shows no description (R8). If the
-  provider's panel offers one when the business creates a method, the
-  setup instructions say what to type there; the match uses the name only.
+- **"Descripción"**: Devolada determines the name and the description of
+  each method (the creator, 2026-10-02), and the screen gives both to
+  copy (FR-008). The business types the description in its system's panel
+  when it creates the method; the API returns none (R8), so Devolada
+  never checks it, and a different description changes nothing.
 - **The cash method stays found as today, minus Devolada's names** (FR-012).
   It is still the first name that says "efect" or "cash" in the order the
   business's system lists them, so a business with several such methods
@@ -482,6 +557,10 @@ No new entity. The feature reads what exists:
 
 - **Spec 018 (cash at stores)**: the store channel, the stores' names and
   Puntos de pago. US2 needs it; US1 does not.
+- **The integrations hub's execution switch and observation mode**
+  (`integrations-hub` D4): new integrations are born observing and the
+  business turns execution on. FR-013 adds its condition to that switch;
+  the switch itself is unchanged.
 - **Debt `core-reads-provider-directly`**: its action half is paid (spec
   018 D9, 2026-10-01): every way a payment is recorded already goes through
   the integration's action capability, and only the adapter talks to the

@@ -13,9 +13,9 @@ measurements (M1–M4) before this plan.
 
 **Decision**: `apps/api/src/wisphub/payment-methods.ts` declares
 `SPEI - LINK.DEVOLADAPAGO` (the SPEI channel) and `CASH - RED.DEVOLADAPAGO`
-(the store channel). Nothing in the core carries them. The admin shows
-them through the integration's own contract (D8), never as literals of its
-own.
+(the store channel), each with its description (D15). Nothing in the core
+carries them. The admin shows them through the integration's own contract
+(D8), never as literals of its own.
 
 **Rationale**: The creator fixed the names (spec Clarifications
 2026-10-02), and FR-011 puts them in the adapter: they are product copy the
@@ -188,6 +188,9 @@ Referencia: …", R12); the customer's name (rejected: FR-007).
 - The WispHub screen calls the read when it opens, with its own loading
   and error states, so the screen's main read (`GET /integrations`) keeps
   no provider call.
+- The block sits right after the connection card and before the mapping
+  and *Ejecución* cards: the creator's order is the connection, then the
+  payment methods, then execution (spec Clarifications 2026-10-02).
 
 **Rationale**: FR-008 and FR-009. Constitution VIII: a typo must not send
 payments to cash in silence. Keeping it off `GET /integrations` keeps the
@@ -251,6 +254,10 @@ the methods exist: until this release, every payment Devolada dev records
 there carries `CASH - RED.DEVOLADAPAGO`. That is acceptable on the demo and
 not on the pilot's live books.
 
+The gate (D14) does not touch a business whose execution is already on at
+the release, the pilot included if it is executing: it keeps recording as
+today until it creates the methods, then records with them.
+
 ---
 
 ## D13 — Tests
@@ -268,8 +275,97 @@ not on the pilot's live books.
 - **Component** (`apps/admin`, happy-dom + MSW + axe): the WispHub screen's
   block — both lines, the network's line hidden with the channel off, the
   setup copy, the unreachable state.
+- **The gate** (API suite): turning execution on with the methods →
+  saved; with one missing → `409 PAYMENT_METHODS_MISSING` and the row
+  still observing; the network's method missing with the store channel on
+  → refused, with it off → saved; WispHub timing out →
+  `503 PAYMENT_METHODS_UNCHECKED`, row unchanged; turning off with no
+  method → saved and no provider call; `actionsEnabled: true` on a row
+  already on → saved and no provider call; a duplicate → saved. The
+  component suite: the switch cannot be turned on while the block says
+  missing, can always be turned off, and both refusals have es-MX copy.
 - Existing suites keep their `formas-de-pago` stub (`efectivo`, id 7):
   with no Devolada method the adapter records exactly as today, which is
   FR-003's "no change" and keeps them green.
 
 Every test cites `payment-method-per-channel US<n>` (constitution VII).
+The API suites that need execution on seed the row directly
+(`seedBusiness({ actionsEnabled: true })`), so the gate does not touch
+them. The admin's `integrations.test.tsx` renders the WispHub screen with
+MSW on `onUnhandledRequest: "error"`, so it needs a handler for the new
+read; its switch cases then run against a block that says found.
+
+---
+
+## D14 — The methods are a requirement for turning on automatic execution
+
+**Decision**: `patchWisphub` checks the methods when, and only when, a
+patch turns `actionsEnabled` from false to true:
+
+1. It asks the adapter for the setup block (D8), with the key and
+   installation the row will have after this patch, and with the
+   business's `store_channel_on`.
+2. Every required line must be `found` or `duplicate`: the SPEI line
+   always, the network's line when the store channel is on.
+3. A required line `missing` → `409 PAYMENT_METHODS_MISSING`; the provider
+   not reached (`checked: false`) → `503 PAYMENT_METHODS_UNCHECKED`. Either
+   way the whole patch is refused and nothing is saved, so a combined
+   patch never half-applies.
+
+No check, and no provider call, when a patch turns execution off, leaves
+it as it is, or sets it to true on a row already on. Nothing else writes
+`actions_enabled` to true outside `/dev/seed`, which stays as it is
+(dev only). Nothing in Devolada ever writes it to false on its own: not
+the release, not a missing method, not the store channel switched on
+later (FR-013).
+
+In the panel, the *Ejecución* switch cannot be turned on while the block
+says a required method is missing, and says why, pointing at the block;
+it can always be turned off. The API is the authority: the block on
+screen can be ten minutes old (D3), so both refusals have es-MX copy too.
+
+**Rationale**: the creator's decision of 2026-10-02 (spec FR-013, SC-007).
+The existing switch (`integrations-hub` D4) is the moment a business asks
+Devolada to start writing in its system, so it is the one place a missing
+method can still be prevented rather than repaired: once a payment is
+recorded as cash, FR-006 keeps it there. Collecting is untouched: a new
+integration is born observing, so a business collects from the
+connection on. Turning execution off, or keeping it on, never depends on
+WispHub answering (constitution VIII).
+
+**Alternatives considered**: gating collection (rejected by the creator:
+it stops money for a reporting detail, and a business without this
+provider has no methods at all, constitution IX); turning execution off
+when a method disappears (rejected: it would stop reconnections for a
+setup state, the opposite of FR-004); checking only in the panel
+(rejected: the panel's block can be stale, and a second client of the
+route would skip it); letting an unreachable provider through (rejected:
+the gate would then pass on exactly the day nobody can see whether the
+methods exist).
+
+---
+
+## D15 — The descriptions are Devolada's copy, given to copy, never checked
+
+**Decision**: next to each name, `wisphub/payment-methods.ts` declares its
+description, product copy in es-MX:
+
+- SPEI: «Pagos SPEI validados por link de Devolada. Los registra
+  Devolada; no usar en mostrador.»
+- Network: «Pagos en efectivo en tiendas de la red Devolada. Los registra
+  Devolada; no usar en mostrador.»
+
+The setup block carries each line's `description` beside its `name`, and
+the screen offers a copy button for each. The match never reads a
+description.
+
+**Rationale**: the creator decided Devolada names and describes the
+methods, and asked that the SPEI one say «Pagos SPEI validados por link
+de Devolada» (spec Clarifications 2026-10-02). The provider's API returns
+no description (R8), so it cannot be checked; it is there for the
+business's own staff, and «no usar en mostrador» repeats FR-008's
+instruction where the counter staff will read it.
+
+**Alternatives considered**: the description as a literal in the admin
+(rejected: two places to change it, and the names already come from the
+adapter, D1); checking the description (impossible through the API, R8).

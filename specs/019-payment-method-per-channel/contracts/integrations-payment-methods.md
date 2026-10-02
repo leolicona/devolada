@@ -1,6 +1,6 @@
 # Contract: Devolada's methods on the WispHub screen (US4)
 
-Two surfaces of the WispHub integration's own routes
+Three surfaces of the WispHub integration's own routes
 (`apps/api/src/routes/integrations/`), so the provider's name may appear in
 the route and in the screen's copy (constitution IX). Browser-facing: one
 envelope, no `message`, no `retryable` (constitution III). The schema lives
@@ -15,6 +15,8 @@ export const devoladaMethodLine = z.object({
   /* The exact name to create — the adapter's constant (D1), so the
      screen never carries a literal of its own */
   name: z.string(),
+  /* Devolada's description to type beside it (D15); never checked */
+  description: z.string(),
   status: devoladaMethodStatus,
 });
 
@@ -65,23 +67,49 @@ The handler asks the adapter for the block
 provider payload, as `testWisphubKey` already does for its probes
 (constitution IX).
 
+## `PATCH /integrations/wisphub` turning execution on (D14)
+
+When the patch carries `actionsEnabled: true` and the row has it false:
+
+| The block, read with the key and installation the row will have | Answer | Saved |
+| --- | --- | --- |
+| Every required line `found` or `duplicate` (SPEI always; the network's when the store channel is on) | `200`, as today | The whole patch |
+| A required line `missing` | `409` `PAYMENT_METHODS_MISSING` | Nothing |
+| `checked: false` | `503` `PAYMENT_METHODS_UNCHECKED` | Nothing |
+
+Any other patch — execution off, execution left as it is, `true` on a row
+already on — is answered as today, with no provider call. The request
+schema does not change.
+
 ## The screen (es-MX copy, indicative)
+
+The order is the creator's: *Conexión* (the key card), then *Formas de
+pago de Devolada*, then the mapping, then *Ejecución*.
 
 A block *Formas de pago de Devolada* on the WispHub screen:
 
-- One line per method: the exact name (JetBrains Mono, like a folio), a
-  copy button, and a `StatusBadge`. Three statuses are new in
+- One line per method: the exact name (JetBrains Mono, like a folio) and
+  its description, a copy button for each, and a `StatusBadge`. Three statuses are new in
   `packages/ui` (`StatusBadge` is the only representation of a status):
   `methodFound` *Creada* (success, check), `methodMissing` *Falta crearla*
   (info: a setup step, not a failure), `methodDuplicate` *Repetida*
   (warning). Under a duplicate: *"Hay dos con este nombre; usamos la más
   antigua."* (FR-003.)
-- Under a missing method: *"Mientras no exista, esos pagos se registran
-  como efectivo, igual que hoy."* As a setup step, not an error (FR-008).
+- Under a missing method, as a setup step, not an error (FR-008): while
+  observing, *"Créala para poder encender la ejecución."*; with execution
+  on, *"Mientras no exista, esos pagos se registran como efectivo, igual
+  que hoy."*
 - The instruction: *"Créalas en WispHub con estos nombres exactos y no las
   uses para cobros en mostrador."* (FR-008, FR-010.)
 - `checked: false`: *"No pudimos revisar tus formas de pago en WispHub.
   Vuelve a intentar."* Never shown as missing (FR-009).
 - The network's line only when `session.storeChannel.on`.
+- *Ejecución*: while the block says a required method is missing, the
+  switch cannot be turned on, and reads *"Para encender la ejecución,
+  primero crea tus formas de pago de Devolada."* with a link to the
+  block. It can always be turned off. The refusals, when the API has the
+  last word: `PAYMENT_METHODS_MISSING` → *"Aún falta crear una forma de
+  pago de Devolada en WispHub."*; `PAYMENT_METHODS_UNCHECKED` → *"No
+  pudimos revisar tus formas de pago en WispHub. Vuelve a intentar."*
 - While the read runs, the waiting label sits inside `<Pending>`
   (pending-lint).

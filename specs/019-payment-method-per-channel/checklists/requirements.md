@@ -72,3 +72,13 @@
   the debt `core-reads-provider-directly` was already paid by spec 018 D9,
   so recording a payment is already a declared capability. This feature
   only widens what the core hands it.
+- Revised after the first plan (2026-10-02), on the creator's decision:
+  the methods are a requirement for turning on automatic execution, not
+  for collecting (FR-013, SC-007). The requirement rides the integration's
+  existing execution switch (`integrations-hub` D4), so a new business
+  collects in observation mode from the connection on and never records
+  its first payments as cash by mistake; Devolada never turns an
+  execution off, so nothing that works today breaks (constitution VIII).
+  US4 rose from P3 to P2 and gained the gate's scenarios. The business
+  also copies a description with each name (FR-008); the API returns no
+  description (R8), so it is never checked.

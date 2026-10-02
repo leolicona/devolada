@@ -110,7 +110,12 @@ pago de Devolada*, then the mapping, then *Ejecución*.
 A block *Formas de pago de Devolada* on the WispHub screen:
 
 - One line per method: the exact name (JetBrains Mono, like a folio) and
-  its description, a copy button for each, and a `StatusBadge`. Three statuses are new in
+  its description, and a `StatusBadge`. Each of the two is itself the
+  copy control (the creator, 2026-10-02): the whole field is one
+  `<button>` — its label with a copy icon beside it, then the value —
+  and a tap copies the value; the icon turns into a check and
+  *"Copiado"*. No separate copy buttons. Its accessible name starts
+  with "Copiar el/la …"; the whole field is the touch target. Three statuses are new in
   `packages/ui` (`StatusBadge` is the only representation of a status):
   `methodFound` *Creada* (success, check), `methodMissing` *Falta crearla*
   (info: a setup step, not a failure), `methodDuplicate` *Repetida*

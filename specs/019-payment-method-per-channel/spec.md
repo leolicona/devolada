@@ -548,6 +548,13 @@ No new entity. The feature reads what exists:
   spec, and is never recorded as SPEI.
 - **The reference is written once**, at recording. A store renamed later
   does not change payments already recorded (FR-006).
+- **Store names are told apart by the operator, not by the system**
+  (the creator, 2026-10-02). The reference carries the store's name as
+  Devolada's operator set it; two stores may share a name today, and
+  SC-006's per-store sum then needs Pagos, where the folio tells them
+  apart. For the pilot the operator gives each store a distinct name
+  (e.g. "Abarrotes Lupita – Centro"). Making the system refuse a repeated
+  name belongs to store registration (spec 018), not to this feature.
 - **No mark in Pagos.** A payment that fell back is not marked one by one:
   the reason is a setup state of the business, and the integration's
   screen shows it (US4). A per-payment mark would need the core and is out

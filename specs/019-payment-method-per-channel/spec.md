@@ -199,7 +199,7 @@ the two links' invoices are there and the counter's is not.
    and the action runs without waiting.
 6. **Given** the business typed the name with different capitals or
    spaces around the dash, **When** a payment is recorded, **Then** the
-   method is still found, within the tolerance M4 decides.
+   method is still found, with the tolerance of FR-003.
 
 ---
 

@@ -161,7 +161,7 @@ async function testKey(
       },
     },
     { name: "invoices", run: () => wisphub.probeInvoices() },
-    { name: "payment_methods", run: () => wisphub.probePaymentMethods() },
+    { name: "payment_methods", run: async () => void (await wisphub.listPaymentMethods()) },
   ];
 
   for (const probe of probes) {

@@ -45,6 +45,19 @@ tested (M1 → T014); the connection test's failed probe answers
 used by the next payment everywhere (D16, the creator's choice → T003,
 T011, T012, T017, T021, T022). Task numbers are the renumbered ones.
 
+**T001 (2026-10-02): no drift.** The three callers of
+`paymentActions.attempt`, the `input()` helper, both users of the cash
+method id, the expected objects and the browser visits are where the task
+says. Every `formas-de-pago` stub matches by prefix or regex and none sends
+`next`. Every `capabilitiesOf` caller passes the whole integration row. The
+latest migration is `0044_cash_at_stores.sql`.
+
+**Deviation found while implementing T011**: the list is cached under a
+new key kind, `payment-methods`, not the old `payment-method`. An entry
+left under the old kind holds a single id; with a row whose stamp is still
+null the key would be the same, and the list reader would get a number on
+the first payment after the deploy.
+
 **Release rule (D12), before any code**: the pilot must not create
 `CASH - RED.DEVOLADAPAGO` before the release that carries FR-012. Today's
 adapter would record every payment with it (R11).
@@ -72,7 +85,7 @@ Paths are as `plan.md` fixes them:
 **Purpose**: check what the tasks change against the tree before editing.
 No behaviour changes in this phase.
 
-- [ ] T001 Check the consumers this feature changes against the tree, and note any drift at the top of this file (`specs/019-payment-method-per-channel/tasks.md`) before editing:
+- [X] T001 Check the consumers this feature changes against the tree, and note any drift at the top of this file (`specs/019-payment-method-per-channel/tasks.md`) before editing:
   - the three callers of `paymentActions.attempt`: `attemptOf` in `settleConfirmed` (`apps/api/src/direct-payments/validation.ts`), `dispatchObserved` (`apps/api/src/routes/payments/handler.ts`) and `sweepReconnections` (`apps/api/src/reconnection/queue.ts`); plus the `input()` helper in `apps/api/test/cash-at-stores-capabilities.test.ts`, which builds an `ActionAttemptInput` by hand;
   - every user of `cashPaymentMethodId` and `WispHub.getCashPaymentMethodId`: `apps/api/src/wisphub/reconnection.ts` and `apps/api/test/provider-latency.test.ts` (scenarios 1, 2, 11b, 12);
   - every `formas-de-pago` stub in `apps/api/test/` matches by prefix or regex, never the exact path, so a `?limit=&offset=` query keeps them matching; and none of them sends `next`, so a one-page read stays one call;
@@ -99,28 +112,28 @@ No behaviour changes in this phase.
 
 **⚠️ No story starts before this phase is green.**
 
-- [ ] T002 [P] Widen `ActionAttemptInput` in `apps/api/src/integrations/capabilities.ts` with `channel: "spei" | "store"` and `recordReference: { folio: string | null; trackingKey: string | null; storeName: string | null }`, exactly as `contracts/action-attempt.md` gives them, each with its comment citing D2/D7. `ActionAttempt` does not change.
-- [ ] T003 [P] Add `paymentMethodsSeenAt: integer("payment_methods_seen_at", { mode: "timestamp_ms" })`, nullable, to `integrations` in `apps/api/src/db/schema.ts`, with a comment citing D16 (what it stamps, who writes it, that the adapter only reads it). Run `pnpm --filter @devolada/api db:generate` and `db:migrate:local`; the generated file in `apps/api/migrations/` must be a single additive `ALTER TABLE integrations ADD payment_methods_seen_at` (D11: the preview applies it to the live dev database).
-- [ ] T004 [P] Create `apps/api/src/direct-payments/record-reference.ts` (core, D2, D10):
+- [X] T002 [P] Widen `ActionAttemptInput` in `apps/api/src/integrations/capabilities.ts` with `channel: "spei" | "store"` and `recordReference: { folio: string | null; trackingKey: string | null; storeName: string | null }`, exactly as `contracts/action-attempt.md` gives them, each with its comment citing D2/D7. `ActionAttempt` does not change.
+- [X] T003 [P] Add `paymentMethodsSeenAt: integer("payment_methods_seen_at", { mode: "timestamp_ms" })`, nullable, to `integrations` in `apps/api/src/db/schema.ts`, with a comment citing D16 (what it stamps, who writes it, that the adapter only reads it). Run `pnpm --filter @devolada/api db:generate` and `db:migrate:local`; the generated file in `apps/api/migrations/` must be a single additive `ALTER TABLE integrations ADD payment_methods_seen_at` (D11: the preview applies it to the live dev database).
+- [X] T004 [P] Create `apps/api/src/direct-payments/record-reference.ts` (core, D2, D10):
   - `storeNamesFor(db, rows)`: one `select id, name from stores where id in (…)` over the rows' non-null `storeId`, as a `Map<storeId, name>`; no query when no row has a store;
   - `recordReferenceOf(row, names)`: `{ folio: row.folio, trackingKey: row.channel === "spei" ? row.trackingKey : null, storeName: row.storeId ? names.get(row.storeId) ?? null : null }`.
   - The comment says why the name is read at recording (D10: the name as it is then; a later rename touches nothing, FR-006) and why nothing about the payer is read (FR-007).
-- [ ] T005 In `settleConfirmed` (`apps/api/src/direct-payments/validation.ts`), keep the row that `await update({ folio: payment.folio ?? makeFolio(), … })` returns, and build every attempt from it: `channel: row.channel` and `recordReference: recordReferenceOf(row, await storeNamesFor(db, [row]))`, read once before `attemptOf`. Comment why the returned row and not `payment`: the clave may have been adopted onto the row after `payment` was read (`adoptKey`, the matcher's write, the accepted key), and the folio is born in this very write. Depends on T002, T004.
-- [ ] T006 [P] In `dispatchObserved` (`apps/api/src/routes/payments/handler.ts`), add `channel: row.channel` and `recordReference: recordReferenceOf(row, await storeNamesFor(db, [row]))` to `actions.attempt`. Depends on T002, T004.
-- [ ] T007 [P] In `sweepReconnections` (`apps/api/src/reconnection/queue.ts`), read `storeNamesFor(db, due)` once per batch beside the businesses' timezones, and add `channel: charge.channel` and `recordReference: recordReferenceOf(charge, storeNames)` to `actions.attempt` (D10: one query, as the batch already does for the businesses). Depends on T002, T004.
-- [ ] T008 [P] Add `channel: "spei"` and `recordReference: { folio: null, trackingKey: null, storeName: null }` to the `input()` helper in `apps/api/test/cash-at-stores-capabilities.test.ts`, so the existing suite typechecks and keeps proving what it proves. Depends on T002.
-- [ ] T009 In `apps/api/src/wisphub/client.ts`:
+- [X] T005 In `settleConfirmed` (`apps/api/src/direct-payments/validation.ts`), keep the row that `await update({ folio: payment.folio ?? makeFolio(), … })` returns, and build every attempt from it: `channel: row.channel` and `recordReference: recordReferenceOf(row, await storeNamesFor(db, [row]))`, read once before `attemptOf`. Comment why the returned row and not `payment`: the clave may have been adopted onto the row after `payment` was read (`adoptKey`, the matcher's write, the accepted key), and the folio is born in this very write. Depends on T002, T004.
+- [X] T006 [P] In `dispatchObserved` (`apps/api/src/routes/payments/handler.ts`), add `channel: row.channel` and `recordReference: recordReferenceOf(row, await storeNamesFor(db, [row]))` to `actions.attempt`. Depends on T002, T004.
+- [X] T007 [P] In `sweepReconnections` (`apps/api/src/reconnection/queue.ts`), read `storeNamesFor(db, due)` once per batch beside the businesses' timezones, and add `channel: charge.channel` and `recordReference: recordReferenceOf(charge, storeNames)` to `actions.attempt` (D10: one query, as the batch already does for the businesses). Depends on T002, T004.
+- [X] T008 [P] Add `channel: "spei"` and `recordReference: { folio: null, trackingKey: null, storeName: null }` to the `input()` helper in `apps/api/test/cash-at-stores-capabilities.test.ts`, so the existing suite typechecks and keeps proving what it proves. Depends on T002.
+- [X] T009 In `apps/api/src/wisphub/client.ts`:
   - replace `getCashPaymentMethodId()` with `listPaymentMethods(): Promise<{ id: number; nombre: string }[]>`: `GET /formas-de-pago/?limit=100&offset=<n>`, following while the answer's `next` is a non-null string, inside the client's operation budget; an empty list is returned as empty (the "no payment methods" throw moves to the chooser, T010);
   - keep the field names of a 400 JSON body on `WispHubError` as `fields?: string[]` (D6): on a non-ok 400 only, read the body as text, `JSON.parse` it safely, and keep its top-level keys. Every other status throws exactly as today.
   - Comment each with D3 / D6 and the measured answer (R9: `{"forma_pago": ["Clave primaria … inválida - objeto no existe."]}`).
-- [ ] T010 Create `apps/api/src/wisphub/payment-methods.ts`, pure, no I/O (D1, D4, D5, D15):
+- [X] T010 Create `apps/api/src/wisphub/payment-methods.ts`, pure, no I/O (D1, D4, D5, D15):
   - the two names, `SPEI - LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO`, each with its es-MX description as research D15 gives it, keyed by channel;
   - `normalizeMethodName(text)`: NFD with accents removed, upper case, runs of spaces collapsed, spaces around `-`, `.` and `·` removed, trimmed (D5);
   - `devoladaMethodFor(methods, channel)`: the methods whose normalized name equals the channel's normalized name; the lowest `id`, or null (FR-003);
   - `devoladaMatches(methods, channel)`: how many match, for the setup block (US4);
   - `cashMethodOf(methods)`: the first, in the provider's order, whose `nombre` matches `/efect|cash/i` and whose normalized name is neither of Devolada's; else the first that is neither; else the first method; an empty list throws `WispHubError("WISPHUB_UNAVAILABLE", "no payment methods")`, today's answer (D4, FR-012). Its comment names R11 (measured 2026-10-02: the demo lists `CASH - RED.DEVOLADAPAGO` before "Cash").
-- [ ] T011 In `apps/api/src/wisphub/cache.ts`, replace `cashPaymentMethodId` with `paymentMethods(businessId, wisphub, now, seenAt)`: the whole list from `listPaymentMethods`, cached for the same ten minutes under the same key kind, with `seenAt` (ms or null) as the key's version through `keyFor`'s existing `version` argument (D3, D16). Add `forgetPaymentMethods(businessId, wisphub, seenAt)` (deletes this colo's entry, D6) and `rememberPaymentMethods(businessId, wisphub, methods, now, seenAt)` (writes a fresh list under a new stamp, for the setup read, D8). Migrate `apps/api/test/provider-latency.test.ts` scenarios 1, 2, 11b and 12 to `listPaymentMethods` and `paymentMethods`, keeping each scenario's assertion (the deadline, the spent budget, one read per tenant, the configured base) and its existing `US-P06` citation. Depends on T009.
-- [ ] T012 Thread the record through the adapter, and use the cash rule:
+- [X] T011 In `apps/api/src/wisphub/cache.ts`, replace `cashPaymentMethodId` with `paymentMethods(businessId, wisphub, now, seenAt)`: the whole list from `listPaymentMethods`, cached for the same ten minutes under the same key kind, with `seenAt` (ms or null) as the key's version through `keyFor`'s existing `version` argument (D3, D16). Add `forgetPaymentMethods(businessId, wisphub, seenAt)` (deletes this colo's entry, D6) and `rememberPaymentMethods(businessId, wisphub, methods, now, seenAt)` (writes a fresh list under a new stamp, for the setup read, D8). Migrate `apps/api/test/provider-latency.test.ts` scenarios 1, 2, 11b and 12 to `listPaymentMethods` and `paymentMethods`, keeping each scenario's assertion (the deadline, the spent budget, one read per tenant, the configured base) and its existing `US-P06` citation. Depends on T009.
+- [X] T012 Thread the record through the adapter, and use the cash rule:
   - `apps/api/src/wisphub/reconnection.ts`: `attemptReconnection` takes one more argument, `record: { channel: "spei" | "store"; reference: ActionAttemptInput["recordReference"] }`; in place of `cashPaymentMethodId(…)`, it reads `paymentMethods(business.id, wisphub, now)` (still in parallel with `ensureAutoActivate`, provider-latency D2) and records with `cashMethodOf(methods).id` (FR-012);
   - `apps/api/src/wisphub/actions.ts`: pass `{ channel: input.channel, reference: input.recordReference }`, and the integration's `paymentMethodsSeenAt` (ms or null) as the cache version that `attemptReconnection` hands to `paymentMethods` (D16);
   - `apps/api/src/wisphub/receivables.ts` and `actions.ts`: `wisphubCapabilities` and `paymentActions` take `WispHubAddress & { paymentMethodsSeenAt?: Date | null }`, which every caller's integration row already satisfies.
@@ -143,11 +156,11 @@ invoice carries the method, and the panel's list filtered by it shows it
 
 ### Tests for User Story 1
 
-- [ ] T013 [US1] Extend the WispHub stubs so a test can name the list and read what was sent:
+- [X] T013 [US1] Extend the WispHub stubs so a test can name the list and read what was sent:
   - `mockPanelSettle` in `apps/api/test/payer-helpers.ts`: `opts.methods` (default `[{ id: 7, nombre: "efectivo" }]`, today's) and a returned capture of the `registrar-pago` body's `forma_pago` and `referencia`;
   - `mockAction` in `apps/api/test/store-helpers.ts`: the same `opts.methods` and `formaPago` / `referencia` on its capture.
   - Existing callers pass nothing and keep today's stub.
-- [ ] T014 [US1] Create `apps/api/test/payment-method-per-channel.test.ts` with `describe("payment-method-per-channel US1 …")`, each case asserting the captured body:
+- [X] T014 [US1] Create `apps/api/test/payment-method-per-channel.test.ts` with `describe("payment-method-per-channel US1 …")`, each case asserting the captured body:
   - the SPEI verdict, list `[efectivo 7, SPEI - LINK.DEVOLADAPAGO 12]` → `forma_pago: 12`;
   - *Ejecutar ahora* on an observed SPEI row → `12`;
   - the sweep on a queued SPEI row → `12`;
@@ -162,8 +175,8 @@ invoice carries the method, and the panel's list filtered by it shows it
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] In `attemptReconnection` (`apps/api/src/wisphub/reconnection.ts`), record with `devoladaMethodFor(methods, record.channel) ?? cashMethodOf(methods)` (D4). Depends on T012.
-- [ ] T016 [US1] In the same function, the fallback (D6): when `registerPayment` throws a `WispHubError` with status 400 whose `fields` include `forma_pago`, and the method sent was Devolada's, call `forgetPaymentMethods` and send the same payment once more with `cashMethodOf(methods).id`. A 422 on either call keeps reconnection D8's reading (the money landed). Any other error is rethrown as today. Comment the measured answer (R9, 2026-10-02) and why a second call cannot pay twice (the invoice stays pending). Depends on T015.
+- [X] T015 [US1] In `attemptReconnection` (`apps/api/src/wisphub/reconnection.ts`), record with `devoladaMethodFor(methods, record.channel) ?? cashMethodOf(methods)` (D4). Depends on T012.
+- [X] T016 [US1] In the same function, the fallback (D6): when `registerPayment` throws a `WispHubError` with status 400 whose `fields` include `forma_pago`, and the method sent was Devolada's, call `forgetPaymentMethods` and send the same payment once more with `cashMethodOf(methods).id`. A 422 on either call keeps reconnection D8's reading (the money landed). Any other error is rethrown as today. Comment the measured answer (R9, 2026-10-02) and why a second call cannot pay twice (the invoice stays pending). Depends on T015.
 
 **Checkpoint**: T014 green; the existing suites green.
 

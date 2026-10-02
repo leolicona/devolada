@@ -106,6 +106,10 @@ describe("cash-at-stores US1 — paymentActions speaks the core's words (D9)", (
     paymentRegistered: false,
     reconnect: true,
     now: new Date(),
+    /* payment-method-per-channel D2: the widened input; none of these
+       cases names a method or a reference */
+    channel: "spei" as const,
+    recordReference: { folio: null, trackingKey: null, storeName: null },
   });
   const optIn = () =>
     fetchMock

@@ -1,7 +1,8 @@
 import { beforeAll, afterEach, describe, expect, it } from "vitest";
 import { fetchMock } from "cloudflare:test";
 import { WispHub } from "../src/wisphub/client";
-import { cashPaymentMethodId, pendingInvoicesForDisplay } from "../src/wisphub/cache";
+import { paymentMethods, pendingInvoicesForDisplay } from "../src/wisphub/cache";
+import { cashMethodOf } from "../src/wisphub/payment-methods";
 
 /* docs/legacy/polish/provider-latency.spec.md (US-P06), adapter and cache
    scenarios: 1–2 (deadlines), 6–7 and 10 (display cache), 11b (payment
@@ -55,7 +56,7 @@ describe("US-P06: every provider call has a deadline (D1)", () => {
       .delay(400);
 
     const provider = new WispHub("wh-key-1", undefined, { callMs: 60, operationMs: 5_000 });
-    await expect(provider.getCashPaymentMethodId()).rejects.toMatchObject({
+    await expect(provider.listPaymentMethods()).rejects.toMatchObject({
       code: "WISPHUB_UNAVAILABLE",
       message: expect.stringContaining("timed out"),
     });
@@ -70,12 +71,12 @@ describe("US-P06: every provider call has a deadline (D1)", () => {
     /* The budget is smaller than the first call, so by the time the
        second is asked for there is no time left to spend. */
     const provider = new WispHub("wh-key-1", undefined, { callMs: 500, operationMs: 100 });
-    await provider.getCashPaymentMethodId().catch(() => undefined);
+    await provider.listPaymentMethods().catch(() => undefined);
 
     /* No interceptor is registered for this second call on purpose: if
        it reached the network at all, the mock agent would answer with a
        "not matched" error instead of this message. */
-    await expect(provider.getCashPaymentMethodId()).rejects.toMatchObject({
+    await expect(provider.listPaymentMethods()).rejects.toMatchObject({
       code: "WISPHUB_UNAVAILABLE",
       message: "operation budget spent",
     });
@@ -131,6 +132,8 @@ describe("US-P06: the pending list is cached for display only (D3)", () => {
 
 });
 
+/* payment-method-per-channel D3: the whole list is cached now, and the
+   cash method is chosen from it */
 describe("US-P06: the cash payment method is cached (D5)", () => {
   it("scenario 11b: a second tenant asks the provider for its own", async () => {
     const now = new Date("2026-08-18T12:00:00Z");
@@ -142,9 +145,10 @@ describe("US-P06: the cash payment method is cached (D5)", () => {
       .intercept({ method: "GET", path: formasDePago })
       .reply(...json({ results: [{ id: 9, nombre: "Efectivo" }] }));
 
-    expect(await cashPaymentMethodId("business-1", provider, now)).toBe(7);
-    expect(await cashPaymentMethodId("business-1", provider, now)).toBe(7);
-    expect(await cashPaymentMethodId("business-2", provider, now)).toBe(9);
+    const cashOf = async (businessId: string) => cashMethodOf(await paymentMethods(businessId, provider, now)).id;
+    expect(await cashOf("business-1")).toBe(7);
+    expect(await cashOf("business-1")).toBe(7);
+    expect(await cashOf("business-2")).toBe(9);
   });
 });
 
@@ -163,6 +167,6 @@ describe("US-P06: the configured base is the one called (D7)", () => {
       .reply(...json({ results: [{ id: 3, nombre: "Efectivo" }] }));
 
     const provider = new WispHub("wh-key-1", "https://sandbox-api.wisphub.net/api");
-    expect(await provider.getCashPaymentMethodId()).toBe(3);
+    expect(cashMethodOf(await provider.listPaymentMethods()).id).toBe(3);
   });
 });

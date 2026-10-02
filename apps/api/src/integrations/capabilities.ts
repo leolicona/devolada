@@ -121,6 +121,23 @@ export type ActionAttemptInput = {
      the money and leaves the service as it is */
   reconnect: boolean;
   now: Date;
+  /* payment-method-per-channel D2: where the money came in. An adapter
+     whose system names its payment methods records each channel under
+     its own; one that has none ignores it (FR-011). */
+  channel: "spei" | "store";
+  /* payment-method-per-channel D2/D7: what ties the record back to
+     Devolada, as values. The adapter writes them in its provider's words
+     and limits; the core never builds the text. Nothing about the payer
+     (FR-007). */
+  recordReference: {
+    /* The payment's DV- folio */
+    folio: string | null;
+    /* The clave de rastreo; null on a store row or when unknown */
+    trackingKey: string | null;
+    /* The store's name as it is when the payment is recorded (D10); null
+       on a SPEI row */
+    storeName: string | null;
+  };
 };
 
 /* cash-at-stores D9: one attempt's answer, in the core's words. `status`

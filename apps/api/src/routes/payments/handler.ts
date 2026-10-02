@@ -15,6 +15,7 @@ import {
 } from "../../integrations/dispatch";
 /* cash-at-stores D9: the business's system by capability, never by name */
 import { capabilitiesOf } from "../../integrations/registry";
+import { recordReferenceOf, storeNamesFor } from "../../direct-payments/record-reference";
 import { pendingVersion } from "../../wisphub/cache";
 import { decidedActionOf, firstAttemptSchedule } from "../../reconnection/queue";
 import { webhookDeliveries } from "../../db/schema";
@@ -491,6 +492,10 @@ async function dispatchObserved(
     paymentRegistered: row.paymentRegisteredAt !== null,
     reconnect,
     now,
+    /* payment-method-per-channel D2, D10: the row's channel, and its
+       reference parts with the store's name as it is now */
+    channel: row.channel,
+    recordReference: recordReferenceOf(row, await storeNamesFor(db, [row])),
   });
   const schedule = firstAttemptSchedule(attempt, now);
   const outcome = outcomeOf(attempt.status, action);

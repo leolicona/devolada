@@ -29,7 +29,7 @@ Expected:
 | A 400 naming another field | No second call; the action fails as today |
 | The name typed as `spei-link . devoladapago` | Matched |
 | Two methods with the SPEI name | The lowest id |
-| A 300-character store name | Reference of 200 characters; folio intact; the name ends in `…` |
+| A 300-character store name, written straight to the row (the operator's form stops at 80) | Reference of 200 characters; folio intact; the name ends in `…` |
 
 | Scenario (setup read and connection test) | Answer |
 | --- | --- |

@@ -159,7 +159,17 @@ fallback included (FR-007):
 
 The separator is a space, the middle dot `·`, and a space. The whole text
 is at most 200 characters (R7). Only the store's name is shortened, ending
-in `…`; the folio and the clave are never cut. With no folio (not expected:
+in `…`; the folio and the clave are never cut.
+
+The store's part is `stores.name`: the store's own name, 2 to 80
+characters, which Devolada's operator sets when creating the store and
+may edit (cash-at-stores, `routes/platform/schema.ts`). It is the name the
+business already sees in Puntos de pago. Never the shopkeeper's name, the
+store's phone or its address. With the folio's 9 characters (`DV-` and
+six, `folio.ts`), a store reference is at most 92 characters and a SPEI
+one about 42 (a clave de rastreo is at most 30), so the 200-character
+guard never cuts anything today; it stays because the name's limit
+belongs to another feature and can change. With no folio (not expected:
 every confirmed row has one) the reference is omitted.
 
 **Rationale**: R10 and R12: the middle dot survives the API and the

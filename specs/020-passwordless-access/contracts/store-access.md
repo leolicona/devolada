@@ -8,7 +8,10 @@ The schemas live in `apps/api/src/routes/store/schema.ts`, exported as
 `@devolada/api/store-schema`. They are imported by `apps/red`, its MSW
 handlers and the Playwright stubs.
 
-Every answer wears the one envelope, with `UPPER_SNAKE` codes. These routes
+Every answer wears the one envelope, with `UPPER_SNAKE` codes. A rejected
+body is `VALIDATION_ERROR`, the store area's word since cash-at-stores
+(written `VALIDATION` here until 2026-10-02, when the implementation kept
+the area's word). These routes
 are browser-facing: no `message`, no `retryable` (constitution III). The
 códigos' error codes are the plugin's own, carried through the envelope:
 `INVALID_OTP`, `OTP_EXPIRED`, `TOO_MANY_ATTEMPTS`.
@@ -38,7 +41,7 @@ Rate-limited 3 per 60 s per address (D3).
   A sign-in código goes to that address **whatever it holds**. A taken
   address is named only after its código (FR-032).
 - **400** `INVALID_INVITATION`: unknown, accepted, replaced, expired, or a
-  suspended store (cash-at-stores D4, unchanged). **400** `VALIDATION`: a
+  suspended store (cash-at-stores D4, unchanged). **400** `VALIDATION_ERROR`: a
   malformed address. **429**.
 
 ### `POST /store/invitations/:token/accept`: changed body
@@ -82,7 +85,7 @@ Rate-limited 3 per 60 s per address (D3).
 - **200** `{ "success": true, "data": { "sent": true } }` for **every**
   well-formed phone. A código goes to the store account's email only when a
   store names that phone (FR-033, cash-at-stores D3).
-- **400** `VALIDATION`: not ten national digits. **429**.
+- **400** `VALIDATION_ERROR`: not ten national digits. **429**.
 
 ### `POST /store/sign-in`: new
 
